@@ -3,10 +3,11 @@
 ## Project Overview
 
 **Name**: frename  
-**Type**: Rust CLI application for Windows  
+**Type**: Rust GUI application for Windows  
 **Purpose**: File renaming utility (functionality being defined incrementally)  
 **Target Platform**: Windows 10/11  
-**Rust Edition**: 2021
+**Rust Edition**: 2021  
+**GUI Framework**: Iced (Elm-architecture GUI)
 
 ## Recommended Architecture Pattern: Agent-Skills-Commands
 
@@ -14,7 +15,8 @@ When implementing functionality, organize code using this pattern:
 
 ```
 src/
-├── main.rs           # Entry point, CLI parsing, orchestration
+├── main.rs           # Entry point, GUI setup, application state
+├── ui/               # UI components and layouts
 ├── commands/         # High-level user commands (rename, batch, undo, etc.)
 ├── agents/           # Task orchestration and workflow logic
 └── skills/           # Atomic capabilities (pattern matching, file ops, validation)
@@ -34,6 +36,7 @@ This structure will be created as functionality is implemented.
 - Use `Result<T, E>` for error handling (avoid `.unwrap()` in production)
 - Prefer explicit types in public APIs
 - Use descriptive names (`file_path` not `fp`)
+- **NEVER use Russian or any non-English language in code** - all code, comments, variable names, function names, documentation must be in English only
 
 ### Windows-Specific
 - Use `std::path::Path` and `PathBuf` for paths (handles Windows separators)
@@ -55,7 +58,8 @@ This structure will be created as functionality is implemented.
 
 ## Dependencies
 
-**Current**: None (add as needed)
+**Current**:
+- `iced` (0.14.0-dev) - Cross-platform GUI framework with Elm architecture
 
 **Guidelines**:
 - Minimize dependencies
@@ -64,6 +68,22 @@ This structure will be created as functionality is implemented.
 
 ## AI Collaboration Guidelines
 
+### CRITICAL: User's Working Style
+**The user works in SMALL, EXPLICIT steps. Follow these rules strictly:**
+
+1. **ONLY implement what is explicitly requested** - nothing more
+2. **Do NOT add extra files, documentation, or helpers** unless asked
+3. **Do NOT anticipate next steps** or add "nice to have" features
+4. **WAIT for explicit instruction** before proceeding to next step
+5. **Minimal changes only** - if asked for a button, add ONLY a button
+
+**Example:**
+- User asks: "Create an empty window"
+- ✅ Correct: Create main.rs with empty window, update Cargo.toml if needed
+- ❌ Wrong: Also create README.md, INSTALL.md, setup scripts, documentation
+
+**Work step-by-step. Stop after each step. Wait for next instruction.**
+
 ### Before Implementing
 1. **Ask if requirements are unclear** - Don't assume functionality
 2. **Confirm approach** for significant architectural changes
@@ -71,8 +91,8 @@ This structure will be created as functionality is implemented.
 
 ### When Coding
 1. **Incremental implementation** - One feature/module at a time
-2. **Test alongside** - Write tests with implementation
-3. **Update context** - Update relevant CLAUDE.md files when patterns change
+2. **Minimal additions** - Only what is requested
+3. **Update context** - Update CLAUDE.md only when working style changes
 
 ### Documentation
 - Update `CLAUDE.md` files when patterns or conventions change
@@ -105,9 +125,9 @@ cargo doc --open               # Build and open docs
 
 ## Project State
 
-**Phase**: AI workflow organization complete, awaiting functionality definition  
-**Code Status**: Minimal placeholder (main.rs only)  
-**Next Steps**: Define first feature/functionality to implement
+**Phase**: Basic GUI window implemented  
+**Code Status**: Empty window with basic egui setup  
+**Next Steps**: Define and implement file renaming UI and functionality
 
 ## Notes for AI
 

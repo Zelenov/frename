@@ -1,0 +1,21 @@
+[package]
+name = "frename"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "File renaming utility for Windows"
+
+[dependencies]
+# GUI framework - Iced for cross-platform GUI
+iced = "0.14.0-dev"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+
+# Windows subsystem - use "windows" for GUI app (no console), "console" for CLI
+[target.'cfg(windows)'.build-dependencies]
+
+# Make it a Windows GUI app (no console window)
+[package.metadata.winres]

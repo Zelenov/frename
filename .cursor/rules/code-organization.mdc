@@ -1,0 +1,47 @@
+# Code Organization - Feature-Based Structure
+
+## Principle
+
+Organize code by **features**, not by technical layers. Group related files together in feature folders.
+
+## Structure
+
+```
+src/
+├── main.rs              # Entry point only - minimal code
+├── app.rs               # Root application state & coordination
+└── features/            # All features here
+    ├── feature_name/    # One folder per feature
+    │   ├── mod.rs       # Public interface
+    │   ├── state.rs     # Data models for this feature
+    │   ├── messages.rs  # Events/actions for this feature
+    │   └── view.rs      # UI rendering for this feature
+    │
+    └── another_feature/
+        ├── mod.rs
+        ├── state.rs
+        ├── messages.rs
+        └── view.rs
+```
+
+## File Responsibilities
+
+- **`mod.rs`** - Public API of the feature, re-exports what other features need
+- **`state.rs`** - Data structures, application state for this feature
+- **`messages.rs`** - Events, actions, messages this feature can handle
+- **`view.rs`** - UI rendering logic using Iced
+
+## Rules
+
+1. Each feature is self-contained in one folder
+2. Features communicate through public interfaces defined in `mod.rs`
+3. Keep features independent - minimal cross-feature dependencies
+4. If files grow large, split into submodules within the feature folder
+5. Delete entire feature by removing its folder
+
+## Benefits
+
+- Clear feature boundaries
+- Easy to find related code
+- Simple to add/remove features
+- No "junk drawer" folders with mixed concerns

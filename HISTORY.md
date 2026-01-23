@@ -1,3 +1,26 @@
+# 0.2.0 GUI Application Structure
+
+## Added
+- GUI application using egui + eframe framework
+- Basic empty window (800x600) with close functionality
+- Project structure: Cargo.toml, src/main.rs
+- README.md with project overview in Russian
+- INSTALL.md with detailed Rust installation instructions
+- check-setup.ps1 script for environment verification
+- .gitignore for Rust projects
+
+## Changed
+- Updated CLAUDE.md: CLI → GUI application
+- Architecture now includes ui/ directory for GUI components
+- Application uses immediate mode GUI (egui)
+
+## Technical
+- Dependencies: eframe 0.30, egui 0.30
+- Windows subsystem configuration for GUI mode
+- Release profile optimizations (LTO, single codegen unit)
+
+---
+
 # 0.1.0 Initial project setup
 
 ## Added
