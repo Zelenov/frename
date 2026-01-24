@@ -1,3 +1,16 @@
+# 0.4.0 Video Player Integration
+
+## Added
+- Video playback using iced_video_player and GStreamer
+- File logging system with simplelog crate
+- GStreamer initialization check on startup
+- Visual feedback for drop zone text
+
+## Changed
+- Video player replaces empty window on file drop
+- Dropped files now load as video players
+- Debug logging to frename_debug.log file
+
 # 0.3.0 Drag and Drop File Handling
 
 ## Added

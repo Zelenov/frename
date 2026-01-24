@@ -26,11 +26,23 @@ impl FrenameApp {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        use iced::widget::container;
+        use iced::widget::{container, text};
+        use iced_video_player::VideoPlayer;
 
-        // Empty window - entire area accepts drag and drop
-        container("")
+        // Show video player if video is loaded, otherwise show drop zone
+        if let Some(video) = &self.drag_drop_state.current_video {
+            VideoPlayer::new(video)
+                .width(iced::Length::Fill)
+                .height(iced::Length::Fill)
+                .into()
+        } else {
+            container(
+                text("Drop a video file here to play")
+                    .size(24)
+            )
+            .center(iced::Length::Fill)
             .into()
+        }
     }
 
     /// Get the window title based on dropped file
