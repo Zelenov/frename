@@ -1,3 +1,17 @@
+# 0.3.0 Drag and Drop File Handling
+
+## Added
+- Drag and drop functionality for files
+- Window title updates to show dropped file path
+- Feature-based architecture with separate drag_drop module
+- Event subscription system for window file drop events
+
+## Changed
+- Refactored app.rs into modular feature structure
+- Empty window now accepts files anywhere in window
+
+---
+
 # 0.2.0 GUI Application Structure
 
 ## Added

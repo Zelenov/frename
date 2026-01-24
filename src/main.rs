@@ -4,7 +4,12 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // Hide console in release mode
 
-use iced::{Element, Task, window};
+use iced::{Task, window, event};
+
+mod app;
+mod features;
+
+use app::FrenameApp;
 
 fn main() -> iced::Result {
     iced::application(
@@ -17,46 +22,19 @@ fn main() -> iced::Result {
         resizable: true,
         ..window::Settings::default()
     })
+    .title(FrenameApp::title)
     .antialiasing(false)
+    .subscription(|_| {
+        event::listen_with(|event, _status, _id| {
+            match event {
+                iced::Event::Window(window::Event::FileDropped(path)) => {
+                    Some(app::Message::DragDrop(
+                        features::drag_drop::Message::FileDropped(path)
+                    ))
+                }
+                _ => None,
+            }
+        })
+    })
     .run()
-}
-
-/// Main application state
-struct FrenameApp {
-    // Application state will be added here
-}
-
-/// Application messages
-#[derive(Debug, Clone)]
-enum Message {
-    // Messages will be added here
-}
-
-impl FrenameApp {
-    fn update(&mut self, _message: Message) -> Task<Message> {
-        Task::none()
-    }
-
-    fn view(&self) -> Element<'_, Message> {
-        // Empty window - no UI components
-        iced::widget::container(iced::widget::text(""))
-            .into()
-    }
-}
-
-impl Default for FrenameApp {
-    fn default() -> Self {
-        Self {}
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_app_creation() {
-        let _app = FrenameApp::default();
-        // Basic smoke test - app can be created
-    }
 }
