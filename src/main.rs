@@ -5,7 +5,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // Hide console in release mode
 
 use iced::{Task, window, event};
-use simplelog::*;
+use simplelog::{
+    CombinedLogger, ColorChoice, Config, LevelFilter, TermLogger, TerminalMode, WriteLogger,
+};
 use std::fs::File;
 
 mod app;
@@ -14,10 +16,10 @@ mod ui;
 
 use app::FrenameApp;
 
-fn main() -> iced::Result {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize file + console logging
-    let log_file = File::create("frename_debug.log").expect("Failed to create log file");
-    
+    let log_file = File::create("frename_debug.log")?;
+
     CombinedLogger::init(vec![
         TermLogger::new(
             LevelFilter::Info,
@@ -30,27 +32,30 @@ fn main() -> iced::Result {
             Config::default(),
             log_file,
         ),
-    ]).expect("Failed to initialize logger");
+    ])?;
 
     log::info!("frename application started");
 
     // Check GStreamer availability
     match gstreamer::init() {
-        Ok(_) => {
+        Ok(()) => {
             let version = gstreamer::version();
-            log::info!("GStreamer initialized successfully: {}.{}.{}.{}", 
-                version.0, version.1, version.2, version.3);
+            log::info!(
+                "GStreamer initialized successfully: {}.{}.{}.{}",
+                version.0, version.1, version.2, version.3
+            );
         }
         Err(e) => {
-            log::error!("GStreamer initialization failed: {}", e);
+            log::error!("GStreamer initialization failed: {e}");
             log::error!("Please install GStreamer. See GSTREAMER_SETUP.md for instructions.");
-            eprintln!("ERROR: GStreamer not found or failed to initialize: {}", e);
-            eprintln!("Please install GStreamer. See GSTREAMER_SETUP.md for instructions.");
-            std::process::exit(1);
+            return Err(format!(
+                "GStreamer not found or failed to initialize: {e}. \
+                 Please install GStreamer. See GSTREAMER_SETUP.md for instructions."
+            ).into());
         }
     }
 
-    iced::application(
+    Ok(iced::application(
         || (FrenameApp::default(), Task::none()),
         FrenameApp::update,
         FrenameApp::view,
@@ -74,5 +79,5 @@ fn main() -> iced::Result {
             }
         })
     })
-    .run()
+    .run()?)
 }

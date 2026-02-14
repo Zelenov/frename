@@ -2,7 +2,7 @@
 
 use iced::{Element, Task};
 use iced_video_player::{Video, VideoPlayer};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Video player component state
@@ -31,25 +31,22 @@ impl VideoPlayerState {
     where
         AppMessage: 'static,
     {
-        log::info!("Starting video load: {:?}", path);
+        log::info!("Starting video load: {}", path.display());
         self.loading = true;
         self.current_video = None;
 
         Task::future(async move {
             let (tx, rx) = std::sync::mpsc::channel();
-            
+
             std::thread::spawn(move || {
                 // Convert path to URL
-                let url = match url::Url::from_file_path(&path) {
-                    Ok(url) => url,
-                    Err(_) => {
-                        log::warn!("Failed to create URL from path: {:?}", path);
-                        let _ = tx.send(false);
-                        return;
-                    }
+                let Ok(url) = url::Url::from_file_path(&path) else {
+                    log::warn!("Failed to create URL from path: {}", path.display());
+                    let _ = tx.send(false);
+                    return;
                 };
 
-                log::debug!("File URL created: {}", url);
+                log::debug!("File URL created: {url}");
 
                 // Load video
                 let success = match Video::new(&url) {
@@ -58,12 +55,11 @@ impl VideoPlayerState {
                         true
                     }
                     Err(e) => {
-                        log::error!("Failed to load video: {}", e);
-                        eprintln!("Failed to load video: {}", e);
+                        log::error!("Failed to load video: {e}");
                         false
                     }
                 };
-                
+
                 let _ = tx.send(success);
             });
 
@@ -73,13 +69,21 @@ impl VideoPlayerState {
     }
 
     /// Handle video loaded message
-    pub fn handle_video_loaded(&mut self, path: &PathBuf, success: bool) {
+    pub fn handle_video_loaded(&mut self, path: &Path, success: bool) {
         self.loading = false;
         if success {
             // Reload the video synchronously for storage
-            if let Ok(url) = url::Url::from_file_path(path) {
-                if let Ok(video) = Video::new(&url) {
-                    self.current_video = Some(Arc::new(video));
+            match url::Url::from_file_path(path) {
+                Ok(url) => match Video::new(&url) {
+                    Ok(video) => {
+                        self.current_video = Some(Arc::new(video));
+                    }
+                    Err(e) => {
+                        log::error!("Failed to reload video: {e}");
+                    }
+                },
+                Err(()) => {
+                    log::error!("Failed to create URL from path: {}", path.display());
                 }
             }
         }

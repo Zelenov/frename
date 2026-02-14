@@ -6,6 +6,7 @@ use crate::features::drag_drop;
 use crate::ui;
 
 /// Main application state
+#[derive(Default)]
 pub struct FrenameApp {
     drag_drop_state: drag_drop::DragDropState,
     video_player_state: ui::video_player::VideoPlayerState,
@@ -44,15 +45,6 @@ impl FrenameApp {
             file.display().to_string()
         } else {
             String::from("frename")
-        }
-    }
-}
-
-impl Default for FrenameApp {
-    fn default() -> Self {
-        Self {
-            drag_drop_state: Default::default(),
-            video_player_state: Default::default(),
         }
     }
 }

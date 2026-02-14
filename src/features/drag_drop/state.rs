@@ -12,7 +12,7 @@ pub struct DragDropState {
 impl DragDropState {
     /// Handle file dropped
     pub fn handle_file_dropped(&mut self, path: PathBuf) {
-        log::info!("File dropped: {:?}", path);
+        log::info!("File dropped: {}", path.display());
         self.dropped_file = Some(path);
     }
 }
