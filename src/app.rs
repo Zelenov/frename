@@ -3,46 +3,39 @@
 use iced::{Element, Task};
 
 use crate::features::drag_drop;
+use crate::ui;
 
 /// Main application state
 pub struct FrenameApp {
     drag_drop_state: drag_drop::DragDropState,
+    video_player_state: ui::video_player::VideoPlayerState,
 }
 
 /// Application messages
 #[derive(Debug, Clone)]
 pub enum Message {
     DragDrop(drag_drop::Message),
+    VideoPlayer(ui::video_player::Message),
 }
 
 impl FrenameApp {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::DragDrop(drag_drop::Message::FileDropped(path)) => {
-                self.drag_drop_state.handle_file_dropped(path);
+                self.drag_drop_state.handle_file_dropped(path.clone());
+                self.video_player_state.load_video(path, Message::VideoPlayer)
+            }
+            Message::VideoPlayer(ui::video_player::Message::VideoLoaded(success)) => {
+                if let Some(path) = &self.drag_drop_state.dropped_file {
+                    self.video_player_state.handle_video_loaded(path, success);
+                }
                 Task::none()
             }
         }
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        use iced::widget::{container, text};
-        use iced_video_player::VideoPlayer;
-
-        // Show video player if video is loaded, otherwise show drop zone
-        if let Some(video) = &self.drag_drop_state.current_video {
-            VideoPlayer::new(video)
-                .width(iced::Length::Fill)
-                .height(iced::Length::Fill)
-                .into()
-        } else {
-            container(
-                text("Drop a video file here to play")
-                    .size(24)
-            )
-            .center(iced::Length::Fill)
-            .into()
-        }
+        ui::video_player::view(&self.video_player_state)
     }
 
     /// Get the window title based on dropped file
@@ -59,6 +52,7 @@ impl Default for FrenameApp {
     fn default() -> Self {
         Self {
             drag_drop_state: Default::default(),
+            video_player_state: Default::default(),
         }
     }
 }
