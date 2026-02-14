@@ -12,7 +12,6 @@ use std::fs::File;
 
 mod app;
 mod features;
-mod ui;
 
 use app::FrenameApp;
 

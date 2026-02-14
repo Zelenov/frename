@@ -2,21 +2,20 @@
 
 use iced::{Element, Task};
 
-use crate::features::drag_drop;
-use crate::ui;
+use crate::features::{drag_drop, video_player};
 
 /// Main application state
 #[derive(Default)]
 pub struct FrenameApp {
     drag_drop_state: drag_drop::DragDropState,
-    video_player_state: ui::video_player::VideoPlayerState,
+    video_player_state: video_player::VideoPlayerState,
 }
 
 /// Application messages
 #[derive(Debug, Clone)]
 pub enum Message {
     DragDrop(drag_drop::Message),
-    VideoPlayer(ui::video_player::Message),
+    VideoPlayer(video_player::Message),
 }
 
 impl FrenameApp {
@@ -26,17 +25,14 @@ impl FrenameApp {
                 self.drag_drop_state.handle_file_dropped(path.clone());
                 self.video_player_state.load_video(path, Message::VideoPlayer)
             }
-            Message::VideoPlayer(ui::video_player::Message::VideoLoaded(success)) => {
-                if let Some(path) = &self.drag_drop_state.dropped_file {
-                    self.video_player_state.handle_video_loaded(path, success);
-                }
-                Task::none()
+            Message::VideoPlayer(msg) => {
+                self.video_player_state.update(msg).map(Message::VideoPlayer)
             }
         }
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        ui::video_player::view(&self.video_player_state)
+        video_player::view::view(&self.video_player_state).map(Message::VideoPlayer)
     }
 
     /// Get the window title based on dropped file
