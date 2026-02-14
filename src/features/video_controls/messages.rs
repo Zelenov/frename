@@ -9,6 +9,10 @@ pub enum Message {
     VideoReady { duration_secs: f32 },
     /// Set playing state
     SetPlaying(bool),
-    /// Update current position
+    /// Update current position (from video player per-frame updates)
     UpdatePosition(f32),
+    /// User is seeking to a position in seconds
+    Seek(f32),
+    /// User released the seek bar
+    SeekReleased,
 }

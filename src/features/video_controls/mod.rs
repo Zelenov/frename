@@ -1,6 +1,7 @@
 //! Video player controls feature
 
 mod messages;
+mod progress_bar;
 mod state;
 pub mod view;
 

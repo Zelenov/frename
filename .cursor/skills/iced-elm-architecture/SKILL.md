@@ -174,7 +174,47 @@ Always return `Task<Message>` from `update`. Use:
 - `Task::done(Message::X)` - dispatch a follow-up message through the loop
 - `Task::batch([...])` - dispatch multiple follow-ups
 
-### 5. Avoid Redundant Redraws
+### 5. Flatten With Early Returns
+
+Use `let ... else { return }` guard clauses instead of nested `if let` / `match`. Keep nesting shallow.
+
+```rust
+// WRONG - deep nesting
+Message::VideoLoaded(success) => {
+    if success {
+        if let Some(path) = &self.video_path {
+            match url::Url::from_file_path(path) {
+                Ok(url) => match Video::new(&url) {
+                    Ok(video) => { /* finally the logic */ }
+                    Err(e) => { log::error!("..."); }
+                },
+                Err(()) => { log::error!("..."); }
+            }
+        }
+    }
+    Task::none()
+}
+
+// CORRECT - flat with early returns
+Message::VideoLoaded(success) => {
+    let Some(path) = self.video_path.as_ref().filter(|_| success) else {
+        return Task::none();
+    };
+    let Ok(url) = url::Url::from_file_path(path) else {
+        log::error!("Failed to create URL from path: {}", path.display());
+        return Task::none();
+    };
+    let Ok(video) = Video::new(&url) else {
+        log::error!("Failed to reload video from: {url}");
+        return Task::none();
+    };
+    let duration_secs = video.duration().as_secs_f32();
+    self.current_video = Some(video);
+    Task::done(Message::VideoReady { duration_secs })
+}
+```
+
+### 6. Avoid Redundant Redraws
 
 Don't use `on_new_frame` or similar per-frame callbacks unless you need per-frame UI updates (e.g., a progress slider). Each message triggers a re-render in iced.
 

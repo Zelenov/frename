@@ -1,7 +1,7 @@
 //! UI rendering for video player feature
 
 use iced::widget::{column, container, text};
-use iced::Element;
+use iced::{Background, Color, Element};
 use iced_video_player::VideoPlayer;
 
 use crate::features::video_controls;
@@ -14,13 +14,18 @@ pub fn view(state: &VideoPlayerState) -> Element<'_, Message> {
             .width(iced::Length::Fill)
             .height(iced::Length::Fill)
             .content_fit(iced::ContentFit::Contain)
+            .on_new_frame(Message::NewFrame)
             .on_end_of_stream(Message::EndOfStream);
 
         // Wrap in container so column layout sees Fill height
         // (VideoPlayer widget's size() always reports Shrink)
         let video_area = container(player)
             .width(iced::Length::Fill)
-            .height(iced::Length::Fill);
+            .height(iced::Length::Fill)
+            .style(|_theme| container::Style {
+                background: Some(Background::Color(Color::from_rgb(0.12, 0.12, 0.12))),
+                ..container::Style::default()
+            });
 
         let controls = video_controls::view::view(state.controls()).map(Message::Controls);
 

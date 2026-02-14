@@ -3,6 +3,7 @@
 use iced::Task;
 use iced_video_player::Video;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::features::video_controls::{self, VideoControlsState};
 use super::Message;
@@ -82,40 +83,55 @@ impl VideoPlayerState {
         match message {
             Message::VideoLoaded(success) => {
                 self.loading = false;
-                if success {
-                    if let Some(path) = &self.video_path {
-                        match url::Url::from_file_path(path) {
-                            Ok(url) => match Video::new(&url) {
-                                Ok(video) => {
-                                    let duration_secs = video.duration().as_secs_f32();
-                                    self.current_video = Some(video);
-                                    return Task::done(Message::VideoReady { duration_secs });
-                                }
-                                Err(e) => {
-                                    log::error!("Failed to reload video: {e}");
-                                }
-                            },
-                            Err(()) => {
-                                log::error!(
-                                    "Failed to create URL from path: {}",
-                                    path.display()
-                                );
-                            }
-                        }
-                    }
-                }
-                Task::none()
+
+                let Some(path) = self.video_path.as_ref().filter(|_| success) else {
+                    return Task::none();
+                };
+
+                let Ok(url) = url::Url::from_file_path(path) else {
+                    log::error!("Failed to create URL from path: {}", path.display());
+                    return Task::none();
+                };
+
+                let Ok(video) = Video::new(&url) else {
+                    log::error!("Failed to reload video from: {url}");
+                    return Task::none();
+                };
+
+                let duration_secs = video.duration().as_secs_f32();
+                self.current_video = Some(video);
+                Task::done(Message::VideoReady { duration_secs })
             }
             Message::VideoReady { duration_secs } => Task::done(Message::Controls(
                 video_controls::Message::VideoReady { duration_secs },
             )),
+            Message::NewFrame => {
+                let Some(video) = &self.current_video else {
+                    return Task::none();
+                };
+                let pos = video.position().as_secs_f32();
+                Task::done(Message::Controls(
+                    video_controls::Message::UpdatePosition(pos),
+                ))
+            }
             Message::EndOfStream => Task::done(Message::Controls(
                 video_controls::Message::SetPlaying(false),
             )),
             Message::TogglePause => {
-                if let Some(video) = &mut self.current_video {
-                    let paused = video.paused();
-                    video.set_paused(!paused);
+                let Some(video) = &mut self.current_video else {
+                    return Task::none();
+                };
+                let paused = video.paused();
+                video.set_paused(!paused);
+                Task::none()
+            }
+            Message::Seek(position_secs) => {
+                let Some(video) = &mut self.current_video else {
+                    return Task::none();
+                };
+                let duration = Duration::from_secs_f64(position_secs as f64);
+                if let Err(e) = video.seek(duration, false) {
+                    log::error!("Failed to seek: {e}");
                 }
                 Task::none()
             }
@@ -126,6 +142,9 @@ impl VideoPlayerState {
                 match ctrl_msg {
                     video_controls::Message::TogglePlayPause => {
                         Task::done(Message::TogglePause)
+                    }
+                    video_controls::Message::Seek(pos) => {
+                        Task::done(Message::Seek(pos))
                     }
                     _ => Task::none(),
                 }

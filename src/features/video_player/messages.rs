@@ -9,10 +9,14 @@ pub enum Message {
     VideoLoaded(bool),
     /// Video became available after loading
     VideoReady { duration_secs: f32 },
+    /// New frame rendered - update position
+    NewFrame,
     /// End of stream reached
     EndOfStream,
     /// Toggle pause state on the video
     TogglePause,
+    /// Seek to position in seconds
+    Seek(f32),
     /// Controls message
     Controls(video_controls::Message),
 }
