@@ -1,4 +1,4 @@
-//! UI rendering for file handler feature
+//! UI for folder workspace: folder list + video panel + rename panel
 
 use iced::widget::{column, container, row};
 use iced::{Background, Element, Length};
@@ -6,11 +6,10 @@ use iced::{Background, Element, Length};
 use crate::features::{folder, folder_controls, rename_panel, video_player};
 use crate::theme;
 use crate::widgets::splitter::{Splitter, HIT_WIDTH};
-use super::{FileHandlerState, Message};
+use super::{FolderWorkspace, Message};
 
-/// Render the file handler view:
-/// [Video Player] | splitter | [Folder + Folder controls] | splitter | [Rename Panel]
-pub fn view(state: &FileHandlerState) -> Element<'_, Message> {
+/// Layout: [Video Player] | splitter | [Folder + controls] | splitter | [Rename Panel]
+pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
     let video = container(
         video_player::view::view(state.video_player()).map(Message::VideoPlayer),
     )
@@ -43,7 +42,6 @@ pub fn view(state: &FileHandlerState) -> Element<'_, Message> {
         .width(Length::Fixed(state.folder_width()))
         .height(Length::Fill);
 
-    // Right splitter: left bound = after video + left splitter + min folder
     let right_min_left = state.left_width() + HIT_WIDTH + 120.0;
     let right_splitter = Splitter::new(Message::RightSplitterDragged)
         .min_left(right_min_left)

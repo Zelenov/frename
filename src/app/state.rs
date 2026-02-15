@@ -2,15 +2,16 @@
 
 use iced::{Element, Subscription, Task};
 
-use crate::features::{drag_drop, file_handler, folder};
+use crate::features::{drag_drop, folder, folder_workspace};
 
 use super::Message;
 
-/// Main application state
+/// Main application state. The app is folder-centric: once a folder is chosen,
+/// the state is the folder workspace (folder + video + rename panels).
 #[derive(Default)]
 pub struct FrenameApp {
     drag_drop_state: drag_drop::DragDropState,
-    file_handler_state: file_handler::FileHandlerState,
+    folder_workspace: folder_workspace::FolderWorkspace,
 }
 
 impl FrenameApp {
@@ -21,65 +22,63 @@ impl FrenameApp {
 
                 let parent = path.parent().map(|p| p.to_path_buf());
                 let current_dir = self
-                    .file_handler_state
+                    .folder_workspace
                     .folder()
                     .directory()
                     .map(|d| d.path());
 
-                // If we already have this directory open, just select and scroll to the file
                 let same_directory = parent.as_ref().and_then(|p| {
                     current_dir.map(|cur| cur == p.as_path())
                 }).unwrap_or(false);
 
                 if same_directory {
                     let index = self
-                        .file_handler_state
+                        .folder_workspace
                         .folder()
                         .directory()
                         .and_then(|d| d.find_by_path(&path));
 
                     if let Some(idx) = index {
                         return Task::batch([
-                            Task::done(Message::FileHandler(file_handler::Message::Folder(
+                            Task::done(Message::FolderWorkspace(folder_workspace::Message::Folder(
                                 folder::Message::SelectFile(idx),
                             ))),
-                            Task::done(Message::FileHandler(file_handler::Message::OpenFile(path))),
+                            Task::done(Message::FolderWorkspace(folder_workspace::Message::OpenFile(path))),
                         ]);
                     }
                 }
 
-                // Different directory or file not in list: scan folder then auto-select
                 let directory = parent.unwrap_or_else(|| path.clone());
-                Task::done(Message::FileHandler(file_handler::Message::Folder(
+                Task::done(Message::FolderWorkspace(folder_workspace::Message::Folder(
                     folder::Message::ScanFolder {
                         directory,
                         target_file: path,
                     },
                 )))
             }
-            Message::FileHandler(msg) => {
-                self.file_handler_state.update(msg).map(Message::FileHandler)
+            Message::FolderWorkspace(msg) => {
+                self.folder_workspace.update(msg).map(Message::FolderWorkspace)
             }
         }
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        file_handler::view::view(&self.file_handler_state).map(Message::FileHandler)
+        folder_workspace::view::view(&self.folder_workspace).map(Message::FolderWorkspace)
     }
 
     /// Feature subscriptions (file drop, keyboard, timers, etc.)
     pub fn subscription(&self) -> Subscription<Message> {
         Subscription::batch([
             self.drag_drop_state.subscription().map(Message::DragDrop),
-            self.file_handler_state
+            self.folder_workspace
                 .subscription()
-                .map(Message::FileHandler),
+                .map(Message::FolderWorkspace),
         ])
     }
 
     /// Get the window title based on the currently open file
     pub fn title(&self) -> String {
-        if let Some(file) = self.file_handler_state.current_file() {
+        if let Some(file) = self.folder_workspace.current_file() {
             file.display().to_string()
         } else {
             String::from("frename")

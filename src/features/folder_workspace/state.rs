@@ -1,4 +1,4 @@
-//! State for file handler feature
+//! State for folder workspace: the open folder and its panels
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -21,15 +21,16 @@ const DEFAULT_FOLDER_WIDTH: f32 = 200.0;
 /// Minimum width of the folder panel.
 const MIN_FOLDER_WIDTH: f32 = 120.0;
 
-/// Central file handling state - the core of the application
-pub struct FileHandlerState {
-    /// Currently open file path
+/// Folder workspace: the single open folder and the panels that operate on it.
+/// This is the main application state once a folder is chosen (folder list, video, rename).
+pub struct FolderWorkspace {
+    /// Currently open file path (selected file in the folder)
     current_file: Option<PathBuf>,
-    /// Folder listing (scanned directory, file selection)
+    /// Folder (scanned directory, file list, selection)
     folder: FolderState,
-    /// Video player (activated when the opened file is a video)
+    /// Video player panel
     video_player: VideoPlayerState,
-    /// Rename panel (right side: file name display + tag list)
+    /// Rename panel (file name + tag list)
     rename_panel: RenamePanelState,
     /// Width of the left (video) panel in pixels.
     left_width: f32,
@@ -37,7 +38,7 @@ pub struct FileHandlerState {
     folder_width: f32,
 }
 
-impl Default for FileHandlerState {
+impl Default for FolderWorkspace {
     fn default() -> Self {
         Self {
             current_file: None,
@@ -50,14 +51,13 @@ impl Default for FileHandlerState {
     }
 }
 
-impl FileHandlerState {
+impl FolderWorkspace {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::OpenFile(path) => {
                 log::info!("Opening file: {}", path.display());
                 self.current_file = Some(path.clone());
 
-                // If this file is in the current directory, select and scroll to it
                 let in_current_dir = self
                     .folder
                     .directory()
@@ -78,8 +78,6 @@ impl FileHandlerState {
                 }
             }
             Message::Folder(folder_msg) => {
-                // If user selected another file and current file is dirty: switch immediately
-                // and run apply in background (spinner shows on the previous file).
                 if let folder::Message::SelectFile(new_index) = &folder_msg {
                     let current_dirty = self
                         .folder
@@ -139,7 +137,6 @@ impl FileHandlerState {
                 }
             }
             Message::ApplyChanges => {
-                // Start async apply (e.g. for "apply on close"); spinner shows on current selection
                 let applying_idx = self.folder.directory().and_then(|d| d.selected_index());
                 self.folder.set_applying(applying_idx);
                 Task::future(async move {
@@ -181,7 +178,6 @@ impl FileHandlerState {
             }
             Message::LeftSplitterDragged(x) => {
                 self.left_width = x;
-                // Ensure folder panel doesn't shrink below minimum
                 let folder_start = self.left_width + HIT_WIDTH;
                 let folder_end = folder_start + self.folder_width;
                 let new_folder_width = folder_end - x - HIT_WIDTH;
@@ -202,32 +198,28 @@ impl FileHandlerState {
         self.video_player.subscription().map(Message::VideoPlayer)
     }
 
-    /// Currently open file path
+    /// Currently open (selected) file path
     pub fn current_file(&self) -> Option<&PathBuf> {
         self.current_file.as_ref()
     }
 
-    /// Get reference to the folder state
+    /// The folder (directory + file list + selection)
     pub fn folder(&self) -> &FolderState {
         &self.folder
     }
 
-    /// Get reference to the video player state
     pub fn video_player(&self) -> &VideoPlayerState {
         &self.video_player
     }
 
-    /// Get reference to the rename panel state
     pub fn rename_panel(&self) -> &RenamePanelState {
         &self.rename_panel
     }
 
-    /// Width of the left (video) panel in pixels.
     pub fn left_width(&self) -> f32 {
         self.left_width
     }
 
-    /// Width of the middle (folder) panel in pixels.
     pub fn folder_width(&self) -> f32 {
         self.folder_width
     }
