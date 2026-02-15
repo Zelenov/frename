@@ -14,6 +14,8 @@ pub struct VideoPlayerState {
     current_video: Option<Video>,
     /// Whether a video is currently loading
     loading: bool,
+    /// Last load attempt failed (show error X in view)
+    load_failed: bool,
     /// Path of the video being loaded or currently playing
     video_path: Option<PathBuf>,
     /// Controls state
@@ -25,6 +27,7 @@ impl Default for VideoPlayerState {
         Self {
             current_video: None,
             loading: false,
+            load_failed: false,
             video_path: None,
             controls: VideoControlsState::default(),
         }
@@ -43,23 +46,23 @@ impl VideoPlayerState {
     {
         log::info!("Starting video load: {}", path.display());
         self.loading = true;
+        self.load_failed = false;
         self.current_video = None;
         self.video_path = Some(path.clone());
         self.controls = VideoControlsState::default();
 
         Task::future(async move {
-            let (tx, rx) = std::sync::mpsc::channel();
-
-            std::thread::spawn(move || {
+            // Run blocking video load on a thread pool so the async executor
+            // can yield and the UI can redraw "Loading video..." while loading.
+            let success = tokio::task::spawn_blocking(move || {
                 let Ok(url) = url::Url::from_file_path(&path) else {
                     log::warn!("Failed to create URL from path: {}", path.display());
-                    let _ = tx.send(false);
-                    return;
+                    return false;
                 };
 
                 log::debug!("File URL created: {url}");
 
-                let success = match Video::new(&url) {
+                match Video::new(&url) {
                     Ok(_video) => {
                         log::info!("Video loaded successfully");
                         true
@@ -68,12 +71,11 @@ impl VideoPlayerState {
                         log::error!("Failed to load video: {e}");
                         false
                     }
-                };
+                }
+            })
+            .await
+            .unwrap_or(false);
 
-                let _ = tx.send(success);
-            });
-
-            let success = rx.recv().unwrap_or(false);
             on_loaded(Message::VideoLoaded(success))
         })
     }
@@ -83,6 +85,10 @@ impl VideoPlayerState {
         match message {
             Message::VideoLoaded(success) => {
                 self.loading = false;
+                self.load_failed = !success;
+                if !success {
+                    log::info!("Video load failed; showing error state (load_failed=true)");
+                }
 
                 let Some(path) = self.video_path.as_ref().filter(|_| success) else {
                     return Task::none();
@@ -149,6 +155,11 @@ impl VideoPlayerState {
     /// Whether a video is currently loading
     pub fn is_loading(&self) -> bool {
         self.loading
+    }
+
+    /// Whether the last video load attempt failed
+    pub fn load_failed(&self) -> bool {
+        self.load_failed
     }
 
     /// Get reference to the current video

@@ -128,7 +128,15 @@ impl FolderWorkspace {
                         .and_then(|dir| dir.selected_file());
                     if let Some(file) = selected {
                         let path = file.file_path().to_path_buf();
-                        Task::batch([task, Task::done(Message::OpenFile(path))])
+                        // Only open file if selection changed (avoid re-opening same file
+                        // when scroll task completes after OpenFile, which would reset
+                        // video load_failed state).
+                        let open_same = self.current_file.as_ref() == Some(&path);
+                        if open_same {
+                            task
+                        } else {
+                            Task::batch([task, Task::done(Message::OpenFile(path))])
+                        }
                     } else {
                         task
                     }

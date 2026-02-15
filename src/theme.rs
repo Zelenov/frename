@@ -27,6 +27,9 @@ pub const TEXT: Color = Color::from_rgb(0.92, 0.92, 0.95);
 /// Muted / placeholder text.
 pub const TEXT_MUTED: Color = Color::from_rgb(0.55, 0.55, 0.6);
 
+/// Error / failed state (e.g. video failed to load).
+pub const ERROR: Color = Color::from_rgb(0.95, 0.35, 0.35);
+
 /// Splitter bar (matches track).
 pub const SPLITTER: Color = Color::from_rgb(0.25, 0.25, 0.25);
 

@@ -26,8 +26,8 @@ simplelog = "0.12"
 # GStreamer bindings - for checking availability
 gstreamer = "0.23"
 
-# Async runtime (for ApplyChanges delay)
-tokio = { version = "1", features = ["time"] }
+# Async runtime (ApplyChanges delay; spawn_blocking for non-blocking video load)
+tokio = { version = "1", features = ["time", "rt"] }
 
 [profile.release]
 opt-level = 3

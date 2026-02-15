@@ -44,6 +44,20 @@ pub fn view(state: &VideoPlayerState) -> Element<'_, Message> {
         )
         .center(iced::Length::Fill)
         .into()
+    } else if state.load_failed() {
+        container(
+            text("✕")
+                .size(80)
+                .color(theme::ERROR),
+        )
+        .center(iced::Length::Fill)
+        .width(iced::Length::Fill)
+        .height(iced::Length::Fill)
+        .style(|_theme| container::Style {
+            background: Some(Background::Color(theme::BG_PANEL)),
+            ..container::Style::default()
+        })
+        .into()
     } else {
         container(
             text("Drop a video file here to play")
