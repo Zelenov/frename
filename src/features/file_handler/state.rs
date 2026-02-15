@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use iced::{Subscription, Task};
 
+use crate::features::folder::{self, FolderState};
 use crate::features::rename_panel::RenamePanelState;
 use crate::features::video_player::VideoPlayerState;
 
@@ -16,6 +17,8 @@ const DEFAULT_LEFT_WIDTH: f32 = 560.0;
 pub struct FileHandlerState {
     /// Currently open file path
     current_file: Option<PathBuf>,
+    /// Folder listing (scanned directory, file selection)
+    folder: FolderState,
     /// Video player (activated when the opened file is a video)
     video_player: VideoPlayerState,
     /// Rename panel (right side: file name display + tag list)
@@ -28,6 +31,7 @@ impl Default for FileHandlerState {
     fn default() -> Self {
         Self {
             current_file: None,
+            folder: FolderState::default(),
             video_player: VideoPlayerState::default(),
             rename_panel: RenamePanelState::default(),
             left_width: DEFAULT_LEFT_WIDTH,
@@ -42,15 +46,33 @@ impl FileHandlerState {
                 log::info!("Opening file: {}", path.display());
                 self.current_file = Some(path.clone());
 
-                // Set the initial file name from the dropped file (stem without extension)
+                // Set the initial file name from the selected file (stem without extension)
                 let file_stem = path
                     .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or("");
                 self.rename_panel.set_file_name(file_stem);
 
-                // For now, treat all files as video
+                // Load the file in the video player
                 self.video_player.load_video(path, Message::VideoPlayer)
+            }
+            Message::Folder(folder_msg) => {
+                // Check if this is a file selection before forwarding
+                let is_file_select = matches!(&folder_msg, folder::Message::SelectFile(_));
+
+                let task = self.folder.update(folder_msg).map(Message::Folder);
+
+                // When a file is selected, open it in the video player + rename panel
+                if is_file_select {
+                    if let Some(file_info) = self.folder.selected_file() {
+                        let path = file_info.file_path().to_path_buf();
+                        Task::batch([task, Task::done(Message::OpenFile(path))])
+                    } else {
+                        task
+                    }
+                } else {
+                    task
+                }
             }
             Message::VideoPlayer(msg) => {
                 self.video_player.update(msg).map(Message::VideoPlayer)
@@ -73,6 +95,11 @@ impl FileHandlerState {
     /// Currently open file path
     pub fn current_file(&self) -> Option<&PathBuf> {
         self.current_file.as_ref()
+    }
+
+    /// Get reference to the folder state
+    pub fn folder(&self) -> &FolderState {
+        &self.folder
     }
 
     /// Get reference to the video player state

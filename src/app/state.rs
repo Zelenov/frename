@@ -2,7 +2,7 @@
 
 use iced::{Element, Subscription, Task};
 
-use crate::features::{drag_drop, file_handler};
+use crate::features::{drag_drop, file_handler, folder};
 
 use super::Message;
 
@@ -18,7 +18,19 @@ impl FrenameApp {
         match message {
             Message::DragDrop(drag_drop::Message::FileDropped(path)) => {
                 self.drag_drop_state.handle_file_dropped(path.clone());
-                Task::done(Message::FileHandler(file_handler::Message::OpenFile(path)))
+
+                // Scan the parent directory and auto-select the dropped file
+                let directory = path
+                    .parent()
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|| path.clone());
+
+                Task::done(Message::FileHandler(file_handler::Message::Folder(
+                    folder::Message::ScanFolder {
+                        directory,
+                        target_file: path,
+                    },
+                )))
             }
             Message::FileHandler(msg) => {
                 self.file_handler_state.update(msg).map(Message::FileHandler)

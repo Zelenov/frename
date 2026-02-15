@@ -1,6 +1,65 @@
-//! Core rename logic - builds a file name from checked tags.
+//! File structures, directory scanning, and rename logic for frename.
 
 use crate::TagList;
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
+
+// ---------------------------------------------------------------------------
+// FileInfo - metadata for a file in the folder listing
+// ---------------------------------------------------------------------------
+
+/// Holds the context for a file being processed.
+#[derive(Debug, Clone)]
+pub struct FileInfo {
+    /// Full path to the file.
+    file_path: PathBuf,
+    /// File creation time (used for sorting).
+    created_at: SystemTime,
+}
+
+impl FileInfo {
+    /// Create a new FileInfo from a file path and creation time.
+    pub fn new(file_path: impl Into<PathBuf>, created_at: SystemTime) -> Self {
+        Self {
+            file_path: file_path.into(),
+            created_at,
+        }
+    }
+
+    /// Get the file path.
+    pub fn file_path(&self) -> &Path {
+        &self.file_path
+    }
+
+    /// Get the creation time.
+    pub fn created_at(&self) -> SystemTime {
+        self.created_at
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Directory scanning
+// ---------------------------------------------------------------------------
+
+/// Scan a directory and return all files sorted by creation date (oldest first).
+pub fn scan_directory(directory: &Path) -> Result<Vec<FileInfo>, std::io::Error> {
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(directory)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() {
+            let metadata = entry.metadata()?;
+            let created = metadata.created().unwrap_or(SystemTime::UNIX_EPOCH);
+            files.push(FileInfo::new(path, created));
+        }
+    }
+    files.sort_by(|a, b| a.created_at().cmp(&b.created_at()));
+    Ok(files)
+}
+
+// ---------------------------------------------------------------------------
+// RenameCore - tag-based file name builder
+// ---------------------------------------------------------------------------
 
 /// Core rename engine that owns the tag list and maintains
 /// a file name built from the currently checked tags.
@@ -66,6 +125,8 @@ impl Default for RenameCore {
 mod tests {
     use super::*;
 
+    // -- RenameCore tests --
+
     #[test]
     fn test_empty_by_default() {
         let core = RenameCore::new();
@@ -106,5 +167,15 @@ mod tests {
         let mut core = RenameCore::new();
         core.toggle_tag(9999);
         assert_eq!(core.file_name(), "");
+    }
+
+    // -- FileInfo tests --
+
+    #[test]
+    fn test_file_info_creation() {
+        let now = SystemTime::now();
+        let info = FileInfo::new("/some/path/file.mp4", now);
+        assert_eq!(info.file_path(), Path::new("/some/path/file.mp4"));
+        assert_eq!(info.created_at(), now);
     }
 }
