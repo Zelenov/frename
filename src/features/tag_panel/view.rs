@@ -1,4 +1,4 @@
-//! UI for the rename panel. Only this module knows how the form and tag list look (scrollable, checkboxes, etc.).
+//! UI for the tag panel. Only this module knows how the tag list looks (scrollable, checkboxes).
 
 use iced::widget::{checkbox, column, container, mouse_area, scrollable, text};
 use iced::{mouse, Background, Border, Element, Length};
@@ -6,7 +6,7 @@ use iced::{mouse, Background, Border, Element, Length};
 use frename_core::File;
 
 use crate::theme;
-use super::{Message, RenamePanelState};
+use super::{Message, TagPanelState};
 
 /// Dark checkbox style: dark background, light text, accent when checked.
 fn dark_checkbox_style(
@@ -48,10 +48,10 @@ fn dark_checkbox_style(
     }
 }
 
-/// Render the full rename panel: file name display on top, tag list below.
-/// `selected_file` is the currently selected file from the directory (tags and name are shown/edited there).
+/// Render the tag panel: scrollable list of tag checkboxes.
+/// `selected_file` is the file from the file workspace when ready (no file = placeholder).
 pub fn view<'a>(
-    _state: &'a RenamePanelState,
+    _state: &'a TagPanelState,
     selected_file: Option<&'a File>,
 ) -> Element<'a, Message> {
     let Some(file) = selected_file else {
@@ -72,29 +72,6 @@ pub fn view<'a>(
         .into();
     };
 
-    // File name display at the top
-    let file_name_display = {
-        let label = if file.file_name().is_empty() {
-            "(no tags selected)"
-        } else {
-            file.file_name()
-        };
-
-        container(
-            text(label)
-                .size(14)
-                .color(theme::TEXT)
-                .wrapping(text::Wrapping::WordOrGlyph),
-        )
-        .padding([8, 8])
-        .width(Length::Fill)
-        .style(|_theme| iced::widget::container::Style {
-            background: Some(Background::Color(theme::BG_ELEVATED)),
-            ..Default::default()
-        })
-    };
-
-    // Scrollable tag list with checkboxes
     let tag_items: Vec<Element<'_, Message>> = file
         .tags()
         .iter()
@@ -123,12 +100,7 @@ pub fn view<'a>(
         .height(Length::Fill)
         .style(theme::dark_scrollable_style);
 
-    let panel = column![file_name_display, tag_list]
-        .spacing(4)
-        .width(Length::Fill)
-        .height(Length::Fill);
-
-    container(panel)
+    container(tag_list)
         .width(Length::Fill)
         .height(Length::Fill)
         .padding([4, 4])

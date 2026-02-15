@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use frename_core::Directory;
-use crate::features::{folder, rename_panel, video_player};
+use crate::features::{folder, tag_panel, video_player};
 
 /// Messages handled by the folder workspace (owns directory, selection, and all logic).
 #[derive(Debug, Clone)]
@@ -25,7 +25,7 @@ pub enum Message {
     /// Video player messages
     VideoPlayer(video_player::Message),
     /// Rename panel messages
-    RenamePanel(rename_panel::Message),
+    TagPanel(tag_panel::Message),
     /// Left splitter dragged (between video and folder) — absolute cursor X
     LeftSplitterDragged(f32),
     /// Right splitter dragged (between folder and rename panel) — absolute cursor X

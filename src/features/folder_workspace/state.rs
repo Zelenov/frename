@@ -7,11 +7,12 @@
 
 use std::path::{Path, PathBuf};
 
-use frename_core::Directory;
+use frename_core::{Directory, TagList};
 use iced::{Subscription, Task};
 
+use crate::features::file_workspace::FileWorkspace;
 use crate::features::folder;
-use crate::features::rename_panel::RenamePanelState;
+use crate::features::tag_panel::TagPanelState;
 use crate::features::video_player::VideoPlayerState;
 use crate::widgets::splitter::HIT_WIDTH;
 
@@ -22,12 +23,17 @@ const DEFAULT_FOLDER_WIDTH: f32 = 200.0;
 const MIN_FOLDER_WIDTH: f32 = 120.0;
 
 /// Folder workspace: owns directory, selected file, loading. Handles selection; panels just show and send messages.
+/// Holds global tag list (same for all folders) and the file workspace (current file + its tag selection).
 pub struct FolderWorkspace {
     directory: Option<Directory>,
     loading: bool,
     current_file: Option<Box<Path>>,
+    /// Global tags (same set for all files); file workspace gets a copy when loading a file.
+    global_tags: TagList,
+    /// File currently being edited: copy of file + tag selection. Rename panel reads/updates this.
+    file_workspace: FileWorkspace,
     video_player: VideoPlayerState,
-    rename_panel: RenamePanelState,
+    tag_panel: TagPanelState,
     left_width: f32,
     folder_width: f32,
 }
@@ -38,8 +44,10 @@ impl Default for FolderWorkspace {
             directory: None,
             loading: false,
             current_file: None,
+            global_tags: TagList::new(),
+            file_workspace: FileWorkspace::default(),
             video_player: VideoPlayerState::default(),
-            rename_panel: RenamePanelState::default(),
+            tag_panel: TagPanelState::default(),
             left_width: DEFAULT_LEFT_WIDTH,
             folder_width: DEFAULT_FOLDER_WIDTH,
         }
@@ -62,7 +70,7 @@ impl FolderWorkspace {
             Message::VideoPlayer(msg) => {
                 self.video_player.update(msg).map(Message::VideoPlayer)
             }
-            Message::RenamePanel(msg) => self.handle_rename_panel(msg),
+            Message::TagPanel(msg) => self.handle_tag_panel(msg),
             Message::LeftSplitterDragged(x) => {
                 self.left_width = x;
                 let folder_start = self.left_width + HIT_WIDTH;
@@ -112,9 +120,11 @@ impl FolderWorkspace {
                 return Task::none();
             }
             self.current_file = Some(path.clone().into_boxed_path());
+            self.file_workspace.set_file(dir.selected_file().cloned());
             log::info!("Opening file: {}", path.display());
             self.video_player.load_video(path, Message::VideoPlayer)
         } else {
+            self.file_workspace.set_file(None);
             let directory = parent.unwrap_or_else(|| path.clone());
             Task::done(Message::ScanFolder {
                 directory,
@@ -127,6 +137,7 @@ impl FolderWorkspace {
         log::info!("Scanning directory: {}", directory.display());
         self.loading = true;
         self.directory = None;
+        self.file_workspace.set_file(None);
 
         Task::future(async move {
             match Directory::open(&directory).await {
@@ -158,6 +169,7 @@ impl FolderWorkspace {
                 "Target file not found in scanned directory: {}",
                 target_file.display()
             );
+            self.file_workspace.set_file(None);
             return Task::none();
         };
         let dir = self.directory.as_mut().expect("just set");
@@ -169,6 +181,7 @@ impl FolderWorkspace {
             .map(|f| f.file_path().to_path_buf())
             .expect("we just selected");
         self.current_file = Some(path.clone().into_boxed_path());
+        self.file_workspace.set_file(dir.selected_file().cloned());
         log::info!("Opening file: {}", path.display());
         self.video_player.load_video(path, Message::VideoPlayer)
     }
@@ -192,6 +205,7 @@ impl FolderWorkspace {
             return Task::none();
         };
         self.current_file = Some(path.clone().into_boxed_path());
+        self.file_workspace.set_file(dir.selected_file().cloned());
         log::info!("Opening file: {}", path.display());
         self.video_player.load_video(path, Message::VideoPlayer)
     }
@@ -218,19 +232,13 @@ impl FolderWorkspace {
         self.select_file_at(current + 1)
     }
 
-    fn handle_rename_panel(
+    fn handle_tag_panel(
         &mut self,
-        msg: crate::features::rename_panel::Message,
+        msg: crate::features::tag_panel::Message,
     ) -> Task<Message> {
-        let crate::features::rename_panel::Message::ToggleTag(index) = msg;
-        if let Some(file) = self
-            .directory
-            .as_mut()
-            .and_then(|d| d.selected_file_mut())
-        {
-            file.toggle_tag(index);
-        }
-        self.rename_panel.update(&msg);
+        let crate::features::tag_panel::Message::ToggleTag(index) = msg;
+        self.file_workspace.toggle_tag(index);
+        self.tag_panel.update(&msg);
         Task::none()
     }
 
@@ -251,9 +259,14 @@ impl FolderWorkspace {
         self.loading
     }
 
-    /// Currently selected file (for rename panel and others that need the File).
-    pub fn selected_file(&self) -> Option<&frename_core::File> {
-        self.directory.as_ref().and_then(|d| d.selected_file())
+    /// Global tag list (same set for all files). File workspace gets a copy when loading a file.
+    pub fn global_tags(&self) -> &TagList {
+        &self.global_tags
+    }
+
+    /// File workspace: current file and its tag selection (for rename panel). Use this for display and tag toggles.
+    pub fn file_workspace(&self) -> &FileWorkspace {
+        &self.file_workspace
     }
 
     pub fn has_previous_next(&self) -> (bool, bool) {
@@ -273,8 +286,8 @@ impl FolderWorkspace {
         &self.video_player
     }
 
-    pub fn rename_panel(&self) -> &RenamePanelState {
-        &self.rename_panel
+    pub fn tag_panel(&self) -> &TagPanelState {
+        &self.tag_panel
     }
 
     pub fn left_width(&self) -> f32 {

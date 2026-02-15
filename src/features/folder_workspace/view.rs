@@ -6,7 +6,7 @@
 use iced::widget::{column, container, row};
 use iced::{Background, Element, Length};
 
-use crate::features::{folder, folder_controls, rename_panel, video_player};
+use crate::features::{file_workspace, folder, folder_controls, video_player};
 use crate::theme;
 use crate::widgets::splitter::{Splitter, HIT_WIDTH};
 
@@ -48,12 +48,12 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
         .min_left(right_min_left)
         .min_right(200.0);
 
-    let selected_file = state.selected_file();
-    let panel =
-        rename_panel::view::view(state.rename_panel(), selected_file).map(Message::RenamePanel);
+    let file_ws = state.file_workspace();
+    let file_workspace_panel =
+        file_workspace::view::view(file_ws, state.tag_panel()).map(Message::TagPanel);
 
     container(
-        row![video, left_splitter, folder_list, right_splitter, panel]
+        row![video, left_splitter, folder_list, right_splitter, file_workspace_panel]
             .width(Length::Fill)
             .height(Length::Fill),
     )

@@ -1,6 +1,6 @@
-//! Messages for rename panel feature
+//! Messages for tag panel feature
 
-/// Messages handled by the rename panel
+/// Messages handled by the tag panel
 #[derive(Debug, Clone)]
 pub enum Message {
     /// Toggle a tag by its index
