@@ -59,6 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         FrenameApp::update,
         FrenameApp::view,
     )
+    .centered()
     .window(window::Settings {
         size: iced::Size::new(800.0, 600.0),
         resizable: true,
