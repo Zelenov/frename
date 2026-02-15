@@ -5,19 +5,15 @@ use iced::advanced::renderer;
 use iced::advanced::widget::{self, Widget};
 use iced::advanced::{self, Clipboard, Shell};
 use iced::mouse;
-use iced::{Border, Color, Element, Event, Length, Rectangle, Shadow, Size};
+use iced::{Border, Element, Event, Length, Rectangle, Shadow, Size};
+
+use crate::theme;
 
 /// Visual width of the splitter bar.
 const BAR_WIDTH: f32 = 4.0;
 
 /// Hit-test width (wider than visual for easier grabbing).
 pub const HIT_WIDTH: f32 = 12.0;
-
-/// Splitter bar color.
-const BAR_COLOR: Color = Color::from_rgb(0.3, 0.3, 0.3);
-
-/// Splitter bar color when hovered or dragged.
-const BAR_COLOR_ACTIVE: Color = Color::from_rgb(0.45, 0.45, 0.45);
 
 /// Internal widget state for tracking drag.
 #[derive(Default)]
@@ -105,9 +101,9 @@ where
 
         let is_active = state.is_dragging || cursor.is_over(bounds);
         let color = if is_active {
-            BAR_COLOR_ACTIVE
+            theme::SPLITTER_ACTIVE
         } else {
-            BAR_COLOR
+            theme::SPLITTER
         };
 
         // Draw a thin centered bar within the hit area

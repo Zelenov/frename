@@ -110,6 +110,55 @@ impl FolderState {
                 }
                 Task::none()
             }
+            Message::PreviousFile => {
+                if let Some(dir) = &mut self.directory {
+                    let current = dir.selected_index().unwrap_or(0);
+                    if current > 0 {
+                        let index = current - 1;
+                        if dir.select(index) {
+                            let total = dir.len();
+                            let fraction = if total <= 1 {
+                                0.0
+                            } else {
+                                index as f32 / (total - 1) as f32
+                            };
+                            return operation::snap_to(
+                                self.scrollable_id.clone(),
+                                RelativeOffset::<Option<f32>> {
+                                    x: None,
+                                    y: Some(fraction),
+                                },
+                            );
+                        }
+                    }
+                }
+                Task::none()
+            }
+            Message::NextFile => {
+                if let Some(dir) = &mut self.directory {
+                    let len = dir.len();
+                    let current = dir.selected_index().unwrap_or(0);
+                    if current + 1 < len {
+                        let index = current + 1;
+                        if dir.select(index) {
+                            let total = dir.len();
+                            let fraction = if total <= 1 {
+                                0.0
+                            } else {
+                                index as f32 / (total - 1) as f32
+                            };
+                            return operation::snap_to(
+                                self.scrollable_id.clone(),
+                                RelativeOffset::<Option<f32>> {
+                                    x: None,
+                                    y: Some(fraction),
+                                },
+                            );
+                        }
+                    }
+                }
+                Task::none()
+            }
         }
     }
 

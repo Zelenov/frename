@@ -12,6 +12,7 @@ use std::fs::File;
 
 mod app;
 mod features;
+mod theme;
 mod widgets;
 
 use app::FrenameApp;
@@ -64,6 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         FrenameApp::update,
         FrenameApp::view,
     )
+    .theme(iced::Theme::Dark)
     .centered()
     .window(window::Settings {
         size: iced::Size::new(800.0, 600.0),

@@ -115,7 +115,12 @@ impl FileHandlerState {
                     }
                 }
 
-                let is_file_select = matches!(&folder_msg, folder::Message::SelectFile(_));
+                let is_file_select = matches!(
+                        &folder_msg,
+                        folder::Message::SelectFile(_)
+                            | folder::Message::PreviousFile
+                            | folder::Message::NextFile
+                    );
                 let task = self.folder.update(folder_msg).map(Message::Folder);
 
                 if is_file_select {

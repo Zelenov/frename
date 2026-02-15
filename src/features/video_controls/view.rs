@@ -3,11 +3,11 @@
 use iced::widget::{button, container, row, text};
 use iced::{Background, Color, Element};
 
+use crate::theme;
 use super::progress_bar::ProgressBar;
 use super::{Message, VideoControlsState};
 
 const CONTROLS_HEIGHT: f32 = 32.0;
-const CONTROLS_BG: Color = Color::from_rgb(0.12, 0.12, 0.12);
 
 /// Render the video player controls.
 /// `position_secs` is the live playback position read from the video at view time.
@@ -24,13 +24,13 @@ pub fn view(state: &VideoControlsState, position_secs: f32) -> Element<'_, Messa
         .padding(0)
         .style(|_theme, status| {
             let bg = match status {
-                button::Status::Hovered => Color::from_rgb(0.25, 0.25, 0.25),
-                button::Status::Pressed => Color::from_rgb(0.3, 0.3, 0.3),
+                button::Status::Hovered => theme::TRACK,
+                button::Status::Pressed => theme::SPLITTER_ACTIVE,
                 _ => Color::TRANSPARENT,
             };
             button::Style {
                 background: Some(Background::Color(bg)),
-                text_color: Color::WHITE,
+                text_color: theme::TEXT,
                 border: iced::Border::default(),
                 shadow: iced::Shadow::default(),
                 snap: true,
@@ -58,7 +58,7 @@ pub fn view(state: &VideoControlsState, position_secs: f32) -> Element<'_, Messa
         .width(iced::Length::Fill)
         .height(CONTROLS_HEIGHT)
         .style(|_theme| container::Style {
-            background: Some(Background::Color(CONTROLS_BG)),
+            background: Some(Background::Color(theme::BG_PANEL)),
             ..container::Style::default()
         })
         .into()

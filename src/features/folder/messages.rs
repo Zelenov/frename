@@ -19,4 +19,8 @@ pub enum Message {
     },
     /// Select a file by its index in the list
     SelectFile(usize),
+    /// Select the previous file in the list (from folder controls)
+    PreviousFile,
+    /// Select the next file in the list (from folder controls)
+    NextFile,
 }

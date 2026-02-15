@@ -5,12 +5,12 @@ use iced::advanced::renderer;
 use iced::advanced::widget::{self, Widget};
 use iced::advanced::{self, Clipboard, Shell};
 use iced::mouse;
-use iced::{Border, Color, Element, Event, Length, Rectangle, Shadow, Size};
+use iced::{Border, Element, Event, Length, Rectangle, Shadow, Size};
+
+use crate::theme;
 
 const BAR_HEIGHT: f32 = 8.0;
 const HIT_HEIGHT: f32 = 24.0;
-const TRACK_COLOR: Color = Color::from_rgb(0.25, 0.25, 0.25);
-const FILL_COLOR: Color = Color::from_rgb(0.35, 0.65, 1.0);
 const BORDER_RADIUS: f32 = 4.0;
 
 /// Internal widget state for tracking drag
@@ -134,7 +134,7 @@ where
                 shadow: Shadow::default(),
                 snap: true,
             },
-            TRACK_COLOR,
+            theme::TRACK,
         );
 
         // Progress fill
@@ -155,7 +155,7 @@ where
                     shadow: Shadow::default(),
                     snap: true,
                 },
-                FILL_COLOR,
+                theme::ACCENT,
             );
         }
     }

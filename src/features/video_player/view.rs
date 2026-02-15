@@ -1,10 +1,11 @@
 //! UI rendering for video player feature
 
 use iced::widget::{column, container, text};
-use iced::{Background, Color, Element};
+use iced::{Background, Element};
 use iced_video_player::VideoPlayer;
 
 use crate::features::video_controls;
+use crate::theme;
 use super::{Message, VideoPlayerState};
 
 /// Render the video player with controls below
@@ -22,7 +23,7 @@ pub fn view(state: &VideoPlayerState) -> Element<'_, Message> {
             .width(iced::Length::Fill)
             .height(iced::Length::Fill)
             .style(|_theme| container::Style {
-                background: Some(Background::Color(Color::from_rgb(0.12, 0.12, 0.12))),
+                background: Some(Background::Color(theme::BG_PANEL)),
                 ..container::Style::default()
             });
 
@@ -36,12 +37,20 @@ pub fn view(state: &VideoPlayerState) -> Element<'_, Message> {
             .height(iced::Length::Fill)
             .into()
     } else if state.is_loading() {
-        container(text("Loading video...").size(24))
-            .center(iced::Length::Fill)
-            .into()
+        container(
+            text("Loading video...")
+                .size(24)
+                .color(theme::TEXT_MUTED),
+        )
+        .center(iced::Length::Fill)
+        .into()
     } else {
-        container(text("Drop a video file here to play").size(24))
-            .center(iced::Length::Fill)
-            .into()
+        container(
+            text("Drop a video file here to play")
+                .size(24)
+                .color(theme::TEXT_MUTED),
+        )
+        .center(iced::Length::Fill)
+        .into()
     }
 }
