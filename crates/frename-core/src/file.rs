@@ -7,8 +7,8 @@ use std::time::SystemTime;
 /// A file being processed: path and metadata plus tag-based rename state.
 #[derive(Debug, Clone)]
 pub struct File {
-    /// Full path to the file.
-    file_path: PathBuf,
+    /// Full path to the file (immutable).
+    file_path: Box<Path>,
     /// Original file name stem (without extension), parsed from the path.
     initial_filename: String,
     /// File creation time (used for sorting).
@@ -23,8 +23,8 @@ pub struct File {
 
 impl File {
     /// Create a file entry from a path and creation time (e.g. when scanning a directory).
-    pub fn from_path(file_path: impl Into<PathBuf>, created_at: SystemTime) -> Self {
-        let file_path = file_path.into();
+    pub fn from_path(file_path: impl AsRef<Path>, created_at: SystemTime) -> Self {
+        let file_path = file_path.as_ref().to_path_buf().into_boxed_path();
         let initial_filename = file_path
             .file_stem()
             .and_then(|s| s.to_str())
@@ -44,7 +44,7 @@ impl File {
     /// Create a new empty File (default tag list, no path).
     pub fn new() -> Self {
         Self {
-            file_path: PathBuf::new(),
+            file_path: PathBuf::new().into_boxed_path(),
             initial_filename: String::new(),
             created_at: SystemTime::UNIX_EPOCH,
             tag_list: TagList::new(),

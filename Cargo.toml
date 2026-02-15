@@ -26,7 +26,7 @@ simplelog = "0.12"
 # GStreamer bindings - for checking availability
 gstreamer = "0.23"
 
-# Async runtime (ApplyChanges delay; spawn_blocking for non-blocking video load)
+# Async runtime (spawn_blocking for non-blocking video load)
 tokio = { version = "1", features = ["time", "rt"] }
 
 [profile.release]

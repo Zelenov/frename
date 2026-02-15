@@ -1,4 +1,4 @@
-//! UI rendering for the rename panel feature
+//! UI for the rename panel. Only this module knows how the form and tag list look (scrollable, checkboxes, etc.).
 
 use iced::widget::{checkbox, column, container, mouse_area, scrollable, text};
 use iced::{mouse, Background, Border, Element, Length};

@@ -1,4 +1,4 @@
-//! UI rendering for folder controls feature
+//! UI for folder controls (prev/next). Only this module knows they are buttons; receives only booleans.
 
 use iced::widget::{button, container, row, text};
 use iced::{Background, Color, Element};

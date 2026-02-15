@@ -1,26 +1,12 @@
-//! Messages for the folder feature
+//! Messages from the folder list (user actions; workspace handles selection and notifies panels)
 
-use std::path::PathBuf;
-
-use frename_core::Directory;
-
-/// Messages handled by the folder feature
+/// User actions in the folder list; workspace updates selected file and panels react.
 #[derive(Debug, Clone)]
 pub enum Message {
-    /// Scan a directory and auto-select the target file afterwards
-    ScanFolder {
-        directory: PathBuf,
-        target_file: PathBuf,
-    },
-    /// Directory scan completed
-    FolderLoaded {
-        directory: Directory,
-        target_file: PathBuf,
-    },
-    /// Select a file by its index in the list
+    /// User selected a file by its index in the list
     SelectFile(usize),
-    /// Select the previous file in the list (from folder controls)
+    /// User pressed previous file (folder controls)
     PreviousFile,
-    /// Select the next file in the list (from folder controls)
+    /// User pressed next file (folder controls)
     NextFile,
 }

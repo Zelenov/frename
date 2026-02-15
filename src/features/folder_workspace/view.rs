@@ -1,4 +1,7 @@
-//! UI for folder workspace: folder list + video panel + rename panel
+//! UI for folder workspace: only this module knows the workspace layout (row, splitters, region sizes).
+//!
+//! We pass only data to each feature view (directory, current_file, selected_file, etc.).
+//! We do not tell any feature how to look (scrollable, rectangular, etc.); each feature view owns its appearance.
 
 use iced::widget::{column, container, row};
 use iced::{Background, Element, Length};
@@ -6,9 +9,10 @@ use iced::{Background, Element, Length};
 use crate::features::{folder, folder_controls, rename_panel, video_player};
 use crate::theme;
 use crate::widgets::splitter::{Splitter, HIT_WIDTH};
+
 use super::{FolderWorkspace, Message};
 
-/// Layout: [Video Player] | splitter | [Folder + controls] | splitter | [Rename Panel]
+/// Workspace layout: regions and splitters. Child views receive only data; they decide how they look.
 pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
     let video = container(
         video_player::view::view(state.video_player()).map(Message::VideoPlayer),
@@ -20,18 +24,15 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
         .min_left(150.0)
         .min_right(200.0);
 
-    let (has_previous, has_next) = state
-        .folder()
-        .directory()
-        .map(|d| {
-            let idx = d.selected_index().unwrap_or(0);
-            let len = d.len();
-            (idx > 0, idx + 1 < len)
-        })
-        .unwrap_or((false, false));
+    let (has_previous, has_next) = state.has_previous_next();
 
     let folder_col: Element<'_, folder::Message> = column![
-        container(folder::view::view(state.folder())).height(Length::Fill),
+        container(folder::view::view(
+            state.directory(),
+            state.current_file(),
+            state.is_loading(),
+        ))
+        .height(Length::Fill),
         folder_controls::view::view(has_previous, has_next),
     ]
     .height(Length::Fill)
@@ -47,10 +48,7 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
         .min_left(right_min_left)
         .min_right(200.0);
 
-    let selected_file = state
-        .folder()
-        .directory()
-        .and_then(|d| d.selected_file());
+    let selected_file = state.selected_file();
     let panel =
         rename_panel::view::view(state.rename_panel(), selected_file).map(Message::RenamePanel);
 

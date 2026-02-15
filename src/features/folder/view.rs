@@ -1,69 +1,65 @@
-//! UI rendering for the folder feature
+//! UI for the folder list. Only this module knows the list is scrollable and how rows look.
+//!
+//! Receives only data (directory, selected file, loading) from workspace; no parent knows our layout or widgets.
+
+use std::path::Path;
 
 use iced::widget::{column, container, mouse_area, row, scrollable, text};
 use iced::{mouse, Background, Element, Length};
 
 use crate::theme;
-use super::{FolderState, Message};
 
-/// Render the folder panel: a scrollable list of file names
-pub fn view(state: &FolderState) -> Element<'_, Message> {
+use super::Message;
+
+const FOLDER_LIST_SCROLLABLE_ID: &str = "folder-file-list";
+
+/// Render the folder panel: a scrollable list of file names.
+/// Workspace passes directory and selected file; this view shows them and emits SelectFile/Previous/Next.
+pub fn view<'a>(
+    directory: Option<&'a frename_core::Directory>,
+    selected_path: Option<&'a Path>,
+    loading: bool,
+) -> Element<'a, Message> {
     let placeholder = |s: String| {
-        container(
-            text(s)
-                .size(14)
-                .color(theme::TEXT_MUTED),
-        )
-        .padding([8, 8])
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(|_theme| iced::widget::container::Style {
-            background: Some(Background::Color(theme::BG_PANEL)),
-            ..Default::default()
-        })
+        container(text(s).size(14).color(theme::TEXT_MUTED))
+            .padding([8, 8])
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(|_theme| iced::widget::container::Style {
+                background: Some(Background::Color(theme::BG_PANEL)),
+                ..Default::default()
+            })
     };
 
-    if state.is_loading() {
+    if loading {
         return placeholder("Scanning folder...".to_string()).into();
     }
 
-    let Some(directory) = state.directory() else {
+    let Some(dir) = directory else {
         return placeholder("Drop a file to open its folder".to_string()).into();
     };
 
-    if directory.is_empty() {
+    if dir.is_empty() {
         return placeholder("Folder is empty".to_string()).into();
     }
 
-    let selected = directory.selected_index();
-    let applying = state.applying_index();
+    let selected_index = selected_path.and_then(|p| dir.find_by_path(p));
 
-    let items: Vec<Element<'_, Message>> = directory
+    let items: Vec<Element<'_, Message>> = dir
         .files()
         .iter()
         .enumerate()
         .map(|(index, file_info)| {
             let name = file_info.initial_filename();
-            let is_selected = selected == Some(index);
-            let is_applying = applying == Some(index);
+            let is_selected = selected_index == Some(index);
 
-            let label = text(name)
-                .size(14)
-                .color(theme::TEXT);
-            let spinner_text = if is_applying { " ⟳" } else { "" };
-            let row_content = row![
-                label,
-                text(spinner_text)
-                    .size(14)
-                    .color(theme::ACCENT),
-            ]
-            .spacing(6)
-            .align_y(iced::Alignment::Center);
+            let label = text(name).size(14).color(theme::TEXT);
+            let row_content = row![label].align_y(iced::Alignment::Center);
 
             let row = container(row_content)
                 .padding([4, 8])
                 .width(Length::Fill)
-                .style(move |_theme: &iced::Theme| container::Style {
+                .style(move |_theme: &iced::Theme| iced::widget::container::Style {
                     background: Some(Background::Color(if is_selected {
                         theme::ACCENT_SELECTED
                     } else {
@@ -80,7 +76,7 @@ pub fn view(state: &FolderState) -> Element<'_, Message> {
         .collect();
 
     let list = scrollable(column(items).width(Length::Fill))
-        .id(state.scrollable_id().clone())
+        .id(iced::widget::Id::new(FOLDER_LIST_SCROLLABLE_ID))
         .height(Length::Fill)
         .style(theme::dark_scrollable_style);
 

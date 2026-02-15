@@ -2,23 +2,30 @@
 
 use std::path::PathBuf;
 
+use frename_core::Directory;
 use crate::features::{folder, rename_panel, video_player};
 
-/// Messages handled by the folder workspace (folder + panels)
+/// Messages handled by the folder workspace (owns directory, selection, and all logic).
 #[derive(Debug, Clone)]
 pub enum Message {
-    /// Open a file (set up video player + rename panel for the selected file)
+    /// Open a file by path: if in current folder then select and open, else scan folder then open
     OpenFile(PathBuf),
-    /// Folder messages (directory scan, file selection)
+    /// Scan a directory and auto-select the target file afterwards
+    ScanFolder {
+        directory: PathBuf,
+        target_file: PathBuf,
+    },
+    /// Directory scan completed (internal)
+    FolderLoaded {
+        directory: Directory,
+        target_file: PathBuf,
+    },
+    /// User selected a file in the list (from folder view)
     Folder(folder::Message),
     /// Video player messages
     VideoPlayer(video_player::Message),
     /// Rename panel messages
     RenamePanel(rename_panel::Message),
-    /// Apply name changes to the currently selected file (async; no rename yet, just spinner).
-    ApplyChanges,
-    /// Apply operation finished; optionally switch to pending selection.
-    ApplyChangesCompleted,
     /// Left splitter dragged (between video and folder) — absolute cursor X
     LeftSplitterDragged(f32),
     /// Right splitter dragged (between folder and rename panel) — absolute cursor X

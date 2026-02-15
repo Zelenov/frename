@@ -1,5 +1,8 @@
-//! Folder workspace: the open folder and its panels (folder list, video, rename).
-//! This is the main content of the app once a folder is chosen.
+//! Folder workspace: owns the loaded folder, selected file, and selection logic.
+//!
+//! The app only sees update, view, subscription, and current_file (for title).
+//! How the workspace looks (splitters, regions) is only in this crate's view.
+//! Each feature (folder list, video, rename) receives only data and owns its own UI.
 
 mod messages;
 mod state;

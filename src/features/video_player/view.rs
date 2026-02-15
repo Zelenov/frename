@@ -1,4 +1,4 @@
-//! UI rendering for video player feature
+//! UI for the video player. Only this module knows how the player and controls look.
 
 use iced::widget::{column, container, text};
 use iced::{Background, Element};

@@ -1,14 +1,14 @@
 //! Directory scanning and file list management.
 
 use crate::File;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::SystemTime;
 
 /// A scanned directory containing a sorted list of files and an optional selection.
 #[derive(Debug, Clone)]
 pub struct Directory {
-    /// Directory path that was scanned.
-    path: PathBuf,
+    /// Directory path that was scanned (immutable).
+    path: Box<Path>,
     /// Files in the directory, sorted by creation date (oldest first).
     files: Vec<File>,
     /// Index of the currently selected file.
@@ -17,9 +17,9 @@ pub struct Directory {
 
 impl Directory {
     /// Create an empty directory (no files scanned).
-    pub fn empty(directory: impl Into<PathBuf>) -> Self {
+    pub fn empty(directory: impl AsRef<Path>) -> Self {
         Self {
-            path: directory.into(),
+            path: directory.as_ref().to_path_buf().into_boxed_path(),
             files: Vec::new(),
             selected_index: None,
         }
@@ -39,7 +39,7 @@ impl Directory {
         }
         files.sort_by(|a, b| a.created_at().cmp(&b.created_at()));
         Ok(Self {
-            path: directory.to_path_buf(),
+            path: directory.to_path_buf().into_boxed_path(),
             files,
             selected_index: None,
         })
