@@ -1,6 +1,6 @@
 //! State for video player feature
 
-use iced::Task;
+use iced::{Subscription, Task, time};
 use iced_video_player::Video;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -105,15 +105,9 @@ impl VideoPlayerState {
             Message::VideoReady { duration_secs } => Task::done(Message::Controls(
                 video_controls::Message::VideoReady { duration_secs },
             )),
-            Message::NewFrame => {
-                let Some(video) = &self.current_video else {
-                    return Task::none();
-                };
-                let pos = video.position().as_secs_f32();
-                Task::done(Message::Controls(
-                    video_controls::Message::UpdatePosition(pos),
-                ))
-            }
+            // NewFrame triggers update → view cycle so the progress bar
+            // reads fresh position from the video. No state change needed.
+            Message::NewFrame => Task::none(),
             Message::EndOfStream => Task::done(Message::Controls(
                 video_controls::Message::SetPlaying(false),
             )),
@@ -165,5 +159,19 @@ impl VideoPlayerState {
     /// Get reference to the controls state
     pub fn controls(&self) -> &VideoControlsState {
         &self.controls
+    }
+
+    /// Subscriptions active when a video is loaded:
+    /// - periodic tick for progress bar updates
+    /// - keyboard shortcuts from controls (Space = play/pause)
+    pub fn subscription(&self) -> Subscription<Message> {
+        if self.current_video.is_some() {
+            Subscription::batch([
+                time::every(Duration::from_millis(250)).map(|_| Message::NewFrame),
+                self.controls.subscription().map(Message::Controls),
+            ])
+        } else {
+            Subscription::none()
+        }
     }
 }

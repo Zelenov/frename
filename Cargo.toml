@@ -8,7 +8,7 @@ description = "File renaming utility for Windows"
 
 [dependencies]
 # GUI framework - Iced for cross-platform GUI
-iced = "0.14.0-dev"
+iced = { version = "0.14.0-dev", features = ["tokio"] }
 
 # Video playback - GStreamer-based (requires GStreamer installation on Windows)
 # See GSTREAMER_SETUP.md for installation instructions

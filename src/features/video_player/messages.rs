@@ -9,7 +9,7 @@ pub enum Message {
     VideoLoaded(bool),
     /// Video became available after loading
     VideoReady { duration_secs: f32 },
-    /// New frame rendered - update position
+    /// New video frame rendered (triggers view refresh for progress bar)
     NewFrame,
     /// End of stream reached
     EndOfStream,

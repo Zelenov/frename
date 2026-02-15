@@ -1,6 +1,6 @@
 ---
 name: iced-elm-architecture
-description: Iced GUI framework Elm architecture patterns for Rust. Feature-based code organization, message flow, Task::done dispatch, and component independence. Use when building iced UI features, adding messages, creating views, wiring components, or organizing iced application code.
+description: Iced GUI framework Elm architecture patterns for Rust. Feature-based code organization, message flow, Task::done dispatch, subscriptions, and component independence. Use when building iced UI features, adding messages, creating views, wiring components, or organizing iced application code.
 ---
 
 # Iced Elm Architecture Patterns
@@ -13,7 +13,7 @@ Every feature lives in its own folder under `src/features/`:
 src/features/feature_name/
 ├── mod.rs        # Re-exports: pub use messages::Message; pub use state::FeatureState;
 ├── messages.rs   # All messages this feature handles
-├── state.rs      # State struct + update method
+├── state.rs      # State struct + update + subscription methods
 └── view.rs       # UI rendering function
 ```
 
@@ -74,6 +74,21 @@ impl FeatureState {
         }
     }
 
+    // Subscription - returns feature-specific subscriptions
+    pub fn subscription(&self) -> Subscription<Message> {
+        // Gate subscriptions by state - return none when feature is inactive
+        if self.is_active() {
+            Subscription::batch([
+                // Own subscriptions (timers, etc.)
+                time::every(Duration::from_millis(250)).map(|_| Message::Tick),
+                // Child subscriptions wrapped with .map()
+                self.child.subscription().map(Message::Controls),
+            ])
+        } else {
+            Subscription::none()
+        }
+    }
+
     // Expose state through getters, not public fields
     pub fn field(&self) -> &SomeType { &self.field }
     pub fn child(&self) -> &ChildState { &self.child }
@@ -87,7 +102,8 @@ use super::{Message, FeatureState};
 
 pub fn view(state: &FeatureState) -> Element<'_, Message> {
     // Compose child views with .map() for message translation
-    let child_view = child::view::view(state.child()).map(Message::Controls);
+    // Pass live data as parameters - child reads it at view time
+    let child_view = child::view::view(state.child(), live_data).map(Message::Controls);
 
     column![own_content, child_view]
         .width(iced::Length::Fill)
@@ -214,9 +230,126 @@ Message::VideoLoaded(success) => {
 }
 ```
 
-### 6. Avoid Redundant Redraws
+### 6. Read High-Frequency Data at View Time
 
-Don't use `on_new_frame` or similar per-frame callbacks unless you need per-frame UI updates (e.g., a progress slider). Each message triggers a re-render in iced.
+Don't pipe high-frequency data (e.g., playback position) through messages. Instead, read it directly from the source in `view()` and pass as a parameter to child views.
+
+```rust
+// WRONG - pushing position through messages on every frame
+Message::NewFrame => {
+    let pos = video.position().as_secs_f32();
+    Task::done(Message::Controls(controls::Message::UpdatePosition(pos)))
+    // Creates 2 message cycles per frame → layout invalidation warnings
+}
+
+// CORRECT - read position at view time, pass to child view
+pub fn view(state: &VideoPlayerState) -> Element<'_, Message> {
+    if let Some(video) = state.current_video() {
+        let position_secs = video.position().as_secs_f32();
+        let controls = controls::view::view(state.controls(), position_secs)
+            .map(Message::Controls);
+        // ...
+    }
+}
+```
+
+The child view receives live data as a parameter and uses it directly (or falls back to local state during user interaction like seeking):
+```rust
+pub fn view(state: &ControlsState, position_secs: f32) -> Element<'_, Message> {
+    let current_pos = if state.is_seeking() {
+        state.seek_position_secs()  // user is dragging - show drag position
+    } else {
+        position_secs               // normal playback - show live position
+    };
+    // ...
+}
+```
+
+### 7. Use Time Subscriptions Instead of Per-Frame Callbacks
+
+Never use `on_new_frame` or similar per-frame widget callbacks to drive UI updates. They fire at video framerate (30-60fps), causing "consecutive RedrawRequested layout invalidation" warnings.
+
+Instead, use `iced::time::every()` at a controlled rate. The underlying widget (e.g., VideoPlayer) renders at full framerate internally. The subscription just triggers periodic `view()` refreshes to pick up fresh data.
+
+```rust
+// WRONG - fires 30-60x/sec, causes layout invalidation warnings
+VideoPlayer::new(video)
+    .on_new_frame(Message::NewFrame)  // don't do this for progress bar updates
+
+// CORRECT - tick at controlled rate via subscription
+pub fn subscription(&self) -> Subscription<Message> {
+    if self.current_video.is_some() {
+        time::every(Duration::from_millis(250)).map(|_| Message::NewFrame)
+    } else {
+        Subscription::none()
+    }
+}
+// NewFrame handler is a no-op - just triggers view() refresh
+Message::NewFrame => Task::none(),
+```
+
+**Requires** `tokio` feature for iced: `iced = { version = "...", features = ["tokio"] }`
+
+### 8. Subscriptions Belong to Features
+
+Each feature owns its subscriptions. Features return `Subscription::none()` when inactive. Parent features batch child subscriptions with `.map()`. The app batches all feature subscriptions. `main.rs` just delegates.
+
+```
+Subscription flow:
+
+  ControlsState::subscription()         → Subscription<controls::Message>
+       ↓ .map(Message::Controls)
+  VideoPlayerState::subscription()      → Subscription<video_player::Message>
+       ↓ .map(Message::VideoPlayer)
+  DragDropState::subscription()         → Subscription<drag_drop::Message>
+       ↓ .map(Message::DragDrop)
+  FrenameApp::subscription()            → Subscription<app::Message>
+       ↓
+  main.rs: .subscription(FrenameApp::subscription)
+```
+
+Feature subscription pattern:
+```rust
+// Feature gates its subscription by state
+pub fn subscription(&self) -> Subscription<Message> {
+    if self.is_active() {
+        Subscription::batch([
+            time::every(Duration::from_millis(250)).map(|_| Message::Tick),
+            self.child.subscription().map(Message::Controls),
+        ])
+    } else {
+        Subscription::none()
+    }
+}
+```
+
+App batches all feature subscriptions:
+```rust
+pub fn subscription(&self) -> Subscription<Message> {
+    Subscription::batch([
+        self.drag_drop_state.subscription().map(Message::DragDrop),
+        self.video_player_state.subscription().map(Message::VideoPlayer),
+    ])
+}
+```
+
+`main.rs` stays clean:
+```rust
+.subscription(FrenameApp::subscription)
+```
+
+### 9. Custom Widgets Use Range + Value API
+
+Custom widgets (like progress bars) should accept a range and value, not a pre-computed fraction. The widget handles conversion internally. This mirrors iced's built-in `Slider` API.
+
+```rust
+// WRONG - caller computes fraction, widget works with 0.0..1.0
+let progress = position / duration;
+ProgressBar::new(progress, |fraction| Message::Seek(fraction * duration))
+
+// CORRECT - widget accepts range + value, handles math internally
+ProgressBar::new(0.0..=duration, position, Message::Seek)
+```
 
 ## app.rs Pattern
 
@@ -236,6 +369,13 @@ pub fn update(&mut self, message: Message) -> Task<Message> {
 
 pub fn view(&self) -> Element<'_, Message> {
     feature::view::view(&self.feature_state).map(Message::Feature)
+}
+
+pub fn subscription(&self) -> Subscription<Message> {
+    Subscription::batch([
+        self.feature_a.subscription().map(Message::FeatureA),
+        self.feature_b.subscription().map(Message::FeatureB),
+    ])
 }
 ```
 

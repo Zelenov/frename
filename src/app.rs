@@ -1,6 +1,6 @@
 //! Root application state and coordination
 
-use iced::{Element, Task};
+use iced::{Element, Subscription, Task};
 
 use crate::features::{drag_drop, video_player};
 
@@ -33,6 +33,16 @@ impl FrenameApp {
 
     pub fn view(&self) -> Element<'_, Message> {
         video_player::view::view(&self.video_player_state).map(Message::VideoPlayer)
+    }
+
+    /// Feature subscriptions (file drop, keyboard, timers, etc.)
+    pub fn subscription(&self) -> Subscription<Message> {
+        Subscription::batch([
+            self.drag_drop_state.subscription().map(Message::DragDrop),
+            self.video_player_state
+                .subscription()
+                .map(Message::VideoPlayer),
+        ])
     }
 
     /// Get the window title based on dropped file

@@ -14,7 +14,6 @@ pub fn view(state: &VideoPlayerState) -> Element<'_, Message> {
             .width(iced::Length::Fill)
             .height(iced::Length::Fill)
             .content_fit(iced::ContentFit::Contain)
-            .on_new_frame(Message::NewFrame)
             .on_end_of_stream(Message::EndOfStream);
 
         // Wrap in container so column layout sees Fill height
@@ -27,7 +26,10 @@ pub fn view(state: &VideoPlayerState) -> Element<'_, Message> {
                 ..container::Style::default()
             });
 
-        let controls = video_controls::view::view(state.controls()).map(Message::Controls);
+        // Read live position from the video at view time (like the Slider pattern)
+        let position_secs = video.position().as_secs_f32();
+        let controls =
+            video_controls::view::view(state.controls(), position_secs).map(Message::Controls);
 
         column![video_area, controls]
             .width(iced::Length::Fill)

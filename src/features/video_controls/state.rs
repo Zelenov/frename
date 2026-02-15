@@ -1,26 +1,28 @@
 //! State for video controls feature
 
+use iced::{event, keyboard, Subscription};
+
 use super::Message;
 
 /// Video player controls state
 pub struct VideoControlsState {
     /// Whether the video is currently playing
     is_playing: bool,
-    /// Current playback position in seconds
-    position_secs: f32,
     /// Total duration in seconds
     duration_secs: f32,
     /// Whether the user is currently dragging the progress bar
     seeking: bool,
+    /// Position while user is dragging (only meaningful when seeking == true)
+    seek_position: f32,
 }
 
 impl Default for VideoControlsState {
     fn default() -> Self {
         Self {
             is_playing: false,
-            position_secs: 0.0,
             duration_secs: 0.0,
             seeking: false,
+            seek_position: 0.0,
         }
     }
 }
@@ -34,24 +36,18 @@ impl VideoControlsState {
             }
             Message::VideoReady { duration_secs } => {
                 self.duration_secs = *duration_secs;
-                self.position_secs = 0.0;
                 self.is_playing = true;
                 self.seeking = false;
+                self.seek_position = 0.0;
             }
             Message::SetPlaying(playing) => {
                 if self.is_playing != *playing {
                     self.is_playing = *playing;
                 }
             }
-            Message::UpdatePosition(pos) => {
-                // Ignore position updates while user is dragging
-                if !self.seeking && (self.position_secs - pos).abs() > 0.05 {
-                    self.position_secs = *pos;
-                }
-            }
             Message::Seek(pos) => {
                 self.seeking = true;
-                self.position_secs = *pos;
+                self.seek_position = *pos;
             }
             Message::SeekReleased => {
                 self.seeking = false;
@@ -64,13 +60,29 @@ impl VideoControlsState {
         self.is_playing
     }
 
-    /// Current position in seconds
-    pub fn position_secs(&self) -> f32 {
-        self.position_secs
-    }
-
     /// Total duration in seconds
     pub fn duration_secs(&self) -> f32 {
         self.duration_secs
+    }
+
+    /// Whether the user is currently seeking (dragging the progress bar)
+    pub fn is_seeking(&self) -> bool {
+        self.seeking
+    }
+
+    /// Seek position in seconds (only meaningful while seeking)
+    pub fn seek_position_secs(&self) -> f32 {
+        self.seek_position
+    }
+
+    /// Keyboard shortcuts for video controls (Space = play/pause)
+    pub fn subscription(&self) -> Subscription<Message> {
+        event::listen_with(|event, _status, _id| match event {
+            iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                key: keyboard::Key::Named(keyboard::key::Named::Space),
+                ..
+            }) => Some(Message::TogglePlayPause),
+            _ => None,
+        })
     }
 }

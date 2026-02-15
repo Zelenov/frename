@@ -19,21 +19,35 @@ struct State {
     is_dragging: bool,
 }
 
-/// A rectangular progress bar that supports click and drag to seek
+/// A rectangular progress bar that supports click and drag to seek.
+/// Works with absolute values in a range, like `Slider`.
 pub struct ProgressBar<'a, Message> {
-    /// Current progress as fraction 0.0 to 1.0
-    progress: f32,
-    /// Called with fraction 0.0..=1.0 when user clicks or drags
+    /// Minimum value
+    min: f32,
+    /// Maximum value
+    max: f32,
+    /// Current value within min..=max
+    value: f32,
+    /// Called with value in min..=max when user clicks or drags
     on_seek: Box<dyn Fn(f32) -> Message + 'a>,
     /// Called when user releases the mouse after seeking
     on_release: Option<Message>,
 }
 
 impl<'a, Message> ProgressBar<'a, Message> {
-    /// Create a new progress bar
-    pub fn new(progress: f32, on_seek: impl Fn(f32) -> Message + 'a) -> Self {
+    /// Create a new progress bar with a range and current value.
+    /// Usage: `ProgressBar::new(0.0..=duration, position, Message::Seek)`
+    pub fn new(
+        range: std::ops::RangeInclusive<f32>,
+        value: f32,
+        on_seek: impl Fn(f32) -> Message + 'a,
+    ) -> Self {
+        let min = *range.start();
+        let max = *range.end();
         Self {
-            progress: progress.clamp(0.0, 1.0),
+            min,
+            max,
+            value: value.clamp(min, max),
             on_seek: Box::new(on_seek),
             on_release: None,
         }
@@ -45,11 +59,22 @@ impl<'a, Message> ProgressBar<'a, Message> {
         self
     }
 
-    /// Calculate seek fraction from cursor position
-    fn fraction_from_cursor(&self, bounds: Rectangle, cursor: mouse::Cursor) -> Option<f32> {
-        cursor
-            .position()
-            .map(|pos| ((pos.x - bounds.x) / bounds.width).clamp(0.0, 1.0))
+    /// Current progress as a fraction 0.0..=1.0
+    fn fraction(&self) -> f32 {
+        let span = self.max - self.min;
+        if span > 0.0 {
+            (self.value - self.min) / span
+        } else {
+            0.0
+        }
+    }
+
+    /// Convert cursor position to a value in min..=max
+    fn value_from_cursor(&self, bounds: Rectangle, cursor: mouse::Cursor) -> Option<f32> {
+        cursor.position().map(|pos| {
+            let fraction = ((pos.x - bounds.x) / bounds.width).clamp(0.0, 1.0);
+            self.min + fraction * (self.max - self.min)
+        })
     }
 }
 
@@ -113,7 +138,7 @@ where
         );
 
         // Progress fill
-        let fill_width = bounds.width * self.progress;
+        let fill_width = bounds.width * self.fraction();
         if fill_width > 0.5 {
             renderer.fill_quad(
                 renderer::Quad {
@@ -153,15 +178,15 @@ where
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 if cursor.is_over(bounds) {
                     state.is_dragging = true;
-                    if let Some(fraction) = self.fraction_from_cursor(bounds, cursor) {
-                        shell.publish((self.on_seek)(fraction));
+                    if let Some(value) = self.value_from_cursor(bounds, cursor) {
+                        shell.publish((self.on_seek)(value));
                     }
                 }
             }
             Event::Mouse(mouse::Event::CursorMoved { .. }) => {
                 if state.is_dragging {
-                    if let Some(fraction) = self.fraction_from_cursor(bounds, cursor) {
-                        shell.publish((self.on_seek)(fraction));
+                    if let Some(value) = self.value_from_cursor(bounds, cursor) {
+                        shell.publish((self.on_seek)(value));
                     }
                 }
             }

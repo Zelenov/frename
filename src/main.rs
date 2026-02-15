@@ -4,7 +4,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // Hide console in release mode
 
-use iced::{Task, window, event};
+use iced::{Task, window};
 use simplelog::{
     CombinedLogger, ColorChoice, Config, LevelFilter, TermLogger, TerminalMode, WriteLogger,
 };
@@ -66,17 +66,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     })
     .title(FrenameApp::title)
     .antialiasing(false)
-    .subscription(|_| {
-        event::listen_with(|event, _status, _id| {
-            match event {
-                iced::Event::Window(window::Event::FileDropped(path)) => {
-                    Some(app::Message::DragDrop(
-                        features::drag_drop::Message::FileDropped(path)
-                    ))
-                }
-                _ => None,
-            }
-        })
-    })
+    .subscription(FrenameApp::subscription)
     .run()?)
 }

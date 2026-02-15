@@ -9,8 +9,9 @@ use super::{Message, VideoControlsState};
 const CONTROLS_HEIGHT: f32 = 32.0;
 const CONTROLS_BG: Color = Color::from_rgb(0.12, 0.12, 0.12);
 
-/// Render the video player controls
-pub fn view(state: &VideoControlsState) -> Element<'_, Message> {
+/// Render the video player controls.
+/// `position_secs` is the live playback position read from the video at view time.
+pub fn view(state: &VideoControlsState, position_secs: f32) -> Element<'_, Message> {
     let play_pause_label = if state.is_playing() { "⏸" } else { "▶" };
     let play_pause_btn = button(
         container(text(play_pause_label).size(16))
@@ -37,16 +38,15 @@ pub fn view(state: &VideoControlsState) -> Element<'_, Message> {
         });
 
     let duration = state.duration_secs();
-    let progress = if duration > 0.0 {
-        state.position_secs() / duration
+    // While seeking, show the drag position; otherwise use live video position
+    let current_pos = if state.is_seeking() {
+        state.seek_position_secs()
     } else {
-        0.0
+        position_secs
     };
 
-    let bar = ProgressBar::new(progress, move |fraction| {
-        Message::Seek(fraction * duration)
-    })
-    .on_release(Message::SeekReleased);
+    let bar = ProgressBar::new(0.0..=duration, current_pos, Message::Seek)
+        .on_release(Message::SeekReleased);
 
     let controls = row![play_pause_btn, bar]
         .spacing(8)
