@@ -12,12 +12,17 @@ use std::fs::File;
 
 mod app;
 mod features;
+mod widgets;
 
 use app::FrenameApp;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize file + console logging
-    let log_file = File::create("frename_debug.log")?;
+    // Initialize file + console logging (log file next to the executable)
+    let log_path = std::env::current_exe()?
+        .parent()
+        .expect("executable must have a parent directory")
+        .join("frename_debug.log");
+    let log_file = File::create(log_path)?;
 
     CombinedLogger::init(vec![
         TermLogger::new(

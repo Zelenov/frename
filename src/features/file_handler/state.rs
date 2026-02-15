@@ -9,6 +9,9 @@ use crate::features::video_player::VideoPlayerState;
 
 use super::Message;
 
+/// Default width of the left (video) panel in pixels.
+const DEFAULT_LEFT_WIDTH: f32 = 560.0;
+
 /// Central file handling state - the core of the application
 pub struct FileHandlerState {
     /// Currently open file path
@@ -17,6 +20,8 @@ pub struct FileHandlerState {
     video_player: VideoPlayerState,
     /// Rename panel (right side: file name display + tag list)
     rename_panel: RenamePanelState,
+    /// Width of the left (video) panel in pixels.
+    left_width: f32,
 }
 
 impl Default for FileHandlerState {
@@ -25,6 +30,7 @@ impl Default for FileHandlerState {
             current_file: None,
             video_player: VideoPlayerState::default(),
             rename_panel: RenamePanelState::default(),
+            left_width: DEFAULT_LEFT_WIDTH,
         }
     }
 }
@@ -53,6 +59,10 @@ impl FileHandlerState {
                 self.rename_panel.update(&msg);
                 Task::none()
             }
+            Message::SplitterDragged(left_width) => {
+                self.left_width = left_width;
+                Task::none()
+            }
         }
     }
 
@@ -73,5 +83,10 @@ impl FileHandlerState {
     /// Get reference to the rename panel state
     pub fn rename_panel(&self) -> &RenamePanelState {
         &self.rename_panel
+    }
+
+    /// Width of the left (video) panel in pixels.
+    pub fn left_width(&self) -> f32 {
+        self.left_width
     }
 }
