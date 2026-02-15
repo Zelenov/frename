@@ -17,6 +17,8 @@ pub struct File {
     tag_list: TagList,
     /// Current file name built from checked tags (joined by dots).
     file_name: String,
+    /// True when file_name has been changed (e.g. by toggling tags) and not yet applied to disk.
+    dirty: bool,
 }
 
 impl File {
@@ -35,6 +37,7 @@ impl File {
             created_at,
             tag_list: TagList::new(),
             file_name,
+            dirty: false,
         }
     }
 
@@ -46,6 +49,7 @@ impl File {
             created_at: SystemTime::UNIX_EPOCH,
             tag_list: TagList::new(),
             file_name: String::new(),
+            dirty: false,
         }
     }
 
@@ -70,6 +74,7 @@ impl File {
             tag.toggle();
         }
         self.rebuild_file_name();
+        self.dirty = true;
     }
 
     /// Set the initial file name (e.g. when no path is set).
@@ -86,6 +91,16 @@ impl File {
     /// Get a reference to the tag list.
     pub fn tags(&self) -> &[crate::Tag] {
         self.tag_list.tags()
+    }
+
+    /// Whether the file name has been changed and not yet applied to disk.
+    pub fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
+    /// Mark the file as applied (clear dirty). Called after a successful apply/rename.
+    pub fn clear_dirty(&mut self) {
+        self.dirty = false;
     }
 
     fn rebuild_file_name(&mut self) {

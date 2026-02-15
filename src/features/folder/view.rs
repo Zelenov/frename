@@ -1,6 +1,6 @@
 //! UI rendering for the folder feature
 
-use iced::widget::{column, container, mouse_area, scrollable, text};
+use iced::widget::{column, container, mouse_area, row, scrollable, text};
 use iced::{mouse, Background, Color, Element, Length};
 
 use super::{FolderState, Message};
@@ -32,6 +32,7 @@ pub fn view(state: &FolderState) -> Element<'_, Message> {
     }
 
     let selected = directory.selected_index();
+    let applying = state.applying_index();
 
     let items: Vec<Element<'_, Message>> = directory
         .files()
@@ -40,10 +41,15 @@ pub fn view(state: &FolderState) -> Element<'_, Message> {
         .map(|(index, file_info)| {
             let name = file_info.initial_filename();
             let is_selected = selected == Some(index);
+            let is_applying = applying == Some(index);
 
             let label = text(name).size(13);
+            let spinner_text = if is_applying { " ⟳" } else { "" };
+            let row_content = row![label, text(spinner_text).size(13)]
+                .spacing(6)
+                .align_y(iced::Alignment::Center);
 
-            let row = container(label)
+            let row = container(row_content)
                 .padding([3, 8])
                 .width(Length::Fill)
                 .style(move |_theme: &iced::Theme| {

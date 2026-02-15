@@ -1,6 +1,7 @@
 //! State for file handler feature
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use iced::{Subscription, Task};
 
@@ -77,18 +78,51 @@ impl FileHandlerState {
                 }
             }
             Message::Folder(folder_msg) => {
-                // Check if this is a file selection before forwarding
-                let is_file_select = matches!(&folder_msg, folder::Message::SelectFile(_));
+                // If user selected another file and current file is dirty: switch immediately
+                // and run apply in background (spinner shows on the previous file).
+                if let folder::Message::SelectFile(new_index) = &folder_msg {
+                    let current_dirty = self
+                        .folder
+                        .directory()
+                        .and_then(|d| d.selected_file())
+                        .map(|f| f.is_dirty())
+                        .unwrap_or(false);
+                    if current_dirty {
+                        let applying_idx =
+                            self.folder.directory().and_then(|d| d.selected_index());
+                        self.folder.set_applying(applying_idx);
 
+                        let folder_task =
+                            self.folder
+                                .update(folder::Message::SelectFile(*new_index))
+                                .map(Message::Folder);
+                        let path = self
+                            .folder
+                            .directory()
+                            .and_then(|d| d.selected_file())
+                            .map(|f| f.file_path().to_path_buf());
+                        let apply_task = Task::future(async move {
+                            tokio::time::sleep(Duration::from_secs(1)).await;
+                            Message::ApplyChangesCompleted
+                        });
+
+                        let mut tasks: Vec<Task<Message>> =
+                            vec![folder_task, apply_task];
+                        if let Some(p) = path {
+                            tasks.push(Task::done(Message::OpenFile(p)));
+                        }
+                        return Task::batch(tasks);
+                    }
+                }
+
+                let is_file_select = matches!(&folder_msg, folder::Message::SelectFile(_));
                 let task = self.folder.update(folder_msg).map(Message::Folder);
 
-                // When a file is selected, open it in the video player + rename panel
                 if is_file_select {
                     let selected = self
                         .folder
                         .directory()
                         .and_then(|dir| dir.selected_file());
-
                     if let Some(file) = selected {
                         let path = file.file_path().to_path_buf();
                         Task::batch([task, Task::done(Message::OpenFile(path))])
@@ -98,6 +132,29 @@ impl FileHandlerState {
                 } else {
                     task
                 }
+            }
+            Message::ApplyChanges => {
+                // Start async apply (e.g. for "apply on close"); spinner shows on current selection
+                let applying_idx = self.folder.directory().and_then(|d| d.selected_index());
+                self.folder.set_applying(applying_idx);
+                Task::future(async move {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    Message::ApplyChangesCompleted
+                })
+            }
+            Message::ApplyChangesCompleted => {
+                let applying_idx = self.folder.applying_index();
+                self.folder.set_applying(None);
+                if let Some(idx) = applying_idx {
+                    if let Some(file) = self
+                        .folder
+                        .directory_mut()
+                        .and_then(|d| d.file_at_mut(idx))
+                    {
+                        file.clear_dirty();
+                    }
+                }
+                Task::none()
             }
             Message::VideoPlayer(msg) => {
                 self.video_player.update(msg).map(Message::VideoPlayer)

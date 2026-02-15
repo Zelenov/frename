@@ -71,6 +71,11 @@ impl Directory {
         self.files.get_mut(idx)
     }
 
+    /// Get a mutable reference to the file at the given index.
+    pub fn file_at_mut(&mut self, index: usize) -> Option<&mut File> {
+        self.files.get_mut(index)
+    }
+
     /// Select a file by index. Returns true if the index was valid.
     pub fn select(&mut self, index: usize) -> bool {
         if index < self.files.len() {

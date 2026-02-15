@@ -16,6 +16,8 @@ pub struct FolderState {
     directory: Option<Directory>,
     /// Whether a directory scan is in progress
     loading: bool,
+    /// Index of the file currently being "applied" (show spinner next to it).
+    applying_index: Option<usize>,
     /// Stable scrollable ID for scroll-into-view
     scrollable_id: Id,
 }
@@ -25,6 +27,7 @@ impl Default for FolderState {
         Self {
             directory: None,
             loading: false,
+            applying_index: None,
             scrollable_id: Id::new(FOLDER_LIST_ID),
         }
     }
@@ -123,6 +126,16 @@ impl FolderState {
     /// Whether a directory scan is in progress
     pub fn is_loading(&self) -> bool {
         self.loading
+    }
+
+    /// Index of the file row that should show the "applying" spinner.
+    pub fn applying_index(&self) -> Option<usize> {
+        self.applying_index
+    }
+
+    /// Set which file is currently being applied (show spinner). None to clear.
+    pub fn set_applying(&mut self, index: Option<usize>) {
+        self.applying_index = index;
     }
 
     /// Get the scrollable widget ID

@@ -15,6 +15,10 @@ pub enum Message {
     VideoPlayer(video_player::Message),
     /// Rename panel messages
     RenamePanel(rename_panel::Message),
+    /// Apply name changes to the currently selected file (async; no rename yet, just spinner).
+    ApplyChanges,
+    /// Apply operation finished; optionally switch to pending selection.
+    ApplyChangesCompleted,
     /// Left splitter dragged (between video and folder) — absolute cursor X
     LeftSplitterDragged(f32),
     /// Right splitter dragged (between folder and rename panel) — absolute cursor X
