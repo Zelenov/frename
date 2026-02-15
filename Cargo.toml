@@ -7,6 +7,9 @@ authors = ["Your Name <your.email@example.com>"]
 description = "File renaming utility for Windows"
 
 [dependencies]
+# Core logic crate
+frename-core = { path = "crates/frename-core" }
+
 # GUI framework - Iced for cross-platform GUI
 iced = { version = "0.14.0-dev", features = ["tokio"] }
 
