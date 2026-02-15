@@ -11,7 +11,7 @@ use iced::{Border, Color, Element, Event, Length, Rectangle, Shadow, Size};
 const BAR_WIDTH: f32 = 4.0;
 
 /// Hit-test width (wider than visual for easier grabbing).
-const HIT_WIDTH: f32 = 12.0;
+pub const HIT_WIDTH: f32 = 12.0;
 
 /// Splitter bar color.
 const BAR_COLOR: Color = Color::from_rgb(0.3, 0.3, 0.3);

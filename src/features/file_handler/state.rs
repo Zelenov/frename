@@ -7,11 +7,18 @@ use iced::{Subscription, Task};
 use crate::features::folder::{self, FolderState};
 use crate::features::rename_panel::RenamePanelState;
 use crate::features::video_player::VideoPlayerState;
+use crate::widgets::splitter::HIT_WIDTH;
 
 use super::Message;
 
 /// Default width of the left (video) panel in pixels.
-const DEFAULT_LEFT_WIDTH: f32 = 560.0;
+const DEFAULT_LEFT_WIDTH: f32 = 460.0;
+
+/// Default width of the middle (folder) panel in pixels.
+const DEFAULT_FOLDER_WIDTH: f32 = 200.0;
+
+/// Minimum width of the folder panel.
+const MIN_FOLDER_WIDTH: f32 = 120.0;
 
 /// Central file handling state - the core of the application
 pub struct FileHandlerState {
@@ -25,6 +32,8 @@ pub struct FileHandlerState {
     rename_panel: RenamePanelState,
     /// Width of the left (video) panel in pixels.
     left_width: f32,
+    /// Width of the middle (folder) panel in pixels.
+    folder_width: f32,
 }
 
 impl Default for FileHandlerState {
@@ -35,6 +44,7 @@ impl Default for FileHandlerState {
             video_player: VideoPlayerState::default(),
             rename_panel: RenamePanelState::default(),
             left_width: DEFAULT_LEFT_WIDTH,
+            folder_width: DEFAULT_FOLDER_WIDTH,
         }
     }
 }
@@ -46,15 +56,25 @@ impl FileHandlerState {
                 log::info!("Opening file: {}", path.display());
                 self.current_file = Some(path.clone());
 
-                // Set the initial file name from the selected file (stem without extension)
-                let file_stem = path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("");
-                self.rename_panel.set_file_name(file_stem);
+                // If this file is in the current directory, select and scroll to it
+                let in_current_dir = self
+                    .folder
+                    .directory()
+                    .filter(|d| path.parent().map(|p| p == d.path()).unwrap_or(false))
+                    .and_then(|d| d.find_by_path(&path));
 
-                // Load the file in the video player
-                self.video_player.load_video(path, Message::VideoPlayer)
+                if let Some(index) = in_current_dir {
+                    let scroll_task = self
+                        .folder
+                        .update(folder::Message::SelectFile(index))
+                        .map(Message::Folder);
+                    Task::batch([
+                        scroll_task,
+                        self.video_player.load_video(path, Message::VideoPlayer),
+                    ])
+                } else {
+                    self.video_player.load_video(path, Message::VideoPlayer)
+                }
             }
             Message::Folder(folder_msg) => {
                 // Check if this is a file selection before forwarding
@@ -64,8 +84,13 @@ impl FileHandlerState {
 
                 // When a file is selected, open it in the video player + rename panel
                 if is_file_select {
-                    if let Some(file_info) = self.folder.selected_file() {
-                        let path = file_info.file_path().to_path_buf();
+                    let selected = self
+                        .folder
+                        .directory()
+                        .and_then(|dir| dir.selected_file());
+
+                    if let Some(file) = selected {
+                        let path = file.file_path().to_path_buf();
                         Task::batch([task, Task::done(Message::OpenFile(path))])
                     } else {
                         task
@@ -78,11 +103,34 @@ impl FileHandlerState {
                 self.video_player.update(msg).map(Message::VideoPlayer)
             }
             Message::RenamePanel(msg) => {
+                match msg {
+                    crate::features::rename_panel::Message::ToggleTag(index) => {
+                        if let Some(file) = self
+                            .folder
+                            .directory_mut()
+                            .and_then(|d| d.selected_file_mut())
+                        {
+                            file.toggle_tag(index);
+                        }
+                    }
+                }
                 self.rename_panel.update(&msg);
                 Task::none()
             }
-            Message::SplitterDragged(left_width) => {
-                self.left_width = left_width;
+            Message::LeftSplitterDragged(x) => {
+                self.left_width = x;
+                // Ensure folder panel doesn't shrink below minimum
+                let folder_start = self.left_width + HIT_WIDTH;
+                let folder_end = folder_start + self.folder_width;
+                let new_folder_width = folder_end - x - HIT_WIDTH;
+                if new_folder_width < MIN_FOLDER_WIDTH {
+                    self.folder_width = MIN_FOLDER_WIDTH;
+                }
+                Task::none()
+            }
+            Message::RightSplitterDragged(x) => {
+                let new_folder_width = x - self.left_width - HIT_WIDTH;
+                self.folder_width = new_folder_width.max(MIN_FOLDER_WIDTH);
                 Task::none()
             }
         }
@@ -115,5 +163,10 @@ impl FileHandlerState {
     /// Width of the left (video) panel in pixels.
     pub fn left_width(&self) -> f32 {
         self.left_width
+    }
+
+    /// Width of the middle (folder) panel in pixels.
+    pub fn folder_width(&self) -> f32 {
+        self.folder_width
     }
 }

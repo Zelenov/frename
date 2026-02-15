@@ -15,27 +15,30 @@ pub fn view(state: &FolderState) -> Element<'_, Message> {
             .into();
     }
 
-    if state.files().is_empty() {
+    let Some(directory) = state.directory() else {
         return container(text("Drop a file to open its folder").size(13))
+            .padding([8, 8])
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into();
+    };
+
+    if directory.is_empty() {
+        return container(text("Folder is empty").size(13))
             .padding([8, 8])
             .width(Length::Fill)
             .height(Length::Fill)
             .into();
     }
 
-    let selected = state.selected_index();
+    let selected = directory.selected_index();
 
-    let items: Vec<Element<'_, Message>> = state
+    let items: Vec<Element<'_, Message>> = directory
         .files()
         .iter()
         .enumerate()
         .map(|(index, file_info)| {
-            let name = file_info
-                .file_path()
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("???");
-
+            let name = file_info.initial_filename();
             let is_selected = selected == Some(index);
 
             let label = text(name).size(13);

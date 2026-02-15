@@ -1,7 +1,8 @@
 //! State for the folder feature
 
-use frename_core::FileInfo;
-use iced::widget::scrollable;
+use frename_core::Directory;
+use iced::widget::scrollable::RelativeOffset;
+use iced::widget::{operation, Id};
 use iced::Task;
 
 use super::Message;
@@ -9,25 +10,22 @@ use super::Message;
 /// Scrollable widget ID for the folder file list.
 const FOLDER_LIST_ID: &str = "folder-file-list";
 
-/// Folder state - holds the scanned file list and selection
+/// Folder state - wraps a core Directory and adds UI concerns
 pub struct FolderState {
-    /// Files in the current folder, sorted by creation date
-    files: Vec<FileInfo>,
-    /// Index of the currently selected file
-    selected_index: Option<usize>,
+    /// The scanned directory (None until first scan)
+    directory: Option<Directory>,
     /// Whether a directory scan is in progress
     loading: bool,
     /// Stable scrollable ID for scroll-into-view
-    scrollable_id: scrollable::Id,
+    scrollable_id: Id,
 }
 
 impl Default for FolderState {
     fn default() -> Self {
         Self {
-            files: Vec::new(),
-            selected_index: None,
+            directory: None,
             loading: false,
-            scrollable_id: scrollable::Id::new(FOLDER_LIST_ID),
+            scrollable_id: Id::new(FOLDER_LIST_ID),
         }
     }
 }
@@ -42,34 +40,40 @@ impl FolderState {
             } => {
                 log::info!("Scanning directory: {}", directory.display());
                 self.loading = true;
-                self.files.clear();
-                self.selected_index = None;
+                self.directory = None;
 
                 Task::future(async move {
-                    match frename_core::scan_directory(&directory) {
-                        Ok(files) => {
-                            log::info!("Directory scan complete: {} files found", files.len());
-                            Message::FolderLoaded { files, target_file }
+                    match Directory::open(&directory).await {
+                        Ok(dir) => {
+                            log::info!(
+                                "Directory scan complete: {} files found",
+                                dir.len()
+                            );
+                            Message::FolderLoaded {
+                                directory: dir,
+                                target_file,
+                            }
                         }
                         Err(e) => {
                             log::error!("Failed to scan directory: {e}");
+                            // Create an empty directory on error — use a
+                            // synchronous fallback since we already failed.
                             Message::FolderLoaded {
-                                files: Vec::new(),
+                                directory: Directory::empty(directory),
                                 target_file,
                             }
                         }
                     }
                 })
             }
-            Message::FolderLoaded { files, target_file } => {
+            Message::FolderLoaded {
+                directory,
+                target_file,
+            } => {
                 self.loading = false;
 
-                // Find the target file in the scanned list
-                let target_index = files
-                    .iter()
-                    .position(|f| f.file_path() == target_file.as_path());
-
-                self.files = files;
+                let target_index = directory.find_by_path(&target_file);
+                self.directory = Some(directory);
 
                 if let Some(index) = target_index {
                     log::info!("Auto-selecting dropped file at index {index}");
@@ -83,38 +87,37 @@ impl FolderState {
                 }
             }
             Message::SelectFile(index) => {
-                if index < self.files.len() {
-                    self.selected_index = Some(index);
-                    // Scroll the selected item into view
-                    let fraction = if self.files.len() <= 1 {
-                        0.0
-                    } else {
-                        index as f32 / (self.files.len() - 1) as f32
-                    };
-                    scrollable::snap_to(
-                        self.scrollable_id.clone(),
-                        scrollable::RelativeOffset { x: 0.0, y: fraction },
-                    )
-                } else {
-                    Task::none()
+                if let Some(dir) = &mut self.directory {
+                    if dir.select(index) {
+                        // Scroll the selected item into view
+                        let total = dir.len();
+                        let fraction = if total <= 1 {
+                            0.0
+                        } else {
+                            index as f32 / (total - 1) as f32
+                        };
+                        return operation::snap_to(
+                            self.scrollable_id.clone(),
+                            RelativeOffset::<Option<f32>> {
+                                x: None,
+                                y: Some(fraction),
+                            },
+                        );
+                    }
                 }
+                Task::none()
             }
         }
     }
 
-    /// Get the list of files
-    pub fn files(&self) -> &[FileInfo] {
-        &self.files
+    /// Get the directory (if loaded)
+    pub fn directory(&self) -> Option<&Directory> {
+        self.directory.as_ref()
     }
 
-    /// Get the selected file index
-    pub fn selected_index(&self) -> Option<usize> {
-        self.selected_index
-    }
-
-    /// Get the currently selected file
-    pub fn selected_file(&self) -> Option<&FileInfo> {
-        self.selected_index.and_then(|i| self.files.get(i))
+    /// Get a mutable reference to the directory (if loaded)
+    pub fn directory_mut(&mut self) -> Option<&mut Directory> {
+        self.directory.as_mut()
     }
 
     /// Whether a directory scan is in progress
@@ -123,7 +126,7 @@ impl FolderState {
     }
 
     /// Get the scrollable widget ID
-    pub fn scrollable_id(&self) -> &scrollable::Id {
+    pub fn scrollable_id(&self) -> &Id {
         &self.scrollable_id
     }
 }

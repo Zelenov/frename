@@ -15,6 +15,8 @@ pub enum Message {
     VideoPlayer(video_player::Message),
     /// Rename panel messages
     RenamePanel(rename_panel::Message),
-    /// Splitter dragged — absolute cursor X position
-    SplitterDragged(f32),
+    /// Left splitter dragged (between video and folder) — absolute cursor X
+    LeftSplitterDragged(f32),
+    /// Right splitter dragged (between folder and rename panel) — absolute cursor X
+    RightSplitterDragged(f32),
 }

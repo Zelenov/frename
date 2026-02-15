@@ -19,12 +19,37 @@ impl FrenameApp {
             Message::DragDrop(drag_drop::Message::FileDropped(path)) => {
                 self.drag_drop_state.handle_file_dropped(path.clone());
 
-                // Scan the parent directory and auto-select the dropped file
-                let directory = path
-                    .parent()
-                    .map(|p| p.to_path_buf())
-                    .unwrap_or_else(|| path.clone());
+                let parent = path.parent().map(|p| p.to_path_buf());
+                let current_dir = self
+                    .file_handler_state
+                    .folder()
+                    .directory()
+                    .map(|d| d.path());
 
+                // If we already have this directory open, just select and scroll to the file
+                let same_directory = parent.as_ref().and_then(|p| {
+                    current_dir.map(|cur| cur == p.as_path())
+                }).unwrap_or(false);
+
+                if same_directory {
+                    let index = self
+                        .file_handler_state
+                        .folder()
+                        .directory()
+                        .and_then(|d| d.find_by_path(&path));
+
+                    if let Some(idx) = index {
+                        return Task::batch([
+                            Task::done(Message::FileHandler(file_handler::Message::Folder(
+                                folder::Message::SelectFile(idx),
+                            ))),
+                            Task::done(Message::FileHandler(file_handler::Message::OpenFile(path))),
+                        ]);
+                    }
+                }
+
+                // Different directory or file not in list: scan folder then auto-select
+                let directory = parent.unwrap_or_else(|| path.clone());
                 Task::done(Message::FileHandler(file_handler::Message::Folder(
                     folder::Message::ScanFolder {
                         directory,

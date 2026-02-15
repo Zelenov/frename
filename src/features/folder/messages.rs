@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use frename_core::FileInfo;
+use frename_core::Directory;
 
 /// Messages handled by the folder feature
 #[derive(Debug, Clone)]
@@ -14,7 +14,7 @@ pub enum Message {
     },
     /// Directory scan completed
     FolderLoaded {
-        files: Vec<FileInfo>,
+        directory: Directory,
         target_file: PathBuf,
     },
     /// Select a file by its index in the list

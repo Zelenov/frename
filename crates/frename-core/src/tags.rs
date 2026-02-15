@@ -40,6 +40,7 @@ impl Tag {
 }
 
 /// A collection of available tags.
+#[derive(Clone, Debug)]
 pub struct TagList {
     tags: Vec<Tag>,
 }

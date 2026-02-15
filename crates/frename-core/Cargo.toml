@@ -5,3 +5,4 @@ edition = "2021"
 description = "Core logic for frename file renaming utility"
 
 [dependencies]
+tokio = { version = "1", features = ["fs"] }

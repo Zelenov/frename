@@ -1,28 +1,51 @@
-//! File structures, directory scanning, and rename logic for frename.
+//! File structure: path/metadata and tag-based rename state.
 
 use crate::TagList;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-// ---------------------------------------------------------------------------
-// FileInfo - metadata for a file in the folder listing
-// ---------------------------------------------------------------------------
-
-/// Holds the context for a file being processed.
+/// A file being processed: path and metadata plus tag-based rename state.
 #[derive(Debug, Clone)]
-pub struct FileInfo {
+pub struct File {
     /// Full path to the file.
     file_path: PathBuf,
+    /// Original file name stem (without extension), parsed from the path.
+    initial_filename: String,
     /// File creation time (used for sorting).
     created_at: SystemTime,
+    /// Available tags with checked state.
+    tag_list: TagList,
+    /// Current file name built from checked tags (joined by dots).
+    file_name: String,
 }
 
-impl FileInfo {
-    /// Create a new FileInfo from a file path and creation time.
-    pub fn new(file_path: impl Into<PathBuf>, created_at: SystemTime) -> Self {
+impl File {
+    /// Create a file entry from a path and creation time (e.g. when scanning a directory).
+    pub fn from_path(file_path: impl Into<PathBuf>, created_at: SystemTime) -> Self {
+        let file_path = file_path.into();
+        let initial_filename = file_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
+        let file_name = initial_filename.clone();
         Self {
-            file_path: file_path.into(),
+            file_path,
+            initial_filename,
             created_at,
+            tag_list: TagList::new(),
+            file_name,
+        }
+    }
+
+    /// Create a new empty File (default tag list, no path).
+    pub fn new() -> Self {
+        Self {
+            file_path: PathBuf::new(),
+            initial_filename: String::new(),
+            created_at: SystemTime::UNIX_EPOCH,
+            tag_list: TagList::new(),
+            file_name: String::new(),
         }
     }
 
@@ -31,52 +54,14 @@ impl FileInfo {
         &self.file_path
     }
 
+    /// Get the original file name stem (without extension).
+    pub fn initial_filename(&self) -> &str {
+        &self.initial_filename
+    }
+
     /// Get the creation time.
     pub fn created_at(&self) -> SystemTime {
         self.created_at
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Directory scanning
-// ---------------------------------------------------------------------------
-
-/// Scan a directory and return all files sorted by creation date (oldest first).
-pub fn scan_directory(directory: &Path) -> Result<Vec<FileInfo>, std::io::Error> {
-    let mut files = Vec::new();
-    for entry in std::fs::read_dir(directory)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file() {
-            let metadata = entry.metadata()?;
-            let created = metadata.created().unwrap_or(SystemTime::UNIX_EPOCH);
-            files.push(FileInfo::new(path, created));
-        }
-    }
-    files.sort_by(|a, b| a.created_at().cmp(&b.created_at()));
-    Ok(files)
-}
-
-// ---------------------------------------------------------------------------
-// RenameCore - tag-based file name builder
-// ---------------------------------------------------------------------------
-
-/// Core rename engine that owns the tag list and maintains
-/// a file name built from the currently checked tags.
-pub struct RenameCore {
-    /// Available tags with checked state
-    tag_list: TagList,
-    /// The current file name built from checked tags (joined by dots)
-    file_name: String,
-}
-
-impl RenameCore {
-    /// Create a new RenameCore with the default tag list.
-    pub fn new() -> Self {
-        Self {
-            tag_list: TagList::new(),
-            file_name: String::new(),
-        }
     }
 
     /// Toggle a tag by index and rebuild the file name.
@@ -87,12 +72,13 @@ impl RenameCore {
         self.rebuild_file_name();
     }
 
-    /// Set the initial file name (e.g. from a dropped file).
+    /// Set the initial file name (e.g. when no path is set).
     pub fn set_file_name(&mut self, name: impl Into<String>) {
-        self.file_name = name.into();
+        self.initial_filename = name.into();
+        self.rebuild_file_name();
     }
 
-    /// Get the current file name (concatenation of checked tags separated by dots).
+    /// Get the current file name: tags (if any) joined by dots, then the initial filename.
     pub fn file_name(&self) -> &str {
         &self.file_name
     }
@@ -102,9 +88,8 @@ impl RenameCore {
         self.tag_list.tags()
     }
 
-    /// Rebuild the file name from all currently checked tags.
     fn rebuild_file_name(&mut self) {
-        self.file_name = self
+        let tags_part: String = self
             .tag_list
             .tags()
             .iter()
@@ -112,10 +97,17 @@ impl RenameCore {
             .map(|tag| tag.tag())
             .collect::<Vec<&str>>()
             .join(".");
+        self.file_name = if tags_part.is_empty() {
+            self.initial_filename.clone()
+        } else if self.initial_filename.is_empty() {
+            tags_part
+        } else {
+            format!("{}.{}", tags_part, self.initial_filename)
+        };
     }
 }
 
-impl Default for RenameCore {
+impl Default for File {
     fn default() -> Self {
         Self::new()
     }
@@ -125,57 +117,70 @@ impl Default for RenameCore {
 mod tests {
     use super::*;
 
-    // -- RenameCore tests --
-
     #[test]
     fn test_empty_by_default() {
-        let core = RenameCore::new();
-        assert_eq!(core.file_name(), "");
+        let f = File::new();
+        assert_eq!(f.file_name(), "");
     }
 
     #[test]
     fn test_single_tag_checked() {
-        let mut core = RenameCore::new();
-        // First tag is "Action"
-        core.toggle_tag(0);
-        assert_eq!(core.file_name(), "Action");
+        let mut f = File::new();
+        f.toggle_tag(0);
+        assert_eq!(f.file_name(), "Action");
     }
 
     #[test]
     fn test_multiple_tags_joined_by_dots() {
-        let mut core = RenameCore::new();
-        // Toggle first two tags: "Action" and "Adventure"
-        core.toggle_tag(0);
-        core.toggle_tag(1);
-        assert_eq!(core.file_name(), "Action.Adventure");
+        let mut f = File::new();
+        f.toggle_tag(0);
+        f.toggle_tag(1);
+        assert_eq!(f.file_name(), "Action.Adventure");
     }
 
     #[test]
     fn test_uncheck_removes_from_name() {
-        let mut core = RenameCore::new();
-        core.toggle_tag(0);
-        core.toggle_tag(1);
-        assert_eq!(core.file_name(), "Action.Adventure");
-
-        // Uncheck first tag
-        core.toggle_tag(0);
-        assert_eq!(core.file_name(), "Adventure");
+        let mut f = File::new();
+        f.toggle_tag(0);
+        f.toggle_tag(1);
+        assert_eq!(f.file_name(), "Action.Adventure");
+        f.toggle_tag(0);
+        assert_eq!(f.file_name(), "Adventure");
     }
 
     #[test]
     fn test_toggle_out_of_bounds_is_safe() {
-        let mut core = RenameCore::new();
-        core.toggle_tag(9999);
-        assert_eq!(core.file_name(), "");
+        let mut f = File::new();
+        f.toggle_tag(9999);
+        assert_eq!(f.file_name(), "");
     }
 
-    // -- FileInfo tests --
+    #[test]
+    fn test_from_path() {
+        let now = SystemTime::now();
+        let f = File::from_path("/some/path/file.mp4", now);
+        assert_eq!(f.file_path(), Path::new("/some/path/file.mp4"));
+        assert_eq!(f.initial_filename(), "file");
+        assert_eq!(f.created_at(), now);
+    }
 
     #[test]
-    fn test_file_info_creation() {
+    fn test_from_path_no_extension() {
         let now = SystemTime::now();
-        let info = FileInfo::new("/some/path/file.mp4", now);
-        assert_eq!(info.file_path(), Path::new("/some/path/file.mp4"));
-        assert_eq!(info.created_at(), now);
+        let f = File::from_path("/some/path/readme", now);
+        assert_eq!(f.initial_filename(), "readme");
+    }
+
+    #[test]
+    fn test_file_name_starts_with_initial_then_tags_prepended() {
+        let now = SystemTime::now();
+        let mut f = File::from_path("/path/my_video.mp4", now);
+        assert_eq!(f.file_name(), "my_video");
+        f.toggle_tag(0);
+        assert_eq!(f.file_name(), "Action.my_video");
+        f.toggle_tag(1);
+        assert_eq!(f.file_name(), "Action.Adventure.my_video");
+        f.toggle_tag(0);
+        assert_eq!(f.file_name(), "Adventure.my_video");
     }
 }
