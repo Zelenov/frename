@@ -2,8 +2,6 @@
 //!
 //! Receives only data (directory, selected file, loading) from workspace; no parent knows our layout or widgets.
 
-use std::path::Path;
-
 use iced::widget::{column, container, mouse_area, row, scrollable, text};
 use iced::{mouse, Background, Element, Length};
 
@@ -17,7 +15,7 @@ const FOLDER_LIST_SCROLLABLE_ID: &str = "folder-file-list";
 /// Workspace passes directory and selected file; this view shows them and emits SelectFile/Previous/Next.
 pub fn view<'a>(
     directory: Option<&'a frename_core::Directory>,
-    selected_path: Option<&'a Path>,
+    selected_file: Option<&'a frename_core::File>,
     loading: bool,
 ) -> Element<'a, Message> {
     let placeholder = |s: String| {
@@ -43,7 +41,7 @@ pub fn view<'a>(
         return placeholder("Folder is empty".to_string()).into();
     }
 
-    let selected_index = selected_path.and_then(|p| dir.find_by_path(p));
+    let selected_index = selected_file.and_then(|f| dir.find_by_path(f.file_path()));
 
     let items: Vec<Element<'_, Message>> = dir
         .files()

@@ -19,4 +19,8 @@ pub enum Message {
     Seek(f32),
     /// Controls message
     Controls(video_controls::Message),
+    /// Unload current video (e.g. before switching file). Emits VideoUnloaded when done.
+    Unload,
+    /// Current video has been unloaded; safe to persist file and load next.
+    VideoUnloaded,
 }

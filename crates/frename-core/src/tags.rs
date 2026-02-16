@@ -56,7 +56,7 @@ pub struct TagList {
 impl TagList {
     /// Create a new TagList from stored tag names; checked state from file_tag_list (no duplicate).
     pub fn new(stored_tag_names: &[&str], file_tag_list: Option<&FileTagList>) -> Self {
-        let tags = stored_tag_names
+        let tags: Vec<Tag> = stored_tag_names
             .iter()
             .map(|name| {
                 let mut tag = Tag::new(*name);
@@ -64,6 +64,12 @@ impl TagList {
                 tag
             })
             .collect();
+        if let Some(list) = file_tag_list {
+            let values: Vec<&str> = list.file_tags().iter().map(|ft| ft.value()).collect();
+            log::info!("TagList::new file_tag_list: {:?}", values);
+        } else {
+            log::info!("TagList::new file_tag_list: None");
+        }
         Self { tags }
     }
 

@@ -50,7 +50,7 @@ impl FrenameApp {
     pub fn title(&self) -> String {
         self.folder_workspace
             .current_file()
-            .map_or_else(|| String::from("frename"), |file| file.display().to_string())
+            .map_or_else(|| String::from("frename"), |f| f.file_path().display().to_string())
     }
 }
 

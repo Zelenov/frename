@@ -1,9 +1,9 @@
 //! State for file workspace: the file currently being edited and stored tags with checked state.
 //!
 //! We do not change the open file's file_tag_list on toggle; we only change the workspace tag_list.
-//! File tags are synced from the workspace when opening another file (sync save).
+//! File workspace does not save; it provides a snapshot (path + tags) that folder workspace persists when switching file.
 
-use frename_core::{File, FileTagger, TagList, TagStorage};
+use frename_core::{File, FileTagSnapshot, TagList, TagStorage};
 
 /// File workspace: current file and stored tags with checked state (source of truth for UI).
 #[derive(Default)]
@@ -32,15 +32,8 @@ impl FileWorkspace {
                 if already_loaded {
                     return;
                 }
-                self.sync_file_tags_to_file();
-                self.loading = true;
-                self.file = None;
                 self.file = Some(f);
-                self.tag_list = TagList::new(
-                    TagStorage::names(),
-                    self.file().map(|f| f.tag_list()),
-                );
-                self.loading = false;
+                self.tag_list = TagList::new(TagStorage::names(), self.file().map(|file| file.tag_list()));
             }
         }
     }
@@ -70,20 +63,12 @@ impl FileWorkspace {
         self.tag_list.checked_file_tags()
     }
 
-    /// Sync workspace tag list into the open file's file_tag_list. Called internally when changing file.
-    fn sync_file_tags_to_file(&mut self) {
-        if let Some(file) = self.file.as_mut() {
-            *file.tag_list_mut() = self.tag_list.checked_file_tags();
-        }
-    }
-
-    /// Open a file: save current file (if any) synchronously, then set the new file.
-    /// Target already has tags from directory parse. Caller updates selection and video.
-    pub fn open_file(&mut self, target: File) {
-        if let Some(f) = self.file() {
-            let tags = self.checked_file_tags();
-            FileTagger::save(tags.file_tags(), f.file_path());
-        }
-        self.set_file(Some(target));
+    /// Snapshot of the current file's path and workspace tags (to be saved by folder workspace when switching file). Does not persist anything.
+    pub fn get_snapshot(&self) -> Option<FileTagSnapshot> {
+        let file = self.file()?;
+        let path = file.file_path().to_path_buf();
+        let tags = self.checked_file_tags();
+        let tags_vec = tags.file_tags().to_vec();
+        Some(FileTagSnapshot { path, tags: tags_vec })
     }
 }

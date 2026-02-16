@@ -149,6 +149,13 @@ impl VideoPlayerState {
                     _ => Task::none(),
                 }
             }
+            Message::Unload => {
+                self.current_video = None;
+                self.video_path = None;
+                self.loading = false;
+                Task::done(Message::VideoUnloaded)
+            }
+            Message::VideoUnloaded => Task::none(),
         }
     }
 

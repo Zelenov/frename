@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use frename_core::Directory;
+use frename_core::{Directory, FileTag};
 use crate::features::{folder, tag_panel, video_player};
 
 /// Messages handled by the folder workspace (owns directory, selection, and all logic).
@@ -19,6 +19,11 @@ pub enum Message {
     FolderLoaded {
         directory: Directory,
         target_file: PathBuf,
+    },
+    /// Snapshot to persist: created by folder workspace when switching file (from file workspace get_snapshot). Save to disk then update directory.
+    FileUpdated {
+        path: PathBuf,
+        new_tags: Vec<FileTag>,
     },
     /// User selected a file in the list (from folder view)
     Folder(folder::Message),

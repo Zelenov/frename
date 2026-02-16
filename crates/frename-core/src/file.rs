@@ -1,8 +1,8 @@
 //! File structure: path/metadata and tag-based rename state.
 //! File holds a FileTagList (tags + name building). From File's perspective we only update tags in it.
 
-use crate::FileTagList;
-use std::path::Path;
+use crate::{FileTagList, FileTagger, SaveAndReparse};
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 /// A file being processed: path and metadata plus a tag list (tags + file name built from them).
@@ -19,26 +19,36 @@ pub struct File {
 }
 
 impl File {
-    /// Create a file entry from a path, creation time, and tags (e.g. when scanning a directory).
-    pub fn from_path(
-        file_path: impl AsRef<Path>,
-        created_at: SystemTime,
-        tags: &[crate::FileTag],
-    ) -> Self {
-        let file_path = file_path.as_ref().to_path_buf().into_boxed_path();
+    fn new_from_path_and_time(file_path: Box<Path>, created_at: SystemTime) -> Self {
         let initial_filename = file_path
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("")
             .to_string();
+        let tags = FileTagger::parse(&file_path);
         let mut file_tag_list = FileTagList::new();
-        file_tag_list.set_file_tags(tags);
+        file_tag_list.set_file_tags(&tags);
         Self {
             file_path,
             initial_filename,
             created_at,
             file_tag_list,
         }
+    }
+
+    /// Create a file from a path only: loads metadata (created_at) and tags asynchronously.
+    pub async fn open(path: impl AsRef<Path> + Send) -> Result<Self, std::io::Error> {
+        let path = path.as_ref();
+        let metadata = tokio::fs::metadata(path).await?;
+        let created_at = metadata.created().unwrap_or(SystemTime::UNIX_EPOCH);
+        let file_path = path.to_path_buf().into_boxed_path();
+        Ok(Self::new_from_path_and_time(file_path, created_at))
+    }
+
+    /// Create a file from path and creation time. For tests and programmatic use; tags are loaded via FileTagger::parse.
+    pub fn from_path(file_path: impl AsRef<Path>, created_at: SystemTime) -> Self {
+        let file_path = file_path.as_ref().to_path_buf().into_boxed_path();
+        Self::new_from_path_and_time(file_path, created_at)
     }
 
     /// Get the file path.
@@ -70,6 +80,13 @@ impl File {
     pub fn tag_list_mut(&mut self) -> &mut FileTagList {
         &mut self.file_tag_list
     }
+
+    /// Save the given file tags to this file's path, re-parse, and update this file's tag list. Returns path and tags as stored (e.g. for UI sync).
+    pub fn save_tags(&mut self, file_tags: &[crate::FileTag]) -> (PathBuf, Vec<crate::FileTag>) {
+        let (path_buf, new_tags) = file_tags.save_and_reparse(&self.file_path);
+        self.set_file_tags(&new_tags);
+        (path_buf, new_tags)
+    }
 }
 
 #[cfg(test)]
@@ -79,27 +96,27 @@ mod tests {
 
     #[test]
     fn test_empty_by_default() {
-        let f = File::from_path("", SystemTime::UNIX_EPOCH, &[]);
+        let f = File::from_path("", SystemTime::UNIX_EPOCH);
         assert_eq!(f.tag_list().file_name(f.initial_filename()), "");
     }
 
     #[test]
     fn test_single_tag() {
-        let mut f = File::from_path("", SystemTime::UNIX_EPOCH, &[]);
+        let mut f = File::from_path("", SystemTime::UNIX_EPOCH);
         f.set_file_tags(&[FileTag::new("Action")]);
         assert_eq!(f.tag_list().file_name(f.initial_filename()), "Action");
     }
 
     #[test]
     fn test_multiple_tags_joined_by_dots() {
-        let mut f = File::from_path("", SystemTime::UNIX_EPOCH, &[]);
+        let mut f = File::from_path("", SystemTime::UNIX_EPOCH);
         f.set_file_tags(&[FileTag::new("Action"), FileTag::new("Adventure")]);
         assert_eq!(f.tag_list().file_name(f.initial_filename()), "Action.Adventure");
     }
 
     #[test]
     fn test_add_and_remove_tag() {
-        let mut f = File::from_path("", SystemTime::UNIX_EPOCH, &[]);
+        let mut f = File::from_path("", SystemTime::UNIX_EPOCH);
         f.tag_list_mut().add_tag("Action");
         assert_eq!(f.tag_list().file_name(f.initial_filename()), "Action");
         f.tag_list_mut().add_tag("Adventure");
@@ -110,7 +127,7 @@ mod tests {
 
     #[test]
     fn test_has_tag() {
-        let mut f = File::from_path("", SystemTime::UNIX_EPOCH, &[]);
+        let mut f = File::from_path("", SystemTime::UNIX_EPOCH);
         assert!(!f.tag_list().has_tag("Action"));
         f.tag_list_mut().add_tag("Action");
         assert!(f.tag_list().has_tag("Action"));
@@ -119,7 +136,7 @@ mod tests {
     #[test]
     fn test_from_path() {
         let now = SystemTime::now();
-        let f = File::from_path("/some/path/file.mp4", now, &[]);
+        let f = File::from_path("/some/path/file.mp4", now);
         assert_eq!(f.file_path(), Path::new("/some/path/file.mp4"));
         assert_eq!(f.initial_filename(), "file");
         assert_eq!(f.created_at(), now);
@@ -128,14 +145,14 @@ mod tests {
     #[test]
     fn test_from_path_no_extension() {
         let now = SystemTime::now();
-        let f = File::from_path("/some/path/readme", now, &[]);
+        let f = File::from_path("/some/path/readme", now);
         assert_eq!(f.initial_filename(), "readme");
     }
 
     #[test]
     fn test_file_name_starts_with_initial_then_tags_prepended() {
         let now = SystemTime::now();
-        let mut f = File::from_path("/path/my_video.mp4", now, &[]);
+        let mut f = File::from_path("/path/my_video.mp4", now);
         assert_eq!(f.tag_list().file_name(f.initial_filename()), "my_video");
         f.set_file_tags(&[FileTag::new("Action")]);
         assert_eq!(f.tag_list().file_name(f.initial_filename()), "Action.my_video");
