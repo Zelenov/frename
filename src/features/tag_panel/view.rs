@@ -3,7 +3,7 @@
 use iced::widget::{checkbox, column, container, mouse_area, scrollable, text};
 use iced::{mouse, Background, Border, Element, Length};
 
-use frename_core::File;
+use frename_core::{File, TagList};
 
 use crate::theme;
 use super::{Message, TagPanelState};
@@ -50,11 +50,13 @@ fn dark_checkbox_style(
 
 /// Render the tag panel: scrollable list of tag checkboxes.
 /// `selected_file` is the file from the file workspace when ready (no file = placeholder).
+/// `tag_list` is the workspace stored tags (value + checked); use workspace checked flag everywhere.
 pub fn view<'a>(
     _state: &'a TagPanelState,
     selected_file: Option<&'a File>,
+    tag_list: &'a TagList,
 ) -> Element<'a, Message> {
-    let Some(file) = selected_file else {
+    let Some(_file) = selected_file else {
         return container(
             text("Select a file")
                 .size(14)
@@ -72,13 +74,14 @@ pub fn view<'a>(
         .into();
     };
 
-    let tag_items: Vec<Element<'_, Message>> = file
+    let tag_items: Vec<Element<'_, Message>> = tag_list
         .tags()
         .iter()
         .enumerate()
         .map(|(index, tag)| {
+            let is_checked = tag.is_checked();
             let row_content = container(
-                checkbox(tag.is_checked())
+                checkbox(is_checked)
                     .label(tag.tag())
                     .on_toggle(move |_| Message::ToggleTag(index))
                     .size(16)

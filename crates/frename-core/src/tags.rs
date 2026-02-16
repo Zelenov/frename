@@ -1,6 +1,9 @@
 //! Tag management for file classification.
+//! These are the stored (enriched) tags; FileTag is the plain value for parse/save.
 
-/// A single tag that can be applied to a file.
+use crate::{tag_storage::TagStorage, FileTag, FileTagList};
+
+/// A single tag that can be applied to a file (stored tag with checked state).
 #[derive(Debug, Clone)]
 pub struct Tag {
     /// The tag text.
@@ -37,6 +40,11 @@ impl Tag {
     pub fn toggle(&mut self) {
         self.checked = !self.checked;
     }
+
+    /// Convert this tag to a FileTag (the value only). Used when saving to file.
+    pub fn to_file_tag(&self) -> FileTag {
+        FileTag::new(self.tag().to_string())
+    }
 }
 
 /// A collection of available tags.
@@ -46,11 +54,17 @@ pub struct TagList {
 }
 
 impl TagList {
-    /// Create a new TagList with the default set of hardcoded tags.
-    pub fn new() -> Self {
-        Self {
-            tags: default_tags(),
-        }
+    /// Create a new TagList from stored tag names; checked state from file_tag_list (no duplicate).
+    pub fn new(stored_tag_names: &[&str], file_tag_list: Option<&FileTagList>) -> Self {
+        let tags = stored_tag_names
+            .iter()
+            .map(|name| {
+                let mut tag = Tag::new(*name);
+                tag.set_checked(file_tag_list.map_or(false, |list| list.has_tag(name)));
+                tag
+            })
+            .collect();
+        Self { tags }
     }
 
     /// Get the list of all available tags.
@@ -62,120 +76,26 @@ impl TagList {
     pub fn tags_mut(&mut self) -> &mut [Tag] {
         &mut self.tags
     }
+
+    // TODO: initial filename refactoring
+    /// Checked tags as a FileTagList (for save and sync).
+    pub fn checked_file_tags(&self) -> FileTagList {
+        let tags: Vec<FileTag> = self
+            .tags
+            .iter()
+            .filter(|t| t.is_checked())
+            .map(|t| t.to_file_tag())
+            .collect();
+        let mut list = FileTagList::new();
+        list.set_file_tags(&tags);
+        list
+    }
 }
 
 impl Default for TagList {
     fn default() -> Self {
-        Self::new()
+        Self::new(TagStorage::names(), None)
     }
-}
-
-/// Returns the default set of 100 hardcoded tags.
-fn default_tags() -> Vec<Tag> {
-    let names = [
-        "Action",
-        "Adventure",
-        "Animation",
-        "Architecture",
-        "Art",
-        "Astronomy",
-        "Biography",
-        "Blog",
-        "Business",
-        "Celebration",
-        "Classic",
-        "Comedy",
-        "Concert",
-        "Cooking",
-        "Dance",
-        "Design",
-        "Documentary",
-        "Drama",
-        "Education",
-        "Entertainment",
-        "Environment",
-        "Event",
-        "Experimental",
-        "Family",
-        "Fantasy",
-        "Fashion",
-        "Finance",
-        "Fitness",
-        "Food",
-        "Gaming",
-        "Gardening",
-        "Geography",
-        "Health",
-        "History",
-        "Holiday",
-        "Home Improvement",
-        "Horror",
-        "How-To",
-        "Humor",
-        "Indie",
-        "Industrial",
-        "Interview",
-        "Journalism",
-        "Kids",
-        "Landscape",
-        "Language",
-        "Lecture",
-        "Lifestyle",
-        "Literature",
-        "Live Stream",
-        "Mathematics",
-        "Medicine",
-        "Military",
-        "Motivation",
-        "Music",
-        "Mystery",
-        "Mythology",
-        "Nature",
-        "News",
-        "Outdoors",
-        "Parody",
-        "Performance",
-        "Pets",
-        "Philosophy",
-        "Photography",
-        "Physics",
-        "Podcast",
-        "Politics",
-        "Portrait",
-        "Presentation",
-        "Psychology",
-        "Puzzle",
-        "Reality",
-        "Religion",
-        "Retro",
-        "Review",
-        "Romance",
-        "Satire",
-        "Science",
-        "Science Fiction",
-        "Short Film",
-        "Social Media",
-        "Space",
-        "Sports",
-        "Suspense",
-        "Technology",
-        "Thriller",
-        "Time-Lapse",
-        "Travel",
-        "Tutorial",
-        "Underwater",
-        "Urban",
-        "Vlog",
-        "Weather",
-        "Wedding",
-        "Western",
-        "Wildlife",
-        "Workout",
-        "Workshop",
-        "Yoga",
-    ];
-
-    names.iter().map(|name| Tag::new(*name)).collect()
 }
 
 #[cfg(test)]
@@ -190,13 +110,13 @@ mod tests {
 
     #[test]
     fn test_tag_list_has_100_tags() {
-        let list = TagList::new();
+        let list = TagList::new(TagStorage::names(), None);
         assert_eq!(list.tags().len(), 100);
     }
 
     #[test]
     fn test_tag_list_first_and_last() {
-        let list = TagList::new();
+        let list = TagList::new(TagStorage::names(), None);
         assert_eq!(list.tags().first().unwrap().tag(), "Action");
         assert_eq!(list.tags().last().unwrap().tag(), "Yoga");
     }

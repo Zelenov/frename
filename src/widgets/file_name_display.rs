@@ -1,25 +1,32 @@
-//! File name display widget. Shows the generated file name for a file (or placeholders).
+//! File name display widget. Shows the file name from workspace tag list + file stem (not the file's own tags).
 //! Display-only; no interactions.
 
 use iced::widget::{container, text};
 use iced::{Background, Element, Length};
 
-use frename_core::File;
+use frename_core::{File, TagList};
 
 use crate::theme;
 
-/// Render the file name display: shows the current file name (tags + initial name) or a placeholder.
-pub fn view<'a, Message: 'a>(file: Option<&'a File>) -> Element<'a, Message> {
-    let (label, color) = match file {
-        None => ("Select a file", theme::TEXT_MUTED),
-        Some(f) => (
-            if f.file_name().is_empty() {
-                "(no tags selected)"
-            } else {
-                f.file_name()
-            },
-            theme::TEXT,
-        ),
+/// Render the file name display: workspace tags + file stem, or a placeholder.
+pub fn view<'a, Message: 'a>(
+    file: Option<&'a File>,
+    tag_list: Option<&'a TagList>,
+) -> Element<'a, Message> {
+    let (label, color) = match (file, tag_list) {
+        (None, _) => ("Select a file".to_string(), theme::TEXT_MUTED),
+        (Some(_), None) => ("(no tags)".to_string(), theme::TEXT_MUTED),
+        (Some(f), Some(list)) => {
+            let name = list.checked_file_tags().file_name(f.initial_filename());
+            (
+                if name.is_empty() {
+                    "(no tags selected)".to_string()
+                } else {
+                    name
+                },
+                theme::TEXT,
+            )
+        }
     };
 
     let content = container(

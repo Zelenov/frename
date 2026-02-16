@@ -1,27 +1,28 @@
-//! State for file workspace: the file currently being edited and its tag selection.
+//! State for file workspace: the file currently being edited and stored tags with checked state.
 //!
-//! Public interface: set the file to work on (None or Some). The component owns loading
-//! and all internal behaviour; callers only use `set_file` and `file()`.
+//! We do not change the open file's file_tag_list on toggle; we only change the workspace tag_list.
+//! File tags are synced from the workspace when opening another file (sync save).
 
-use frename_core::File;
+use frename_core::{File, FileTagger, TagList, TagStorage};
 
-/// File workspace: operates on the currently selected file. You set the file (None or Some);
-/// the component does the rest internally (loading, etc.). Only public API: `set_file`, `file`.
+/// File workspace: current file and stored tags with checked state (source of truth for UI).
 #[derive(Default)]
 pub struct FileWorkspace {
-    /// Internal: true while loading the file (e.g. async load). Not exposed.
     loading: bool,
     /// Current file when ready. None while loading or when nothing set.
     file: Option<File>,
+    /// Stored tags with checked state (synced from file on load; toggles update only this, not the file).
+    tag_list: TagList,
 }
 
 impl FileWorkspace {
-    /// Set the file to work on. None = clear. Some(file) = load and work on it; internals handle loading.
+    /// Set the file to work on. When changing file, syncs workspace tags to the current file first, then loads the new one.
     pub fn set_file(&mut self, file: Option<File>) {
         match file {
             None => {
                 self.loading = false;
                 self.file = None;
+                self.tag_list = TagList::new(TagStorage::names(), None);
             }
             Some(f) => {
                 let already_loaded = self
@@ -31,10 +32,14 @@ impl FileWorkspace {
                 if already_loaded {
                     return;
                 }
+                self.sync_file_tags_to_file();
                 self.loading = true;
                 self.file = None;
-                // Internal: "load" (sync for now; can become async later). When ready, set file and clear loading.
                 self.file = Some(f);
+                self.tag_list = TagList::new(
+                    TagStorage::names(),
+                    self.file().map(|f| f.tag_list()),
+                );
                 self.loading = false;
             }
         }
@@ -48,10 +53,37 @@ impl FileWorkspace {
         self.file.as_ref()
     }
 
-    /// Toggle a tag by index and rebuild the displayed file name.
+    /// Stored tags with checked state (use this for UI; checked is the workspace source of truth).
+    pub fn tag_list(&self) -> &TagList {
+        &self.tag_list
+    }
+
+    /// Toggle stored tag at index. Only updates workspace tag_list; file is synced after save.
     pub fn toggle_tag(&mut self, index: usize) {
-        if let Some(file) = self.file.as_mut() {
-            file.toggle_tag(index);
+        if let Some(tag) = self.tag_list.tags_mut().get_mut(index) {
+            tag.toggle();
         }
+    }
+
+    /// Checked tags from workspace as FileTagList (for save). Use this, not file's tags.
+    pub fn checked_file_tags(&self) -> frename_core::FileTagList {
+        self.tag_list.checked_file_tags()
+    }
+
+    /// Sync workspace tag list into the open file's file_tag_list. Called internally when changing file.
+    fn sync_file_tags_to_file(&mut self) {
+        if let Some(file) = self.file.as_mut() {
+            *file.tag_list_mut() = self.tag_list.checked_file_tags();
+        }
+    }
+
+    /// Open a file: save current file (if any) synchronously, then set the new file.
+    /// Target already has tags from directory parse. Caller updates selection and video.
+    pub fn open_file(&mut self, target: File) {
+        if let Some(f) = self.file() {
+            let tags = self.checked_file_tags();
+            FileTagger::save(tags.file_tags(), f.file_path());
+        }
+        self.set_file(Some(target));
     }
 }

@@ -7,7 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
-use frename_core::{Directory, TagList};
+use frename_core::Directory;
 use iced::{Subscription, Task};
 
 use crate::features::file_workspace::FileWorkspace;
@@ -23,13 +23,10 @@ const DEFAULT_FOLDER_WIDTH: f32 = 200.0;
 const MIN_FOLDER_WIDTH: f32 = 120.0;
 
 /// Folder workspace: owns directory, selected file, loading. Handles selection; panels just show and send messages.
-/// Holds global tag list (same for all folders) and the file workspace (current file + its tag selection).
 pub struct FolderWorkspace {
     directory: Option<Directory>,
     loading: bool,
     current_file: Option<Box<Path>>,
-    /// Global tags (same set for all files); file workspace gets a copy when loading a file.
-    global_tags: TagList,
     /// File currently being edited: copy of file + tag selection. Rename panel reads/updates this.
     file_workspace: FileWorkspace,
     video_player: VideoPlayerState,
@@ -44,7 +41,6 @@ impl Default for FolderWorkspace {
             directory: None,
             loading: false,
             current_file: None,
-            global_tags: TagList::new(),
             file_workspace: FileWorkspace::default(),
             video_player: VideoPlayerState::default(),
             tag_panel: TagPanelState::default(),
@@ -110,19 +106,13 @@ impl FolderWorkspace {
                 .is_some();
 
         if in_folder {
-            let Some(dir) = self.directory.as_mut() else {
+            let Some(target_file) = self.directory.as_ref().and_then(|d| {
+                d.find_by_path(&path)
+                    .and_then(|idx| d.files().get(idx).cloned())
+            }) else {
                 return Task::none();
             };
-            let Some(index) = dir.find_by_path(&path) else {
-                return Task::none();
-            };
-            if !dir.select(index) {
-                return Task::none();
-            }
-            self.current_file = Some(path.clone().into_boxed_path());
-            self.file_workspace.set_file(dir.selected_file().cloned());
-            log::info!("Opening file: {}", path.display());
-            self.video_player.load_video(path, Message::VideoPlayer)
+            return self.open_file_in_folder(target_file);
         } else {
             self.file_workspace.set_file(None);
             let directory = parent.unwrap_or_else(|| path.clone());
@@ -176,12 +166,21 @@ impl FolderWorkspace {
         if !dir.select(index) {
             return Task::none();
         }
-        let path = dir
-            .selected_file()
-            .map(|f| f.file_path().to_path_buf())
-            .expect("we just selected");
+        let Some(target_file) = dir.selected_file().cloned() else {
+            return Task::none();
+        };
+        self.open_file_in_folder(target_file)
+    }
+
+    fn open_file_in_folder(&mut self, target_file: frename_core::File) -> Task<Message> {
+        let path = target_file.file_path().to_path_buf();
+        self.file_workspace.open_file(target_file);
+        if let Some(dir) = self.directory.as_mut() {
+            if let Some(index) = dir.find_by_path(&path) {
+                let _ = dir.select(index);
+            }
+        }
         self.current_file = Some(path.clone().into_boxed_path());
-        self.file_workspace.set_file(dir.selected_file().cloned());
         log::info!("Opening file: {}", path.display());
         self.video_player.load_video(path, Message::VideoPlayer)
     }
@@ -201,13 +200,10 @@ impl FolderWorkspace {
         if !dir.select(index) {
             return Task::none();
         }
-        let Some(path) = dir.selected_file().map(|f| f.file_path().to_path_buf()) else {
+        let Some(target_file) = dir.selected_file().cloned() else {
             return Task::none();
         };
-        self.current_file = Some(path.clone().into_boxed_path());
-        self.file_workspace.set_file(dir.selected_file().cloned());
-        log::info!("Opening file: {}", path.display());
-        self.video_player.load_video(path, Message::VideoPlayer)
+        self.open_file_in_folder(target_file)
     }
 
     fn select_previous(&mut self) -> Task<Message> {
@@ -257,11 +253,6 @@ impl FolderWorkspace {
 
     pub fn is_loading(&self) -> bool {
         self.loading
-    }
-
-    /// Global tag list (same set for all files). File workspace gets a copy when loading a file.
-    pub fn global_tags(&self) -> &TagList {
-        &self.global_tags
     }
 
     /// File workspace: current file and its tag selection (for rename panel). Use this for display and tag toggles.

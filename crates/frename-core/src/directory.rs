@@ -1,6 +1,6 @@
 //! Directory scanning and file list management.
 
-use crate::File;
+use crate::{File, FileTagger};
 use std::path::Path;
 use std::time::SystemTime;
 
@@ -34,7 +34,8 @@ impl Directory {
             if path.is_file() {
                 let metadata = entry.metadata().await?;
                 let created = metadata.created().unwrap_or(SystemTime::UNIX_EPOCH);
-                files.push(File::from_path(path, created));
+                let tags = FileTagger::parse(&path).await;
+                files.push(File::from_path(path, created, &tags));
             }
         }
         files.sort_by(|a, b| a.created_at().cmp(&b.created_at()));
@@ -63,17 +64,6 @@ impl Directory {
     /// Get the currently selected file.
     pub fn selected_file(&self) -> Option<&File> {
         self.selected_index.and_then(|i| self.files.get(i))
-    }
-
-    /// Get a mutable reference to the currently selected file.
-    pub fn selected_file_mut(&mut self) -> Option<&mut File> {
-        let idx = self.selected_index?;
-        self.files.get_mut(idx)
-    }
-
-    /// Get a mutable reference to the file at the given index.
-    pub fn file_at_mut(&mut self, index: usize) -> Option<&mut File> {
-        self.files.get_mut(index)
     }
 
     /// Select a file by index. Returns true if the index was valid.
