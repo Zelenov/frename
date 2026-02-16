@@ -18,8 +18,8 @@ pub fn view<'a>(
     selected_file: Option<&'a frename_core::File>,
     loading: bool,
 ) -> Element<'a, Message> {
-    let placeholder = |s: String| {
-        container(text(s).size(14).color(theme::TEXT_MUTED))
+    let placeholder_icon = |icon: &'static str| {
+        container(text(icon).size(48).color(theme::TEXT_MUTED))
             .padding([8, 8])
             .width(Length::Fill)
             .height(Length::Fill)
@@ -30,15 +30,15 @@ pub fn view<'a>(
     };
 
     if loading {
-        return placeholder("Scanning folder...".to_string()).into();
+        return placeholder_icon("⏳").into();
     }
 
     let Some(dir) = directory else {
-        return placeholder("Drop a file to open its folder".to_string()).into();
+        return placeholder_icon("📂").into();
     };
 
     if dir.is_empty() {
-        return placeholder("Folder is empty".to_string()).into();
+        return placeholder_icon("📭").into();
     }
 
     let selected_index = selected_file.and_then(|f| dir.find_by_path(f.file_path()));

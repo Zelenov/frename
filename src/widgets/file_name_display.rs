@@ -14,13 +14,13 @@ pub fn view<'a, Message: 'a>(
     tag_list: Option<&'a TagList>,
 ) -> Element<'a, Message> {
     let (label, color) = match (file, tag_list) {
-        (None, _) => ("Select a file".to_string(), theme::TEXT_MUTED),
-        (Some(_), None) => ("(no tags)".to_string(), theme::TEXT_MUTED),
+        (None, _) => ("📄".to_string(), theme::TEXT_MUTED),
+        (Some(_), None) => ("🏷".to_string(), theme::TEXT_MUTED),
         (Some(f), Some(list)) => {
             let name = list.checked_file_tags().file_name(f.initial_filename());
             (
                 if name.is_empty() {
-                    "(no tags selected)".to_string()
+                    "🏷".to_string()
                 } else {
                     name
                 },

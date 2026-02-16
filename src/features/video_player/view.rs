@@ -38,8 +38,8 @@ pub fn view(state: &VideoPlayerState) -> Element<'_, Message> {
             .into()
     } else if state.is_loading() {
         container(
-            text("Loading video...")
-                .size(24)
+            text("⏳")
+                .size(48)
                 .color(theme::TEXT_MUTED),
         )
         .center(iced::Length::Fill)
@@ -60,8 +60,8 @@ pub fn view(state: &VideoPlayerState) -> Element<'_, Message> {
         .into()
     } else {
         container(
-            text("Drop a video file here to play")
-                .size(24)
+            text("🎬")
+                .size(48)
                 .color(theme::TEXT_MUTED),
         )
         .center(iced::Length::Fill)

@@ -3,7 +3,7 @@
 //! We pass only data to each feature view (directory, current_file, selected_file, etc.).
 //! We do not tell any feature how to look (scrollable, rectangular, etc.); each feature view owns its appearance.
 
-use iced::widget::{column, container, row};
+use iced::widget::{column, container, row, text};
 use iced::{Background, Element, Length};
 
 use crate::features::{file_workspace, folder, folder_controls, video_player};
@@ -12,8 +12,30 @@ use crate::widgets::splitter::{Splitter, HIT_WIDTH};
 
 use super::{FolderWorkspace, Message};
 
-/// Workspace layout: regions and splitters. Child views receive only data; they decide how they look.
+/// Workspace layout: one big drop panel when no folder is open; otherwise regions and splitters.
 pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
+    if state.directory().is_none() {
+        let icon = if state.is_loading() { "⏳" } else { "📂" };
+        return container(
+            container(
+                text(icon)
+                    .size(120)
+                    .color(theme::TEXT_MUTED),
+            )
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .width(Length::Fill)
+            .height(Length::Fill),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(|_theme| iced::widget::container::Style {
+            background: Some(Background::Color(theme::BG_PANEL)),
+            ..Default::default()
+        })
+        .into();
+    }
+
     let video = container(
         video_player::view::view(state.video_player()).map(Message::VideoPlayer),
     )

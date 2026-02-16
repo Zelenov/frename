@@ -58,8 +58,8 @@ pub fn view<'a>(
 ) -> Element<'a, Message> {
     let Some(_file) = selected_file else {
         return container(
-            text("Select a file")
-                .size(14)
+            text("📄")
+                .size(48)
                 .color(theme::TEXT_MUTED)
                 .width(Length::Fill)
                 .height(Length::Fill),
