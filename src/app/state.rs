@@ -4,22 +4,34 @@
 //! It does not know how any feature looks (scrollable, layout, panels) or what internals they have.
 //! Only `folder_workspace.current_file()` is used for the window title.
 
-use iced::{Element, Subscription, Task};
+use iced::{event, window, Element, Subscription, Task};
 
 use crate::features::{drag_drop, folder_workspace};
 
 use super::Message;
 
 /// Application state: top-level features only. No knowledge of child UI or structure.
-#[derive(Default)]
 pub struct FrenameApp {
     drag_drop_state: drag_drop::DragDropState,
     folder_workspace: folder_workspace::FolderWorkspace,
 }
 
 impl FrenameApp {
+    /// Creates the app. Database/persistence is handled in the core (directory) layer.
+    pub fn new() -> Self {
+        Self {
+            drag_drop_state: drag_drop::DragDropState::default(),
+            folder_workspace: folder_workspace::FolderWorkspace::new(),
+        }
+    }
+}
+
+impl FrenameApp {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::WindowReady => Task::done(Message::FolderWorkspace(
+                folder_workspace::Message::LoadLastSession,
+            )),
             Message::DragDrop(drag_drop::Message::FileDropped(path)) => {
                 self.drag_drop_state.handle_file_dropped(path.clone());
                 Task::done(Message::FolderWorkspace(
@@ -36,13 +48,17 @@ impl FrenameApp {
         folder_workspace::view::view(&self.folder_workspace).map(Message::FolderWorkspace)
     }
 
-    /// Feature subscriptions (file drop, keyboard, timers, etc.)
+    /// Feature subscriptions (file drop, window opened, etc.)
     pub fn subscription(&self) -> Subscription<Message> {
         Subscription::batch([
             self.drag_drop_state.subscription().map(Message::DragDrop),
             self.folder_workspace
                 .subscription()
                 .map(Message::FolderWorkspace),
+            event::listen_with(|ev, _status, _id| match ev {
+                iced::Event::Window(window::Event::Opened { .. }) => Some(Message::WindowReady),
+                _ => None,
+            }),
         ])
     }
 
@@ -60,7 +76,6 @@ mod tests {
 
     #[test]
     fn test_app_creation() {
-        let _app = FrenameApp::default();
-        // Basic smoke test - app can be created
+        let _app = FrenameApp::new();
     }
 }

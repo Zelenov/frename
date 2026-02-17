@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use frename_core::{Directory, FileTag};
+use frename_core::{Directory, File, FileTag, FolderAndFile};
 use crate::features::{folder, tag_panel, video_player};
 
 /// Messages handled by the folder workspace (owns directory, selection, and all logic).
@@ -10,16 +10,17 @@ use crate::features::{folder, tag_panel, video_player};
 pub enum Message {
     /// Open a file by path: if in current folder then select and open, else scan folder then open
     OpenFile(PathBuf),
+    /// Initialize: load last session from state store and open that folder/file if any.
+    LoadLastSession,
     /// Scan a directory and auto-select the target file afterwards
-    ScanFolder {
-        directory: PathBuf,
-        target_file: PathBuf,
-    },
-    /// Directory scan completed (internal)
+    ScanFolder(FolderAndFile),
+    /// Directory scan completed (internal). target_file = which file to select and open, if any.
     FolderLoaded {
         directory: Directory,
-        target_file: PathBuf,
+        target_file: Option<PathBuf>,
     },
+    /// File was selected (by directory). Apply snapshot, set file workspace, load/unload video.
+    FileOpened(File),
     /// Snapshot to persist: created by folder workspace when switching file (from file workspace get_snapshot). Save to disk then update directory.
     FileUpdated {
         path: PathBuf,

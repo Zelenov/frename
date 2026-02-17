@@ -1,6 +1,8 @@
 //! Core logic for frename - file renaming utility.
 
+mod db;
 mod directory;
+mod folder_file;
 mod file_tag;
 mod file_tag_list;
 mod file_tag_snapshot;
@@ -9,7 +11,9 @@ mod file;
 mod tag_storage;
 mod tags;
 
-pub use directory::Directory;
+pub use db::{AppDatabase, AppStateStore, EmptyAppStateStore};
+pub use directory::{ensure_db_initialized, open_last_directory, Directory};
+pub use folder_file::FolderAndFile;
 pub use file::File;
 pub use file_tag::FileTag;
 pub use file_tag_list::FileTagList;

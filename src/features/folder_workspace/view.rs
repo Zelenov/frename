@@ -49,11 +49,7 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
     let (has_previous, has_next) = state.has_previous_next();
 
     let folder_col: Element<'_, folder::Message> = column![
-        container(folder::view::view(
-            state.directory(),
-            state.current_file(),
-            state.is_loading(),
-        ))
+        container(folder::view::view(state.directory(), state.is_loading()))
         .height(Length::Fill),
         folder_controls::view::view(has_previous, has_next),
     ]

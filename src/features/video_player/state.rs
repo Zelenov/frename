@@ -36,14 +36,7 @@ impl Default for VideoPlayerState {
 
 impl VideoPlayerState {
     /// Load a video file asynchronously
-    pub fn load_video<AppMessage>(
-        &mut self,
-        path: PathBuf,
-        on_loaded: impl Fn(Message) -> AppMessage + 'static + Send + Sync,
-    ) -> Task<AppMessage>
-    where
-        AppMessage: 'static,
-    {
+    pub fn load_video(&mut self, path: PathBuf) -> Task<Message> {
         log::info!("Starting video load: {}", path.display());
         self.loading = true;
         self.load_failed = false;
@@ -76,7 +69,7 @@ impl VideoPlayerState {
             .await
             .unwrap_or(false);
 
-            on_loaded(Message::VideoLoaded(success))
+            Message::VideoLoaded(success)
         })
     }
 

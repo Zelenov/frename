@@ -1,6 +1,6 @@
 ---
 name: iced-elm-architecture
-description: Iced GUI framework Elm architecture patterns for Rust. Feature-based code organization, message flow, Task::done dispatch, subscriptions, and component independence. Use when building iced UI features, adding messages, creating views, wiring components, or organizing iced application code.
+description: Iced GUI framework Elm architecture patterns for Rust. Feature-based code organization, message flow, Task::done dispatch, core/UI separation, snapshots, deferred side effects, subscriptions, and component independence. Use when building iced UI features, adding messages, creating views, wiring components, or organizing iced application code.
 ---
 
 # Iced Elm Architecture Patterns
@@ -115,15 +115,24 @@ pub fn view(state: &FeatureState) -> Element<'_, Message> {
 ### mod.rs
 
 ```rust
-mod messages;
 mod state;
 pub mod view;
 
-pub use messages::Message;
 pub use state::FeatureState;
+// Omit messages if the feature has no message enum (e.g. only exposes data).
 ```
 
+A feature can omit `messages.rs` and a `Message` enum if it only exposes data (e.g. `get_snapshot()`) and never emits to the parent; the parent creates its own messages from that data.
+
 ## Critical Rules
+
+### 0. Never Duplicate Code
+
+Reuse the function you already have. Do not introduce a second function that does the same thing as an existing one, and do not repeat the same logic in multiple places.
+
+- If you need to "persist state" in several code paths, have **one** function that performs the persist (e.g. `write_session`), and call it from every path (e.g. `open()` and `persist_session()` both call that one function). Do not call the low-level writer (e.g. `save_last_session`) from multiple places with different argument construction; centralize construction and the single call in one helper.
+- Before adding a new helper or "convenience" function, check whether existing code already does the same thing. If it does, call that. If the existing function has the wrong shape, refactor it once and reuse it everywhere.
+- Duplication leads to drift and bugs when one path is updated and the other is not.
 
 ### 1. Never Call update Directly Across Components
 
@@ -380,3 +389,118 @@ pub fn subscription(&self) -> Subscription<Message> {
 ```
 
 The `.map(Message::Feature)` wraps child messages into the app-level enum for proper routing.
+
+## Core vs UI (View model vs Model)
+
+Keep **domain logic in a core crate** (e.g. `frename-core`); the UI only orchestrates via messages, Task dispatch, and view.
+
+- **Core (model)**: types and operations (Directory, File, …). All checks and decisions live here: "does this exist?", "is this already open?", "did selection change?". Core functions return **coherent results** (e.g. `Option<File>`) so the UI never has to inspect internals or duplicate logic.
+- **UI state (view model)**: holds core types, **only** dispatches messages and calls core. No conditionals that mirror core logic (no "if current file == target" in the UI). Call core; if it returns `None` / "no-op", return `Task::none()` or send nothing; if it returns `Some(x)`, send a message (e.g. `FileOpened(x)`). Messages stay in the feature; all the "ifs" and checks live in Directory / File.
+- **Directory is the only source of truth for selection.** The folder (Directory) knows what file is selected. The UI must **not** pass "current workspace file" or "current selection" into Directory. Directory uses its own state (e.g. `selected_file()`) to decide "already selected?" or "open this path". One code path for persistence; no duplicate helpers.
+
+### Database and sessions: only two places may know the DB exists
+
+**Rule: No UI or feature state must ever know that a database or “sessions” exist.**
+
+- **Only two places** are allowed to touch the database or session persistence:
+  1. **App / main** – initializes the database once at startup (e.g. `ensure_db_initialized()`). No other app or UI code touches DB init.
+  2. **Core directory (e.g. `directory.rs`)** – the only component that implements “session” and persistence. It owns the idea of “last folder + optional file”. Inside its own functions it updates the database when needed. No one else sees `save_last_session`, `get_last_session`, or any DB type.
+
+- **Directory’s public surface**: the UI only sees a **minimal API**. No inner helpers (e.g. `file_for_path`) are exposed. Typical operations:
+  - **Open directory** – `Directory::open(path)`. Inside, directory sets its state and persists (folder, no file). No separate “update session” call.
+  - **Select / open file** – `dir.set_selection(Some(path) | None)`, `dir.open_path(path)` (path only; directory uses its own `selected_file()` for "already selected?"), `dir.select_index(i)`, `dir.select_previous()`, `dir.select_next()`. Inside these, directory updates its own state and persists (folder + optional file).
+
+- **No file in features/, no state.rs, no view, no UI component** may:
+  - Call **any database or session persistence API** (e.g. `save_last_session`, `get_last_session`, or anything from the `db` module) **except**:
+    - **main** may call `ensure_db_initialized()` once at startup.
+    - The UI may call the **directory module’s public API** only: e.g. `Directory::open`, `dir.set_selection`, `dir.open_path`, `dir.select_index`, `dir.select_previous`, `dir.select_next`, and the module-level `open_last_directory()` for startup. Those live in directory and may use storage internally; the UI must never import or name the `db` module or “session”/“database”.
+  - Import or reference the `db` module or session persistence types. Only the directory module (and main for init) may do that.
+
+- **Session shape**: folder (required) + optional file. Reflected in the core type (e.g. `FolderAndFile { folder, file: Option<PathBuf> }`). Only directory reads/writes it; no one else constructs or passes “session” for persistence.
+
+### Core module layout and style
+
+- **File structure (e.g. `directory.rs`, `file.rs`)**: Put **types and data** first (struct and fields, with section comment). Then **constructors** (private helper if any, then `open` / `from_path` etc.). Then **accessors** (read-only getters). Then **mutation / commands** (set_selection, select_index, update_file, etc.). Last: **private helpers** (find_by_path, persist_session, etc.). Use section comments so the file is easy to scan.
+- **If/else: short branch first.** In conditionals, put the **short** branch first and the **long** branch second. Prefer early return for the short path (e.g. `if index >= len { return None; }` then the main logic) so the reader sees the guard first and then the "happy" path.
+- **Logging**: Log **inside the module that owns the operation**. Directory logs scan start/complete/failure and file updates; callers do not log directory results. Avoid duplicate or "caller reports core result" logs.
+- **Public API**: Make functions **private** if only used within the same module. **Remove** unused methods. For test-only or programmatic-only APIs (e.g. `with_files`, `from_path`), either keep public with a doc like "For testing and programmatic use only" or use `pub(crate)` when all callers are in the same crate. Use `#[allow(dead_code)]` only when a method is used only by tests (same crate).
+
+Prefer **extension-style APIs** in core using traits so call sites read as receiver-first:
+
+```rust
+// In core: trait + impl
+pub trait SaveAndReparse { fn save_and_reparse(&self, path: &Path) -> (PathBuf, Vec<FileTag>); }
+impl SaveAndReparse for [FileTag] { ... }
+
+// In UI: one import, clear call
+use frename_core::SaveAndReparse;
+let (path, tags) = tags.file_tags().save_and_reparse(&path);
+```
+
+## Snapshots and Data, Not Messages
+
+When a child provides "data to be applied later" (e.g. file tags to save), use a **plain data type** (e.g. `FileTagSnapshot { path, tags }`) in core, not a message.
+
+- **Child feature**: exposes something like `get_snapshot() -> Option<FileTagSnapshot>`. It does **not** save and does **not** create a message.
+- **Parent**: when it needs to persist, it creates **its own** message (e.g. `Message::FileUpdated`) from that snapshot and sends it to itself. The message type lives in the **parent** (the one that performs the side effect).
+
+So: snapshot = data in core; message = owned by the component that runs the side effect.
+
+## Defer Side Effects Until Safe
+
+When a side effect (e.g. saving a file) must **not** run until another resource is released (e.g. video stopped), defer the side effect until you get a "released" signal.
+
+1. **Store pending data** in parent state (e.g. `pending_file_updated: Option<FileTagSnapshot>`).
+2. **Request release** by sending a message to the child (e.g. `Message::VideoPlayer(Unload)`).
+3. **Child** clears the resource and returns a "released" message (e.g. `VideoUnloaded`).
+4. **Parent** handles the "released" message: take pending data, dispatch the side-effect message to itself (e.g. `FileUpdated`), then start the next action (e.g. load new video). Clear pending.
+
+Example flow: switch file → get snapshot, switch UI to new file, store snapshot, send Unload → on VideoUnloaded → send FileUpdated (so save runs), then load new video. Save never runs while the previous video is still playing.
+
+## Parent Intercepts Child Messages
+
+When the parent must **react** to a specific child message (e.g. `VideoUnloaded`) before or instead of forwarding, match on the child message and handle that variant; forward the rest.
+
+```rust
+Message::VideoPlayer(msg) => match msg {
+    video_player::Message::VideoUnloaded => self.on_video_unloaded(),
+    other => self.video_player.update(other).map(Message::VideoPlayer),
+}
+```
+
+Do not forward the "special" message to the child; handle it in the parent and return the appropriate `Task`.
+
+### 10. Single Message for "Apply This Selection"
+
+When multiple code paths lead to the same UI update (e.g. "file was selected → apply snapshot, set file workspace, load/unload video"), use **one message** and **one handler** instead of calling a shared function from many places.
+
+- **Define one message** (e.g. `FileOpened(File)`) meaning "this file is now selected; apply the usual logic."
+- **Call sites** (open by path, folder loaded, select by index, prev/next) get a `File` from core and **send** the message: `Task::done(Message::FileOpened(file))`. They do **not** call an "apply file opened" function directly.
+- **One handler** for that message does all the work (snapshot, set file workspace, load or unload video). This keeps a single place for the logic and avoids duplication.
+
+In tests, the iced runtime does not run tasks; simulate by sending the same message (e.g. get selected file from directory and call `update(Message::FileOpened(file))`) when a task would have produced it.
+
+### 11. Icons Over Text for UI
+
+Prefer icons over informational text. Keep the screen free of labels except for user content.
+
+- **No text on buttons** – use a single icon (e.g. `◀` `▶` `⏸` for prev/next/play-pause).
+- **No standalone informational text** – replace placeholders and status text with one clear icon:
+  - Loading: `⏳`
+  - Drop / open folder: `📂`
+  - Drop video: `🎬`
+  - Error: `✕` or `❌`
+  - Empty: `📭`
+  - Select file / document: `📄`
+  - No tags: `🏷`
+- **Keep as text** – file names, tag names, and any other user-defined or user-visible content.
+- Use a larger size for placeholder icons (e.g. 48–120) so they read as a single visual, not body text.
+
+### 12. One Big Panel When Empty
+
+When the workspace has no data yet (e.g. no folder opened), show **one full-window panel** (e.g. drop zone with icon), not multiple empty panels side by side.
+
+- **Where**: Implement this in the **workspace view** (e.g. `folder_workspace/view.rs`), not in `app.rs`.
+- **Condition**: If `state.directory().is_none()` (and similar “no data” checks), render a single centered container (icon + optional loading state). Otherwise render the normal multi-panel layout.
+- **Loading**: While loading after a drop, the same big panel can show a loading icon (e.g. `⏳`) until the workspace has real data.
+- App stays minimal: it only delegates view to the workspace; the workspace decides one-panel vs. multi-panel from its own state.

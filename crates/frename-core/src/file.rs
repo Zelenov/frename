@@ -1,9 +1,13 @@
 //! File structure: path/metadata and tag-based rename state.
 //! File holds a FileTagList (tags + name building). From File's perspective we only update tags in it.
 
-use crate::{FileTagList, FileTagger, SaveAndReparse};
-use std::path::{Path, PathBuf};
+use crate::{FileTagList, FileTagger};
+use std::path::Path;
 use std::time::SystemTime;
+
+// ---------------------------------------------------------------------------
+// Types and data
+// ---------------------------------------------------------------------------
 
 /// A file being processed: path and metadata plus a tag list (tags + file name built from them).
 #[derive(Debug, Clone)]
@@ -17,6 +21,10 @@ pub struct File {
     /// Tags on this file. File name is built from this list and initial_filename.
     file_tag_list: FileTagList,
 }
+
+// ---------------------------------------------------------------------------
+// Constructors
+// ---------------------------------------------------------------------------
 
 impl File {
     fn new_from_path_and_time(file_path: Box<Path>, created_at: SystemTime) -> Self {
@@ -51,6 +59,10 @@ impl File {
         Self::new_from_path_and_time(file_path, created_at)
     }
 
+    // -----------------------------------------------------------------------
+    // Accessors
+    // -----------------------------------------------------------------------
+
     /// Get the file path.
     pub fn file_path(&self) -> &Path {
         &self.file_path
@@ -66,6 +78,10 @@ impl File {
         self.created_at
     }
 
+    // -----------------------------------------------------------------------
+    // Mediators (tag list and mutation)
+    // -----------------------------------------------------------------------
+
     /// Set the tags on this file (e.g. from parser).
     pub fn set_file_tags(&mut self, tags: &[crate::FileTag]) {
         self.file_tag_list.set_file_tags(tags);
@@ -76,16 +92,10 @@ impl File {
         &self.file_tag_list
     }
 
-    /// Mutable reference to the file's tag list.
-    pub fn tag_list_mut(&mut self) -> &mut FileTagList {
+    /// Mutable reference to the file's tag list (crate-only; used by tests).
+    #[allow(dead_code)]
+    pub(crate) fn tag_list_mut(&mut self) -> &mut FileTagList {
         &mut self.file_tag_list
-    }
-
-    /// Save the given file tags to this file's path, re-parse, and update this file's tag list. Returns path and tags as stored (e.g. for UI sync).
-    pub fn save_tags(&mut self, file_tags: &[crate::FileTag]) -> (PathBuf, Vec<crate::FileTag>) {
-        let (path_buf, new_tags) = file_tags.save_and_reparse(&self.file_path);
-        self.set_file_tags(&new_tags);
-        (path_buf, new_tags)
     }
 }
 

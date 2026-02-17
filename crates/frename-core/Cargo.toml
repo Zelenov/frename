@@ -6,4 +6,5 @@ description = "Core logic for frename file renaming utility"
 
 [dependencies]
 log = "0.4"
+rusqlite = { version = "0.32", features = ["bundled"] }
 tokio = { version = "1", features = ["fs", "time"] }

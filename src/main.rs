@@ -1,5 +1,5 @@
 //! frename - File Renaming Utility for Windows
-//! 
+//!
 //! A GUI-based file renaming tool with preview and batch operations.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // Hide console in release mode
@@ -16,6 +16,7 @@ mod theme;
 mod widgets;
 
 use app::FrenameApp;
+use frename_core::ensure_db_initialized;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize file + console logging (log file next to the executable)
@@ -60,8 +61,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Initialize DB (migrations) before any iced work.
+    ensure_db_initialized();
+
     Ok(iced::application(
-        || (FrenameApp::default(), Task::none()),
+        || (FrenameApp::new(), Task::none()),
         FrenameApp::update,
         FrenameApp::view,
     )

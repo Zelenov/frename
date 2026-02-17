@@ -1,6 +1,6 @@
 //! UI for the folder list. Only this module knows the list is scrollable and how rows look.
 //!
-//! Receives only data (directory, selected file, loading) from workspace; no parent knows our layout or widgets.
+//! Receives only data (directory, loading) from workspace; selection from directory; no parent knows our layout or widgets.
 
 use iced::widget::{column, container, mouse_area, row, scrollable, text};
 use iced::{mouse, Background, Element, Length};
@@ -12,10 +12,9 @@ use super::Message;
 const FOLDER_LIST_SCROLLABLE_ID: &str = "folder-file-list";
 
 /// Render the folder panel: a scrollable list of file names.
-/// Workspace passes directory and selected file; this view shows them and emits SelectFile/Previous/Next.
+/// Selection comes from the directory; view emits SelectFile/Previous/Next.
 pub fn view<'a>(
     directory: Option<&'a frename_core::Directory>,
-    selected_file: Option<&'a frename_core::File>,
     loading: bool,
 ) -> Element<'a, Message> {
     let placeholder_icon = |icon: &'static str| {
@@ -41,7 +40,7 @@ pub fn view<'a>(
         return placeholder_icon("📭").into();
     }
 
-    let selected_index = selected_file.and_then(|f| dir.find_by_path(f.file_path()));
+    let selected_index = dir.selected_index();
 
     let items: Vec<Element<'_, Message>> = dir
         .files()
