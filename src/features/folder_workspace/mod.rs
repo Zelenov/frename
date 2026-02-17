@@ -8,8 +8,8 @@ mod messages;
 mod state;
 pub mod view;
 
-/// Directory type used in this workspace (generic over AppDatabase).
-pub type Directory = frename_core::Directory<frename_core::AppDatabase>;
+/// Directory type used in this workspace (app state store wrapped with logging).
+pub type Directory = frename_core::Directory<frename_core::LoggingAppStateStore<frename_core::AppDatabase>>;
 
 pub use messages::Message;
 pub use state::FolderWorkspace;

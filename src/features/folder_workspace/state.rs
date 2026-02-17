@@ -8,7 +8,8 @@
 use std::path::PathBuf;
 
 use frename_core::{
-    AppDatabase, AppStateStore, File, FolderAndFile, FileTagSnapshot, SaveAndReparse,
+    AppDatabase, AppStateStore, File, FolderAndFile, FileTagSnapshot, LoggingAppStateStore,
+    SaveAndReparse,
 };
 
 use super::Directory;
@@ -89,7 +90,7 @@ impl FolderWorkspace {
     }
 
     fn load_last_session(&self) -> Task<Message> {
-        let store = AppDatabase::new();
+        let store = LoggingAppStateStore::new(AppDatabase::new());
         let Some(session) = store.get_last_session() else {
             return Task::none();
         };
@@ -115,7 +116,7 @@ impl FolderWorkspace {
     fn scan_folder(&mut self, pair: FolderAndFile) -> Task<Message> {
         let folder = pair.folder().to_path_buf();
         let target_file = pair.file().map(|p| p.to_path_buf());
-        let store = AppDatabase::new();
+        let store = LoggingAppStateStore::new(AppDatabase::new());
         self.loading = true;
         self.file_workspace.set_file(None);
         self.pending_file_updated = None;
@@ -300,7 +301,7 @@ mod tests {
     use std::path::PathBuf;
     use std::time::SystemTime;
 
-    use frename_core::{AppDatabase, File, FileTag, TagStorage};
+    use frename_core::{AppDatabase, File, FileTag, Initializable, LoggingAppStateStore, TagStorage};
 
     use crate::features::{folder, tag_panel};
 
@@ -334,8 +335,9 @@ mod tests {
                     )
                 })
                 .collect();
-            let store = AppDatabase::new();
-            store.initialize();
+            let db = AppDatabase::new();
+            let store = LoggingAppStateStore::new(db);
+            store.initialize().unwrap();
             let directory = Directory::with_files(&dir, files, store);
             let target_file = dir.join("file_0.mp4");
             Self {

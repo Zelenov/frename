@@ -14,7 +14,7 @@ const FOLDER_LIST_SCROLLABLE_ID: &str = "folder-file-list";
 /// Render the folder panel: a scrollable list of file names.
 /// Selection comes from the directory; view emits SelectFile/Previous/Next.
 pub fn view<'a>(
-    directory: Option<&'a frename_core::Directory<frename_core::AppDatabase>>,
+    directory: Option<&'a crate::features::folder_workspace::Directory>,
     loading: bool,
 ) -> Element<'a, Message> {
     let placeholder_icon = |icon: &'static str| {

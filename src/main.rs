@@ -16,7 +16,7 @@ mod theme;
 mod widgets;
 
 use app::FrenameApp;
-use frename_core::AppDatabase;
+use frename_core::{Initializable, LoggingAppStateStore};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize file + console logging (log file next to the executable)
@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     CombinedLogger::init(vec![
         TermLogger::new(
-            LevelFilter::Info,
+            LevelFilter::Debug,
             Config::default(),
             TerminalMode::Mixed,
             ColorChoice::Auto
@@ -61,8 +61,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Initialize app database (migrations) before iced.
-    AppDatabase::new().initialize();
+    // Initialize app database (migrations) before iced; decorator logs.
+    let _ = LoggingAppStateStore::new(frename_core::AppDatabase::new()).initialize();
 
     Ok(iced::application(
         || (FrenameApp::new(), Task::none()),
