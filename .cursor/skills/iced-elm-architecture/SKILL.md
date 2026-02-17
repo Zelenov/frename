@@ -1,6 +1,6 @@
 ---
 name: iced-elm-architecture
-description: Iced GUI framework Elm architecture patterns for Rust. Feature-based code organization, message flow, Task::done dispatch, core/UI separation, snapshots, deferred side effects, subscriptions, and component independence. Use when building iced UI features, adding messages, creating views, wiring components, or organizing iced application code.
+description: Iced GUI framework Elm architecture patterns for Rust. Feature-based code organization, message flow, Task::done dispatch, core/UI separation, snapshots, deferred side effects, subscriptions, component independence. Persistence and app state: database initialization only in main.rs; transient store (no singleton, no factory); Directory generic over store; store only in constructor; call store.get_last_session from workspace; on folder load failure keep previous state. Use when building iced UI features, adding messages, creating views, wiring components, organizing iced code, or implementing persistence/session.
 ---
 
 # Iced Elm Architecture Patterns
@@ -398,25 +398,41 @@ Keep **domain logic in a core crate** (e.g. `frename-core`); the UI only orchest
 - **UI state (view model)**: holds core types, **only** dispatches messages and calls core. No conditionals that mirror core logic (no "if current file == target" in the UI). Call core; if it returns `None` / "no-op", return `Task::none()` or send nothing; if it returns `Some(x)`, send a message (e.g. `FileOpened(x)`). Messages stay in the feature; all the "ifs" and checks live in Directory / File.
 - **Directory is the only source of truth for selection.** The folder (Directory) knows what file is selected. The UI must **not** pass "current workspace file" or "current selection" into Directory. Directory uses its own state (e.g. `selected_file()`) to decide "already selected?" or "open this path". One code path for persistence; no duplicate helpers.
 
-### Database and sessions: only two places may know the DB exists
+### Database initialization: only in main.rs
 
-**Rule: No UI or feature state must ever know that a database or “sessions” exist.**
+**Rule: Database initialization must only be called in main.rs. Nowhere else.**
 
-- **Only two places** are allowed to touch the database or session persistence:
-  1. **App / main** – initializes the database once at startup (e.g. `ensure_db_initialized()`). No other app or UI code touches DB init.
-  2. **Core directory (e.g. `directory.rs`)** – the only component that implements “session” and persistence. It owns the idea of “last folder + optional file”. Inside its own functions it updates the database when needed. No one else sees `save_last_session`, `get_last_session`, or any DB type.
+- In `main.rs`, before starting the UI (e.g. before `iced::application`), call **once**: `AppDatabase::new().initialize()` (or equivalent). This runs migrations and prepares the DB file.
+- **Do not** call `.initialize()` in the workspace, in features, in core when creating a store for normal use, or in tests. Creating a store (e.g. `AppDatabase::new()`) is fine; only the one-time migration/setup belongs in main.
+- Rationale: one place owns “the app has started, DB is ready”; no scattered init, no duplicate migration runs.
 
-- **Directory’s public surface**: the UI only sees a **minimal API**. No inner helpers (e.g. `file_for_path`) are exposed. Typical operations:
-  - **Open directory** – `Directory::open(path)`. Inside, directory sets its state and persists (folder, no file). No separate “update session” call.
-  - **Select / open file** – `dir.set_selection(Some(path) | None)`, `dir.open_path(path)` (path only; directory uses its own `selected_file()` for "already selected?"), `dir.select_index(i)`, `dir.select_previous()`, `dir.select_next()`. Inside these, directory updates its own state and persists (folder + optional file).
+### App state store: transient, no singleton, no factory
 
-- **No file in features/, no state.rs, no view, no UI component** may:
-  - Call **any database or session persistence API** (e.g. `save_last_session`, `get_last_session`, or anything from the `db` module) **except**:
-    - **main** may call `ensure_db_initialized()` once at startup.
-    - The UI may call the **directory module’s public API** only: e.g. `Directory::open`, `dir.set_selection`, `dir.open_path`, `dir.select_index`, `dir.select_previous`, `dir.select_next`, and the module-level `open_last_directory()` for startup. Those live in directory and may use storage internally; the UI must never import or name the `db` module or “session”/“database”.
-  - Import or reference the `db` module or session persistence types. Only the directory module (and main for init) may do that.
+- **Store is transient.** Create as many stores as you need. It is not a singleton and not scoped; use the **constructor** where a store is needed (e.g. `AppDatabase::new()`).
+- **No factory, no helper.** Do not add a “create app state store” function or factory trait. Where the UI or workspace needs a store (e.g. to load last session or to pass into `Directory::open`), call the store constructor directly (e.g. `AppDatabase::new()`).
+- **No Arc for passing the store around.** If a type (e.g. Directory) needs to hold the store and must be `Clone` (e.g. for messages), make that type **generic over the store** (e.g. `Directory<S: AppStateStore + Clone>`) and store `S` by value, not `Arc<dyn AppStateStore>`.
 
-- **Session shape**: folder (required) + optional file. Reflected in the core type (e.g. `FolderAndFile { folder, file: Option<PathBuf> }`). Only directory reads/writes it; no one else constructs or passes “session” for persistence.
+### Directory generic over the store; store only in the constructor
+
+- **`Directory<S>`** where `S: AppStateStore + Clone`. The store is passed **only** to the constructor; no store parameter on other methods.
+- **Constructors**: `Directory::open(path, store: S)` and `Directory::with_files(path, files, store: S)`. Directory keeps `S` and uses it internally for persistence (e.g. on `select_index`, `clear_selection`).
+- **No store parameter** on `set_selection`, `open_path`, `select_index`, `select_previous`, `select_next`. Those methods use the store held by Directory.
+- In the app, use a **type alias** for the concrete directory type (e.g. `type Directory = frename_core::Directory<frename_core::AppDatabase>`) so messages and workspace stay readable.
+
+### Where the store is used
+
+- **Load last session**: The **workspace** (or feature that owns “load last”) creates a store with the constructor and calls **store.get_last_session()** directly. Do not add a “get_last_session(store)” helper in the directory (or core) module; call the store method from the workspace.
+- **Opening a folder**: The workspace creates a store with the constructor and passes it into `Directory::open(path, store)`. On success, the returned `Directory<S>` holds that store for future persistence. On failure, do not create an empty directory (see below).
+
+### Folder load failure: keep previous state
+
+- When **Directory::open** fails (e.g. async scan errors), do **not** create or use an “empty” directory. Do not replace the current directory with an empty one.
+- Send a dedicated message (e.g. `FolderLoadFailed`). The handler sets `loading = false` and **leaves everything else unchanged** (same directory as before, if any). So: no `Directory::empty()`; on failure, stay in the same state as before the attempt.
+
+### Session shape and who touches it
+
+- **Session shape**: folder (required) + optional file, e.g. `FolderAndFile { folder, file: Option<PathBuf> }`. Only Directory (and the store it holds) reads/writes this for persistence.
+- **Directory’s public surface**: the UI calls `Directory::open(path, store)`, `dir.set_selection(Some(path) | None)`, `dir.open_path(path)`, `dir.select_index(i)`, `dir.select_previous()`, `dir.select_next()`. No inner persistence helpers are exposed. Directory persists inside these methods using its stored `S`.
 
 ### Core module layout and style
 

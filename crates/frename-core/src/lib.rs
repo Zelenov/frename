@@ -11,8 +11,8 @@ mod file;
 mod tag_storage;
 mod tags;
 
-pub use db::{AppDatabase, AppStateStore, EmptyAppStateStore};
-pub use directory::{ensure_db_initialized, open_last_directory, Directory};
+pub use db::{AppDatabase, AppStateStore};
+pub use directory::Directory;
 pub use folder_file::FolderAndFile;
 pub use file::File;
 pub use file_tag::FileTag;

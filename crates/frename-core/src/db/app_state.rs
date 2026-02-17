@@ -23,15 +23,15 @@ pub trait AppStateStore: Send + Sync {
 }
 
 // ---------------------------------------------------------------------------
-// Empty store (e.g. for tests or default)
+// Empty store (e.g. for tests)
 // ---------------------------------------------------------------------------
 
 /// No-op store: never returns a session, records nothing.
-#[derive(Debug, Default)]
-pub struct EmptyAppStateStore;
+#[derive(Clone, Debug, Default)]
+pub(crate) struct EmptyAppStateStore;
 
 impl EmptyAppStateStore {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self
     }
 }
@@ -53,7 +53,7 @@ use rusqlite::Connection;
 /// The application database. Holds app state (last folder/file), and will hold user data
 /// and other application storage. SQLite-backed. Call `initialize()` once at startup
 /// (e.g. next to GStreamer init); then use as an `AppStateStore` or for future storage.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct AppDatabase {
     path: PathBuf,
 }

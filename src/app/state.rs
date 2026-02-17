@@ -17,7 +17,6 @@ pub struct FrenameApp {
 }
 
 impl FrenameApp {
-    /// Creates the app. Database/persistence is handled in the core (directory) layer.
     pub fn new() -> Self {
         Self {
             drag_drop_state: drag_drop::DragDropState::default(),

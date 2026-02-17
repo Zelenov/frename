@@ -1,8 +1,8 @@
 //! Directory scanning and file list management.
 //!
-//! Also provides last-session persistence (DB-backed) so the UI does not depend on the database type.
+//! Directory is generic over the store type S. Store is passed only to the constructor; used internally for persistence. No Arc.
 
-use crate::db::{AppDatabase, AppStateStore};
+use crate::db::AppStateStore;
 use crate::{File, FileTag, FolderAndFile};
 use std::path::{Path, PathBuf};
 
@@ -11,42 +11,32 @@ use std::path::{Path, PathBuf};
 // ---------------------------------------------------------------------------
 
 /// A scanned directory containing a sorted list of files and an optional selection.
-#[derive(Debug, Clone)]
-pub struct Directory {
-    /// Directory path that was scanned (immutable).
+/// Generic over the store type S; store is set only in the constructor.
+#[derive(Clone, Debug)]
+pub struct Directory<S> {
     path: Box<Path>,
-    /// Files in the directory, sorted by creation date (oldest first).
     files: Vec<File>,
-    /// Index of the currently selected file.
     selected_index: Option<usize>,
+    store: S,
 }
 
 // ---------------------------------------------------------------------------
 // Constructors
 // ---------------------------------------------------------------------------
 
-impl Directory {
-    /// Create an empty directory (no files scanned).
-    pub fn empty(directory: impl AsRef<Path>) -> Self {
-        Self {
-            path: directory.as_ref().to_path_buf().into_boxed_path(),
-            files: Vec::new(),
-            selected_index: None,
-        }
-    }
-
-    /// Create a directory with the given path and files. For testing and programmatic use only (not used by production UI).
-    pub fn with_files(path: impl AsRef<Path>, files: Vec<File>) -> Self {
+impl<S: AppStateStore + Clone> Directory<S> {
+    /// Create a directory with the given path and files. For testing and programmatic use only (not used by production UI). Store is kept for persistence.
+    pub fn with_files(path: impl AsRef<Path>, files: Vec<File>, store: S) -> Self {
         Self {
             path: path.as_ref().to_path_buf().into_boxed_path(),
             files,
             selected_index: None,
+            store,
         }
     }
 
-    /// Open a directory asynchronously: scan all files and sort by creation date.
-    /// Persists (folder, no file) as current session.
-    pub async fn open(directory: &Path) -> Result<Self, std::io::Error> {
+    /// Open a directory asynchronously: scan all files and sort by creation date. Store is kept for later persistence.
+    pub async fn open(directory: &Path, store: S) -> Result<Self, std::io::Error> {
         log::info!("Scanning directory: {}", directory.display());
         let mut files = Vec::new();
         let mut entries = tokio::fs::read_dir(directory)
@@ -77,25 +67,22 @@ impl Directory {
             );
         }
         files.sort_by(|a, b| a.created_at().cmp(&b.created_at()));
-        write_session(directory, None);
+        store.set_last_folder_and_file(&FolderAndFile::new(directory, None::<PathBuf>));
         log::info!("Directory scan complete: {} files found", files.len());
         Ok(Self {
             path: directory.to_path_buf().into_boxed_path(),
             files,
             selected_index: None,
+            store,
         })
     }
 
-    // -----------------------------------------------------------------------
-    // Accessors (read-only)
-    // -----------------------------------------------------------------------
-
-    /// Get the directory path (used internally for session persistence).
-    fn path(&self) -> &Path {
+    /// Directory path.
+    pub fn path(&self) -> &Path {
         &self.path
     }
 
-    /// Get the list of files.
+    /// List of files.
     pub fn files(&self) -> &[File] {
         &self.files
     }
@@ -225,35 +212,9 @@ impl Directory {
     }
 
     fn persist_session(&self) {
-        write_session(
+        self.store.set_last_folder_and_file(&FolderAndFile::new(
             self.path(),
             self.selected_file().map(|f| f.file_path().to_path_buf()),
-        );
+        ));
     }
-}
-
-// ---------------------------------------------------------------------------
-// Last-session persistence (default DB; UI does not touch the database)
-// ---------------------------------------------------------------------------
-
-fn write_session(folder: &Path, file: Option<PathBuf>) {
-    save_last_session(&FolderAndFile::new(folder, file));
-}
-
-fn save_last_session(value: &FolderAndFile) {
-    let db = AppDatabase::new();
-    db.initialize();
-    db.set_last_folder_and_file(value);
-}
-
-/// Ensures the app database exists and migrations are run. Call once at startup before any iced work.
-pub fn ensure_db_initialized() {
-    AppDatabase::new().initialize();
-}
-
-/// Returns the last opened folder and file, if any. Uses the default app database.
-pub fn open_last_directory() -> Option<FolderAndFile> {
-    let db = AppDatabase::new();
-    db.initialize();
-    db.get_last_session()
 }

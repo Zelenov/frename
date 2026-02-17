@@ -7,7 +7,11 @@
 
 use std::path::PathBuf;
 
-use frename_core::{Directory, File, FolderAndFile, FileTagSnapshot, SaveAndReparse};
+use frename_core::{
+    AppDatabase, AppStateStore, File, FolderAndFile, FileTagSnapshot, SaveAndReparse,
+};
+
+use super::Directory;
 use iced::{Subscription, Task};
 
 use crate::features::file_workspace::FileWorkspace;
@@ -37,7 +41,6 @@ pub struct FolderWorkspace {
 }
 
 impl FolderWorkspace {
-    /// Creates a workspace. Last-session persistence is handled by the core (directory) layer.
     pub fn new() -> Self {
         Self {
             directory: None,
@@ -60,6 +63,7 @@ impl FolderWorkspace {
                 directory,
                 target_file,
             } => self.folder_loaded(directory, target_file),
+            Message::FolderLoadFailed => self.folder_load_failed(),
             Message::FileOpened(file) => self.apply_file_opened(file),
             Message::FileUpdated { path, new_tags } => self.apply_file_updated(path, new_tags),
             Message::Folder(folder_msg) => self.handle_folder_message(folder_msg),
@@ -85,7 +89,8 @@ impl FolderWorkspace {
     }
 
     fn load_last_session(&self) -> Task<Message> {
-        let Some(session) = frename_core::open_last_directory() else {
+        let store = AppDatabase::new();
+        let Some(session) = store.get_last_session() else {
             return Task::none();
         };
         Task::done(Message::ScanFolder(session))
@@ -110,28 +115,30 @@ impl FolderWorkspace {
     fn scan_folder(&mut self, pair: FolderAndFile) -> Task<Message> {
         let folder = pair.folder().to_path_buf();
         let target_file = pair.file().map(|p| p.to_path_buf());
+        let store = AppDatabase::new();
         self.loading = true;
-        self.directory = None;
         self.file_workspace.set_file(None);
         self.pending_file_updated = None;
 
         Task::future(async move {
-            match Directory::open(&folder).await {
+            match Directory::open(&folder, store).await {
                 Ok(dir) => Message::FolderLoaded {
                     directory: dir,
                     target_file,
                 },
-                Err(_) => Message::FolderLoaded {
-                    directory: Directory::empty(folder),
-                    target_file,
-                },
+                Err(_) => Message::FolderLoadFailed,
             }
         })
     }
 
+    fn folder_load_failed(&mut self) -> Task<Message> {
+        self.loading = false;
+        Task::none()
+    }
+
     fn folder_loaded(&mut self, directory: Directory, target_file: Option<PathBuf>) -> Task<Message> {
         self.loading = false;
-        self.directory = Some(directory);
+        self.directory = Some(directory); // replace previous directory only on success
         let dir = self.directory.as_mut().expect("just set");
         let selected = dir.set_selection(target_file.as_deref());
         if let Some(file) = selected {
@@ -293,11 +300,11 @@ mod tests {
     use std::path::PathBuf;
     use std::time::SystemTime;
 
-    use frename_core::{Directory, File, FileTag, TagStorage};
+    use frename_core::{AppDatabase, File, FileTag, TagStorage};
 
     use crate::features::{folder, tag_panel};
 
-    use super::{FolderWorkspace, Message};
+    use super::{Directory, FolderWorkspace, Message};
 
     /// Simulates the iced runtime processing a FileOpened task: directory already has selection, so send FileOpened(selected_file).
     fn flush_file_opened(workspace: &mut FolderWorkspace) {
@@ -327,7 +334,9 @@ mod tests {
                     )
                 })
                 .collect();
-            let directory = Directory::with_files(&dir, files);
+            let store = AppDatabase::new();
+            store.initialize();
+            let directory = Directory::with_files(&dir, files, store);
             let target_file = dir.join("file_0.mp4");
             Self {
                 directory,

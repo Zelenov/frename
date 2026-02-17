@@ -4,4 +4,4 @@ mod app_state;
 mod migrations;
 mod schema;
 
-pub use app_state::{AppDatabase, AppStateStore, EmptyAppStateStore};
+pub use app_state::{AppDatabase, AppStateStore};

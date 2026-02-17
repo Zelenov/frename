@@ -16,7 +16,7 @@ mod theme;
 mod widgets;
 
 use app::FrenameApp;
-use frename_core::ensure_db_initialized;
+use frename_core::AppDatabase;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize file + console logging (log file next to the executable)
@@ -61,8 +61,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Initialize DB (migrations) before any iced work.
-    ensure_db_initialized();
+    // Initialize app database (migrations) before iced.
+    AppDatabase::new().initialize();
 
     Ok(iced::application(
         || (FrenameApp::new(), Task::none()),

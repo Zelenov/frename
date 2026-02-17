@@ -2,7 +2,9 @@
 
 use std::path::PathBuf;
 
-use frename_core::{Directory, File, FileTag, FolderAndFile};
+use frename_core::{File, FileTag, FolderAndFile};
+
+use super::Directory;
 use crate::features::{folder, tag_panel, video_player};
 
 /// Messages handled by the folder workspace (owns directory, selection, and all logic).
@@ -19,6 +21,8 @@ pub enum Message {
         directory: Directory,
         target_file: Option<PathBuf>,
     },
+    /// Directory scan failed; keep previous state (no directory replaced).
+    FolderLoadFailed,
     /// File was selected (by directory). Apply snapshot, set file workspace, load/unload video.
     FileOpened(File),
     /// Snapshot to persist: created by folder workspace when switching file (from file workspace get_snapshot). Save to disk then update directory.
