@@ -51,10 +51,13 @@ impl Tag {
 }
 
 /// A collection of available tags. Generic over the store type S (load and add stored tags).
+/// Holds the full tag list and an optional filter query; use [TagList::filtered_indices] for display.
 #[derive(Clone, Debug)]
 pub struct TagList<S> {
     store: S,
     tags: Vec<Tag>,
+    /// Case-insensitive filter: only tags whose text contains this string are shown.
+    filter_query: String,
 }
 
 impl<S: StoredTagStore + Clone> TagList<S> {
@@ -75,7 +78,36 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         } else {
             log::info!("TagList::new file_tag_list: None");
         }
-        Self { store, tags }
+        Self {
+            store,
+            tags,
+            filter_query: String::new(),
+        }
+    }
+
+    /// Set the filter query. Empty string shows all tags. Matching is case-insensitive and "contains".
+    pub fn set_filter(&mut self, query: impl Into<String>) {
+        self.filter_query = query.into();
+    }
+
+    /// Current filter query (for binding the search bar).
+    pub fn filter_query(&self) -> &str {
+        self.filter_query.as_str()
+    }
+
+    /// Indices into [TagList::tags] that pass the current filter (case-insensitive contains).
+    /// Use these indices for display and pass the same index to [ToggleTag](crate::Tag) / toggle logic.
+    pub fn filtered_indices(&self) -> Vec<usize> {
+        let q = self.filter_query.trim().to_lowercase();
+        if q.is_empty() {
+            return (0..self.tags.len()).collect();
+        }
+        self.tags
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.tag().to_lowercase().contains(&q))
+            .map(|(i, _)| i)
+            .collect()
     }
 
     /// Add a stored tag (persists to store and appends to the list). Unused for now; for future UI.
@@ -154,5 +186,24 @@ mod tests {
         let list = TagList::new(store, None);
         assert_eq!(list.tags().first().unwrap().tag(), "First");
         assert_eq!(list.tags().last().unwrap().tag(), "Last");
+    }
+
+    #[test]
+    fn test_filtered_indices_case_insensitive_contains() {
+        let store = FakeAppStorage::new()
+            .add_stored_tag(StoredTag::new(0, "Action"))
+            .add_stored_tag(StoredTag::new(1, "Comedy"))
+            .add_stored_tag(StoredTag::new(2, "Sci-Fi"))
+            .add_stored_tag(StoredTag::new(3, "Documentary"));
+        let mut list = TagList::new(store, None);
+        assert_eq!(list.filtered_indices(), [0, 1, 2, 3]);
+        list.set_filter("com");
+        assert_eq!(list.filtered_indices(), [1]);
+        list.set_filter("COM");
+        assert_eq!(list.filtered_indices(), [1]);
+        list.set_filter("i");
+        assert_eq!(list.filtered_indices(), [0, 2]);
+        list.set_filter("  ");
+        assert_eq!(list.filtered_indices(), [0, 1, 2, 3]);
     }
 }

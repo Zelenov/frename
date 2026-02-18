@@ -69,6 +69,11 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         &self.tag_list
     }
 
+    /// Set the tag list filter query (case-insensitive contains). Used by the search bar.
+    pub fn set_tag_filter(&mut self, query: String) {
+        self.tag_list.set_filter(query);
+    }
+
     /// Toggle stored tag at index. Only updates workspace tag_list; file is synced after save.
     pub fn toggle_tag(&mut self, index: usize) {
         if let Some(tag) = self.tag_list.tags_mut().get_mut(index) {

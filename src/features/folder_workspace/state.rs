@@ -242,10 +242,17 @@ impl FolderWorkspace {
         &mut self,
         msg: crate::features::tag_panel::Message,
     ) -> Task<Message> {
-        let crate::features::tag_panel::Message::ToggleTag(index) = msg;
-        self.file_workspace.toggle_tag(index);
-        self.tag_panel.update(&msg);
-        Task::none()
+        match msg {
+            crate::features::tag_panel::Message::SetFilter(query) => {
+                self.file_workspace.set_tag_filter(query);
+                Task::none()
+            }
+            crate::features::tag_panel::Message::ToggleTag(index) => {
+                self.file_workspace.toggle_tag(index);
+                self.tag_panel.update(&msg);
+                Task::none()
+            }
+        }
     }
 
     pub fn subscription(&self) -> Subscription<Message> {

@@ -77,11 +77,12 @@ where
         .into();
     };
 
-    let tag_items: Vec<Element<'_, Message>> = tag_list
-        .tags()
+    let tags = tag_list.tags();
+    let filtered_indices = tag_list.filtered_indices();
+    let tag_items: Vec<Element<'_, Message>> = filtered_indices
         .iter()
-        .enumerate()
-        .map(|(index, tag)| {
+        .map(|&index| {
+            let tag = &tags[index];
             let is_checked = tag.is_checked();
             let row_content = container(
                 checkbox(is_checked)
