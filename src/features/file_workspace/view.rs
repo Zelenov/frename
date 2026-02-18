@@ -26,6 +26,7 @@ where
     let file_name = widgets::file_name_display::view(
         file_workspace.file(),
         Some(file_workspace.tag_list()),
+        widgets::file_name_display::DEFAULT_WRAP,
     );
     let search_bar = widgets::search_bar::view(
         tag_list.filter_query(),

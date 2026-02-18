@@ -28,11 +28,11 @@ fn parse_file_name(path: &Path) -> FileSnapshot {
     let (tags, name_without_extension, extension) = match parts.len() {
         0 => (Vec::new(), String::new(), String::new()),
         1 => (Vec::new(), parts[0].clone(), String::new()),
-        2 => (Vec::new(), parts[0].clone(), parts[1].clone()),
+        2 => (Vec::new(), parts[0].clone(), format!(".{}", parts[1])),
         n => (
             parts[..n - 2].to_vec(),
             parts[n - 2].clone(),
-            parts[n - 1].clone(),
+            format!(".{}", parts[n - 1]),
         ),
     };
     FileSnapshot::new(tags, name_without_extension, extension, name)

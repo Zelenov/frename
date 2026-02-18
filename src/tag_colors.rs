@@ -1,5 +1,5 @@
 //! Indexed palette of tag colors. Tags store a color index; UI looks up the color here.
-//! Colors are chosen to work on the dark panel background and to be visually distinct.
+//! Colors are light enough for black text on the chip (file name display and tag list stripe).
 
 use iced::Color;
 

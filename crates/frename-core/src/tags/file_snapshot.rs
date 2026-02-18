@@ -61,11 +61,12 @@ impl FileSnapshot {
     }
 
     /// Build the full file name: tags (if any) + name without extension + extension.
+    /// Extension may include a leading dot (e.g. ".mp4"); no extra dot is added in that case.
     pub fn file_name(&self) -> String {
         let name_ext = if self.extension.is_empty() {
             self.name_without_extension.to_string()
         } else {
-            format!("{}.{}", self.name_without_extension, self.extension)
+            format!("{}{}", self.name_without_extension, self.extension)
         };
         if self.tags.is_empty() {
             name_ext
