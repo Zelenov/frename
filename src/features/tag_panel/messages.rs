@@ -15,4 +15,9 @@ pub enum Message {
     SelectDown,
     /// Toggle the currently selected tag (Space key).
     ToggleSelectedTag,
+    /// Tag list was scrolled; report viewport for scroll-into-view (selection).
+    TagListScrolled {
+        scroll_y: f32,
+        viewport_height: f32,
+    },
 }

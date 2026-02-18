@@ -19,7 +19,7 @@ use iced::widget::operation;
 
 use crate::features::file_workspace::FileWorkspace;
 use crate::features::folder;
-use crate::features::tag_panel::TagPanelState;
+use crate::features::tag_panel::{self, TagPanelState, TAG_LIST_SCROLLABLE_ID};
 use crate::features::video_player::{self, VideoPlayerState};
 use crate::widgets::search_bar::SEARCH_BAR_INPUT_ID;
 use crate::widgets::splitter::HIT_WIDTH;
@@ -29,6 +29,8 @@ use super::Message;
 const DEFAULT_LEFT_WIDTH: f32 = 460.0;
 const DEFAULT_FOLDER_WIDTH: f32 = 200.0;
 const MIN_FOLDER_WIDTH: f32 = 120.0;
+/// Tag list row height in pixels (must match tag panel row layout for scroll-into-view).
+const TAG_ROW_HEIGHT: f32 = 28.0;
 
 /// Folder workspace: owns directory, loading. Current file is the directory's selection.
 pub struct FolderWorkspace {
@@ -42,6 +44,9 @@ pub struct FolderWorkspace {
     pending_file_updated: Option<FileTagSnapshot>,
     left_width: f32,
     folder_width: f32,
+    /// Last reported tag list scroll offset and viewport height (for scroll-into-view).
+    tag_list_scroll_y: Option<f32>,
+    tag_list_viewport_height: Option<f32>,
 }
 
 impl FolderWorkspace {
@@ -55,6 +60,8 @@ impl FolderWorkspace {
             pending_file_updated: None,
             left_width: DEFAULT_LEFT_WIDTH,
             folder_width: DEFAULT_FOLDER_WIDTH,
+            tag_list_scroll_y: None,
+            tag_list_viewport_height: None,
         }
     }
 
@@ -91,6 +98,7 @@ impl FolderWorkspace {
             }
             Message::FocusSearchBarAndKey(key) => self.focus_search_bar_and_key(key),
             Message::Noop => Task::none(),
+            Message::ScrollTagListToSelection => self.scroll_tag_list_to_selection(),
         }
     }
 
@@ -261,29 +269,37 @@ impl FolderWorkspace {
 
     fn handle_tag_panel(
         &mut self,
-        msg: crate::features::tag_panel::Message,
+        msg: tag_panel::Message,
     ) -> Task<Message> {
         match msg {
-            crate::features::tag_panel::Message::SetFilter(query) => {
+            tag_panel::Message::SetFilter(query) => {
                 self.file_workspace.set_tag_filter(query);
                 self.clamp_selection_to_filtered();
+                Task::done(Message::ScrollTagListToSelection)
+            }
+            tag_panel::Message::TagListScrolled {
+                scroll_y,
+                viewport_height,
+            } => {
+                self.tag_list_scroll_y = Some(scroll_y);
+                self.tag_list_viewport_height = Some(viewport_height);
                 Task::none()
             }
-            crate::features::tag_panel::Message::ToggleTag(id) => {
+            tag_panel::Message::ToggleTag(id) => {
                 self.file_workspace.toggle_tag_by_id(id);
                 self.tag_panel.set_selected(Some(id));
                 self.tag_panel.update(&msg);
                 Task::none()
             }
-            crate::features::tag_panel::Message::SelectUp => {
+            tag_panel::Message::SelectUp => {
                 self.move_tag_selection(-1);
-                Task::none()
+                Task::done(Message::ScrollTagListToSelection)
             }
-            crate::features::tag_panel::Message::SelectDown => {
+            tag_panel::Message::SelectDown => {
                 self.move_tag_selection(1);
-                Task::none()
+                Task::done(Message::ScrollTagListToSelection)
             }
-            crate::features::tag_panel::Message::ToggleSelectedTag => {
+            tag_panel::Message::ToggleSelectedTag => {
                 // If search bar had focus, it may have inserted a space; strip it so Space doesn't add to the filter.
                 let filter = self.file_workspace.tag_list().filter_query();
                 if filter.ends_with(' ') {
@@ -302,17 +318,11 @@ impl FolderWorkspace {
 
     /// Clear selection if the selected tag is not in the current filtered list (selection must be visible).
     fn clamp_selection_to_filtered(&mut self) {
-        let visible = {
-            let tag_list = self.file_workspace.tag_list();
-            let filtered = tag_list.filtered_indices();
-            let tags = tag_list.tags();
-            self.tag_panel.selected_tag_id().and_then(|id| {
-                filtered
-                    .iter()
-                    .find(|&&i| tags.get(i).map_or(false, |t| t.id() == id))
-                    .copied()
-            })
-        };
+        let tag_list = self.file_workspace.tag_list();
+        let visible = self
+            .tag_panel
+            .selected_tag_id()
+            .filter(|id| tag_list.filtered_tag_ids().contains(id));
         if visible.is_none() && self.tag_panel.selected_tag_id().is_some() {
             self.tag_panel.set_selected(None);
         }
@@ -320,39 +330,82 @@ impl FolderWorkspace {
 
     /// Move tag list selection by delta (-1 = up, 1 = down). Uses filtered list.
     fn move_tag_selection(&mut self, delta: i32) {
-        let new_id = {
-            let tag_list = self.file_workspace.tag_list();
-            let filtered = tag_list.filtered_indices();
-            let tags = tag_list.tags();
-            if filtered.is_empty() {
-                self.tag_panel.set_selected(None);
-                return;
-            }
-            let current = self.tag_panel.selected_tag_id().and_then(|id| {
-                filtered
-                    .iter()
-                    .position(|&i| tags.get(i).map_or(false, |t| t.id() == id))
-            });
-            let idx = match current {
-                None if delta > 0 => Some(0),
-                None => None,
-                Some(i) => {
-                    let next = i as i32 + delta;
-                    if next < 0 {
-                        None
+        let tag_list = self.file_workspace.tag_list();
+        let filtered = tag_list.filtered_tag_ids();
+        if filtered.is_empty() {
+            self.tag_panel.set_selected(None);
+            return;
+        }
+        let current_pos = self
+            .tag_panel
+            .selected_tag_id()
+            .and_then(|id| filtered.iter().position(|&fid| fid == id));
+        let new_id = match current_pos {
+            None if delta > 0 => filtered.first().copied(),
+            None => None,
+            Some(i) => {
+                let next = i as i32 + delta;
+                if next < 0 {
+                    filtered.first().copied()
+                } else {
+                    let u = next as usize;
+                    if u < filtered.len() {
+                        filtered.get(u).copied()
                     } else {
-                        let u = next as usize;
-                        if u < filtered.len() {
-                            Some(u)
-                        } else {
-                            Some(i)
-                        }
+                        filtered.get(i).copied()
                     }
                 }
-            };
-            idx.and_then(|i| filtered.get(i)).map(|&full_idx| tags[full_idx].id())
+            }
         };
         self.tag_panel.set_selected(new_id);
+    }
+
+    /// Scroll the tag list so the selected row is in view (scroll-into-view: only adjust if needed).
+    fn scroll_tag_list_to_selection(&self) -> Task<Message> {
+        let selected_id = match self.tag_panel.selected_tag_id() {
+            Some(id) => id,
+            None => return Task::none(),
+        };
+        let tag_list = self.file_workspace.tag_list();
+        let filtered = tag_list.filtered_tag_ids();
+        let row_index = match filtered.iter().position(|&id| id == selected_id) {
+            Some(i) => i,
+            None => return Task::none(),
+        };
+        let row_top = (row_index as f32) * TAG_ROW_HEIGHT;
+        let row_bottom = row_top + TAG_ROW_HEIGHT;
+        let (current, vh) = match (self.tag_list_scroll_y, self.tag_list_viewport_height) {
+            (Some(y), Some(h)) => (y, h),
+            _ => {
+                // No viewport yet (user hasn't scrolled); scroll so selection is at top.
+                let target_y = row_top.max(0.0);
+                let offset = iced::widget::scrollable::AbsoluteOffset {
+                    x: None,
+                    y: Some(target_y),
+                };
+                return operation::scroll_to(
+                    iced::widget::Id::new(TAG_LIST_SCROLLABLE_ID),
+                    offset,
+                )
+                .map(|_: ()| Message::Noop);
+            }
+        };
+        let target_y = if row_top < current {
+            row_top
+        } else if row_bottom > current + vh {
+            (row_bottom - vh).max(0.0)
+        } else {
+            return Task::none();
+        };
+        let offset = iced::widget::scrollable::AbsoluteOffset {
+            x: None,
+            y: Some(target_y),
+        };
+        operation::scroll_to(
+            iced::widget::Id::new(TAG_LIST_SCROLLABLE_ID),
+            offset,
+        )
+        .map(|_: ()| Message::Noop)
     }
 
     pub fn subscription(&self) -> Subscription<Message> {

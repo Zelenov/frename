@@ -7,7 +7,7 @@ use frename_core::{File, StoredTagStore, TagList};
 
 use crate::tag_colors;
 use crate::theme;
-use super::{Message, TagPanelState};
+use super::{Message, TagPanelState, TAG_LIST_SCROLLABLE_ID};
 
 /// Dark checkbox style: dark background, light text, accent when checked.
 fn dark_checkbox_style(
@@ -78,14 +78,12 @@ where
         .into();
     };
 
-    let tags = tag_list.tags();
-    let filtered_indices = tag_list.filtered_indices();
     let selected_id = state.selected_tag_id();
-    let tag_items: Vec<Element<'_, Message>> = filtered_indices
-        .iter()
-        .map(|&index| {
-            let tag = &tags[index];
-            let id = tag.id();
+    let tag_items: Vec<Element<'_, Message>> = tag_list
+        .filtered_tag_ids()
+        .into_iter()
+        .filter_map(|id| {
+            let tag = tag_list.get_tag(id)?;
             let is_checked = tag.is_checked();
             let is_selected = selected_id == Some(id);
             let tag_color = tag_colors::TagColors::color(tag.color_index());
@@ -122,16 +120,28 @@ where
             let row_content = row![color_stripe, checkbox_content]
                 .width(Length::Fill)
                 .spacing(0);
-            mouse_area(row_content)
-                .on_press(Message::ToggleTag(id))
-                .interaction(mouse::Interaction::Pointer)
-                .into()
+            Some(
+                mouse_area(row_content)
+                    .on_press(Message::ToggleTag(id))
+                    .interaction(mouse::Interaction::Pointer)
+                    .into(),
+            )
         })
         .collect();
 
     let tag_column = column(tag_items).width(Length::Fill);
     let tag_list = scrollable(tag_column)
+        .id(iced::widget::Id::new(TAG_LIST_SCROLLABLE_ID))
         .height(Length::Fill)
+        .on_scroll(|viewport| {
+            let offset = viewport.absolute_offset();
+            let scroll_y = offset.y;
+            let viewport_height = viewport.bounds().height;
+            Message::TagListScrolled {
+                scroll_y,
+                viewport_height,
+            }
+        })
         .style(theme::dark_scrollable_style);
 
     container(tag_list)

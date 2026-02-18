@@ -7,3 +7,6 @@ pub mod view;
 
 pub use messages::Message;
 pub use state::TagPanelState;
+
+/// Widget id for the tag list scrollable (for scroll-to-selection operations).
+pub const TAG_LIST_SCROLLABLE_ID: &str = "tag-list-scrollable";

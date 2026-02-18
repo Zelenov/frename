@@ -89,7 +89,7 @@ impl Tag {
 }
 
 /// A collection of available tags. Generic over the store type S (load and add stored tags).
-/// Holds the full tag list and an optional filter query; use [TagList::filtered_indices] for display.
+/// Holds the full tag list and an optional filter query; use [TagList::filtered_tag_ids] for display.
 #[derive(Clone, Debug)]
 pub struct TagList<S> {
     store: S,
@@ -134,19 +134,22 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         self.filter_query.as_str()
     }
 
-    /// Indices into [TagList::tags] that pass the current filter (case-insensitive contains).
-    /// Use these indices for display and pass the same index to [ToggleTag](crate::Tag) / toggle logic.
-    pub fn filtered_indices(&self) -> Vec<usize> {
+    /// Tag ids that pass the current filter (case-insensitive contains), in display order.
+    pub fn filtered_tag_ids(&self) -> Vec<TagId> {
         let q = self.filter_query.trim().to_lowercase();
         if q.is_empty() {
-            return (0..self.tags.len()).collect();
+            return self.tags.iter().map(|t| t.id()).collect();
         }
         self.tags
             .iter()
-            .enumerate()
-            .filter(|(_, t)| t.tag().to_lowercase().contains(&q))
-            .map(|(i, _)| i)
+            .filter(|t| t.tag().to_lowercase().contains(&q))
+            .map(|t| t.id())
             .collect()
+    }
+
+    /// Look up a tag by id.
+    pub fn get_tag(&self, id: TagId) -> Option<&Tag> {
+        self.tags.iter().find(|t| t.id() == id)
     }
 
     /// Toggle the tag with the given id. No-op if id not found.
@@ -242,21 +245,27 @@ mod tests {
     }
 
     #[test]
-    fn test_filtered_indices_case_insensitive_contains() {
+    fn test_filtered_tag_ids_case_insensitive_contains() {
         let store = FakeAppStorage::new()
             .add_stored_tag(StoredTag::new(0, "Action", 0))
             .add_stored_tag(StoredTag::new(1, "Comedy", 0))
             .add_stored_tag(StoredTag::new(2, "Sci-Fi", 0))
             .add_stored_tag(StoredTag::new(3, "Documentary", 0));
         let mut list = TagList::new(store, None);
-        assert_eq!(list.filtered_indices(), [0, 1, 2, 3]);
+        assert_eq!(
+            list.filtered_tag_ids(),
+            [TagId(0), TagId(1), TagId(2), TagId(3)]
+        );
         list.set_filter("com");
-        assert_eq!(list.filtered_indices(), [1]);
+        assert_eq!(list.filtered_tag_ids(), [TagId(1)]);
         list.set_filter("COM");
-        assert_eq!(list.filtered_indices(), [1]);
+        assert_eq!(list.filtered_tag_ids(), [TagId(1)]);
         list.set_filter("i");
-        assert_eq!(list.filtered_indices(), [0, 2]);
+        assert_eq!(list.filtered_tag_ids(), [TagId(0), TagId(2)]);
         list.set_filter("  ");
-        assert_eq!(list.filtered_indices(), [0, 1, 2, 3]);
+        assert_eq!(
+            list.filtered_tag_ids(),
+            [TagId(0), TagId(1), TagId(2), TagId(3)]
+        );
     }
 }

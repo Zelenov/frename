@@ -52,4 +52,6 @@ pub enum Message {
     FocusSearchBarAndKey(GlobalSearchKey),
     /// No-op (e.g. used when returning a focus operation from update).
     Noop,
+    /// Scroll the tag list so the selected row is in view (deferred to next frame).
+    ScrollTagListToSelection,
 }
