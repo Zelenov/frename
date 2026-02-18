@@ -20,4 +20,4 @@ pub use file_tag::FileTag;
 pub use file_tag_list::FileTagList;
 pub use file_tag_snapshot::FileTagSnapshot;
 pub use file_tagger::{FileTagger, SaveAndReparse};
-pub use tags::{Tag, TagList};
+pub use tags::{Tag, TagId, TagList};

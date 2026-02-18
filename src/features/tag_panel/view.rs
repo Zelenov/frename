@@ -83,20 +83,22 @@ where
         .iter()
         .map(|&index| {
             let tag = &tags[index];
+            let id = tag.id();
             let is_checked = tag.is_checked();
             let row_content = container(
                 checkbox(is_checked)
                     .label(tag.tag())
-                    .on_toggle(move |_| Message::ToggleTag(index))
+                    .on_toggle(move |_| Message::ToggleTag(id))
                     .size(16)
                     .text_size(14)
                     .style(dark_checkbox_style),
             )
             .padding([4, 8])
-            .width(Length::Fill);
+            .width(Length::Fill)
+            .id(iced::widget::Id::from(id.widget_id()));
 
             mouse_area(row_content)
-                .on_press(Message::ToggleTag(index))
+                .on_press(Message::ToggleTag(id))
                 .interaction(mouse::Interaction::Pointer)
                 .into()
         })

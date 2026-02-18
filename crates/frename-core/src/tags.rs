@@ -6,9 +6,22 @@
 use crate::db::StoredTagStore;
 use crate::{FileTag, FileTagList, StoredTag};
 
+/// Stable unique id for a tag (from stored tag index). Used for widget identity and messages.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TagId(pub i64);
+
+impl TagId {
+    /// For Iced widget identity: stable string per id.
+    pub fn widget_id(&self) -> String {
+        format!("tag-{}", self.0)
+    }
+}
+
 /// A single tag that can be applied to a file (stored tag with checked state).
 #[derive(Debug, Clone)]
 pub struct Tag {
+    /// Stable id (from stored tag index).
+    id: TagId,
     /// The tag text.
     tag: String,
     /// Whether this tag is currently checked.
@@ -16,12 +29,18 @@ pub struct Tag {
 }
 
 impl Tag {
-    /// Create a new tag with the given text.
-    pub fn new(tag: impl Into<String>) -> Self {
+    /// Create a new tag with the given id and text (used when building from store).
+    pub fn with_id(id: TagId, tag: impl Into<String>) -> Self {
         Self {
+            id,
             tag: tag.into(),
             checked: false,
         }
+    }
+
+    /// Get the tag id.
+    pub fn id(&self) -> TagId {
+        self.id
     }
 
     /// Get the tag text.
@@ -67,7 +86,8 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let tags: Vec<Tag> = stored_tags
             .iter()
             .map(|st| {
-                let mut tag = Tag::new(st.value());
+                let id = TagId(st.index());
+                let mut tag = Tag::with_id(id, st.value());
                 tag.set_checked(file_tag_list.map_or(false, |list| list.has_tag(st.value())));
                 tag
             })
@@ -110,6 +130,13 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             .collect()
     }
 
+    /// Toggle the tag with the given id. No-op if id not found.
+    pub fn toggle_by_id(&mut self, id: TagId) {
+        if let Some(tag) = self.tags.iter_mut().find(|t| t.id() == id) {
+            tag.toggle();
+        }
+    }
+
     /// Add a stored tag (persists to store and appends to the list). Unused for now; for future UI.
     #[allow(dead_code)]
     pub fn add_tag(&mut self, value: impl Into<String>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -117,7 +144,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let index = self.tags.len() as i64;
         let st = StoredTag::new(index, &value);
         self.store.add_stored_tag(st)?;
-        self.tags.push(Tag::new(value));
+        self.tags.push(Tag::with_id(TagId(index), value));
         Ok(())
     }
 
@@ -161,7 +188,8 @@ mod tests {
 
     #[test]
     fn test_tag_creation() {
-        let tag = Tag::new("Action");
+        let tag = Tag::with_id(TagId(0), "Action");
+        assert_eq!(tag.id(), TagId(0));
         assert_eq!(tag.tag(), "Action");
     }
 

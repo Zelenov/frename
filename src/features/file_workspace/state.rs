@@ -74,11 +74,9 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.tag_list.set_filter(query);
     }
 
-    /// Toggle stored tag at index. Only updates workspace tag_list; file is synced after save.
-    pub fn toggle_tag(&mut self, index: usize) {
-        if let Some(tag) = self.tag_list.tags_mut().get_mut(index) {
-            tag.toggle();
-        }
+    /// Toggle stored tag by id. Only updates workspace tag_list; file is synced after save.
+    pub fn toggle_tag_by_id(&mut self, id: frename_core::TagId) {
+        self.tag_list.toggle_by_id(id);
     }
 
     /// Checked tags from workspace as FileTagList (for save). Use this, not file's tags.

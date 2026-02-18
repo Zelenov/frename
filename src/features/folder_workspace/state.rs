@@ -247,8 +247,8 @@ impl FolderWorkspace {
                 self.file_workspace.set_tag_filter(query);
                 Task::none()
             }
-            crate::features::tag_panel::Message::ToggleTag(index) => {
-                self.file_workspace.toggle_tag(index);
+            crate::features::tag_panel::Message::ToggleTag(id) => {
+                self.file_workspace.toggle_tag_by_id(id);
                 self.tag_panel.update(&msg);
                 Task::none()
             }
@@ -383,15 +383,16 @@ mod tests {
         flush_file_opened(&mut workspace);
 
         let tag_name = "Comedy";
-        let tag_index = workspace
+        let tag_id = workspace
             .file_workspace()
             .tag_list()
             .tags()
             .iter()
-            .position(|t| t.tag() == tag_name)
+            .find(|t| t.tag() == tag_name)
+            .map(|t| t.id())
             .expect("Comedy is a stored tag");
         let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(
-            tag_index,
+            tag_id,
         )));
 
         let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
