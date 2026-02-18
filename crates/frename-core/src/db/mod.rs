@@ -1,13 +1,13 @@
 //! Application database: schema, migrations, and app state storage.
 //!
 //! Layout:
-//! - [traits] — interfaces: `AppStateStore`, `Initializable`
+//! - [traits] — interfaces: `AppStateStore`, `Initializable`, `StoredTagNames`
 //! - [logging] — decorator that adds logging around any store
-//! - [empty_store] — no-op store for tests
+//! - [fake_app_storage] — in-memory store for tests (implements both app state and tag names)
 //! - [app_database] — SQLite implementation (no logging; wrap with logging for that)
 
 mod app_database;
-mod empty_store;
+pub(crate) mod fake_app_storage;
 mod logging;
 mod migrations;
 mod schema;
@@ -15,4 +15,4 @@ mod traits;
 
 pub use app_database::AppDatabase;
 pub use logging::LoggingAppStateStore;
-pub use traits::{AppStateStore, Initializable};
+pub use traits::{AppStateStore, Initializable, StoredTagStore};

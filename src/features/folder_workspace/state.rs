@@ -32,7 +32,7 @@ pub struct FolderWorkspace {
     directory: Option<Directory>,
     loading: bool,
     /// File currently being edited: copy of file + tag selection. Rename panel reads/updates this.
-    file_workspace: FileWorkspace,
+    file_workspace: FileWorkspace<AppDatabase>,
     video_player: VideoPlayerState,
     tag_panel: TagPanelState,
     /// Snapshot to persist after current video is unloaded (then we send FileUpdated and load next video).
@@ -46,7 +46,7 @@ impl FolderWorkspace {
         Self {
             directory: None,
             loading: false,
-            file_workspace: FileWorkspace::default(),
+            file_workspace: FileWorkspace::<AppDatabase>::default(),
             video_player: VideoPlayerState::default(),
             tag_panel: TagPanelState::default(),
             pending_file_updated: None,
@@ -268,7 +268,7 @@ impl FolderWorkspace {
     }
 
     /// File workspace: current file and its tag selection (for rename panel). Use this for display and tag toggles.
-    pub fn file_workspace(&self) -> &FileWorkspace {
+    pub fn file_workspace(&self) -> &FileWorkspace<AppDatabase> {
         &self.file_workspace
     }
 
@@ -301,7 +301,7 @@ mod tests {
     use std::path::PathBuf;
     use std::time::SystemTime;
 
-    use frename_core::{AppDatabase, File, FileTag, Initializable, LoggingAppStateStore, TagStorage};
+    use frename_core::{AppDatabase, File, FileTag, Initializable, LoggingAppStateStore};
 
     use crate::features::{folder, tag_panel};
 
@@ -376,9 +376,12 @@ mod tests {
         flush_file_opened(&mut workspace);
 
         let tag_name = "Comedy";
-        let tag_index = TagStorage::names()
+        let tag_index = workspace
+            .file_workspace()
+            .tag_list()
+            .tags()
             .iter()
-            .position(|&n| n == tag_name)
+            .position(|t| t.tag() == tag_name)
             .expect("Comedy is a stored tag");
         let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(
             tag_index,

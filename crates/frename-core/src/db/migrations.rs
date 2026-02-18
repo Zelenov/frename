@@ -1,4 +1,4 @@
-//! Runs the app state DB schema. Two migrations only: initial migration table, then folder history (v1.0 prep). No more until told.
+//! Runs the app state DB schema. SQL migrations only (schema + seed data in SQL).
 
 use rusqlite::Connection;
 
@@ -19,9 +19,13 @@ const MIGRATIONS: &[Migration] = &[
         version: 2,
         sql: schema::M2_FOLDER_HISTORY,
     },
+    Migration {
+        version: 3,
+        sql: schema::M3_STORED_TAGS,
+    },
 ];
 
-/// Returns the current schema version. Ensures schema_version table and initial row exist (CREATE IF NOT EXISTS / INSERT WHERE NOT EXISTS).
+/// Returns the current schema version.
 fn current_version(conn: &Connection) -> Result<u32, rusqlite::Error> {
     conn.execute_batch(schema::M1_SCHEMA_VERSION)?;
     conn.query_row("SELECT version FROM schema_version LIMIT 1", [], |row| row.get(0))

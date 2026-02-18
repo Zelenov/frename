@@ -2,27 +2,42 @@
 //!
 //! We do not change the open file's file_tag_list on toggle; we only change the workspace tag_list.
 //! File workspace does not save; it provides a snapshot (path + tags) that folder workspace persists when switching file.
+//!
+//! Generic over the store type S (like Directory and TagList). Store is passed to the constructor; used to build the tag list.
 
-use frename_core::{File, FileTagSnapshot, TagList, TagStorage};
+use frename_core::{AppDatabase, File, FileTagSnapshot, StoredTagStore, TagList};
 
 /// File workspace: current file and stored tags with checked state (source of truth for UI).
-#[derive(Default)]
-pub struct FileWorkspace {
+/// Generic over the store type S; store is set only in the constructor.
+#[derive(Clone, Debug)]
+pub struct FileWorkspace<S> {
     loading: bool,
     /// Current file when ready. None while loading or when nothing set.
     file: Option<File>,
+    /// Store for tag names (used to build tag list on file change).
+    store: S,
     /// Stored tags with checked state (synced from file on load; toggles update only this, not the file).
-    tag_list: TagList,
+    tag_list: TagList<S>,
 }
 
-impl FileWorkspace {
+impl<S: StoredTagStore + Clone> FileWorkspace<S> {
+    /// Create a file workspace with the given store. Tag list is built from the store; no file selected.
+    pub fn new(store: S) -> Self {
+        Self {
+            loading: false,
+            file: None,
+            store: store.clone(),
+            tag_list: TagList::new(store, None),
+        }
+    }
+
     /// Set the file to work on. When changing file, syncs workspace tags to the current file first, then loads the new one.
     pub fn set_file(&mut self, file: Option<File>) {
         match file {
             None => {
                 self.loading = false;
                 self.file = None;
-                self.tag_list = TagList::new(TagStorage::names(), None);
+                self.tag_list = TagList::new(self.store.clone(), None);
             }
             Some(f) => {
                 let already_loaded = self
@@ -33,7 +48,10 @@ impl FileWorkspace {
                     return;
                 }
                 self.file = Some(f);
-                self.tag_list = TagList::new(TagStorage::names(), self.file().map(|file| file.tag_list()));
+                self.tag_list = TagList::new(
+                    self.store.clone(),
+                    self.file().map(|file| file.tag_list()),
+                );
             }
         }
     }
@@ -47,7 +65,7 @@ impl FileWorkspace {
     }
 
     /// Stored tags with checked state (use this for UI; checked is the workspace source of truth).
-    pub fn tag_list(&self) -> &TagList {
+    pub fn tag_list(&self) -> &TagList<S> {
         &self.tag_list
     }
 
@@ -70,5 +88,11 @@ impl FileWorkspace {
         let tags = self.checked_file_tags();
         let tags_vec = tags.file_tags().to_vec();
         Some(FileTagSnapshot { path, tags: tags_vec })
+    }
+}
+
+impl Default for FileWorkspace<AppDatabase> {
+    fn default() -> Self {
+        Self::new(AppDatabase::new())
     }
 }

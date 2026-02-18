@@ -1,7 +1,10 @@
 //! Tag management for file classification.
 //! These are the stored (enriched) tags; FileTag is the plain value for parse/save.
+//!
+//! TagList is generic over the store type S (like Directory). Store is used to load stored tags and to add tags.
 
-use crate::{tag_storage::TagStorage, FileTag, FileTagList};
+use crate::db::StoredTagStore;
+use crate::{FileTag, FileTagList, StoredTag};
 
 /// A single tag that can be applied to a file (stored tag with checked state).
 #[derive(Debug, Clone)]
@@ -31,8 +34,8 @@ impl Tag {
         self.checked
     }
 
-    /// Set the checked state of this tag.
-    pub fn set_checked(&mut self, checked: bool) {
+    /// Set the checked state of this tag (crate-only).
+    pub(crate) fn set_checked(&mut self, checked: bool) {
         self.checked = checked;
     }
 
@@ -41,26 +44,28 @@ impl Tag {
         self.checked = !self.checked;
     }
 
-    /// Convert this tag to a FileTag (the value only). Used when saving to file.
-    pub fn to_file_tag(&self) -> FileTag {
+    /// Convert this tag to a FileTag (crate-only; used when saving to file).
+    pub(crate) fn to_file_tag(&self) -> FileTag {
         FileTag::new(self.tag().to_string())
     }
 }
 
-/// A collection of available tags.
+/// A collection of available tags. Generic over the store type S (load and add stored tags).
 #[derive(Clone, Debug)]
-pub struct TagList {
+pub struct TagList<S> {
+    store: S,
     tags: Vec<Tag>,
 }
 
-impl TagList {
-    /// Create a new TagList from stored tag names; checked state from file_tag_list (no duplicate).
-    pub fn new(stored_tag_names: &[&str], file_tag_list: Option<&FileTagList>) -> Self {
-        let tags: Vec<Tag> = stored_tag_names
+impl<S: StoredTagStore + Clone> TagList<S> {
+    /// Create a new TagList from the store (stored tags) and optional file tag list for checked state.
+    pub fn new(store: S, file_tag_list: Option<&FileTagList>) -> Self {
+        let stored_tags = store.get_stored_tags().unwrap_or_default();
+        let tags: Vec<Tag> = stored_tags
             .iter()
-            .map(|name| {
-                let mut tag = Tag::new(*name);
-                tag.set_checked(file_tag_list.map_or(false, |list| list.has_tag(name)));
+            .map(|st| {
+                let mut tag = Tag::new(st.value());
+                tag.set_checked(file_tag_list.map_or(false, |list| list.has_tag(st.value())));
                 tag
             })
             .collect();
@@ -70,7 +75,18 @@ impl TagList {
         } else {
             log::info!("TagList::new file_tag_list: None");
         }
-        Self { tags }
+        Self { store, tags }
+    }
+
+    /// Add a stored tag (persists to store and appends to the list). Unused for now; for future UI.
+    #[allow(dead_code)]
+    pub fn add_tag(&mut self, value: impl Into<String>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let value = value.into();
+        let index = self.tags.len() as i64;
+        let st = StoredTag::new(index, &value);
+        self.store.add_stored_tag(st)?;
+        self.tags.push(Tag::new(value));
+        Ok(())
     }
 
     /// Get the list of all available tags.
@@ -98,14 +114,17 @@ impl TagList {
     }
 }
 
-impl Default for TagList {
+impl Default for TagList<crate::db::AppDatabase> {
     fn default() -> Self {
-        Self::new(TagStorage::names(), None)
+        Self::new(crate::db::AppDatabase::new(), None)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::db::fake_app_storage::FakeAppStorage;
+    use crate::StoredTag;
+
     use super::*;
 
     #[test]
@@ -115,15 +134,25 @@ mod tests {
     }
 
     #[test]
-    fn test_tag_list_has_100_tags() {
-        let list = TagList::new(TagStorage::names(), None);
-        assert_eq!(list.tags().len(), 100);
+    fn test_tag_list_reflects_stored_tags() {
+        let store = FakeAppStorage::new()
+            .add_stored_tag(StoredTag::new(0, "A"))
+            .add_stored_tag(StoredTag::new(1, "B"))
+            .add_stored_tag(StoredTag::new(2, "C"));
+        let list = TagList::new(store, None);
+        assert_eq!(list.tags().len(), 3);
+        assert_eq!(list.tags()[0].tag(), "A");
+        assert_eq!(list.tags()[1].tag(), "B");
+        assert_eq!(list.tags()[2].tag(), "C");
     }
 
     #[test]
     fn test_tag_list_first_and_last() {
-        let list = TagList::new(TagStorage::names(), None);
-        assert_eq!(list.tags().first().unwrap().tag(), "Action");
-        assert_eq!(list.tags().last().unwrap().tag(), "Yoga");
+        let store = FakeAppStorage::new()
+            .add_stored_tag(StoredTag::new(0, "First"))
+            .add_stored_tag(StoredTag::new(1, "Last"));
+        let list = TagList::new(store, None);
+        assert_eq!(list.tags().first().unwrap().tag(), "First");
+        assert_eq!(list.tags().last().unwrap().tag(), "Last");
     }
 }

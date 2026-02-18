@@ -4,15 +4,18 @@
 use iced::widget::{container, text};
 use iced::{Background, Element, Length};
 
-use frename_core::{File, TagList};
+use frename_core::{File, StoredTagStore, TagList};
 
 use crate::theme;
 
 /// Render the file name display: workspace tags + file stem, or a placeholder.
-pub fn view<'a, Message: 'a>(
+pub fn view<'a, S, Message: 'a>(
     file: Option<&'a File>,
-    tag_list: Option<&'a TagList>,
-) -> Element<'a, Message> {
+    tag_list: Option<&'a TagList<S>>,
+) -> Element<'a, Message>
+where
+    S: StoredTagStore + Clone,
+{
     let (label, color) = match (file, tag_list) {
         (None, _) => ("📄".to_string(), theme::TEXT_MUTED),
         (Some(_), None) => ("🏷".to_string(), theme::TEXT_MUTED),

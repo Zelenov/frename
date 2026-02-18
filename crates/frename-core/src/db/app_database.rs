@@ -4,10 +4,10 @@ use std::path::PathBuf;
 
 use rusqlite::Connection;
 
-use crate::FolderAndFile;
+use crate::{FolderAndFile, StoredTag};
 
 use super::migrations;
-use super::traits::{AppStateStore, Initializable};
+use super::traits::{AppStateStore, Initializable, StoredTagStore};
 
 /// The application database. Holds app state (last folder/file), and will hold user data
 /// and other application storage. SQLite-backed. Use `Initializable::initialize()` once at startup
@@ -37,6 +37,30 @@ impl Initializable for AppDatabase {
     fn initialize(&self) -> Result<(), rusqlite::Error> {
         let conn = Connection::open(&self.path)?;
         migrations::run(&conn)?;
+        Ok(())
+    }
+}
+
+impl StoredTagStore for AppDatabase {
+    fn get_stored_tags(&self) -> Result<Vec<StoredTag>, Box<dyn std::error::Error + Send + Sync>> {
+        let conn = Connection::open(&self.path)?;
+        let mut stmt = conn.prepare("SELECT sort_order, name FROM stored_tags ORDER BY sort_order")?;
+        let tags = stmt
+            .query_map([], |row| {
+                let index: i64 = row.get(0)?;
+                let value: String = row.get(1)?;
+                Ok(StoredTag::new(index, value))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(tags)
+    }
+
+    fn add_stored_tag(&mut self, tag: StoredTag) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let conn = Connection::open(&self.path)?;
+        conn.execute(
+            "INSERT INTO stored_tags (sort_order, name) VALUES (?1, ?2)",
+            rusqlite::params![tag.index(), tag.value()],
+        )?;
         Ok(())
     }
 }
