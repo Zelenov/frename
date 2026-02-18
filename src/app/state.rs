@@ -9,7 +9,7 @@
 
 use iced::{event, keyboard, window, Element, Subscription, Task};
 
-use crate::features::{drag_drop, folder_workspace};
+use crate::features::{drag_drop, folder_workspace, tag_panel};
 
 use super::Message;
 
@@ -59,9 +59,38 @@ impl FrenameApp {
                 .map(Message::FolderWorkspace),
             event::listen_with(|ev, status, _| match ev {
                 iced::Event::Window(window::Event::Opened { .. }) => Some(Message::WindowReady),
+                // Space always toggles the selected tag (even when focus is in the search bar; we strip the space from filter in the handler).
+                iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: keyboard::Key::Named(keyboard::key::Named::Space),
+                    ..
+                }) => Some(Message::FolderWorkspace(
+                    folder_workspace::Message::TagPanel(tag_panel::Message::ToggleSelectedTag),
+                )),
                 iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. })
                     if matches!(status, event::Status::Ignored) =>
                 {
+                    if let keyboard::Key::Named(name) = key.as_ref() {
+                        let msg = match name {
+                            keyboard::key::Named::ArrowUp => {
+                                Some(Message::FolderWorkspace(
+                                    folder_workspace::Message::TagPanel(
+                                        tag_panel::Message::SelectUp,
+                                    ),
+                                ))
+                            }
+                            keyboard::key::Named::ArrowDown => {
+                                Some(Message::FolderWorkspace(
+                                    folder_workspace::Message::TagPanel(
+                                        tag_panel::Message::SelectDown,
+                                    ),
+                                ))
+                            }
+                            _ => None,
+                        };
+                        if msg.is_some() {
+                            return msg;
+                        }
+                    }
                     let k = match key.as_ref() {
                         keyboard::Key::Character(c) => {
                             c.chars().next().map(folder_workspace::GlobalSearchKey::Char)

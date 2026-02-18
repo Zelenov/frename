@@ -48,11 +48,11 @@ fn dark_checkbox_style(
     }
 }
 
-/// Render the tag panel: scrollable list of tag checkboxes.
+/// Render the tag panel: scrollable list of tag checkboxes with keyboard-selectable cursor.
 /// `selected_file` is the file from the file workspace when ready (no file = placeholder).
 /// `tag_list` is the workspace stored tags (value + checked); use workspace checked flag everywhere.
 pub fn view<'a, S>(
-    _state: &'a TagPanelState,
+    state: &'a TagPanelState,
     selected_file: Option<&'a File>,
     tag_list: &'a TagList<S>,
 ) -> Element<'a, Message>
@@ -79,12 +79,14 @@ where
 
     let tags = tag_list.tags();
     let filtered_indices = tag_list.filtered_indices();
+    let selected_id = state.selected_tag_id();
     let tag_items: Vec<Element<'_, Message>> = filtered_indices
         .iter()
         .map(|&index| {
             let tag = &tags[index];
             let id = tag.id();
             let is_checked = tag.is_checked();
+            let is_selected = selected_id == Some(id);
             let row_content = container(
                 checkbox(is_checked)
                     .label(tag.tag())
@@ -95,7 +97,15 @@ where
             )
             .padding([4, 8])
             .width(Length::Fill)
-            .id(iced::widget::Id::from(id.widget_id()));
+            .id(iced::widget::Id::from(id.widget_id()))
+            .style(move |_theme: &iced::Theme| iced::widget::container::Style {
+                background: Some(Background::Color(if is_selected {
+                    theme::ACCENT_SELECTED
+                } else {
+                    theme::BG_PANEL
+                })),
+                ..Default::default()
+            });
 
             mouse_area(row_content)
                 .on_press(Message::ToggleTag(id))

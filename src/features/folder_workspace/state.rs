@@ -270,10 +270,68 @@ impl FolderWorkspace {
             }
             crate::features::tag_panel::Message::ToggleTag(id) => {
                 self.file_workspace.toggle_tag_by_id(id);
+                self.tag_panel.set_selected(Some(id));
                 self.tag_panel.update(&msg);
                 Task::none()
             }
+            crate::features::tag_panel::Message::SelectUp => {
+                self.move_tag_selection(-1);
+                Task::none()
+            }
+            crate::features::tag_panel::Message::SelectDown => {
+                self.move_tag_selection(1);
+                Task::none()
+            }
+            crate::features::tag_panel::Message::ToggleSelectedTag => {
+                // If search bar had focus, it may have inserted a space; strip it so Space doesn't add to the filter.
+                let filter = self.file_workspace.tag_list().filter_query();
+                if filter.ends_with(' ') {
+                    let trimmed = filter.trim_end();
+                    self.file_workspace.set_tag_filter(trimmed.to_string());
+                }
+                if let Some(id) = self.tag_panel.selected_tag_id() {
+                    self.file_workspace.toggle_tag_by_id(id);
+                }
+                Task::none()
+            }
         }
+    }
+
+    /// Move tag list selection by delta (-1 = up, 1 = down). Uses filtered list.
+    fn move_tag_selection(&mut self, delta: i32) {
+        let new_id = {
+            let tag_list = self.file_workspace.tag_list();
+            let filtered = tag_list.filtered_indices();
+            let tags = tag_list.tags();
+            if filtered.is_empty() {
+                self.tag_panel.set_selected(None);
+                return;
+            }
+            let current = self.tag_panel.selected_tag_id().and_then(|id| {
+                filtered
+                    .iter()
+                    .position(|&i| tags.get(i).map_or(false, |t| t.id() == id))
+            });
+            let idx = match current {
+                None if delta > 0 => Some(0),
+                None => None,
+                Some(i) => {
+                    let next = i as i32 + delta;
+                    if next < 0 {
+                        None
+                    } else {
+                        let u = next as usize;
+                        if u < filtered.len() {
+                            Some(u)
+                        } else {
+                            Some(i)
+                        }
+                    }
+                }
+            };
+            idx.and_then(|i| filtered.get(i)).map(|&full_idx| tags[full_idx].id())
+        };
+        self.tag_panel.set_selected(new_id);
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
