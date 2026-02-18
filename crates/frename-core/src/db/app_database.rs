@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use rusqlite::Connection;
 
-use crate::{FolderAndFile, StoredTag};
+use crate::{FolderAndFile, StoredTag, TagColorMapping};
 
 use super::migrations;
 use super::traits::{AppStateStore, Initializable, StoredTagStore};
@@ -44,26 +44,51 @@ impl Initializable for AppDatabase {
 impl StoredTagStore for AppDatabase {
     fn get_stored_tags(&self) -> Result<Vec<StoredTag>, Box<dyn std::error::Error + Send + Sync>> {
         let conn = Connection::open(&self.path)?;
-        let mut stmt = conn.prepare(
-            "SELECT sort_order, name, color_index FROM stored_tags ORDER BY sort_order",
-        )?;
+        let mut stmt = conn.prepare("SELECT sort_order, name FROM stored_tags ORDER BY sort_order")?;
         let tags = stmt
             .query_map([], |row| {
                 let index: i64 = row.get(0)?;
                 let value: String = row.get(1)?;
-                let color_index: i32 = row.get(2)?;
-                Ok(StoredTag::new(index, value, color_index as u8))
+                Ok(StoredTag::new(index, value))
             })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(tags)
     }
 
-    fn add_stored_tag(&mut self, tag: StoredTag) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    fn get_tag_color_mapping(&self) -> Result<TagColorMapping, Box<dyn std::error::Error + Send + Sync>> {
+        let conn = Connection::open(&self.path)?;
+        let mut stmt = conn.prepare("SELECT tag_name, color_index FROM tag_color_mapping")?;
+        let entries: Vec<(String, u8)> = stmt
+            .query_map([], |row| {
+                let name: String = row.get(0)?;
+                let idx: i32 = row.get(1)?;
+                Ok((name, idx as u8))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(TagColorMapping::from_entries(entries))
+    }
+
+    fn add_stored_tag(
+        &mut self,
+        tag: StoredTag,
+        color_index: u8,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let conn = Connection::open(&self.path)?;
         conn.execute(
-            "INSERT INTO stored_tags (sort_order, name, color_index) VALUES (?1, ?2, ?3)",
-            rusqlite::params![tag.index(), tag.value(), i32::from(tag.color_index())],
+            "INSERT INTO stored_tags (sort_order, name) VALUES (?1, ?2)",
+            rusqlite::params![tag.index(), tag.value()],
         )?;
+        conn.execute(
+            "INSERT OR REPLACE INTO tag_color_mapping (tag_name, color_index) VALUES (?1, ?2)",
+            rusqlite::params![tag.value(), i32::from(color_index)],
+        )?;
+        Ok(())
+    }
+
+    fn remove_stored_tag(&mut self, tag_name: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let conn = Connection::open(&self.path)?;
+        conn.execute("DELETE FROM tag_color_mapping WHERE tag_name = ?1", [tag_name])?;
+        conn.execute("DELETE FROM stored_tags WHERE name = ?1", [tag_name])?;
         Ok(())
     }
 }

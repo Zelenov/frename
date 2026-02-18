@@ -1,5 +1,6 @@
 //! Tag management for file classification.
 //! TagList is generic over the store type S (like Directory). Store is used to load stored tags and to add tags.
+//! Tag entity has ID (index); color is resolved from TagColorMapping by tag name.
 
 use crate::db::StoredTagStore;
 use super::{FileSnapshot, StoredTag};
@@ -98,17 +99,19 @@ pub struct TagList<S> {
 }
 
 impl<S: StoredTagStore + Clone> TagList<S> {
-    /// Create a new TagList from the store and the initial file snapshot. Snapshot inners (name, extension, initial file name) are copied; checked state is set from the snapshot's tags.
+    /// Create a new TagList from the store and the initial file snapshot. Snapshot inners (name, extension, initial file name) are copied; checked state is set from the snapshot's tags. Colors are resolved from the store's tag color mapping by tag name.
     pub fn new(store: S, file_snapshot: FileSnapshot) -> Self {
         let name_without_extension = file_snapshot.name_without_extension().to_string();
         let extension = file_snapshot.extension().to_string();
         let initial_file_name = file_snapshot.initial_file_name().to_string();
         let stored_tags = store.get_stored_tags().unwrap_or_default();
+        let color_mapping = store.get_tag_color_mapping().unwrap_or_default();
         let tags: Vec<Tag> = stored_tags
             .iter()
             .map(|st| {
                 let id = TagId(st.index());
-                let mut tag = Tag::with_id(id, st.value(), st.color_index());
+                let color_index = color_mapping.color_index_for(st.value());
+                let mut tag = Tag::with_id(id, st.value(), color_index);
                 tag.set_checked(file_snapshot.has_tag(st.value()));
                 tag
             })
@@ -164,7 +167,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         }
     }
 
-    /// Add a stored tag (persists to store and appends to the list).
+    /// Add a stored tag (persists to store and appends to the list). Color is stored in tag_color_mapping by name.
     /// Color index is chosen at random from the palette range (0..16).
     #[allow(dead_code)]
     pub fn add_tag(
@@ -174,9 +177,9 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let value = value.into();
         let index = self.tags.len() as i64;
         let color_index = random_color_index();
-        let st = StoredTag::new(index, &value, color_index);
-        self.store.add_stored_tag(st)?;
-        self.tags.push(Tag::with_id(TagId(index), value, color_index));
+        let st = StoredTag::new(index, &value);
+        self.store.add_stored_tag(st, color_index)?;
+        self.tags.push(Tag::with_id(TagId(index), value.clone(), color_index));
         Ok(())
     }
 
@@ -231,9 +234,9 @@ mod tests {
     #[test]
     fn test_tag_list_reflects_stored_tags() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::new(0, "A", 0))
-            .add_stored_tag(StoredTag::new(1, "B", 1))
-            .add_stored_tag(StoredTag::new(2, "C", 2));
+            .add_stored_tag(StoredTag::new(0, "A"), 0)
+            .add_stored_tag(StoredTag::new(1, "B"), 1)
+            .add_stored_tag(StoredTag::new(2, "C"), 2);
         let list = TagList::new(store, FileSnapshot::default());
         assert_eq!(list.tags().len(), 3);
         assert_eq!(list.tags()[0].tag(), "A");
@@ -244,8 +247,8 @@ mod tests {
     #[test]
     fn test_tag_list_first_and_last() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::new(0, "First", 0))
-            .add_stored_tag(StoredTag::new(1, "Last", 0));
+            .add_stored_tag(StoredTag::new(0, "First"), 0)
+            .add_stored_tag(StoredTag::new(1, "Last"), 0);
         let list = TagList::new(store, FileSnapshot::default());
         assert_eq!(list.tags().first().unwrap().tag(), "First");
         assert_eq!(list.tags().last().unwrap().tag(), "Last");
@@ -254,10 +257,10 @@ mod tests {
     #[test]
     fn test_filtered_tag_ids_case_insensitive_contains() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::new(0, "Action", 0))
-            .add_stored_tag(StoredTag::new(1, "Comedy", 0))
-            .add_stored_tag(StoredTag::new(2, "Sci-Fi", 0))
-            .add_stored_tag(StoredTag::new(3, "Documentary", 0));
+            .add_stored_tag(StoredTag::new(0, "Action"), 0)
+            .add_stored_tag(StoredTag::new(1, "Comedy"), 0)
+            .add_stored_tag(StoredTag::new(2, "Sci-Fi"), 0)
+            .add_stored_tag(StoredTag::new(3, "Documentary"), 0);
         let mut list = TagList::new(store, FileSnapshot::default());
         assert_eq!(
             list.filtered_tag_ids(),

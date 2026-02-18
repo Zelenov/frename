@@ -134,3 +134,13 @@ pub const M4_TAG_COLOR_INDEX: &str = "
 ALTER TABLE stored_tags ADD COLUMN color_index INTEGER NOT NULL DEFAULT 0;
 UPDATE stored_tags SET color_index = (sort_order % 16);
 ";
+
+/// Migration 5: separate tag color storage. Colors keyed by tag name (not tag ID).
+/// tag_color_mapping is the only source for tag colors; stored_tags keeps sort_order and name only for tag identity.
+pub const M5_TAG_COLOR_MAPPING: &str = "
+CREATE TABLE IF NOT EXISTS tag_color_mapping (
+    tag_name TEXT NOT NULL PRIMARY KEY,
+    color_index INTEGER NOT NULL
+);
+INSERT OR IGNORE INTO tag_color_mapping (tag_name, color_index) SELECT name, color_index FROM stored_tags;
+";

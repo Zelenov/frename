@@ -11,5 +11,6 @@ pub use directory::Directory;
 pub use folder_file::FolderAndFile;
 pub use file::File;
 pub use tags::{
-    FileSnapshot, FileTagger, LoggingFileTagger, SaveAndReparse, StoredTag, Tag, TagId, TagList,
+    FileSnapshot, FileTagger, LoggingFileTagger, SaveAndReparse, StoredTag, Tag, TagColorMapping,
+    TagId, TagList,
 };

@@ -1,7 +1,10 @@
 //! Single in-memory fake for app storage in tests. Implements AppStateStore and StoredTagStore; no database.
 
+use std::collections::HashMap;
+
 use crate::FolderAndFile;
 use crate::StoredTag;
+use crate::TagColorMapping;
 
 use super::traits::{AppStateStore, StoredTagStore};
 
@@ -11,6 +14,8 @@ use super::traits::{AppStateStore, StoredTagStore};
 pub(crate) struct FakeAppStorage {
     last_session: Option<FolderAndFile>,
     stored_tags: Vec<StoredTag>,
+    /// Tag name -> color index (mirrors tag_color_mapping table).
+    tag_colors: HashMap<String, u8>,
 }
 
 #[allow(dead_code)] // Test helpers used from #[cfg(test)] and integration tests
@@ -20,8 +25,9 @@ impl FakeAppStorage {
         Self::default()
     }
 
-    /// Add one stored tag (builder-style).
-    pub(crate) fn add_stored_tag(mut self, tag: StoredTag) -> Self {
+    /// Add one stored tag with color (builder-style).
+    pub(crate) fn add_stored_tag(mut self, tag: StoredTag, color_index: u8) -> Self {
+        self.tag_colors.insert(tag.value().to_string(), color_index);
         self.stored_tags.push(tag);
         self
     }
@@ -53,8 +59,23 @@ impl StoredTagStore for FakeAppStorage {
         Ok(self.stored_tags.clone())
     }
 
-    fn add_stored_tag(&mut self, tag: StoredTag) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    fn get_tag_color_mapping(&self) -> Result<TagColorMapping, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(TagColorMapping::from_entries(self.tag_colors.clone().into_iter()))
+    }
+
+    fn add_stored_tag(
+        &mut self,
+        tag: StoredTag,
+        color_index: u8,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.tag_colors.insert(tag.value().to_string(), color_index);
         self.stored_tags.push(tag);
+        Ok(())
+    }
+
+    fn remove_stored_tag(&mut self, tag_name: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.tag_colors.remove(tag_name);
+        self.stored_tags.retain(|t| t.value() != tag_name);
         Ok(())
     }
 }
