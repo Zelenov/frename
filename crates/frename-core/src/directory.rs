@@ -3,7 +3,7 @@
 //! Directory is generic over the store type S. Store is passed only to the constructor; used internally for persistence. No Arc.
 
 use crate::db::AppStateStore;
-use crate::{File, FileTag, FolderAndFile};
+use crate::{File, FileSnapshot, FolderAndFile};
 use std::path::{Path, PathBuf};
 
 // ---------------------------------------------------------------------------
@@ -181,19 +181,23 @@ impl<S: AppStateStore + Clone> Directory<S> {
         self.select_index(current + 1)
     }
 
-    /// Update the tags of the file at the given path. Returns true if the file was found and updated.
-    pub fn update_file(&mut self, path: &Path, new_tags: &[FileTag]) -> bool {
+    /// Update the snapshot of the file at the given path. Returns true if the file was found and updated.
+    pub fn update_file(&mut self, path: &Path, snapshot: &FileSnapshot) -> bool {
         let found = self
             .find_by_path(path)
             .and_then(|index| self.file_at_mut(index))
             .map(|file| {
-                file.set_file_tags(new_tags);
+                file.set_file_snapshot(snapshot);
             })
             .is_some();
         if !found {
             log::warn!("Directory::update_file path not found: {}", path.display());
         } else {
-            log::info!("Updated file: {} ({} tag(s))", path.display(), new_tags.len());
+            log::info!(
+                "Updated file: {} ({} tag(s))",
+                path.display(),
+                snapshot.tags().len()
+            );
         }
         found
     }

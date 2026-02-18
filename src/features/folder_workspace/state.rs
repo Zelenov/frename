@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 
 use frename_core::{
-    AppDatabase, AppStateStore, File, FolderAndFile, FileTagSnapshot, LoggingAppStateStore,
+    AppDatabase, AppStateStore, File, FileSnapshot, FolderAndFile, LoggingAppStateStore,
     SaveAndReparse,
 };
 
@@ -41,7 +41,7 @@ pub struct FolderWorkspace {
     video_player: VideoPlayerState,
     tag_panel: TagPanelState,
     /// Snapshot to persist after current video is unloaded (then we send FileUpdated and load next video).
-    pending_file_updated: Option<FileTagSnapshot>,
+    pending_file_updated: Option<(PathBuf, FileSnapshot)>,
     left_width: f32,
     folder_width: f32,
     /// Last reported tag list scroll offset and viewport height (for scroll-into-view).
@@ -76,7 +76,7 @@ impl FolderWorkspace {
             } => self.folder_loaded(directory, target_file),
             Message::FolderLoadFailed => self.folder_load_failed(),
             Message::FileOpened(file) => self.apply_file_opened(file),
-            Message::FileUpdated { path, new_tags } => self.apply_file_updated(path, new_tags),
+            Message::FileUpdated { path, snapshot } => self.apply_file_updated(path, snapshot),
             Message::Folder(folder_msg) => self.handle_folder_message(folder_msg),
             Message::VideoPlayer(msg) => match msg {
                 video_player::Message::VideoUnloaded => self.on_video_unloaded(),
@@ -196,11 +196,9 @@ impl FolderWorkspace {
     /// Called when video player has unloaded. Persist pending snapshot (FileUpdated) then load the new video.
     fn on_video_unloaded(&mut self) -> Task<Message> {
         let pending = self.pending_file_updated.take();
-        let Some(s) = pending else {
+        let Some((path, snapshot)) = pending else {
             return Task::none();
         };
-        let path = s.path;
-        let new_tags = s.tags;
         let video_task = self
             .directory
             .as_ref()
@@ -212,17 +210,17 @@ impl FolderWorkspace {
             })
             .unwrap_or(Task::none());
         Task::batch([
-            Task::done(Message::FileUpdated { path, new_tags }),
+            Task::done(Message::FileUpdated { path, snapshot }),
             video_task,
         ])
     }
 
-    fn apply_file_updated(&mut self, path: PathBuf, new_tags: Vec<frename_core::FileTag>) -> Task<Message> {
-        let (path_buf, tags_after_save) = new_tags.as_slice().save_and_reparse(&path);
+    fn apply_file_updated(&mut self, path: PathBuf, snapshot: frename_core::FileSnapshot) -> Task<Message> {
+        let (path_buf, snapshot_after_save) = snapshot.save_and_reparse(&path);
         let _ = self
             .directory
             .as_mut()
-            .map(|dir| dir.update_file(&path_buf, &tags_after_save));
+            .map(|dir| dir.update_file(&path_buf, &snapshot_after_save));
         Task::none()
     }
 
@@ -461,7 +459,7 @@ mod tests {
     use std::path::PathBuf;
     use std::time::SystemTime;
 
-    use frename_core::{AppDatabase, File, FileTag, Initializable, LoggingAppStateStore};
+    use frename_core::{AppDatabase, File, FileSnapshot, Initializable, LoggingAppStateStore};
 
     use crate::features::{folder, tag_panel};
 
@@ -550,9 +548,10 @@ mod tests {
 
         let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
         flush_file_opened(&mut workspace);
+        let snapshot = FileSnapshot::new(vec![tag_name.to_string()], "file_0", "mp4", "file_0.mp4");
         let _ = workspace.update(Message::FileUpdated {
             path: first_file_path,
-            new_tags: vec![FileTag::new(tag_name)],
+            snapshot,
         });
         let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
         flush_file_opened(&mut workspace);
@@ -562,7 +561,7 @@ mod tests {
                 .file_workspace()
                 .file()
                 .unwrap()
-                .tag_list()
+                .snapshot()
                 .has_tag(tag_name),
             "tags should be saved after selecting another file"
         );

@@ -1,7 +1,7 @@
 //! File structure: path/metadata and tag-based rename state.
-//! File holds a FileTagList (tags + name building). From File's perspective we only update tags in it.
+//! File holds a FileSnapshot (tags + name + extension). From File's perspective we only update tags in it.
 
-use crate::{FileTagList, FileTagger};
+use crate::{FileSnapshot, FileTagger};
 use std::path::Path;
 use std::time::SystemTime;
 
@@ -9,17 +9,15 @@ use std::time::SystemTime;
 // Types and data
 // ---------------------------------------------------------------------------
 
-/// A file being processed: path and metadata plus a tag list (tags + file name built from them).
+/// A file being processed: path and metadata plus a tag list (tags, name, extension).
 #[derive(Debug, Clone)]
 pub struct File {
     /// Full path to the file (immutable).
     file_path: Box<Path>,
-    /// Original file name stem (without extension), parsed from the path.
-    initial_filename: String,
     /// File creation time (used for sorting).
     created_at: SystemTime,
-    /// Tags on this file. File name is built from this list and initial_filename.
-    file_tag_list: FileTagList,
+    /// Tags, name without extension, and extension. File name is built from this snapshot.
+    file_snapshot: FileSnapshot,
 }
 
 // ---------------------------------------------------------------------------
@@ -28,23 +26,15 @@ pub struct File {
 
 impl File {
     fn new_from_path_and_time(file_path: Box<Path>, created_at: SystemTime) -> Self {
-        let initial_filename = file_path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_string();
-        let tags = FileTagger::parse(&file_path);
-        let mut file_tag_list = FileTagList::new();
-        file_tag_list.set_file_tags(&tags);
+        let file_snapshot = FileTagger::parse(&file_path);
         Self {
             file_path,
-            initial_filename,
             created_at,
-            file_tag_list,
+            file_snapshot,
         }
     }
 
-    /// Create a file from a path only: loads metadata (created_at) and tags asynchronously.
+    /// Create a file from a path only: loads metadata (created_at) and tags via FileTagger::parse.
     pub async fn open(path: impl AsRef<Path> + Send) -> Result<Self, std::io::Error> {
         let path = path.as_ref();
         let metadata = tokio::fs::metadata(path).await?;
@@ -68,9 +58,9 @@ impl File {
         &self.file_path
     }
 
-    /// Get the original file name stem (without extension).
+    /// Get the original file name stem (without extension), from the parsed snapshot.
     pub fn initial_filename(&self) -> &str {
-        &self.initial_filename
+        self.file_snapshot.name_without_extension()
     }
 
     /// Get the creation time.
@@ -82,65 +72,64 @@ impl File {
     // Mediators (tag list and mutation)
     // -----------------------------------------------------------------------
 
-    /// Set the tags on this file (e.g. from parser).
-    pub fn set_file_tags(&mut self, tags: &[crate::FileTag]) {
-        self.file_tag_list.set_file_tags(tags);
+    /// Set the file's snapshot (e.g. after save-and-reparse).
+    pub fn set_file_snapshot(&mut self, snapshot: &FileSnapshot) {
+        self.file_snapshot = snapshot.clone();
     }
 
-    /// The file's tag list (tags, display, and for building TagList from stored names).
-    pub fn tag_list(&self) -> &FileTagList {
-        &self.file_tag_list
+    /// The file's snapshot (tags, name, extension; display and for building TagList from stored names).
+    pub fn snapshot(&self) -> &FileSnapshot {
+        &self.file_snapshot
     }
 
-    /// Mutable reference to the file's tag list (crate-only; used by tests).
+    /// Mutable reference to the file's snapshot (crate-only; used by tests).
     #[allow(dead_code)]
-    pub(crate) fn tag_list_mut(&mut self) -> &mut FileTagList {
-        &mut self.file_tag_list
+    pub(crate) fn snapshot_mut(&mut self) -> &mut FileSnapshot {
+        &mut self.file_snapshot
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::FileTag;
 
     #[test]
     fn test_empty_by_default() {
         let f = File::from_path("", SystemTime::UNIX_EPOCH);
-        assert_eq!(f.tag_list().file_name(f.initial_filename()), "");
+        assert_eq!(f.snapshot().file_name(), "");
     }
 
     #[test]
     fn test_single_tag() {
         let mut f = File::from_path("", SystemTime::UNIX_EPOCH);
-        f.set_file_tags(&[FileTag::new("Action")]);
-        assert_eq!(f.tag_list().file_name(f.initial_filename()), "Action");
+        f.snapshot_mut().set_tags(["Action"]);
+        assert_eq!(f.snapshot().file_name(), "Action");
     }
 
     #[test]
     fn test_multiple_tags_joined_by_dots() {
         let mut f = File::from_path("", SystemTime::UNIX_EPOCH);
-        f.set_file_tags(&[FileTag::new("Action"), FileTag::new("Adventure")]);
-        assert_eq!(f.tag_list().file_name(f.initial_filename()), "Action.Adventure");
+        f.snapshot_mut().set_tags(["Action", "Adventure"]);
+        assert_eq!(f.snapshot().file_name(), "Action.Adventure");
     }
 
     #[test]
     fn test_add_and_remove_tag() {
         let mut f = File::from_path("", SystemTime::UNIX_EPOCH);
-        f.tag_list_mut().add_tag("Action");
-        assert_eq!(f.tag_list().file_name(f.initial_filename()), "Action");
-        f.tag_list_mut().add_tag("Adventure");
-        assert_eq!(f.tag_list().file_name(f.initial_filename()), "Action.Adventure");
-        f.tag_list_mut().remove_tag("Action");
-        assert_eq!(f.tag_list().file_name(f.initial_filename()), "Adventure");
+        f.snapshot_mut().set_tags(["Action"]);
+        assert_eq!(f.snapshot().file_name(), "Action");
+        f.snapshot_mut().set_tags(["Action", "Adventure"]);
+        assert_eq!(f.snapshot().file_name(), "Action.Adventure");
+        f.snapshot_mut().set_tags(["Adventure"]);
+        assert_eq!(f.snapshot().file_name(), "Adventure");
     }
 
     #[test]
     fn test_has_tag() {
         let mut f = File::from_path("", SystemTime::UNIX_EPOCH);
-        assert!(!f.tag_list().has_tag("Action"));
-        f.tag_list_mut().add_tag("Action");
-        assert!(f.tag_list().has_tag("Action"));
+        assert!(!f.snapshot().has_tag("Action"));
+        f.snapshot_mut().set_tags(["Action"]);
+        assert!(f.snapshot().has_tag("Action"));
     }
 
     #[test]
@@ -163,12 +152,12 @@ mod tests {
     fn test_file_name_starts_with_initial_then_tags_prepended() {
         let now = SystemTime::now();
         let mut f = File::from_path("/path/my_video.mp4", now);
-        assert_eq!(f.tag_list().file_name(f.initial_filename()), "my_video");
-        f.set_file_tags(&[FileTag::new("Action")]);
-        assert_eq!(f.tag_list().file_name(f.initial_filename()), "Action.my_video");
-        f.set_file_tags(&[FileTag::new("Action"), FileTag::new("Adventure")]);
-        assert_eq!(f.tag_list().file_name(f.initial_filename()), "Action.Adventure.my_video");
-        f.tag_list_mut().remove_tag("Action");
-        assert_eq!(f.tag_list().file_name(f.initial_filename()), "Adventure.my_video");
+        assert_eq!(f.snapshot().file_name(), "my_video.mp4");
+        f.snapshot_mut().set_tags(["Action"]);
+        assert_eq!(f.snapshot().file_name(), "Action.my_video.mp4");
+        f.snapshot_mut().set_tags(["Action", "Adventure"]);
+        assert_eq!(f.snapshot().file_name(), "Action.Adventure.my_video.mp4");
+        f.snapshot_mut().set_tags(["Adventure"]);
+        assert_eq!(f.snapshot().file_name(), "Adventure.my_video.mp4");
     }
 }

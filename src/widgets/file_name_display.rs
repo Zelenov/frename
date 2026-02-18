@@ -19,8 +19,9 @@ where
     let (label, color) = match (file, tag_list) {
         (None, _) => ("📄".to_string(), theme::TEXT_MUTED),
         (Some(_), None) => ("🏷".to_string(), theme::TEXT_MUTED),
-        (Some(f), Some(list)) => {
-            let name = list.checked_file_tags().file_name(f.initial_filename());
+        (Some(_f), Some(list)) => {
+            let list_for_display = list.file_snapshot();
+            let name = list_for_display.file_name();
             (
                 if name.is_empty() {
                     "🏷".to_string()

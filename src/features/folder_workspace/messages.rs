@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use frename_core::{File, FileTag, FolderAndFile};
+use frename_core::{File, FileSnapshot, FolderAndFile};
 
 use super::Directory;
 use crate::features::{folder, tag_panel, video_player};
@@ -36,7 +36,7 @@ pub enum Message {
     /// Snapshot to persist: created by folder workspace when switching file (from file workspace get_snapshot). Save to disk then update directory.
     FileUpdated {
         path: PathBuf,
-        new_tags: Vec<FileTag>,
+        snapshot: FileSnapshot,
     },
     /// User selected a file in the list (from folder view)
     Folder(folder::Message),

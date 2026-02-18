@@ -1,11 +1,13 @@
 //! State for file workspace: the file currently being edited and stored tags with checked state.
 //!
-//! We do not change the open file's file_tag_list on toggle; we only change the workspace tag_list.
+//! We do not change the open file's snapshot on toggle; we only change the workspace tag list.
 //! File workspace does not save; it provides a snapshot (path + tags) that folder workspace persists when switching file.
 //!
 //! Generic over the store type S (like Directory and TagList). Store is passed to the constructor; used to build the tag list.
 
-use frename_core::{AppDatabase, File, FileTagSnapshot, StoredTagStore, TagList};
+use std::path::PathBuf;
+
+use frename_core::{AppDatabase, File, FileSnapshot, StoredTagStore, TagList};
 
 /// File workspace: current file and stored tags with checked state (source of truth for UI).
 /// Generic over the store type S; store is set only in the constructor.
@@ -27,7 +29,7 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
             loading: false,
             file: None,
             store: store.clone(),
-            tag_list: TagList::new(store, None),
+            tag_list: TagList::new(store, FileSnapshot::default()),
         }
     }
 
@@ -37,7 +39,7 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
             None => {
                 self.loading = false;
                 self.file = None;
-                self.tag_list = TagList::new(self.store.clone(), None);
+                self.tag_list = TagList::new(self.store.clone(), FileSnapshot::default());
             }
             Some(f) => {
                 let already_loaded = self
@@ -47,11 +49,9 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
                 if already_loaded {
                     return;
                 }
+                let snapshot = f.snapshot().clone();
                 self.file = Some(f);
-                self.tag_list = TagList::new(
-                    self.store.clone(),
-                    self.file().map(|file| file.tag_list()),
-                );
+                self.tag_list = TagList::new(self.store.clone(), snapshot);
             }
         }
     }
@@ -79,18 +79,12 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.tag_list.toggle_by_id(id);
     }
 
-    /// Checked tags from workspace as FileTagList (for save). Use this, not file's tags.
-    pub fn checked_file_tags(&self) -> frename_core::FileTagList {
-        self.tag_list.checked_file_tags()
-    }
-
-    /// Snapshot of the current file's path and workspace tags (to be saved by folder workspace when switching file). Does not persist anything.
-    pub fn get_snapshot(&self) -> Option<FileTagSnapshot> {
+    /// Snapshot of the current file's path and workspace snapshot (to be saved by folder workspace when switching file). Does not persist anything.
+    pub fn get_snapshot(&self) -> Option<(PathBuf, FileSnapshot)> {
         let file = self.file()?;
         let path = file.file_path().to_path_buf();
-        let tags = self.checked_file_tags();
-        let tags_vec = tags.file_tags().to_vec();
-        Some(FileTagSnapshot { path, tags: tags_vec })
+        let snapshot = self.tag_list.file_snapshot();
+        Some((path, snapshot))
     }
 }
 

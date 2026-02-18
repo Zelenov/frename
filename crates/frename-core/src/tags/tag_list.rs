@@ -1,10 +1,8 @@
 //! Tag management for file classification.
-//! These are the stored (enriched) tags; FileTag is the plain value for parse/save.
-//!
 //! TagList is generic over the store type S (like Directory). Store is used to load stored tags and to add tags.
 
 use crate::db::StoredTagStore;
-use crate::{FileTag, FileTagList, StoredTag};
+use super::{FileSnapshot, StoredTag};
 
 /// Number of tag colors in the UI palette (must match the UI crate).
 const TAG_PALETTE_LEN: u8 = 16;
@@ -81,46 +79,53 @@ impl Tag {
     pub fn toggle(&mut self) {
         self.checked = !self.checked;
     }
-
-    /// Convert this tag to a FileTag (crate-only; used when saving to file).
-    pub(crate) fn to_file_tag(&self) -> FileTag {
-        FileTag::new(self.tag().to_string())
-    }
 }
 
 /// A collection of available tags. Generic over the store type S (load and add stored tags).
-/// Holds the full tag list and an optional filter query; use [TagList::filtered_tag_ids] for display.
+/// Holds the full tag list, snapshot inners (name, extension, initial file name) copied at construction, and filter query.
 #[derive(Clone, Debug)]
 pub struct TagList<S> {
     store: S,
     tags: Vec<Tag>,
     /// Case-insensitive filter: only tags whose text contains this string are shown.
     filter_query: String,
+    /// Name without extension (from snapshot at construction; used to build snapshot from checked tags).
+    name_without_extension: String,
+    /// File extension (from snapshot at construction).
+    extension: String,
+    /// Initial file name (from snapshot at construction).
+    initial_file_name: String,
 }
 
 impl<S: StoredTagStore + Clone> TagList<S> {
-    /// Create a new TagList from the store (stored tags) and optional file tag list for checked state.
-    pub fn new(store: S, file_tag_list: Option<&FileTagList>) -> Self {
+    /// Create a new TagList from the store and the initial file snapshot. Snapshot inners (name, extension, initial file name) are copied; checked state is set from the snapshot's tags.
+    pub fn new(store: S, file_snapshot: FileSnapshot) -> Self {
+        let name_without_extension = file_snapshot.name_without_extension().to_string();
+        let extension = file_snapshot.extension().to_string();
+        let initial_file_name = file_snapshot.initial_file_name().to_string();
         let stored_tags = store.get_stored_tags().unwrap_or_default();
         let tags: Vec<Tag> = stored_tags
             .iter()
             .map(|st| {
                 let id = TagId(st.index());
                 let mut tag = Tag::with_id(id, st.value(), st.color_index());
-                tag.set_checked(file_tag_list.map_or(false, |list| list.has_tag(st.value())));
+                tag.set_checked(file_snapshot.has_tag(st.value()));
                 tag
             })
             .collect();
-        if let Some(list) = file_tag_list {
-            let values: Vec<&str> = list.file_tags().iter().map(|ft| ft.value()).collect();
-            log::info!("TagList::new file_tag_list: {:?}", values);
-        } else {
-            log::info!("TagList::new file_tag_list: None");
-        }
+        log::info!(
+            "TagList::new snapshot: name={} ext={} initial={:?}",
+            name_without_extension,
+            extension,
+            initial_file_name
+        );
         Self {
             store,
             tags,
             filter_query: String::new(),
+            name_without_extension,
+            extension,
+            initial_file_name,
         }
     }
 
@@ -185,31 +190,33 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         &mut self.tags
     }
 
-    // TODO: initial filename refactoring
-    /// Checked tags as a FileTagList (for save and sync).
-    pub fn checked_file_tags(&self) -> FileTagList {
-        let tags: Vec<FileTag> = self
+    /// Build a FileSnapshot from the currently checked tags and the snapshot inners stored at construction (name, extension, initial file name).
+    pub fn file_snapshot(&self) -> FileSnapshot {
+        let tags: Vec<String> = self
             .tags
             .iter()
             .filter(|t| t.is_checked())
-            .map(|t| t.to_file_tag())
+            .map(|t| t.tag().to_string())
             .collect();
-        let mut list = FileTagList::new();
-        list.set_file_tags(&tags);
-        list
+        FileSnapshot::new(
+            tags,
+            self.name_without_extension.as_str(),
+            self.extension.as_str(),
+            self.initial_file_name.as_str(),
+        )
     }
 }
 
 impl Default for TagList<crate::db::AppDatabase> {
     fn default() -> Self {
-        Self::new(crate::db::AppDatabase::new(), None)
+        Self::new(crate::db::AppDatabase::new(), FileSnapshot::default())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::db::fake_app_storage::FakeAppStorage;
-    use crate::StoredTag;
+    use super::StoredTag;
 
     use super::*;
 
@@ -227,7 +234,7 @@ mod tests {
             .add_stored_tag(StoredTag::new(0, "A", 0))
             .add_stored_tag(StoredTag::new(1, "B", 1))
             .add_stored_tag(StoredTag::new(2, "C", 2));
-        let list = TagList::new(store, None);
+        let list = TagList::new(store, FileSnapshot::default());
         assert_eq!(list.tags().len(), 3);
         assert_eq!(list.tags()[0].tag(), "A");
         assert_eq!(list.tags()[1].tag(), "B");
@@ -239,7 +246,7 @@ mod tests {
         let store = FakeAppStorage::new()
             .add_stored_tag(StoredTag::new(0, "First", 0))
             .add_stored_tag(StoredTag::new(1, "Last", 0));
-        let list = TagList::new(store, None);
+        let list = TagList::new(store, FileSnapshot::default());
         assert_eq!(list.tags().first().unwrap().tag(), "First");
         assert_eq!(list.tags().last().unwrap().tag(), "Last");
     }
@@ -251,7 +258,7 @@ mod tests {
             .add_stored_tag(StoredTag::new(1, "Comedy", 0))
             .add_stored_tag(StoredTag::new(2, "Sci-Fi", 0))
             .add_stored_tag(StoredTag::new(3, "Documentary", 0));
-        let mut list = TagList::new(store, None);
+        let mut list = TagList::new(store, FileSnapshot::default());
         assert_eq!(
             list.filtered_tag_ids(),
             [TagId(0), TagId(1), TagId(2), TagId(3)]
