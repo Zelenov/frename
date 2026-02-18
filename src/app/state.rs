@@ -3,8 +3,11 @@
 //! The app only holds top-level features and uses their public API (update, view, subscription).
 //! It does not know how any feature looks (scrollable, layout, panels) or what internals they have.
 //! Only `folder_workspace.current_file()` is used for the window title.
+//!
+//! UI-level concern: when a typing key is pressed and no text field is focused, focus the search bar
+//! and send the key so it can be emulated into the filter (Iced does not replay events to widgets).
 
-use iced::{event, window, Element, Subscription, Task};
+use iced::{event, keyboard, window, Element, Subscription, Task};
 
 use crate::features::{drag_drop, folder_workspace};
 
@@ -47,15 +50,36 @@ impl FrenameApp {
         folder_workspace::view::view(&self.folder_workspace).map(Message::FolderWorkspace)
     }
 
-    /// Feature subscriptions (file drop, window opened, etc.)
+    /// Feature subscriptions (file drop, window opened, global keyboard to search bar).
     pub fn subscription(&self) -> Subscription<Message> {
         Subscription::batch([
             self.drag_drop_state.subscription().map(Message::DragDrop),
             self.folder_workspace
                 .subscription()
                 .map(Message::FolderWorkspace),
-            event::listen_with(|ev, _status, _id| match ev {
+            event::listen_with(|ev, status, _| match ev {
                 iced::Event::Window(window::Event::Opened { .. }) => Some(Message::WindowReady),
+                iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. })
+                    if matches!(status, event::Status::Ignored) =>
+                {
+                    let k = match key.as_ref() {
+                        keyboard::Key::Character(c) => {
+                            c.chars().next().map(folder_workspace::GlobalSearchKey::Char)
+                        }
+                        keyboard::Key::Named(keyboard::key::Named::Backspace) => {
+                            Some(folder_workspace::GlobalSearchKey::Backspace)
+                        }
+                        keyboard::Key::Named(keyboard::key::Named::Delete) => {
+                            Some(folder_workspace::GlobalSearchKey::Delete)
+                        }
+                        _ => None,
+                    };
+                    k.map(|key| {
+                        Message::FolderWorkspace(
+                            folder_workspace::Message::FocusSearchBarAndKey(key),
+                        )
+                    })
+                }
                 _ => None,
             }),
         ])

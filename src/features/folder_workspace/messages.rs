@@ -7,6 +7,14 @@ use frename_core::{File, FileTag, FolderAndFile};
 use super::Directory;
 use crate::features::{folder, tag_panel, video_player};
 
+/// Key that triggered global focus (we emulate it into the search bar; Iced cannot replay the event).
+#[derive(Debug, Clone)]
+pub enum GlobalSearchKey {
+    Char(char),
+    Backspace,
+    Delete,
+}
+
 /// Messages handled by the folder workspace (owns directory, selection, and all logic).
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -40,4 +48,8 @@ pub enum Message {
     LeftSplitterDragged(f32),
     /// Right splitter dragged (between folder and rename panel) — absolute cursor X
     RightSplitterDragged(f32),
+    /// Focus the search bar and emulate the triggering key into the filter (Iced cannot replay the event).
+    FocusSearchBarAndKey(GlobalSearchKey),
+    /// No-op (e.g. used when returning a focus operation from update).
+    Noop,
 }

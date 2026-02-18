@@ -12,13 +12,16 @@ use frename_core::{
     SaveAndReparse,
 };
 
+use super::messages::GlobalSearchKey;
 use super::Directory;
 use iced::{Subscription, Task};
+use iced::widget::operation;
 
 use crate::features::file_workspace::FileWorkspace;
 use crate::features::folder;
 use crate::features::tag_panel::TagPanelState;
 use crate::features::video_player::{self, VideoPlayerState};
+use crate::widgets::search_bar::SEARCH_BAR_INPUT_ID;
 use crate::widgets::splitter::HIT_WIDTH;
 
 use super::Message;
@@ -86,7 +89,25 @@ impl FolderWorkspace {
                 self.folder_width = new_folder_width.max(MIN_FOLDER_WIDTH);
                 Task::none()
             }
+            Message::FocusSearchBarAndKey(key) => self.focus_search_bar_and_key(key),
+            Message::Noop => Task::none(),
         }
+    }
+
+    /// Emulate the key into the filter and focus the search bar (Iced cannot replay the event to the widget).
+    fn focus_search_bar_and_key(&mut self, key: GlobalSearchKey) -> Task<Message> {
+        let current = self.file_workspace.tag_list().filter_query().to_string();
+        let new_value = match key {
+            GlobalSearchKey::Char(c) => format!("{}{}", current, c),
+            GlobalSearchKey::Backspace | GlobalSearchKey::Delete => {
+                let mut s = current;
+                s.pop();
+                s
+            }
+        };
+        self.file_workspace.set_tag_filter(new_value);
+        operation::focus(iced::widget::Id::from(SEARCH_BAR_INPUT_ID))
+            .map(|_: ()| Message::Noop)
     }
 
     fn load_last_session(&self) -> Task<Message> {
