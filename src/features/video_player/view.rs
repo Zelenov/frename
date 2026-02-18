@@ -1,6 +1,6 @@
 //! UI for the video player. Only this module knows how the player and controls look.
 
-use iced::widget::{column, container, text};
+use iced::widget::{column, container, mouse_area, text};
 use iced::{Background, Element};
 use iced_video_player::VideoPlayer;
 
@@ -18,14 +18,18 @@ pub fn view(state: &VideoPlayerState) -> Element<'_, Message> {
             .on_end_of_stream(Message::EndOfStream);
 
         // Wrap in container so column layout sees Fill height
-        // (VideoPlayer widget's size() always reports Shrink)
-        let video_area = container(player)
-            .width(iced::Length::Fill)
-            .height(iced::Length::Fill)
-            .style(|_theme| container::Style {
-                background: Some(Background::Color(theme::BG_PANEL)),
-                ..container::Style::default()
-            });
+        // (VideoPlayer widget's size() always reports Shrink).
+        // Click on video area toggles pause.
+        let video_area = mouse_area(
+            container(player)
+                .width(iced::Length::Fill)
+                .height(iced::Length::Fill)
+                .style(|_theme| container::Style {
+                    background: Some(Background::Color(theme::BG_PANEL)),
+                    ..container::Style::default()
+                }),
+        )
+        .on_press(Message::TogglePause);
 
         // Read live position from the video at view time (like the Slider pattern)
         let position_secs = video.position().as_secs_f32();

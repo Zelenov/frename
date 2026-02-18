@@ -6,6 +6,17 @@
 use crate::db::StoredTagStore;
 use crate::{FileTag, FileTagList, StoredTag};
 
+/// Number of tag colors in the UI palette (must match the UI crate).
+const TAG_PALETTE_LEN: u8 = 16;
+
+fn random_color_index() -> u8 {
+    let n = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    (n as u64 % u64::from(TAG_PALETTE_LEN)) as u8
+}
+
 /// Stable unique id for a tag (from stored tag index). Used for widget identity and messages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TagId(pub i64);
@@ -26,15 +37,18 @@ pub struct Tag {
     tag: String,
     /// Whether this tag is currently checked.
     checked: bool,
+    /// Index into the app's tag color palette (0-based).
+    color_index: u8,
 }
 
 impl Tag {
-    /// Create a new tag with the given id and text (used when building from store).
-    pub fn with_id(id: TagId, tag: impl Into<String>) -> Self {
+    /// Create a new tag with the given id, text, and color index (used when building from store).
+    pub fn with_id(id: TagId, tag: impl Into<String>, color_index: u8) -> Self {
         Self {
             id,
             tag: tag.into(),
             checked: false,
+            color_index,
         }
     }
 
@@ -51,6 +65,11 @@ impl Tag {
     /// Whether this tag is checked.
     pub fn is_checked(&self) -> bool {
         self.checked
+    }
+
+    /// Color palette index for this tag (for UI styling).
+    pub fn color_index(&self) -> u8 {
+        self.color_index
     }
 
     /// Set the checked state of this tag (crate-only).
@@ -87,7 +106,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             .iter()
             .map(|st| {
                 let id = TagId(st.index());
-                let mut tag = Tag::with_id(id, st.value());
+                let mut tag = Tag::with_id(id, st.value(), st.color_index());
                 tag.set_checked(file_tag_list.map_or(false, |list| list.has_tag(st.value())));
                 tag
             })
@@ -137,14 +156,19 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         }
     }
 
-    /// Add a stored tag (persists to store and appends to the list). Unused for now; for future UI.
+    /// Add a stored tag (persists to store and appends to the list).
+    /// Color index is chosen at random from the palette range (0..16).
     #[allow(dead_code)]
-    pub fn add_tag(&mut self, value: impl Into<String>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn add_tag(
+        &mut self,
+        value: impl Into<String>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let value = value.into();
         let index = self.tags.len() as i64;
-        let st = StoredTag::new(index, &value);
+        let color_index = random_color_index();
+        let st = StoredTag::new(index, &value, color_index);
         self.store.add_stored_tag(st)?;
-        self.tags.push(Tag::with_id(TagId(index), value));
+        self.tags.push(Tag::with_id(TagId(index), value, color_index));
         Ok(())
     }
 
@@ -188,17 +212,18 @@ mod tests {
 
     #[test]
     fn test_tag_creation() {
-        let tag = Tag::with_id(TagId(0), "Action");
+        let tag = Tag::with_id(TagId(0), "Action", 0);
         assert_eq!(tag.id(), TagId(0));
         assert_eq!(tag.tag(), "Action");
+        assert_eq!(tag.color_index(), 0);
     }
 
     #[test]
     fn test_tag_list_reflects_stored_tags() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::new(0, "A"))
-            .add_stored_tag(StoredTag::new(1, "B"))
-            .add_stored_tag(StoredTag::new(2, "C"));
+            .add_stored_tag(StoredTag::new(0, "A", 0))
+            .add_stored_tag(StoredTag::new(1, "B", 1))
+            .add_stored_tag(StoredTag::new(2, "C", 2));
         let list = TagList::new(store, None);
         assert_eq!(list.tags().len(), 3);
         assert_eq!(list.tags()[0].tag(), "A");
@@ -209,8 +234,8 @@ mod tests {
     #[test]
     fn test_tag_list_first_and_last() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::new(0, "First"))
-            .add_stored_tag(StoredTag::new(1, "Last"));
+            .add_stored_tag(StoredTag::new(0, "First", 0))
+            .add_stored_tag(StoredTag::new(1, "Last", 0));
         let list = TagList::new(store, None);
         assert_eq!(list.tags().first().unwrap().tag(), "First");
         assert_eq!(list.tags().last().unwrap().tag(), "Last");
@@ -219,10 +244,10 @@ mod tests {
     #[test]
     fn test_filtered_indices_case_insensitive_contains() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::new(0, "Action"))
-            .add_stored_tag(StoredTag::new(1, "Comedy"))
-            .add_stored_tag(StoredTag::new(2, "Sci-Fi"))
-            .add_stored_tag(StoredTag::new(3, "Documentary"));
+            .add_stored_tag(StoredTag::new(0, "Action", 0))
+            .add_stored_tag(StoredTag::new(1, "Comedy", 0))
+            .add_stored_tag(StoredTag::new(2, "Sci-Fi", 0))
+            .add_stored_tag(StoredTag::new(3, "Documentary", 0));
         let mut list = TagList::new(store, None);
         assert_eq!(list.filtered_indices(), [0, 1, 2, 3]);
         list.set_filter("com");

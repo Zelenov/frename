@@ -266,6 +266,7 @@ impl FolderWorkspace {
         match msg {
             crate::features::tag_panel::Message::SetFilter(query) => {
                 self.file_workspace.set_tag_filter(query);
+                self.clamp_selection_to_filtered();
                 Task::none()
             }
             crate::features::tag_panel::Message::ToggleTag(id) => {
@@ -289,11 +290,31 @@ impl FolderWorkspace {
                     let trimmed = filter.trim_end();
                     self.file_workspace.set_tag_filter(trimmed.to_string());
                 }
+                self.clamp_selection_to_filtered();
+                // Only toggle if the selected tag is visible (in the filtered list).
                 if let Some(id) = self.tag_panel.selected_tag_id() {
                     self.file_workspace.toggle_tag_by_id(id);
                 }
                 Task::none()
             }
+        }
+    }
+
+    /// Clear selection if the selected tag is not in the current filtered list (selection must be visible).
+    fn clamp_selection_to_filtered(&mut self) {
+        let visible = {
+            let tag_list = self.file_workspace.tag_list();
+            let filtered = tag_list.filtered_indices();
+            let tags = tag_list.tags();
+            self.tag_panel.selected_tag_id().and_then(|id| {
+                filtered
+                    .iter()
+                    .find(|&&i| tags.get(i).map_or(false, |t| t.id() == id))
+                    .copied()
+            })
+        };
+        if visible.is_none() && self.tag_panel.selected_tag_id().is_some() {
+            self.tag_panel.set_selected(None);
         }
     }
 

@@ -12,6 +12,7 @@ use std::fs::File;
 
 mod app;
 mod features;
+mod tag_colors;
 mod theme;
 mod widgets;
 

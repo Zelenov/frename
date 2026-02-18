@@ -1,10 +1,11 @@
 //! UI for the tag panel. Only this module knows how the tag list looks (scrollable, checkboxes).
 
-use iced::widget::{checkbox, column, container, mouse_area, scrollable, text};
+use iced::widget::{checkbox, column, container, mouse_area, row, scrollable, text};
 use iced::{mouse, Background, Border, Element, Length};
 
 use frename_core::{File, StoredTagStore, TagList};
 
+use crate::tag_colors;
 use crate::theme;
 use super::{Message, TagPanelState};
 
@@ -87,7 +88,19 @@ where
             let id = tag.id();
             let is_checked = tag.is_checked();
             let is_selected = selected_id == Some(id);
-            let row_content = container(
+            let tag_color = tag_colors::TagColors::color(tag.color_index());
+            let color_stripe = container(
+                iced::widget::Space::new()
+                    .width(Length::Fixed(4.))
+                    .height(Length::Fill),
+            )
+            .width(Length::Fixed(4.))
+            .height(Length::Fill)
+            .style(move |_theme: &iced::Theme| iced::widget::container::Style {
+                background: Some(Background::Color(tag_color)),
+                ..Default::default()
+            });
+            let checkbox_content = container(
                 checkbox(is_checked)
                     .label(tag.tag())
                     .on_toggle(move |_| Message::ToggleTag(id))
@@ -106,7 +119,9 @@ where
                 })),
                 ..Default::default()
             });
-
+            let row_content = row![color_stripe, checkbox_content]
+                .width(Length::Fill)
+                .spacing(0);
             mouse_area(row_content)
                 .on_press(Message::ToggleTag(id))
                 .interaction(mouse::Interaction::Pointer)

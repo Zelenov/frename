@@ -23,6 +23,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 3,
         sql: schema::M3_STORED_TAGS,
     },
+    Migration {
+        version: 4,
+        sql: schema::M4_TAG_COLOR_INDEX,
+    },
 ];
 
 /// Returns the current schema version.

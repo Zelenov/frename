@@ -44,12 +44,15 @@ impl Initializable for AppDatabase {
 impl StoredTagStore for AppDatabase {
     fn get_stored_tags(&self) -> Result<Vec<StoredTag>, Box<dyn std::error::Error + Send + Sync>> {
         let conn = Connection::open(&self.path)?;
-        let mut stmt = conn.prepare("SELECT sort_order, name FROM stored_tags ORDER BY sort_order")?;
+        let mut stmt = conn.prepare(
+            "SELECT sort_order, name, color_index FROM stored_tags ORDER BY sort_order",
+        )?;
         let tags = stmt
             .query_map([], |row| {
                 let index: i64 = row.get(0)?;
                 let value: String = row.get(1)?;
-                Ok(StoredTag::new(index, value))
+                let color_index: i32 = row.get(2)?;
+                Ok(StoredTag::new(index, value, color_index as u8))
             })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(tags)
@@ -58,8 +61,8 @@ impl StoredTagStore for AppDatabase {
     fn add_stored_tag(&mut self, tag: StoredTag) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let conn = Connection::open(&self.path)?;
         conn.execute(
-            "INSERT INTO stored_tags (sort_order, name) VALUES (?1, ?2)",
-            rusqlite::params![tag.index(), tag.value()],
+            "INSERT INTO stored_tags (sort_order, name, color_index) VALUES (?1, ?2, ?3)",
+            rusqlite::params![tag.index(), tag.value(), i32::from(tag.color_index())],
         )?;
         Ok(())
     }
