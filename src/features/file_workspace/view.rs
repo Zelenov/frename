@@ -10,6 +10,9 @@ use crate::widgets;
 
 use super::FileWorkspace;
 
+/// Horizontal padding for the file workspace panel (same inset from splitter and window edge).
+const PANEL_PADDING_X: f32 = 8.0;
+
 /// Render the file workspace: file name on top, search bar, tag panel below (and later other panels).
 /// Caller passes file workspace state, tag panel state, and global tag list; messages are tag panel messages.
 pub fn view<'a, S>(
@@ -27,6 +30,7 @@ where
     let search_bar = widgets::search_bar::view(
         tag_list.filter_query(),
         tag_panel::Message::SetFilter,
+        || tag_panel::Message::SetFilter(String::new()),
     );
     let tag_panel = tag_panel::view::view(tag_panel_state, file_workspace.file(), tag_list);
 
@@ -38,5 +42,6 @@ where
     container(content)
         .width(Length::Fill)
         .height(Length::Fill)
+        .padding([0.0, PANEL_PADDING_X])
         .into()
 }

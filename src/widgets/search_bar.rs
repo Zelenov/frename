@@ -1,21 +1,21 @@
-//! Reusable search bar widget. Stateless: parent holds value and provides on_input message.
-//! Icon inside the bar (first symbol, small and muted); user-typed content is the only text.
+//! Reusable search bar widget. Stateless: parent holds value and provides on_input and on_clear.
+//! Icon inside the bar (search left, clear right when non-empty); user-typed content is the only text.
 
-use iced::widget::{container, row, text, text_input};
-use iced::{Element, Length};
+use iced::widget::{container, mouse_area, row, text, text_input};
+use iced::{mouse, Element, Length};
 
 use crate::theme;
 
 /// Widget id for the search bar text input (for focus and global key capture).
 pub const SEARCH_BAR_INPUT_ID: &str = "search-bar-input";
 
-/// Render a search bar: one visual unit with icon inside on the left, then text input.
-/// Icon is small and muted; cursor/text starts to the right of the icon.
+/// Render a search bar: one visual unit with search icon on the left, text input, clear (×) on the right when non-empty.
 pub fn view<'a, Message: Clone + 'a>(
     value: &'a str,
     on_input: impl Fn(String) -> Message + 'a,
+    on_clear: impl Fn() -> Message + 'a,
 ) -> Element<'a, Message> {
-    let icon = text("🔍").size(12).color(theme::TEXT_MUTED);
+    let search_icon = text("🔍").size(12).color(theme::TEXT_MUTED);
     let input = text_input("", value)
         .id(iced::widget::Id::from(SEARCH_BAR_INPUT_ID))
         .on_input(on_input)
@@ -36,7 +36,23 @@ pub fn view<'a, Message: Clone + 'a>(
             }
         });
 
-    let inner = row![icon, input]
+    let clear_icon = if value.is_empty() {
+        None
+    } else {
+        let icon = text("×").size(16).color(theme::TEXT_MUTED);
+        Some(
+            mouse_area(container(icon).padding(4))
+                .on_press(on_clear())
+                .interaction(mouse::Interaction::Pointer)
+                .into(),
+        )
+    };
+
+    let mut row_elems: Vec<Element<'a, Message>> = vec![search_icon.into(), input.into()];
+    if let Some(clear) = clear_icon {
+        row_elems.push(clear);
+    }
+    let inner = row(row_elems)
         .spacing(6)
         .align_y(iced::Alignment::Center);
 
