@@ -99,6 +99,7 @@ impl FolderWorkspace {
             Message::FocusSearchBarAndKey(key) => self.focus_search_bar_and_key(key),
             Message::Noop => Task::none(),
             Message::ScrollTagListToSelection => self.scroll_tag_list_to_selection(),
+            Message::RemoveTag => self.handle_tag_panel(tag_panel::Message::DeleteSelectedTag),
         }
     }
 
@@ -309,6 +310,28 @@ impl FolderWorkspace {
                 if let Some(id) = self.tag_panel.selected_tag_id() {
                     self.file_workspace.toggle_tag_by_id(id);
                 }
+                Task::none()
+            }
+            tag_panel::Message::DeleteTag(id) => {
+                if self.tag_panel.selected_tag_id() == Some(id) {
+                    self.tag_panel.set_selected(None);
+                }
+                self.tag_panel.set_hovered(None);
+                if let Err(e) = self.file_workspace.remove_stored_tag_by_id(id) {
+                    log::error!("Failed to delete tag: {}", e);
+                }
+                self.clamp_selection_to_filtered();
+                Task::none()
+            }
+            tag_panel::Message::DeleteSelectedTag => {
+                if let Some(id) = self.tag_panel.selected_tag_id() {
+                    self.handle_tag_panel(tag_panel::Message::DeleteTag(id))
+                } else {
+                    Task::none()
+                }
+            }
+            tag_panel::Message::TagHovered(hovered) => {
+                self.tag_panel.set_hovered(hovered);
                 Task::none()
             }
         }

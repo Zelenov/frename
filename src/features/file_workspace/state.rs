@@ -7,7 +7,7 @@
 
 use std::path::PathBuf;
 
-use frename_core::{AppDatabase, File, FileSnapshot, StoredTagStore, TagColorMapping, TagList};
+use frename_core::{AppDatabase, File, FileSnapshot, StoredTagStore, TagColorMapping, TagId, TagList};
 
 /// File workspace: current file and stored tags with checked state (source of truth for UI).
 /// Generic over the store type S; store is set only in the constructor.
@@ -80,8 +80,16 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     }
 
     /// Toggle stored tag by id. Only updates workspace tag_list; file is synced after save.
-    pub fn toggle_tag_by_id(&mut self, id: frename_core::TagId) {
+    pub fn toggle_tag_by_id(&mut self, id: TagId) {
         self.tag_list.toggle_by_id(id);
+    }
+
+    /// Remove a stored tag by id from the store and rebuild the tag list. Delegates to TagList.
+    pub fn remove_stored_tag_by_id(
+        &mut self,
+        id: TagId,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.tag_list.remove_stored_tag_by_id(id)
     }
 
     /// Snapshot of the current file's path and workspace snapshot (to be saved by folder workspace when switching file). Does not persist anything.

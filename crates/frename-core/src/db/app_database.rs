@@ -85,10 +85,15 @@ impl StoredTagStore for AppDatabase {
         Ok(())
     }
 
-    fn remove_stored_tag(&mut self, tag_name: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    fn remove_stored_tag_by_id(&mut self, tag_id: i64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let conn = Connection::open(&self.path)?;
-        conn.execute("DELETE FROM tag_color_mapping WHERE tag_name = ?1", [tag_name])?;
-        conn.execute("DELETE FROM stored_tags WHERE name = ?1", [tag_name])?;
+        let name: String = conn.query_row(
+            "SELECT name FROM stored_tags WHERE sort_order = ?1",
+            [tag_id],
+            |row| row.get(0),
+        )?;
+        conn.execute("DELETE FROM tag_color_mapping WHERE tag_name = ?1", [&name])?;
+        conn.execute("DELETE FROM stored_tags WHERE sort_order = ?1", [tag_id])?;
         Ok(())
     }
 }

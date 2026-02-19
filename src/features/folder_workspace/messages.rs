@@ -54,4 +54,6 @@ pub enum Message {
     Noop,
     /// Scroll the tag list so the selected row is in view (deferred to next frame).
     ScrollTagListToSelection,
+    /// Remove the selected tag (e.g. triggered by Delete key).
+    RemoveTag,
 }

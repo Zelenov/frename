@@ -21,6 +21,9 @@ pub const ACCENT: Color = Color::from_rgb(0.35, 0.65, 1.0);
 /// Selected row / hover (accent with transparency).
 pub const ACCENT_SELECTED: Color = Color::from_rgba(0.35, 0.65, 1.0, 0.25);
 
+/// Selected row / hover (accent with transparency).
+pub const DEBUG: Color = Color::from_rgba(0.35, 0.0, 0.0, 1.0);
+
 /// Primary text (off-white).
 pub const TEXT: Color = Color::from_rgb(0.92, 0.92, 0.95);
 

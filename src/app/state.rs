@@ -95,6 +95,11 @@ impl FrenameApp {
                                     folder_workspace::Message::Folder(folder::Message::NextFile),
                                 ))
                             }
+                            keyboard::key::Named::Delete => {
+                                Some(Message::FolderWorkspace(
+                                    folder_workspace::Message::RemoveTag,
+                                ))
+                            }
                             _ => None,
                         };
                         if msg.is_some() {

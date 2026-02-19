@@ -73,9 +73,11 @@ impl StoredTagStore for FakeAppStorage {
         Ok(())
     }
 
-    fn remove_stored_tag(&mut self, tag_name: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.tag_colors.remove(tag_name);
-        self.stored_tags.retain(|t| t.value() != tag_name);
+    fn remove_stored_tag_by_id(&mut self, tag_id: i64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if let Some(tag) = self.stored_tags.iter().find(|t| t.index() == tag_id) {
+            self.tag_colors.remove(tag.value());
+        }
+        self.stored_tags.retain(|t| t.index() != tag_id);
         Ok(())
     }
 }

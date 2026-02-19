@@ -208,6 +208,16 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             self.initial_file_name.as_str(),
         )
     }
+
+    /// Remove a stored tag by tag id from the store and from the in-memory list (reindex following tags).
+    pub fn remove_stored_tag_by_id(
+        &mut self,
+        id: TagId,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.store.remove_stored_tag_by_id(id.0)?;
+        self.tags.retain(|t| t.id() != id);
+        Ok(())
+    }
 }
 
 impl Default for TagList<crate::db::AppDatabase> {

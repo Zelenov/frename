@@ -20,4 +20,10 @@ pub enum Message {
         scroll_y: f32,
         viewport_height: f32,
     },
+    /// Remove the tag from the store and UI (unselect first, then delete).
+    DeleteTag(TagId),
+    /// Remove the currently selected tag (no-op if none selected).
+    DeleteSelectedTag,
+    /// Mouse entered or left a tag row (for showing delete button on hover).
+    TagHovered(Option<TagId>),
 }

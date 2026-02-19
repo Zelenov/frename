@@ -9,6 +9,9 @@ use crate::tag_colors;
 use crate::theme;
 use super::{Message, TagPanelState, TAG_LIST_SCROLLABLE_ID};
 
+/// Tag list row height in pixels. Must match folder_workspace::TAG_ROW_HEIGHT for scroll-into-view.
+const TAG_ROW_HEIGHT: f32 = 28.0;
+
 /// Dark checkbox style: dark background, light text, accent when checked.
 fn dark_checkbox_style(
     _theme: &iced::Theme,
@@ -79,6 +82,7 @@ where
     };
 
     let selected_id = state.selected_tag_id();
+    let hovered_id = state.hovered_tag_id();
     let tag_items: Vec<Element<'_, Message>> = tag_list
         .filtered_tag_ids()
         .into_iter()
@@ -86,6 +90,7 @@ where
             let tag = tag_list.get_tag(id)?;
             let is_checked = tag.is_checked();
             let is_selected = selected_id == Some(id);
+            let show_delete = is_selected || hovered_id == Some(id);
             let tag_color = tag_colors::TagColors::color(tag.color_index());
             let color_stripe = container(
                 iced::widget::Space::new()
@@ -108,24 +113,55 @@ where
             )
             .padding([4, 8])
             .width(Length::Fill)
-            .id(iced::widget::Id::from(id.widget_id()))
-            .style(move |_theme: &iced::Theme| iced::widget::container::Style {
-                background: Some(Background::Color(if is_selected {
-                    theme::ACCENT_SELECTED
-                } else {
-                    theme::BG_PANEL
-                })),
-                ..Default::default()
-            });
-            let row_content = row![color_stripe, checkbox_content]
+            .id(iced::widget::Id::from(id.widget_id()));
+            let main_row = row![color_stripe, checkbox_content]
                 .width(Length::Fill)
                 .spacing(0);
-            Some(
-                mouse_area(row_content)
-                    .on_press(Message::ToggleTag(id))
-                    .interaction(mouse::Interaction::Pointer)
-                    .into(),
-            )
+            let main_cell = mouse_area(main_row)
+                .on_press(Message::ToggleTag(id))
+                .on_enter(Message::TagHovered(Some(id)))
+                .on_exit(Message::TagHovered(None))
+                .interaction(mouse::Interaction::Pointer);
+            let delete_slot: Element<'_, Message> = if show_delete {
+                mouse_area(
+                    container(text("×").size(14).color(theme::TEXT_MUTED))
+                        .center_y(Length::Fill)
+                        .padding([0, 4]),
+                )
+                .on_press(Message::DeleteTag(id))
+                .into()
+            } else {
+                iced::widget::Space::new().into()
+            };
+            let row_height = Length::Fixed(TAG_ROW_HEIGHT);
+            let right_margin = container(iced::widget::Space::new())
+                .width(Length::Fixed(12.0))
+                .height(row_height);
+            let full_row = row![
+                container(main_cell)
+                    .width(Length::Fill)
+                    .height(row_height),
+                container(delete_slot)
+                    .width(Length::Fixed(24.0))
+                    .height(row_height)
+                    .center_y(Length::Fill),
+                right_margin,
+            ]
+            .width(Length::Fill)
+            .height(row_height)
+            .spacing(0);
+            let row_background = container(full_row)
+                .height(row_height)
+                .width(Length::Fill)
+                .style(move |_theme: &iced::Theme| iced::widget::container::Style {
+                    background: Some(Background::Color(if is_selected {
+                        theme::ACCENT_SELECTED
+                    } else {
+                        theme::BG_PANEL
+                    })),
+                    ..Default::default()
+                });
+            Some(row_background.into())
         })
         .collect();
 
