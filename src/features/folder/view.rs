@@ -1,21 +1,23 @@
 //! UI for the folder list. Only this module knows the list is scrollable and how rows look.
 //!
-//! Receives only data (directory, loading) from workspace; selection from directory; no parent knows our layout or widgets.
+//! Receives only data (directory, loading, tag color mapping) from workspace; selection from directory; no parent knows our layout or widgets.
 
 use iced::widget::{column, container, mouse_area, row, scrollable, text};
 use iced::{mouse, Background, Element, Length};
 
 use crate::theme;
+use crate::widgets;
 
 use super::Message;
 
 const FOLDER_LIST_SCROLLABLE_ID: &str = "folder-file-list";
 
-/// Render the folder panel: a scrollable list of file names.
+/// Render the folder panel: a scrollable list of file names (tag chips + name.extension, no wrap).
 /// Selection comes from the directory; view emits SelectFile/Previous/Next.
 pub fn view<'a>(
     directory: Option<&'a crate::features::folder_workspace::Directory>,
     loading: bool,
+    tag_color_mapping: frename_core::TagColorMapping,
 ) -> Element<'a, Message> {
     let placeholder_icon = |icon: &'static str| {
         container(text(icon).size(48).color(theme::TEXT_MUTED))
@@ -47,11 +49,13 @@ pub fn view<'a>(
         .iter()
         .enumerate()
         .map(|(index, file_info)| {
-            let name = file_info.initial_filename();
             let is_selected = selected_index == Some(index);
-
-            let label = text(name).size(14).color(theme::TEXT);
-            let row_content = row![label].align_y(iced::Alignment::Center);
+            let name_display = widgets::file_name_display::view(
+                file_info.snapshot().clone(),
+                &tag_color_mapping,
+                false,
+            );
+            let row_content = row![name_display].align_y(iced::Alignment::Center);
 
             let row = container(row_content)
                 .padding([4, 8])

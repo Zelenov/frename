@@ -132,7 +132,7 @@ INSERT OR IGNORE INTO stored_tags (sort_order, name) VALUES
 /// Migration 4: add color_index to stored_tags and assign palette indices (sort_order % 16).
 pub const M4_TAG_COLOR_INDEX: &str = "
 ALTER TABLE stored_tags ADD COLUMN color_index INTEGER NOT NULL DEFAULT 0;
-UPDATE stored_tags SET color_index = (sort_order % 16);
+UPDATE stored_tags SET color_index = 1 + (sort_order % 15);
 ";
 
 /// Migration 5: separate tag color storage. Colors keyed by tag name (not tag ID).

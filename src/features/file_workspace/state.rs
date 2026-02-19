@@ -7,7 +7,7 @@
 
 use std::path::PathBuf;
 
-use frename_core::{AppDatabase, File, FileSnapshot, StoredTagStore, TagList};
+use frename_core::{AppDatabase, File, FileSnapshot, StoredTagStore, TagColorMapping, TagList};
 
 /// File workspace: current file and stored tags with checked state (source of truth for UI).
 /// Generic over the store type S; store is set only in the constructor.
@@ -67,6 +67,11 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     /// Stored tags with checked state (use this for UI; checked is the workspace source of truth).
     pub fn tag_list(&self) -> &TagList<S> {
         &self.tag_list
+    }
+
+    /// Tag name -> color index mapping (for rendering file name chips in lists).
+    pub fn tag_color_mapping(&self) -> TagColorMapping {
+        self.store.get_tag_color_mapping().unwrap_or_default()
     }
 
     /// Set the tag list filter query (case-insensitive contains). Used by the search bar.

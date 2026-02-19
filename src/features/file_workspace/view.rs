@@ -23,9 +23,10 @@ pub fn view<'a, S>(
 where
     S: frename_core::StoredTagStore + Clone,
 {
-    let file_name = widgets::file_name_display::view(
-        file_workspace.file(),
-        Some(file_workspace.tag_list()),
+    let color_mapping = file_workspace.tag_color_mapping();
+    let file_name = widgets::file_name_display::view_in_panel(
+        file_workspace.tag_list().file_snapshot(),
+        &color_mapping,
         widgets::file_name_display::DEFAULT_WRAP,
     );
     let search_bar = widgets::search_bar::view(
