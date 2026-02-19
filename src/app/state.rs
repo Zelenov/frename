@@ -9,7 +9,7 @@
 
 use iced::{event, keyboard, window, Element, Subscription, Task};
 
-use crate::features::{drag_drop, folder_workspace, tag_panel};
+use crate::features::{drag_drop, folder, folder_workspace, tag_panel};
 
 use super::Message;
 
@@ -83,6 +83,16 @@ impl FrenameApp {
                                     folder_workspace::Message::TagPanel(
                                         tag_panel::Message::SelectDown,
                                     ),
+                                ))
+                            }
+                            keyboard::key::Named::PageUp => {
+                                Some(Message::FolderWorkspace(
+                                    folder_workspace::Message::Folder(folder::Message::PreviousFile),
+                                ))
+                            }
+                            keyboard::key::Named::PageDown => {
+                                Some(Message::FolderWorkspace(
+                                    folder_workspace::Message::Folder(folder::Message::NextFile),
                                 ))
                             }
                             _ => None,

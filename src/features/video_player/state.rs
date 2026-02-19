@@ -139,6 +139,23 @@ impl VideoPlayerState {
                     video_controls::Message::Seek(pos) => {
                         Task::done(Message::Seek(pos))
                     }
+                    video_controls::Message::SeekBack10 => {
+                        let Some(video) = self.current_video.as_ref() else {
+                            return Task::none();
+                        };
+                        let pos = video.position().as_secs_f32();
+                        let new_pos = (pos - 10.0).max(0.0);
+                        Task::done(Message::Seek(new_pos))
+                    }
+                    video_controls::Message::SeekForward10 => {
+                        let Some(video) = self.current_video.as_ref() else {
+                            return Task::none();
+                        };
+                        let pos = video.position().as_secs_f32();
+                        let duration_secs = video.duration().as_secs_f32();
+                        let new_pos = (pos + 10.0).min(duration_secs);
+                        Task::done(Message::Seek(new_pos))
+                    }
                     _ => Task::none(),
                 }
             }

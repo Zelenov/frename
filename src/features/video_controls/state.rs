@@ -52,6 +52,9 @@ impl VideoControlsState {
             Message::SeekReleased => {
                 self.seeking = false;
             }
+            Message::SeekBack10 | Message::SeekForward10 => {
+                // No local state change; video player performs the seek
+            }
         }
     }
 
@@ -75,13 +78,19 @@ impl VideoControlsState {
         self.seek_position
     }
 
-    /// Keyboard shortcuts for video controls (Space = play/pause)
+    /// Keyboard shortcuts for video controls: Space/F2 = play/pause, F1 = 10s back, F3 = 10s forward
     pub fn subscription(&self) -> Subscription<Message> {
         event::listen_with(|event, _status, _id| match event {
-            iced::Event::Keyboard(keyboard::Event::KeyPressed {
-                key: keyboard::Key::Named(keyboard::key::Named::Space),
-                ..
-            }) => Some(Message::TogglePlayPause),
+            iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) => {
+                let msg = match key.as_ref() {
+                    keyboard::Key::Named(keyboard::key::Named::Space) => Some(Message::TogglePlayPause),
+                    keyboard::Key::Named(keyboard::key::Named::F1) => Some(Message::SeekBack10),
+                    keyboard::Key::Named(keyboard::key::Named::F2) => Some(Message::TogglePlayPause),
+                    keyboard::Key::Named(keyboard::key::Named::F3) => Some(Message::SeekForward10),
+                    _ => None,
+                };
+                msg
+            }
             _ => None,
         })
     }

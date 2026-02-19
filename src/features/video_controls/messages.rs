@@ -13,4 +13,8 @@ pub enum Message {
     Seek(f32),
     /// User released the seek bar
     SeekReleased,
+    /// Seek 10 seconds backward (button or F1)
+    SeekBack10,
+    /// Seek 10 seconds forward (button or F3)
+    SeekForward10,
 }

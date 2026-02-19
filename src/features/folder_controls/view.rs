@@ -1,6 +1,6 @@
 //! UI for folder controls (prev/next). Only this module knows they are buttons; receives only booleans.
 
-use iced::widget::{button, container, row, text};
+use iced::widget::{button, container, row, text, tooltip};
 use iced::{Background, Color, Element};
 
 use crate::features::folder;
@@ -33,27 +33,37 @@ pub fn view(has_previous: bool, has_next: bool) -> Element<'static, folder::Mess
         }
     };
 
-    let prev_btn = button(
-        container(text("◀").size(16))
-            .center_x(iced::Length::Fill)
-            .center_y(iced::Length::Fill),
+    let prev_btn: Element<'_, folder::Message> = tooltip(
+        button(
+            container(text("◀").size(16))
+                .center_x(iced::Length::Fill)
+                .center_y(iced::Length::Fill),
+        )
+            .on_press(folder::Message::PreviousFile)
+            .width(CONTROLS_HEIGHT)
+            .height(iced::Length::Fill)
+            .padding(0)
+            .style(button_style(has_previous)),
+        text("Page Up"),
+        iced::widget::tooltip::Position::Top,
     )
-    .on_press(folder::Message::PreviousFile)
-    .width(CONTROLS_HEIGHT)
-    .height(iced::Length::Fill)
-    .padding(0)
-    .style(button_style(has_previous));
+        .into();
 
-    let next_btn = button(
-        container(text("▶").size(16))
-            .center_x(iced::Length::Fill)
-            .center_y(iced::Length::Fill),
+    let next_btn: Element<'_, folder::Message> = tooltip(
+        button(
+            container(text("▶").size(16))
+                .center_x(iced::Length::Fill)
+                .center_y(iced::Length::Fill),
+        )
+            .on_press(folder::Message::NextFile)
+            .width(CONTROLS_HEIGHT)
+            .height(iced::Length::Fill)
+            .padding(0)
+            .style(button_style(has_next)),
+        text("Page Down"),
+        iced::widget::tooltip::Position::Top,
     )
-    .on_press(folder::Message::NextFile)
-    .width(CONTROLS_HEIGHT)
-    .height(iced::Length::Fill)
-    .padding(0)
-    .style(button_style(has_next));
+        .into();
 
     let controls = row![prev_btn, next_btn]
         .spacing(8)
