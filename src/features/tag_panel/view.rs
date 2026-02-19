@@ -86,7 +86,8 @@ where
             let tag = tag_list.get_tag(id)?;
             let is_checked = tag.is_checked();
             let is_selected = selected_id == Some(id);
-            let show_delete = is_selected;
+            let is_stored = tag.is_stored();
+            let show_action = is_selected;
             let tag_color = tag_colors::TagColors::color(tag.color_index());
             let color_stripe = container(
                 iced::widget::Space::new()
@@ -116,13 +117,18 @@ where
             let main_cell = mouse_area(main_row)
                 .on_press(Message::ToggleTag(id))
                 .interaction(mouse::Interaction::Pointer);
-            let delete_slot: Element<'_, Message> = if show_delete {
+            let action_slot: Element<'_, Message> = if show_action {
+                let (label, msg) = if is_stored {
+                    ("×", Message::DeleteTag(id))
+                } else {
+                    ("💾", Message::SaveTag(id))
+                };
                 mouse_area(
-                    container(text("×").size(14).color(theme::TEXT_MUTED))
+                    container(text(label).size(14).color(theme::TEXT_MUTED))
                         .center_y(Length::Fill)
                         .padding([0, 4]),
                 )
-                .on_press(Message::DeleteTag(id))
+                .on_press(msg)
                 .into()
             } else {
                 iced::widget::Space::new().into()
@@ -135,7 +141,7 @@ where
                 container(main_cell)
                     .width(Length::Fill)
                     .height(row_height),
-                container(delete_slot)
+                container(action_slot)
                     .width(Length::Fixed(24.0))
                     .height(row_height)
                     .center_y(Length::Fill),

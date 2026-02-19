@@ -20,8 +20,10 @@ pub enum Message {
         scroll_y: f32,
         viewport_height: f32,
     },
-    /// Remove the tag from the store and UI (unselect first, then delete).
+    /// Remove the tag from the store and UI (unselect first, then delete). Only for stored tags.
     DeleteTag(TagId),
     /// Remove the currently selected tag (no-op if none selected).
     DeleteSelectedTag,
+    /// Save a snapshot-only tag to the store (add to DB). No-op if tag is already stored.
+    SaveTag(TagId),
 }

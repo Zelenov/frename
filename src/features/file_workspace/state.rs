@@ -92,6 +92,14 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.tag_list.remove_stored_tag_by_id(id)
     }
 
+    /// Save a snapshot-only tag to the store (add to DB). Delegates to TagList.
+    pub fn save_tag(
+        &mut self,
+        id: TagId,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.tag_list.save_tag(id)
+    }
+
     /// Snapshot of the current file's path and workspace snapshot (to be saved by folder workspace when switching file). Does not persist anything.
     pub fn get_snapshot(&self) -> Option<(PathBuf, FileSnapshot)> {
         let file = self.file()?;

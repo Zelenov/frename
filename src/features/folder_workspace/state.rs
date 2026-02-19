@@ -333,6 +333,12 @@ impl FolderWorkspace {
                     Task::none()
                 }
             }
+            tag_panel::Message::SaveTag(id) => {
+                if let Err(e) = self.file_workspace.save_tag(id) {
+                    log::error!("Failed to save tag to store: {}", e);
+                }
+                Task::none()
+            }
         }
     }
 

@@ -144,3 +144,17 @@ CREATE TABLE IF NOT EXISTS tag_color_mapping (
 );
 INSERT OR IGNORE INTO tag_color_mapping (tag_name, color_index) SELECT name, color_index FROM stored_tags;
 ";
+
+/// Migration 6: stored_tags keyed by UUID (id TEXT) instead of sort_order as identity. sort_order kept for display order.
+pub const M6_STORED_TAGS_UUID: &str = "
+CREATE TABLE IF NOT EXISTS stored_tags_new (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    sort_order INTEGER NOT NULL,
+    CONSTRAINT stored_tags_new_name_unique UNIQUE (name)
+);
+INSERT INTO stored_tags_new (id, name, sort_order)
+SELECT '00000000-0000-0000-0000-' || printf('%012x', sort_order), name, sort_order FROM stored_tags;
+DROP TABLE stored_tags;
+ALTER TABLE stored_tags_new RENAME TO stored_tags;
+";

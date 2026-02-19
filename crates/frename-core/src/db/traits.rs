@@ -1,5 +1,7 @@
 //! Traits for app state storage: session read/write, stored tags, tag color mapping, and one-time initialization.
 
+use uuid::Uuid;
+
 use crate::{FolderAndFile, StoredTag, TagColorMapping};
 
 /// Interface for storing and restoring app state (last folder and file).
@@ -13,9 +15,9 @@ pub trait AppStateStore: Send + Sync {
     fn set_last_folder_and_file(&self, value: &FolderAndFile);
 }
 
-/// Interface for stored tags and tag color mapping. Tags are keyed by tag id (index); tag colors are keyed by tag name.
+/// Interface for stored tags and tag color mapping. Tags are keyed by tag id (UUID); tag colors are keyed by tag name.
 pub trait StoredTagStore: Send + Sync {
-    /// Returns stored tags in index order (no color; use tag color mapping for colors).
+    /// Returns stored tags in sort order (no color; use tag color mapping for colors).
     fn get_stored_tags(&self) -> Result<Vec<StoredTag>, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Returns the tag name -> color index mapping (tag colors keyed by tag name).
@@ -28,8 +30,15 @@ pub trait StoredTagStore: Send + Sync {
         color_index: u8,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
-    /// Removes a tag by tag id from stored_tags and its entry from tag_color_mapping (by tag name).
-    fn remove_stored_tag_by_id(&mut self, tag_id: i64) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    /// Saves or updates a stored tag by id: insert if id not present, else update name and color.
+    fn save_tag(
+        &mut self,
+        tag: StoredTag,
+        color_index: u8,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Removes a tag by tag id (UUID) from stored_tags and its entry from tag_color_mapping (by tag name).
+    fn remove_stored_tag_by_id(&mut self, tag_id: Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// One-time setup (e.g. run migrations). Implemented by the database; the logging decorator wraps it.

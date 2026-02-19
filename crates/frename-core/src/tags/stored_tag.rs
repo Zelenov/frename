@@ -1,26 +1,28 @@
-//! Stored tag: a tag entry in the app store (database or fake). Identity is index + name; color is in TagColorMapping (by name).
+//! Stored tag: a tag entry in the app store (database or fake). Identity is UUID + name; color is in TagColorMapping (by name).
 
-/// A single stored tag in the store. Has an index (order) and value (label). Color is stored separately in tag_color_mapping by name.
+use uuid::Uuid;
+
+/// A single stored tag in the store. Has an id (UUID) and value (label). Color is stored separately in tag_color_mapping by name.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StoredTag {
-    /// Display order (e.g. sort_order in DB).
-    index: i64,
+    /// Stable unique id (UUID).
+    id: Uuid,
     /// Tag label (e.g. name in DB).
     value: String,
 }
 
 impl StoredTag {
-    /// Create a stored tag with the given index and value.
-    pub fn new(index: i64, value: impl Into<String>) -> Self {
+    /// Create a stored tag with the given id and value.
+    pub fn new(id: Uuid, value: impl Into<String>) -> Self {
         Self {
-            index,
+            id,
             value: value.into(),
         }
     }
 
-    /// Order index for this tag.
-    pub fn index(&self) -> i64 {
-        self.index
+    /// Tag id (UUID).
+    pub fn id(&self) -> Uuid {
+        self.id
     }
 
     /// Tag label.
