@@ -4,7 +4,7 @@
 //! We do not tell any feature how to look (scrollable, rectangular, etc.); each feature view owns its appearance.
 
 use iced::widget::{column, container, row, text};
-use iced::{Background, Element, Length};
+use iced::{Element, Length};
 
 use crate::features::{file_workspace, folder, folder_controls, video_player};
 use crate::theme;
@@ -29,10 +29,7 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
         )
         .width(Length::Fill)
         .height(Length::Fill)
-        .style(|_theme| iced::widget::container::Style {
-            background: Some(Background::Color(theme::BG_PANEL)),
-            ..Default::default()
-        })
+        .style(theme::panel_container_style)
         .into();
     }
 
@@ -85,9 +82,6 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
     )
     .width(Length::Fill)
     .height(Length::Fill)
-    .style(|_theme| iced::widget::container::Style {
-        background: Some(Background::Color(theme::BG_MAIN)),
-        ..Default::default()
-    })
+    .style(theme::main_container_style)
     .into()
 }

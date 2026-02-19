@@ -1,7 +1,7 @@
 //! UI rendering for video controls feature
 
 use iced::widget::{button, container, row, text, tooltip};
-use iced::{Background, Color, Element};
+use iced::Element;
 
 use crate::theme;
 use super::progress_bar::ProgressBar;
@@ -12,21 +12,6 @@ const CONTROLS_HEIGHT: f32 = 32.0;
 /// Render the video player controls.
 /// `position_secs` is the live playback position read from the video at view time.
 pub fn view(state: &VideoControlsState, position_secs: f32) -> Element<'_, Message> {
-    let btn_style = |status: button::Status| {
-        let bg = match status {
-            button::Status::Hovered => theme::TRACK,
-            button::Status::Pressed => theme::SPLITTER_ACTIVE,
-            _ => Color::TRANSPARENT,
-        };
-        button::Style {
-            background: Some(Background::Color(bg)),
-            text_color: theme::TEXT,
-            border: iced::Border::default(),
-            shadow: iced::Shadow::default(),
-            snap: true,
-        }
-    };
-
     let back10_btn: Element<'_, Message> = tooltip(
         button(
             container(text("⏪").size(16))
@@ -37,7 +22,7 @@ pub fn view(state: &VideoControlsState, position_secs: f32) -> Element<'_, Messa
             .width(CONTROLS_HEIGHT)
             .height(iced::Length::Fill)
             .padding(0)
-            .style(move |_theme: &iced::Theme, status| btn_style(status)),
+            .style(theme::icon_button_style(true)),
         text("F1"),
         tooltip::Position::Top,
     )
@@ -54,7 +39,7 @@ pub fn view(state: &VideoControlsState, position_secs: f32) -> Element<'_, Messa
             .width(CONTROLS_HEIGHT)
             .height(iced::Length::Fill)
             .padding(0)
-            .style(move |_theme: &iced::Theme, status| btn_style(status)),
+            .style(theme::icon_button_style(true)),
         text("F2"),
         tooltip::Position::Top,
     )
@@ -70,7 +55,7 @@ pub fn view(state: &VideoControlsState, position_secs: f32) -> Element<'_, Messa
             .width(CONTROLS_HEIGHT)
             .height(iced::Length::Fill)
             .padding(0)
-            .style(move |_theme: &iced::Theme, status| btn_style(status)),
+            .style(theme::icon_button_style(true)),
         text("F3"),
         tooltip::Position::Top,
     )
@@ -96,9 +81,6 @@ pub fn view(state: &VideoControlsState, position_secs: f32) -> Element<'_, Messa
         .padding([0, 8])
         .width(iced::Length::Fill)
         .height(CONTROLS_HEIGHT)
-        .style(|_theme| container::Style {
-            background: Some(Background::Color(theme::BG_PANEL)),
-            ..container::Style::default()
-        })
+        .style(theme::panel_container_style)
         .into()
 }

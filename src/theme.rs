@@ -1,7 +1,7 @@
 //! Shared UI theme: colors and styling aligned with the video progress bar.
 
 use iced::widget::scrollable::{AutoScroll, Rail, Scroller, Status};
-use iced::Color;
+use iced::{Background, Color};
 
 /// Main app background (dark).
 pub const BG_MAIN: Color = Color::from_rgb(0.10, 0.10, 0.10);
@@ -38,6 +38,106 @@ pub const SPLITTER: Color = Color::from_rgb(0.25, 0.25, 0.25);
 
 /// Splitter when hovered or dragged.
 pub const SPLITTER_ACTIVE: Color = Color::from_rgb(0.40, 0.40, 0.40);
+
+/// Container style for panels (tag list, folder list, controls bars).
+pub fn panel_container_style(
+    _theme: &iced::Theme,
+) -> iced::widget::container::Style {
+    iced::widget::container::Style {
+        background: Some(Background::Color(BG_PANEL)),
+        ..Default::default()
+    }
+}
+
+/// Container style for selectable rows (selected vs default background).
+pub fn row_background_style(
+    _theme: &iced::Theme,
+    selected: bool,
+) -> iced::widget::container::Style {
+    iced::widget::container::Style {
+        background: Some(Background::Color(if selected {
+            ACCENT_SELECTED
+        } else {
+            BG_PANEL
+        })),
+        ..Default::default()
+    }
+}
+
+/// Container style for folder list rows (selected vs transparent).
+pub fn selectable_row_style(
+    _theme: &iced::Theme,
+    selected: bool,
+) -> iced::widget::container::Style {
+    iced::widget::container::Style {
+        background: Some(Background::Color(if selected {
+            ACCENT_SELECTED
+        } else {
+            Color::TRANSPARENT
+        })),
+        ..Default::default()
+    }
+}
+
+/// Container style for elevated surfaces (file name area).
+pub fn elevated_container_style(
+    _theme: &iced::Theme,
+) -> iced::widget::container::Style {
+    iced::widget::container::Style {
+        background: Some(Background::Color(BG_ELEVATED)),
+        ..Default::default()
+    }
+}
+
+/// Container style for elevated surfaces with a visible border (e.g. search bar).
+pub fn elevated_container_bordered_style(
+    _theme: &iced::Theme,
+) -> iced::widget::container::Style {
+    iced::widget::container::Style {
+        background: Some(Background::Color(BG_ELEVATED)),
+        border: iced::Border {
+            radius: 4.0.into(),
+            width: 1.0,
+            color: TEXT_MUTED,
+        },
+        ..Default::default()
+    }
+}
+
+/// Container style for main app background.
+pub fn main_container_style(
+    _theme: &iced::Theme,
+) -> iced::widget::container::Style {
+    iced::widget::container::Style {
+        background: Some(Background::Color(BG_MAIN)),
+        ..Default::default()
+    }
+}
+
+/// Icon button style (prev/next, video controls). When disabled, uses transparent bg and muted text.
+pub fn icon_button_style(
+    enabled: bool,
+) -> impl Fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style + Clone {
+    move |_theme: &iced::Theme, status: iced::widget::button::Status| {
+        let (bg, text_color) = if enabled {
+            let bg = match status {
+                iced::widget::button::Status::Hovered => TRACK,
+                iced::widget::button::Status::Pressed => SPLITTER_ACTIVE,
+                _ => Color::TRANSPARENT,
+            };
+            (bg, TEXT)
+        } else {
+            (Color::TRANSPARENT, TEXT_MUTED)
+        };
+        iced::widget::button::Style {
+            background: Some(Background::Color(bg)),
+            text_color,
+            border: iced::Border::default(),
+            shadow: iced::Shadow::default(),
+            snap: true,
+        }
+    }
+}
 
 /// Dark scrollable style: dark track and scroller to match panels.
 pub fn dark_scrollable_style(

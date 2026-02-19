@@ -1,6 +1,6 @@
 ---
 name: iced-elm-architecture
-description: Iced GUI framework Elm architecture patterns for Rust. Feature-based code organization, message flow, Task::done dispatch, core/UI separation, snapshots, deferred side effects, subscriptions, component independence. Persistence and app state: database initialization only in main.rs; transient store (no singleton, no factory); Directory generic over store; store only in constructor; call store.get_last_session from workspace; on folder load failure keep previous state. Use when building iced UI features, adding messages, creating views, wiring components, organizing iced code, or implementing persistence/session.
+description: Iced GUI framework Elm architecture patterns for Rust. Feature-based code organization, message flow, Task::done dispatch, core/UI separation, snapshots, deferred side effects, subscriptions, component independence. Persistence and app state: database initialization only in main.rs; transient store (no singleton, no factory); Directory generic over store; store only in constructor; call store.get_last_session from workspace; on folder load failure keep previous state. Solved patterns: keyboard→app→workspace→feature message chain, selectable rows with one parent background (hover/delete without breaking layout), consolidated styles in theme.rs, delete+hover list UX. Use when building iced UI features, adding messages, creating views, wiring components, organizing iced code, implementing persistence/session, or fixing row layout or style duplication.
 ---
 
 # Iced Elm Architecture Patterns
@@ -520,3 +520,46 @@ When the workspace has no data yet (e.g. no folder opened), show **one full-wind
 - **Condition**: If `state.directory().is_none()` (and similar “no data” checks), render a single centered container (icon + optional loading state). Otherwise render the normal multi-panel layout.
 - **Loading**: While loading after a drop, the same big panel can show a loading icon (e.g. `⏳`) until the workspace has real data.
 - App stays minimal: it only delegates view to the workspace; the workspace decides one-panel vs. multi-panel from its own state.
+
+---
+
+## Solved Patterns (Best Solutions)
+
+Patterns that worked well; apply when facing similar problems.
+
+### Keyboard → App → Workspace → Feature
+
+When a global key (e.g. Delete) must trigger an action in a nested feature (e.g. delete selected tag):
+
+1. **App** handles the key (e.g. in `keyboard::on_key_press` or view subscription), maps it to an **app-level message** (e.g. `RemoveTag`).
+2. **App update** forwards to the workspace: `Message::FolderWorkspace(workspace::Message::RemoveTag)` (or similar).
+3. **Workspace update** forwards to the feature that owns the action: e.g. `Message::TagPanel(tag_panel::Message::DeleteSelectedTag)`.
+4. **Feature update** handles the action: e.g. if `selected_tag_id().is_some()`, treat like `DeleteTag(id)` (unselect, clear hover, call core/child to apply the change, clamp selection). If nothing selected, return `Task::none()` and **do not** focus the search bar or other widget.
+
+No direct `update()` calls across components. One message chain; each layer only forwards or translates.
+
+### Selectable Rows: One Parent Container for Background
+
+To avoid layout/alignment bugs and disappearing content when adding hover/delete to list rows:
+
+- **One parent container** owns the row background. Use a **single style** on that container (e.g. `theme::row_background_style(theme, is_selected)`). Child cells (checkbox, main content, delete slot, right margin) have **no** background style so they inherit the parent’s look.
+- **Fixed row height**: define a constant (e.g. `TAG_ROW_HEIGHT`) and use it for the parent row and all inner columns so height is consistent and scroll-into-view works.
+- **Layout**: parent = row with: `container(main_cell).height(row_height).width(Length::Fill)`, `container(delete_slot).width(24).height(row_height)`, and a fixed-width right-margin column. Only the parent gets `.style(...)` for background.
+- **Hover**: store `hovered_id: Option<TagId>` in state. Main cell uses `on_enter(Message::TagHovered(Some(id)))` and `on_exit(Message::TagHovered(None))`. Show delete control when `is_selected || hovered_id == Some(id)`. When not shown, use an empty `Space` in the delete slot so layout does not shift.
+- **Color stripe** (e.g. tag color bar on the left) can keep its own small styled container; the rest of the row inherits from the parent.
+
+### Consolidated Styles in theme.rs
+
+Avoid duplicated inline `container::Style { background: Some(Background::Color(...)), ... }` across views.
+
+- **Centralize in `theme.rs`**: add helpers such as `panel_container_style()`, `row_background_style(selected)`, `selectable_row_style(selected)` (transparent vs selected for lists), `elevated_container_style()`, `elevated_container_bordered_style()` (e.g. search bar), `main_container_style()`, `icon_button_style(enabled)`.
+- **Views** call these (e.g. `.style(theme::panel_container_style)`) instead of repeating style structs. One place defines panel/row/elevated/button look; changing the theme updates all usages.
+- **Widget-specific styling** (e.g. tag color chip, progress bar) can stay inline where the value is dynamic (e.g. per-tag color).
+
+### Delete + Hover Without Breaking the List
+
+When adding delete (and hover) to a list (e.g. tag list):
+
+- **Do not** put background style on the checkbox, delete slot, or margin containers; only the **row parent** gets the background. Otherwise alignment and clipping can break and rows can "disappear."
+- Use a **single row structure** for both "delete visible" and "delete hidden": same columns, same heights; when delete is hidden, put `Space::new()` (or empty content) in the delete slot so layout is unchanged.
+- On delete, **clear selection and hover** in the same handler (e.g. `TagHovered(None)`, unselect), then perform the core action (e.g. remove tag by id). Clamp selection index if the list shrinks.

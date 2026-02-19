@@ -1,6 +1,6 @@
 //! UI for file workspace: hosts the file name display and panels for the current file (tag panel and more in the future).
 //!
-//! Only this module knows the layout of the file workspace region: file name on top, search bar, tag panel below.
+//! Only this module knows the layout of the file workspace region: search bar, tag list, file name panel below.
 
 use iced::widget::{column, container};
 use iced::{Element, Length};
@@ -13,7 +13,7 @@ use super::FileWorkspace;
 /// Horizontal padding for the file workspace panel (same inset from splitter and window edge).
 const PANEL_PADDING_X: f32 = 8.0;
 
-/// Render the file workspace: file name on top, search bar, tag panel below (and later other panels).
+/// Render the file workspace: search bar, tag list, file name panel below (and later other panels).
 /// Caller passes file workspace state, tag panel state, and global tag list; messages are tag panel messages.
 pub fn view<'a, S>(
     file_workspace: &'a FileWorkspace<S>,
@@ -36,7 +36,7 @@ where
     );
     let tag_panel = tag_panel::view::view(tag_panel_state, file_workspace.file(), tag_list);
 
-    let content = column![file_name, search_bar, tag_panel]
+    let content = column![search_bar, tag_panel, file_name]
         .spacing(4)
         .width(Length::Fill)
         .height(Length::Fill);

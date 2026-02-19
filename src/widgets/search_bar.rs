@@ -59,14 +59,6 @@ pub fn view<'a, Message: Clone + 'a>(
     container(inner)
         .padding([6, 8])
         .width(Length::Fill)
-        .style(|_theme: &iced::Theme| iced::widget::container::Style {
-            background: Some(iced::Background::Color(theme::BG_ELEVATED)),
-            border: iced::Border {
-                radius: 4.0.into(),
-                width: 1.0,
-                color: theme::TEXT_MUTED,
-            },
-            ..Default::default()
-        })
+        .style(theme::elevated_container_bordered_style)
         .into()
 }

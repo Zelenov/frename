@@ -87,10 +87,7 @@ pub fn view_in_panel<Message: 'static>(
     container(view(snapshot, color_mapping, wrap))
         .padding([8, 8])
         .width(Length::Fill)
-        .style(|_theme| iced::widget::container::Style {
-            background: Some(Background::Color(theme::BG_ELEVATED)),
-            ..Default::default()
-        })
+        .style(theme::elevated_container_style)
         .into()
 }
 

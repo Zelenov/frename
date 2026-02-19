@@ -1,7 +1,7 @@
 //! UI for the video player. Only this module knows how the player and controls look.
 
 use iced::widget::{column, container, mouse_area, text};
-use iced::{Background, Element};
+use iced::Element;
 use iced_video_player::VideoPlayer;
 
 use crate::features::video_controls;
@@ -24,10 +24,7 @@ pub fn view(state: &VideoPlayerState) -> Element<'_, Message> {
             container(player)
                 .width(iced::Length::Fill)
                 .height(iced::Length::Fill)
-                .style(|_theme| container::Style {
-                    background: Some(Background::Color(theme::BG_PANEL)),
-                    ..container::Style::default()
-                }),
+                .style(theme::panel_container_style),
         )
         .on_press(Message::TogglePause);
 
@@ -57,10 +54,7 @@ pub fn view(state: &VideoPlayerState) -> Element<'_, Message> {
         .center(iced::Length::Fill)
         .width(iced::Length::Fill)
         .height(iced::Length::Fill)
-        .style(|_theme| container::Style {
-            background: Some(Background::Color(theme::BG_PANEL)),
-            ..container::Style::default()
-        })
+        .style(theme::panel_container_style)
         .into()
     } else {
         container(

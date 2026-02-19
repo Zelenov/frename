@@ -3,7 +3,7 @@
 //! Receives only data (directory, loading, tag color mapping) from workspace; selection from directory; no parent knows our layout or widgets.
 
 use iced::widget::{column, container, mouse_area, row, scrollable, text};
-use iced::{mouse, Background, Element, Length};
+use iced::{mouse, Element, Length};
 
 use crate::theme;
 use crate::widgets;
@@ -24,10 +24,7 @@ pub fn view<'a>(
             .padding([8, 8])
             .width(Length::Fill)
             .height(Length::Fill)
-            .style(|_theme| iced::widget::container::Style {
-                background: Some(Background::Color(theme::BG_PANEL)),
-                ..Default::default()
-            })
+            .style(theme::panel_container_style)
     };
 
     if loading {
@@ -60,14 +57,7 @@ pub fn view<'a>(
             let row = container(row_content)
                 .padding([4, 8])
                 .width(Length::Fill)
-                .style(move |_theme: &iced::Theme| iced::widget::container::Style {
-                    background: Some(Background::Color(if is_selected {
-                        theme::ACCENT_SELECTED
-                    } else {
-                        iced::Color::TRANSPARENT
-                    })),
-                    ..Default::default()
-                });
+                .style(move |theme: &iced::Theme| theme::selectable_row_style(theme, is_selected));
 
             mouse_area(row)
                 .on_press(Message::SelectFile(index))
@@ -84,9 +74,6 @@ pub fn view<'a>(
     container(list)
         .width(Length::Fill)
         .height(Length::Fill)
-        .style(|_theme| iced::widget::container::Style {
-            background: Some(Background::Color(theme::BG_PANEL)),
-            ..Default::default()
-        })
+        .style(theme::panel_container_style)
         .into()
 }

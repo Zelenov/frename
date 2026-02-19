@@ -74,15 +74,11 @@ where
         .padding([8, 8])
         .width(Length::Fill)
         .height(Length::Fill)
-        .style(|_theme| iced::widget::container::Style {
-            background: Some(Background::Color(theme::BG_PANEL)),
-            ..Default::default()
-        })
+        .style(theme::panel_container_style)
         .into();
     };
 
     let selected_id = state.selected_tag_id();
-    let hovered_id = state.hovered_tag_id();
     let tag_items: Vec<Element<'_, Message>> = tag_list
         .filtered_tag_ids()
         .into_iter()
@@ -90,7 +86,7 @@ where
             let tag = tag_list.get_tag(id)?;
             let is_checked = tag.is_checked();
             let is_selected = selected_id == Some(id);
-            let show_delete = is_selected || hovered_id == Some(id);
+            let show_delete = is_selected;
             let tag_color = tag_colors::TagColors::color(tag.color_index());
             let color_stripe = container(
                 iced::widget::Space::new()
@@ -119,8 +115,6 @@ where
                 .spacing(0);
             let main_cell = mouse_area(main_row)
                 .on_press(Message::ToggleTag(id))
-                .on_enter(Message::TagHovered(Some(id)))
-                .on_exit(Message::TagHovered(None))
                 .interaction(mouse::Interaction::Pointer);
             let delete_slot: Element<'_, Message> = if show_delete {
                 mouse_area(
@@ -153,14 +147,7 @@ where
             let row_background = container(full_row)
                 .height(row_height)
                 .width(Length::Fill)
-                .style(move |_theme: &iced::Theme| iced::widget::container::Style {
-                    background: Some(Background::Color(if is_selected {
-                        theme::ACCENT_SELECTED
-                    } else {
-                        theme::BG_PANEL
-                    })),
-                    ..Default::default()
-                });
+                .style(move |theme: &iced::Theme| theme::row_background_style(theme, is_selected));
             Some(row_background.into())
         })
         .collect();
@@ -184,9 +171,6 @@ where
         .width(Length::Fill)
         .height(Length::Fill)
         .padding([4, 4])
-        .style(|_theme| iced::widget::container::Style {
-            background: Some(Background::Color(theme::BG_PANEL)),
-            ..Default::default()
-        })
+        .style(theme::panel_container_style)
         .into()
 }

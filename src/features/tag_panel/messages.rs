@@ -24,6 +24,4 @@ pub enum Message {
     DeleteTag(TagId),
     /// Remove the currently selected tag (no-op if none selected).
     DeleteSelectedTag,
-    /// Mouse entered or left a tag row (for showing delete button on hover).
-    TagHovered(Option<TagId>),
 }

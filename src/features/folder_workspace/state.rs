@@ -316,7 +316,6 @@ impl FolderWorkspace {
                 if self.tag_panel.selected_tag_id() == Some(id) {
                     self.tag_panel.set_selected(None);
                 }
-                self.tag_panel.set_hovered(None);
                 if let Err(e) = self.file_workspace.remove_stored_tag_by_id(id) {
                     log::error!("Failed to delete tag: {}", e);
                 }
@@ -329,10 +328,6 @@ impl FolderWorkspace {
                 } else {
                     Task::none()
                 }
-            }
-            tag_panel::Message::TagHovered(hovered) => {
-                self.tag_panel.set_hovered(hovered);
-                Task::none()
             }
         }
     }
