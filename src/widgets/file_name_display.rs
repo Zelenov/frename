@@ -6,7 +6,7 @@
 //! Callers wrap in a container when they need the elevated panel style (e.g. file workspace).
 
 use iced::widget::{container, row, text};
-use iced::{Background, Element, Length};
+use iced::{Background, Element};
 
 use frename_core::{FileSnapshot, TagColorMapping};
 
@@ -16,11 +16,8 @@ use crate::theme;
 /// Dot separator between parts (tags, name, extension).
 const DOT: &str = " . ";
 
-/// When true, the row of tag chips and name/extension wraps to multiple lines when width is limited.
-pub const DEFAULT_WRAP: bool = true;
-
 /// Renders the file name as tag chips + name.extension (no outer container).
-/// Use this for both the file workspace panel (wrap in [view_in_panel]) and the folder list rows.
+/// Callers wrap in a container when they need panel style (e.g. file workspace, folder list rows).
 pub fn view<Message: 'static>(
     snapshot: FileSnapshot,
     color_mapping: &TagColorMapping,
@@ -76,19 +73,6 @@ pub fn view<Message: 'static>(
     } else {
         row.into()
     }
-}
-
-/// Same as [view] but wrapped in the elevated panel container (padding + background). Use in the file workspace.
-pub fn view_in_panel<Message: 'static>(
-    snapshot: FileSnapshot,
-    color_mapping: &TagColorMapping,
-    wrap: bool,
-) -> Element<'static, Message> {
-    container(view(snapshot, color_mapping, wrap))
-        .padding([8, 8])
-        .width(Length::Fill)
-        .style(theme::elevated_container_style)
-        .into()
 }
 
 fn dot_text<Message: 'static>() -> Element<'static, Message> {

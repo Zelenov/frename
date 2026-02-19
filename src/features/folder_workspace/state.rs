@@ -17,6 +17,7 @@ use super::Directory;
 use iced::{Subscription, Task};
 use iced::widget::operation;
 
+use crate::features::file_name_panel::{self, FileNamePanelState};
 use crate::features::file_workspace::FileWorkspace;
 use crate::features::folder;
 use crate::features::tag_panel::{self, TagPanelState, TAG_LIST_SCROLLABLE_ID};
@@ -40,6 +41,7 @@ pub struct FolderWorkspace {
     file_workspace: FileWorkspace<AppDatabase>,
     video_player: VideoPlayerState,
     tag_panel: TagPanelState,
+    file_name_panel: FileNamePanelState,
     /// Snapshot to persist after current video is unloaded (then we send FileUpdated and load next video).
     pending_file_updated: Option<(PathBuf, FileSnapshot)>,
     left_width: f32,
@@ -57,6 +59,7 @@ impl FolderWorkspace {
             file_workspace: FileWorkspace::<AppDatabase>::default(),
             video_player: VideoPlayerState::default(),
             tag_panel: TagPanelState::default(),
+            file_name_panel: FileNamePanelState::default(),
             pending_file_updated: None,
             left_width: DEFAULT_LEFT_WIDTH,
             folder_width: DEFAULT_FOLDER_WIDTH,
@@ -83,6 +86,7 @@ impl FolderWorkspace {
                 other => self.video_player.update(other).map(Message::VideoPlayer),
             },
             Message::TagPanel(msg) => self.handle_tag_panel(msg),
+            Message::FileNamePanel(msg) => self.handle_file_name_panel(msg),
             Message::LeftSplitterDragged(x) => {
                 self.left_width = x;
                 let folder_start = self.left_width + HIT_WIDTH;
@@ -332,6 +336,12 @@ impl FolderWorkspace {
         }
     }
 
+    fn handle_file_name_panel(&mut self, msg: file_name_panel::Message) -> Task<Message> {
+        self.file_name_panel
+            .update(msg, self.file_workspace.tag_list());
+        Task::none()
+    }
+
     /// Clear selection if the selected tag is not in the current filtered list (selection must be visible).
     fn clamp_selection_to_filtered(&mut self) {
         let tag_list = self.file_workspace.tag_list();
@@ -425,7 +435,10 @@ impl FolderWorkspace {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        self.video_player.subscription().map(Message::VideoPlayer)
+        Subscription::batch([
+            self.video_player.subscription().map(Message::VideoPlayer),
+            self.file_name_panel.subscription().map(Message::FileNamePanel),
+        ])
     }
 
     /// Currently selected file (from directory selection).
@@ -461,6 +474,10 @@ impl FolderWorkspace {
 
     pub fn tag_panel(&self) -> &TagPanelState {
         &self.tag_panel
+    }
+
+    pub fn file_name_panel(&self) -> &FileNamePanelState {
+        &self.file_name_panel
     }
 
     pub fn left_width(&self) -> f32 {

@@ -1,6 +1,7 @@
 //! Feature modules
 
 pub mod drag_drop;
+pub mod file_name_panel;
 pub mod file_workspace;
 pub mod folder_workspace;
 pub mod folder;

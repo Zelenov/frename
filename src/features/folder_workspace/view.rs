@@ -71,9 +71,13 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
     let file_workspace_panel = file_workspace::view::view(
         file_ws,
         state.tag_panel(),
+        state.file_name_panel(),
         file_ws.tag_list(),
     )
-    .map(Message::TagPanel);
+    .map(|m| match m {
+        file_workspace::Message::TagPanel(m) => Message::TagPanel(m),
+        file_workspace::Message::FileNamePanel(m) => Message::FileNamePanel(m),
+    });
 
     container(
         row![video, left_splitter, folder_list, right_splitter, file_workspace_panel]

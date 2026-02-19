@@ -155,6 +155,24 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             .collect()
     }
 
+    /// Index of the tag in the checked-tags order (file name order). Returns `None` if the tag is not checked.
+    pub fn checked_index_of(&self, tag_id: TagId) -> Option<usize> {
+        self.tags
+            .iter()
+            .filter(|t| t.is_checked())
+            .position(|t| t.id() == tag_id)
+    }
+
+    /// Tag ID at the given index in checked order (same as [Self::file_snapshot](Self::file_snapshot)().tags()).
+    /// Returns `None` if index is out of range.
+    pub fn checked_tag_id_at(&self, index: usize) -> Option<TagId> {
+        self.tags
+            .iter()
+            .filter(|t| t.is_checked())
+            .nth(index)
+            .map(|t| t.id())
+    }
+
     /// Look up a tag by id.
     pub fn get_tag(&self, id: TagId) -> Option<&Tag> {
         self.tags.iter().find(|t| t.id() == id)
