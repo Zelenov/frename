@@ -61,7 +61,9 @@ impl AppStateStore for FakeAppStorage {
 
 impl StoredTagStore for FakeAppStorage {
     fn get_stored_tags(&self) -> Result<Vec<StoredTag>, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(self.stored_tags.values().cloned().collect())
+        let mut tags: Vec<StoredTag> = self.stored_tags.values().cloned().collect();
+        tags.sort_by_key(StoredTag::sort_order);
+        Ok(tags)
     }
 
     fn get_tag_color_mapping(&self) -> Result<TagColorMapping, Box<dyn std::error::Error + Send + Sync>> {

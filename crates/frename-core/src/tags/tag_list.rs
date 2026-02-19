@@ -7,7 +7,8 @@ use std::collections::HashSet;
 use uuid::Uuid;
 
 use crate::db::StoredTagStore;
-use super::{FileSnapshot, StoredTag};
+use crate::ordered::OrderedThing;
+use super::{tag::{Tag, TagId}, FileSnapshot, StoredTag};
 
 /// Number of tag colors in the UI palette (must match the UI crate).
 const TAG_PALETTE_LEN: u8 = 16;
@@ -18,85 +19,6 @@ fn random_color_index() -> u8 {
         .unwrap_or_default()
         .as_nanos();
     (n as u64 % u64::from(TAG_PALETTE_LEN)) as u8
-}
-
-/// Stable unique id for a tag (UUID).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TagId(pub Uuid);
-
-impl TagId {
-    /// For Iced widget identity: stable string per id.
-    pub fn widget_id(&self) -> String {
-        format!("tag-{}", self.0)
-    }
-
-    /// Create a new TagId (random UUID). Used for snapshot-only tags.
-    pub fn new_snapshot() -> Self {
-        TagId(Uuid::new_v4())
-    }
-}
-
-/// A single tag that can be applied to a file (stored tag with checked state).
-#[derive(Debug, Clone)]
-pub struct Tag {
-    /// Stable id (from stored tag index, or from high range for snapshot-only tags).
-    id: TagId,
-    /// The tag text.
-    tag: String,
-    /// Whether this tag is currently checked.
-    checked: bool,
-    /// Index into the app's tag color palette (0-based).
-    color_index: u8,
-    /// Whether this tag comes from the stored tag store (false for tags only present in the file snapshot).
-    stored: bool,
-}
-
-impl Tag {
-    /// Create a new tag with the given id, text, color index, and stored flag (used when building from store or from file snapshot).
-    pub fn with_id(id: TagId, tag: impl Into<String>, color_index: u8, stored: bool) -> Self {
-        Self {
-            id,
-            tag: tag.into(),
-            checked: false,
-            color_index,
-            stored,
-        }
-    }
-
-    /// Get the tag id.
-    pub fn id(&self) -> TagId {
-        self.id
-    }
-
-    /// Get the tag text.
-    pub fn tag(&self) -> &str {
-        &self.tag
-    }
-
-    /// Whether this tag is checked.
-    pub fn is_checked(&self) -> bool {
-        self.checked
-    }
-
-    /// Color palette index for this tag (for UI styling).
-    pub fn color_index(&self) -> u8 {
-        self.color_index
-    }
-
-    /// Whether this tag comes from the stored tag store (false for tags only present in the file snapshot).
-    pub fn is_stored(&self) -> bool {
-        self.stored
-    }
-
-    /// Set the checked state of this tag (crate-only).
-    pub(crate) fn set_checked(&mut self, checked: bool) {
-        self.checked = checked;
-    }
-
-    /// Toggle the checked state of this tag.
-    pub fn toggle(&mut self) {
-        self.checked = !self.checked;
-    }
 }
 
 /// A collection of available tags. Generic over the store type S (load and add stored tags).
@@ -134,7 +56,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let mut tags: Vec<Tag> = snapshot_only
             .iter()
             .map(|text| {
-                let id = TagId::new_snapshot();
+                let id = TagId::new();
                 let mut tag = Tag::with_id(id, text.as_str(), 0, false); // stored = false
                 tag.set_checked(true);
                 tag
@@ -145,7 +67,8 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             .map(|st| {
                 let id = TagId(st.id());
                 let color_index = color_mapping.color_index_for(st.value());
-                let mut tag = Tag::with_id(id, st.value(), color_index, true); // stored = true
+                let order = st.sort_order();
+                let mut tag = Tag::with_id_and_order(id, st.value(), color_index, true, order);
                 tag.set_checked(file_snapshot.has_tag(st.value()));
                 tag
             })
@@ -257,15 +180,16 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let checked = self.tags[pos].is_checked();
         let stored_already = self.tags[pos].is_stored();
 
+        let order = self.tags[pos].order();
         if stored_already {
             let color_index = self.tags[pos].color_index();
-            let st = StoredTag::new(id.0, &text);
+            let st = StoredTag::with_sort_order(id.0, &text, order);
             self.store.save_tag(st, color_index)?;
         } else {
             let color_index = random_color_index();
-            let st = StoredTag::new(id.0, &text);
+            let st = StoredTag::with_sort_order(id.0, &text, order);
             self.store.save_tag(st, color_index)?;
-            let mut tag = Tag::with_id(id, text, color_index, true);
+            let mut tag = Tag::with_id_and_order(id, text, color_index, true, order);
             tag.set_checked(checked);
             self.tags[pos] = tag;
         }
