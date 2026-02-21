@@ -1,16 +1,17 @@
 //! UI for the tag panel. Only this module knows how the tag list looks (scrollable, checkboxes).
 
-use iced::widget::{checkbox, column, container, mouse_area, row, scrollable, text};
+use iced::widget::{checkbox, column, container, mouse_area, row, scrollable, stack, text};
 use iced::{mouse, Background, Border, Element, Length};
 
 use frename_core::{File, StoredTagStore, TagList};
 
 use crate::tag_colors;
 use crate::theme;
+use crate::widgets::bounds_reporter::BoundsReporter;
 use super::{Message, TagPanelState, TAG_LIST_SCROLLABLE_ID};
 
 /// Tag list row height in pixels. Must match folder_workspace::TAG_ROW_HEIGHT for scroll-into-view.
-const TAG_ROW_HEIGHT: f32 = 28.0;
+pub const TAG_ROW_HEIGHT: f32 = 28.0;
 
 /// Dark checkbox style: dark background, light text, accent when checked.
 fn dark_checkbox_style(
@@ -79,16 +80,29 @@ where
     };
 
     let selected_id = state.selected_tag_id();
+    let dragging_id = state.dragging_tag_id();
+    let drop_target_index = state.drop_target_index();
     let tag_items: Vec<Element<'_, Message>> = tag_list
-        .filtered_tag_ids()
-        .into_iter()
-        .filter_map(|id| {
+        .filtered_display_tag_ids()
+        .iter()
+        .enumerate()
+        .filter_map(|(index, id)| {
+            let id = *id;
             let tag = tag_list.get_tag(id)?;
             let is_checked = tag.is_checked();
             let is_selected = selected_id == Some(id);
             let is_stored = tag.is_stored();
             let show_action = is_selected;
+            let _is_dragging = dragging_id == Some(id);
+            let is_drop_target = drop_target_index == Some(index);
             let tag_color = tag_colors::TagColors::color(tag.color_index());
+            let drag_handle = mouse_area(
+                container(iced::widget::Space::new())
+                    .width(Length::Fixed(12.0))
+                    .height(Length::Fill),
+            )
+            .on_press(Message::DragStarted(id))
+            .interaction(mouse::Interaction::Grab);
             let color_stripe = container(
                 iced::widget::Space::new()
                     .width(Length::Fixed(4.))
@@ -138,6 +152,10 @@ where
                 .width(Length::Fixed(12.0))
                 .height(row_height);
             let full_row = row![
+                container(drag_handle)
+                    .width(Length::Fixed(12.0))
+                    .height(row_height)
+                    .center_y(Length::Fill),
                 container(main_cell)
                     .width(Length::Fill)
                     .height(row_height),
@@ -150,10 +168,11 @@ where
             .width(Length::Fill)
             .height(row_height)
             .spacing(0);
+            let row_style = is_selected || is_drop_target;
             let row_background = container(full_row)
                 .height(row_height)
                 .width(Length::Fill)
-                .style(move |theme: &iced::Theme| theme::row_background_style(theme, is_selected));
+                .style(move |theme: &iced::Theme| theme::row_background_style(theme, row_style));
             Some(row_background.into())
         })
         .collect();
@@ -172,8 +191,13 @@ where
             }
         })
         .style(theme::dark_scrollable_style);
+    // List on top so clicks (checkboxes) reach it; BoundsReporter underneath for cursor→row mapping.
+    let with_bounds = stack([
+        BoundsReporter::new(Message::PanelBounds).into(),
+        tag_list.into(),
+    ]);
 
-    container(tag_list)
+    container(with_bounds)
         .width(Length::Fill)
         .height(Length::Fill)
         .padding([4, 4])

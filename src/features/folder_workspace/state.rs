@@ -274,6 +274,8 @@ impl FolderWorkspace {
         &mut self,
         msg: tag_panel::Message,
     ) -> Task<Message> {
+        self.tag_panel
+            .update(&msg, self.file_workspace.tag_list());
         match msg {
             tag_panel::Message::SetFilter(query) => {
                 self.file_workspace.set_tag_filter(query);
@@ -291,7 +293,6 @@ impl FolderWorkspace {
             tag_panel::Message::ToggleTag(id) => {
                 self.file_workspace.toggle_tag_by_id(id);
                 self.tag_panel.set_selected(Some(id));
-                self.tag_panel.update(&msg);
                 Task::none()
             }
             tag_panel::Message::SelectUp => {
@@ -339,12 +340,27 @@ impl FolderWorkspace {
                 }
                 Task::none()
             }
+            tag_panel::Message::DragStarted(_)
+            | tag_panel::Message::DragHoverCursor { .. }
+            | tag_panel::Message::DragEnded
+            | tag_panel::Message::PanelBounds(_) => Task::none(),
         }
     }
 
     fn handle_file_name_panel(&mut self, msg: file_name_panel::Message) -> Task<Message> {
+        let (dragged_id, drop_index) = if let file_name_panel::Message::DragEnded = &msg {
+            (
+                self.file_name_panel.dragging_tag_id(),
+                self.file_name_panel.drop_target_index(),
+            )
+        } else {
+            (None, None)
+        };
         self.file_name_panel
             .update(msg, self.file_workspace.tag_list());
+        if let (Some(did), Some(idx)) = (dragged_id, drop_index) {
+            self.file_workspace.reorder_tag_to_index(did, idx);
+        }
         Task::none()
     }
 
@@ -354,7 +370,7 @@ impl FolderWorkspace {
         let visible = self
             .tag_panel
             .selected_tag_id()
-            .filter(|id| tag_list.filtered_tag_ids().contains(id));
+            .filter(|id| tag_list.filtered_display_tag_ids().contains(id));
         if visible.is_none() && self.tag_panel.selected_tag_id().is_some() {
             self.tag_panel.set_selected(None);
         }
@@ -363,7 +379,7 @@ impl FolderWorkspace {
     /// Move tag list selection by delta (-1 = up, 1 = down). Uses filtered list.
     fn move_tag_selection(&mut self, delta: i32) {
         let tag_list = self.file_workspace.tag_list();
-        let filtered = tag_list.filtered_tag_ids();
+        let filtered = tag_list.filtered_display_tag_ids();
         if filtered.is_empty() {
             self.tag_panel.set_selected(None);
             return;
@@ -399,7 +415,7 @@ impl FolderWorkspace {
             None => return Task::none(),
         };
         let tag_list = self.file_workspace.tag_list();
-        let filtered = tag_list.filtered_tag_ids();
+        let filtered = tag_list.filtered_display_tag_ids();
         let row_index = match filtered.iter().position(|&id| id == selected_id) {
             Some(i) => i,
             None => return Task::none(),
@@ -444,6 +460,7 @@ impl FolderWorkspace {
         Subscription::batch([
             self.video_player.subscription().map(Message::VideoPlayer),
             self.file_name_panel.subscription().map(Message::FileNamePanel),
+            self.tag_panel.subscription().map(Message::TagPanel),
         ])
     }
 
@@ -575,13 +592,12 @@ mod tests {
         flush_file_opened(&mut workspace);
 
         let tag_name = "Comedy";
-        let tag_id = workspace
-            .file_workspace()
-            .tag_list()
-            .tags()
+        let tag_list = workspace.file_workspace().tag_list();
+        let tag_id = tag_list
+            .filtered_display_tag_ids()
             .iter()
-            .find(|t| t.tag() == tag_name)
-            .map(|t| t.id())
+            .find(|id| tag_list.get_tag(**id).map(|t| t.tag() == tag_name).unwrap_or(false))
+            .copied()
             .expect("Comedy is a stored tag");
         let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(
             tag_id,

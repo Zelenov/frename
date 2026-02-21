@@ -5,6 +5,14 @@ use frename_core::TagId;
 /// Messages handled by the tag panel
 #[derive(Debug, Clone)]
 pub enum Message {
+    /// User started dragging a tag row (identity by TagId).
+    DragStarted(TagId),
+    /// Cursor moved while dragging; used to compute drop target (put-before row).
+    DragHoverCursor { x: f32, y: f32 },
+    /// User released mouse; end drag. Workspace applies reorder (put dragged before target row) if target set.
+    DragEnded,
+    /// Tag list content bounds (for mapping cursor to row index).
+    PanelBounds(iced::Rectangle),
     /// Toggle a tag by its id
     ToggleTag(TagId),
     /// Set the filter query for the tag list (case-insensitive contains)

@@ -100,6 +100,11 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.tag_list.save_tag(id)
     }
 
+    /// Reorders tags: place `dragged_id` at `drop_index` (file name panel drag). Only reorder entry point.
+    pub fn reorder_tag_to_index(&mut self, dragged_id: TagId, drop_index: usize) {
+        self.tag_list.reorder_tag_to_index(dragged_id, drop_index);
+    }
+
     /// Snapshot of the current file's path and workspace snapshot (to be saved by folder workspace when switching file). Does not persist anything.
     pub fn get_snapshot(&self) -> Option<(PathBuf, FileSnapshot)> {
         let file = self.file()?;

@@ -1,6 +1,5 @@
 //! State for the file name panel feature (wrap=true display in file workspace).
-//! Drag reorder state is UI-only; does not persist to TagList.
-//! Handles its own messages (bounds, drag, drop-index).
+//! Tracks drag and drop target; on DragEnded the workspace applies reorder to TagList and persists.
 
 use iced::{event, mouse, Rectangle, Subscription};
 

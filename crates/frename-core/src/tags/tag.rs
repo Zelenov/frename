@@ -52,10 +52,22 @@ impl Tag {
         stored: bool,
         order: OrderKey,
     ) -> Self {
+        Self::with_id_order_checked(id, tag, color_index, stored, order, false)
+    }
+
+    /// Create a new tag with all fields set (id, text, color_index, stored, order, checked).
+    pub fn with_id_order_checked(
+        id: TagId,
+        tag: impl Into<String>,
+        color_index: u8,
+        stored: bool,
+        order: OrderKey,
+        checked: bool,
+    ) -> Self {
         Self {
             id,
             tag: tag.into(),
-            checked: false,
+            checked,
             color_index,
             stored,
             order,
@@ -87,11 +99,6 @@ impl Tag {
         self.stored
     }
 
-    /// Set the checked state of this tag (crate-only).
-    pub(crate) fn set_checked(&mut self, checked: bool) {
-        self.checked = checked;
-    }
-
     /// Toggle the checked state of this tag.
     pub fn toggle(&mut self) {
         self.checked = !self.checked;
@@ -111,13 +118,5 @@ impl OrderedThing for Tag {
 
     fn set_order(&mut self, order: OrderKey) {
         self.order = order;
-    }
-
-    fn is_selected(&self) -> bool {
-        self.checked
-    }
-
-    fn set_selected(&mut self, selected: bool) {
-        self.checked = selected;
     }
 }
