@@ -1,5 +1,8 @@
 //! Tag panel feature - list of tags for the current file.
 //! Shows the tag list for building the file name. File name display is a separate component in the file workspace.
+//! The list view is currently unused (file workspace uses tag_grid); kept for reference or future use.
+
+#![allow(dead_code)]
 
 mod messages;
 mod state;

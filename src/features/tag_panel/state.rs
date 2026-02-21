@@ -46,6 +46,11 @@ impl Default for TagPanelState {
 const PADDING: f32 = 4.0;
 
 impl TagPanelState {
+    /// Panel content bounds when set by BoundsReporter (for dynamic column count in grid).
+    pub fn panel_bounds(&self) -> Option<Rectangle> {
+        self.bounds
+    }
+
     /// Which tag is currently selected in the list (None = no selection).
     pub fn selected_tag_id(&self) -> Option<TagId> {
         self.selected_tag_id

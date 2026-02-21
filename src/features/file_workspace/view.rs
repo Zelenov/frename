@@ -33,6 +33,9 @@ where
     );
     let tag_grid = tag_grid::view::view(tag_panel_state, file_workspace.file(), tag_list)
         .map(Message::TagPanel);
+    let tag_grid = container(tag_grid)
+        .height(Length::Fill)
+        .width(Length::Fill);
 
     let content = column![search_bar, tag_grid, file_name]
         .spacing(4)

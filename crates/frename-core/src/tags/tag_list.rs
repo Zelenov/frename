@@ -181,6 +181,15 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         &self.filtered_display_tag_ids
     }
 
+    /// Tag id whose tag name has the greatest length among filtered display tags. Used to size the tag grid by the longest chip.
+    pub fn longest_display_tag_id(&self) -> Option<TagId> {
+        self.filtered_display_tag_ids
+            .iter()
+            .filter_map(|id| self.tags_by_id.get(id))
+            .max_by_key(|t| t.tag().len())
+            .map(|t| t.id())
+    }
+
     /// Index of the tag in the checked-tags order (file name panel order). Returns `None` if the tag is not checked.
     pub fn checked_index_of(&self, tag_id: TagId) -> Option<usize> {
         self.checked_ids_in_selected_order()

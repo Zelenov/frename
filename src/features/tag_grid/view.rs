@@ -1,4 +1,5 @@
-//! UI for the tag grid: two-column scrollable grid of tag chips (same content as tag panel).
+//! UI for the tag grid: scrollable grid of tag chips (same content as tag panel).
+//! Column count is dynamic: panel width / longest chip width.
 
 use iced::widget::{checkbox, column, container, mouse_area, row, scrollable, stack, text};
 use iced::{mouse, Alignment, Border, Element, Length};
@@ -16,6 +17,23 @@ const CHIP_HEIGHT: f32 = tag_chip::CHIP_ROW_HEIGHT;
 const GRID_MARGIN: f32 = 4.0;
 /// Row height in pixels. Used for layout and for cursor→index mapping in state.
 pub const GRID_ROW_HEIGHT: f32 = CHIP_HEIGHT + GRID_MARGIN;
+
+/// Horizontal padding of the panel container (each side).
+const PANEL_PADDING_X: f32 = 4.0;
+
+/// Estimated width of a tag chip from tag name length (14px font, ~8px per character).
+fn estimated_chip_width(tag_name_len: usize) -> f32 {
+    let base = 2.0 * tag_chip::CHIP_PADDING_HORIZONTAL
+        + tag_chip::LEADING_SLOT_WIDTH
+        + tag_chip::LEADING_TO_LABEL_SPACING
+        + tag_chip::LABEL_TO_TRAILING_SPACING
+        + tag_chip::TRAILING_SLOT_WIDTH;
+    const ESTIMATED_CHAR_WIDTH: f32 = 8.0;
+    base + ESTIMATED_CHAR_WIDTH * (tag_name_len as f32)
+}
+
+/// Minimum chip width when there are no tags (avoid divide by zero).
+const MIN_CHIP_WIDTH: f32 = 60.0;
 
 /// Dark checkbox style: dark background, light text, accent when checked.
 fn dark_checkbox_style(
@@ -86,6 +104,31 @@ where
     let ids: Vec<_> = tag_list.filtered_display_tag_ids().to_vec();
     let row_height = Length::Fixed(GRID_ROW_HEIGHT);
 
+    let max_chip_width = tag_list
+        .longest_display_tag_id()
+        .and_then(|id| tag_list.get_tag(id))
+        .map(|t| estimated_chip_width(t.tag().len()))
+        .unwrap_or(MIN_CHIP_WIDTH)
+        .max(MIN_CHIP_WIDTH);
+
+    let content_width = state
+        .panel_bounds()
+        .map(|b| (b.width - 2.0 * PANEL_PADDING_X).max(0.0));
+
+    let cols = content_width
+        .map(|w| {
+            let divisor = max_chip_width + GRID_MARGIN;
+            if divisor <= 0.0 {
+                1
+            } else {
+                ((w + GRID_MARGIN) / divisor).floor() as u32
+            }
+        })
+        .unwrap_or(1)
+        .max(1);
+
+    let cols_usize = cols as usize;
+
     let empty_cell = || {
         container(iced::widget::Space::new())
             .width(Length::Fill)
@@ -94,14 +137,14 @@ where
     };
 
     let grid_rows: Vec<Element<'_, Message>> = ids
-        .chunks(2)
+        .chunks(cols_usize)
         .enumerate()
         .map(|(row_i, chunk)| {
             let mut cells: Vec<Element<'_, Message>> = chunk
                 .iter()
                 .enumerate()
                 .filter_map(|(col_i, id)| {
-                    let index = row_i * 2 + col_i;
+                    let index = row_i * cols_usize + col_i;
                     let id = *id;
                     let tag = tag_list.get_tag(id)?;
                     let is_checked = tag.is_checked();
@@ -161,17 +204,10 @@ where
                     Some(cell.into())
                 })
                 .collect();
-            let first_cell = if cells.is_empty() {
-                empty_cell()
-            } else {
-                cells.remove(0)
-            };
-            let second_cell = if cells.is_empty() {
-                empty_cell()
-            } else {
-                cells.remove(0)
-            };
-            row![first_cell, second_cell]
+            while cells.len() < cols_usize {
+                cells.push(empty_cell());
+            }
+            row(cells)
                 .spacing(GRID_MARGIN)
                 .width(Length::Fill)
                 .height(row_height)
@@ -197,10 +233,10 @@ where
         .style(theme::dark_scrollable_style);
 
     let with_bounds = stack([
-        BoundsReporter::new(|bounds| Message::PanelBounds {
+        BoundsReporter::new(move |bounds| Message::PanelBounds {
             bounds,
             row_height: GRID_ROW_HEIGHT,
-            cols: 2,
+            cols,
         })
         .into(),
         tag_scroll.into(),

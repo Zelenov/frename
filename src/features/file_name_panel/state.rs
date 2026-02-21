@@ -17,11 +17,13 @@ pub struct FileNamePanelState {
     drop_target_index: Option<usize>,
     /// Panel content bounds (from BoundsReporter) for mapping cursor to drop index.
     bounds: Option<Rectangle>,
-    /// Tag chip under cursor (for checkbox visible on hover in file name panel).
-    hovered_tag_id: Option<TagId>,
+    /// Trash zone bounds (from BoundsReporter); drop here to unselect the tag.
+    trash_bounds: Option<Rectangle>,
+    /// Last cursor position while dragging (used on DragEnded to detect drop-on-trash).
+    last_cursor: Option<(f32, f32)>,
+    /// Tag ID that was being dragged when drop occurred (e.g. on trash); workspace reads via take_dropped_dragged_tag_id(). Used for trash unselect; can be reused for other drop targets.
+    dropped_dragged_tag_id: Option<TagId>,
 }
-
-const PADDING: f32 = 8.0;
 
 impl FileNamePanelState {
     pub fn is_dragging(&self) -> bool {
@@ -37,9 +39,17 @@ impl FileNamePanelState {
         self.drop_target_index
     }
 
-    /// Tag chip currently hovered (for checkbox visible on hover).
-    pub fn hovered_tag_id(&self) -> Option<TagId> {
-        self.hovered_tag_id
+    /// Returns the tag ID that was being dragged when the last drop happened (e.g. on trash) and clears it. Workspace uses it e.g. to unselect when dropped on trash; can support other drop targets.
+    pub fn take_dropped_dragged_tag_id(&mut self) -> Option<TagId> {
+        self.dropped_dragged_tag_id.take()
+    }
+
+    /// True when dragging and the cursor is over the trash zone (for showing drop preview).
+    pub fn cursor_over_trash(&self) -> bool {
+        match (self.last_cursor, self.trash_bounds) {
+            (Some((x, y)), Some(r)) => point_in_rect(x, y, &r),
+            _ => false,
+        }
     }
 
     fn set_dragging(&mut self, tag_id: TagId, initial_index: usize) {
@@ -89,6 +99,7 @@ impl FileNamePanelState {
                 self.set_dragging(tag_id, initial_index.min(tag_count.saturating_sub(1)));
             }
             Message::DragHoverCursor { x, y } => {
+                self.last_cursor = Some((x, y));
                 let index = self
                     .drop_index(x, y, tag_count)
                     .or_else(|| self.resolved_dragging_index(tag_list));
@@ -99,10 +110,21 @@ impl FileNamePanelState {
                     self.clear_drag();
                 }
             }
-            Message::DragEnded => self.clear_drag(),
+            Message::DragEnded => {
+                let dropped_on_trash = self
+                    .trash_bounds
+                    .and_then(|r| self.last_cursor.map(|(x, y)| point_in_rect(x, y, &r)))
+                    .unwrap_or(false)
+                    && self.dragging_tag_id.is_some();
+                if dropped_on_trash {
+                    self.dropped_dragged_tag_id = self.dragging_tag_id;
+                }
+                self.clear_drag();
+                self.last_cursor = None;
+            }
             Message::PanelBounds(bounds) => self.bounds = Some(bounds),
+            Message::TrashBounds(bounds) => self.trash_bounds = Some(bounds),
             Message::UnselectTag(_) => {}
-            Message::ChipHovered(id) => self.hovered_tag_id = id,
         }
     }
 
@@ -113,11 +135,11 @@ impl FileNamePanelState {
         if tag_count == 0 {
             return None;
         }
-        let content_x = bounds.x + PADDING;
-        let content_y = bounds.y + PADDING;
+        let content_x = bounds.x;
+        let content_y = bounds.y;
         let col_total = TAG_CHIP_ESTIMATED_WIDTH + TAG_CHIP_SPACING;
         let row_total = TAG_CHIP_CELL_HEIGHT + TAG_CHIP_SPACING;
-        let content_width = (bounds.width - 2.0 * PADDING).max(col_total);
+        let content_width = bounds.width.max(col_total);
         let cols_per_row = (content_width / col_total).floor() as usize;
         if cols_per_row == 0 {
             return None;
@@ -139,4 +161,8 @@ impl FileNamePanelState {
         let index = row * cols_per_row + col;
         Some(index.min(tag_count))
     }
+}
+
+fn point_in_rect(x: f32, y: f32, r: &Rectangle) -> bool {
+    x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height
 }

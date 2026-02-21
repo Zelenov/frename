@@ -361,7 +361,9 @@ impl FolderWorkspace {
         };
         self.file_name_panel
             .update(msg, self.file_workspace.tag_list());
-        if let (Some(did), Some(idx)) = (dragged_id, drop_index) {
+        if let Some(id) = self.file_name_panel.take_dropped_dragged_tag_id() {
+            self.file_workspace.toggle_tag_by_id(id);
+        } else if let (Some(did), Some(idx)) = (dragged_id, drop_index) {
             self.file_workspace.reorder_tag_to_index(did, idx);
         }
         Task::none()
