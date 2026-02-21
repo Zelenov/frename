@@ -127,6 +127,25 @@ impl StoredTagStore for AppDatabase {
         conn.execute("DELETE FROM stored_tags WHERE id = ?1", [tag_id.to_string()])?;
         Ok(())
     }
+
+    fn update_tag_orders(
+        &mut self,
+        tag_orders: &[(Uuid, i64)],
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if tag_orders.is_empty() {
+            return Ok(());
+        }
+        let mut conn = Connection::open(&self.path)?;
+        let tx = conn.transaction()?;
+        {
+            let mut stmt = tx.prepare("UPDATE stored_tags SET sort_order = ?1 WHERE id = ?2")?;
+            for (id, sort_order) in tag_orders {
+                stmt.execute(rusqlite::params![sort_order, id.to_string()])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
 }
 
 impl AppStateStore for AppDatabase {

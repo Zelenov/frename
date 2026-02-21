@@ -43,6 +43,8 @@ pub struct TagList<S> {
     selected_tag_ids: OrderedCollection<TagId, ()>,
     /// Case-insensitive filter: only tags whose text contains this string are shown.
     filter_query: String,
+    /// True when display_tag_ids was rebalanced (insert_before caused order respread). Cleared after persisting all tag orders in save_tag.
+    display_tags_rebalanced: bool,
     /// Name without extension (from snapshot at construction).
     name_without_extension: String,
     /// File extension (from snapshot at construction).
@@ -130,10 +132,13 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         };
         let mut first_id_opt: Option<TagId> =
             display_tag_ids.iter().next().map(|(id, _, _)| *id);
+        let mut display_tags_rebalanced = false;
         for name in snapshot_deduped.iter().rev() {
             if let Some(&id) = value_to_id.get(name) {
                 match &first_id_opt {
-                    Some(before_id) => display_tag_ids.insert_before(id, (), Some(before_id)),
+                    Some(before_id) => {
+                        display_tags_rebalanced |= display_tag_ids.insert_before(id, (), Some(before_id));
+                    }
                     None => display_tag_ids.insert(id, (), 1),
                 }
                 first_id_opt = Some(id);
@@ -151,6 +156,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             filtered_display_tag_ids: Vec::new(),
             selected_tag_ids,
             filter_query,
+            display_tags_rebalanced,
             name_without_extension,
             extension,
             initial_file_name,
@@ -251,6 +257,17 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             tag.set_stored(true);
             tag.set_color_index(color_index);
         }
+        if self.display_tags_rebalanced {
+            let tag_orders: Vec<(Uuid, i64)> = self
+                .display_tag_ids
+                .iter()
+                .filter_map(|(tid, _, ord)| {
+                    self.tags_by_id.get(tid).filter(|t| t.is_stored()).map(|_| (tid.0, ord))
+                })
+                .collect();
+            self.store.update_tag_orders(&tag_orders)?;
+            self.display_tags_rebalanced = false;
+        }
         Ok(())
     }
 
@@ -306,7 +323,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let id = TagId::new();
         let tag = Tag::with_id_order_checked(id, &name, 0, false, 0, true);
         self.tags_by_id.insert(id, tag);
-        self.display_tag_ids.insert_before(id, (), Option::None);
+        self.display_tags_rebalanced |= self.display_tag_ids.insert_before(id, (), Option::None);
         self.selected_tag_ids.insert_before(id, (), Option::None);
 
         let order = self.display_tag_ids.get_order(&id).unwrap_or(0);

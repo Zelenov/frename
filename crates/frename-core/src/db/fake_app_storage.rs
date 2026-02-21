@@ -97,4 +97,17 @@ impl StoredTagStore for FakeAppStorage {
         self.stored_tags.shift_remove(&tag_id);
         Ok(())
     }
+
+    fn update_tag_orders(
+        &mut self,
+        tag_orders: &[(Uuid, i64)],
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        for (id, order) in tag_orders {
+            if let Some(tag) = self.stored_tags.get(id) {
+                let updated = StoredTag::with_sort_order(*id, tag.value().to_string(), *order);
+                self.stored_tags.insert(*id, updated);
+            }
+        }
+        Ok(())
+    }
 }

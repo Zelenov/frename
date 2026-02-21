@@ -39,6 +39,12 @@ pub trait StoredTagStore: Send + Sync {
 
     /// Removes a tag by tag id (UUID) from stored_tags and its entry from tag_color_mapping (by tag name).
     fn remove_stored_tag_by_id(&mut self, tag_id: Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Updates sort_order for the given stored tags (e.g. after display collection rebalance). Ids not present in the store are ignored.
+    fn update_tag_orders(
+        &mut self,
+        tag_orders: &[(Uuid, i64)],
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// One-time setup (e.g. run migrations). Implemented by the database; the logging decorator wraps it.

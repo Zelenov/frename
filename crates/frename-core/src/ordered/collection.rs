@@ -58,10 +58,11 @@ where
         self.ordered.insert((order, key));
     }
 
-    /// Inserts (key, value) immediately before `before_id`. If `before_id` — inserts before the first element. 
+    /// Inserts (key, value) immediately before `before_id`. If `before_id` — inserts before the first element.
     /// If empty — inserts in the middle.
     /// If `key` is already in the collection, this moves it to the new position (remove then insert before).
-    pub fn insert_before(&mut self, key: K, value: V, before_id: Option<&K>) {
+    /// Returns `true` if the collection was rebalanced (order keys were respread); callers should persist display order when saving.
+    pub fn insert_before(&mut self, key: K, value: V, before_id: Option<&K>) -> bool {
         if self.by_id.contains_key(&key) {
             self.remove(&key).unwrap();
         }
@@ -79,8 +80,9 @@ where
                 }
             }
         };
-        let new_order = self.order_between(left_owned.as_ref(), right_owned.as_ref());
+        let (new_order, rebalanced) = self.order_between(left_owned.as_ref(), right_owned.as_ref());
         self.insert(key, value, new_order);
+        rebalanced
     }
     /// Returns the order for the given key, if present.
     pub fn get_order(&self, id: &K) -> Option<OrderKey> {
@@ -157,12 +159,12 @@ where
         prev
     }
 
+    /// Returns (order_key, rebalanced). rebalanced is true when no integer fit between prev and next and rebalance was run.
     fn order_between(
         &mut self,
         prev: Option<&K>,
         next: Option<&K>,
-    ) -> OrderKey {
-
+    ) -> (OrderKey, bool) {
         // Use 0 for "no previous" to avoid i64 overflow in midpoint (next.checked_sub(i64::MIN) overflows).
         let prev_order = match prev {
             Some(id) => self.order_of.get(&id).copied().unwrap_or(0),
@@ -174,10 +176,11 @@ where
         };
 
         match midpoint(prev_order, next_order) {
-            Some(x) => x,
+            Some(x) => (x, false),
             None => {
                 self.rebalance();
-                self.order_between(prev, next)
+                let (o, _) = self.order_between(prev, next);
+                (o, true)
             }
         }
     }
