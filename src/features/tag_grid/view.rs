@@ -1,7 +1,7 @@
 //! UI for the tag grid: scrollable grid of tag chips (same content as tag panel).
 //! Column count is dynamic: panel width / longest chip width.
 
-use iced::widget::{checkbox, column, container, mouse_area, row, scrollable, stack, text};
+use iced::widget::{checkbox, column, container, mouse_area, row, scrollable, stack, text, tooltip};
 use iced::{mouse, Alignment, Border, Element, Length};
 
 use frename_core::{File, StoredTagStore, TagList};
@@ -160,18 +160,22 @@ where
                         .spacing(0)
                         .style(dark_checkbox_style)
                         .into();
-                    let trailing_el = {
-                        let (label, msg) = match is_stored {
-                            true => ("×", Message::DeleteTag(id)),
-                            false => ("○", Message::SaveTag(id)),
+                    let trailing_el: Element<'_, Message> = {
+                        let (label, msg, tip) = match is_stored {
+                            true => ("×", Message::DeleteTag(id), "Delete"),
+                            false => ("○", Message::SaveTag(id), "Enter"),
                         };
-                        mouse_area(
+                        let btn = mouse_area(
                             container(text(label).size(13).color(iced::Color::from_rgb(0.0, 0.0, 0.0)))
                                 .center_y(Length::Fill)
                                 .padding([0, 4]),
                         )
-                        .on_press(msg)
-                        .into()
+                        .on_press(msg);
+                        if is_selected {
+                            tooltip(btn, text(tip), tooltip::Position::Top).into()
+                        } else {
+                            btn.into()
+                        }
                     };
                     let chip = tag_chip::view_with_leading(
                         tag.tag(),

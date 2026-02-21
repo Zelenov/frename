@@ -60,4 +60,6 @@ pub enum Message {
     TagListScrollAdjusted(f32),
     /// Remove the selected tag (e.g. triggered by Delete key).
     RemoveTag,
+    /// Save the selected tag to the store (e.g. triggered by Enter key on an unsaved tag). No-op if already stored or none selected.
+    SaveSelectedTag,
 }

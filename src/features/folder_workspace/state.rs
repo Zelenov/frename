@@ -106,6 +106,13 @@ impl FolderWorkspace {
                 Task::none()
             }
             Message::RemoveTag => self.handle_tag_panel(tag_panel::Message::DeleteSelectedTag),
+            Message::SaveSelectedTag => {
+                if let Some(id) = self.tag_panel.selected_tag_id() {
+                    self.handle_tag_panel(tag_panel::Message::SaveTag(id))
+                } else {
+                    Task::none()
+                }
+            }
         }
     }
 

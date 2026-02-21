@@ -1,7 +1,7 @@
 //! Reusable search bar widget. Stateless: parent holds value and provides on_input and on_clear.
 //! Icon inside the bar (search left, clear right when non-empty); user-typed content is the only text.
 
-use iced::widget::{container, mouse_area, row, text, text_input};
+use iced::widget::{container, mouse_area, row, text, text_input, tooltip};
 use iced::{mouse, Element, Length};
 
 use crate::theme;
@@ -54,20 +54,30 @@ pub fn view<'a, Message: Clone + 'a>(
     } else {
         let icon = text("×").size(16).color(theme::TEXT_MUTED);
         Some(
-            mouse_area(container(icon).padding(4))
-                .on_press(on_clear())
-                .interaction(mouse::Interaction::Pointer)
-                .into(),
+            tooltip(
+                mouse_area(container(icon).padding(4))
+                    .on_press(on_clear())
+                    .interaction(mouse::Interaction::Pointer),
+                text("Esc"),
+                tooltip::Position::Bottom,
+            )
+            .gap(10)
+            .into(),
         )
     };
 
     // "○" create button: only when create_msg is Some (text is non-empty and not an existing tag)
     let create_icon: Option<Element<'a, Message>> = create_msg.map(|msg| {
         let icon = text("○").size(14).color(theme::TEXT_MUTED);
-        mouse_area(container(icon).padding(4))
-            .on_press(msg)
-            .interaction(mouse::Interaction::Pointer)
-            .into()
+        tooltip(
+            mouse_area(container(icon).padding(4))
+                .on_press(msg)
+                .interaction(mouse::Interaction::Pointer),
+            text("Enter"),
+            tooltip::Position::Bottom,
+        )
+        .gap(10)
+        .into()
     });
 
     let mut row_elems: Vec<Element<'a, Message>> = vec![search_icon.into(), input.into()];

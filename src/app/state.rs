@@ -66,6 +66,15 @@ impl FrenameApp {
                 }) => Some(Message::FolderWorkspace(
                     folder_workspace::Message::TagPanel(tag_panel::Message::ToggleSelectedTag),
                 )),
+                // Escape always clears the search bar filter.
+                iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                    ..
+                }) => Some(Message::FolderWorkspace(
+                    folder_workspace::Message::TagPanel(tag_panel::Message::SetFilter(
+                        String::new(),
+                    )),
+                )),
                 iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. })
                     if matches!(status, event::Status::Ignored) =>
                 {
@@ -112,6 +121,11 @@ impl FrenameApp {
                             keyboard::key::Named::Delete => {
                                 Some(Message::FolderWorkspace(
                                     folder_workspace::Message::RemoveTag,
+                                ))
+                            }
+                            keyboard::key::Named::Enter => {
+                                Some(Message::FolderWorkspace(
+                                    folder_workspace::Message::SaveSelectedTag,
                                 ))
                             }
                             _ => None,
