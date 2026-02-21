@@ -2,6 +2,7 @@
 //! Used in: folder list (display-only), file name panel (drag + checkbox), tag list (checkbox only).
 //! Modes: display-only, with optional leading (e.g. checkbox), optional drag (lift + shadow), optional on_select.
 
+use crate::theme;
 use iced::widget::{column, container, mouse_area, row, space, stack, text};
 use iced::{mouse, Alignment, Background, Element, Length, Shadow, Vector};
 
@@ -58,7 +59,7 @@ pub fn view_display_only<Message: 'static>(
 /// * `is_hovered` – when `leading_visible_on_hover_only` is true, leading is visible only when this is true
 /// * `trailing` – optional content to the right of the label (e.g. delete/save icon in tag list); use with `trailing_visible_on_selection_only`
 /// * `trailing_visible_on_selection_only` – when true, trailing is visible only when `is_selected`; space is always reserved (visibility, not collapse)
-/// * `is_selected` – when `trailing_visible_on_selection_only` is true, trailing is visible only when this is true
+/// * `is_selected` – when true, trailing (if selection-only) is visible and the chip is drawn with the tag selection outline (bright blue border)
 pub fn view_with_leading<Message: Clone + 'static>(
     tag_name: impl Into<String>,
     tag_color: iced::Color,
@@ -168,9 +169,18 @@ pub fn view_with_leading<Message: Clone + 'static>(
         } else {
             Shadow::default()
         };
+        let border = if is_selected {
+            iced::Border {
+                width: 2.0,
+                color: theme::ACCENT,
+                radius: 4.0.into(),
+            }
+        } else {
+            iced::border::rounded(2)
+        };
         iced::widget::container::Style {
             background: Some(Background::Color(tag_color)),
-            border: iced::border::rounded(2),
+            border,
             shadow,
             ..Default::default()
         }

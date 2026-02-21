@@ -80,13 +80,16 @@ where
         .align_x(Alignment::Start);
 
     let content_bounds = BoundsReporter::new(Message::PanelBounds);
+    // Wrap BoundsReporter in a Fixed height to prevent it (Fill x Fill) from propagating
+    // Fill height up through the Shrink chain in file_name_panel → file_workspace column.
+    let content_bounds = container(content_bounds)
+        .width(Length::Fill)
+        .height(Length::Fixed(TAG_CHIP_CELL_HEIGHT));
     let chips_cell = container(
         stack![content_bounds, tag_row]
-            .width(Length::Fill)
-            .height(Length::Fill),
+            .width(Length::Fill),
     )
-    .width(Length::Fill)
-    .height(Length::Fill);
+    .width(Length::Fill);
 
     chips_cell.into()
 }

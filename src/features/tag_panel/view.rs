@@ -1,7 +1,7 @@
 //! UI for the tag panel. Only this module knows how the tag list looks (scrollable, tag chips with checkboxes).
 
 use iced::widget::{checkbox, column, container, mouse_area, row, scrollable, stack, text};
-use iced::{mouse, Border, Element, Length};
+use iced::{mouse, Alignment, Border, Element, Length};
 
 use frename_core::{File, StoredTagStore, TagList};
 
@@ -92,7 +92,7 @@ where
             let is_checked = tag.is_checked();
             let is_selected = selected_id == Some(id);
             let is_stored = tag.is_stored();
-            let is_drop_target = drop_target_index == Some(index);
+            let _is_drop_target = drop_target_index == Some(index);
             let tag_color = tag_colors::TagColors::color(tag.color_index());
             let checkbox_el = checkbox(is_checked)
                 .on_toggle(move |_| Message::ToggleTag(id))
@@ -140,17 +140,18 @@ where
             let full_row = row![
                 container(main_cell)
                     .width(Length::Fill)
-                    .height(row_height),
+                    .height(row_height)
+                    .center_y(Length::Fill),
                 right_margin,
             ]
             .width(Length::Fill)
             .height(row_height)
-            .spacing(0);
-            let row_style = is_selected || is_drop_target;
+            .spacing(0)
+            .align_y(Alignment::Center);
             let row_background = container(full_row)
                 .height(row_height)
                 .width(Length::Fill)
-                .style(move |theme: &iced::Theme| theme::row_background_style(theme, row_style));
+                .style(move |theme: &iced::Theme| theme::tag_row_background_style(theme, is_selected));
             Some(row_background.into())
         })
         .collect();
@@ -175,6 +176,7 @@ where
             bounds,
             row_height: TAG_ROW_HEIGHT,
             cols: 1,
+            row_content_height: None,
         })
         .into(),
         tag_list.into(),

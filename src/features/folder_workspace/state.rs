@@ -30,8 +30,6 @@ use super::Message;
 const DEFAULT_LEFT_WIDTH: f32 = 460.0;
 const DEFAULT_FOLDER_WIDTH: f32 = 200.0;
 const MIN_FOLDER_WIDTH: f32 = 120.0;
-/// Tag list row height in pixels (must match tag panel row layout for scroll-into-view).
-const TAG_ROW_HEIGHT: f32 = 28.0;
 
 /// Folder workspace: owns directory, loading. Current file is the directory's selection.
 pub struct FolderWorkspace {
@@ -103,6 +101,10 @@ impl FolderWorkspace {
             Message::FocusSearchBarAndKey(key) => self.focus_search_bar_and_key(key),
             Message::Noop => Task::none(),
             Message::ScrollTagListToSelection => self.scroll_tag_list_to_selection(),
+            Message::TagListScrollAdjusted(scroll_y) => {
+                self.tag_list_scroll_y = Some(scroll_y);
+                Task::none()
+            }
             Message::RemoveTag => self.handle_tag_panel(tag_panel::Message::DeleteSelectedTag),
         }
     }
@@ -296,11 +298,13 @@ impl FolderWorkspace {
                 Task::none()
             }
             tag_panel::Message::SelectUp => {
-                self.move_tag_selection(-1);
+                let step = -(self.tag_panel.cols() as i32);
+                self.move_tag_selection(step);
                 Task::done(Message::ScrollTagListToSelection)
             }
             tag_panel::Message::SelectDown => {
-                self.move_tag_selection(1);
+                let step = self.tag_panel.cols() as i32;
+                self.move_tag_selection(step);
                 Task::done(Message::ScrollTagListToSelection)
             }
             tag_panel::Message::ToggleSelectedTag => {
@@ -413,7 +417,9 @@ impl FolderWorkspace {
         self.tag_panel.set_selected(new_id);
     }
 
-    /// Scroll the tag list so the selected row is in view (scroll-into-view: only adjust if needed).
+    /// Scroll the tag list so the selected row is in view (scroll-into-view: only when selection would leave viewport).
+    /// Uses tag panel row_height and cols so list (1 col) and grid (N cols) both work.
+    /// When we haven't received on_scroll yet, use panel bounds height as viewport and assume scroll_y = 0.
     fn scroll_tag_list_to_selection(&self) -> Task<Message> {
         let selected_id = match self.tag_panel.selected_tag_id() {
             Some(id) => id,
@@ -421,28 +427,34 @@ impl FolderWorkspace {
         };
         let tag_list = self.file_workspace.tag_list();
         let filtered = tag_list.filtered_display_tag_ids();
-        let row_index = match filtered.iter().position(|&id| id == selected_id) {
+        let flat_index = match filtered.iter().position(|&id| id == selected_id) {
             Some(i) => i,
             None => return Task::none(),
         };
-        let row_top = (row_index as f32) * TAG_ROW_HEIGHT;
-        let row_bottom = row_top + TAG_ROW_HEIGHT;
-        let (current, vh) = match (self.tag_list_scroll_y, self.tag_list_viewport_height) {
-            (Some(y), Some(h)) => (y, h),
-            _ => {
-                // No viewport yet (user hasn't scrolled); scroll so selection is at top.
-                let target_y = row_top.max(0.0);
-                let offset = iced::widget::scrollable::AbsoluteOffset {
-                    x: None,
-                    y: Some(target_y),
-                };
-                return operation::scroll_to(
-                    iced::widget::Id::new(TAG_LIST_SCROLLABLE_ID),
-                    offset,
-                )
-                .map(|_: ()| Message::Noop);
+        let cols = self.tag_panel.cols() as usize;
+        let row_stride = self.tag_panel.row_height();
+        let row_extent = self
+            .tag_panel
+            .row_content_height()
+            .unwrap_or(row_stride);
+        let visual_row = flat_index / cols;
+        let row_top = (visual_row as f32) * row_stride;
+        let row_bottom = row_top + row_extent;
+
+        let (current, vh) = match (
+            self.tag_list_scroll_y,
+            self.tag_list_viewport_height,
+            self.tag_panel.panel_bounds(),
+        ) {
+            (Some(y), Some(h), _) => (y, h),
+            (y_opt, _, Some(bounds)) => {
+                let vh = self.tag_list_viewport_height.unwrap_or(bounds.height);
+                let current = y_opt.unwrap_or(0.0);
+                (current, vh)
             }
+            _ => return Task::none(),
         };
+
         let target_y = if row_top < current {
             row_top
         } else if row_bottom > current + vh {
@@ -450,15 +462,20 @@ impl FolderWorkspace {
         } else {
             return Task::none();
         };
+
         let offset = iced::widget::scrollable::AbsoluteOffset {
             x: None,
             y: Some(target_y),
         };
-        operation::scroll_to(
+        let scroll_op = operation::scroll_to(
             iced::widget::Id::new(TAG_LIST_SCROLLABLE_ID),
             offset,
         )
-        .map(|_: ()| Message::Noop)
+        .map(|_: ()| Message::Noop);
+        Task::batch([
+            scroll_op,
+            Task::done(Message::TagListScrollAdjusted(target_y)),
+        ])
     }
 
     pub fn subscription(&self) -> Subscription<Message> {

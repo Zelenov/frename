@@ -21,6 +21,9 @@ pub const ACCENT: Color = Color::from_rgb(0.35, 0.65, 1.0);
 /// Selected row / hover (accent with transparency).
 pub const ACCENT_SELECTED: Color = Color::from_rgba(0.35, 0.65, 1.0, 0.25);
 
+/// Tag row selected background: same hue as ACCENT / selected chip border, higher opacity so it matches the border.
+pub const ACCENT_TAG_ROW: Color = Color::from_rgba(0.35, 0.65, 1.0, 0.45);
+
 /// Primary text (off-white).
 pub const TEXT: Color = Color::from_rgb(0.92, 0.92, 0.95);
 
@@ -54,6 +57,21 @@ pub fn row_background_style(
     iced::widget::container::Style {
         background: Some(Background::Color(if selected {
             ACCENT_SELECTED
+        } else {
+            BG_PANEL
+        })),
+        ..Default::default()
+    }
+}
+
+/// Container style for tag list/grid rows: selected = accent tint matching selected chip border opacity, unselected = panel.
+pub fn tag_row_background_style(
+    _theme: &iced::Theme,
+    selected: bool,
+) -> iced::widget::container::Style {
+    iced::widget::container::Style {
+        background: Some(Background::Color(if selected {
+            ACCENT_TAG_ROW
         } else {
             BG_PANEL
         })),

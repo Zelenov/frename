@@ -15,8 +15,10 @@ use crate::features::tag_panel::{Message, TagPanelState, TAG_LIST_SCROLLABLE_ID}
 /// Height of one grid row: chip height + margin (separator between rows/columns).
 const CHIP_HEIGHT: f32 = tag_chip::CHIP_ROW_HEIGHT;
 const GRID_MARGIN: f32 = 4.0;
-/// Row height in pixels. Used for layout and for cursor→index mapping in state.
+/// Row height in pixels (content only). Used for each row widget height.
 pub const GRID_ROW_HEIGHT: f32 = CHIP_HEIGHT + GRID_MARGIN;
+/// Vertical stride per grid row: row height + column spacing. Must match scrollable layout for scroll-into-view.
+const GRID_ROW_STRIDE: f32 = GRID_ROW_HEIGHT + GRID_MARGIN;
 
 /// Horizontal padding of the panel container (each side).
 const PANEL_PADDING_X: f32 = 4.0;
@@ -150,7 +152,7 @@ where
                     let is_checked = tag.is_checked();
                     let is_selected = selected_id == Some(id);
                     let is_stored = tag.is_stored();
-                    let is_drop_target = drop_target_index == Some(index);
+                    let _is_drop_target = drop_target_index == Some(index);
                     let tag_color = tag_colors::TagColors::color(tag.color_index());
                     let checkbox_el = checkbox(is_checked)
                         .on_toggle(move |_| Message::ToggleTag(id))
@@ -191,16 +193,16 @@ where
                     let main_cell = mouse_area(chip_cell)
                         .on_press(Message::ToggleTag(id))
                         .interaction(mouse::Interaction::Pointer);
-                    let cell_style = is_selected || is_drop_target;
                     let cell = container(
                         container(main_cell)
                             .width(Length::Fill)
                             .height(row_height)
-                            .align_x(Alignment::Start),
+                            .align_x(Alignment::Start)
+                            .center_y(Length::Fill),
                     )
                     .width(Length::Fill)
                     .height(row_height)
-                    .style(move |theme: &iced::Theme| theme::row_background_style(theme, cell_style));
+                    .style(move |theme: &iced::Theme| theme::tag_row_background_style(theme, is_selected));
                     Some(cell.into())
                 })
                 .collect();
@@ -235,8 +237,9 @@ where
     let with_bounds = stack([
         BoundsReporter::new(move |bounds| Message::PanelBounds {
             bounds,
-            row_height: GRID_ROW_HEIGHT,
+            row_height: GRID_ROW_STRIDE,
             cols,
+            row_content_height: Some(GRID_ROW_HEIGHT),
         })
         .into(),
         tag_scroll.into(),

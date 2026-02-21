@@ -23,10 +23,12 @@ pub struct TagPanelState {
     /// Tag list content bounds (from BoundsReporter) and scroll Y for mapping cursor to row index.
     bounds: Option<Rectangle>,
     scroll_y: f32,
-    /// Row height in pixels (list or grid). Used for cursor→index mapping.
+    /// Row height in pixels / stride (list or grid). Used for cursor→index mapping and row_top.
     row_height: f32,
     /// Number of columns (1 = list, 2 = grid).
     cols: u32,
+    /// Height of row content for scroll-into-view. None = use row_height (list). Some = grid content only.
+    row_content_height: Option<f32>,
 }
 
 impl Default for TagPanelState {
@@ -39,6 +41,7 @@ impl Default for TagPanelState {
             scroll_y: 0.0,
             row_height: DEFAULT_ROW_HEIGHT,
             cols: DEFAULT_COLS,
+            row_content_height: None,
         }
     }
 }
@@ -49,6 +52,21 @@ impl TagPanelState {
     /// Panel content bounds when set by BoundsReporter (for dynamic column count in grid).
     pub fn panel_bounds(&self) -> Option<Rectangle> {
         self.bounds
+    }
+
+    /// Row height in pixels (list or grid). Used for scroll-into-view.
+    pub fn row_height(&self) -> f32 {
+        self.row_height
+    }
+
+    /// Number of columns (1 = list, ≥1 = grid). Used for selection step and scroll-into-view.
+    pub fn cols(&self) -> u32 {
+        self.cols.max(1)
+    }
+
+    /// Height of one row's content for scroll-into-view. None = use row_height (list). Some = grid content only.
+    pub fn row_content_height(&self) -> Option<f32> {
+        self.row_content_height
     }
 
     /// Which tag is currently selected in the list (None = no selection).
@@ -108,10 +126,16 @@ impl TagPanelState {
                 self.dragging_tag_id = None;
                 self.drop_target_index = None;
             }
-            Message::PanelBounds { bounds, row_height, cols } => {
+            Message::PanelBounds {
+                bounds,
+                row_height,
+                cols,
+                row_content_height,
+            } => {
                 self.bounds = Some(*bounds);
                 self.row_height = *row_height;
                 self.cols = (*cols).max(1);
+                self.row_content_height = *row_content_height;
             }
             Message::TagListScrolled { scroll_y, .. } => {
                 self.scroll_y = *scroll_y;

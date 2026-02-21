@@ -56,6 +56,8 @@ pub enum Message {
     Noop,
     /// Scroll the tag list so the selected row is in view (deferred to next frame).
     ScrollTagListToSelection,
+    /// Internal: update cached scroll Y after programmatic scroll (so next scroll-into-view uses correct viewport).
+    TagListScrollAdjusted(f32),
     /// Remove the selected tag (e.g. triggered by Delete key).
     RemoveTag,
 }

@@ -30,16 +30,14 @@ where
     let top_row = row![chips, trash]
         .spacing(TRASH_SPACING)
         .align_y(Alignment::Center)
-        .width(Length::Fill)
-        .height(Length::Fill);
+        .width(Length::Fill);
 
     let name_line = file_name_line::view(name_ext);
 
     let inner = container(
         column![top_row, name_line]
             .spacing(8)
-            .width(Length::Fill)
-            .height(Length::Fill),
+            .width(Length::Fill),
     )
     .padding([8, 8])
     .width(Length::Fill)

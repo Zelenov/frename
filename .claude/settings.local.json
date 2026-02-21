@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tail:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(grep:*)"
+    ]
+  }
+}

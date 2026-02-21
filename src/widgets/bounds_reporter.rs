@@ -1,5 +1,5 @@
-//! Widget that reports its layout bounds when the cursor moves over it.
-//! Used for mapping cursor position to drop index (e.g. file name panel drag).
+//! Widget that reports its layout bounds whenever they change (fires on any event, deduplicated).
+//! Used for scroll-into-view and cursor-to-row mapping (e.g. drag-drop).
 
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer;
@@ -13,7 +13,7 @@ struct State {
     last_bounds: Option<Rectangle>,
 }
 
-/// Fill-sized widget that reports its layout bounds when the cursor is over it.
+/// Fill-sized widget that reports its layout bounds whenever they change (on any event).
 pub struct BoundsReporter<'a, Message> {
     on_bounds: Box<dyn Fn(Rectangle) -> Message + 'a>,
 }
@@ -69,16 +69,13 @@ where
         tree: &mut widget::Tree,
         _event: &Event,
         layout: Layout<'_>,
-        cursor: mouse::Cursor,
+        _cursor: mouse::Cursor,
         _renderer: &Renderer,
         _clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) {
         let bounds = layout.bounds();
-        if !cursor.is_over(bounds) {
-            return;
-        }
         let state = tree.state.downcast_mut::<State>();
         let changed = state
             .last_bounds
