@@ -23,6 +23,9 @@ pub enum Message {
     ToggleTag(TagId),
     /// Set the filter query for the tag list (case-insensitive contains)
     SetFilter(String),
+    /// Create a new tag with the given name (only when name doesn't match any existing tag).
+    /// Creates the tag, inserts it at the front of both collections, saves it to the store, then clears the filter.
+    CreateTag(String),
     /// Move grid cursor left by 1 (wraps last→first).
     SelectLeft,
     /// Move grid cursor right by 1 (wraps last→first).

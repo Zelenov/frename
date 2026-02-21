@@ -14,7 +14,7 @@ use std::collections::{HashMap, HashSet};
 
 use uuid::Uuid;
 
-use crate::db::StoredTagStore;
+use crate::{OrderedThing, db::StoredTagStore};
 use crate::ordered::OrderedCollection;
 use super::{tag::{Tag, TagId}, FileSnapshot, StoredTag};
 
@@ -286,6 +286,34 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             self.extension.as_str(),
             self.initial_file_name.as_str(),
         )
+    }
+
+    /// Returns true if any tag in the list has the given name (case-insensitive exact match).
+    pub fn has_tag_with_name(&self, name: &str) -> bool {
+        self.tags_by_id
+            .values()
+            .any(|t| t.tag().eq_ignore_ascii_case(name))
+    }
+
+    /// Create a new unsaved tag with the given name, insert it at the front of both display and
+    /// selected collections, mark it checked=true. Returns the new tag's id.
+    /// Returns None if a tag with this name already exists (case-insensitive).
+    pub fn create_new_tag(&mut self, name: impl Into<String>) -> Option<TagId> {
+        let name = name.into();
+        if self.has_tag_with_name(&name) {
+            return None;
+        }
+        let id = TagId::new();
+        let tag = Tag::with_id_order_checked(id, &name, 0, false, 0, true);
+        self.tags_by_id.insert(id, tag);
+        self.display_tag_ids.insert_before(id, (), Option::None);
+        self.selected_tag_ids.insert_before(id, (), Option::None);
+
+        let order = self.display_tag_ids.get_order(&id).unwrap_or(0);
+        let tag = self.tags_by_id.get_mut(&id).unwrap();
+        tag.set_order(order);
+        self.rebuild_filtered_display_tag_ids();
+        Some(id)
     }
 
     /// Remove a stored tag by tag id from the store and from the in-memory list. No-op for snapshot-only tags (use save to add them first).

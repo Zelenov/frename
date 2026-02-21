@@ -284,6 +284,20 @@ impl FolderWorkspace {
                 self.clamp_selection_to_filtered();
                 Task::done(Message::ScrollTagListToSelection)
             }
+            tag_panel::Message::CreateTag(name) => {
+                let name = name.trim().to_string();
+                if !name.is_empty() {
+                    match self.file_workspace.create_and_save_new_tag(name) {
+                        Ok(id) => {
+                            self.tag_panel.set_selected(Some(id));
+                            self.clamp_selection_to_filtered();
+                            return Task::done(Message::ScrollTagListToSelection);
+                        }
+                        Err(e) => log::error!("Failed to create tag: {}", e),
+                    }
+                }
+                Task::none()
+            }
             tag_panel::Message::TagListScrolled {
                 scroll_y,
                 viewport_height,

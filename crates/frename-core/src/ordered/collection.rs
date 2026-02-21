@@ -67,7 +67,7 @@ where
         }
 
         let (left_owned, right_owned) = match before_id {
-            None => (None, None),
+            None => (None, self.iter().next().map(|k| k.0.clone())),
             Some(b) => {
                 if self.by_id.contains_key(b) {
                     (

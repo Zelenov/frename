@@ -26,10 +26,17 @@ where
 {
     let file_name =
         file_name_panel::view::view(file_name_panel_state, tag_list).map(Message::FileNamePanel);
+    let filter = tag_list.filter_query();
+    let on_create = if !filter.trim().is_empty() && !file_workspace.has_tag_with_name(filter.trim()) {
+        Some(|text: String| Message::TagPanel(tag_panel::Message::CreateTag(text.trim().to_string())))
+    } else {
+        None
+    };
     let search_bar = widgets::search_bar::view(
-        tag_list.filter_query(),
+        filter,
         |s| Message::TagPanel(tag_panel::Message::SetFilter(s)),
         || Message::TagPanel(tag_panel::Message::SetFilter(String::new())),
+        on_create,
     );
     let tag_grid = tag_grid::view::view(tag_panel_state, file_workspace.file(), tag_list)
         .map(Message::TagPanel);

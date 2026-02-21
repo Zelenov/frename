@@ -100,6 +100,29 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.tag_list.save_tag(id)
     }
 
+    /// Returns true if any tag in the list has the given name (case-insensitive exact match). Used to
+    /// decide whether to show the "create" button in the search bar.
+    pub fn has_tag_with_name(&self, name: &str) -> bool {
+        self.tag_list.has_tag_with_name(name)
+    }
+
+    /// Create a new unsaved tag, insert at the front of both collections, then immediately save to
+    /// the store (assigns a random color). Returns the new tag's id.
+    pub fn create_and_save_new_tag(
+        &mut self,
+        name: String,
+    ) -> Result<TagId, Box<dyn std::error::Error + Send + Sync>> {
+        let id = self.tag_list.create_new_tag(name).ok_or_else(|| {
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "tag with this name already exists",
+            )) as Box<dyn std::error::Error + Send + Sync>
+        })?;
+        self.tag_list.save_tag(id)?;
+        self.set_tag_filter(String::new());
+        Ok(id)
+    }
+
     /// Reorders tags: place `dragged_id` at `drop_index` (file name panel drag). Only reorder entry point.
     pub fn reorder_tag_to_index(&mut self, dragged_id: TagId, drop_index: usize) {
         self.tag_list.reorder_tag_to_index(dragged_id, drop_index);

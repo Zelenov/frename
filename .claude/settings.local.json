@@ -3,7 +3,8 @@
     "allow": [
       "Bash(tail:*)",
       "Bash(powershell.exe:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(cd /c/Work/my/frename && cargo check 2>&1)"
     ]
   }
 }
