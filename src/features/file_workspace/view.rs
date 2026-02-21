@@ -3,7 +3,7 @@
 //! Only this module knows the layout of the file workspace region. Folder list keeps using
 //! [crate::widgets::file_name_display] with wrap=false.
 
-use iced::widget::{column, container};
+use iced::widget::{column, container, row};
 use iced::{Element, Length};
 
 use crate::features::{file_name_panel, tag_panel};

@@ -1,17 +1,15 @@
 //! File name display widget. Shows how the new file name is combined: each tag as a colored
-//! box with label (dot-separated), then the name and extension concatenated (no separator between them).
-//! Display-only; no interactions.
-//!
-//! Single entry point: [view] takes a snapshot and color mapping, returns the chip row.
-//! Callers wrap in a container when they need the elevated panel style (e.g. file workspace).
+//! chip (dot-separated), then the name and extension concatenated (no separator between them).
+//! Display-only; no interactions. Uses [crate::widgets::tag_chip] for tag pills.
 
-use iced::widget::{container, row, text};
-use iced::{Background, Element};
+use iced::widget::{row, text};
+use iced::Element;
 
 use frename_core::{FileSnapshot, TagColorMapping};
 
 use crate::tag_colors;
 use crate::theme;
+use crate::widgets::tag_chip;
 
 /// Dot separator between parts (tags, name, extension).
 const DOT: &str = " . ";
@@ -35,20 +33,7 @@ pub fn view<Message: 'static>(
         }
         let color_index = color_mapping.color_index_for(tag_name);
         let tag_color = tag_colors::TagColors::color(color_index);
-        parts.push(
-            container(
-                text(tag_name.clone())
-                    .size(14)
-                    .color(iced::Color::from_rgb(0.0, 0.0, 0.0)),
-            )
-            .padding([4, 6])
-            .style(move |_theme| iced::widget::container::Style {
-                background: Some(Background::Color(tag_color)),
-                border: iced::border::rounded(2),
-                ..Default::default()
-            })
-            .into(),
-        );
+        parts.push(tag_chip::view_display_only(tag_name.clone(), tag_color));
     }
     if !name_ext.is_empty() {
         if !tags.is_empty() {

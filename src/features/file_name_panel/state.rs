@@ -17,6 +17,8 @@ pub struct FileNamePanelState {
     drop_target_index: Option<usize>,
     /// Panel content bounds (from BoundsReporter) for mapping cursor to drop index.
     bounds: Option<Rectangle>,
+    /// Tag chip under cursor (for checkbox visible on hover in file name panel).
+    hovered_tag_id: Option<TagId>,
 }
 
 const PADDING: f32 = 8.0;
@@ -33,6 +35,11 @@ impl FileNamePanelState {
 
     pub fn drop_target_index(&self) -> Option<usize> {
         self.drop_target_index
+    }
+
+    /// Tag chip currently hovered (for checkbox visible on hover).
+    pub fn hovered_tag_id(&self) -> Option<TagId> {
+        self.hovered_tag_id
     }
 
     fn set_dragging(&mut self, tag_id: TagId, initial_index: usize) {
@@ -94,6 +101,8 @@ impl FileNamePanelState {
             }
             Message::DragEnded => self.clear_drag(),
             Message::PanelBounds(bounds) => self.bounds = Some(bounds),
+            Message::UnselectTag(_) => {}
+            Message::ChipHovered(id) => self.hovered_tag_id = id,
         }
     }
 

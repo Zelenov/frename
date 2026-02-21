@@ -1,13 +1,14 @@
-//! UI for the tag panel. Only this module knows how the tag list looks (scrollable, checkboxes).
+//! UI for the tag panel. Only this module knows how the tag list looks (scrollable, tag chips with checkboxes).
 
 use iced::widget::{checkbox, column, container, mouse_area, row, scrollable, stack, text};
-use iced::{mouse, Background, Border, Element, Length};
+use iced::{mouse, Border, Element, Length};
 
 use frename_core::{File, StoredTagStore, TagList};
 
 use crate::tag_colors;
 use crate::theme;
 use crate::widgets::bounds_reporter::BoundsReporter;
+use crate::widgets::tag_chip;
 use super::{Message, TagPanelState, TAG_LIST_SCROLLABLE_ID};
 
 /// Tag list row height in pixels. Must match folder_workspace::TAG_ROW_HEIGHT for scroll-into-view.
@@ -80,7 +81,6 @@ where
     };
 
     let selected_id = state.selected_tag_id();
-    let dragging_id = state.dragging_tag_id();
     let drop_target_index = state.drop_target_index();
     let tag_items: Vec<Element<'_, Message>> = tag_list
         .filtered_display_tag_ids()
@@ -92,77 +92,55 @@ where
             let is_checked = tag.is_checked();
             let is_selected = selected_id == Some(id);
             let is_stored = tag.is_stored();
-            let show_action = is_selected;
-            let _is_dragging = dragging_id == Some(id);
             let is_drop_target = drop_target_index == Some(index);
             let tag_color = tag_colors::TagColors::color(tag.color_index());
-            let drag_handle = mouse_area(
-                container(iced::widget::Space::new())
-                    .width(Length::Fixed(12.0))
-                    .height(Length::Fill),
-            )
-            .on_press(Message::DragStarted(id))
-            .interaction(mouse::Interaction::Grab);
-            let color_stripe = container(
-                iced::widget::Space::new()
-                    .width(Length::Fixed(4.))
-                    .height(Length::Fill),
-            )
-            .width(Length::Fixed(4.))
-            .height(Length::Fill)
-            .style(move |_theme: &iced::Theme| iced::widget::container::Style {
-                background: Some(Background::Color(tag_color)),
-                ..Default::default()
-            });
-            let checkbox_content = container(
-                checkbox(is_checked)
-                    .label(tag.tag())
-                    .on_toggle(move |_| Message::ToggleTag(id))
-                    .size(16)
-                    .text_size(14)
-                    .style(dark_checkbox_style),
-            )
-            .padding([4, 8])
-            .width(Length::Fill)
-            .id(iced::widget::Id::from(id.widget_id()));
-            let main_row = row![color_stripe, checkbox_content]
-                .width(Length::Fill)
-                .spacing(0);
-            let main_cell = mouse_area(main_row)
-                .on_press(Message::ToggleTag(id))
-                .interaction(mouse::Interaction::Pointer);
-            let action_slot: Element<'_, Message> = if show_action {
-                let (label, msg) = if is_stored {
-                    ("×", Message::DeleteTag(id))
-                } else {
-                    ("💾", Message::SaveTag(id))
+            let checkbox_el = checkbox(is_checked)
+                .on_toggle(move |_| Message::ToggleTag(id))
+                .size(16)
+                .spacing(0)
+                .style(dark_checkbox_style)
+                .into();
+            let trailing_el = {
+                let (label, msg) = match is_stored {
+                    true => ("×", Message::DeleteTag(id)),
+                    false => ("○", Message::SaveTag(id)),
                 };
                 mouse_area(
-                    container(text(label).size(14).color(theme::TEXT_MUTED))
+                    container(text(label).size(13).color(iced::Color::from_rgb(0.0, 0.0, 0.0)))
                         .center_y(Length::Fill)
                         .padding([0, 4]),
                 )
                 .on_press(msg)
                 .into()
-            } else {
-                iced::widget::Space::new().into()
             };
+            let chip = tag_chip::view_with_leading(
+                tag.tag(),
+                tag_color,
+                TAG_ROW_HEIGHT,
+                Some(checkbox_el),
+                None,
+                Some(Message::ToggleTag(id)),
+                false, // leading always visible in tag list
+                false,
+                Some(trailing_el),
+                true,  // trailing_visible_on_selection_only: X/💾 only when selected
+                is_selected,
+            );
+            let chip_cell = container(chip)
+                .width(Length::Shrink)
+                .height(Length::Fixed(TAG_ROW_HEIGHT))
+                .id(iced::widget::Id::from(id.widget_id()));
+            let main_cell = mouse_area(chip_cell)
+                .on_press(Message::ToggleTag(id))
+                .interaction(mouse::Interaction::Pointer);
             let row_height = Length::Fixed(TAG_ROW_HEIGHT);
             let right_margin = container(iced::widget::Space::new())
                 .width(Length::Fixed(12.0))
                 .height(row_height);
             let full_row = row![
-                container(drag_handle)
-                    .width(Length::Fixed(12.0))
-                    .height(row_height)
-                    .center_y(Length::Fill),
                 container(main_cell)
                     .width(Length::Fill)
                     .height(row_height),
-                container(action_slot)
-                    .width(Length::Fixed(24.0))
-                    .height(row_height)
-                    .center_y(Length::Fill),
                 right_margin,
             ]
             .width(Length::Fill)

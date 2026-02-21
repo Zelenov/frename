@@ -16,4 +16,8 @@ pub enum Message {
     DragEnded,
     /// Panel content bounds on screen (for mapping cursor to chip index).
     PanelBounds(iced::Rectangle),
+    /// User unchecked the tag in this panel; workspace toggles it off (unselect for current file).
+    UnselectTag(TagId),
+    /// Mouse entered or left a tag chip (for checkbox visible on hover).
+    ChipHovered(Option<TagId>),
 }

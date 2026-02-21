@@ -2,14 +2,15 @@
 //! No dots. Drag reorder is UI-only; does not change TagList.
 //! Extension already includes a dot when needed (see name_ext_from_parts).
 
-use iced::widget::{column, container, mouse_area, row, space, stack, text};
-use iced::{mouse, Alignment, Background, Element, Length, Shadow, Vector};
+use iced::widget::{checkbox, column, container, mouse_area, row, stack, text};
+use iced::{mouse, Alignment, Element, Length};
 
 use frename_core::{StoredTagStore, TagList};
 
 use crate::tag_colors;
 use crate::theme;
 use crate::widgets::bounds_reporter::BoundsReporter;
+use crate::widgets::tag_chip;
 
 use super::{Message, TAG_CHIP_CELL_HEIGHT, TAG_CHIP_ROW_HEIGHT, TAG_CHIP_SPACING};
 
@@ -57,53 +58,33 @@ where
         let tag_name = tag.tag().to_string();
         let tag_color = tag_colors::TagColors::color(tag.color_index());
         let is_dragging = dragging_index == Some(idx);
-        let chip_inner = container(
-            text(tag_name)
-                .size(14)
-                .color(iced::Color::from_rgb(0.0, 0.0, 0.0)),
-        )
-        .padding([4, 6]);
-        let chip_style = move |_theme: &_| {
-            let shadow = if is_dragging {
-                Shadow {
-                    color: iced::Color::from_rgba(0.0, 0.0, 0.0, 0.3),
-                    offset: Vector::new(0.0, 1.0),
-                    blur_radius: 10.0,
-                }
-            } else {
-                Shadow::default()
-            };
-            iced::widget::container::Style {
-                background: Some(Background::Color(tag_color)),
-                border: iced::border::rounded(2),
-                shadow,
-                ..Default::default()
-            }
-        };
-        let chip = container(chip_inner)
-            .height(Length::Fixed(TAG_CHIP_ROW_HEIGHT))
-            .style(chip_style);
-        let chip = mouse_area(chip)
-            .on_press(Message::DragStarted {
+        let checkbox_el = checkbox(true)
+            .on_toggle(move |_| Message::UnselectTag(tag_id))
+            .size(16)
+            .spacing(0)
+            .into();
+        let is_hovered = state.hovered_tag_id() == Some(tag_id);
+        let chip = tag_chip::view_with_leading(
+            tag_name,
+            tag_color,
+            TAG_CHIP_ROW_HEIGHT,
+            Some(checkbox_el),
+            Some((TAG_CHIP_CELL_HEIGHT, is_dragging)),
+            Some(Message::DragStarted {
                 tag_id,
                 initial_index: idx,
-            })
+            }),
+            true,  // leading_visible_on_hover_only
+            is_hovered,
+            None,  // trailing: no action icons in file name panel
+            false,
+            false,
+        );
+        let chip_with_hover = mouse_area(chip)
+            .on_enter(Message::ChipHovered(Some(tag_id)))
+            .on_exit(Message::ChipHovered(None))
             .interaction(mouse::Interaction::Pointer);
-        let chip: Element<'_, Message> = chip.into();
-        let lift_px = TAG_CHIP_CELL_HEIGHT - TAG_CHIP_ROW_HEIGHT;
-        let chip = if is_dragging {
-            column![
-                chip,
-                container(space()).height(Length::Fixed(lift_px)),
-            ]
-        } else {
-            column![
-                container(space()).height(Length::Fixed(lift_px)),
-                chip,
-            ]
-        }
-        .into();
-        chip_elements.push(chip);
+        chip_elements.push(chip_with_hover.into());
     }
 
     let tag_row = row(chip_elements)

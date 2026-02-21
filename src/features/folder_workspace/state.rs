@@ -348,6 +348,9 @@ impl FolderWorkspace {
     }
 
     fn handle_file_name_panel(&mut self, msg: file_name_panel::Message) -> Task<Message> {
+        if let file_name_panel::Message::UnselectTag(id) = &msg {
+            self.file_workspace.toggle_tag_by_id(*id);
+        }
         let (dragged_id, drop_index) = if let file_name_panel::Message::DragEnded = &msg {
             (
                 self.file_name_panel.dragging_tag_id(),
