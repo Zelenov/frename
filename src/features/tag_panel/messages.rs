@@ -11,8 +11,12 @@ pub enum Message {
     DragHoverCursor { x: f32, y: f32 },
     /// User released mouse; end drag. Workspace applies reorder (put dragged before target row) if target set.
     DragEnded,
-    /// Tag list content bounds (for mapping cursor to row index).
-    PanelBounds(iced::Rectangle),
+    /// Tag list content bounds (for mapping cursor to row index). row_height and cols define layout (list = 1 col, grid = 2 cols).
+    PanelBounds {
+        bounds: iced::Rectangle,
+        row_height: f32,
+        cols: u32,
+    },
     /// Toggle a tag by its id
     ToggleTag(TagId),
     /// Set the filter query for the tag list (case-insensitive contains)

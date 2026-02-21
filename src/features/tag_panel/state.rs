@@ -9,8 +9,10 @@ use super::Message;
 /// Row height for cursor-to-row mapping. Must match view::TAG_ROW_HEIGHT.
 const TAG_ROW_HEIGHT: f32 = 28.0;
 
+const DEFAULT_ROW_HEIGHT: f32 = 28.0;
+const DEFAULT_COLS: u32 = 1;
+
 /// Tag panel state (UI-only; the selected file and tag toggles live in the file workspace).
-#[derive(Default)]
 pub struct TagPanelState {
     /// Tag list cursor: which tag row is selected (for keyboard Up/Down, delete button, Delete key).
     selected_tag_id: Option<TagId>,
@@ -21,6 +23,24 @@ pub struct TagPanelState {
     /// Tag list content bounds (from BoundsReporter) and scroll Y for mapping cursor to row index.
     bounds: Option<Rectangle>,
     scroll_y: f32,
+    /// Row height in pixels (list or grid). Used for cursor→index mapping.
+    row_height: f32,
+    /// Number of columns (1 = list, 2 = grid).
+    cols: u32,
+}
+
+impl Default for TagPanelState {
+    fn default() -> Self {
+        Self {
+            selected_tag_id: None,
+            dragging_tag_id: None,
+            drop_target_index: None,
+            bounds: None,
+            scroll_y: 0.0,
+            row_height: DEFAULT_ROW_HEIGHT,
+            cols: DEFAULT_COLS,
+        }
+    }
 }
 
 const PADDING: f32 = 4.0;
@@ -83,8 +103,10 @@ impl TagPanelState {
                 self.dragging_tag_id = None;
                 self.drop_target_index = None;
             }
-            Message::PanelBounds(bounds) => {
+            Message::PanelBounds { bounds, row_height, cols } => {
                 self.bounds = Some(*bounds);
+                self.row_height = *row_height;
+                self.cols = (*cols).max(1);
             }
             Message::TagListScrolled { scroll_y, .. } => {
                 self.scroll_y = *scroll_y;
@@ -93,14 +115,19 @@ impl TagPanelState {
         }
     }
 
-    /// Row index under the cursor (0..len). None if cursor outside list.
+    /// Row index under the cursor (0..len). None if cursor outside list. Uses stored row_height and cols (list=1, grid=2).
     fn row_index_at_cursor(&self, cursor_x: f32, cursor_y: f32, row_count: usize) -> Option<usize> {
         let bounds = self.bounds?;
         if row_count == 0 {
             return None;
         }
         let content_y = bounds.y + PADDING;
-        let row_height = TAG_ROW_HEIGHT;
+        let row_height = if self.row_height > 0.0 {
+            self.row_height
+        } else {
+            TAG_ROW_HEIGHT
+        };
+        let cols = self.cols.max(1) as usize;
         if cursor_x < bounds.x
             || cursor_x >= bounds.x + bounds.width
             || cursor_y < content_y
@@ -108,7 +135,11 @@ impl TagPanelState {
             return None;
         }
         let rel_y = cursor_y - content_y + self.scroll_y;
+        let rel_x = cursor_x - bounds.x;
         let row = (rel_y / row_height).floor() as usize;
-        Some(row.min(row_count.saturating_sub(1)))
+        let col_width = bounds.width / cols as f32;
+        let col = (rel_x / col_width).floor().min((cols - 1) as f32) as usize;
+        let index = row * cols + col;
+        Some(index.min(row_count.saturating_sub(1)))
     }
 }

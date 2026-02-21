@@ -343,7 +343,7 @@ impl FolderWorkspace {
             tag_panel::Message::DragStarted(_)
             | tag_panel::Message::DragHoverCursor { .. }
             | tag_panel::Message::DragEnded
-            | tag_panel::Message::PanelBounds(_) => Task::none(),
+            | tag_panel::Message::PanelBounds { .. } => Task::none(),
         }
     }
 

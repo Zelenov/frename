@@ -171,7 +171,12 @@ where
         .style(theme::dark_scrollable_style);
     // List on top so clicks (checkboxes) reach it; BoundsReporter underneath for cursor→row mapping.
     let with_bounds = stack([
-        BoundsReporter::new(Message::PanelBounds).into(),
+        BoundsReporter::new(|bounds| Message::PanelBounds {
+            bounds,
+            row_height: TAG_ROW_HEIGHT,
+            cols: 1,
+        })
+        .into(),
         tag_list.into(),
     ]);
 
