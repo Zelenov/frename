@@ -71,6 +71,20 @@ impl FrenameApp {
                 {
                     if let keyboard::Key::Named(name) = key.as_ref() {
                         let msg = match name {
+                            keyboard::key::Named::ArrowLeft => {
+                                Some(Message::FolderWorkspace(
+                                    folder_workspace::Message::TagPanel(
+                                        tag_panel::Message::SelectLeft,
+                                    ),
+                                ))
+                            }
+                            keyboard::key::Named::ArrowRight => {
+                                Some(Message::FolderWorkspace(
+                                    folder_workspace::Message::TagPanel(
+                                        tag_panel::Message::SelectRight,
+                                    ),
+                                ))
+                            }
                             keyboard::key::Named::ArrowUp => {
                                 Some(Message::FolderWorkspace(
                                     folder_workspace::Message::TagPanel(

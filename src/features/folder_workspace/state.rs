@@ -297,14 +297,20 @@ impl FolderWorkspace {
                 self.tag_panel.set_selected(Some(id));
                 Task::none()
             }
+            tag_panel::Message::SelectLeft => {
+                self.move_selection_left();
+                Task::done(Message::ScrollTagListToSelection)
+            }
+            tag_panel::Message::SelectRight => {
+                self.move_selection_right();
+                Task::done(Message::ScrollTagListToSelection)
+            }
             tag_panel::Message::SelectUp => {
-                let step = -(self.tag_panel.cols() as i32);
-                self.move_tag_selection(step);
+                self.move_selection_up();
                 Task::done(Message::ScrollTagListToSelection)
             }
             tag_panel::Message::SelectDown => {
-                let step = self.tag_panel.cols() as i32;
-                self.move_tag_selection(step);
+                self.move_selection_down();
                 Task::done(Message::ScrollTagListToSelection)
             }
             tag_panel::Message::ToggleSelectedTag => {
@@ -385,36 +391,72 @@ impl FolderWorkspace {
         }
     }
 
-    /// Move tag list selection by delta (-1 = up, 1 = down). Uses filtered list.
-    fn move_tag_selection(&mut self, delta: i32) {
-        let tag_list = self.file_workspace.tag_list();
-        let filtered = tag_list.filtered_display_tag_ids();
-        if filtered.is_empty() {
-            self.tag_panel.set_selected(None);
-            return;
-        }
-        let current_pos = self
-            .tag_panel
-            .selected_tag_id()
+    /// Left: move by -1, wrap last→first.
+    fn move_selection_left(&mut self) {
+        let filtered = self.file_workspace.tag_list().filtered_display_tag_ids().to_vec();
+        if filtered.is_empty() { self.tag_panel.set_selected(None); return; }
+        let cur = self.tag_panel.selected_tag_id()
             .and_then(|id| filtered.iter().position(|&fid| fid == id));
-        let new_id = match current_pos {
-            None if delta > 0 => filtered.first().copied(),
-            None => None,
+        let new_i = match cur {
+            None | Some(0) => filtered.len() - 1,
+            Some(i) => i - 1,
+        };
+        self.tag_panel.set_selected(filtered.get(new_i).copied());
+    }
+
+    /// Right: move by +1, wrap last→first.
+    fn move_selection_right(&mut self) {
+        let filtered = self.file_workspace.tag_list().filtered_display_tag_ids().to_vec();
+        if filtered.is_empty() { self.tag_panel.set_selected(None); return; }
+        let last = filtered.len() - 1;
+        let cur = self.tag_panel.selected_tag_id()
+            .and_then(|id| filtered.iter().position(|&fid| fid == id));
+        let new_i = match cur {
+            None => 0,
+            Some(i) if i >= last => 0,
+            Some(i) => i + 1,
+        };
+        self.tag_panel.set_selected(filtered.get(new_i).copied());
+    }
+
+    /// Up: move one visual row up; top row wraps to last row at same column.
+    fn move_selection_up(&mut self) {
+        let filtered = self.file_workspace.tag_list().filtered_display_tag_ids().to_vec();
+        if filtered.is_empty() { self.tag_panel.set_selected(None); return; }
+        let cols = self.tag_panel.cols().max(1) as usize;
+        let count = filtered.len();
+        let cur = self.tag_panel.selected_tag_id()
+            .and_then(|id| filtered.iter().position(|&fid| fid == id));
+        let new_i = match cur {
+            None => count - 1,
+            Some(i) if i < cols => {
+                // top row → jump to last row, same column
+                let x = i % cols;
+                let last_row = (count - 1) / cols;
+                let new_i = last_row * cols + x;
+                if new_i >= count { new_i - cols } else { new_i }
+            }
+            Some(i) => i - cols,
+        };
+        self.tag_panel.set_selected(filtered.get(new_i).copied());
+    }
+
+    /// Down: move one visual row down; last row wraps to first row at same column.
+    fn move_selection_down(&mut self) {
+        let filtered = self.file_workspace.tag_list().filtered_display_tag_ids().to_vec();
+        if filtered.is_empty() { self.tag_panel.set_selected(None); return; }
+        let cols = self.tag_panel.cols().max(1) as usize;
+        let count = filtered.len();
+        let cur = self.tag_panel.selected_tag_id()
+            .and_then(|id| filtered.iter().position(|&fid| fid == id));
+        let new_i = match cur {
+            None => 0,
             Some(i) => {
-                let next = i as i32 + delta;
-                if next < 0 {
-                    filtered.first().copied()
-                } else {
-                    let u = next as usize;
-                    if u < filtered.len() {
-                        filtered.get(u).copied()
-                    } else {
-                        filtered.get(i).copied()
-                    }
-                }
+                let new_i = i + cols;
+                if new_i >= count { i % cols } else { new_i }
             }
         };
-        self.tag_panel.set_selected(new_id);
+        self.tag_panel.set_selected(filtered.get(new_i).copied());
     }
 
     /// Scroll the tag list so the selected row is in view (scroll-into-view: only when selection would leave viewport).

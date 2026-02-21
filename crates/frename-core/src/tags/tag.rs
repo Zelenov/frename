@@ -99,6 +99,16 @@ impl Tag {
         self.stored
     }
 
+    /// Set the stored flag (e.g. after saving a snapshot-only tag to the store).
+    pub fn set_stored(&mut self, stored: bool) {
+        self.stored = stored;
+    }
+
+    /// Set the color index (e.g. after saving a new tag and assigning a random color).
+    pub fn set_color_index(&mut self, color_index: u8) {
+        self.color_index = color_index;
+    }
+
     /// Toggle the checked state of this tag.
     pub fn toggle(&mut self) {
         self.checked = !self.checked;

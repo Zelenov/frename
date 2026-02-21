@@ -23,9 +23,13 @@ pub enum Message {
     ToggleTag(TagId),
     /// Set the filter query for the tag list (case-insensitive contains)
     SetFilter(String),
-    /// Move list cursor up (keyboard)
+    /// Move grid cursor left by 1 (wraps last→first).
+    SelectLeft,
+    /// Move grid cursor right by 1 (wraps last→first).
+    SelectRight,
+    /// Move grid cursor up one row (wraps top row → last row, same column).
     SelectUp,
-    /// Move list cursor down (keyboard)
+    /// Move grid cursor down one row (wraps last row → first row, same column).
     SelectDown,
     /// Toggle the currently selected tag (Space key).
     ToggleSelectedTag,
