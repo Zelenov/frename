@@ -81,15 +81,18 @@ where
     };
 
     let selected_id = state.selected_tag_id();
+    let drop_target_index = state.drop_target_index();
     let tag_items: Vec<Element<'_, Message>> = tag_list
         .filtered_display_tag_ids()
         .iter()
-        .filter_map(|id| {
+        .enumerate()
+        .filter_map(|(index, id)| {
             let id = *id;
             let tag = tag_list.get_tag(id)?;
             let is_checked = tag.is_checked();
             let is_selected = selected_id == Some(id);
             let is_stored = tag.is_stored();
+            let _is_drop_target = drop_target_index == Some(index);
             let tag_color = tag_colors::TagColors::color(tag.color_index());
             let checkbox_el = checkbox(is_checked)
                 .on_toggle(move |_| Message::ToggleTag(id))

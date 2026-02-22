@@ -324,6 +324,12 @@ impl FolderWorkspace {
         &mut self,
         msg: tag_panel::Message,
     ) -> Task<Message> {
+        // Capture drag state before update() clears it on DragEnded.
+        let drag_on_end = if let tag_panel::Message::DragEnded = &msg {
+            Some((self.tag_panel.dragging_tag_id(), self.tag_panel.drop_target_index()))
+        } else {
+            None
+        };
         self.tag_panel
             .update(&msg, self.file_workspace.tag_list());
         match msg {
@@ -409,6 +415,23 @@ impl FolderWorkspace {
             tag_panel::Message::SaveTag(id) => {
                 if let Err(e) = self.file_workspace.save_tag(id) {
                     log::error!("Failed to save tag to store: {}", e);
+                }
+                Task::none()
+            }
+            tag_panel::Message::DragStarted(_) | tag_panel::Message::DragHoverCursor { .. } => {
+                Task::none()
+            }
+            tag_panel::Message::DragEnded => {
+                if let Some((Some(did), Some(display_idx))) = drag_on_end {
+                    let tag_list = self.file_workspace.tag_list();
+                    let display_ids = tag_list.filtered_display_tag_ids().to_vec();
+                    // Map display index → checked index: count checked tags before display_idx.
+                    let checked_idx = display_ids
+                        .iter()
+                        .take(display_idx)
+                        .filter(|&&id| tag_list.get_tag(id).map_or(false, |t| t.is_checked()))
+                        .count();
+                    self.file_workspace.reorder_tag_to_index(did, checked_idx);
                 }
                 Task::none()
             }
@@ -583,6 +606,7 @@ impl FolderWorkspace {
         Subscription::batch([
             self.media_viewer.subscription().map(Message::MediaViewer),
             self.file_name_panel.subscription().map(Message::FileNamePanel),
+            self.tag_panel.subscription().map(Message::TagPanel),
         ])
     }
 
