@@ -9,7 +9,7 @@
 
 use iced::{event, keyboard, window, Element, Subscription, Task};
 
-use crate::features::{drag_drop, folder, folder_workspace, tag_panel};
+use crate::features::{drag_drop, folder, folder_workspace, media_viewer, tag_panel};
 
 use super::Message;
 
@@ -17,6 +17,8 @@ use super::Message;
 pub struct FrenameApp {
     drag_drop_state: drag_drop::DragDropState,
     folder_workspace: folder_workspace::FolderWorkspace,
+    /// Window ID waiting for GStreamer unload before we close.
+    pending_close: Option<window::Id>,
 }
 
 impl FrenameApp {
@@ -24,6 +26,7 @@ impl FrenameApp {
         Self {
             drag_drop_state: drag_drop::DragDropState::default(),
             folder_workspace: folder_workspace::FolderWorkspace::new(),
+            pending_close: None,
         }
     }
 }
@@ -34,6 +37,15 @@ impl FrenameApp {
             Message::WindowReady => Task::done(Message::FolderWorkspace(
                 folder_workspace::Message::LoadLastSession,
             )),
+            Message::CloseRequested(id) => {
+                if !self.folder_workspace.needs_media_unload() {
+                    return window::close(id);
+                }
+                self.pending_close = Some(id);
+                Task::done(Message::FolderWorkspace(
+                    folder_workspace::Message::MediaViewer(media_viewer::Message::Unload),
+                ))
+            }
             Message::DragDrop(drag_drop::Message::FileDropped(path)) => {
                 self.drag_drop_state.handle_file_dropped(path.clone());
                 Task::done(Message::FolderWorkspace(
@@ -41,7 +53,15 @@ impl FrenameApp {
                 ))
             }
             Message::FolderWorkspace(msg) => {
-                self.folder_workspace.update(msg).map(Message::FolderWorkspace)
+                let is_unloaded = matches!(
+                    &msg,
+                    folder_workspace::Message::MediaViewer(media_viewer::Message::Unloaded)
+                );
+                let task = self.folder_workspace.update(msg).map(Message::FolderWorkspace);
+                let Some(id) = is_unloaded.then(|| self.pending_close.take()).flatten() else {
+                    return task;
+                };
+                Task::batch([task, window::close(id)])
             }
         }
     }
@@ -57,6 +77,7 @@ impl FrenameApp {
             self.folder_workspace
                 .subscription()
                 .map(Message::FolderWorkspace),
+            window::close_requests().map(Message::CloseRequested),
             event::listen_with(|ev, status, _| match ev {
                 iced::Event::Window(window::Event::Opened { .. }) => Some(Message::WindowReady),
                 // Space always toggles the selected tag (even when focus is in the search bar; we strip the space from filter in the handler).

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use frename_core::{File, FileSnapshot, FolderAndFile};
 
 use super::Directory;
-use crate::features::{file_name_panel, folder, tag_panel, video_player};
+use crate::features::{file_name_panel, folder, media_viewer, tag_panel};
 
 /// Key that triggered global focus (we emulate it into the search bar; Iced cannot replay the event).
 #[derive(Debug, Clone)]
@@ -40,8 +40,8 @@ pub enum Message {
     },
     /// User selected a file in the list (from folder view)
     Folder(folder::Message),
-    /// Video player messages
-    VideoPlayer(video_player::Message),
+    /// Media viewer messages (video + image)
+    MediaViewer(media_viewer::Message),
     /// Tag panel messages
     TagPanel(tag_panel::Message),
     /// File name panel messages (wrap=true display in file workspace)

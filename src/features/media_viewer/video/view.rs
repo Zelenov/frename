@@ -1,4 +1,4 @@
-//! UI for the video player. Only this module knows how the player and controls look.
+//! View for the video player sub-feature.
 
 use iced::widget::{column, container, mouse_area, text};
 use iced::Element;
@@ -8,7 +8,7 @@ use crate::features::video_controls;
 use crate::theme;
 use super::{Message, VideoPlayerState};
 
-/// Render the video player with controls below
+/// Render the video player with controls below.
 pub fn view(state: &VideoPlayerState) -> Element<'_, Message> {
     if let Some(video) = state.current_video() {
         let player = VideoPlayer::new(video)
@@ -17,9 +17,6 @@ pub fn view(state: &VideoPlayerState) -> Element<'_, Message> {
             .content_fit(iced::ContentFit::Contain)
             .on_end_of_stream(Message::EndOfStream);
 
-        // Wrap in container so column layout sees Fill height
-        // (VideoPlayer widget's size() always reports Shrink).
-        // Click on video area toggles pause.
         let video_area = mouse_area(
             container(player)
                 .width(iced::Length::Fill)
@@ -28,7 +25,6 @@ pub fn view(state: &VideoPlayerState) -> Element<'_, Message> {
         )
         .on_press(Message::TogglePause);
 
-        // Read live position from the video at view time (like the Slider pattern)
         let position_secs = video.position().as_secs_f32();
         let controls =
             video_controls::view::view(state.controls(), position_secs).map(Message::Controls);
@@ -38,31 +34,19 @@ pub fn view(state: &VideoPlayerState) -> Element<'_, Message> {
             .height(iced::Length::Fill)
             .into()
     } else if state.is_loading() {
-        container(
-            text("⏳")
-                .size(48)
-                .color(theme::TEXT_MUTED),
-        )
-        .center(iced::Length::Fill)
-        .into()
+        container(text("⏳").size(48).color(theme::TEXT_MUTED))
+            .center(iced::Length::Fill)
+            .into()
     } else if state.load_failed() {
-        container(
-            text("✕")
-                .size(80)
-                .color(theme::ERROR),
-        )
-        .center(iced::Length::Fill)
-        .width(iced::Length::Fill)
-        .height(iced::Length::Fill)
-        .style(theme::panel_container_style)
-        .into()
+        container(text("✕").size(80).color(theme::ERROR))
+            .center(iced::Length::Fill)
+            .width(iced::Length::Fill)
+            .height(iced::Length::Fill)
+            .style(theme::panel_container_style)
+            .into()
     } else {
-        container(
-            text("🎬")
-                .size(48)
-                .color(theme::TEXT_MUTED),
-        )
-        .center(iced::Length::Fill)
-        .into()
+        container(text("🎬").size(48).color(theme::TEXT_MUTED))
+            .center(iced::Length::Fill)
+            .into()
     }
 }

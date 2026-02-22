@@ -1,7 +1,7 @@
 //! File structure: path/metadata and tag-based rename state.
 //! File holds a FileSnapshot (tags + name + extension). From File's perspective we only update tags in it.
 
-use crate::{FileSnapshot, FileTagger};
+use crate::{FileKind, FileSnapshot, FileTagger};
 use std::path::Path;
 use std::time::SystemTime;
 
@@ -80,6 +80,12 @@ impl File {
     /// The file's snapshot (tags, name, extension; display and for building TagList from stored names).
     pub fn snapshot(&self) -> &FileSnapshot {
         &self.file_snapshot
+    }
+
+    /// Media type of this file based on its extension.
+    pub fn kind(&self) -> FileKind {
+        let ext = self.file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        FileKind::from_extension(ext)
     }
 
     /// Mutable reference to the file's snapshot (crate-only; used by tests).

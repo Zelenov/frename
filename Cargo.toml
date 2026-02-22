@@ -6,18 +6,28 @@ rust-version = "1.75"
 authors = ["Your Name <your.email@example.com>"]
 description = "File renaming utility for Windows"
 
+[features]
+# HEIC/HEIF decoding (requires cmake; install cmake then `cargo build --features heic`)
+heic = ["dep:libheif-rs"]
+
 [dependencies]
 # Core logic crate
 frename-core = { path = "crates/frename-core" }
 
 # GUI framework - Iced for cross-platform GUI
-iced = { version = "0.14.0-dev", features = ["tokio"] }
+iced = { version = "0.14.0-dev", features = ["tokio", "image"] }
 
 # Video playback - GStreamer-based (requires GStreamer installation on Windows)
 # See GSTREAMER_SETUP.md for installation instructions
 # Using git version for compatibility with iced 0.14
 iced_video_player = { git = "https://github.com/jazzfool/iced_video_player", branch = "master" }
 url = "2.5"
+
+# Image decoding (JPEG, PNG, WebP, BMP)
+image = "0.25"
+
+# HEIC/HEIF decoding (optional; requires cmake at build time)
+libheif-rs = { version = "2", features = ["embedded-libheif"], optional = true }
 
 # Logging - simple file logging for debugging
 log = "0.4"

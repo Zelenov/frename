@@ -6,7 +6,7 @@
 use iced::widget::{column, container, row, text};
 use iced::{Element, Length};
 
-use crate::features::{file_workspace, folder, folder_controls, video_player};
+use crate::features::{file_workspace, folder, folder_controls, media_viewer};
 use crate::theme;
 use crate::widgets::splitter::{Splitter, HIT_WIDTH};
 
@@ -34,7 +34,7 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
     }
 
     let video = container(
-        video_player::view::view(state.video_player()).map(Message::VideoPlayer),
+        media_viewer::view::view(state.media_viewer()).map(Message::MediaViewer),
     )
     .width(Length::Fixed(state.left_width()))
     .height(Length::Fill);

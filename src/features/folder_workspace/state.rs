@@ -20,8 +20,8 @@ use iced::widget::operation;
 use crate::features::file_name_panel::{self, FileNamePanelState};
 use crate::features::file_workspace::FileWorkspace;
 use crate::features::folder;
+use crate::features::media_viewer::{self, MediaViewerState};
 use crate::features::tag_panel::{self, TagPanelState, TAG_LIST_SCROLLABLE_ID};
-use crate::features::video_player::{self, VideoPlayerState};
 use crate::widgets::search_bar::SEARCH_BAR_INPUT_ID;
 use crate::widgets::splitter::HIT_WIDTH;
 
@@ -37,10 +37,10 @@ pub struct FolderWorkspace {
     loading: bool,
     /// File currently being edited: copy of file + tag selection. Rename panel reads/updates this.
     file_workspace: FileWorkspace<AppDatabase>,
-    video_player: VideoPlayerState,
+    media_viewer: MediaViewerState,
     tag_panel: TagPanelState,
     file_name_panel: FileNamePanelState,
-    /// Snapshot to persist after current video is unloaded (then we send FileUpdated and load next video).
+    /// Snapshot to persist after media is unloaded (for video: then we send FileUpdated and load next media).
     pending_file_updated: Option<(PathBuf, FileSnapshot)>,
     left_width: f32,
     folder_width: f32,
@@ -55,7 +55,7 @@ impl FolderWorkspace {
             directory: None,
             loading: false,
             file_workspace: FileWorkspace::<AppDatabase>::default(),
-            video_player: VideoPlayerState::default(),
+            media_viewer: MediaViewerState::default(),
             tag_panel: TagPanelState::default(),
             file_name_panel: FileNamePanelState::default(),
             pending_file_updated: None,
@@ -79,9 +79,9 @@ impl FolderWorkspace {
             Message::FileOpened(file) => self.apply_file_opened(file),
             Message::FileUpdated { path, snapshot } => self.apply_file_updated(path, snapshot),
             Message::Folder(folder_msg) => self.handle_folder_message(folder_msg),
-            Message::VideoPlayer(msg) => match msg {
-                video_player::Message::VideoUnloaded => self.on_video_unloaded(),
-                other => self.video_player.update(other).map(Message::VideoPlayer),
+            Message::MediaViewer(msg) => match msg {
+                media_viewer::Message::Unloaded => self.on_media_unloaded(),
+                other => self.media_viewer.update(other).map(Message::MediaViewer),
             },
             Message::TagPanel(msg) => self.handle_tag_panel(msg),
             Message::FileNamePanel(msg) => self.handle_file_name_panel(msg),
@@ -200,32 +200,36 @@ impl FolderWorkspace {
         log::info!("Opening file: {}", file.file_path().display());
         let Some(snapshot) = snapshot else {
             self.pending_file_updated = None;
-            let path = file.file_path().to_path_buf();
-            return self.video_player.load_video(path).map(Message::VideoPlayer);
+            return self.media_viewer.open(&file).map(Message::MediaViewer);
         };
-        self.pending_file_updated = Some(snapshot);
-        Task::done(Message::VideoPlayer(video_player::Message::Unload))
+        if self.media_viewer.needs_unload_before_rename() {
+            self.pending_file_updated = Some(snapshot);
+            Task::done(Message::MediaViewer(media_viewer::Message::Unload))
+        } else {
+            let (path, snap) = snapshot;
+            Task::batch([
+                Task::done(Message::FileUpdated { path, snapshot: snap }),
+                self.media_viewer.open(&file).map(Message::MediaViewer),
+            ])
+        }
     }
 
-    /// Called when video player has unloaded. Persist pending snapshot (FileUpdated) then load the new video.
-    fn on_video_unloaded(&mut self) -> Task<Message> {
-        let pending = self.pending_file_updated.take();
-        let Some((path, snapshot)) = pending else {
+    /// Called when media has unloaded. Persist pending snapshot (FileUpdated) then open the new media.
+    fn on_media_unloaded(&mut self) -> Task<Message> {
+        let Some((path, snapshot)) = self.pending_file_updated.take() else {
             return Task::none();
         };
-        let video_task = self
+        let Some(file) = self
             .directory
             .as_ref()
             .and_then(|d| d.selected_file())
-            .map(|f| {
-                self.video_player
-                    .load_video(f.file_path().to_path_buf())
-                    .map(Message::VideoPlayer)
-            })
-            .unwrap_or(Task::none());
+            .cloned()
+        else {
+            return Task::none();
+        };
         Task::batch([
             Task::done(Message::FileUpdated { path, snapshot }),
-            video_task,
+            self.media_viewer.open(&file).map(Message::MediaViewer),
         ])
     }
 
@@ -540,7 +544,7 @@ impl FolderWorkspace {
 
     pub fn subscription(&self) -> Subscription<Message> {
         Subscription::batch([
-            self.video_player.subscription().map(Message::VideoPlayer),
+            self.media_viewer.subscription().map(Message::MediaViewer),
             self.file_name_panel.subscription().map(Message::FileNamePanel),
         ])
     }
@@ -572,8 +576,13 @@ impl FolderWorkspace {
             .unwrap_or((false, false))
     }
 
-    pub fn video_player(&self) -> &VideoPlayerState {
-        &self.video_player
+    pub fn media_viewer(&self) -> &MediaViewerState {
+        &self.media_viewer
+    }
+
+    /// True when a video is active and must be unloaded before rename or close.
+    pub fn needs_media_unload(&self) -> bool {
+        self.media_viewer.needs_unload_before_rename()
     }
 
     pub fn tag_panel(&self) -> &TagPanelState {

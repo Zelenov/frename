@@ -1,4 +1,4 @@
-//! Video player feature
+//! Video player sub-feature of media_viewer.
 
 mod messages;
 mod state;

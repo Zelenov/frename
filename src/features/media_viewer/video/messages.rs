@@ -1,11 +1,11 @@
-//! Messages for video player feature
+//! Messages for the video player sub-feature.
 
 use crate::features::video_controls;
 
-/// Messages handled by the video player
+/// Messages handled by the video player.
 #[derive(Debug, Clone)]
 pub enum Message {
-    /// Video finished loading
+    /// Video finished loading (success flag)
     VideoLoaded(bool),
     /// Video became available after loading
     VideoReady { duration_secs: f32 },
