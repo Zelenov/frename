@@ -102,7 +102,6 @@ where
     };
 
     let selected_id = state.selected_tag_id();
-    let drop_target_index = state.drop_target_index();
     let ids: Vec<_> = tag_list.filtered_display_tag_ids().to_vec();
     let row_height = Length::Fixed(GRID_ROW_HEIGHT);
 
@@ -140,19 +139,15 @@ where
 
     let grid_rows: Vec<Element<'_, Message>> = ids
         .chunks(cols_usize)
-        .enumerate()
-        .map(|(row_i, chunk)| {
+        .map(|chunk| {
             let mut cells: Vec<Element<'_, Message>> = chunk
                 .iter()
-                .enumerate()
-                .filter_map(|(col_i, id)| {
-                    let index = row_i * cols_usize + col_i;
+                .filter_map(|id| {
                     let id = *id;
                     let tag = tag_list.get_tag(id)?;
                     let is_checked = tag.is_checked();
                     let is_selected = selected_id == Some(id);
                     let is_stored = tag.is_stored();
-                    let _is_drop_target = drop_target_index == Some(index);
                     let tag_color = tag_colors::TagColors::color(tag.color_index());
                     let checkbox_el = checkbox(is_checked)
                         .on_toggle(move |_| Message::ToggleTag(id))

@@ -80,11 +80,11 @@ where
         .align_x(Alignment::Start);
 
     let content_bounds = BoundsReporter::new(Message::PanelBounds);
-    // Wrap BoundsReporter in a Fixed height to prevent it (Fill x Fill) from propagating
-    // Fill height up through the Shrink chain in file_name_panel → file_workspace column.
+    // 0-height anchor: reports correct x/y/width for drop-index without constraining the stack.
+    // drop_index only uses x, y, width — height is computed from tag_count, not from bounds.
     let content_bounds = container(content_bounds)
         .width(Length::Fill)
-        .height(Length::Fixed(TAG_CHIP_CELL_HEIGHT));
+        .height(Length::Fixed(0.0));
     let chips_cell = container(
         stack![content_bounds, tag_row]
             .width(Length::Fill),

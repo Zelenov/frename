@@ -371,10 +371,7 @@ impl FolderWorkspace {
                 }
                 Task::none()
             }
-            tag_panel::Message::DragStarted(_)
-            | tag_panel::Message::DragHoverCursor { .. }
-            | tag_panel::Message::DragEnded
-            | tag_panel::Message::PanelBounds { .. } => Task::none(),
+            tag_panel::Message::PanelBounds { .. } => Task::none(),
         }
     }
 
@@ -545,7 +542,6 @@ impl FolderWorkspace {
         Subscription::batch([
             self.video_player.subscription().map(Message::VideoPlayer),
             self.file_name_panel.subscription().map(Message::FileNamePanel),
-            self.tag_panel.subscription().map(Message::TagPanel),
         ])
     }
 

@@ -1,10 +1,9 @@
 {
   "permissions": {
+    "defaultMode": "bypassPermissions",
     "allow": [
-      "Bash(tail:*)",
-      "Bash(powershell.exe:*)",
-      "Bash(grep:*)",
-      "Bash(cd /c/Work/my/frename && cargo check 2>&1)"
+      "Bash(grep:*)"
     ]
-  }
+  },
+  "skipDangerousModePermissionPrompt": true
 }

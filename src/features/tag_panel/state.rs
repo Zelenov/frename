@@ -1,13 +1,10 @@
 //! State for the tag panel feature
 
-use iced::{event, mouse, Rectangle, Subscription};
+use iced::Rectangle;
 
 use frename_core::{StoredTagStore, TagId, TagList};
 
 use super::Message;
-
-/// Row height for cursor-to-row mapping. Must match view::TAG_ROW_HEIGHT.
-const TAG_ROW_HEIGHT: f32 = 28.0;
 
 const DEFAULT_ROW_HEIGHT: f32 = 28.0;
 const DEFAULT_COLS: u32 = 1;
@@ -16,10 +13,6 @@ const DEFAULT_COLS: u32 = 1;
 pub struct TagPanelState {
     /// Tag list cursor: which tag row is selected (for keyboard Up/Down, delete button, Delete key).
     selected_tag_id: Option<TagId>,
-    /// Tag being dragged (for reorder).
-    dragging_tag_id: Option<TagId>,
-    /// Row index where the dragged tag will be dropped (put before the tag at this index). None when outside list.
-    drop_target_index: Option<usize>,
     /// Tag list content bounds (from BoundsReporter) and scroll Y for mapping cursor to row index.
     bounds: Option<Rectangle>,
     scroll_y: f32,
@@ -35,8 +28,6 @@ impl Default for TagPanelState {
     fn default() -> Self {
         Self {
             selected_tag_id: None,
-            dragging_tag_id: None,
-            drop_target_index: None,
             bounds: None,
             scroll_y: 0.0,
             row_height: DEFAULT_ROW_HEIGHT,
@@ -79,53 +70,9 @@ impl TagPanelState {
         self.selected_tag_id = id;
     }
 
-    /// Tag ID being dragged. None when not dragging.
-    pub fn dragging_tag_id(&self) -> Option<TagId> {
-        self.dragging_tag_id
-    }
-
-    /// Row index to drop at (put dragged tag before the tag at this index). None when outside or not dragging.
-    pub fn drop_target_index(&self) -> Option<usize> {
-        self.drop_target_index
-    }
-
-    /// Subscription for drag: cursor and release while dragging.
-    pub fn subscription(&self) -> Subscription<Message> {
-        if self.dragging_tag_id.is_none() {
-            return Subscription::none();
-        }
-        event::listen_with(|ev, _status, _id| match ev {
-            iced::Event::Mouse(mouse::Event::CursorMoved { position }) => {
-                Some(Message::DragHoverCursor {
-                    x: position.x,
-                    y: position.y,
-                })
-            }
-            iced::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
-                Some(Message::DragEnded)
-            }
-            _ => None,
-        })
-    }
-
-    /// Handle tag panel messages. Pass tag_list for drag drop target resolution.
-    pub fn update<S: StoredTagStore + Clone>(&mut self, message: &Message, tag_list: &TagList<S>) {
+    /// Handle tag panel messages.
+    pub fn update<S: StoredTagStore + Clone>(&mut self, message: &Message, _tag_list: &TagList<S>) {
         match message {
-            Message::DragStarted(tag_id) => {
-                self.dragging_tag_id = Some(*tag_id);
-                self.drop_target_index = tag_list
-                    .filtered_display_tag_ids()
-                    .iter()
-                    .position(|id| id == tag_id)
-                    .or(Some(0));
-            }
-            Message::DragHoverCursor { x, y } => {
-                self.drop_target_index = self.row_index_at_cursor(*x, *y, tag_list.filtered_display_tag_ids().len());
-            }
-            Message::DragEnded => {
-                self.dragging_tag_id = None;
-                self.drop_target_index = None;
-            }
             Message::PanelBounds {
                 bounds,
                 row_height,
@@ -145,7 +92,7 @@ impl TagPanelState {
     }
 
     /// Row index under the cursor (0..len). None if cursor outside list. Uses stored row_height and cols (list=1, grid=2).
-    fn row_index_at_cursor(&self, cursor_x: f32, cursor_y: f32, row_count: usize) -> Option<usize> {
+    pub fn row_index_at_cursor(&self, cursor_x: f32, cursor_y: f32, row_count: usize) -> Option<usize> {
         let bounds = self.bounds?;
         if row_count == 0 {
             return None;
@@ -154,7 +101,7 @@ impl TagPanelState {
         let row_height = if self.row_height > 0.0 {
             self.row_height
         } else {
-            TAG_ROW_HEIGHT
+            DEFAULT_ROW_HEIGHT
         };
         let cols = self.cols.max(1) as usize;
         if cursor_x < bounds.x

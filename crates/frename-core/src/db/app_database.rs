@@ -71,23 +71,6 @@ impl StoredTagStore for AppDatabase {
         Ok(TagColorMapping::from_entries(entries))
     }
 
-    fn add_stored_tag(
-        &mut self,
-        tag: StoredTag,
-        color_index: u8,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let conn = Connection::open(&self.path)?;
-        conn.execute(
-            "INSERT INTO stored_tags (id, name, sort_order) VALUES (?1, ?2, ?3)",
-            rusqlite::params![tag.id().to_string(), tag.value(), tag.sort_order()],
-        )?;
-        conn.execute(
-            "INSERT OR REPLACE INTO tag_color_mapping (tag_name, color_index) VALUES (?1, ?2)",
-            rusqlite::params![tag.value(), i32::from(color_index)],
-        )?;
-        Ok(())
-    }
-
     fn save_tag(
         &mut self,
         tag: StoredTag,

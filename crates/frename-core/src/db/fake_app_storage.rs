@@ -70,16 +70,6 @@ impl StoredTagStore for FakeAppStorage {
         Ok(TagColorMapping::from_entries(self.tag_colors.clone().into_iter()))
     }
 
-    fn add_stored_tag(
-        &mut self,
-        tag: StoredTag,
-        color_index: u8,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.tag_colors.insert(tag.value().to_string(), color_index);
-        self.stored_tags.insert(tag.id(), tag);
-        Ok(())
-    }
-
     fn save_tag(
         &mut self,
         tag: StoredTag,
