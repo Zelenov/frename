@@ -128,6 +128,13 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.tag_list.reorder_tag_to_index(dragged_id, drop_index);
     }
 
+    /// Rebuild the tag list from scratch using the given snapshot (but keeping the same store).
+    /// Used by paste: constructs a new TagList with the pasted tags as the snapshot, so all
+    /// ordering/checked/stored logic runs fresh — identical to what happens when a file is opened.
+    pub fn reinitialize_tags_from_snapshot(&mut self, snapshot: FileSnapshot) {
+        self.tag_list = TagList::new(self.store.clone(), snapshot);
+    }
+
     /// Snapshot of the current file's path and workspace snapshot (to be saved by folder workspace when switching file). Does not persist anything.
     pub fn get_snapshot(&self) -> Option<(PathBuf, FileSnapshot)> {
         let file = self.file()?;

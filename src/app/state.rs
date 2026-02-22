@@ -96,9 +96,20 @@ impl FrenameApp {
                         String::new(),
                     )),
                 )),
-                iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. })
+                iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. })
                     if matches!(status, event::Status::Ignored) =>
                 {
+                    if modifiers.command() {
+                        return match key.as_ref() {
+                            keyboard::Key::Character("c") => Some(Message::FolderWorkspace(
+                                folder_workspace::Message::CopyTags,
+                            )),
+                            keyboard::Key::Character("v") => Some(Message::FolderWorkspace(
+                                folder_workspace::Message::PasteTags,
+                            )),
+                            _ => None,
+                        };
+                    }
                     if let keyboard::Key::Named(name) = key.as_ref() {
                         let msg = match name {
                             keyboard::key::Named::ArrowLeft => {

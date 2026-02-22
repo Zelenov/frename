@@ -39,6 +39,9 @@ gstreamer = "0.23"
 # Async runtime (spawn_blocking for non-blocking video load)
 tokio = { version = "1", features = ["time", "rt"] }
 
+# OS clipboard access (copy filename on Ctrl+C)
+arboard = "3"
+
 [profile.release]
 opt-level = 3
 lto = true

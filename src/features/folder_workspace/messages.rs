@@ -62,4 +62,8 @@ pub enum Message {
     RemoveTag,
     /// Save the selected tag to the store (e.g. triggered by Enter key on an unsaved tag). No-op if already stored or none selected.
     SaveSelectedTag,
+    /// Copy current file's tags (internal clipboard + OS clipboard with filename).
+    CopyTags,
+    /// Paste previously copied tags onto the current file (replace semantics).
+    PasteTags,
 }

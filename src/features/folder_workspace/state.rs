@@ -7,6 +7,7 @@
 
 use std::path::PathBuf;
 
+use arboard;
 use frename_core::{
     AppDatabase, AppStateStore, File, FileSnapshot, FolderAndFile, LoggingAppStateStore,
     SaveAndReparse,
@@ -47,6 +48,8 @@ pub struct FolderWorkspace {
     /// Last reported tag list scroll offset and viewport height (for scroll-into-view).
     tag_list_scroll_y: Option<f32>,
     tag_list_viewport_height: Option<f32>,
+    /// Internally copied tag names (for paste onto another file).
+    copied_tags: Option<Vec<String>>,
 }
 
 impl FolderWorkspace {
@@ -63,6 +66,7 @@ impl FolderWorkspace {
             folder_width: DEFAULT_FOLDER_WIDTH,
             tag_list_scroll_y: None,
             tag_list_viewport_height: None,
+            copied_tags: None,
         }
     }
 
@@ -113,6 +117,8 @@ impl FolderWorkspace {
                     Task::none()
                 }
             }
+            Message::CopyTags => self.copy_tags(),
+            Message::PasteTags => self.paste_tags(),
         }
     }
 
@@ -130,6 +136,37 @@ impl FolderWorkspace {
         self.file_workspace.set_tag_filter(new_value);
         operation::focus(iced::widget::Id::from(SEARCH_BAR_INPUT_ID))
             .map(|_: ()| Message::Noop)
+    }
+
+    fn copy_tags(&mut self) -> Task<Message> {
+        let Some((_, snapshot)) = self.file_workspace.get_snapshot() else {
+            return Task::none();
+        };
+        self.copied_tags = Some(snapshot.tags().to_vec());
+        if let Ok(mut cb) = arboard::Clipboard::new() {
+            let _ = cb.set_text(snapshot.file_name());
+        }
+        Task::none()
+    }
+
+    fn paste_tags(&mut self) -> Task<Message> {
+        let Some(names) = self.copied_tags.clone() else {
+            return Task::none();
+        };
+        let Some((_, current)) = self.file_workspace.get_snapshot() else {
+            return Task::none();
+        };
+        // Recreate the tag list from scratch: pasted tag names as the snapshot, current file's
+        // name/extension preserved. TagList::new handles all ordering, checked, and stored logic.
+        let new_snapshot = FileSnapshot::new(
+            names,
+            current.name_without_extension(),
+            current.extension(),
+            current.initial_file_name(),
+        );
+        self.file_workspace.reinitialize_tags_from_snapshot(new_snapshot);
+        self.clamp_selection_to_filtered();
+        Task::none()
     }
 
     fn load_last_session(&self) -> Task<Message> {
