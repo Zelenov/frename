@@ -21,7 +21,7 @@ disable-model-invocation: false
 
 ## What the app does
 
-**frename** is a Windows desktop app for renaming video files using a tag-based system.
+**frename** is a Windows desktop app for renaming video and image files using a tag-based system.
 
 File name format: `tag1.tag2.name.ext`
 

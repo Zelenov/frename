@@ -17,6 +17,8 @@ disable-model-invocation: false
 - Changing how `FileWorkspace` or `FolderWorkspace` coordinates features
 - Understanding when/how data is written to disk
 
+For wiring `Message::Undo` / `Message::Redo` or implementing undo commands, use the **`undo-dev`** skill instead.
+
 ---
 
 ## The bridge: FileWorkspace
