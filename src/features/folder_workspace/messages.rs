@@ -66,4 +66,8 @@ pub enum Message {
     CopyTags,
     /// Paste previously copied tags onto the current file (replace semantics).
     PasteTags,
+    /// Undo the last undoable action (Ctrl+Z).
+    Undo,
+    /// Redo the last undone action (Ctrl+Y / Ctrl+Shift+Z).
+    Redo,
 }

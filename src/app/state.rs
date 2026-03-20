@@ -108,6 +108,15 @@ impl FrenameApp {
                             keyboard::Key::Character("v") => Some(Message::FolderWorkspace(
                                 folder_workspace::Message::PasteTags,
                             )),
+                            keyboard::Key::Character("z") if modifiers.shift() => {
+                                Some(Message::FolderWorkspace(folder_workspace::Message::Redo))
+                            }
+                            keyboard::Key::Character("z") => {
+                                Some(Message::FolderWorkspace(folder_workspace::Message::Undo))
+                            }
+                            keyboard::Key::Character("y") => {
+                                Some(Message::FolderWorkspace(folder_workspace::Message::Redo))
+                            }
                             _ => None,
                         };
                     }

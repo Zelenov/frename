@@ -318,11 +318,14 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         }
         self.selected_tag_ids.remove(&moved_id);
         let checked_after: Vec<TagId> = checked.into_iter().filter(|id| *id != moved_id).collect();
-        let before_id = match index >= checked_after.len() {
-            false => Some(&checked_after[index]),
-            true => None,
-        };
-        self.selected_tag_ids.insert_before(moved_id, (), before_id);
+        if index < checked_after.len() {
+            self.selected_tag_ids.insert_before(moved_id, (), Some(&checked_after[index]));
+        } else if let Some(last) = checked_after.last() {
+            // Append after the last checked tag (not insert_before(None) which goes to the front).
+            self.selected_tag_ids.insert_after(moved_id, (), Some(last));
+        } else {
+            self.selected_tag_ids.insert_before(moved_id, (), None);
+        }
     }
 
     /// Build a FileSnapshot from checked (selected) tags in [selected_tag_ids] order (file name panel order).
@@ -367,6 +370,124 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         tag.set_order(order);
         self.rebuild_filtered_display_tag_ids();
         Some(id)
+    }
+
+    /// Reinitialize the tag list from a snapshot, preserving the current store.
+    /// Used by PasteTagsCommand to undo/redo paste operations.
+    pub fn reinitialize_from_snapshot(&mut self, snapshot: FileSnapshot) {
+        *self = TagList::new(self.store.clone(), snapshot);
+    }
+
+    /// Capture all data needed to undo a delete for the tag with the given id.
+    /// Returns (name, color_index, was_stored, was_starred, was_checked, sort_order).
+    /// Returns None if the tag is not found.
+    pub fn capture_delete_data(&self, id: TagId) -> Option<(String, u8, bool, bool, bool, i64)> {
+        let tag = self.tags_by_id.get(&id)?;
+        let sort_order = self.display_tag_ids.get_order(&id).unwrap_or(0);
+        Some((
+            tag.tag().to_string(),
+            tag.color_index(),
+            tag.is_stored(),
+            tag.is_starred(),
+            tag.is_checked(),
+            sort_order,
+        ))
+    }
+
+    /// Restore a tag that was previously deleted. Inserts back into the store (if stored) and
+    /// both ordered collections using the original sort_order.
+    pub fn restore_deleted_tag(
+        &mut self,
+        tag_id: TagId,
+        tag_name: &str,
+        color_index: u8,
+        was_stored: bool,
+        was_starred: bool,
+        was_checked: bool,
+        sort_order: i64,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if was_stored {
+            let st = StoredTag::with_all(tag_id.0, tag_name, sort_order, was_starred);
+            self.store.save_tag(st, color_index)?;
+        }
+        let mut tag = Tag::with_id_order_checked(
+            tag_id, tag_name, color_index, was_stored, sort_order, was_checked,
+        );
+        tag.set_starred(was_starred);
+        self.tags_by_id.insert(tag_id, tag);
+        self.display_tag_ids.insert(tag_id, (), sort_order);
+        self.selected_tag_ids.insert(tag_id, (), sort_order);
+        self.rebuild_filtered_display_tag_ids();
+        Ok(())
+    }
+
+    /// Create a new unsaved tag with a specific id (for redo of CreateTagCommand so the UUID
+    /// is stable across redo). Returns false if a tag with that name already exists.
+    pub fn create_tag_with_id(&mut self, id: TagId, name: impl Into<String>) -> bool {
+        let name = name.into();
+        if self.has_tag_with_name(&name) {
+            return false;
+        }
+        let tag = Tag::with_id_order_checked(id, &name, 0, false, 0, true);
+        self.tags_by_id.insert(id, tag);
+        self.display_tags_rebalanced |= self.display_tag_ids.insert_before(id, (), None);
+        self.selected_tag_ids.insert_before(id, (), None);
+        let order = self.display_tag_ids.get_order(&id).unwrap_or(0);
+        if let Some(t) = self.tags_by_id.get_mut(&id) {
+            t.set_order(order);
+        }
+        self.rebuild_filtered_display_tag_ids();
+        true
+    }
+
+    /// Save a tag to the store with a forced color index (used by CreateTagCommand::redo to
+    /// preserve the original color across undo/redo cycles).
+    pub fn save_tag_with_color(
+        &mut self,
+        id: TagId,
+        color_index: u8,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let (text, starred) = self
+            .tags_by_id
+            .get(&id)
+            .map(|t| (t.tag().to_string(), t.is_starred()))
+            .ok_or_else(|| {
+                Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, "tag not found"))
+                    as Box<dyn std::error::Error + Send + Sync>
+            })?;
+        let order = self.display_tag_ids.get_order(&id).unwrap_or(0);
+        let st = StoredTag::with_all(id.0, &text, order, starred);
+        self.store.save_tag(st, color_index)?;
+        if let Some(t) = self.tags_by_id.get_mut(&id) {
+            t.set_stored(true);
+            t.set_color_index(color_index);
+        }
+        if self.display_tags_rebalanced {
+            let tag_orders: Vec<(uuid::Uuid, i64)> = self
+                .display_tag_ids
+                .iter()
+                .filter_map(|(tid, _, ord)| {
+                    self.tags_by_id.get(tid).filter(|t| t.is_stored()).map(|_| (tid.0, ord))
+                })
+                .collect();
+            self.store.update_tag_orders(&tag_orders)?;
+            self.display_tags_rebalanced = false;
+        }
+        Ok(())
+    }
+
+    /// Remove a stored tag from the DB and mark it as unsaved in memory (for SaveTagCommand undo).
+    pub fn unsave_tag(
+        &mut self,
+        id: TagId,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if self.tags_by_id.get(&id).map_or(false, |t| t.is_stored()) {
+            self.store.remove_stored_tag_by_id(id.0)?;
+        }
+        if let Some(t) = self.tags_by_id.get_mut(&id) {
+            t.set_stored(false);
+        }
+        Ok(())
     }
 
     /// Remove a stored tag by tag id from the store and from the in-memory list. No-op for snapshot-only tags (use save to add them first).

@@ -10,8 +10,11 @@ use std::path::PathBuf;
 use arboard;
 use frename_core::{
     AppDatabase, AppStateStore, File, FileSnapshot, FolderAndFile, LoggingAppStateStore,
-    SaveAndReparse,
+    NavigateFileCommand, ReorderTagCommand, ToggleTagCommand, PasteTagsCommand,
+    DeleteTagCommand, CreateTagCommand, SaveTagCommand, StarTagCommand,
+    SaveAndReparse, UndoContext, UndoError,
 };
+use frename_core::undo::History;
 
 use super::messages::GlobalSearchKey;
 use super::Directory;
@@ -32,6 +35,10 @@ const DEFAULT_LEFT_WIDTH: f32 = 460.0;
 const DEFAULT_FOLDER_WIDTH: f32 = 200.0;
 const MIN_FOLDER_WIDTH: f32 = 120.0;
 
+/// Concrete history type for this workspace: Directory uses LoggingAppStateStore<AppDatabase>,
+/// TagList uses AppDatabase.
+type WorkspaceHistory = History<LoggingAppStateStore<AppDatabase>, AppDatabase>;
+
 /// Folder workspace: owns directory, loading. Current file is the directory's selection.
 pub struct FolderWorkspace {
     directory: Option<Directory>,
@@ -43,6 +50,9 @@ pub struct FolderWorkspace {
     file_name_panel: FileNamePanelState,
     /// Snapshot to persist after media is unloaded (for video: then we send FileUpdated and load next media).
     pending_file_updated: Option<(PathBuf, FileSnapshot)>,
+    /// The directory selection index before the last navigation (captured before dir.select_*).
+    /// Consumed by apply_file_updated to build NavigateFileCommand.
+    pending_from_index: Option<usize>,
     left_width: f32,
     folder_width: f32,
     /// Last reported tag list scroll offset and viewport height (for scroll-into-view).
@@ -50,6 +60,8 @@ pub struct FolderWorkspace {
     tag_list_viewport_height: Option<f32>,
     /// Internally copied tag names (for paste onto another file).
     copied_tags: Option<Vec<String>>,
+    /// Undo/redo history for all undoable actions.
+    history: WorkspaceHistory,
 }
 
 impl FolderWorkspace {
@@ -62,11 +74,13 @@ impl FolderWorkspace {
             tag_panel: TagPanelState::default(),
             file_name_panel: FileNamePanelState::default(),
             pending_file_updated: None,
+            pending_from_index: None,
             left_width: DEFAULT_LEFT_WIDTH,
             folder_width: DEFAULT_FOLDER_WIDTH,
             tag_list_scroll_y: None,
             tag_list_viewport_height: None,
             copied_tags: None,
+            history: WorkspaceHistory::new(50),
         }
     }
 
@@ -119,6 +133,8 @@ impl FolderWorkspace {
             }
             Message::CopyTags => self.copy_tags(),
             Message::PasteTags => self.paste_tags(),
+            Message::Undo => self.perform_undo(),
+            Message::Redo => self.perform_redo(),
         }
     }
 
@@ -153,19 +169,18 @@ impl FolderWorkspace {
         let Some(names) = self.copied_tags.clone() else {
             return Task::none();
         };
-        let Some((_, current)) = self.file_workspace.get_snapshot() else {
+        let Some((_, snapshot_before)) = self.file_workspace.get_snapshot() else {
             return Task::none();
         };
-        // Recreate the tag list from scratch: pasted tag names as the snapshot, current file's
-        // name/extension preserved. TagList::new handles all ordering, checked, and stored logic.
-        let new_snapshot = FileSnapshot::new(
+        let snapshot_after = FileSnapshot::new(
             names,
-            current.name_without_extension(),
-            current.extension(),
-            current.initial_file_name(),
+            snapshot_before.name_without_extension(),
+            snapshot_before.extension(),
+            snapshot_before.initial_file_name(),
         );
-        self.file_workspace.reinitialize_tags_from_snapshot(new_snapshot);
+        self.file_workspace.reinitialize_tags_from_snapshot(snapshot_after.clone());
         self.clamp_selection_to_filtered();
+        self.history.push(Box::new(PasteTagsCommand { snapshot_before, snapshot_after }));
         Task::none()
     }
 
@@ -276,6 +291,21 @@ impl FolderWorkspace {
             .directory
             .as_mut()
             .map(|dir| dir.update_file(&path_buf, &snapshot_after_save));
+
+        // Push NavigateFileCommand when we have a valid from_index (set by select_* before navigating).
+        if let Some(from_index) = self.pending_from_index.take() {
+            if let Some(to_index) = self.directory.as_ref().and_then(|d| d.selected_index()) {
+                self.history.push(Box::new(NavigateFileCommand {
+                    from_index,
+                    to_index,
+                    path_before: path.clone(),
+                    path_after: path_buf.clone(),
+                    snapshot_before: snapshot.clone(),
+                    snapshot_after: snapshot_after_save.clone(),
+                }));
+            }
+        }
+
         Task::none()
     }
 
@@ -288,33 +318,39 @@ impl FolderWorkspace {
     }
 
     fn select_file_at(&mut self, index: usize) -> Task<Message> {
+        self.pending_from_index = self.directory.as_ref().and_then(|d| d.selected_index());
         let Some(file) = self
             .directory
             .as_mut()
             .and_then(|dir| dir.select_index(index))
         else {
+            self.pending_from_index = None;
             return Task::none();
         };
         Task::done(Message::FileOpened(file))
     }
 
     fn select_previous(&mut self) -> Task<Message> {
+        self.pending_from_index = self.directory.as_ref().and_then(|d| d.selected_index());
         let Some(file) = self
             .directory
             .as_mut()
             .and_then(|dir| dir.select_previous())
         else {
+            self.pending_from_index = None;
             return Task::none();
         };
         Task::done(Message::FileOpened(file))
     }
 
     fn select_next(&mut self) -> Task<Message> {
+        self.pending_from_index = self.directory.as_ref().and_then(|d| d.selected_index());
         let Some(file) = self
             .directory
             .as_mut()
             .and_then(|dir| dir.select_next())
         else {
+            self.pending_from_index = None;
             return Task::none();
         };
         Task::done(Message::FileOpened(file))
@@ -341,8 +377,10 @@ impl FolderWorkspace {
             tag_panel::Message::CreateTag(name) => {
                 let name = name.trim().to_string();
                 if !name.is_empty() {
-                    match self.file_workspace.create_and_save_new_tag(name) {
+                    match self.file_workspace.create_and_save_new_tag(name.clone()) {
                         Ok(id) => {
+                            let color_index = self.file_workspace.tag_list().get_tag(id).map_or(0, |t| t.color_index());
+                            self.history.push(Box::new(CreateTagCommand { tag_id: id, tag_name: name, color_index }));
                             self.tag_panel.set_selected(Some(id));
                             self.clamp_selection_to_filtered();
                             return Task::done(Message::ScrollTagListToSelection);
@@ -361,8 +399,10 @@ impl FolderWorkspace {
                 Task::none()
             }
             tag_panel::Message::ToggleTag(id) => {
+                let was_checked = self.file_workspace.tag_list().get_tag(id).map_or(false, |t| t.is_checked());
                 self.file_workspace.toggle_tag_by_id(id);
                 self.tag_panel.set_selected(Some(id));
+                self.history.push(Box::new(ToggleTagCommand { tag_id: id, was_checked }));
                 Task::none()
             }
             tag_panel::Message::SelectLeft => {
@@ -391,7 +431,9 @@ impl FolderWorkspace {
                 self.clamp_selection_to_filtered();
                 // Only toggle if the selected tag is visible (in the filtered list).
                 if let Some(id) = self.tag_panel.selected_tag_id() {
+                    let was_checked = self.file_workspace.tag_list().get_tag(id).map_or(false, |t| t.is_checked());
                     self.file_workspace.toggle_tag_by_id(id);
+                    self.history.push(Box::new(ToggleTagCommand { tag_id: id, was_checked }));
                 }
                 Task::none()
             }
@@ -399,8 +441,14 @@ impl FolderWorkspace {
                 if self.tag_panel.selected_tag_id() == Some(id) {
                     self.tag_panel.set_selected(None);
                 }
+                let delete_data = self.file_workspace.tag_list().capture_delete_data(id);
                 if let Err(e) = self.file_workspace.remove_stored_tag_by_id(id) {
                     log::error!("Failed to delete tag: {}", e);
+                } else if let Some((name, color, was_stored, was_starred, was_checked, sort_order)) = delete_data {
+                    self.history.push(Box::new(DeleteTagCommand {
+                        tag_id: id, tag_name: name, color_index: color,
+                        was_stored, was_starred, was_checked, sort_order,
+                    }));
                 }
                 self.clamp_selection_to_filtered();
                 Task::none()
@@ -415,22 +463,26 @@ impl FolderWorkspace {
             tag_panel::Message::SaveTag(id) => {
                 if let Err(e) = self.file_workspace.save_tag(id) {
                     log::error!("Failed to save tag to store: {}", e);
+                } else {
+                    let color_index = self.file_workspace.tag_list().get_tag(id).map_or(0, |t| t.color_index());
+                    self.history.push(Box::new(SaveTagCommand { tag_id: id, color_index }));
                 }
                 Task::none()
             }
             tag_panel::Message::ToggleStar(id) => {
-                let is_starred = self
+                let was_starred = self
                     .file_workspace
                     .tag_list()
                     .get_tag(id)
                     .map_or(false, |t| t.is_starred());
-                let result = if is_starred {
+                let result = if was_starred {
                     self.file_workspace.unstar_tag(id)
                 } else {
                     self.file_workspace.star_tag(id)
                 };
-                if let Err(e) = result {
-                    log::error!("Failed to toggle star: {}", e);
+                match result {
+                    Ok(()) => self.history.push(Box::new(StarTagCommand { tag_id: id, was_starred })),
+                    Err(e) => log::error!("Failed to toggle star: {}", e),
                 }
                 Task::none()
             }
@@ -447,7 +499,13 @@ impl FolderWorkspace {
                         .take(display_idx)
                         .filter(|&&id| tag_list.get_tag(id).map_or(false, |t| t.is_checked()))
                         .count();
+                    let from_index = self.file_workspace.tag_list().checked_index_of(did);
                     self.file_workspace.reorder_tag_to_index(did, checked_idx);
+                    if let Some(fi) = from_index {
+                        self.history.push(Box::new(ReorderTagCommand {
+                            moved_id: did, from_index: fi, to_index: checked_idx,
+                        }));
+                    }
                 }
                 Task::none()
             }
@@ -457,7 +515,10 @@ impl FolderWorkspace {
 
     fn handle_file_name_panel(&mut self, msg: file_name_panel::Message) -> Task<Message> {
         if let file_name_panel::Message::UnselectTag(id) = &msg {
-            self.file_workspace.toggle_tag_by_id(*id);
+            let id = *id;
+            let was_checked = self.file_workspace.tag_list().get_tag(id).map_or(false, |t| t.is_checked());
+            self.file_workspace.toggle_tag_by_id(id);
+            self.history.push(Box::new(ToggleTagCommand { tag_id: id, was_checked }));
         }
         let (dragged_id, drop_index) = if let file_name_panel::Message::DragEnded = &msg {
             (
@@ -472,9 +533,68 @@ impl FolderWorkspace {
         if let Some(id) = self.file_name_panel.take_dropped_dragged_tag_id() {
             self.file_workspace.toggle_tag_by_id(id);
         } else if let (Some(did), Some(idx)) = (dragged_id, drop_index) {
+            let from_index = self.file_workspace.tag_list().checked_index_of(did);
             self.file_workspace.reorder_tag_to_index(did, idx);
+            if let Some(fi) = from_index {
+                self.history.push(Box::new(ReorderTagCommand {
+                    moved_id: did,
+                    from_index: fi,
+                    to_index: idx,
+                }));
+            }
         }
         Task::none()
+    }
+
+    fn perform_undo(&mut self) -> Task<Message> {
+        if !self.history.can_undo() || self.directory.is_none() {
+            return Task::none();
+        }
+        // Inner block: limits the lifetime of dir/tl borrows so we can use self after.
+        let result: Result<(), UndoError> = {
+            let dir = self.directory.as_mut().expect("checked above");
+            let tl = self.file_workspace.tag_list_mut();
+            let mut ctx = UndoContext { directory: dir, tag_list: tl };
+            self.history.undo(&mut ctx)
+        };
+        match result {
+            Ok(()) => self.refresh_after_undo_redo(),
+            Err(e) => {
+                log::warn!("Undo failed: {}", e);
+                Task::none()
+            }
+        }
+    }
+
+    fn perform_redo(&mut self) -> Task<Message> {
+        if !self.history.can_redo() || self.directory.is_none() {
+            return Task::none();
+        }
+        let result: Result<(), UndoError> = {
+            let dir = self.directory.as_mut().expect("checked above");
+            let tl = self.file_workspace.tag_list_mut();
+            let mut ctx = UndoContext { directory: dir, tag_list: tl };
+            self.history.redo(&mut ctx)
+        };
+        match result {
+            Ok(()) => self.refresh_after_undo_redo(),
+            Err(e) => {
+                log::warn!("Redo failed: {}", e);
+                Task::none()
+            }
+        }
+    }
+
+    fn refresh_after_undo_redo(&self) -> Task<Message> {
+        let file = self
+            .directory
+            .as_ref()
+            .and_then(|d| d.selected_file())
+            .cloned();
+        match file {
+            Some(f) => Task::done(Message::FileOpened(f)),
+            None => Task::none(),
+        }
     }
 
     /// Clear selection if the selected tag is not in the current filtered list (selection must be visible).

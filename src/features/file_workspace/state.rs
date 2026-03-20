@@ -69,6 +69,11 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         &self.tag_list
     }
 
+    /// Mutable access to the tag list (used by undo/redo to apply ReorderTagCommand).
+    pub fn tag_list_mut(&mut self) -> &mut TagList<S> {
+        &mut self.tag_list
+    }
+
     /// Tag name -> color index mapping (for rendering file name chips in lists).
     pub fn tag_color_mapping(&self) -> TagColorMapping {
         self.store.get_tag_color_mapping().unwrap_or_default()
