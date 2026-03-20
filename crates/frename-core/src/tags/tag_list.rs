@@ -53,16 +53,31 @@ pub struct TagList<S> {
     initial_file_name: String,
 }
 
+/// Returns the match rank for a non-empty, pre-lowercased query against a tag name.
+/// None    = no match (tag hidden)
+/// Some(0) = full match
+/// Some(1) = prefix match
+/// Some(2) = contains match
+fn match_rank(query_lower: &str, tag_name: &str) -> Option<u8> {
+    let name_lower = tag_name.to_lowercase();
+    if name_lower == query_lower            { return Some(0); }
+    if name_lower.starts_with(query_lower)  { return Some(1); }
+    if name_lower.contains(query_lower)     { return Some(2); }
+    None
+}
+
 impl<S> TagList<S> {
     fn tag_matches_filter(&self, t: &Tag) -> bool {
         let q = self.filter_query.trim().to_lowercase();
-        q.is_empty() || t.tag().to_lowercase().contains(&q)
+        q.is_empty() || match_rank(&q, t.tag()).is_some()
     }
 
     fn rebuild_filtered_display_tag_ids(&mut self) {
-        // Filter (preserving display order), then stable-sort into three sections:
-        // 0 = unstored, 1 = starred stored, 2 = unstarred stored.
-        // Starred tags always float to the top regardless of underlying order algorithm.
+        // Filter (preserving display order), then stable-sort by (section, rank):
+        //   section: 0 = unstored, 1 = starred stored, 2 = unstarred stored
+        //   rank:    0 = full match, 1 = prefix match, 2 = contains match
+        // Starred tags always float to the top of their section.
+        // sort_by_key is stable so ties keep the original display order.
         let mut filtered: Vec<TagId> = self
             .display_tag_ids
             .iter()
@@ -71,10 +86,20 @@ impl<S> TagList<S> {
             .filter(|t| self.tag_matches_filter(t))
             .map(|t| t.id())
             .collect();
-        filtered.sort_by_key(|id| match self.tags_by_id.get(id) {
-            Some(t) if !t.is_stored() => 0u8,
-            Some(t) if t.is_starred() => 1u8,
-            _ => 2u8,
+        let q = self.filter_query.trim().to_lowercase();
+        filtered.sort_by_key(|id| {
+            let tag = self.tags_by_id.get(id);
+            let section: u8 = match tag {
+                Some(t) if !t.is_stored() => 0,
+                Some(t) if t.is_starred() => 1,
+                _ => 2,
+            };
+            let rank: u8 = if q.is_empty() {
+                0
+            } else {
+                tag.and_then(|t| match_rank(&q, t.tag())).unwrap_or(2)
+            };
+            (section, rank)
         });
         self.filtered_display_tag_ids = filtered;
     }
@@ -487,9 +512,9 @@ mod tests {
     #[test]
     fn test_tag_list_reflects_stored_tags() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "A", 1), 0, false)
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "B", 2), 1, false)
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "C", 3), 2, false);
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "A", 1, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "B", 2, false), 1)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "C", 3, false), 2);
         let list = TagList::new(store, FileSnapshot::default());
         assert_eq!(list.filtered_display_tag_ids().len(), 3);
         assert_eq!(list.get_tag(list.filtered_display_tag_ids()[0]).unwrap().tag(), "A");
@@ -500,8 +525,8 @@ mod tests {
     #[test]
     fn test_tag_list_first_and_last() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "First", 1), 0, false)
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Last", 2), 0, false);
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "First", 1, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Last", 2, false), 0);
         let list = TagList::new(store, FileSnapshot::default());
         let ids = list.filtered_display_tag_ids();
         assert_eq!(list.get_tag(ids[0]).unwrap().tag(), "First");
@@ -565,9 +590,9 @@ mod tests {
     #[test]
     fn reorder_checked_to_index_only_affects_file_name_order() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "A", 1), 0, false)
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "B", 2), 0, false)
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "C", 3), 0, false);
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "A", 1, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "B", 2, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "C", 3, false), 0);
         let snapshot = FileSnapshot::new(vec!["A".into(), "B".into(), "C".into()], "n", "ext", "init");
         let mut list = TagList::new(store, snapshot);
         assert_eq!(list.file_snapshot().tags(), ["A", "B", "C"]);
@@ -585,8 +610,8 @@ mod tests {
     #[test]
     fn init_hash_has_all_stored_and_snapshot_no_duplicates() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "StoredA", 1), 0, false)
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "StoredB", 2), 0, false);
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "StoredA", 1, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "StoredB", 2, false), 0);
         let snapshot = FileSnapshot::new(
             vec!["StoredA".into(), "OnlySnapshot".into()],
             "n",
@@ -630,8 +655,8 @@ mod tests {
     #[test]
     fn init_snapshot_tags_at_beginning_in_snapshot_order() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Stored1", 10), 0, false)
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Stored2", 20), 0, false);
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Stored1", 10, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Stored2", 20, false), 0);
         let snapshot = FileSnapshot::new(
             vec!["SnapX".into(), "SnapY".into()],
             "n",
@@ -673,9 +698,9 @@ mod tests {
     #[test]
     fn init_snapshot_empty_ordered_equals_stored_order() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "A", 1), 0, false)
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "B", 2), 0, false)
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "C", 3), 0, false);
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "A", 1, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "B", 2, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "C", 3, false), 0);
         let list = TagList::new(store, FileSnapshot::default());
         let ids = list.filtered_display_tag_ids();
         assert_eq!(list.get_tag(ids[0]).unwrap().tag(), "A");
@@ -686,8 +711,8 @@ mod tests {
     #[test]
     fn init_stored_not_in_snapshot_after_snapshot_tags() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "S", 1), 0, false)
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "T", 2), 0, false);
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "S", 1, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "T", 2, false), 0);
         let snapshot = FileSnapshot::new(vec!["S".into()], "n", "ext", "init");
         let list = TagList::new(store, snapshot);
         let ids = list.filtered_display_tag_ids();
@@ -700,12 +725,65 @@ mod tests {
         assert_eq!(names[1], "T");
     }
 
+    // --- Search ranking tests ---
+
+    fn make_stored_list(names: &[&str]) -> TagList<FakeAppStorage> {
+        let mut store = FakeAppStorage::new();
+        for (i, name) in names.iter().enumerate() {
+            store = store.add_stored_tag(StoredTag::with_all(Uuid::new_v4(), *name, (i + 1) as i64, false), 0);
+        }
+        TagList::new(store, FileSnapshot::default())
+    }
+
+    fn filtered_names(list: &TagList<FakeAppStorage>) -> Vec<String> {
+        list.filtered_display_tag_ids()
+            .iter()
+            .filter_map(|id| list.get_tag(*id))
+            .map(|t| t.tag().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn rank_full_match_first() {
+        let mut list = make_stored_list(&["Hello", "aHello", "Hel"]);
+        list.set_filter("Hel");
+        assert_eq!(filtered_names(&list), ["Hel", "Hello", "aHello"]);
+    }
+
+    #[test]
+    fn rank_prefix_before_contains() {
+        let mut list = make_stored_list(&["Hello", "aHello", "Hel"]);
+        list.set_filter("H");
+        assert_eq!(filtered_names(&list), ["Hello", "Hel", "aHello"]);
+    }
+
+    #[test]
+    fn rank_contains_only() {
+        let mut list = make_stored_list(&["Hello", "aHello", "Hel"]);
+        list.set_filter("l");
+        assert_eq!(filtered_names(&list), ["Hello", "aHello", "Hel"]);
+    }
+
+    #[test]
+    fn rank_case_insensitive() {
+        let mut list = make_stored_list(&["Hello", "aHello", "Hel"]);
+        list.set_filter("hel");
+        assert_eq!(filtered_names(&list), ["Hel", "Hello", "aHello"]);
+    }
+
+    #[test]
+    fn rank_empty_query_preserves_original_order() {
+        let mut list = make_stored_list(&["Hello", "aHello", "Hel"]);
+        list.set_filter("");
+        assert_eq!(filtered_names(&list), ["Hello", "aHello", "Hel"]);
+    }
+
     #[test]
     fn init_filter_empty_display_order_equals_filtered_order() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "A", 1), 0, false)
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "B", 2), 0, false)
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "C", 3), 0, false);
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "A", 1, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "B", 2, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "C", 3, false), 0);
         let mut list = TagList::new(store, FileSnapshot::default());
         list.set_filter("");
         let filtered = list.filtered_display_tag_ids();
