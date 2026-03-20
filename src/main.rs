@@ -11,6 +11,7 @@ use simplelog::{
 use std::fs::File;
 
 mod app;
+mod crash_guard;
 mod features;
 mod tag_colors;
 mod theme;
@@ -65,7 +66,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize app database (migrations) before iced; decorator logs.
     let _ = LoggingAppStateStore::new(frename_core::AppDatabase::new()).initialize();
 
-    Ok(iced::application(
+    // Install AFTER gstreamer::init() so our filter is registered last.
+    crash_guard::install();
+
+    iced::application(
         || (FrenameApp::new(), Task::none()),
         FrenameApp::update,
         FrenameApp::view,
@@ -80,5 +84,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .title(FrenameApp::title)
     .antialiasing(false)
     .subscription(FrenameApp::subscription)
-    .run()?)
+    .run()?;
+
+    std::process::exit(0);
 }

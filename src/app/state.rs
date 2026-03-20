@@ -38,6 +38,7 @@ impl FrenameApp {
                 folder_workspace::Message::LoadLastSession,
             )),
             Message::CloseRequested(id) => {
+                crate::crash_guard::mark_closing();
                 if !self.folder_workspace.needs_media_unload() {
                     return window::close(id);
                 }
