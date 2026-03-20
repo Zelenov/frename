@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use frename_core::{File, FileSnapshot, FolderAndFile};
+use frename_core::{File, FileId, FileSnapshot, FolderAndFile};
 
 use super::Directory;
 use crate::features::{file_name_panel, folder, media_viewer, tag_panel};
@@ -33,9 +33,10 @@ pub enum Message {
     FolderLoadFailed,
     /// File was selected (by directory). Apply snapshot, set file workspace, load/unload video.
     FileOpened(File),
-    /// Snapshot to persist: created by folder workspace when switching file (from file workspace get_snapshot). Save to disk then update directory.
+    /// Snapshot to persist: created by folder workspace when switching file.
+    /// Uses the stable FileId so the correct file is found even if it was renamed.
     FileUpdated {
-        path: PathBuf,
+        id: FileId,
         snapshot: FileSnapshot,
     },
     /// User selected a file in the list (from folder view)

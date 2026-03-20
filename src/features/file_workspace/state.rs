@@ -5,9 +5,7 @@
 //!
 //! Generic over the store type S (like Directory and TagList). Store is passed to the constructor; used to build the tag list.
 
-use std::path::PathBuf;
-
-use frename_core::{AppDatabase, File, FileSnapshot, StoredTagStore, TagColorMapping, TagId, TagList};
+use frename_core::{AppDatabase, File, FileId, FileSnapshot, StoredTagStore, TagColorMapping, TagId, TagList};
 
 /// File workspace: current file and stored tags with checked state (source of truth for UI).
 /// Generic over the store type S; store is set only in the constructor.
@@ -156,12 +154,13 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.tag_list = TagList::new(self.store.clone(), snapshot);
     }
 
-    /// Snapshot of the current file's path and workspace snapshot (to be saved by folder workspace when switching file). Does not persist anything.
-    pub fn get_snapshot(&self) -> Option<(PathBuf, FileSnapshot)> {
+    /// Snapshot of the current file's stable id and workspace tag state.
+    /// Used by folder workspace to save when switching file. Does not persist anything.
+    pub fn get_snapshot(&self) -> Option<(FileId, FileSnapshot)> {
         let file = self.file()?;
-        let path = file.file_path().to_path_buf();
+        let id = file.id();
         let snapshot = self.tag_list.file_snapshot();
-        Some((path, snapshot))
+        Some((id, snapshot))
     }
 }
 

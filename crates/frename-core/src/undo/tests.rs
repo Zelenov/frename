@@ -8,7 +8,7 @@ mod tests {
     use std::time::SystemTime;
 
     use crate::db::fake_app_storage::FakeAppStorage;
-    use crate::{Directory, File, FileSnapshot, StoredTag, TagList};
+    use crate::{Directory, File, FileId, FileSnapshot, StoredTag, TagList};
     use crate::undo::{
         History, NavigateFileCommand, ReorderTagCommand, ToggleTagCommand, PasteTagsCommand,
         DeleteTagCommand, CreateTagCommand, SaveTagCommand, StarTagCommand, UndoContext,
@@ -302,6 +302,8 @@ mod tests {
             File::from_path(dir_path.join("a.mp4"), SystemTime::UNIX_EPOCH),
             File::from_path(dir_path.join("b.mp4"), SystemTime::UNIX_EPOCH),
         ];
+        let file_a_id = files[0].id();
+        let file_b_id = files[1].id();
         let mut directory = Directory::with_files(&dir_path, files, FakeAppStorage::new());
         directory.select_index(1); // start at index 1
 
@@ -313,8 +315,8 @@ mod tests {
 
         let mut history = History::new(50);
         history.push(Box::new(NavigateFileCommand {
-            from_index: 0,
-            to_index: 1,
+            file_id: file_a_id,
+            to_file_id: file_b_id,
             path_before: dir_path.join("a.mp4"),
             path_after: dir_path.join("a.mp4"), // same path (no rename)
             snapshot_before: snap_before.clone(),
@@ -335,6 +337,8 @@ mod tests {
             File::from_path(dir_path.join("a.mp4"), SystemTime::UNIX_EPOCH),
             File::from_path(dir_path.join("b.mp4"), SystemTime::UNIX_EPOCH),
         ];
+        let file_a_id = files[0].id();
+        let file_b_id = files[1].id();
         let mut directory = Directory::with_files(&dir_path, files, FakeAppStorage::new());
         directory.select_index(1);
 
@@ -343,8 +347,8 @@ mod tests {
 
         let mut history = History::new(50);
         history.push(Box::new(NavigateFileCommand {
-            from_index: 0,
-            to_index: 1,
+            file_id: file_a_id,
+            to_file_id: file_b_id,
             path_before: dir_path.join("a.mp4"),
             path_after: dir_path.join("a.mp4"),
             snapshot_before: FileSnapshot::new(vec![], "a", "mp4", "a.mp4"),
@@ -682,11 +686,12 @@ mod tests {
     }
 
     #[test]
-    fn navigate_command_undo_fails_gracefully_when_index_out_of_range() {
+    fn navigate_command_undo_fails_gracefully_when_file_not_found() {
         let dir_path = PathBuf::from("C:/test");
         let files = vec![
             File::from_path(dir_path.join("a.mp4"), SystemTime::UNIX_EPOCH),
         ];
+        let file_a_id = files[0].id();
         let mut directory = Directory::with_files(&dir_path, files, FakeAppStorage::new());
         directory.select_index(0);
 
@@ -694,21 +699,28 @@ mod tests {
         let mut tag_list = TagList::new(store, FileSnapshot::default());
 
         let mut history = History::new(50);
-        // from_index=5 is out of range (only 1 file)
+        // Use a bogus to_file_id that doesn't exist in the directory (redo would fail)
+        // For undo: file_id must exist so the rename reverts, but then select_by_id(file_id) is used.
+        // Test that redo fails when to_file_id is bogus.
+        let bogus_id = FileId::new();
         history.push(Box::new(NavigateFileCommand {
-            from_index: 5,
-            to_index: 0,
+            file_id: file_a_id,
+            to_file_id: bogus_id,
             path_before: dir_path.join("a.mp4"),
             path_after: dir_path.join("a.mp4"),
             snapshot_before: FileSnapshot::new(vec![], "a", "mp4", "a.mp4"),
             snapshot_after: FileSnapshot::new(vec![], "a", "mp4", "a.mp4"),
         }));
 
+        {
+            let mut ctx = UndoContext { directory: &mut directory, tag_list: &mut tag_list };
+            history.undo(&mut ctx).unwrap(); // undo selects file_a_id — succeeds
+        }
+        // redo should fail: to_file_id is bogus
         let mut ctx = UndoContext { directory: &mut directory, tag_list: &mut tag_list };
-        let result = history.undo(&mut ctx);
+        let result = history.redo(&mut ctx);
         assert!(result.is_err());
-        // Stack unchanged
-        assert!(history.can_undo());
-        assert!(!history.can_redo());
+        // Stack unchanged after error
+        assert!(history.can_redo());
     }
 }

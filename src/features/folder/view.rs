@@ -42,8 +42,7 @@ pub fn view<'a>(
     let selected_index = dir.selected_index();
 
     let items: Vec<Element<'_, Message>> = dir
-        .files()
-        .iter()
+        .files_in_order()
         .enumerate()
         .map(|(index, file_info)| {
             let is_selected = selected_index == Some(index);

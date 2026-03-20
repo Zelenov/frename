@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use arboard;
 use frename_core::{
-    AppDatabase, AppStateStore, File, FileSnapshot, FolderAndFile, LoggingAppStateStore,
+    AppDatabase, AppStateStore, File, FileId, FileSnapshot, FolderAndFile, LoggingAppStateStore,
     NavigateFileCommand, ReorderTagCommand, ToggleTagCommand, PasteTagsCommand,
     DeleteTagCommand, CreateTagCommand, SaveTagCommand, StarTagCommand,
     SaveAndReparse, UndoContext, UndoError,
@@ -48,11 +48,12 @@ pub struct FolderWorkspace {
     media_viewer: MediaViewerState,
     tag_panel: TagPanelState,
     file_name_panel: FileNamePanelState,
-    /// Snapshot to persist after media is unloaded (for video: then we send FileUpdated and load next media).
-    pending_file_updated: Option<(PathBuf, FileSnapshot)>,
-    /// The directory selection index before the last navigation (captured before dir.select_*).
+    /// Deferred rename: set when media must unload before the previous file can be renamed.
+    /// Stores the file's stable ID and the tag snapshot to save.
+    pending_file_updated: Option<(FileId, FileSnapshot)>,
+    /// The ID of the file navigated to (captured after dir.select_*).
     /// Consumed by apply_file_updated to build NavigateFileCommand.
-    pending_from_index: Option<usize>,
+    pending_to_file_id: Option<FileId>,
     left_width: f32,
     folder_width: f32,
     /// Last reported tag list scroll offset and viewport height (for scroll-into-view).
@@ -74,7 +75,7 @@ impl FolderWorkspace {
             tag_panel: TagPanelState::default(),
             file_name_panel: FileNamePanelState::default(),
             pending_file_updated: None,
-            pending_from_index: None,
+            pending_to_file_id: None,
             left_width: DEFAULT_LEFT_WIDTH,
             folder_width: DEFAULT_FOLDER_WIDTH,
             tag_list_scroll_y: None,
@@ -95,7 +96,7 @@ impl FolderWorkspace {
             } => self.folder_loaded(directory, target_file),
             Message::FolderLoadFailed => self.folder_load_failed(),
             Message::FileOpened(file) => self.apply_file_opened(file),
-            Message::FileUpdated { path, snapshot } => self.apply_file_updated(path, snapshot),
+            Message::FileUpdated { id, snapshot } => self.apply_file_updated(id, snapshot),
             Message::Folder(folder_msg) => self.handle_folder_message(folder_msg),
             Message::MediaViewer(msg) => match msg {
                 media_viewer::Message::Unloaded => self.on_media_unloaded(),
@@ -236,7 +237,7 @@ impl FolderWorkspace {
         self.loading = false;
         self.directory = Some(directory); // replace previous directory only on success
         let dir = self.directory.as_mut().expect("just set");
-        let selected = dir.set_selection(target_file.as_deref());
+        let selected = target_file.as_deref().and_then(|p| dir.open_path(p));
         if let Some(file) = selected {
             Task::done(Message::FileOpened(file))
         } else {
@@ -250,17 +251,16 @@ impl FolderWorkspace {
         let snapshot = self.file_workspace.get_snapshot();
         self.file_workspace.set_file(Some(file.clone()));
         log::info!("Opening file: {}", file.file_path().display());
-        let Some(snapshot) = snapshot else {
+        let Some((id, snap)) = snapshot else {
             self.pending_file_updated = None;
             return self.media_viewer.open(&file).map(Message::MediaViewer);
         };
         if self.media_viewer.needs_unload_before_rename() {
-            self.pending_file_updated = Some(snapshot);
+            self.pending_file_updated = Some((id, snap));
             Task::done(Message::MediaViewer(media_viewer::Message::Unload))
         } else {
-            let (path, snap) = snapshot;
             Task::batch([
-                Task::done(Message::FileUpdated { path, snapshot: snap }),
+                Task::done(Message::FileUpdated { id, snapshot: snap }),
                 self.media_viewer.open(&file).map(Message::MediaViewer),
             ])
         }
@@ -268,7 +268,7 @@ impl FolderWorkspace {
 
     /// Called when media has unloaded. Persist pending snapshot (FileUpdated) then open the new media.
     fn on_media_unloaded(&mut self) -> Task<Message> {
-        let Some((path, snapshot)) = self.pending_file_updated.take() else {
+        let Some((id, snapshot)) = self.pending_file_updated.take() else {
             return Task::none();
         };
         let Some(file) = self
@@ -280,30 +280,41 @@ impl FolderWorkspace {
             return Task::none();
         };
         Task::batch([
-            Task::done(Message::FileUpdated { path, snapshot }),
+            Task::done(Message::FileUpdated { id, snapshot }),
             self.media_viewer.open(&file).map(Message::MediaViewer),
         ])
     }
 
-    fn apply_file_updated(&mut self, path: PathBuf, snapshot: frename_core::FileSnapshot) -> Task<Message> {
-        let (path_buf, snapshot_after_save) = snapshot.save_and_reparse(&path);
+    fn apply_file_updated(&mut self, id: FileId, snapshot: frename_core::FileSnapshot) -> Task<Message> {
+        // Resolve the current on-disk path via the stable file ID.
+        let Some(current_path) = self
+            .directory
+            .as_ref()
+            .and_then(|d| d.file_by_id(id))
+            .map(|f| f.file_path().to_path_buf())
+        else {
+            log::warn!("apply_file_updated: file id not found in directory");
+            return Task::none();
+        };
+
+        let path_before = current_path.clone();
+        let (new_path, snapshot_after_save) = snapshot.save_and_reparse(&current_path);
+
         let _ = self
             .directory
             .as_mut()
-            .map(|dir| dir.update_file(&path_buf, &snapshot_after_save));
+            .map(|dir| dir.rename_file(id, &new_path, &snapshot_after_save));
 
-        // Push NavigateFileCommand when we have a valid from_index (set by select_* before navigating).
-        if let Some(from_index) = self.pending_from_index.take() {
-            if let Some(to_index) = self.directory.as_ref().and_then(|d| d.selected_index()) {
-                self.history.push(Box::new(NavigateFileCommand {
-                    from_index,
-                    to_index,
-                    path_before: path.clone(),
-                    path_after: path_buf.clone(),
-                    snapshot_before: snapshot.clone(),
-                    snapshot_after: snapshot_after_save.clone(),
-                }));
-            }
+        // Push NavigateFileCommand when we have a valid to_file_id (set by select_* after navigating).
+        if let Some(to_file_id) = self.pending_to_file_id.take() {
+            self.history.push(Box::new(NavigateFileCommand {
+                file_id: id,
+                to_file_id,
+                path_before,
+                path_after: new_path,
+                snapshot_before: snapshot,
+                snapshot_after: snapshot_after_save,
+            }));
         }
 
         Task::none()
@@ -318,41 +329,41 @@ impl FolderWorkspace {
     }
 
     fn select_file_at(&mut self, index: usize) -> Task<Message> {
-        self.pending_from_index = self.directory.as_ref().and_then(|d| d.selected_index());
         let Some(file) = self
             .directory
             .as_mut()
             .and_then(|dir| dir.select_index(index))
         else {
-            self.pending_from_index = None;
+            self.pending_to_file_id = None;
             return Task::none();
         };
+        self.pending_to_file_id = Some(file.id());
         Task::done(Message::FileOpened(file))
     }
 
     fn select_previous(&mut self) -> Task<Message> {
-        self.pending_from_index = self.directory.as_ref().and_then(|d| d.selected_index());
         let Some(file) = self
             .directory
             .as_mut()
             .and_then(|dir| dir.select_previous())
         else {
-            self.pending_from_index = None;
+            self.pending_to_file_id = None;
             return Task::none();
         };
+        self.pending_to_file_id = Some(file.id());
         Task::done(Message::FileOpened(file))
     }
 
     fn select_next(&mut self) -> Task<Message> {
-        self.pending_from_index = self.directory.as_ref().and_then(|d| d.selected_index());
         let Some(file) = self
             .directory
             .as_mut()
             .and_then(|dir| dir.select_next())
         else {
-            self.pending_from_index = None;
+            self.pending_to_file_id = None;
             return Task::none();
         };
+        self.pending_to_file_id = Some(file.id());
         Task::done(Message::FileOpened(file))
     }
 
@@ -782,6 +793,19 @@ impl FolderWorkspace {
         self.media_viewer.needs_unload_before_rename()
     }
 
+    /// Test helper: inject a pending deferred rename as if media is locked.
+    /// Only available in test builds.
+    #[cfg(test)]
+    pub fn inject_pending_rename(&mut self, id: FileId, snapshot: FileSnapshot) {
+        self.pending_file_updated = Some((id, snapshot));
+    }
+
+    /// Test helper: check whether a deferred rename is pending.
+    #[cfg(test)]
+    pub fn has_pending_rename(&self) -> bool {
+        self.pending_file_updated.is_some()
+    }
+
     pub fn tag_panel(&self) -> &TagPanelState {
         &self.tag_panel
     }
@@ -804,7 +828,7 @@ mod tests {
     use std::path::PathBuf;
     use std::time::SystemTime;
 
-    use frename_core::{AppDatabase, File, FileSnapshot, Initializable, LoggingAppStateStore};
+    use frename_core::{AppDatabase, File, FileId, FileSnapshot, Initializable, LoggingAppStateStore};
 
     use crate::features::{folder, tag_panel};
 
@@ -861,22 +885,33 @@ mod tests {
         flush_file_opened(&mut workspace);
 
         assert_eq!(
-            workspace.directory().map(|d| d.files().len()),
+            workspace.directory().map(|d| d.files_in_order().count()),
             Some(2),
             "folder panel should show two files"
         );
     }
 
+    /// Helper: get the FileId of the file at the given directory index.
+    fn file_id_at(workspace: &FolderWorkspace, index: usize) -> FileId {
+        workspace
+            .directory()
+            .and_then(|d| d.files_in_order().nth(index))
+            .map(|f| f.id())
+            .expect("file at index should exist")
+    }
+
     #[test]
     fn tags_are_saved_after_selecting_another_file() {
         let test_dir = TestDirectory::new(2);
-        let first_file_path = PathBuf::from("C:/test/folder/file_0.mp4");
         let mut workspace = FolderWorkspace::new();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory,
             target_file: Some(test_dir.target_file),
         });
         flush_file_opened(&mut workspace);
+
+        // Capture file_0's stable ID before any navigation.
+        let file_0_id = file_id_at(&workspace, 0);
 
         let tag_name = "Comedy";
         let tag_list = workspace.file_workspace().tag_list();
@@ -886,17 +921,85 @@ mod tests {
             .find(|id| tag_list.get_tag(**id).map(|t| t.tag() == tag_name).unwrap_or(false))
             .copied()
             .expect("Comedy is a stored tag");
-        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(
-            tag_id,
-        )));
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
 
         let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
         flush_file_opened(&mut workspace);
-        let snapshot = FileSnapshot::new(vec![tag_name.to_string()], "file_0", "mp4", "file_0.mp4");
-        let _ = workspace.update(Message::FileUpdated {
-            path: first_file_path,
-            snapshot,
+
+        // Manually drive the FileUpdated that would fire from the iced runtime.
+        let snapshot = FileSnapshot::new(vec![tag_name.to_string()], "file_0", ".mp4", "file_0.mp4");
+        let _ = workspace.update(Message::FileUpdated { id: file_0_id, snapshot });
+
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        flush_file_opened(&mut workspace);
+
+        assert!(
+            workspace.file_workspace().file().unwrap().snapshot().has_tag(tag_name),
+            "tags should be saved after selecting another file"
+        );
+    }
+
+    /// When a video file is "loading" its GStreamer pipeline holds a file handle, so rename
+    /// must be deferred.  Opening an .mp4 sets `video.loading = true`, which makes
+    /// `needs_unload_before_rename()` return true on the next file switch — the rename is
+    /// stored in `pending_file_updated` and only fires after `MediaViewer::Unloaded`.
+    #[test]
+    fn deferred_rename_fires_after_media_unloaded() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        // Load folder; file_0 is selected and the video pipeline starts loading.
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory,
+            target_file: Some(test_dir.target_file),
         });
+        flush_file_opened(&mut workspace);
+        // After opening file_0.mp4: video.loading = true → needs_unload_before_rename() = true.
+
+        // Toggle a tag on file_0 so there is something to defer.
+        let tag_list = workspace.file_workspace().tag_list();
+        let tag_id = tag_list
+            .filtered_display_tag_ids()
+            .iter()
+            .find(|id| tag_list.get_tag(**id).map(|t| t.tag() == "Comedy").unwrap_or(false))
+            .copied()
+            .expect("Comedy is a stored tag");
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
+
+        // Navigate to file_1; because media is "loading", rename is deferred.
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+
+        // The rename of file_0 must now be pending.
+        assert!(
+            workspace.has_pending_rename(),
+            "rename must be deferred while video is loading/active"
+        );
+
+        // on_media_unloaded consumes the pending snapshot and emits FileUpdated + open next.
+        // In tests we drive these manually since there is no iced runtime.
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+
+        // Pending must now be consumed.
+        assert!(
+            !workspace.has_pending_rename(),
+            "pending rename must be consumed after Unloaded"
+        );
+
+        // Drive the FileUpdated that on_media_unloaded emitted (manually re-emit here using the stable ID).
+        let file_0_id = file_id_at(&workspace, 0);
+        let _ = workspace.update(Message::FileUpdated {
+            id: file_0_id,
+            snapshot: frename_core::FileSnapshot::new(
+                vec!["Comedy".to_string()],
+                "file_0",
+                ".mp4",
+                "file_0.mp4",
+            ),
+        });
+
+        // Navigate back to file_0 and verify its snapshot reflects the deferred rename.
         let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
         flush_file_opened(&mut workspace);
 
@@ -906,8 +1009,78 @@ mod tests {
                 .file()
                 .unwrap()
                 .snapshot()
-                .has_tag(tag_name),
-            "tags should be saved after selecting another file"
+                .has_tag("Comedy"),
+            "Comedy tag must survive the deferred rename on file_0"
+        );
+    }
+
+    /// When the pending rename is consumed by `on_media_unloaded`, the pending field is cleared
+    /// so a second `Unloaded` event does not cause a double rename.
+    #[test]
+    fn pending_rename_is_consumed_on_media_unloaded() {
+        let test_dir = TestDirectory::new(2);
+
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory,
+            target_file: Some(test_dir.target_file),
+        });
+        flush_file_opened(&mut workspace);
+        // file_0.mp4 is loading → needs_unload_before_rename() = true.
+
+        // Navigate to file_1; the rename of file_0 is deferred.
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        assert!(workspace.has_pending_rename(), "rename must be pending");
+
+        // First Unloaded: consumes the pending.
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert!(!workspace.has_pending_rename(), "pending must be None after Unloaded");
+
+        // Second Unloaded: must be a no-op (nothing to consume).
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert!(!workspace.has_pending_rename(), "still None after second Unloaded");
+    }
+
+    /// Verify that `save_and_reparse` (called by FileUpdated) updates the file path in the
+    /// directory when tags change the file name.
+    #[test]
+    fn file_updated_renames_file_path_in_directory() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory,
+            target_file: Some(test_dir.target_file),
+        });
+        flush_file_opened(&mut workspace);
+
+        // Capture file_0's stable ID before navigation.
+        let file_0_id = file_id_at(&workspace, 0);
+
+        // Navigate to file_1.
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+
+        // Apply FileUpdated with a snapshot that changes the name: "Comedy.file_0.mp4".
+        let snapshot = frename_core::FileSnapshot::new(
+            vec!["Comedy".to_string()],
+            "file_0",
+            ".mp4",
+            "file_0.mp4",
+        );
+        let _ = workspace.update(Message::FileUpdated { id: file_0_id, snapshot });
+
+        // The directory should now track the file under its new path.
+        let dir = workspace.directory().expect("directory should be loaded");
+        let new_path = PathBuf::from("C:/test/folder/Comedy.file_0.mp4");
+        let file_renamed = dir.files_in_order().any(|f| f.file_path() == new_path.as_path());
+        assert!(
+            file_renamed,
+            "directory must track the renamed path Comedy.file_0.mp4"
         );
     }
 }

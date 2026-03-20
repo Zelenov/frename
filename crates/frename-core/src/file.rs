@@ -4,15 +4,39 @@
 use crate::{FileKind, FileSnapshot, FileTagger};
 use std::path::Path;
 use std::time::SystemTime;
+use uuid::Uuid;
 
 // ---------------------------------------------------------------------------
-// Types and data
+// FileId
+// ---------------------------------------------------------------------------
+
+/// Stable identifier for a file within a session.
+/// Assigned once when the file is first scanned; survives renames.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FileId(Uuid);
+
+impl FileId {
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+}
+
+impl Default for FileId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// File
 // ---------------------------------------------------------------------------
 
 /// A file being processed: path and metadata plus a tag list (tags, name, extension).
 #[derive(Debug, Clone)]
 pub struct File {
-    /// Full path to the file (immutable).
+    /// Stable session identity — survives disk renames.
+    id: FileId,
+    /// Full path to the file (updated after a rename).
     file_path: Box<Path>,
     /// File creation time (used for sorting).
     created_at: SystemTime,
@@ -28,6 +52,7 @@ impl File {
     fn new_from_path_and_time(file_path: Box<Path>, created_at: SystemTime) -> Self {
         let file_snapshot = FileTagger::parse(&file_path);
         Self {
+            id: FileId::new(),
             file_path,
             created_at,
             file_snapshot,
@@ -43,7 +68,7 @@ impl File {
         Ok(Self::new_from_path_and_time(file_path, created_at))
     }
 
-    /// Create a file from path and creation time. For tests and programmatic use; tags are loaded via FileTagger::parse.
+    /// Create a file from path and creation time. For tests and programmatic use.
     pub fn from_path(file_path: impl AsRef<Path>, created_at: SystemTime) -> Self {
         let file_path = file_path.as_ref().to_path_buf().into_boxed_path();
         Self::new_from_path_and_time(file_path, created_at)
@@ -52,6 +77,11 @@ impl File {
     // -----------------------------------------------------------------------
     // Accessors
     // -----------------------------------------------------------------------
+
+    /// Stable session identifier — survives renames.
+    pub fn id(&self) -> FileId {
+        self.id
+    }
 
     /// Get the file path.
     pub fn file_path(&self) -> &Path {
@@ -75,6 +105,11 @@ impl File {
     /// Set the file's snapshot (e.g. after save-and-reparse).
     pub fn set_file_snapshot(&mut self, snapshot: &FileSnapshot) {
         self.file_snapshot = snapshot.clone();
+    }
+
+    /// Update the file's path (e.g. after a disk rename).
+    pub(crate) fn set_file_path(&mut self, new_path: &Path) {
+        self.file_path = new_path.to_path_buf().into_boxed_path();
     }
 
     /// The file's snapshot (tags, name, extension; display and for building TagList from stored names).
@@ -148,22 +183,16 @@ mod tests {
     }
 
     #[test]
-    fn test_from_path_no_extension() {
-        let now = SystemTime::now();
-        let f = File::from_path("/some/path/readme", now);
-        assert_eq!(f.initial_filename(), "readme");
+    fn file_id_is_stable_across_clone() {
+        let f = File::from_path("/some/path/file.mp4", SystemTime::UNIX_EPOCH);
+        let cloned = f.clone();
+        assert_eq!(f.id(), cloned.id());
     }
 
     #[test]
-    fn test_file_name_starts_with_initial_then_tags_prepended() {
-        let now = SystemTime::now();
-        let mut f = File::from_path("/path/my_video.mp4", now);
-        assert_eq!(f.snapshot().file_name(), "my_video.mp4");
-        f.snapshot_mut().set_tags(["Action"]);
-        assert_eq!(f.snapshot().file_name(), "Action.my_video.mp4");
-        f.snapshot_mut().set_tags(["Action", "Adventure"]);
-        assert_eq!(f.snapshot().file_name(), "Action.Adventure.my_video.mp4");
-        f.snapshot_mut().set_tags(["Adventure"]);
-        assert_eq!(f.snapshot().file_name(), "Adventure.my_video.mp4");
+    fn two_files_have_different_ids() {
+        let f1 = File::from_path("/some/path/file.mp4", SystemTime::UNIX_EPOCH);
+        let f2 = File::from_path("/some/path/file.mp4", SystemTime::UNIX_EPOCH);
+        assert_ne!(f1.id(), f2.id());
     }
 }

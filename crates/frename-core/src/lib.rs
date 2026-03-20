@@ -13,11 +13,13 @@ pub use db::{AppDatabase, AppStateStore, Initializable, LoggingAppStateStore, St
 pub use directory::Directory;
 pub use file_kind::FileKind;
 pub use folder_file::FolderAndFile;
-pub use file::File;
+pub use file::{File, FileId};
 pub use ordered::{OrderableEntry, OrderedCollection, OrderKey, OrderedThing};
 pub use tags::{
-    FileSnapshot, FileTagger, LoggingFileTagger, SaveAndReparse, StoredTag, Tag, TagColorMapping,
-    TagId, TagList,
+    install_file_tagger,
+    FileSnapshot, FileTagger, FileTaggerBackend, LoggingFileTagger,
+    InMemoryFileTagger, ProductionFileTagger,
+    SaveAndReparse, StoredTag, Tag, TagColorMapping, TagId, TagList,
 };
 pub use undo::{
     History, UndoContext, UndoError,

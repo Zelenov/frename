@@ -18,9 +18,24 @@ mod theme;
 mod widgets;
 
 use app::FrenameApp;
-use frename_core::{Initializable, LoggingAppStateStore};
+use frename_core::{
+    install_file_tagger, InMemoryFileTagger, ProductionFileTagger,
+    Initializable, LoggingAppStateStore,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Install the file tagger backend before any file operations.
+    //   Release build (default): ProductionFileTagger — actually renames files on disk.
+    //   Debug build or --debug flag: InMemoryFileTagger — no disk changes (safe for testing).
+    //   --production flag: force ProductionFileTagger even in debug builds.
+    let args: Vec<String> = std::env::args().collect();
+    let debug_flag = args.iter().any(|a| a == "--debug");
+    let production_flag = args.iter().any(|a| a == "--production");
+    if production_flag || (!cfg!(debug_assertions) && !debug_flag) {
+        install_file_tagger(Box::new(ProductionFileTagger));
+    } else {
+        install_file_tagger(Box::new(InMemoryFileTagger::default()));
+    }
     // Initialize file + console logging (log file next to the executable)
     let log_path = std::env::current_exe()?
         .parent()

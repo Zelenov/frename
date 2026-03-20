@@ -6,7 +6,6 @@ use crate::TagId;
 #[derive(Debug)]
 pub enum UndoError {
     FileNotFound(PathBuf),
-    IndexOutOfRange(usize),
     TagNotFound(TagId),
     Io(std::io::Error),
 }
@@ -15,7 +14,6 @@ impl fmt::Display for UndoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UndoError::FileNotFound(p) => write!(f, "File not found: {}", p.display()),
-            UndoError::IndexOutOfRange(i) => write!(f, "Index out of range: {}", i),
             UndoError::TagNotFound(id) => write!(f, "Tag not found: {:?}", id),
             UndoError::Io(e) => write!(f, "I/O: {}", e),
         }

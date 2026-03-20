@@ -6,7 +6,6 @@ mod traits;
 mod tests;
 
 pub mod commands;
-pub mod wrappers;
 
 pub use context::UndoContext;
 pub use error::UndoError;
