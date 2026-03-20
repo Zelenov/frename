@@ -83,7 +83,6 @@ impl VideoControlsState {
         event::listen_with(|event, _status, _id| match event {
             iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) => {
                 let msg = match key.as_ref() {
-                    keyboard::Key::Named(keyboard::key::Named::Space) => Some(Message::TogglePlayPause),
                     keyboard::Key::Named(keyboard::key::Named::F1) => Some(Message::SeekBack10),
                     keyboard::Key::Named(keyboard::key::Named::F2) => Some(Message::TogglePlayPause),
                     keyboard::Key::Named(keyboard::key::Named::F3) => Some(Message::SeekForward10),

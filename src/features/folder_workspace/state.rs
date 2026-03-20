@@ -439,9 +439,9 @@ impl FolderWorkspace {
                     let trimmed = filter.trim_end();
                     self.file_workspace.set_tag_filter(trimmed.to_string());
                 }
-                self.clamp_selection_to_filtered();
-                // Only toggle if the selected tag is visible (in the filtered list).
-                if let Some(id) = self.tag_panel.selected_tag_id() {
+                // Toggle the first visible tag (top of filtered list), so the flow is:
+                // type to search → first match is highlighted → Space to toggle → keep searching.
+                if let Some(&id) = self.file_workspace.tag_list().filtered_display_tag_ids().first() {
                     let was_checked = self.file_workspace.tag_list().get_tag(id).map_or(false, |t| t.is_checked());
                     self.file_workspace.toggle_tag_by_id(id);
                     self.history.push(Box::new(ToggleTagCommand { tag_id: id, was_checked }));
