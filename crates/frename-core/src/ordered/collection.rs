@@ -159,6 +159,48 @@ where
         prev
     }
 
+    fn right_neighbor_of(&self, id: &K) -> Option<&K> {
+        let current_order = match self.order_of.get(id) {
+            Some(&o) => o,
+            None => return None,
+        };
+        let key = (current_order, id.clone());
+        self.ordered
+            .range((Bound::Excluded(&key), Bound::Unbounded))
+            .next()
+            .map(|(_, id)| id)
+    }
+
+    /// Inserts (key, value) immediately after `after_id`.
+    /// `insert_after(key, value, None)` inserts at position 0 (before the current first element).
+    /// `insert_after(key, value, Some(anchor))` inserts immediately after `anchor`; if `anchor` is last, appends at end.
+    /// If `key` is already in the collection it is removed first (moved to the new position).
+    /// Returns `true` if the collection was rebalanced.
+    pub fn insert_after(&mut self, key: K, value: V, after_id: Option<&K>) -> bool {
+        if self.by_id.contains_key(&key) {
+            self.remove(&key).unwrap();
+        }
+
+        let (left_owned, right_owned) = match after_id {
+            None => {
+                // Insert at very beginning: before the current first element.
+                (None, self.iter().next().map(|k| k.0.clone()))
+            }
+            Some(a) => {
+                if self.by_id.contains_key(a) {
+                    let left = Some(a.clone());
+                    let right = self.right_neighbor_of(a).cloned();
+                    (left, right)
+                } else {
+                    (None, None)
+                }
+            }
+        };
+        let (new_order, rebalanced) = self.order_between(left_owned.as_ref(), right_owned.as_ref());
+        self.insert(key, value, new_order);
+        rebalanced
+    }
+
     /// Returns (order_key, rebalanced). rebalanced is true when no integer fit between prev and next and rebalance was run.
     fn order_between(
         &mut self,
@@ -243,6 +285,49 @@ mod tests {
         }
         let ids: Vec<u32> = c.iter().map(|(id, _, _)| *id).collect();
         assert_eq!(ids, [3, 1, 2]);
+    }
+
+    #[test]
+    fn insert_after_none_goes_to_front() {
+        let mut c: OrderedCollection<u32, ()> = OrderedCollection::new();
+        c.insert(1, (), 100);
+        c.insert(2, (), 200);
+        c.insert_after(3, (), None);
+        let ids: Vec<u32> = c.iter().map(|(id, _, _)| *id).collect();
+        assert_eq!(ids, [3, 1, 2]);
+    }
+
+    #[test]
+    fn insert_after_anchor_places_after_anchor() {
+        let mut c: OrderedCollection<u32, ()> = OrderedCollection::new();
+        c.insert(1, (), 100);
+        c.insert(2, (), 200);
+        c.insert(3, (), 300);
+        c.insert_after(4, (), Some(&2));
+        let ids: Vec<u32> = c.iter().map(|(id, _, _)| *id).collect();
+        assert_eq!(ids, [1, 2, 4, 3]);
+    }
+
+    #[test]
+    fn insert_after_last_appends_at_end() {
+        let mut c: OrderedCollection<u32, ()> = OrderedCollection::new();
+        c.insert(1, (), 100);
+        c.insert(2, (), 200);
+        c.insert_after(3, (), Some(&2));
+        let ids: Vec<u32> = c.iter().map(|(id, _, _)| *id).collect();
+        assert_eq!(ids, [1, 2, 3]);
+    }
+
+    #[test]
+    fn insert_after_moves_existing_element() {
+        let mut c: OrderedCollection<u32, ()> = OrderedCollection::new();
+        c.insert(1, (), 100);
+        c.insert(2, (), 200);
+        c.insert(3, (), 300);
+        // Move 1 after 3 (to end)
+        c.insert_after(1, (), Some(&3));
+        let ids: Vec<u32> = c.iter().map(|(id, _, _)| *id).collect();
+        assert_eq!(ids, [2, 3, 1]);
     }
 
     #[test]

@@ -45,14 +45,15 @@ impl Initializable for AppDatabase {
 impl StoredTagStore for AppDatabase {
     fn get_stored_tags(&self) -> Result<Vec<StoredTag>, Box<dyn std::error::Error + Send + Sync>> {
         let conn = Connection::open(&self.path)?;
-        let mut stmt = conn.prepare("SELECT id, name, sort_order FROM stored_tags ORDER BY sort_order")?;
+        let mut stmt = conn.prepare("SELECT id, name, sort_order, starred FROM stored_tags ORDER BY sort_order")?;
         let tags = stmt
             .query_map([], |row| {
                 let id_str: String = row.get(0)?;
                 let value: String = row.get(1)?;
                 let sort_order: i64 = row.get(2)?;
+                let starred: i64 = row.get(3)?;
                 let id = Uuid::parse_str(&id_str).map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
-                Ok(StoredTag::with_sort_order(id, value, sort_order))
+                Ok(StoredTag::with_all(id, value, sort_order, starred != 0))
             })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(tags)
@@ -85,11 +86,12 @@ impl StoredTagStore for AppDatabase {
             "DELETE FROM tag_color_mapping WHERE tag_name IN (SELECT name FROM stored_tags WHERE id = ?1)",
             [&id_str],
         )?;
-        // Add or update stored_tags: insert with sort_order, or update name and sort_order on conflict.
+        // Add or update stored_tags: insert with sort_order and starred, or update on conflict.
         let sort_order = tag.sort_order();
+        let starred = tag.starred() as i32;
         conn.execute(
-            "INSERT INTO stored_tags (id, name, sort_order) VALUES (?1, ?2, ?3) ON CONFLICT(id) DO UPDATE SET name = excluded.name, sort_order = excluded.sort_order",
-            rusqlite::params![id_str, name, sort_order],
+            "INSERT INTO stored_tags (id, name, sort_order, starred) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(id) DO UPDATE SET name = excluded.name, sort_order = excluded.sort_order, starred = excluded.starred",
+            rusqlite::params![id_str, name, sort_order, starred],
         )?;
         // Add or replace color mapping for the current name.
         conn.execute(

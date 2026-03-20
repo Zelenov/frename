@@ -145,6 +145,11 @@ CREATE TABLE IF NOT EXISTS tag_color_mapping (
 INSERT OR IGNORE INTO tag_color_mapping (tag_name, color_index) SELECT name, color_index FROM stored_tags;
 ";
 
+/// Migration 7: add starred column to stored_tags. Existing rows get starred = 0 (false).
+pub const M7_STARRED_COLUMN: &str = "
+ALTER TABLE stored_tags ADD COLUMN starred INTEGER NOT NULL DEFAULT 0;
+";
+
 /// Migration 6: stored_tags keyed by UUID (id TEXT) instead of sort_order as identity. sort_order kept for display order.
 pub const M6_STORED_TAGS_UUID: &str = "
 CREATE TABLE IF NOT EXISTS stored_tags_new (

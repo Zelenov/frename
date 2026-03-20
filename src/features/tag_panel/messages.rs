@@ -47,4 +47,6 @@ pub enum Message {
     DeleteSelectedTag,
     /// Save a snapshot-only tag to the store (add to DB). No-op if tag is already stored.
     SaveTag(TagId),
+    /// Toggle the starred state of a stored tag. No-op for unstored tags.
+    ToggleStar(TagId),
 }

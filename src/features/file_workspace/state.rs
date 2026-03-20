@@ -128,6 +128,22 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.tag_list.reorder_tag_to_index(dragged_id, drop_index);
     }
 
+    /// Star a stored tag (pin to section 2). Delegates to TagList.
+    pub fn star_tag(
+        &mut self,
+        id: TagId,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.tag_list.star_tag(id)
+    }
+
+    /// Unstar a stored tag (move to section 3). Delegates to TagList.
+    pub fn unstar_tag(
+        &mut self,
+        id: TagId,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.tag_list.unstar_tag(id)
+    }
+
     /// Rebuild the tag list from scratch using the given snapshot (but keeping the same store).
     /// Used by paste: constructs a new TagList with the pasted tags as the snapshot, so all
     /// ordering/checked/stored logic runs fresh — identical to what happens when a file is opened.

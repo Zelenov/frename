@@ -77,7 +77,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .theme(iced::Theme::Dark)
     .centered()
     .window(window::Settings {
-        size: iced::Size::new(800.0, 600.0),
+        size: iced::Size::new(1200.0, 600.0),
         resizable: true,
         ..window::Settings::default()
     })

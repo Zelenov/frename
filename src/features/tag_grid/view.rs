@@ -148,6 +148,7 @@ where
                     let is_checked = tag.is_checked();
                     let is_selected = selected_id == Some(id);
                     let is_stored = tag.is_stored();
+                    let is_starred = tag.is_starred();
                     let tag_color = tag_colors::TagColors::color(tag.color_index());
                     let checkbox_el = checkbox(is_checked)
                         .on_toggle(move |_| Message::ToggleTag(id))
@@ -155,22 +156,59 @@ where
                         .spacing(0)
                         .style(dark_checkbox_style)
                         .into();
+                    // Trailing: [star (20px) | action (16px)] always visible; action content conditional.
                     let trailing_el: Element<'_, Message> = {
-                        let (label, msg, tip) = match is_stored {
-                            true => ("×", Message::DeleteTag(id), "Delete"),
-                            false => ("○", Message::SaveTag(id), "Enter"),
-                        };
-                        let btn = mouse_area(
-                            container(text(label).size(13).color(iced::Color::from_rgb(0.0, 0.0, 0.0)))
-                                .center_y(Length::Fill)
-                                .padding([0, 4]),
-                        )
-                        .on_press(msg);
-                        if is_selected {
-                            tooltip(btn, text(tip), tooltip::Position::Top).into()
+                        let star_part: Element<'_, Message> = if is_stored {
+                            let symbol = if is_starred { "★" } else { "☆" };
+                            let star_color = if is_starred {
+                                iced::Color::from_rgb(1.0, 0.8, 0.0)
+                            } else {
+                                theme::TEXT_MUTED
+                            };
+                            mouse_area(
+                                container(text(symbol).size(13).color(star_color))
+                                    .width(Length::Fixed(20.0))
+                                    .height(Length::Fill)
+                                    .center_x(Length::Fill)
+                                    .center_y(Length::Fill),
+                            )
+                            .on_press(Message::ToggleStar(id))
+                            .interaction(mouse::Interaction::Pointer)
+                            .into()
                         } else {
-                            btn.into()
-                        }
+                            container(iced::widget::Space::new())
+                                .width(Length::Fixed(20.0))
+                                .into()
+                        };
+                        let action_part: Element<'_, Message> = {
+                            let (label, msg, tip) = match is_stored {
+                                true => ("×", Message::DeleteTag(id), "Delete"),
+                                false => ("○", Message::SaveTag(id), "Enter"),
+                            };
+                            if is_stored && !is_selected {
+                                container(iced::widget::Space::new())
+                                    .width(Length::Fixed(16.0))
+                                    .into()
+                            } else {
+                                let btn = mouse_area(
+                                    container(text(label).size(13).color(iced::Color::from_rgb(0.0, 0.0, 0.0)))
+                                        .width(Length::Fixed(16.0))
+                                        .height(Length::Fill)
+                                        .center_x(Length::Fill)
+                                        .center_y(Length::Fill),
+                                )
+                                .on_press(msg);
+                                if is_selected {
+                                    tooltip(btn, text(tip), tooltip::Position::Top).into()
+                                } else {
+                                    btn.into()
+                                }
+                            }
+                        };
+                        row![star_part, action_part]
+                            .spacing(0)
+                            .align_y(Alignment::Center)
+                            .into()
                     };
                     let chip = tag_chip::view_with_leading(
                         tag.tag(),
@@ -182,7 +220,7 @@ where
                         false,
                         false,
                         Some(trailing_el),
-                        true,
+                        false, // trailing always visible (star shows state; action visibility managed internally)
                         is_selected,
                     );
                     let chip_cell = container(chip)

@@ -418,6 +418,22 @@ impl FolderWorkspace {
                 }
                 Task::none()
             }
+            tag_panel::Message::ToggleStar(id) => {
+                let is_starred = self
+                    .file_workspace
+                    .tag_list()
+                    .get_tag(id)
+                    .map_or(false, |t| t.is_starred());
+                let result = if is_starred {
+                    self.file_workspace.unstar_tag(id)
+                } else {
+                    self.file_workspace.star_tag(id)
+                };
+                if let Err(e) = result {
+                    log::error!("Failed to toggle star: {}", e);
+                }
+                Task::none()
+            }
             tag_panel::Message::DragStarted(_) | tag_panel::Message::DragHoverCursor { .. } => {
                 Task::none()
             }

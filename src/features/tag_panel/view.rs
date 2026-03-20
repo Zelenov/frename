@@ -92,6 +92,7 @@ where
             let is_checked = tag.is_checked();
             let is_selected = selected_id == Some(id);
             let is_stored = tag.is_stored();
+            let is_starred = tag.is_starred();
             let _is_drop_target = drop_target_index == Some(index);
             let tag_color = tag_colors::TagColors::color(tag.color_index());
             let checkbox_el = checkbox(is_checked)
@@ -100,18 +101,55 @@ where
                 .spacing(0)
                 .style(dark_checkbox_style)
                 .into();
-            let trailing_el = {
-                let (label, msg) = match is_stored {
-                    true => ("×", Message::DeleteTag(id)),
-                    false => ("○", Message::SaveTag(id)),
+            // Trailing: [star (20px) | action (16px)] always visible; action content is conditional.
+            let trailing_el: Element<'_, Message> = {
+                let star_part: Element<'_, Message> = if is_stored {
+                    let symbol = if is_starred { "★" } else { "☆" };
+                    let star_color = if is_starred {
+                        iced::Color::from_rgb(1.0, 0.8, 0.0)
+                    } else {
+                        theme::TEXT_MUTED
+                    };
+                    mouse_area(
+                        container(text(symbol).size(13).color(star_color))
+                            .width(Length::Fixed(20.0))
+                            .height(Length::Fill)
+                            .center_x(Length::Fill)
+                            .center_y(Length::Fill),
+                    )
+                    .on_press(Message::ToggleStar(id))
+                    .interaction(mouse::Interaction::Pointer)
+                    .into()
+                } else {
+                    container(iced::widget::Space::new())
+                        .width(Length::Fixed(20.0))
+                        .into()
                 };
-                mouse_area(
-                    container(text(label).size(13).color(iced::Color::from_rgb(0.0, 0.0, 0.0)))
-                        .center_y(Length::Fill)
-                        .padding([0, 4]),
-                )
-                .on_press(msg)
-                .into()
+                let action_part: Element<'_, Message> = {
+                    let (label, msg) = match is_stored {
+                        true => ("×", Message::DeleteTag(id)),
+                        false => ("○", Message::SaveTag(id)),
+                    };
+                    if is_stored && !is_selected {
+                        container(iced::widget::Space::new())
+                            .width(Length::Fixed(16.0))
+                            .into()
+                    } else {
+                        mouse_area(
+                            container(text(label).size(13).color(iced::Color::from_rgb(0.0, 0.0, 0.0)))
+                                .width(Length::Fixed(16.0))
+                                .height(Length::Fill)
+                                .center_x(Length::Fill)
+                                .center_y(Length::Fill),
+                        )
+                        .on_press(msg)
+                        .into()
+                    }
+                };
+                row![star_part, action_part]
+                    .spacing(0)
+                    .align_y(Alignment::Center)
+                    .into()
             };
             let chip = tag_chip::view_with_leading(
                 tag.tag(),
@@ -123,7 +161,7 @@ where
                 false, // leading always visible in tag list
                 false,
                 Some(trailing_el),
-                true,  // trailing_visible_on_selection_only: X/💾 only when selected
+                false, // trailing always visible (star shows state; action visibility managed internally)
                 is_selected,
             );
             let chip_cell = container(chip)

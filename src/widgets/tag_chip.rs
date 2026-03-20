@@ -19,8 +19,8 @@ pub const LEADING_SLOT_HEIGHT: f32 = 16.0;
 /// Space between leading slot and label.
 pub const LEADING_TO_LABEL_SPACING: f32 = 6.0;
 
-/// Fixed size of the trailing slot (e.g. delete/save icon). Space is always reserved when trailing is present; visibility only when selected.
-pub const TRAILING_SLOT_WIDTH: f32 = 16.0;
+/// Fixed size of the trailing slot (e.g. star + delete/save icon). Holds two icons: star (20px) + action (16px).
+pub const TRAILING_SLOT_WIDTH: f32 = 36.0;
 /// Space between label and trailing slot.
 pub const LABEL_TO_TRAILING_SPACING: f32 = 4.0;
 

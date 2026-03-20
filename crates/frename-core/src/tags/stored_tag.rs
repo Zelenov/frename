@@ -2,7 +2,7 @@
 
 use uuid::Uuid;
 
-/// A single stored tag in the store. Has an id (UUID), value (label), and sort order. Color is stored separately in tag_color_mapping by name.
+/// A single stored tag in the store. Has an id (UUID), value (label), sort order, and starred flag.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StoredTag {
     /// Stable unique id (UUID).
@@ -11,20 +11,23 @@ pub struct StoredTag {
     value: String,
     /// Display/sort order (persisted as INTEGER in DB).
     sort_order: i64,
+    /// Whether this tag is starred (pinned to the starred section). Persisted as INTEGER (0/1) in DB.
+    starred: bool,
 }
 
 impl StoredTag {
-    /// Create a stored tag with the given id and value. Sort order is 0 (append when inserting).
+    /// Create a stored tag with the given id and value. Sort order is 0, starred is false.
     pub fn new(id: Uuid, value: impl Into<String>) -> Self {
-        Self::with_sort_order(id, value, 0)
+        Self::with_all(id, value, 0, false)
     }
 
-    /// Create a stored tag with the given id, value, and sort order.
-    pub fn with_sort_order(id: Uuid, value: impl Into<String>, sort_order: i64) -> Self {
+    /// Create a stored tag with all fields.
+    pub fn with_all(id: Uuid, value: impl Into<String>, sort_order: i64, starred: bool) -> Self {
         Self {
             id,
             value: value.into(),
             sort_order,
+            starred,
         }
     }
 
@@ -41,5 +44,10 @@ impl StoredTag {
     /// Sort order for display (persisted in DB).
     pub fn sort_order(&self) -> i64 {
         self.sort_order
+    }
+
+    /// Whether this tag is starred.
+    pub fn starred(&self) -> bool {
+        self.starred
     }
 }

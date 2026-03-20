@@ -60,7 +60,10 @@ impl<S> TagList<S> {
     }
 
     fn rebuild_filtered_display_tag_ids(&mut self) {
-        self.filtered_display_tag_ids = self
+        // Filter (preserving display order), then stable-sort into three sections:
+        // 0 = unstored, 1 = starred stored, 2 = unstarred stored.
+        // Starred tags always float to the top regardless of underlying order algorithm.
+        let mut filtered: Vec<TagId> = self
             .display_tag_ids
             .iter()
             .map(|(id, _, _)| *id)
@@ -68,6 +71,12 @@ impl<S> TagList<S> {
             .filter(|t| self.tag_matches_filter(t))
             .map(|t| t.id())
             .collect();
+        filtered.sort_by_key(|id| match self.tags_by_id.get(id) {
+            Some(t) if !t.is_stored() => 0u8,
+            Some(t) if t.is_starred() => 1u8,
+            _ => 2u8,
+        });
+        self.filtered_display_tag_ids = filtered;
     }
 
     /// Checked (selected) tag ids in [selected_tag_ids] order (file name panel order).
@@ -92,7 +101,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let snapshot_tags = file_snapshot.tags();
         let stored_values: HashSet<String> = stored_tags.iter().map(|st| st.value().to_string()).collect();
 
-        // 1. Stored [all] → hash (checked = exists in snapshot, order = from db)
+        // 1. Stored [all] → hash (checked = exists in snapshot, order = from db, starred = from db)
         let mut tags_by_id = HashMap::new();
         let mut value_to_id: HashMap<String, TagId> = HashMap::new();
         for st in stored_tags.iter() {
@@ -100,7 +109,8 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             let color_index = color_mapping.color_index_for(st.value());
             let order = st.sort_order();
             let checked = file_snapshot.has_tag(st.value());
-            let tag = Tag::with_id_order_checked(id, st.value(), color_index, true, order, checked);
+            let mut tag = Tag::with_id_order_checked(id, st.value(), color_index, true, order, checked);
+            tag.set_starred(st.starred());
             tags_by_id.insert(id, tag);
             value_to_id.insert(st.value().to_string(), id);
         }
@@ -228,7 +238,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         &mut self,
         id: TagId,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let (text, stored_already, color_index) = self
+        let (text, stored_already, color_index, starred) = self
             .tags_by_id
             .get(&id)
             .map(|t| {
@@ -236,6 +246,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
                     t.tag().to_string(),
                     t.is_stored(),
                     t.color_index(),
+                    t.is_starred(),
                 )
             })
             .ok_or_else(|| {
@@ -251,7 +262,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             false => random_color_index(),
         };
 
-        let st = StoredTag::with_sort_order(id.0, &text, order);
+        let st = StoredTag::with_all(id.0, &text, order, starred);
         self.store.save_tag(st, color_index)?;
         if let Some(tag) = self.tags_by_id.get_mut(&id) {
             tag.set_stored(true);
@@ -347,6 +358,106 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         self.rebuild_filtered_display_tag_ids();
         Ok(())
     }
+
+    // --- Star / unstar ---
+
+    /// The last tag in display order whose `stored == false`. Anchor for the end of section 1.
+    fn last_unstored_id(&self) -> Option<TagId> {
+        self.display_tag_ids
+            .iter()
+            .filter_map(|(id, _, _)| self.tags_by_id.get(id).filter(|t| !t.is_stored()).map(|t| t.id()))
+            .last()
+    }
+
+    /// The last tag in display order whose `stored == true && starred == true`, excluding `excluding`.
+    fn last_starred_id(&self, excluding: TagId) -> Option<TagId> {
+        self.display_tag_ids
+            .iter()
+            .filter_map(|(id, _, _)| {
+                if *id == excluding { return None; }
+                self.tags_by_id.get(id)
+                    .filter(|t| t.is_stored() && t.is_starred())
+                    .map(|t| t.id())
+            })
+            .last()
+    }
+
+    /// Flush the current display order for all stored tags to the database.
+    fn persist_display_order(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let tag_orders: Vec<(Uuid, i64)> = self
+            .display_tag_ids
+            .iter()
+            .filter_map(|(tid, _, ord)| {
+                self.tags_by_id.get(tid).filter(|t| t.is_stored()).map(|_| (tid.0, ord))
+            })
+            .collect();
+        self.store.update_tag_orders(&tag_orders)
+    }
+
+    /// Star a stored tag: set `starred = true`, move it to section 2 (after all unstored tags),
+    /// persist. Returns `Err` if the tag is not found or is unstored.
+    pub fn star_tag(&mut self, id: TagId) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let (is_stored, already_starred) = self
+            .tags_by_id
+            .get(&id)
+            .map(|t| (t.is_stored(), t.is_starred()))
+            .ok_or_else(|| {
+                Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, "tag not found"))
+                    as Box<dyn std::error::Error + Send + Sync>
+            })?;
+        if !is_stored {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "cannot star an unsaved tag",
+            )));
+        }
+        if already_starred {
+            return Ok(());
+        }
+        if let Some(tag) = self.tags_by_id.get_mut(&id) {
+            tag.set_starred(true);
+        }
+        let anchor = self.last_unstored_id();
+        self.display_tag_ids.insert_after(id, (), anchor.as_ref());
+        self.selected_tag_ids.insert_after(id, (), anchor.as_ref());
+        self.save_tag(id)?;
+        self.persist_display_order()?;
+        Ok(())
+    }
+
+    /// Unstar a stored tag: set `starred = false`, move it to section 3 (after all starred tags),
+    /// persist. Returns `Err` if the tag is not found or is unstored.
+    pub fn unstar_tag(&mut self, id: TagId) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let (is_stored, already_unstarred) = self
+            .tags_by_id
+            .get(&id)
+            .map(|t| (t.is_stored(), !t.is_starred()))
+            .ok_or_else(|| {
+                Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, "tag not found"))
+                    as Box<dyn std::error::Error + Send + Sync>
+            })?;
+        if !is_stored {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "cannot unstar an unsaved tag",
+            )));
+        }
+        if already_unstarred {
+            return Ok(());
+        }
+        if let Some(tag) = self.tags_by_id.get_mut(&id) {
+            tag.set_starred(false);
+        }
+        let anchor = match self.last_starred_id(id) {
+            Some(last_starred) => Some(last_starred),
+            None => self.last_unstored_id(),
+        };
+        self.display_tag_ids.insert_after(id, (), anchor.as_ref());
+        self.selected_tag_ids.insert_after(id, (), anchor.as_ref());
+        self.save_tag(id)?;
+        self.persist_display_order()?;
+        Ok(())
+    }
 }
 
 impl Default for TagList<crate::db::AppDatabase> {
@@ -376,9 +487,9 @@ mod tests {
     #[test]
     fn test_tag_list_reflects_stored_tags() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "A", 1), 0)
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "B", 2), 1)
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "C", 3), 2);
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "A", 1), 0, false)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "B", 2), 1, false)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "C", 3), 2, false);
         let list = TagList::new(store, FileSnapshot::default());
         assert_eq!(list.filtered_display_tag_ids().len(), 3);
         assert_eq!(list.get_tag(list.filtered_display_tag_ids()[0]).unwrap().tag(), "A");
@@ -389,8 +500,8 @@ mod tests {
     #[test]
     fn test_tag_list_first_and_last() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "First", 1), 0)
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "Last", 2), 0);
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "First", 1), 0, false)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Last", 2), 0, false);
         let list = TagList::new(store, FileSnapshot::default());
         let ids = list.filtered_display_tag_ids();
         assert_eq!(list.get_tag(ids[0]).unwrap().tag(), "First");
@@ -454,9 +565,9 @@ mod tests {
     #[test]
     fn reorder_checked_to_index_only_affects_file_name_order() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "A", 1), 0)
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "B", 2), 0)
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "C", 3), 0);
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "A", 1), 0, false)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "B", 2), 0, false)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "C", 3), 0, false);
         let snapshot = FileSnapshot::new(vec!["A".into(), "B".into(), "C".into()], "n", "ext", "init");
         let mut list = TagList::new(store, snapshot);
         assert_eq!(list.file_snapshot().tags(), ["A", "B", "C"]);
@@ -474,8 +585,8 @@ mod tests {
     #[test]
     fn init_hash_has_all_stored_and_snapshot_no_duplicates() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "StoredA", 1), 0)
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "StoredB", 2), 0);
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "StoredA", 1), 0, false)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "StoredB", 2), 0, false);
         let snapshot = FileSnapshot::new(
             vec!["StoredA".into(), "OnlySnapshot".into()],
             "n",
@@ -519,8 +630,8 @@ mod tests {
     #[test]
     fn init_snapshot_tags_at_beginning_in_snapshot_order() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "Stored1", 10), 0)
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "Stored2", 20), 0);
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Stored1", 10), 0, false)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Stored2", 20), 0, false);
         let snapshot = FileSnapshot::new(
             vec!["SnapX".into(), "SnapY".into()],
             "n",
@@ -562,9 +673,9 @@ mod tests {
     #[test]
     fn init_snapshot_empty_ordered_equals_stored_order() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "A", 1), 0)
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "B", 2), 0)
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "C", 3), 0);
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "A", 1), 0, false)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "B", 2), 0, false)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "C", 3), 0, false);
         let list = TagList::new(store, FileSnapshot::default());
         let ids = list.filtered_display_tag_ids();
         assert_eq!(list.get_tag(ids[0]).unwrap().tag(), "A");
@@ -575,8 +686,8 @@ mod tests {
     #[test]
     fn init_stored_not_in_snapshot_after_snapshot_tags() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "S", 1), 0)
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "T", 2), 0);
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "S", 1), 0, false)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "T", 2), 0, false);
         let snapshot = FileSnapshot::new(vec!["S".into()], "n", "ext", "init");
         let list = TagList::new(store, snapshot);
         let ids = list.filtered_display_tag_ids();
@@ -592,9 +703,9 @@ mod tests {
     #[test]
     fn init_filter_empty_display_order_equals_filtered_order() {
         let store = FakeAppStorage::new()
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "A", 1), 0)
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "B", 2), 0)
-            .add_stored_tag(StoredTag::with_sort_order(Uuid::new_v4(), "C", 3), 0);
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "A", 1), 0, false)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "B", 2), 0, false)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "C", 3), 0, false);
         let mut list = TagList::new(store, FileSnapshot::default());
         list.set_filter("");
         let filtered = list.filtered_display_tag_ids();

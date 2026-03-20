@@ -94,7 +94,7 @@ impl StoredTagStore for FakeAppStorage {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         for (id, order) in tag_orders {
             if let Some(tag) = self.stored_tags.get(id) {
-                let updated = StoredTag::with_sort_order(*id, tag.value().to_string(), *order);
+                let updated = StoredTag::with_all(*id, tag.value().to_string(), *order, tag.starred());
                 self.stored_tags.insert(*id, updated);
             }
         }

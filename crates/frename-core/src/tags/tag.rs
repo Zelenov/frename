@@ -33,6 +33,8 @@ pub struct Tag {
     color_index: u8,
     /// Whether this tag comes from the stored tag store (false for tags only present in the file snapshot).
     stored: bool,
+    /// Whether this stored tag is starred (pinned to section 2). Always false for unstored tags.
+    starred: bool,
     /// Sort order (for [OrderedThing] and [crate::ordered::OrderedCollection]).
     order: OrderKey,
 }
@@ -70,6 +72,7 @@ impl Tag {
             checked,
             color_index,
             stored,
+            starred: false,
             order,
         }
     }
@@ -107,6 +110,16 @@ impl Tag {
     /// Set the color index (e.g. after saving a new tag and assigning a random color).
     pub fn set_color_index(&mut self, color_index: u8) {
         self.color_index = color_index;
+    }
+
+    /// Whether this stored tag is starred (pinned above unstarred stored tags).
+    pub fn is_starred(&self) -> bool {
+        self.starred
+    }
+
+    /// Set the starred flag. Only meaningful for stored tags; unstored tags should always be false.
+    pub fn set_starred(&mut self, starred: bool) {
+        self.starred = starred;
     }
 
     /// Toggle the checked state of this tag.

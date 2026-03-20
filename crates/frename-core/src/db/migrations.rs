@@ -35,6 +35,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 6,
         sql: schema::M6_STORED_TAGS_UUID,
     },
+    Migration {
+        version: 7,
+        sql: schema::M7_STARRED_COLUMN,
+    },
 ];
 
 /// Returns the current schema version.
