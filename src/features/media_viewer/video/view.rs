@@ -32,7 +32,8 @@ pub fn view(
                 .height(Length::Fill)
                 .style(theme::panel_container_style),
         )
-        .on_press(Message::TogglePause);
+        .on_press(Message::TogglePause)
+        .on_double_click(Message::ToggleFullscreen);
 
         let position_secs = video.position().as_secs_f32();
         let controls_inner =

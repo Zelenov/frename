@@ -1,6 +1,6 @@
 //! View for the image viewer sub-feature.
 
-use iced::widget::{button, column, container, image, row, text, tooltip};
+use iced::widget::{button, column, container, image, mouse_area, row, text, tooltip};
 use iced::{ContentFit, Element, Length};
 
 use crate::theme;
@@ -12,10 +12,13 @@ const CONTROLS_HEIGHT: f32 = 32.0;
 /// `is_fullscreen` controls which icon the fullscreen button shows.
 pub fn view(state: &ImageViewerState, is_fullscreen: bool) -> Element<'_, Message> {
     if let Some(handle) = state.current_handle() {
-        let img = image(handle.clone())
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .content_fit(ContentFit::Contain);
+        let img = mouse_area(
+            image(handle.clone())
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .content_fit(ContentFit::Contain),
+        )
+        .on_double_click(Message::ToggleFullscreen);
 
         let fullscreen_icon = if is_fullscreen { "⊡" } else { "⛶" };
         let fullscreen_btn: Element<'_, Message> = tooltip(

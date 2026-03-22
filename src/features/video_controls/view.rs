@@ -46,7 +46,7 @@ pub fn view(
             .height(iced::Length::Fill)
             .padding(0)
             .style(theme::icon_button_style(true)),
-        text("F2"),
+        text("Space"),
         tooltip::Position::Top,
     )
         .into();

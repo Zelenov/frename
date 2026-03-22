@@ -92,17 +92,15 @@ impl VideoControlsState {
         self.volume
     }
 
-    /// Keyboard shortcuts for video controls: Space/F2 = play/pause, F1 = 10s back, F3 = 10s forward
+    /// Keyboard shortcuts for video controls: F1 = 10s back, F3 = 10s forward
     pub fn subscription(&self) -> Subscription<Message> {
         event::listen_with(|event, _status, _id| match event {
             iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) => {
-                let msg = match key.as_ref() {
+                match key.as_ref() {
                     keyboard::Key::Named(keyboard::key::Named::F1) => Some(Message::SeekBack10),
-                    keyboard::Key::Named(keyboard::key::Named::F2) => Some(Message::TogglePlayPause),
                     keyboard::Key::Named(keyboard::key::Named::F3) => Some(Message::SeekForward10),
                     _ => None,
-                };
-                msg
+                }
             }
             _ => None,
         })

@@ -9,7 +9,7 @@
 
 use iced::{event, keyboard, window, Element, Subscription, Task};
 
-use crate::features::{drag_drop, folder, folder_workspace, media_viewer, tag_panel};
+use crate::features::{drag_drop, folder, folder_workspace, media_viewer, media_viewer::video as media_viewer_video, tag_panel};
 use frename_core::{AppDatabase, AppStateStore, WindowGeometry};
 
 use super::Message;
@@ -135,12 +135,22 @@ impl FrenameApp {
                 iced::Event::Window(window::Event::Resized(size)) => {
                     Some(Message::WindowResized(size.width, size.height))
                 }
-                // Space always toggles the selected tag (even when focus is in the search bar; we strip the space from filter in the handler).
+                // Shift+Space toggles the selected tag.
+                iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: keyboard::Key::Named(keyboard::key::Named::Space),
+                    modifiers,
+                    ..
+                }) if modifiers.shift() => Some(Message::FolderWorkspace(
+                    folder_workspace::Message::TagPanel(tag_panel::Message::ToggleSelectedTag),
+                )),
+                // Space toggles video play/pause.
                 iced::Event::Keyboard(keyboard::Event::KeyPressed {
                     key: keyboard::Key::Named(keyboard::key::Named::Space),
                     ..
                 }) => Some(Message::FolderWorkspace(
-                    folder_workspace::Message::TagPanel(tag_panel::Message::ToggleSelectedTag),
+                    folder_workspace::Message::MediaViewer(
+                        media_viewer::Message::Video(media_viewer_video::Message::TogglePause),
+                    ),
                 )),
                 // F5 toggles fullscreen for the media viewer.
                 iced::Event::Keyboard(keyboard::Event::KeyPressed {
@@ -148,6 +158,19 @@ impl FrenameApp {
                     ..
                 }) => Some(Message::FolderWorkspace(
                     folder_workspace::Message::ToggleMediaFullscreen,
+                )),
+                // [ / ] always set segment IN/OUT (even when search bar has focus).
+                iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: keyboard::Key::Character(c),
+                    ..
+                }) if c.as_ref() == "[" => Some(Message::FolderWorkspace(
+                    folder_workspace::Message::SetSegmentStart,
+                )),
+                iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: keyboard::Key::Character(c),
+                    ..
+                }) if c.as_ref() == "]" => Some(Message::FolderWorkspace(
+                    folder_workspace::Message::SetSegmentEnd,
                 )),
                 // Escape: handled by FolderWorkspace (exits fullscreen or clears search filter).
                 iced::Event::Keyboard(keyboard::Event::KeyPressed {
@@ -233,21 +256,6 @@ impl FrenameApp {
                         };
                         if msg.is_some() {
                             return msg;
-                        }
-                    }
-                    // [ sets segment start, ] sets segment end (do not forward to search bar).
-                    if let keyboard::Key::Character(c) = key.as_ref() {
-                        let seg = match c.as_ref() {
-                            "[" => Some(Message::FolderWorkspace(
-                                folder_workspace::Message::SetSegmentStart,
-                            )),
-                            "]" => Some(Message::FolderWorkspace(
-                                folder_workspace::Message::SetSegmentEnd,
-                            )),
-                            _ => None,
-                        };
-                        if seg.is_some() {
-                            return seg;
                         }
                     }
                     let k = match key.as_ref() {
