@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::{FolderAndFile, StoredTag, TagColorMapping};
 
 use super::migrations;
+use super::schema;
 use super::traits::{AppStateStore, Initializable, StoredTagStore, WindowGeometry};
 
 /// The application database. Holds app state (last folder/file), and will hold user data
@@ -31,6 +32,13 @@ impl AppDatabase {
     /// Creates the database at the given path (for tests or custom location).
     pub fn with_path(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into() }
+    }
+
+    /// Inserts the built-in tag seed data (INSERT OR IGNORE — safe to call multiple times).
+    /// Call this only in debug/development mode.
+    pub fn seed_debug_tags(&self) -> Result<(), rusqlite::Error> {
+        let conn = Connection::open(&self.path)?;
+        conn.execute_batch(schema::SEED_TAGS)
     }
 }
 

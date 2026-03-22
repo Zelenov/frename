@@ -31,10 +31,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     let debug_flag = args.iter().any(|a| a == "--debug");
     let production_flag = args.iter().any(|a| a == "--production");
-    if production_flag || (!cfg!(debug_assertions) && !debug_flag) {
-        install_file_tagger(Box::new(ProductionFileTagger));
-    } else {
+    // Debug mode: debug build (or --debug flag) without --production override.
+    let is_debug_mode = !production_flag && (cfg!(debug_assertions) || debug_flag);
+
+    if is_debug_mode {
         install_file_tagger(Box::new(InMemoryFileTagger::default()));
+    } else {
+        install_file_tagger(Box::new(ProductionFileTagger));
     }
     // Initialize file + console logging (log file next to the executable)
     let log_path = std::env::current_exe()?
@@ -80,6 +83,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize app database (migrations) before iced; decorator logs.
     let _ = LoggingAppStateStore::new(AppDatabase::new()).initialize();
+
+    // Seed built-in tags only in debug/development mode.
+    if is_debug_mode {
+        if let Err(e) = AppDatabase::new().seed_debug_tags() {
+            log::warn!("Failed to seed debug tags: {e}");
+        }
+    }
 
     // Restore saved window geometry (size + position + maximized), or use defaults.
     let saved = AppDatabase::new().get_window_state();
