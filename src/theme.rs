@@ -37,6 +37,8 @@ pub const ERROR: Color = Color::from_rgb(0.95, 0.35, 0.35);
 pub const SEGMENT: Color = Color::from_rgba(1.0, 0.85, 0.2, 0.75);
 
 /// Splitter bar (matches track).
+pub const VOLUME: Color = Color::from_rgb(0.35, 0.80, 0.50);
+
 pub const SPLITTER: Color = Color::from_rgb(0.25, 0.25, 0.25);
 
 /// Splitter when hovered or dragged.

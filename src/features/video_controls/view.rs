@@ -1,6 +1,6 @@
 //! UI rendering for video controls feature
 
-use iced::widget::{button, container, row, text, tooltip};
+use iced::widget::{button, container, row, text, tooltip, Space};
 use iced::{Element, Length};
 
 use crate::theme;
@@ -111,13 +111,24 @@ pub fn view(
         .on_release(Message::SeekReleased)
         .segment_range(segment_start, segment_end);
 
-    let volume_bar = container(
-        ProgressBar::new(0.0..=1.0, state.volume(), Message::SetVolume)
-    )
-    .width(Length::Fixed(80.0))
-    .height(Length::Fill);
+    let volume_icon: Element<'_, Message> = container(text("🔊").size(13))
+        .center_y(Length::Fill)
+        .into();
 
-    let controls = row![back10_btn, play_pause_btn, forward10_btn, seg_in_btn, seg_out_btn, bar, volume_bar]
+    let volume_bar: Element<'_, Message> = container(
+        ProgressBar::new(0.0..=1.0, state.volume(), Message::SetVolume)
+            .fill_color(theme::VOLUME),
+    )
+    .width(Length::Fixed(72.0))
+    .center_y(Length::Fill)
+    .into();
+
+    let controls = row![
+        back10_btn, play_pause_btn, forward10_btn, seg_in_btn, seg_out_btn,
+        bar,
+        Space::new().width(8),
+        volume_icon, volume_bar
+    ]
         .spacing(8)
         .height(iced::Length::Fill)
         .align_y(iced::Alignment::Center);

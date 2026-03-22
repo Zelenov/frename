@@ -5,7 +5,7 @@ use iced::advanced::renderer;
 use iced::advanced::widget::{self, Widget};
 use iced::advanced::{self, Clipboard, Shell};
 use iced::mouse;
-use iced::{Border, Element, Event, Length, Rectangle, Shadow, Size};
+use iced::{Border, Color, Element, Event, Length, Rectangle, Shadow, Size};
 
 use crate::theme;
 
@@ -36,6 +36,8 @@ pub struct ProgressBar<'a, Message> {
     segment_start: Option<f32>,
     /// Optional segment end in seconds (for the highlighted range).
     segment_end: Option<f32>,
+    /// Fill color for the progress portion (defaults to theme::ACCENT).
+    fill_color: Option<Color>,
 }
 
 impl<'a, Message> ProgressBar<'a, Message> {
@@ -56,7 +58,14 @@ impl<'a, Message> ProgressBar<'a, Message> {
             on_release: None,
             segment_start: None,
             segment_end: None,
+            fill_color: None,
         }
+    }
+
+    /// Override the fill color for the progress portion.
+    pub fn fill_color(mut self, color: Color) -> Self {
+        self.fill_color = Some(color);
+        self
     }
 
     /// Message to emit when the user releases after seeking
@@ -168,7 +177,7 @@ where
                     shadow: Shadow::default(),
                     snap: true,
                 },
-                theme::ACCENT,
+                self.fill_color.unwrap_or(theme::ACCENT),
             );
         }
 
