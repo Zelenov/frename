@@ -140,10 +140,11 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             value_to_id.insert(st.value().to_string(), id);
         }
 
-        // 2. Snapshot [where value not in stored] → hash (checked = false, order = 0)
+        // 2. Snapshot [where value not in stored] → hash (checked = true, order = 0)
+        // These tags exist in the filename so they must be selected (checked = true).
         for name in snapshot_tags.iter().filter(|name| !stored_values.contains(name.as_str())) {
             let id = TagId::new();
-            let tag = Tag::with_id_order_checked(id, name.as_str(), 0, false, 0, false);
+            let tag = Tag::with_id_order_checked(id, name.as_str(), 0, false, 0, true);
             tags_by_id.insert(id, tag);
             value_to_id.insert(name.clone(), id);
         }

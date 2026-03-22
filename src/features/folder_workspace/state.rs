@@ -128,6 +128,7 @@ impl FolderWorkspace {
             }
             Message::FocusSearchBarAndKey(key) => self.focus_search_bar_and_key(key),
             Message::Noop => Task::none(),
+            Message::ScrollFolderListToSelected => self.scroll_folder_list_to_selected(),
             Message::ScrollTagListToSelection => self.scroll_tag_list_to_selection(),
             Message::TagListScrollAdjusted(scroll_y) => {
                 self.tag_list_scroll_y = Some(scroll_y);
@@ -263,7 +264,10 @@ impl FolderWorkspace {
         let dir = self.directory.as_mut().expect("just set");
         let selected = target_file.as_deref().and_then(|p| dir.open_path(p));
         if let Some(file) = selected {
-            Task::done(Message::FileOpened(file))
+            Task::batch([
+                Task::done(Message::FileOpened(file)),
+                Task::done(Message::ScrollFolderListToSelected),
+            ])
         } else {
             self.file_workspace.set_file(None);
             self.pending_file_updated = None;
@@ -772,6 +776,22 @@ impl FolderWorkspace {
             scroll_op,
             Task::done(Message::TagListScrollAdjusted(target_y)),
         ])
+    }
+
+    fn scroll_folder_list_to_selected(&self) -> Task<Message> {
+        let Some(dir) = self.directory.as_ref() else {
+            return Task::none();
+        };
+        let Some(index) = dir.selected_index() else {
+            return Task::none();
+        };
+        let target_y = (index as f32) * folder::FOLDER_ROW_HEIGHT;
+        let offset = iced::widget::scrollable::AbsoluteOffset {
+            x: None,
+            y: Some(target_y),
+        };
+        operation::scroll_to(iced::widget::Id::new(folder::FOLDER_LIST_SCROLLABLE_ID), offset)
+            .map(|_: ()| Message::Noop)
     }
 
     pub fn subscription(&self) -> Subscription<Message> {

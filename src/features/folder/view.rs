@@ -10,7 +10,7 @@ use crate::widgets;
 
 use super::Message;
 
-const FOLDER_LIST_SCROLLABLE_ID: &str = "folder-file-list";
+use super::FOLDER_LIST_SCROLLABLE_ID;
 
 /// Render the folder panel: a scrollable list of file names (tag chips + name.extension, no wrap).
 /// Selection comes from the directory; view emits SelectFile/Previous/Next.
