@@ -49,20 +49,6 @@ pub fn panel_container_style(
     }
 }
 
-/// Container style for selectable rows (selected vs default background).
-pub fn row_background_style(
-    _theme: &iced::Theme,
-    selected: bool,
-) -> iced::widget::container::Style {
-    iced::widget::container::Style {
-        background: Some(Background::Color(if selected {
-            ACCENT_SELECTED
-        } else {
-            BG_PANEL
-        })),
-        ..Default::default()
-    }
-}
 
 /// Container style for tag list/grid rows: selected = accent tint matching selected chip border opacity, unselected = panel.
 pub fn tag_row_background_style(

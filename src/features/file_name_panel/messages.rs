@@ -18,6 +18,4 @@ pub enum Message {
     PanelBounds(iced::Rectangle),
     /// Trash zone bounds (drop here to unselect the dragged tag).
     TrashBounds(iced::Rectangle),
-    /// User unchecked the tag in this panel; workspace toggles it off (unselect for current file).
-    UnselectTag(TagId),
 }

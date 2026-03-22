@@ -554,12 +554,6 @@ impl FolderWorkspace {
     }
 
     fn handle_file_name_panel(&mut self, msg: file_name_panel::Message) -> Task<Message> {
-        if let file_name_panel::Message::UnselectTag(id) = &msg {
-            let id = *id;
-            let was_checked = self.file_workspace.tag_list().get_tag(id).map_or(false, |t| t.is_checked());
-            self.file_workspace.toggle_tag_by_id(id);
-            self.history.push(Box::new(ToggleTagCommand { tag_id: id, was_checked }));
-        }
         let (dragged_id, drop_index) = if let file_name_panel::Message::DragEnded = &msg {
             (
                 self.file_name_panel.dragging_tag_id(),

@@ -8,9 +8,8 @@ use iced::{mouse, Element, Length};
 use crate::theme;
 use crate::widgets;
 
+use super::{FOLDER_LIST_SCROLLABLE_ID, FOLDER_ROW_HEIGHT};
 use super::Message;
-
-use super::FOLDER_LIST_SCROLLABLE_ID;
 
 /// Render the folder panel: a scrollable list of file names (tag chips + name.extension, no wrap).
 /// Selection comes from the directory; view emits SelectFile/Previous/Next.
@@ -56,6 +55,7 @@ pub fn view<'a>(
             let row = container(row_content)
                 .padding([4, 8])
                 .width(Length::Fill)
+                .height(Length::Fixed(FOLDER_ROW_HEIGHT))
                 .style(move |theme: &iced::Theme| theme::selectable_row_style(theme, is_selected));
 
             mouse_area(row)
