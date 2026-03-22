@@ -4,7 +4,16 @@ use uuid::Uuid;
 
 use crate::{FolderAndFile, StoredTag, TagColorMapping};
 
-/// Interface for storing and restoring app state (last folder and file).
+/// Saved window position and size (logical pixels).
+#[derive(Debug, Clone, Copy)]
+pub struct WindowGeometry {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+/// Interface for storing and restoring app state (last folder and file, window geometry).
 /// Implemented by the application database and by the test fake (e.g. `FakeAppStorage`).
 /// Pass by value (e.g. `Box<dyn AppStateStore>`); no singleton, connection is opened per use.
 pub trait AppStateStore: Send + Sync {
@@ -13,6 +22,12 @@ pub trait AppStateStore: Send + Sync {
 
     /// Sets the last opened folder and file in it (inserts or updates).
     fn set_last_folder_and_file(&self, value: &FolderAndFile);
+
+    /// Returns the saved window geometry, if any.
+    fn get_window_state(&self) -> Option<WindowGeometry> { None }
+
+    /// Saves the window geometry (position + size).
+    fn set_window_state(&self, _geometry: WindowGeometry) {}
 }
 
 /// Interface for stored tags and tag color mapping. Tags are keyed by tag id (UUID); tag colors are keyed by tag name.

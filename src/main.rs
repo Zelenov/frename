@@ -20,7 +20,7 @@ mod widgets;
 use app::FrenameApp;
 use frename_core::{
     install_file_tagger, InMemoryFileTagger, ProductionFileTagger,
-    Initializable, LoggingAppStateStore,
+    AppDatabase, AppStateStore, Initializable, LoggingAppStateStore,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -79,7 +79,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Initialize app database (migrations) before iced; decorator logs.
-    let _ = LoggingAppStateStore::new(frename_core::AppDatabase::new()).initialize();
+    let _ = LoggingAppStateStore::new(AppDatabase::new()).initialize();
+
+    // Restore saved window geometry (size + position), or use defaults.
+    let saved = AppDatabase::new().get_window_state();
+    let window_size = saved.map(|g| iced::Size::new(g.width, g.height))
+        .unwrap_or(iced::Size::new(1200.0, 600.0));
+    let window_position = saved.map(|g| window::Position::Specific(iced::Point::new(g.x, g.y)))
+        .unwrap_or(window::Position::Centered);
+
+    // Load window icon from embedded .ico bytes.
+    let icon_bytes = include_bytes!("../frename-icon.ico");
+    let window_icon = image::load_from_memory(icon_bytes)
+        .ok()
+        .and_then(|img| {
+            let rgba = img.to_rgba8();
+            let (w, h) = rgba.dimensions();
+            window::icon::from_rgba(rgba.into_raw(), w, h).ok()
+        });
 
     // Install AFTER gstreamer::init() so our filter is registered last.
     crash_guard::install();
@@ -90,10 +107,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         FrenameApp::view,
     )
     .theme(iced::Theme::Dark)
-    .centered()
     .window(window::Settings {
-        size: iced::Size::new(1200.0, 600.0),
+        size: window_size,
+        position: window_position,
         resizable: true,
+        icon: window_icon,
         ..window::Settings::default()
     })
     .title(FrenameApp::title)

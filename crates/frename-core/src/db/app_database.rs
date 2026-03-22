@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::{FolderAndFile, StoredTag, TagColorMapping};
 
 use super::migrations;
-use super::traits::{AppStateStore, Initializable, StoredTagStore};
+use super::traits::{AppStateStore, Initializable, StoredTagStore, WindowGeometry};
 
 /// The application database. Holds app state (last folder/file), and will hold user data
 /// and other application storage. SQLite-backed. Use `Initializable::initialize()` once at startup
@@ -169,5 +169,24 @@ impl AppStateStore for AppDatabase {
              ON CONFLICT(folder_path) DO UPDATE SET last_file_path = excluded.last_file_path, opened_at = datetime('now')",
             rusqlite::params![folder_str, file_str],
         );
+    }
+
+    fn get_window_state(&self) -> Option<WindowGeometry> {
+        let conn = Connection::open(&self.path).ok()?;
+        conn.query_row(
+            "SELECT x, y, width, height FROM window_state WHERE id = 1",
+            [],
+            |row| Ok(WindowGeometry { x: row.get(0)?, y: row.get(1)?, width: row.get(2)?, height: row.get(3)? }),
+        ).ok()
+    }
+
+    fn set_window_state(&self, geometry: WindowGeometry) {
+        if let Ok(conn) = Connection::open(&self.path) {
+            let _ = conn.execute(
+                "INSERT INTO window_state (id, x, y, width, height) VALUES (1, ?1, ?2, ?3, ?4)
+                 ON CONFLICT(id) DO UPDATE SET x = excluded.x, y = excluded.y, width = excluded.width, height = excluded.height",
+                rusqlite::params![geometry.x, geometry.y, geometry.width, geometry.height],
+            );
+        }
     }
 }

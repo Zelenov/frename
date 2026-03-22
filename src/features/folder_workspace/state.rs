@@ -63,6 +63,8 @@ pub struct FolderWorkspace {
     copied_tags: Option<Vec<String>>,
     /// Undo/redo history for all undoable actions.
     history: WorkspaceHistory,
+    /// Whether the media viewer is currently shown fullscreen (F5).
+    media_fullscreen: bool,
 }
 
 impl FolderWorkspace {
@@ -82,6 +84,7 @@ impl FolderWorkspace {
             tag_list_viewport_height: None,
             copied_tags: None,
             history: WorkspaceHistory::new(50),
+            media_fullscreen: false,
         }
     }
 
@@ -136,6 +139,21 @@ impl FolderWorkspace {
             Message::PasteTags => self.paste_tags(),
             Message::Undo => self.perform_undo(),
             Message::Redo => self.perform_redo(),
+            Message::ToggleMediaFullscreen => {
+                // Only toggle when media is active (video or image).
+                if self.media_viewer.is_previewable() {
+                    self.media_fullscreen = !self.media_fullscreen;
+                }
+                Task::none()
+            }
+            Message::EscapePressed => {
+                if self.media_fullscreen {
+                    self.media_fullscreen = false;
+                    Task::none()
+                } else {
+                    self.handle_tag_panel(tag_panel::Message::SetFilter(String::new()))
+                }
+            }
         }
     }
 
@@ -248,6 +266,7 @@ impl FolderWorkspace {
     }
 
     fn apply_file_opened(&mut self, file: frename_core::File) -> Task<Message> {
+        self.media_fullscreen = false;
         let snapshot = self.file_workspace.get_snapshot();
         self.file_workspace.set_file(Some(file.clone()));
         log::info!("Opening file: {}", file.file_path().display());
@@ -786,6 +805,11 @@ impl FolderWorkspace {
 
     pub fn media_viewer(&self) -> &MediaViewerState {
         &self.media_viewer
+    }
+
+    /// True when the media viewer is in fullscreen mode (F5).
+    pub fn media_fullscreen(&self) -> bool {
+        self.media_fullscreen
     }
 
     /// True when a video is active and must be unloaded before rename or close.

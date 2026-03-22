@@ -55,6 +55,12 @@ impl MediaViewerState {
         }
     }
 
+    /// Returns `true` when a media file (video or image) is currently being shown.
+    /// Used to guard fullscreen toggle: no point going fullscreen with nothing to show.
+    pub fn is_previewable(&self) -> bool {
+        matches!(self.active, ActiveMedia::Video | ActiveMedia::Image)
+    }
+
     /// Returns `true` when a GStreamer video is active and must be unloaded before the
     /// previous file can be renamed. Images hold no file handle so no unload is needed.
     pub fn needs_unload_before_rename(&self) -> bool {
@@ -90,6 +96,8 @@ impl MediaViewerState {
 
             // Intercepted by FolderWorkspace; no-op here if it ever reaches update().
             Message::Unloaded => Task::none(),
+            // Intercepted by FolderWorkspace; no-op here if it ever reaches update().
+            Message::ToggleFullscreen => Task::none(),
         }
     }
 

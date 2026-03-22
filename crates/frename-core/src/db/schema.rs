@@ -150,6 +150,17 @@ pub const M7_STARRED_COLUMN: &str = "
 ALTER TABLE stored_tags ADD COLUMN starred INTEGER NOT NULL DEFAULT 0;
 ";
 
+/// Migration 8: window geometry (single row, id always 1).
+pub const M8_WINDOW_STATE: &str = "
+CREATE TABLE IF NOT EXISTS window_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    width REAL NOT NULL,
+    height REAL NOT NULL
+);
+";
+
 /// Migration 6: stored_tags keyed by UUID (id TEXT) instead of sort_order as identity. sort_order kept for display order.
 pub const M6_STORED_TAGS_UUID: &str = "
 CREATE TABLE IF NOT EXISTS stored_tags_new (

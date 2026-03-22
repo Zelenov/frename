@@ -49,6 +49,7 @@ codegen-units = 1
 
 # Windows subsystem - use "windows" for GUI app (no console), "console" for CLI
 [target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
 
 # Make it a Windows GUI app (no console window)
 [package.metadata.winres]

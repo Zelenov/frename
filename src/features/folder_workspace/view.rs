@@ -14,6 +14,15 @@ use super::{FolderWorkspace, Message};
 
 /// Workspace layout: one big drop panel when no folder is open; otherwise regions and splitters.
 pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
+    if state.media_fullscreen() {
+        return container(
+            media_viewer::view::view(state.media_viewer()).map(Message::MediaViewer),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into();
+    }
+
     if state.directory().is_none() {
         let icon = if state.is_loading() { "⏳" } else { "📂" };
         return container(

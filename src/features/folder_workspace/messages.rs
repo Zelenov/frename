@@ -71,4 +71,8 @@ pub enum Message {
     Undo,
     /// Redo the last undone action (Ctrl+Y / Ctrl+Shift+Z).
     Redo,
+    /// Toggle fullscreen mode for the media viewer (F5).
+    ToggleMediaFullscreen,
+    /// Escape pressed globally: exits fullscreen if active, otherwise clears the search bar filter.
+    EscapePressed,
 }
