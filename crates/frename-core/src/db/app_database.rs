@@ -182,7 +182,7 @@ impl AppStateStore for AppDatabase {
     fn get_window_state(&self) -> Option<WindowGeometry> {
         let conn = Connection::open(&self.path).ok()?;
         conn.query_row(
-            "SELECT x, y, width, height, is_maximized, monitor_width, monitor_height FROM window_state WHERE id = 1",
+            "SELECT x, y, width, height, is_maximized, monitor_width, monitor_height, left_panel_width, folder_panel_width FROM window_state WHERE id = 1",
             [],
             |row| Ok(WindowGeometry {
                 x: row.get(0)?,
@@ -192,6 +192,8 @@ impl AppStateStore for AppDatabase {
                 is_maximized: row.get::<_, i64>(4)? != 0,
                 monitor_width: row.get(5)?,
                 monitor_height: row.get(6)?,
+                left_panel_width: row.get::<_, f64>(7)? as f32,
+                folder_panel_width: row.get::<_, f64>(8)? as f32,
             }),
         ).ok()
     }
@@ -199,20 +201,39 @@ impl AppStateStore for AppDatabase {
     fn set_window_state(&self, geometry: WindowGeometry) {
         if let Ok(conn) = Connection::open(&self.path) {
             let _ = conn.execute(
-                "INSERT INTO window_state (id, x, y, width, height, is_maximized, monitor_width, monitor_height)
-                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                "INSERT INTO window_state (id, x, y, width, height, is_maximized, monitor_width, monitor_height, left_panel_width, folder_panel_width)
+                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
                  ON CONFLICT(id) DO UPDATE SET
                      x = excluded.x, y = excluded.y,
                      width = excluded.width, height = excluded.height,
                      is_maximized = excluded.is_maximized,
                      monitor_width = excluded.monitor_width,
-                     monitor_height = excluded.monitor_height",
+                     monitor_height = excluded.monitor_height,
+                     left_panel_width = excluded.left_panel_width,
+                     folder_panel_width = excluded.folder_panel_width",
                 rusqlite::params![
                     geometry.x, geometry.y, geometry.width, geometry.height,
                     geometry.is_maximized as i64,
                     geometry.monitor_width, geometry.monitor_height,
+                    geometry.left_panel_width as f64, geometry.folder_panel_width as f64,
                 ],
             );
+        }
+    }
+
+}
+
+impl AppDatabase {
+    /// Updates only the panel width columns in window_state (row must already exist).
+    pub fn set_panel_widths(&self, left_panel_width: f32, folder_panel_width: f32) {
+        if let Ok(conn) = Connection::open(&self.path) {
+            match conn.execute(
+                "UPDATE window_state SET left_panel_width = ?1, folder_panel_width = ?2 WHERE id = 1",
+                rusqlite::params![left_panel_width as f64, folder_panel_width as f64],
+            ) {
+                Ok(rows) => log::debug!("set_panel_widths: left={left_panel_width}, folder={folder_panel_width} ({rows} rows updated)"),
+                Err(e) => log::warn!("set_panel_widths failed: {e}"),
+            }
         }
     }
 }

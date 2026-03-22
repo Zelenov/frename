@@ -73,6 +73,15 @@ pub struct FolderWorkspace {
 
 impl FolderWorkspace {
     pub fn new() -> Self {
+        let (left_width, folder_width) = AppDatabase::new().get_window_state()
+            .and_then(|w| {
+                if w.left_panel_width > 0.0 && w.folder_panel_width > 0.0 {
+                    Some((w.left_panel_width, w.folder_panel_width))
+                } else {
+                    None
+                }
+            })
+            .unwrap_or((DEFAULT_LEFT_WIDTH, DEFAULT_FOLDER_WIDTH));
         Self {
             directory: None,
             loading: false,
@@ -82,8 +91,8 @@ impl FolderWorkspace {
             file_name_panel: FileNamePanelState::default(),
             pending_file_updated: None,
             pending_to_file_id: None,
-            left_width: DEFAULT_LEFT_WIDTH,
-            folder_width: DEFAULT_FOLDER_WIDTH,
+            left_width,
+            folder_width,
             tag_list_scroll_y: None,
             tag_list_viewport_height: None,
             folder_scroll_y: None,
@@ -127,11 +136,13 @@ impl FolderWorkspace {
                 let folder_end = folder_start + self.folder_width;
                 let new_folder_width = folder_end - x - HIT_WIDTH;
                 self.folder_width = new_folder_width.max(MIN_FOLDER_WIDTH);
+                AppDatabase::new().set_panel_widths(self.left_width, self.folder_width);
                 Task::none()
             }
             Message::RightSplitterDragged(x) => {
                 let new_folder_width = x - self.left_width - HIT_WIDTH;
                 self.folder_width = new_folder_width.max(MIN_FOLDER_WIDTH);
+                AppDatabase::new().set_panel_widths(self.left_width, self.folder_width);
                 Task::none()
             }
             Message::FocusSearchBarAndKey(key) => self.focus_search_bar_and_key(key),
@@ -533,9 +544,10 @@ impl FolderWorkspace {
                 Task::none()
             }
             tag_panel::Message::DeleteTag(id) => {
-                if self.tag_panel.selected_tag_id() == Some(id) {
-                    self.tag_panel.set_selected(None);
-                }
+                // Find the deleted tag's position in the filtered list before removal.
+                let filtered_before = self.file_workspace.tag_list().filtered_display_tag_ids().to_vec();
+                let deleted_pos = filtered_before.iter().position(|&fid| fid == id);
+
                 let delete_data = self.file_workspace.tag_list().capture_delete_data(id);
                 if let Err(e) = self.file_workspace.remove_stored_tag_by_id(id) {
                     log::error!("Failed to delete tag: {}", e);
@@ -545,7 +557,15 @@ impl FolderWorkspace {
                         was_stored, was_starred, was_checked, sort_order,
                     }));
                 }
-                self.clamp_selection_to_filtered();
+
+                // Select the neighbor: left (or first if deleted was first).
+                if let Some(pos) = deleted_pos {
+                    let filtered_after = self.file_workspace.tag_list().filtered_display_tag_ids().to_vec();
+                    let new_i = if pos == 0 { 0 } else { pos - 1 };
+                    self.tag_panel.set_selected(filtered_after.get(new_i).copied());
+                } else {
+                    self.clamp_selection_to_filtered();
+                }
                 Task::none()
             }
             tag_panel::Message::DeleteSelectedTag => {
@@ -609,13 +629,6 @@ impl FolderWorkspace {
     }
 
     fn handle_file_name_panel(&mut self, msg: file_name_panel::Message) -> Task<Message> {
-        // RemoveTag unchecks the tag directly (no drag state involved).
-        if let file_name_panel::Message::RemoveTag(id) = msg {
-            let was_checked = self.file_workspace.tag_list().get_tag(id).map_or(false, |t| t.is_checked());
-            self.file_workspace.toggle_tag_by_id(id);
-            self.history.push(Box::new(ToggleTagCommand { tag_id: id, was_checked }));
-            return Task::none();
-        }
         if let file_name_panel::Message::ClearSegmentStart = msg {
             let old_secs = self.file_workspace.segment_start_secs();
             self.file_workspace.set_segment_start_secs(None);

@@ -41,6 +41,12 @@ CREATE TABLE IF NOT EXISTS window_state (
 );
 ";
 
+/// Migration 2: add panel width columns to window_state.
+pub const M2_PANEL_WIDTHS: &str = "
+ALTER TABLE window_state ADD COLUMN left_panel_width REAL DEFAULT 0;
+ALTER TABLE window_state ADD COLUMN folder_panel_width REAL DEFAULT 0;
+";
+
 /// Debug-only seed data: 100 tags with colors.
 /// Uses INSERT OR IGNORE so re-running is safe.
 /// IDs follow the pattern used by the original UUID migration.

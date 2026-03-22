@@ -14,6 +14,8 @@ pub struct VideoControlsState {
     seeking: bool,
     /// Position while user is dragging (only meaningful when seeking == true)
     seek_position: f32,
+    /// Volume level 0.0..=1.0
+    volume: f32,
 }
 
 impl Default for VideoControlsState {
@@ -23,6 +25,7 @@ impl Default for VideoControlsState {
             duration_secs: 0.0,
             seeking: false,
             seek_position: 0.0,
+            volume: 1.0,
         }
     }
 }
@@ -58,6 +61,9 @@ impl VideoControlsState {
             Message::SetSegmentStart | Message::SetSegmentEnd => {
                 // No local state change; video player captures current position and emits SegmentMarked
             }
+            Message::SetVolume(v) => {
+                self.volume = v.clamp(0.0, 1.0);
+            }
         }
     }
 
@@ -79,6 +85,11 @@ impl VideoControlsState {
     /// Seek position in seconds (only meaningful while seeking)
     pub fn seek_position_secs(&self) -> f32 {
         self.seek_position
+    }
+
+    /// Current volume level 0.0..=1.0
+    pub fn volume(&self) -> f32 {
+        self.volume
     }
 
     /// Keyboard shortcuts for video controls: Space/F2 = play/pause, F1 = 10s back, F3 = 10s forward

@@ -15,6 +15,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 1,
         sql: schema::M1_FULL_SCHEMA,
     },
+    Migration {
+        version: 2,
+        sql: schema::M2_PANEL_WIDTHS,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.

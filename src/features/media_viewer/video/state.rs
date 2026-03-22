@@ -130,6 +130,12 @@ impl VideoPlayerState {
                     }
                     video_controls::Message::SetSegmentStart => self.capture_segment_start(),
                     video_controls::Message::SetSegmentEnd => self.capture_segment_end(),
+                    video_controls::Message::SetVolume(v) => {
+                        if let Some(video) = &mut self.current_video {
+                            video.set_volume(v as f64);
+                        }
+                        Task::none()
+                    }
                     _ => Task::none(),
                 }
             }
@@ -155,12 +161,14 @@ impl VideoPlayerState {
 
     fn capture_segment_start(&self) -> Task<Message> {
         let Some(video) = self.current_video.as_ref() else { return Task::none(); };
-        Task::done(Message::SegmentStartMarked(video.position().as_secs_f32()))
+        let secs = video.position().as_secs_f32().floor();
+        Task::done(Message::SegmentStartMarked(secs))
     }
 
     fn capture_segment_end(&self) -> Task<Message> {
         let Some(video) = self.current_video.as_ref() else { return Task::none(); };
-        Task::done(Message::SegmentEndMarked(video.position().as_secs_f32()))
+        let secs = video.position().as_secs_f32().ceil();
+        Task::done(Message::SegmentEndMarked(secs))
     }
 
     /// True when a video is loaded or in the process of loading.

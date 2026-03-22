@@ -1,7 +1,7 @@
 //! UI rendering for video controls feature
 
 use iced::widget::{button, container, row, text, tooltip};
-use iced::Element;
+use iced::{Element, Length};
 
 use crate::theme;
 use super::progress_bar::ProgressBar;
@@ -111,7 +111,13 @@ pub fn view(
         .on_release(Message::SeekReleased)
         .segment_range(segment_start, segment_end);
 
-    let controls = row![back10_btn, play_pause_btn, forward10_btn, seg_in_btn, seg_out_btn, bar]
+    let volume_bar = container(
+        ProgressBar::new(0.0..=1.0, state.volume(), Message::SetVolume)
+    )
+    .width(Length::Fixed(80.0))
+    .height(Length::Fill);
+
+    let controls = row![back10_btn, play_pause_btn, forward10_btn, seg_in_btn, seg_out_btn, bar, volume_bar]
         .spacing(8)
         .height(iced::Length::Fill)
         .align_y(iced::Alignment::Center);

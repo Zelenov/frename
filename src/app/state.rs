@@ -282,6 +282,8 @@ impl FrenameApp {
             is_maximized: self.is_maximized,
             monitor_width: self.monitor_size.0,
             monitor_height: self.monitor_size.1,
+            left_panel_width: self.folder_workspace.left_width(),
+            folder_panel_width: self.folder_workspace.folder_width(),
         });
     }
 

@@ -18,8 +18,6 @@ pub enum Message {
     PanelBounds(iced::Rectangle),
     /// Trash zone bounds (drop here to unselect the dragged tag).
     TrashBounds(iced::Rectangle),
-    /// Remove (uncheck) a tag from the display tags panel via the × button.
-    RemoveTag(TagId),
     /// Clear the segment start marker (× on the IN badge).
     ClearSegmentStart,
     /// Clear the segment end marker (× on the OUT badge).

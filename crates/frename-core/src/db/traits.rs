@@ -17,6 +17,10 @@ pub struct WindowGeometry {
     pub monitor_width: f32,
     /// Height of the monitor the window was on (logical pixels); 0.0 if unknown.
     pub monitor_height: f32,
+    /// Width of the left (media) panel; 0.0 means use default.
+    pub left_panel_width: f32,
+    /// Width of the folder list (middle) panel; 0.0 means use default.
+    pub folder_panel_width: f32,
 }
 
 /// Interface for storing and restoring app state (last folder and file, window geometry).
@@ -34,6 +38,7 @@ pub trait AppStateStore: Send + Sync {
 
     /// Saves the window geometry (position + size).
     fn set_window_state(&self, _geometry: WindowGeometry) {}
+
 }
 
 /// Interface for stored tags and tag color mapping. Tags are keyed by tag id (UUID); tag colors are keyed by tag name.

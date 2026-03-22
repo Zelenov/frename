@@ -21,4 +21,6 @@ pub enum Message {
     SetSegmentStart,
     /// Set segment end marker at the current video position (] key or button)
     SetSegmentEnd,
+    /// Set volume (0.0 = silent, 1.0 = full)
+    SetVolume(f32),
 }
