@@ -8,9 +8,9 @@ use crate::theme;
 
 const CONTROLS_HEIGHT: f32 = 32.0;
 
-/// Render the folder controls: Previous File and Next File buttons.
-/// Buttons are enabled only when there is a previous/next file available.
-pub fn view(has_previous: bool, has_next: bool) -> Element<'static, folder::Message> {
+/// Render the folder controls: Previous File, Next File, and Scroll-to-Selected buttons.
+/// Buttons are enabled only when applicable.
+pub fn view(has_previous: bool, has_next: bool, has_selected: bool) -> Element<'static, folder::Message> {
     let prev_btn: Element<'_, folder::Message> = tooltip(
         button(
             container(text("◀").size(16))
@@ -43,7 +43,23 @@ pub fn view(has_previous: bool, has_next: bool) -> Element<'static, folder::Mess
     )
         .into();
 
-    let controls = row![prev_btn, next_btn]
+    let scroll_btn: Element<'_, folder::Message> = tooltip(
+        button(
+            container(text("⊙").size(16))
+                .center_x(iced::Length::Fill)
+                .center_y(iced::Length::Fill),
+        )
+            .on_press(folder::Message::ScrollToSelected)
+            .width(CONTROLS_HEIGHT)
+            .height(iced::Length::Fill)
+            .padding(0)
+            .style(theme::icon_button_style(has_selected)),
+        text("Scroll to file"),
+        iced::widget::tooltip::Position::Top,
+    )
+        .into();
+
+    let controls = row![prev_btn, next_btn, scroll_btn]
         .spacing(8)
         .height(iced::Length::Fill)
         .align_y(iced::Alignment::Center);

@@ -17,4 +17,8 @@ pub enum Message {
     Unloaded,
     /// User clicked the fullscreen button (or pressed F5/Escape). Intercepted by FolderWorkspace.
     ToggleFullscreen,
+    /// Segment start was set from the video player. Intercepted by FolderWorkspace.
+    SegmentStartMarked(f32),
+    /// Segment end was set from the video player. Intercepted by FolderWorkspace.
+    SegmentEndMarked(f32),
 }

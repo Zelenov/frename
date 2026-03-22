@@ -5,3 +5,4 @@ pub mod file_name_display;
 pub mod search_bar;
 pub mod splitter;
 pub mod tag_chip;
+pub mod timecode_badge;

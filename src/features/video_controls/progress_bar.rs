@@ -32,6 +32,10 @@ pub struct ProgressBar<'a, Message> {
     on_seek: Box<dyn Fn(f32) -> Message + 'a>,
     /// Called when user releases the mouse after seeking
     on_release: Option<Message>,
+    /// Optional segment start in seconds (for the highlighted range).
+    segment_start: Option<f32>,
+    /// Optional segment end in seconds (for the highlighted range).
+    segment_end: Option<f32>,
 }
 
 impl<'a, Message> ProgressBar<'a, Message> {
@@ -50,12 +54,21 @@ impl<'a, Message> ProgressBar<'a, Message> {
             value: value.clamp(min, max),
             on_seek: Box::new(on_seek),
             on_release: None,
+            segment_start: None,
+            segment_end: None,
         }
     }
 
     /// Message to emit when the user releases after seeking
     pub fn on_release(mut self, message: Message) -> Self {
         self.on_release = Some(message);
+        self
+    }
+
+    /// Set optional segment start/end positions (in seconds) to highlight on the bar.
+    pub fn segment_range(mut self, start: Option<f32>, end: Option<f32>) -> Self {
+        self.segment_start = start;
+        self.segment_end = end;
         self
     }
 
@@ -157,6 +170,59 @@ where
                 },
                 theme::ACCENT,
             );
+        }
+
+        // Segment highlight.
+        // Positions are clamped to [min, max] so we never draw outside the bar.
+        // Rules:
+        //   only start OR only end  → single vertical marker line
+        //   start < end             → filled rectangle (no rounded corners) between them
+        //   start >= end            → two separate marker lines, no fill
+        let span = self.max - self.min;
+        if span > 0.0 {
+            // Convert seconds to an x-coordinate, clamped to the bar's pixel range.
+            let to_x = |secs: f32| {
+                bounds.x + ((secs - self.min) / span).clamp(0.0, 1.0) * bounds.width
+            };
+            let draw_marker = |renderer: &mut Renderer, x: f32| {
+                renderer.fill_quad(
+                    renderer::Quad {
+                        bounds: Rectangle { x: x - 1.0, y: bar_y, width: 2.0, height: BAR_HEIGHT },
+                        border: Border::default(),
+                        shadow: Shadow::default(),
+                        snap: true,
+                    },
+                    theme::SEGMENT,
+                );
+            };
+
+            match (self.segment_start, self.segment_end) {
+                (Some(s), Some(e)) if s < e => {
+                    // Both markers in valid order → filled range (no rounded corners) + two marker lines.
+                    let x0 = to_x(s);
+                    let x1 = to_x(e);
+                    let w = (x1 - x0).max(2.0);
+                    renderer.fill_quad(
+                        renderer::Quad {
+                            bounds: Rectangle { x: x0, y: bar_y, width: w, height: BAR_HEIGHT },
+                            border: Border::default(),
+                            shadow: Shadow::default(),
+                            snap: true,
+                        },
+                        theme::SEGMENT,
+                    );
+                    draw_marker(renderer, x0);
+                    draw_marker(renderer, x1);
+                }
+                (Some(s), Some(e)) => {
+                    // Both exist but start >= end → two separate marker lines, no fill.
+                    draw_marker(renderer, to_x(s));
+                    draw_marker(renderer, to_x(e));
+                }
+                (Some(s), None) => draw_marker(renderer, to_x(s)),
+                (None, Some(e)) => draw_marker(renderer, to_x(e)),
+                (None, None) => {}
+            }
         }
     }
 

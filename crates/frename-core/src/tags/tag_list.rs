@@ -21,13 +21,6 @@ use super::{tag::{Tag, TagId}, FileSnapshot, StoredTag};
 /// Number of tag colors in the UI palette (must match the UI crate).
 const TAG_PALETTE_LEN: u8 = 16;
 
-fn random_color_index() -> u8 {
-    let n = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    (n as u64 % u64::from(TAG_PALETTE_LEN)) as u8
-}
 
 /// A collection of available tags. Generic over the store type S (load and add stored tags).
 #[derive(Clone, Debug)]
@@ -45,12 +38,18 @@ pub struct TagList<S> {
     filter_query: String,
     /// True when display_tag_ids was rebalanced (insert_before caused order respread). Cleared after persisting all tag orders in save_tag.
     display_tags_rebalanced: bool,
+    /// Counter for assigning sequential tag colors (cycles through palette). Avoids timer-resolution bias.
+    color_counter: u8,
     /// Name without extension (from snapshot at construction).
     name_without_extension: String,
     /// File extension (from snapshot at construction).
     extension: String,
     /// Initial file name (from snapshot at construction).
     initial_file_name: String,
+    /// Segment start in seconds, if set.
+    segment_start: Option<f32>,
+    /// Segment end in seconds, if set.
+    segment_end: Option<f32>,
 }
 
 /// Returns the match rank for a non-empty, pre-lowercased query against a tag name.
@@ -67,6 +66,13 @@ fn match_rank(query_lower: &str, tag_name: &str) -> Option<u8> {
 }
 
 impl<S> TagList<S> {
+    /// Returns the next color index from the sequential counter (cycles through 0..TAG_PALETTE_LEN).
+    fn next_color_index(&mut self) -> u8 {
+        let index = self.color_counter % TAG_PALETTE_LEN;
+        self.color_counter = self.color_counter.wrapping_add(1);
+        index
+    }
+
     fn tag_matches_filter(&self, t: &Tag) -> bool {
         let q = self.filter_query.trim().to_lowercase();
         q.is_empty() || match_rank(&q, t.tag()).is_some()
@@ -121,6 +127,8 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let name_without_extension = file_snapshot.name_without_extension().to_string();
         let extension = file_snapshot.extension().to_string();
         let initial_file_name = file_snapshot.initial_file_name().to_string();
+        let segment_start = file_snapshot.segment_start();
+        let segment_end = file_snapshot.segment_end();
         let stored_tags = store.get_stored_tags().unwrap_or_default();
         let color_mapping = store.get_tag_color_mapping().unwrap_or_default();
         let snapshot_tags = file_snapshot.tags();
@@ -185,6 +193,8 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let selected_tag_ids = display_tag_ids.clone();
 
         let filter_query = String::new();
+        // Start color counter at number of stored tags so sequential tags get distinct colors.
+        let color_counter = stored_tags.len() as u8;
         let mut list = Self {
             store,
             tags_by_id,
@@ -193,9 +203,12 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             selected_tag_ids,
             filter_query,
             display_tags_rebalanced,
+            color_counter,
             name_without_extension,
             extension,
             initial_file_name,
+            segment_start,
+            segment_end,
         };
         list.rebuild_filtered_display_tag_ids();
         log::info!(
@@ -252,8 +265,42 @@ impl<S: StoredTagStore + Clone> TagList<S> {
 
     /// Toggle the tag with the given id. No-op if id not found. [selected_tag_ids] is unchanged (has all tags).
     pub fn toggle_by_id(&mut self, id: TagId) {
+        let was_checked = self.tags_by_id.get(&id).map_or(false, |t| t.is_checked());
         if let Some(tag) = self.tags_by_id.get_mut(&id) {
             tag.toggle();
+        }
+        // When a tag becomes checked, reposition it in selected_tag_ids so starred tags
+        // always appear before non-starred tags in the file name chips panel.
+        if !was_checked {
+            let is_starred = self.tags_by_id.get(&id).map_or(false, |t| t.is_starred());
+            if is_starred {
+                // Move starred tag before the first checked non-starred tag.
+                let first_non_starred_checked = self.selected_tag_ids
+                    .iter()
+                    .find_map(|(tid, _, _)| {
+                        if *tid == id { return None; }
+                        self.tags_by_id.get(tid)
+                            .filter(|t| t.is_checked() && !t.is_starred())
+                            .map(|t| t.id())
+                    });
+                if let Some(anchor) = first_non_starred_checked {
+                    self.selected_tag_ids.insert_before(id, (), Some(&anchor));
+                }
+            } else {
+                // Move non-starred tag after the last checked starred tag.
+                let last_starred_checked = self.selected_tag_ids
+                    .iter()
+                    .filter_map(|(tid, _, _)| {
+                        if *tid == id { return None; }
+                        self.tags_by_id.get(tid)
+                            .filter(|t| t.is_checked() && t.is_starred())
+                            .map(|t| t.id())
+                    })
+                    .last();
+                if let Some(anchor) = last_starred_checked {
+                    self.selected_tag_ids.insert_after(id, (), Some(&anchor));
+                }
+            }
         }
     }
 
@@ -285,7 +332,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
 
         let color_index = match stored_already {
             true =>  color_index,
-            false => random_color_index(),
+            false => self.next_color_index(),
         };
 
         let st = StoredTag::with_all(id.0, &text, order, starred);
@@ -337,12 +384,35 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             .filter_map(|id| self.tags_by_id.get(id))
             .map(|t| t.tag().to_string())
             .collect();
-        FileSnapshot::new(
+        let mut snap = FileSnapshot::new(
             tags,
             self.name_without_extension.as_str(),
             self.extension.as_str(),
             self.initial_file_name.as_str(),
-        )
+        );
+        snap.set_segment_start(self.segment_start);  // Option<f32>
+        snap.set_segment_end(self.segment_end);      // Option<f32>
+        snap
+    }
+
+    /// Segment start in seconds, if set.
+    pub fn segment_start_secs(&self) -> Option<f32> {
+        self.segment_start
+    }
+
+    /// Segment end in seconds, if set.
+    pub fn segment_end_secs(&self) -> Option<f32> {
+        self.segment_end
+    }
+
+    /// Set the segment start marker (in seconds). Pass `None` to clear.
+    pub fn set_segment_start_secs(&mut self, secs: Option<f32>) {
+        self.segment_start = secs;
+    }
+
+    /// Set the segment end marker (in seconds). Pass `None` to clear.
+    pub fn set_segment_end_secs(&mut self, secs: Option<f32>) {
+        self.segment_end = secs;
     }
 
     /// Returns true if any tag in the list has the given name (case-insensitive exact match).

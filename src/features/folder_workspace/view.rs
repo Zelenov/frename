@@ -14,9 +14,13 @@ use super::{FolderWorkspace, Message};
 
 /// Workspace layout: one big drop panel when no folder is open; otherwise regions and splitters.
 pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
+    let seg_start = state.file_workspace().segment_start_secs();
+    let seg_end = state.file_workspace().segment_end_secs();
+
     if state.media_fullscreen() {
         return container(
-            media_viewer::view::view(state.media_viewer(), true).map(Message::MediaViewer),
+            media_viewer::view::view(state.media_viewer(), true, seg_start, seg_end)
+                .map(Message::MediaViewer),
         )
         .width(Length::Fill)
         .height(Length::Fill)
@@ -43,7 +47,8 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
     }
 
     let video = container(
-        media_viewer::view::view(state.media_viewer(), false).map(Message::MediaViewer),
+        media_viewer::view::view(state.media_viewer(), false, seg_start, seg_end)
+            .map(Message::MediaViewer),
     )
     .width(Length::Fixed(state.left_width()))
     .height(Length::Fill);
@@ -53,6 +58,7 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
         .min_right(200.0);
 
     let (has_previous, has_next) = state.has_previous_next();
+    let has_selected = state.current_file().is_some();
 
     let folder_col: Element<'_, folder::Message> = column![
         container(folder::view::view(
@@ -61,7 +67,7 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
             state.file_workspace().tag_color_mapping(),
         ))
         .height(Length::Fill),
-        folder_controls::view::view(has_previous, has_next),
+        folder_controls::view::view(has_previous, has_next, has_selected),
     ]
     .height(Length::Fill)
     .into();

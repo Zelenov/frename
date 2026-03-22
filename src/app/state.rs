@@ -235,6 +235,21 @@ impl FrenameApp {
                             return msg;
                         }
                     }
+                    // [ sets segment start, ] sets segment end (do not forward to search bar).
+                    if let keyboard::Key::Character(c) = key.as_ref() {
+                        let seg = match c.as_ref() {
+                            "[" => Some(Message::FolderWorkspace(
+                                folder_workspace::Message::SetSegmentStart,
+                            )),
+                            "]" => Some(Message::FolderWorkspace(
+                                folder_workspace::Message::SetSegmentEnd,
+                            )),
+                            _ => None,
+                        };
+                        if seg.is_some() {
+                            return seg;
+                        }
+                    }
                     let k = match key.as_ref() {
                         keyboard::Key::Character(c) => {
                             c.chars().next().map(folder_workspace::GlobalSearchKey::Char)

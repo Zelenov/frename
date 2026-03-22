@@ -154,6 +154,26 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.tag_list = TagList::new(self.store.clone(), snapshot);
     }
 
+    /// Segment start in seconds for the current file, if set.
+    pub fn segment_start_secs(&self) -> Option<f32> {
+        self.tag_list.segment_start_secs()
+    }
+
+    /// Segment end in seconds for the current file, if set.
+    pub fn segment_end_secs(&self) -> Option<f32> {
+        self.tag_list.segment_end_secs()
+    }
+
+    /// Set the segment start marker to the given position in seconds.
+    pub fn set_segment_start_secs(&mut self, secs: Option<f32>) {
+        self.tag_list.set_segment_start_secs(secs);
+    }
+
+    /// Set the segment end marker to the given position in seconds.
+    pub fn set_segment_end_secs(&mut self, secs: Option<f32>) {
+        self.tag_list.set_segment_end_secs(secs);
+    }
+
     /// Snapshot of the current file's stable id and workspace tag state.
     /// Used by folder workspace to save when switching file. Does not persist anything.
     pub fn get_snapshot(&self) -> Option<(FileId, FileSnapshot)> {

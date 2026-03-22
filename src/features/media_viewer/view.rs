@@ -9,10 +9,17 @@ use super::{image, video, Message, MediaViewerState};
 
 /// Render the appropriate sub-view based on which media type is active.
 /// `is_fullscreen` is forwarded to sub-views so they can show the correct button icon.
-pub fn view(state: &MediaViewerState, is_fullscreen: bool) -> Element<'_, Message> {
+/// `segment_start` and `segment_end` are only used for video (progress bar highlight).
+pub fn view(
+    state: &MediaViewerState,
+    is_fullscreen: bool,
+    segment_start: Option<f32>,
+    segment_end: Option<f32>,
+) -> Element<'_, Message> {
     match &state.active {
         ActiveMedia::Video => {
-            video::view::view(&state.video, is_fullscreen).map(Message::Video)
+            video::view::view(&state.video, is_fullscreen, segment_start, segment_end)
+                .map(Message::Video)
         }
         ActiveMedia::Image => {
             image::view::view(&state.image, is_fullscreen).map(Message::Image)

@@ -12,6 +12,7 @@ use frename_core::{
     AppDatabase, AppStateStore, File, FileId, FileSnapshot, FolderAndFile, LoggingAppStateStore,
     NavigateFileCommand, ReorderTagCommand, ToggleTagCommand, PasteTagsCommand,
     DeleteTagCommand, CreateTagCommand, SaveTagCommand, StarTagCommand,
+    SetSegmentStartCommand, SetSegmentEndCommand,
     SaveAndReparse, UndoContext, UndoError,
 };
 use frename_core::undo::History;
@@ -24,7 +25,7 @@ use iced::widget::operation;
 use crate::features::file_name_panel::{self, FileNamePanelState};
 use crate::features::file_workspace::FileWorkspace;
 use crate::features::folder;
-use crate::features::media_viewer::{self, MediaViewerState};
+use crate::features::media_viewer::{self, video as media_viewer_video, MediaViewerState};
 use crate::features::tag_panel::{self, TagPanelState, TAG_LIST_SCROLLABLE_ID};
 use crate::widgets::search_bar::SEARCH_BAR_INPUT_ID;
 use crate::widgets::splitter::HIT_WIDTH;
@@ -59,6 +60,9 @@ pub struct FolderWorkspace {
     /// Last reported tag list scroll offset and viewport height (for scroll-into-view).
     tag_list_scroll_y: Option<f32>,
     tag_list_viewport_height: Option<f32>,
+    /// Last reported folder list scroll offset and viewport height (for scroll-into-view).
+    folder_scroll_y: Option<f32>,
+    folder_viewport_height: Option<f32>,
     /// Internally copied tag names (for paste onto another file).
     copied_tags: Option<Vec<String>>,
     /// Undo/redo history for all undoable actions.
@@ -82,6 +86,8 @@ impl FolderWorkspace {
             folder_width: DEFAULT_FOLDER_WIDTH,
             tag_list_scroll_y: None,
             tag_list_viewport_height: None,
+            folder_scroll_y: None,
+            folder_viewport_height: None,
             copied_tags: None,
             history: WorkspaceHistory::new(50),
             media_fullscreen: false,
@@ -109,6 +115,8 @@ impl FolderWorkspace {
                     }
                     Task::none()
                 }
+                media_viewer::Message::SegmentStartMarked(secs) => self.set_segment_start(secs),
+                media_viewer::Message::SegmentEndMarked(secs) => self.set_segment_end(secs),
                 other => self.media_viewer.update(other).map(Message::MediaViewer),
             },
             Message::TagPanel(msg) => self.handle_tag_panel(msg),
@@ -129,6 +137,10 @@ impl FolderWorkspace {
             Message::FocusSearchBarAndKey(key) => self.focus_search_bar_and_key(key),
             Message::Noop => Task::none(),
             Message::ScrollFolderListToSelected => self.scroll_folder_list_to_selected(),
+            Message::FolderListScrollAdjusted(y) => {
+                self.folder_scroll_y = Some(y);
+                Task::none()
+            }
             Message::ScrollTagListToSelection => self.scroll_tag_list_to_selection(),
             Message::TagListScrollAdjusted(scroll_y) => {
                 self.tag_list_scroll_y = Some(scroll_y);
@@ -153,6 +165,12 @@ impl FolderWorkspace {
                 }
                 Task::none()
             }
+            Message::SetSegmentStart => Task::done(Message::MediaViewer(
+                media_viewer::Message::Video(media_viewer_video::Message::CaptureSegmentStart),
+            )),
+            Message::SetSegmentEnd => Task::done(Message::MediaViewer(
+                media_viewer::Message::Video(media_viewer_video::Message::CaptureSegmentEnd),
+            )),
             Message::EscapePressed => {
                 if self.media_fullscreen {
                     self.media_fullscreen = false;
@@ -178,6 +196,22 @@ impl FolderWorkspace {
         self.file_workspace.set_tag_filter(new_value);
         operation::focus(iced::widget::Id::from(SEARCH_BAR_INPUT_ID))
             .map(|_: ()| Message::Noop)
+    }
+
+    fn set_segment_start(&mut self, secs: f32) -> Task<Message> {
+        if self.file_workspace.file().is_none() { return Task::none(); }
+        let old_secs = self.file_workspace.segment_start_secs();
+        self.file_workspace.set_segment_start_secs(Some(secs));
+        self.history.push(Box::new(SetSegmentStartCommand { old_secs, new_secs: Some(secs) }));
+        Task::none()
+    }
+
+    fn set_segment_end(&mut self, secs: f32) -> Task<Message> {
+        if self.file_workspace.file().is_none() { return Task::none(); }
+        let old_secs = self.file_workspace.segment_end_secs();
+        self.file_workspace.set_segment_end_secs(Some(secs));
+        self.history.push(Box::new(SetSegmentEndCommand { old_secs, new_secs: Some(secs) }));
+        Task::none()
     }
 
     fn copy_tags(&mut self) -> Task<Message> {
@@ -354,6 +388,12 @@ impl FolderWorkspace {
             folder::Message::SelectFile(index) => self.select_file_at(index),
             folder::Message::PreviousFile => self.select_previous(),
             folder::Message::NextFile => self.select_next(),
+            folder::Message::Scrolled { scroll_y, viewport_height } => {
+                self.folder_scroll_y = Some(scroll_y);
+                self.folder_viewport_height = Some(viewport_height);
+                Task::none()
+            }
+            folder::Message::ScrollToSelected => Task::done(Message::ScrollFolderListToSelected),
         }
     }
 
@@ -380,7 +420,10 @@ impl FolderWorkspace {
             return Task::none();
         };
         self.pending_to_file_id = Some(file.id());
-        Task::done(Message::FileOpened(file))
+        Task::batch([
+            Task::done(Message::FileOpened(file)),
+            Task::done(Message::ScrollFolderListToSelected),
+        ])
     }
 
     fn select_next(&mut self) -> Task<Message> {
@@ -393,7 +436,10 @@ impl FolderWorkspace {
             return Task::none();
         };
         self.pending_to_file_id = Some(file.id());
-        Task::done(Message::FileOpened(file))
+        Task::batch([
+            Task::done(Message::FileOpened(file)),
+            Task::done(Message::ScrollFolderListToSelected),
+        ])
     }
 
     fn handle_tag_panel(
@@ -411,7 +457,8 @@ impl FolderWorkspace {
         match msg {
             tag_panel::Message::SetFilter(query) => {
                 self.file_workspace.set_tag_filter(query);
-                self.clamp_selection_to_filtered();
+                // Do not clamp selection: keep the selected tag even when it becomes hidden by the
+                // filter. Space will then toggle the first visible tag and move selection there.
                 Task::done(Message::ScrollTagListToSelection)
             }
             tag_panel::Message::CreateTag(name) => {
@@ -468,12 +515,20 @@ impl FolderWorkspace {
                     let trimmed = filter.trim_end();
                     self.file_workspace.set_tag_filter(trimmed.to_string());
                 }
-                // Toggle the first visible tag (top of filtered list), so the flow is:
-                // type to search → first match is highlighted → Space to toggle → keep searching.
-                if let Some(&id) = self.file_workspace.tag_list().filtered_display_tag_ids().first() {
+                // Decide which tag to toggle:
+                // - If selected tag is visible → toggle it (keep selection).
+                // - Otherwise → toggle the first visible tag and move selection to it.
+                let filtered = self.file_workspace.tag_list().filtered_display_tag_ids().to_vec();
+                let selected_id = self.tag_panel.selected_tag_id();
+                let selected_visible = selected_id.filter(|id| filtered.contains(id));
+                let id_to_toggle = selected_visible.or_else(|| filtered.first().copied());
+                if let Some(id) = id_to_toggle {
                     let was_checked = self.file_workspace.tag_list().get_tag(id).map_or(false, |t| t.is_checked());
                     self.file_workspace.toggle_tag_by_id(id);
                     self.history.push(Box::new(ToggleTagCommand { tag_id: id, was_checked }));
+                    if selected_visible.is_none() {
+                        self.tag_panel.set_selected(Some(id));
+                    }
                 }
                 Task::none()
             }
@@ -554,6 +609,25 @@ impl FolderWorkspace {
     }
 
     fn handle_file_name_panel(&mut self, msg: file_name_panel::Message) -> Task<Message> {
+        // RemoveTag unchecks the tag directly (no drag state involved).
+        if let file_name_panel::Message::RemoveTag(id) = msg {
+            let was_checked = self.file_workspace.tag_list().get_tag(id).map_or(false, |t| t.is_checked());
+            self.file_workspace.toggle_tag_by_id(id);
+            self.history.push(Box::new(ToggleTagCommand { tag_id: id, was_checked }));
+            return Task::none();
+        }
+        if let file_name_panel::Message::ClearSegmentStart = msg {
+            let old_secs = self.file_workspace.segment_start_secs();
+            self.file_workspace.set_segment_start_secs(None);
+            self.history.push(Box::new(SetSegmentStartCommand { old_secs, new_secs: None }));
+            return Task::none();
+        }
+        if let file_name_panel::Message::ClearSegmentEnd = msg {
+            let old_secs = self.file_workspace.segment_end_secs();
+            self.file_workspace.set_segment_end_secs(None);
+            self.history.push(Box::new(SetSegmentEndCommand { old_secs, new_secs: None }));
+            return Task::none();
+        }
         let (dragged_id, drop_index) = if let file_name_panel::Message::DragEnded = &msg {
             (
                 self.file_name_panel.dragging_tag_id(),
@@ -779,13 +853,29 @@ impl FolderWorkspace {
         let Some(index) = dir.selected_index() else {
             return Task::none();
         };
-        let target_y = (index as f32) * folder::FOLDER_ROW_HEIGHT;
+        let row_top = (index as f32) * folder::FOLDER_ROW_HEIGHT;
+        let row_bottom = row_top + folder::FOLDER_ROW_HEIGHT;
+
+        let current = self.folder_scroll_y.unwrap_or(0.0);
+        let vh = self.folder_viewport_height.unwrap_or(f32::MAX);
+
+        let target_y = if row_top < current {
+            row_top
+        } else if row_bottom > current + vh {
+            (row_bottom - vh).max(0.0)
+        } else {
+            return Task::none();
+        };
+
         let offset = iced::widget::scrollable::AbsoluteOffset {
             x: None,
             y: Some(target_y),
         };
-        operation::scroll_to(iced::widget::Id::new(folder::FOLDER_LIST_SCROLLABLE_ID), offset)
-            .map(|_: ()| Message::Noop)
+        Task::batch([
+            operation::scroll_to(iced::widget::Id::new(folder::FOLDER_LIST_SCROLLABLE_ID), offset)
+                .map(|_: ()| Message::Noop),
+            Task::done(Message::FolderListScrollAdjusted(target_y)),
+        ])
     }
 
     pub fn subscription(&self) -> Subscription<Message> {

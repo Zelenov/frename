@@ -14,13 +14,25 @@ use crate::widgets::tag_chip;
 /// Dot separator between parts (tags, name, extension).
 const DOT: &str = " . ";
 
-/// Renders the file name as tag chips + name.extension (no outer container).
+/// Format seconds as `MM:SS` or `HH:MM:SS`.
+fn fmt_timecode(secs: f32) -> String {
+    let total = secs as u32;
+    let h = total / 3600;
+    let m = (total % 3600) / 60;
+    let s = total % 60;
+    if h == 0 { format!("{:02}:{:02}", m, s) } else { format!("{:02}:{:02}:{:02}", h, m, s) }
+}
+
+/// Renders the file name as tag chips + optional timecodes + name.extension (no outer container).
+/// `seg_start`/`seg_end`: optional IN/OUT timecodes shown between tags and file name.
 /// Callers wrap in a container when they need panel style (e.g. file workspace, folder list rows).
 pub fn view<Message: 'static>(
     snapshot: FileSnapshot,
     color_mapping: &TagColorMapping,
     wrap: bool,
 ) -> Element<'static, Message> {
+    let seg_start = snapshot.segment_start();
+    let seg_end = snapshot.segment_end();
     let tags: Vec<String> = snapshot.tags().to_vec();
     let name = snapshot.name_without_extension().to_string();
     let ext = snapshot.extension().to_string();
@@ -35,8 +47,18 @@ pub fn view<Message: 'static>(
         let tag_color = tag_colors::TagColors::color(color_index);
         parts.push(tag_chip::view_display_only(tag_name.clone(), tag_color));
     }
+    // Timecode badges between tags and file name.
+    for secs in seg_start.into_iter().chain(seg_end) {
+        parts.push(dot_text().into());
+        parts.push(
+            text(fmt_timecode(secs))
+                .size(12)
+                .color(theme::TEXT_MUTED)
+                .into(),
+        );
+    }
     if !name_ext.is_empty() {
-        if !tags.is_empty() {
+        if !tags.is_empty() || seg_start.is_some() || seg_end.is_some() {
             parts.push(dot_text().into());
         }
         parts.push(

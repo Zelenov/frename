@@ -68,6 +68,13 @@ pub fn view<'a>(
     let list = scrollable(column(items).width(Length::Fill))
         .id(iced::widget::Id::new(FOLDER_LIST_SCROLLABLE_ID))
         .height(Length::Fill)
+        .on_scroll(|viewport| {
+            let offset = viewport.absolute_offset();
+            Message::Scrolled {
+                scroll_y: offset.y,
+                viewport_height: viewport.bounds().height,
+            }
+        })
         .style(theme::dark_scrollable_style);
 
     container(list)

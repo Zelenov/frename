@@ -55,6 +55,9 @@ impl VideoControlsState {
             Message::SeekBack10 | Message::SeekForward10 => {
                 // No local state change; video player performs the seek
             }
+            Message::SetSegmentStart | Message::SetSegmentEnd => {
+                // No local state change; video player captures current position and emits SegmentMarked
+            }
         }
     }
 

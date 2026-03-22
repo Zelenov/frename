@@ -124,6 +124,8 @@ impl FileNamePanelState {
             }
             Message::PanelBounds(bounds) => self.bounds = Some(bounds),
             Message::TrashBounds(bounds) => self.trash_bounds = Some(bounds),
+            Message::RemoveTag(_) => {} // handled by workspace
+            Message::ClearSegmentStart | Message::ClearSegmentEnd => {} // handled by workspace
         }
     }
 

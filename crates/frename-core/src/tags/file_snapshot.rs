@@ -1,21 +1,38 @@
-//! File snapshot: tags, file name without extension, extension, and initial file name.
-//! Built by parsing a file name (split by dots, trim; last = extension, second-to-last = name, rest = tags).
+//! File snapshot: tags, file name without extension, extension, initial file name,
+//! and optional segment markers stored as plain seconds (f32).
+//!
+//! `file_name()` serialises segments to `in_HH_MM_SS` / `out_HH_MM_SS`.
+//! `FileSnapshot::parse()` is the inverse: parses a raw file-name string back into a snapshot.
 
-/// Holds tags, file name without extension, extension, and initial file name. Built by FileTagger::parse or from UI state.
+use regex::Regex;
+use std::sync::OnceLock;
+
+// ---------------------------------------------------------------------------
+// Shared regex for segment markers
+// ---------------------------------------------------------------------------
+
+fn segment_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"^(in|out)_(\d{2})_(\d{2})_(\d{2})$").unwrap())
+}
+
+// ---------------------------------------------------------------------------
+// FileSnapshot
+// ---------------------------------------------------------------------------
+
 #[derive(Debug, Clone)]
 pub struct FileSnapshot {
-    /// Tags parsed or set (everything before name and extension when split by dots).
     tags: Vec<String>,
-    /// File name without extension (second-to-last part when split by dots).
     name_without_extension: String,
-    /// File extension (last part when split by dots).
     extension: String,
-    /// Initial file name (as first parsed from the path, or copied from base when building from UI).
     initial_file_name: String,
+    /// Segment start in seconds, if set.
+    segment_start: Option<f32>,
+    /// Segment end in seconds, if set.
+    segment_end: Option<f32>,
 }
 
 impl FileSnapshot {
-    /// Create from parsed parts: tags, name without extension, extension, and initial file name.
     pub fn new(
         tags: Vec<String>,
         name_without_extension: impl Into<String>,
@@ -27,47 +44,52 @@ impl FileSnapshot {
             name_without_extension: name_without_extension.into(),
             extension: extension.into(),
             initial_file_name: initial_file_name.into(),
+            segment_start: None,
+            segment_end: None,
         }
     }
 
-    /// Set the tags (e.g. from UI checked state).
+    // ------------------------------------------------------------------
+    // Getters / setters
+    // ------------------------------------------------------------------
+
     pub fn set_tags(&mut self, tags: impl IntoIterator<Item = impl AsRef<str>>) {
         self.tags = tags.into_iter().map(|s| s.as_ref().to_string()).collect();
     }
+    pub fn tags(&self) -> &[String] { &self.tags }
+    pub fn name_without_extension(&self) -> &str { &self.name_without_extension }
+    pub fn extension(&self) -> &str { &self.extension }
+    pub fn initial_file_name(&self) -> &str { &self.initial_file_name }
+    pub fn segment_start(&self) -> Option<f32> { self.segment_start }
+    pub fn segment_end(&self) -> Option<f32> { self.segment_end }
+    pub fn set_segment_start(&mut self, v: Option<f32>) { self.segment_start = v; }
+    pub fn set_segment_end(&mut self, v: Option<f32>) { self.segment_end = v; }
+    pub fn has_tag(&self, value: &str) -> bool { self.tags.iter().any(|t| t == value) }
 
-    /// Tags on this list (for display and for saving).
-    pub fn tags(&self) -> &[String] {
-        &self.tags
-    }
+    // ------------------------------------------------------------------
+    // Serialise: snapshot → file name string
+    // ------------------------------------------------------------------
 
-    /// File name without extension (stem before extension).
-    pub fn name_without_extension(&self) -> &str {
-        &self.name_without_extension
-    }
-
-    /// File extension.
-    pub fn extension(&self) -> &str {
-        &self.extension
-    }
-
-    /// Initial file name (as first parsed from the path, or from base when built from UI).
-    pub fn initial_file_name(&self) -> &str {
-        &self.initial_file_name
-    }
-
-    /// Whether this list contains a tag with the given value.
-    pub fn has_tag(&self, value: &str) -> bool {
-        self.tags.iter().any(|t| t.as_str() == value)
-    }
-
-    /// Build the full file name: tags (if any) + name without extension + extension.
-    /// Extension may include a leading dot (e.g. ".mp4"); no extra dot is added in that case.
+    /// Build the full file name: `[tags.]name[.in_HH_MM_SS][.out_HH_MM_SS].ext`.
     pub fn file_name(&self) -> String {
-        let name_ext = if self.extension.is_empty() {
-            self.name_without_extension.to_string()
+        let mut middle: Vec<String> = Vec::new();
+        if !self.name_without_extension.is_empty() {
+            middle.push(self.name_without_extension.clone());
+        }
+        if let Some(s) = self.segment_start {
+            middle.push(Self::secs_to_marker("in", s));
+        }
+        if let Some(e) = self.segment_end {
+            middle.push(Self::secs_to_marker("out", e));
+        }
+
+        let name_ext = if middle.is_empty() {
+            self.extension.clone()
         } else {
-            format!("{}{}", self.name_without_extension, self.extension)
+            let base = middle.join(".");
+            if self.extension.is_empty() { base } else { format!("{}{}", base, self.extension) }
         };
+
         if self.tags.is_empty() {
             name_ext
         } else if name_ext.is_empty() {
@@ -75,6 +97,66 @@ impl FileSnapshot {
         } else {
             format!("{}.{}", self.tags.join("."), name_ext)
         }
+    }
+
+    fn secs_to_marker(prefix: &str, secs: f32) -> String {
+        let total = secs as u32;
+        format!("{prefix}_{:02}_{:02}_{:02}", total / 3600, (total % 3600) / 60, total % 60)
+    }
+
+    // ------------------------------------------------------------------
+    // Deserialise: file name string → snapshot
+    // ------------------------------------------------------------------
+
+    /// Parse a raw file-name string (not a full path) into a `FileSnapshot`.
+    /// Segment markers (`in_HH_MM_SS` / `out_HH_MM_SS`) are extracted and stored as seconds;
+    /// the remaining dot-parts are split into tags / name / extension as usual.
+    pub fn parse(raw_name: &str) -> Self {
+        let all_parts: Vec<&str> = raw_name
+            .split('.')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        let mut segment_start: Option<f32> = None;
+        let mut segment_end: Option<f32> = None;
+
+        let parts: Vec<&str> = all_parts
+            .iter()
+            .copied()
+            .filter(|part| match segment_re().captures(part) {
+                Some(caps) => {
+                    let h: u32 = caps[2].parse().unwrap_or(0);
+                    let m: u32 = caps[3].parse().unwrap_or(0);
+                    let s: u32 = caps[4].parse().unwrap_or(0);
+                    if m < 60 && s < 60 {
+                        let secs = h as f32 * 3600.0 + m as f32 * 60.0 + s as f32;
+                        if &caps[1] == "in" { segment_start = Some(secs); }
+                        else { segment_end = Some(secs); }
+                        false   // remove from parts
+                    } else {
+                        true    // invalid — treat as regular part
+                    }
+                }
+                None => true,
+            })
+            .collect();
+
+        let (tags, name, ext) = match parts.as_slice() {
+            []              => (vec![], String::new(), String::new()),
+            [only]          => (vec![], only.to_string(), String::new()),
+            [name, ext]     => (vec![], name.to_string(), format!(".{ext}")),
+            [tags @ .., name, ext] => (
+                tags.iter().map(|s| s.to_string()).collect(),
+                name.to_string(),
+                format!(".{ext}"),
+            ),
+        };
+
+        let mut snap = FileSnapshot::new(tags, name, ext, raw_name);
+        snap.set_segment_start(segment_start);
+        snap.set_segment_end(segment_end);
+        snap
     }
 }
 
@@ -85,6 +167,8 @@ impl Default for FileSnapshot {
             name_without_extension: String::new(),
             extension: String::new(),
             initial_file_name: String::new(),
+            segment_start: None,
+            segment_end: None,
         }
     }
 }

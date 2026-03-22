@@ -10,3 +10,4 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 tokio = { version = "1", features = ["fs", "time"] }
 uuid = { version = "1", features = ["v4"] }
 indexmap = "2"
+regex = "1"

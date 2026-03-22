@@ -73,8 +73,14 @@ pub enum Message {
     Redo,
     /// Scroll the folder file list so the selected file is visible (deferred to next frame).
     ScrollFolderListToSelected,
+    /// Internal: update cached folder list scroll Y after programmatic scroll.
+    FolderListScrollAdjusted(f32),
     /// Toggle fullscreen mode for the media viewer (F5).
     ToggleMediaFullscreen,
     /// Escape pressed globally: exits fullscreen if active, otherwise clears the search bar filter.
     EscapePressed,
+    /// Set segment start marker at the current video position ([ key).
+    SetSegmentStart,
+    /// Set segment end marker at the current video position (] key).
+    SetSegmentEnd,
 }

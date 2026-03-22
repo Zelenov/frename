@@ -14,4 +14,5 @@ pub use traits::{CommandSink, Undoable};
 pub use commands::{
     NavigateFileCommand, ReorderTagCommand, ToggleTagCommand, PasteTagsCommand,
     DeleteTagCommand, CreateTagCommand, SaveTagCommand, StarTagCommand,
+    SetSegmentStartCommand, SetSegmentEndCommand,
 };

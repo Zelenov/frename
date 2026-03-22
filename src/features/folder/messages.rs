@@ -9,4 +9,8 @@ pub enum Message {
     PreviousFile,
     /// User pressed next file (folder controls)
     NextFile,
+    /// Folder list scrolled: current scroll offset and viewport height.
+    Scrolled { scroll_y: f32, viewport_height: f32 },
+    /// Scroll the folder list to the currently selected file.
+    ScrollToSelected,
 }

@@ -25,4 +25,5 @@ pub use undo::{
     History, UndoContext, UndoError,
     NavigateFileCommand, ReorderTagCommand, ToggleTagCommand, PasteTagsCommand,
     DeleteTagCommand, CreateTagCommand, SaveTagCommand, StarTagCommand,
+    SetSegmentStartCommand, SetSegmentEndCommand,
 };

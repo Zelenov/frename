@@ -33,6 +33,9 @@ pub const TEXT_MUTED: Color = Color::from_rgb(0.55, 0.55, 0.6);
 /// Error / failed state (e.g. video failed to load).
 pub const ERROR: Color = Color::from_rgb(0.95, 0.35, 0.35);
 
+/// Segment range highlight on the progress bar (inverted accent – warm yellow-green).
+pub const SEGMENT: Color = Color::from_rgba(1.0, 0.85, 0.2, 0.75);
+
 /// Splitter bar (matches track).
 pub const SPLITTER: Color = Color::from_rgb(0.25, 0.25, 0.25);
 

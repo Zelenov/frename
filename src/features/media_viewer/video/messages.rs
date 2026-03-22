@@ -25,4 +25,14 @@ pub enum Message {
     VideoUnloaded,
     /// User clicked the fullscreen toggle button.
     ToggleFullscreen,
+    /// Request to capture the current video position as the segment start marker.
+    /// Emits SegmentStartMarked when captured; no-op when no video is loaded.
+    CaptureSegmentStart,
+    /// Request to capture the current video position as the segment end marker.
+    /// Emits SegmentEndMarked when captured; no-op when no video is loaded.
+    CaptureSegmentEnd,
+    /// Segment start was captured. Bubbles up to FolderWorkspace.
+    SegmentStartMarked(f32),
+    /// Segment end was captured. Bubbles up to FolderWorkspace.
+    SegmentEndMarked(f32),
 }

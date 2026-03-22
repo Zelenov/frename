@@ -80,6 +80,13 @@ impl MediaViewerState {
             Message::Video(video::Message::ToggleFullscreen) => {
                 Task::done(Message::ToggleFullscreen)
             }
+            // Bubble segment markers up so FolderWorkspace can intercept them.
+            Message::Video(video::Message::SegmentStartMarked(secs)) => {
+                Task::done(Message::SegmentStartMarked(secs))
+            }
+            Message::Video(video::Message::SegmentEndMarked(secs)) => {
+                Task::done(Message::SegmentEndMarked(secs))
+            }
             Message::Image(image::Message::ToggleFullscreen) => {
                 Task::done(Message::ToggleFullscreen)
             }
@@ -105,6 +112,8 @@ impl MediaViewerState {
             Message::Unloaded => Task::none(),
             // Intercepted by FolderWorkspace; no-op here if it ever reaches update().
             Message::ToggleFullscreen => Task::none(),
+            // Intercepted by FolderWorkspace; no-op here if they ever reach update().
+            Message::SegmentStartMarked(_) | Message::SegmentEndMarked(_) => Task::none(),
         }
     }
 

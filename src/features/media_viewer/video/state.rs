@@ -128,9 +128,14 @@ impl VideoPlayerState {
                             Task::none()
                         }
                     }
+                    video_controls::Message::SetSegmentStart => self.capture_segment_start(),
+                    video_controls::Message::SetSegmentEnd => self.capture_segment_end(),
                     _ => Task::none(),
                 }
             }
+            Message::CaptureSegmentStart => self.capture_segment_start(),
+            Message::CaptureSegmentEnd => self.capture_segment_end(),
+            Message::SegmentStartMarked(_) | Message::SegmentEndMarked(_) => Task::none(), // bubbles up via media_viewer
             Message::Unload => {
                 self.current_video = None;
                 self.video_path = None;
@@ -147,6 +152,16 @@ impl VideoPlayerState {
     pub fn load_failed(&self) -> bool { self.load_failed }
     pub fn current_video(&self) -> Option<&Video> { self.current_video.as_ref() }
     pub fn controls(&self) -> &VideoControlsState { &self.controls }
+
+    fn capture_segment_start(&self) -> Task<Message> {
+        let Some(video) = self.current_video.as_ref() else { return Task::none(); };
+        Task::done(Message::SegmentStartMarked(video.position().as_secs_f32()))
+    }
+
+    fn capture_segment_end(&self) -> Task<Message> {
+        let Some(video) = self.current_video.as_ref() else { return Task::none(); };
+        Task::done(Message::SegmentEndMarked(video.position().as_secs_f32()))
+    }
 
     /// True when a video is loaded or in the process of loading.
     pub fn is_active(&self) -> bool {
