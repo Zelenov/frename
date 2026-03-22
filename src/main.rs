@@ -81,12 +81,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize app database (migrations) before iced; decorator logs.
     let _ = LoggingAppStateStore::new(AppDatabase::new()).initialize();
 
-    // Restore saved window geometry (size + position), or use defaults.
+    // Restore saved window geometry (size + position + maximized), or use defaults.
     let saved = AppDatabase::new().get_window_state();
     let window_size = saved.map(|g| iced::Size::new(g.width, g.height))
         .unwrap_or(iced::Size::new(1200.0, 600.0));
     let window_position = saved.map(|g| window::Position::Specific(iced::Point::new(g.x, g.y)))
         .unwrap_or(window::Position::Centered);
+    let start_maximized = saved.map(|g| g.is_maximized).unwrap_or(false);
 
     // Load window icon from embedded .ico bytes.
     let icon_bytes = include_bytes!("../frename-icon.ico");
@@ -111,6 +112,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         size: window_size,
         position: window_position,
         resizable: true,
+        maximized: start_maximized,
         icon: window_icon,
         ..window::Settings::default()
     })

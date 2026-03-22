@@ -7,4 +7,6 @@ use iced::widget::image;
 pub enum Message {
     /// Async decode completed: Ok(handle) on success, Err(description) on failure.
     ImageLoaded(Result<image::Handle, String>),
+    /// User clicked the fullscreen toggle button.
+    ToggleFullscreen,
 }

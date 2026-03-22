@@ -23,4 +23,6 @@ pub enum Message {
     Unload,
     /// Current video has been unloaded; safe to persist file and load next.
     VideoUnloaded,
+    /// User clicked the fullscreen toggle button.
+    ToggleFullscreen,
 }

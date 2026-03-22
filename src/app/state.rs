@@ -20,10 +20,16 @@ pub struct FrenameApp {
     folder_workspace: folder_workspace::FolderWorkspace,
     /// Window ID waiting for GStreamer unload before we close.
     pending_close: Option<window::Id>,
-    /// Last known window position (logical px); updated on Moved events.
+    /// The main window ID (captured from the first Opened event).
+    window_id: Option<window::Id>,
+    /// Last known window position (logical px); updated on Moved events when not maximized.
     window_pos: (f32, f32),
-    /// Last known window size (logical px); updated on Resized events.
+    /// Last known window size (logical px); updated on Resized events when not maximized.
     window_size: (f32, f32),
+    /// Whether the window is currently maximized.
+    is_maximized: bool,
+    /// Last known monitor size (logical px); 0×0 if not yet fetched.
+    monitor_size: (f32, f32),
 }
 
 impl FrenameApp {
@@ -33,8 +39,11 @@ impl FrenameApp {
             drag_drop_state: drag_drop::DragDropState::default(),
             folder_workspace: folder_workspace::FolderWorkspace::new(),
             pending_close: None,
+            window_id: None,
             window_pos: saved.map(|g| (g.x, g.y)).unwrap_or((0.0, 0.0)),
             window_size: saved.map(|g| (g.width, g.height)).unwrap_or((1200.0, 600.0)),
+            is_maximized: saved.map(|g| g.is_maximized).unwrap_or(false),
+            monitor_size: saved.map(|g| (g.monitor_width, g.monitor_height)).unwrap_or((0.0, 0.0)),
         }
     }
 }
@@ -42,9 +51,12 @@ impl FrenameApp {
 impl FrenameApp {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::WindowReady => Task::done(Message::FolderWorkspace(
-                folder_workspace::Message::LoadLastSession,
-            )),
+            Message::WindowReady(id) => {
+                self.window_id = Some(id);
+                Task::done(Message::FolderWorkspace(
+                    folder_workspace::Message::LoadLastSession,
+                ))
+            }
             Message::CloseRequested(id) => {
                 crate::crash_guard::mark_closing();
                 if !self.folder_workspace.needs_media_unload() {
@@ -56,12 +68,31 @@ impl FrenameApp {
                 ))
             }
             Message::WindowMoved(x, y) => {
-                AppDatabase::new().set_window_state(WindowGeometry { x, y, width: self.window_size.0, height: self.window_size.1 });
-                Task::none()
+                if !self.is_maximized {
+                    self.window_pos = (x, y);
+                }
+                let fetch = self.fetch_window_extra();
+                self.save_window_state();
+                fetch
             }
             Message::WindowResized(width, height) => {
-                self.window_size = (width, height);
-                AppDatabase::new().set_window_state(WindowGeometry { x: self.window_pos.0, y: self.window_pos.1, width, height });
+                if !self.is_maximized {
+                    self.window_size = (width, height);
+                }
+                let fetch = self.fetch_window_extra();
+                self.save_window_state();
+                fetch
+            }
+            Message::WindowMaximizedFetched(maximized) => {
+                self.is_maximized = maximized;
+                self.save_window_state();
+                Task::none()
+            }
+            Message::WindowMonitorSizeFetched(size) => {
+                if let Some(s) = size {
+                    self.monitor_size = (s.width, s.height);
+                    self.save_window_state();
+                }
                 Task::none()
             }
             Message::DragDrop(drag_drop::Message::FileDropped(path)) => {
@@ -96,8 +127,8 @@ impl FrenameApp {
                 .subscription()
                 .map(Message::FolderWorkspace),
             window::close_requests().map(Message::CloseRequested),
-            event::listen_with(|ev, status, _| match ev {
-                iced::Event::Window(window::Event::Opened { .. }) => Some(Message::WindowReady),
+            event::listen_with(|ev, status, window_id| match ev {
+                iced::Event::Window(window::Event::Opened { .. }) => Some(Message::WindowReady(window_id)),
                 iced::Event::Window(window::Event::Moved(point)) => {
                     Some(Message::WindowMoved(point.x, point.y))
                 }
@@ -224,6 +255,29 @@ impl FrenameApp {
                 }
                 _ => None,
             }),
+        ])
+    }
+
+    fn save_window_state(&self) {
+        AppDatabase::new().set_window_state(WindowGeometry {
+            x: self.window_pos.0,
+            y: self.window_pos.1,
+            width: self.window_size.0,
+            height: self.window_size.1,
+            is_maximized: self.is_maximized,
+            monitor_width: self.monitor_size.0,
+            monitor_height: self.monitor_size.1,
+        });
+    }
+
+    /// Spawn tasks to fetch is_maximized and monitor_size for the current window.
+    fn fetch_window_extra(&self) -> Task<Message> {
+        let Some(id) = self.window_id else {
+            return Task::none();
+        };
+        Task::batch([
+            window::is_maximized(id).map(Message::WindowMaximizedFetched),
+            window::monitor_size(id).map(Message::WindowMonitorSizeFetched),
         ])
     }
 

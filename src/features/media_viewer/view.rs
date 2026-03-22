@@ -8,10 +8,15 @@ use super::state::ActiveMedia;
 use super::{image, video, Message, MediaViewerState};
 
 /// Render the appropriate sub-view based on which media type is active.
-pub fn view(state: &MediaViewerState) -> Element<'_, Message> {
+/// `is_fullscreen` is forwarded to sub-views so they can show the correct button icon.
+pub fn view(state: &MediaViewerState, is_fullscreen: bool) -> Element<'_, Message> {
     match &state.active {
-        ActiveMedia::Video => video::view::view(&state.video).map(Message::Video),
-        ActiveMedia::Image => image::view::view(&state.image).map(Message::Image),
+        ActiveMedia::Video => {
+            video::view::view(&state.video, is_fullscreen).map(Message::Video)
+        }
+        ActiveMedia::Image => {
+            image::view::view(&state.image, is_fullscreen).map(Message::Image)
+        }
         ActiveMedia::Unsupported => unsupported_file_view(),
         ActiveMedia::None => container(text("🎬").size(48).color(theme::TEXT_MUTED))
             .center(Length::Fill)

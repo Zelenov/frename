@@ -161,6 +161,13 @@ CREATE TABLE IF NOT EXISTS window_state (
 );
 ";
 
+/// Migration 9: add is_maximized and monitor size to window_state.
+pub const M9_WINDOW_STATE_EXTENDED: &str = "
+ALTER TABLE window_state ADD COLUMN is_maximized INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE window_state ADD COLUMN monitor_width REAL NOT NULL DEFAULT 0;
+ALTER TABLE window_state ADD COLUMN monitor_height REAL NOT NULL DEFAULT 0;
+";
+
 /// Migration 6: stored_tags keyed by UUID (id TEXT) instead of sort_order as identity. sort_order kept for display order.
 pub const M6_STORED_TAGS_UUID: &str = "
 CREATE TABLE IF NOT EXISTS stored_tags_new (

@@ -16,7 +16,7 @@ use super::{FolderWorkspace, Message};
 pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
     if state.media_fullscreen() {
         return container(
-            media_viewer::view::view(state.media_viewer()).map(Message::MediaViewer),
+            media_viewer::view::view(state.media_viewer(), true).map(Message::MediaViewer),
         )
         .width(Length::Fill)
         .height(Length::Fill)
@@ -43,7 +43,7 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
     }
 
     let video = container(
-        media_viewer::view::view(state.media_viewer()).map(Message::MediaViewer),
+        media_viewer::view::view(state.media_viewer(), false).map(Message::MediaViewer),
     )
     .width(Length::Fixed(state.left_width()))
     .height(Length::Fill);

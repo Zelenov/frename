@@ -11,6 +11,12 @@ pub struct WindowGeometry {
     pub y: f32,
     pub width: f32,
     pub height: f32,
+    /// Whether the window was maximized when last saved.
+    pub is_maximized: bool,
+    /// Width of the monitor the window was on (logical pixels); 0.0 if unknown.
+    pub monitor_width: f32,
+    /// Height of the monitor the window was on (logical pixels); 0.0 if unknown.
+    pub monitor_height: f32,
 }
 
 /// Interface for storing and restoring app state (last folder and file, window geometry).

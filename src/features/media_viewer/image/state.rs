@@ -42,6 +42,8 @@ impl ImageViewerState {
                 self.load_failed = true;
                 log::error!("Image load failed: {e}");
             }
+            // Intercepted by media_viewer/folder_workspace; no-op here.
+            Message::ToggleFullscreen => {}
         }
         Task::none()
     }

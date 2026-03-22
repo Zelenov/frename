@@ -174,18 +174,36 @@ impl AppStateStore for AppDatabase {
     fn get_window_state(&self) -> Option<WindowGeometry> {
         let conn = Connection::open(&self.path).ok()?;
         conn.query_row(
-            "SELECT x, y, width, height FROM window_state WHERE id = 1",
+            "SELECT x, y, width, height, is_maximized, monitor_width, monitor_height FROM window_state WHERE id = 1",
             [],
-            |row| Ok(WindowGeometry { x: row.get(0)?, y: row.get(1)?, width: row.get(2)?, height: row.get(3)? }),
+            |row| Ok(WindowGeometry {
+                x: row.get(0)?,
+                y: row.get(1)?,
+                width: row.get(2)?,
+                height: row.get(3)?,
+                is_maximized: row.get::<_, i64>(4)? != 0,
+                monitor_width: row.get(5)?,
+                monitor_height: row.get(6)?,
+            }),
         ).ok()
     }
 
     fn set_window_state(&self, geometry: WindowGeometry) {
         if let Ok(conn) = Connection::open(&self.path) {
             let _ = conn.execute(
-                "INSERT INTO window_state (id, x, y, width, height) VALUES (1, ?1, ?2, ?3, ?4)
-                 ON CONFLICT(id) DO UPDATE SET x = excluded.x, y = excluded.y, width = excluded.width, height = excluded.height",
-                rusqlite::params![geometry.x, geometry.y, geometry.width, geometry.height],
+                "INSERT INTO window_state (id, x, y, width, height, is_maximized, monitor_width, monitor_height)
+                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 ON CONFLICT(id) DO UPDATE SET
+                     x = excluded.x, y = excluded.y,
+                     width = excluded.width, height = excluded.height,
+                     is_maximized = excluded.is_maximized,
+                     monitor_width = excluded.monitor_width,
+                     monitor_height = excluded.monitor_height",
+                rusqlite::params![
+                    geometry.x, geometry.y, geometry.width, geometry.height,
+                    geometry.is_maximized as i64,
+                    geometry.monitor_width, geometry.monitor_height,
+                ],
             );
         }
     }

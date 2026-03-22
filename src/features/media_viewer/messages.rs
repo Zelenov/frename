@@ -15,4 +15,6 @@ pub enum Message {
     /// Emitted by MediaViewerState when teardown is complete and it is safe to rename.
     /// FolderWorkspace intercepts this before calling update().
     Unloaded,
+    /// User clicked the fullscreen button (or pressed F5/Escape). Intercepted by FolderWorkspace.
+    ToggleFullscreen,
 }

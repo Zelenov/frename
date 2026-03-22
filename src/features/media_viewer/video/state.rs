@@ -138,6 +138,8 @@ impl VideoPlayerState {
                 Task::done(Message::VideoUnloaded)
             }
             Message::VideoUnloaded => Task::none(),
+            // Intercepted by media_viewer/folder_workspace; no-op here.
+            Message::ToggleFullscreen => Task::none(),
         }
     }
 

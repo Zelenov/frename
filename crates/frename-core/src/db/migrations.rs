@@ -43,6 +43,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 8,
         sql: schema::M8_WINDOW_STATE,
     },
+    Migration {
+        version: 9,
+        sql: schema::M9_WINDOW_STATE_EXTENDED,
+    },
 ];
 
 /// Returns the current schema version.

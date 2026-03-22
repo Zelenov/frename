@@ -103,6 +103,12 @@ impl FolderWorkspace {
             Message::Folder(folder_msg) => self.handle_folder_message(folder_msg),
             Message::MediaViewer(msg) => match msg {
                 media_viewer::Message::Unloaded => self.on_media_unloaded(),
+                media_viewer::Message::ToggleFullscreen => {
+                    if self.media_viewer.is_previewable() {
+                        self.media_fullscreen = !self.media_fullscreen;
+                    }
+                    Task::none()
+                }
                 other => self.media_viewer.update(other).map(Message::MediaViewer),
             },
             Message::TagPanel(msg) => self.handle_tag_panel(msg),

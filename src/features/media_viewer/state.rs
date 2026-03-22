@@ -5,7 +5,7 @@ use iced::{Subscription, Task};
 
 use super::image::ImageViewerState;
 use super::video::VideoPlayerState;
-use super::{video, Message};
+use super::{image, video, Message};
 
 /// Which media type is currently active in the left panel.
 #[derive(Default)]
@@ -75,6 +75,13 @@ impl MediaViewerState {
             Message::Video(video::Message::VideoUnloaded) => {
                 self.active = ActiveMedia::None;
                 Task::done(Message::Unloaded)
+            }
+            // Bubble ToggleFullscreen up so FolderWorkspace can intercept it.
+            Message::Video(video::Message::ToggleFullscreen) => {
+                Task::done(Message::ToggleFullscreen)
+            }
+            Message::Image(image::Message::ToggleFullscreen) => {
+                Task::done(Message::ToggleFullscreen)
             }
             Message::Video(vm) => self.video.update(vm).map(Message::Video),
             Message::Image(im) => self.image.update(im).map(Message::Image),
