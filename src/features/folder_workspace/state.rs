@@ -255,8 +255,10 @@ impl FolderWorkspace {
             snapshot_before.initial_file_name(),
         );
         self.file_workspace.reinitialize_tags_from_snapshot(snapshot_after.clone());
+        self.file_workspace.set_tag_filter(String::new());
         self.clamp_selection_to_filtered();
         self.history.push(Box::new(PasteTagsCommand { snapshot_before, snapshot_after }));
+        self.sync_locked = false;
         Task::none()
     }
 
@@ -410,7 +412,26 @@ impl FolderWorkspace {
                 Task::none()
             }
             folder::Message::ScrollToSelected => Task::done(Message::ScrollFolderListToSelected),
+            folder::Message::CopyTagsFrom(id) => self.copy_tags_from_id(id),
         }
+    }
+
+    /// Copy tags from the file with the given stable ID into the currently open file.
+    /// Sets internal clipboard + OS clipboard, then immediately pastes into the current file.
+    fn copy_tags_from_id(&mut self, id: frename_core::FileId) -> Task<Message> {
+        let Some(snapshot) = self
+            .directory
+            .as_ref()
+            .and_then(|dir| dir.file_by_id(id))
+            .map(|f| f.snapshot().clone())
+        else {
+            return Task::none();
+        };
+        if let Ok(mut cb) = arboard::Clipboard::new() {
+            let _ = cb.set_text(snapshot.file_name());
+        }
+        self.copied_tags = Some(snapshot.tags().to_vec());
+        self.paste_tags()
     }
 
     fn select_file_at(&mut self, index: usize) -> Task<Message> {
@@ -951,6 +972,12 @@ impl FolderWorkspace {
     /// File workspace: current file and its tag selection (for rename panel). Use this for display and tag toggles.
     pub fn file_workspace(&self) -> &FileWorkspace<AppDatabase> {
         &self.file_workspace
+    }
+
+    /// True when tags have been copied (internal clipboard has data); used to decide whether
+    /// Ctrl+V in the search bar should paste tags or pass through to text input.
+    pub fn has_copied_tags(&self) -> bool {
+        self.copied_tags.is_some()
     }
 
     pub fn has_previous_next(&self) -> (bool, bool) {

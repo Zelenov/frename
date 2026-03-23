@@ -14,6 +14,27 @@ use frename_core::{AppDatabase, AppStateStore, WindowGeometry};
 
 use super::Message;
 
+/// Ctrl+V handler fired when has_copied_tags is true: intercepts paste globally (even when the
+/// search bar has focus) and pastes tags instead. paste_tags() clears the search filter so the
+/// search bar's concurrent OS-clipboard paste gets overwritten.
+fn ctrl_v_paste_tags_handler(
+    ev: iced::Event,
+    _status: event::Status,
+    _window_id: window::Id,
+) -> Option<Message> {
+    if let iced::Event::Keyboard(keyboard::Event::KeyPressed {
+        key: keyboard::Key::Character(c),
+        modifiers,
+        ..
+    }) = ev
+    {
+        if c.as_ref() == "v" && modifiers.command() {
+            return Some(Message::FolderWorkspace(folder_workspace::Message::PasteTags));
+        }
+    }
+    None
+}
+
 /// Application state: top-level features only. No knowledge of child UI or structure.
 pub struct FrenameApp {
     drag_drop_state: drag_drop::DragDropState,
@@ -121,12 +142,20 @@ impl FrenameApp {
 
     /// Feature subscriptions (file drop, window opened, global keyboard to search bar).
     pub fn subscription(&self) -> Subscription<Message> {
+        // Conditional: when tags are on the internal clipboard, intercept Ctrl+V globally
+        // (even when search bar has focus) so it pastes tags instead of text.
+        let paste_tags_sub = if self.folder_workspace.has_copied_tags() {
+            event::listen_with(ctrl_v_paste_tags_handler)
+        } else {
+            Subscription::none()
+        };
         Subscription::batch([
             self.drag_drop_state.subscription().map(Message::DragDrop),
             self.folder_workspace
                 .subscription()
                 .map(Message::FolderWorkspace),
             window::close_requests().map(Message::CloseRequested),
+            paste_tags_sub,
             event::listen_with(|ev, status, window_id| match ev {
                 iced::Event::Window(window::Event::Opened { .. }) => Some(Message::WindowReady(window_id)),
                 iced::Event::Window(window::Event::Moved(point)) => {
@@ -186,9 +215,6 @@ impl FrenameApp {
                         return match key.as_ref() {
                             keyboard::Key::Character("c") => Some(Message::FolderWorkspace(
                                 folder_workspace::Message::CopyTags,
-                            )),
-                            keyboard::Key::Character("v") => Some(Message::FolderWorkspace(
-                                folder_workspace::Message::PasteTags,
                             )),
                             keyboard::Key::Character("z") if modifiers.shift() => {
                                 Some(Message::FolderWorkspace(folder_workspace::Message::Redo))

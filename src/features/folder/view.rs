@@ -2,7 +2,7 @@
 //!
 //! Receives only data (directory, loading, tag color mapping) from workspace; selection from directory; no parent knows our layout or widgets.
 
-use iced::widget::{column, container, mouse_area, row, scrollable, text};
+use iced::widget::{column, container, mouse_area, row, scrollable, text, tooltip};
 use iced::{mouse, Element, Length};
 
 use crate::theme;
@@ -50,18 +50,41 @@ pub fn view<'a>(
                 &tag_color_mapping,
                 false,
             );
-            let row_content = row![name_display].align_y(iced::Alignment::Center);
 
-            let row = container(row_content)
-                .padding([4, 8])
-                .width(Length::Fill)
-                .height(Length::Fixed(FOLDER_ROW_HEIGHT))
-                .style(move |theme: &iced::Theme| theme::selectable_row_style(theme, is_selected));
+            let copy_btn: Element<'_, Message> = tooltip(
+                mouse_area(
+                    container(text("⎘").size(14).color(crate::theme::TEXT_MUTED))
+                        .center_x(Length::Fixed(28.0))
+                        .center_y(Length::Fill),
+                )
+                .on_press(Message::CopyTagsFrom(file_info.id()))
+                .interaction(mouse::Interaction::Pointer),
+                text("Paste tags"),
+                tooltip::Position::Bottom,
+            )
+            .into();
 
-            mouse_area(row)
-                .on_press(Message::SelectFile(index))
-                .interaction(mouse::Interaction::Pointer)
-                .into()
+            let name_area: Element<'_, Message> = mouse_area(
+                container(name_display)
+                    .padding(iced::Padding { top: 4.0, right: 8.0, bottom: 4.0, left: 0.0 })
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .center_y(Length::Fill),
+            )
+            .on_press(Message::SelectFile(index))
+            .interaction(mouse::Interaction::Pointer)
+            .into();
+
+            container(
+                row![copy_btn, name_area]
+                    .align_y(iced::Alignment::Center)
+                    .width(Length::Fill)
+                    .height(Length::Fill),
+            )
+            .width(Length::Fill)
+            .height(Length::Fixed(FOLDER_ROW_HEIGHT))
+            .style(move |theme: &iced::Theme| theme::selectable_row_style(theme, is_selected))
+            .into()
         })
         .collect();
 
