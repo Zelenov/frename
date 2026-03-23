@@ -366,7 +366,10 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         }
         self.selected_tag_ids.remove(&moved_id);
         let checked_after: Vec<TagId> = checked.into_iter().filter(|id| *id != moved_id).collect();
-        if index < checked_after.len() {
+        if index == 0 {
+            // Place before everything (None anchor = absolute first in collection).
+            self.selected_tag_ids.insert_before(moved_id, (), None);
+        } else if index < checked_after.len() {
             self.selected_tag_ids.insert_before(moved_id, (), Some(&checked_after[index]));
         } else if let Some(last) = checked_after.last() {
             // Append after the last checked tag (not insert_before(None) which goes to the front).
@@ -576,28 +579,40 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         Ok(())
     }
 
+    // --- Sync helpers ---
+
+    /// Sync Up: apply the order from `selected_tag_ids` (file name panel) onto
+    /// `display_tag_ids` (grid/DB), persist to the store, then rebuild the grid cache.
+    pub fn sync_selected_to_display(
+        &mut self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.display_tag_ids
+            .sync_order_from(&self.selected_tag_ids);
+        self.persist_display_order()?;
+        self.rebuild_filtered_display_tag_ids();
+        Ok(())
+    }
+
+    /// Sync Down: apply the order from `display_tag_ids` (grid/DB) onto
+    /// `selected_tag_ids` (file name panel). No DB write needed.
+    pub fn sync_display_to_selected(&mut self) {
+        self.selected_tag_ids
+            .sync_order_from(&self.display_tag_ids);
+    }
+
+    /// Returns `true` if the checked tags have the same relative order in both
+    /// `display_tag_ids` (grid/DB) and `selected_tag_ids` (file name panel).
+    pub fn is_selected_order_same_as_display_order(&self) -> bool {
+        let in_display: Vec<TagId> = self.display_tag_ids
+            .iter()
+            .map(|(id, _, _)| *id)
+            .filter(|id| self.tags_by_id.get(id).map_or(false, |t| t.is_checked()))
+            .collect();
+        let in_selected = self.checked_ids_in_selected_order();
+        in_display == in_selected
+    }
+
     // --- Star / unstar ---
-
-    /// The last tag in display order whose `stored == false`. Anchor for the end of section 1.
-    fn last_unstored_id(&self) -> Option<TagId> {
-        self.display_tag_ids
-            .iter()
-            .filter_map(|(id, _, _)| self.tags_by_id.get(id).filter(|t| !t.is_stored()).map(|t| t.id()))
-            .last()
-    }
-
-    /// The last tag in display order whose `stored == true && starred == true`, excluding `excluding`.
-    fn last_starred_id(&self, excluding: TagId) -> Option<TagId> {
-        self.display_tag_ids
-            .iter()
-            .filter_map(|(id, _, _)| {
-                if *id == excluding { return None; }
-                self.tags_by_id.get(id)
-                    .filter(|t| t.is_stored() && t.is_starred())
-                    .map(|t| t.id())
-            })
-            .last()
-    }
 
     /// Flush the current display order for all stored tags to the database.
     fn persist_display_order(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -611,8 +626,9 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         self.store.update_tag_orders(&tag_orders)
     }
 
-    /// Star a stored tag: set `starred = true`, move it to section 2 (after all unstored tags),
-    /// persist. Returns `Err` if the tag is not found or is unstored.
+    /// Star a stored tag: set `starred = true` and persist the flag.
+    /// Does not change the tag's position in either ordered collection —
+    /// the grid sorts starred tags to the top visually via `rebuild_filtered_display_tag_ids`.
     pub fn star_tag(&mut self, id: TagId) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let (is_stored, already_starred) = self
             .tags_by_id
@@ -634,16 +650,13 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         if let Some(tag) = self.tags_by_id.get_mut(&id) {
             tag.set_starred(true);
         }
-        let anchor = self.last_unstored_id();
-        self.display_tag_ids.insert_after(id, (), anchor.as_ref());
-        self.selected_tag_ids.insert_after(id, (), anchor.as_ref());
         self.save_tag(id)?;
-        self.persist_display_order()?;
+        self.rebuild_filtered_display_tag_ids();
         Ok(())
     }
 
-    /// Unstar a stored tag: set `starred = false`, move it to section 3 (after all starred tags),
-    /// persist. Returns `Err` if the tag is not found or is unstored.
+    /// Unstar a stored tag: set `starred = false` and persist the flag.
+    /// Does not change the tag's position in either ordered collection.
     pub fn unstar_tag(&mut self, id: TagId) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let (is_stored, already_unstarred) = self
             .tags_by_id
@@ -665,14 +678,8 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         if let Some(tag) = self.tags_by_id.get_mut(&id) {
             tag.set_starred(false);
         }
-        let anchor = match self.last_starred_id(id) {
-            Some(last_starred) => Some(last_starred),
-            None => self.last_unstored_id(),
-        };
-        self.display_tag_ids.insert_after(id, (), anchor.as_ref());
-        self.selected_tag_ids.insert_after(id, (), anchor.as_ref());
         self.save_tag(id)?;
-        self.persist_display_order()?;
+        self.rebuild_filtered_display_tag_ids();
         Ok(())
     }
 }

@@ -147,6 +147,23 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.tag_list.unstar_tag(id)
     }
 
+    /// Returns `true` if checked tags have the same relative order in display (DB) and selected (file name panel).
+    pub fn is_selected_order_same_as_display_order(&self) -> bool {
+        self.tag_list.is_selected_order_same_as_display_order()
+    }
+
+    /// Sync Up: copy file name panel order → display/DB. Returns error if persist fails.
+    pub fn sync_selected_to_display(
+        &mut self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.tag_list.sync_selected_to_display()
+    }
+
+    /// Sync Down: copy display/DB order → file name panel. No DB write.
+    pub fn sync_display_to_selected(&mut self) {
+        self.tag_list.sync_display_to_selected();
+    }
+
     /// Rebuild the tag list from scratch using the given snapshot (but keeping the same store).
     /// Used by paste: constructs a new TagList with the pasted tags as the snapshot, so all
     /// ordering/checked/stored logic runs fresh — identical to what happens when a file is opened.

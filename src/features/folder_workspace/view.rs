@@ -83,15 +83,19 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
         .min_right(200.0);
 
     let file_ws = state.file_workspace();
+    let is_synced = file_ws.is_selected_order_same_as_display_order();
     let file_workspace_panel = file_workspace::view::view(
         file_ws,
         state.tag_panel(),
         state.file_name_panel(),
+        is_synced,
+        state.sync_locked(),
         file_ws.tag_list(),
     )
     .map(|m| match m {
         file_workspace::Message::TagPanel(m) => Message::TagPanel(m),
         file_workspace::Message::FileNamePanel(m) => Message::FileNamePanel(m),
+        file_workspace::Message::SyncPanel(m) => Message::SyncPanel(m),
     });
 
     container(

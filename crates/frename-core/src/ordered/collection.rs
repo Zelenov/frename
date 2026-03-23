@@ -201,6 +201,82 @@ where
         rebalanced
     }
 
+    /// Returns `true` if the common elements (keys present in both `self` and `other`) appear in
+    /// the same relative order in both collections.
+    ///
+    /// Elements that exist only in one collection are ignored. An empty intersection is always `true`.
+    pub fn is_same_order_as<V2>(&self, other: &OrderedCollection<K, V2>) -> bool {
+        let other_keys: std::collections::HashSet<&K> =
+            other.iter().map(|(k, _, _)| k).collect();
+        let self_keys: std::collections::HashSet<&K> =
+            self.iter().map(|(k, _, _)| k).collect();
+
+        let self_common: Vec<&K> = self
+            .iter()
+            .filter(|(k, _, _)| other_keys.contains(k))
+            .map(|(k, _, _)| k)
+            .collect();
+        let other_common: Vec<&K> = other
+            .iter()
+            .filter(|(k, _, _)| self_keys.contains(k))
+            .map(|(k, _, _)| k)
+            .collect();
+
+        self_common == other_common
+    }
+
+    /// Reorders the common elements in `self` to match their relative order in `other`.
+    ///
+    /// Elements that exist only in `self` keep their positions relative to each other;
+    /// common elements are rearranged by inserting out-of-order ones after the last correctly
+    /// placed one ("insert the incorrect element after the correct one").
+    ///
+    /// # Example
+    /// ```text
+    /// self:  [x, A, y, B, z, C]   other: [A, C, B]
+    /// after: [x, A, C, y, B, z]
+    /// ```
+    pub fn sync_order_from<V2>(&mut self, other: &OrderedCollection<K, V2>) {
+        let other_keys: std::collections::HashSet<K> =
+            other.iter().map(|(k, _, _)| k.clone()).collect();
+
+        // Common keys in other's order.
+        let common_in_other_order: Vec<K> = other
+            .iter()
+            .filter(|(k, _, _)| self.by_id.contains_key(*k))
+            .map(|(k, _, _)| k.clone())
+            .collect();
+
+        let mut last_anchor: Option<K> = None;
+
+        for key in &common_in_other_order {
+            // Re-read self's common subsequence (may have changed from previous moves).
+            let common_in_self: Vec<K> = self
+                .iter()
+                .filter(|(k, _, _)| other_keys.contains(*k))
+                .map(|(k, _, _)| k.clone())
+                .collect();
+
+            let expected_next: Option<K> = match &last_anchor {
+                None => common_in_self.first().cloned(),
+                Some(anchor) => {
+                    let pos = common_in_self.iter().position(|k| k == anchor);
+                    pos.and_then(|p| common_in_self.get(p + 1)).cloned()
+                }
+            };
+
+            if expected_next.as_ref() == Some(key) {
+                // Already in correct relative position.
+                last_anchor = Some(key.clone());
+            } else {
+                // Move key to immediately after last_anchor.
+                let value = self.remove(key).expect("key in both collections");
+                self.insert_after(key.clone(), value, last_anchor.as_ref());
+                last_anchor = Some(key.clone());
+            }
+        }
+    }
+
     /// Returns (order_key, rebalanced). rebalanced is true when no integer fit between prev and next and rebalance was run.
     fn order_between(
         &mut self,
@@ -328,6 +404,161 @@ mod tests {
         c.insert_after(1, (), Some(&3));
         let ids: Vec<u32> = c.iter().map(|(id, _, _)| *id).collect();
         assert_eq!(ids, [2, 3, 1]);
+    }
+
+    // ── is_same_order_as ────────────────────────────────────────────────────
+
+    #[test]
+    fn same_order_identical_common() {
+        // this: A B C (plus non-common elements)  other: A B C D
+        // Common A B C are in the same order → true
+        let mut this: OrderedCollection<&str, ()> = OrderedCollection::new();
+        this.insert("x", (), 10);
+        this.insert("A", (), 20);
+        this.insert("y", (), 30);
+        this.insert("B", (), 40);
+        this.insert("C", (), 50);
+
+        let mut other: OrderedCollection<&str, ()> = OrderedCollection::new();
+        other.insert("A", (), 1);
+        other.insert("B", (), 2);
+        other.insert("C", (), 3);
+        other.insert("D", (), 4);
+
+        assert!(this.is_same_order_as(&other));
+    }
+
+    #[test]
+    fn same_order_different_common_order() {
+        // this: A B C   other: A C B  → false
+        let mut this: OrderedCollection<&str, ()> = OrderedCollection::new();
+        this.insert("A", (), 10);
+        this.insert("B", (), 20);
+        this.insert("C", (), 30);
+
+        let mut other: OrderedCollection<&str, ()> = OrderedCollection::new();
+        other.insert("A", (), 1);
+        other.insert("C", (), 2);
+        other.insert("B", (), 3);
+
+        assert!(!this.is_same_order_as(&other));
+    }
+
+    #[test]
+    fn same_order_empty_intersection() {
+        let mut this: OrderedCollection<&str, ()> = OrderedCollection::new();
+        this.insert("A", (), 10);
+
+        let mut other: OrderedCollection<&str, ()> = OrderedCollection::new();
+        other.insert("B", (), 1);
+
+        assert!(this.is_same_order_as(&other));
+    }
+
+    // ── sync_order_from ─────────────────────────────────────────────────────
+
+    #[test]
+    fn sync_already_correct_order() {
+        // this: [x, A, y, B, z, C]  other: [A, B, C, D]  → no change
+        let mut this: OrderedCollection<&str, ()> = OrderedCollection::new();
+        this.insert("x", (), 5);
+        this.insert("A", (), 10);
+        this.insert("y", (), 15);
+        this.insert("B", (), 20);
+        this.insert("z", (), 25);
+        this.insert("C", (), 30);
+
+        let mut other: OrderedCollection<&str, ()> = OrderedCollection::new();
+        other.insert("A", (), 1);
+        other.insert("B", (), 2);
+        other.insert("C", (), 3);
+        other.insert("D", (), 4);
+
+        this.sync_order_from(&other);
+
+        let ids: Vec<&str> = this.iter().map(|(k, _, _)| *k).collect();
+        // A, B, C still in same relative order; x, y, z also in their original relative positions
+        let common: Vec<&str> = ids.iter().copied().filter(|k| ["A","B","C"].contains(k)).collect();
+        assert_eq!(common, ["A", "B", "C"]);
+    }
+
+    #[test]
+    fn sync_reorders_a_c_b() {
+        // this: [x, A, y, B, z, C]  other: [A, C, B]  → common become A C B
+        let mut this: OrderedCollection<&str, ()> = OrderedCollection::new();
+        this.insert("x", (), 5);
+        this.insert("A", (), 10);
+        this.insert("y", (), 15);
+        this.insert("B", (), 20);
+        this.insert("z", (), 25);
+        this.insert("C", (), 30);
+
+        let mut other: OrderedCollection<&str, ()> = OrderedCollection::new();
+        other.insert("A", (), 1);
+        other.insert("C", (), 2);
+        other.insert("B", (), 3);
+
+        this.sync_order_from(&other);
+
+        let common: Vec<&str> = this
+            .iter()
+            .map(|(k, _, _)| *k)
+            .filter(|k| ["A", "B", "C"].contains(k))
+            .collect();
+        assert_eq!(common, ["A", "C", "B"]);
+    }
+
+    #[test]
+    fn sync_reorders_c_a_b() {
+        // this: [x, A, y, B, z, C]  other: [C, A, B]  → common become C A B
+        let mut this: OrderedCollection<&str, ()> = OrderedCollection::new();
+        this.insert("x", (), 5);
+        this.insert("A", (), 10);
+        this.insert("y", (), 15);
+        this.insert("B", (), 20);
+        this.insert("z", (), 25);
+        this.insert("C", (), 30);
+
+        let mut other: OrderedCollection<&str, ()> = OrderedCollection::new();
+        other.insert("C", (), 1);
+        other.insert("A", (), 2);
+        other.insert("B", (), 3);
+
+        this.sync_order_from(&other);
+
+        let common: Vec<&str> = this
+            .iter()
+            .map(|(k, _, _)| *k)
+            .filter(|k| ["A", "B", "C"].contains(k))
+            .collect();
+        assert_eq!(common, ["C", "A", "B"]);
+    }
+
+    #[test]
+    fn sync_preserves_non_common_relative_order() {
+        // Non-common elements should keep their relative order among themselves.
+        let mut this: OrderedCollection<u32, ()> = OrderedCollection::new();
+        this.insert(0, (), 5);
+        this.insert(10, (), 10); // common
+        this.insert(1, (), 15);
+        this.insert(20, (), 20); // common
+        this.insert(2, (), 25);
+        this.insert(30, (), 30); // common
+
+        let mut other: OrderedCollection<u32, ()> = OrderedCollection::new();
+        other.insert(30, (), 1);
+        other.insert(10, (), 2);
+        other.insert(20, (), 3);
+
+        this.sync_order_from(&other);
+
+        let all: Vec<u32> = this.iter().map(|(k, _, _)| *k).collect();
+        // non-common [0, 1, 2] must still appear in the same relative order
+        let non_common: Vec<u32> = all.iter().copied().filter(|k| [0u32,1,2].contains(k)).collect();
+        assert_eq!(non_common, [0, 1, 2]);
+        // common [10, 20, 30] must be in other's order: 30, 10, 20
+        let common: Vec<u32> = all.iter().copied().filter(|k| [10u32,20,30].contains(k)).collect();
+        assert_eq!(common, [30, 10, 20]);
     }
 
     #[test]

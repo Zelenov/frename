@@ -6,7 +6,7 @@
 use iced::widget::{column, container};
 use iced::{Element, Length};
 
-use crate::features::{file_name_panel, tag_grid, tag_panel};
+use crate::features::{file_name_panel, sync_panel, tag_grid, tag_panel};
 use crate::widgets;
 
 use super::{FileWorkspace, Message};
@@ -19,6 +19,8 @@ pub fn view<'a, S>(
     file_workspace: &'a FileWorkspace<S>,
     tag_panel_state: &'a tag_panel::TagPanelState,
     file_name_panel_state: &'a file_name_panel::FileNamePanelState,
+    is_synced: bool,
+    sync_locked: bool,
     tag_list: &'a frename_core::TagList<S>,
 ) -> Element<'a, Message>
 where
@@ -44,7 +46,16 @@ where
         .height(Length::Fill)
         .width(Length::Fill);
 
-    let content = column![search_bar, tag_grid, file_name]
+    let sync: Element<'_, Message> =
+        sync_panel::view::view(is_synced, sync_locked).map(Message::SyncPanel);
+
+    // tag_grid → sync → file_name with no gaps so the sync panel visually bridges them.
+    let middle = column![tag_grid, sync, file_name]
+        .spacing(0)
+        .width(Length::Fill)
+        .height(Length::Fill);
+
+    let content = column![search_bar, middle]
         .spacing(4)
         .width(Length::Fill)
         .height(Length::Fill);

@@ -26,6 +26,7 @@ use crate::features::file_name_panel::{self, FileNamePanelState};
 use crate::features::file_workspace::FileWorkspace;
 use crate::features::folder;
 use crate::features::media_viewer::{self, video as media_viewer_video, MediaViewerState};
+use crate::features::sync_panel;
 use crate::features::tag_panel::{self, TagPanelState, TAG_LIST_SCROLLABLE_ID};
 use crate::widgets::search_bar::SEARCH_BAR_INPUT_ID;
 use crate::widgets::splitter::HIT_WIDTH;
@@ -49,6 +50,8 @@ pub struct FolderWorkspace {
     media_viewer: MediaViewerState,
     tag_panel: TagPanelState,
     file_name_panel: FileNamePanelState,
+    /// Whether lock mode is active (sync drag → DB). Shown when sequences are equal.
+    sync_locked: bool,
     /// Deferred rename: set when media must unload before the previous file can be renamed.
     /// Stores the file's stable ID and the tag snapshot to save.
     pending_file_updated: Option<(FileId, FileSnapshot)>,
@@ -89,6 +92,7 @@ impl FolderWorkspace {
             media_viewer: MediaViewerState::default(),
             tag_panel: TagPanelState::default(),
             file_name_panel: FileNamePanelState::default(),
+            sync_locked: true,
             pending_file_updated: None,
             pending_to_file_id: None,
             left_width,
@@ -130,6 +134,7 @@ impl FolderWorkspace {
             },
             Message::TagPanel(msg) => self.handle_tag_panel(msg),
             Message::FileNamePanel(msg) => self.handle_file_name_panel(msg),
+            Message::SyncPanel(msg) => self.handle_sync_panel(msg),
             Message::LeftSplitterDragged(x) => {
                 self.left_width = x;
                 let folder_start = self.left_width + HIT_WIDTH;
@@ -663,6 +668,35 @@ impl FolderWorkspace {
                     to_index: idx,
                 }));
             }
+            // When locked: immediately push the new order to DB as well.
+            if self.sync_locked {
+                if let Err(e) = self.file_workspace.sync_selected_to_display() {
+                    log::error!("sync locked: failed to persist display order: {}", e);
+                }
+            }
+        }
+        Task::none()
+    }
+
+    fn handle_sync_panel(&mut self, msg: sync_panel::Message) -> Task<Message> {
+        match msg {
+            sync_panel::Message::SyncUp => {
+                if let Err(e) = self.file_workspace.sync_selected_to_display() {
+                    log::error!("SyncUp failed: {}", e);
+                } else {
+                    self.sync_locked = true;
+                }
+            }
+            sync_panel::Message::SyncDown => {
+                self.file_workspace.sync_display_to_selected();
+                self.sync_locked = true;
+            }
+            sync_panel::Message::ToggleLock => {
+                // Only toggle when sequences are equal (i.e. lock button is active).
+                if self.file_workspace.is_selected_order_same_as_display_order() {
+                    self.sync_locked = !self.sync_locked;
+                }
+            }
         }
         Task::none()
     }
@@ -959,6 +993,10 @@ impl FolderWorkspace {
 
     pub fn file_name_panel(&self) -> &FileNamePanelState {
         &self.file_name_panel
+    }
+
+    pub fn sync_locked(&self) -> bool {
+        self.sync_locked
     }
 
     pub fn left_width(&self) -> f32 {
