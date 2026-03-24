@@ -3,7 +3,7 @@
 //! We pass only data to each feature view (directory, current_file, selected_file, etc.).
 //! We do not tell any feature how to look (scrollable, rectangular, etc.); each feature view owns its appearance.
 
-use iced::widget::{column, container, row, text};
+use iced::widget::{column, container, row, stack, text};
 use iced::{Element, Length};
 
 use crate::features::{file_workspace, folder, folder_controls, media_viewer};
@@ -17,17 +17,7 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
     let seg_start = state.file_workspace().segment_start_secs();
     let seg_end = state.file_workspace().segment_end_secs();
 
-    if state.media_fullscreen() {
-        return container(
-            media_viewer::view::view(state.media_viewer(), true, seg_start, seg_end)
-                .map(Message::MediaViewer),
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into();
-    }
-
-    if state.directory().is_none() {
+    if state.directory().is_none() && !state.media_fullscreen() {
         let icon = if state.is_loading() { "⏳" } else { "📂" };
         return container(
             container(
@@ -98,13 +88,32 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
         file_workspace::Message::SyncPanel(m) => Message::SyncPanel(m),
     });
 
-    container(
+    let normal_layout = container(
         row![video, left_splitter, folder_list, right_splitter, file_workspace_panel]
             .width(Length::Fill)
             .height(Length::Fill),
     )
     .width(Length::Fill)
     .height(Length::Fill)
-    .style(theme::main_container_style)
-    .into()
+    .style(theme::main_container_style);
+
+    // Always use stack so the root element type never changes — iced preserves
+    // scrollable positions only when the widget-tree structure stays identical.
+    // The overlay is the fullscreen media view when active, or an invisible space.
+    let overlay: Element<'_, Message> = if state.media_fullscreen() {
+        container(
+            media_viewer::view::view(state.media_viewer(), true, seg_start, seg_end)
+                .map(Message::MediaViewer),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
+    } else {
+        iced::widget::Space::new().into()
+    };
+
+    stack![normal_layout, overlay]
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
 }
