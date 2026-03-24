@@ -3,12 +3,19 @@
 //!
 //! Storage: [tags_by_id] (hash) for all tag data; [tags_ordered] (order + tag id only). Display = ordered; filtered = display filtered by name.
 //!
-//! Initialization order:
-//! 1. Stored [all] → hash (checked = exists in snapshot, order = from db).
-//! 2. Snapshot [where value not in stored] → hash (checked = false, order = 0).
-//! 3. Hash [stored and not in snapshot] → ordered (order = from db).
-//! 4. Snapshot [reversed, deduped] → ordered (insert before first) so snapshot tags are at the beginning in snapshot order.
-//! 5. display_tag_ids = all tags in order (never reordered). 6. selected_tag_ids = same ids as display, order changeable in file name panel. 7. Build filtered_display_tag_ids. File name panel shows only checked (selected) tags in [selected_tag_ids] order.
+//! Initialization order (locked = initial file open; unlocked = paste):
+//! 1. Stored [all] → hash (checked = exists in snapshot, order = from db, starred = from db).
+//! 2. Snapshot [where value not in stored] → hash (checked = true, order = 0).
+//! 3. locked=true:  stored-NOT-in-snapshot → display (snapshot tags added in step 5).
+//!    locked=false: ALL stored → display (full DB view; snapshot-order correction applied only to selected).
+//! 4. Dedupe snapshot (first occurrence wins), then reverse.
+//! 5. Snapshot items NOT yet in display → insert at beginning (reversed iteration → snapshot order at front).
+//!    locked=true:  all snapshot items inserted (stored-in-snapshot excluded from step 3 so not in display yet).
+//!    locked=false: only not-stored items inserted (stored-in-snapshot already in display at their DB positions).
+//! 6. selected_tag_ids = display_tag_ids.clone().
+//! 7. For each consecutive snapshot pair: if cur is not after prev in display, move cur after prev in selected.
+//!    Corrects snapshot ordering in selected for locked=false (stored items may be at non-snapshot positions in display).
+//! 8. locked=true: copy selected → display (final display matches snapshot order). Build filtered_display_tag_ids.
 
 use std::collections::{HashMap, HashSet};
 
@@ -121,9 +128,22 @@ impl<S> TagList<S> {
 }
 
 impl<S: StoredTagStore + Clone> TagList<S> {
-    /// Create a new TagList from the store and the initial file snapshot.
-    /// Init: (1) Stored → hash; (2) Snapshot [value not in stored] → hash; (3)–(4) build display_tag_ids (all tags, order never changed); (5) selected_tag_ids = display_tag_ids.clone(); (6) build filtered_display_tag_ids.
+    /// Create a new TagList from the store and the initial file snapshot (locked = true).
+    /// Use this for normal file opens. For paste operations use [`TagList::new_unlocked`].
     pub fn new(store: S, file_snapshot: FileSnapshot) -> Self {
+        Self::new_with_lock(store, file_snapshot, true)
+    }
+
+    /// Create a new TagList with locked = false (paste / reinitialize from pasted snapshot).
+    /// Display keeps the full DB order (new unstored tags prepended); selected is corrected to
+    /// snapshot order so the file-name panel reflects the pasted tag sequence.
+    pub fn new_unlocked(store: S, file_snapshot: FileSnapshot) -> Self {
+        Self::new_with_lock(store, file_snapshot, false)
+    }
+
+    /// Core constructor. `locked` controls how display_tag_ids and selected_tag_ids relate to the
+    /// snapshot order — see the module-level doc comment for the full step-by-step description.
+    fn new_with_lock(store: S, file_snapshot: FileSnapshot, locked: bool) -> Self {
         let name_without_extension = file_snapshot.name_without_extension().to_string();
         let extension = file_snapshot.extension().to_string();
         let initial_file_name = file_snapshot.initial_file_name().to_string();
@@ -132,7 +152,8 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let stored_tags = store.get_stored_tags().unwrap_or_default();
         let color_mapping = store.get_tag_color_mapping().unwrap_or_default();
         let snapshot_tags = file_snapshot.tags();
-        let stored_values: HashSet<String> = stored_tags.iter().map(|st| st.value().to_string()).collect();
+        let stored_values: HashSet<String> =
+            stored_tags.iter().map(|st| st.value().to_string()).collect();
 
         // 1. Stored [all] → hash (checked = exists in snapshot, order = from db, starred = from db)
         let mut tags_by_id = HashMap::new();
@@ -149,7 +170,6 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         }
 
         // 2. Snapshot [where value not in stored] → hash (checked = true, order = 0)
-        // These tags exist in the filename so they must be selected (checked = true).
         for name in snapshot_tags.iter().filter(|name| !stored_values.contains(name.as_str())) {
             let id = TagId::new();
             let tag = Tag::with_id_order_checked(id, name.as_str(), 0, false, 0, true);
@@ -157,40 +177,76 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             value_to_id.insert(name.clone(), id);
         }
 
-        // 3. Hash [stored and not in snapshot] → display (order = from db)
+        // 3. Seed display_tag_ids from stored tags.
+        //    locked=true:  stored-NOT-in-snapshot only (snapshot tags will be prepended in step 5).
+        //    locked=false: ALL stored in DB order (paste keeps the grid order; only new tags prepend).
         let mut display_tag_ids: OrderedCollection<TagId, ()> = OrderedCollection::new();
-        for st in stored_tags.iter().filter(|st| !file_snapshot.has_tag(st.value())) {
+        for st in stored_tags.iter() {
+            if locked && file_snapshot.has_tag(st.value()) {
+                continue; // locked=true: skip; snapshot tags are positioned by step 5 + step 8
+            }
             let id = TagId(st.id());
             let order = st.sort_order();
             display_tag_ids.insert(id, (), order);
         }
 
-        // 4. Snapshot [reversed, deduped] → display (insert before first). Dedupe: first occurrence in snapshot order; then process reversed so display = snapshot order.
-        let snapshot_deduped: Vec<String> = {
+        // 4. Dedupe snapshot (first occurrence wins) and reverse in one pass for the insert loop.
+        //    The reversed vec is also used for the pair loop via windows(2).rev() with swapped indices.
+        let snapshot_deduped_reversed: Vec<String> = {
             let mut seen = HashSet::new();
-            snapshot_tags
+            let mut v: Vec<String> = snapshot_tags
                 .iter()
                 .filter(|s| seen.insert((*s).clone()))
                 .cloned()
-                .collect()
+                .collect();
+            v.reverse();
+            v
         };
-        let mut first_id_opt: Option<TagId> =
-            display_tag_ids.iter().next().map(|(id, _, _)| *id);
+
+        // 5. Snapshot items NOT yet in display → insert at beginning (reversed → snapshot order at front).
+        //    locked=true:  all snapshot items qualify (stored-in-snapshot excluded from step 3).
+        //    locked=false: only not-stored items qualify (stored-in-snapshot already in display).
         let mut display_tags_rebalanced = false;
-        for name in snapshot_deduped.iter().rev() {
-            if let Some(&id) = value_to_id.get(name) {
-                match &first_id_opt {
-                    Some(before_id) => {
-                        display_tags_rebalanced |= display_tag_ids.insert_before(id, (), Some(before_id));
-                    }
-                    None => display_tag_ids.insert(id, (), 1),
-                }
-                first_id_opt = Some(id);
+        for id in snapshot_deduped_reversed.iter().filter_map(|n| value_to_id.get(n)).copied() {
+            if display_tag_ids.get(&id).is_none() {
+                display_tags_rebalanced |= display_tag_ids.insert_after(id, (), None);
             }
         }
 
-        // 5. selected_tag_ids = same ids as display, order changeable in file name panel; file name panel shows only checked in this order
-        let selected_tag_ids = display_tag_ids.clone();
+        // 6. selected_tag_ids starts as a copy of display order.
+        let mut selected_tag_ids = display_tag_ids.clone();
+
+        // 7. For each consecutive snapshot pair (original order): if cur is not after prev in
+        //    display_tag_ids, move cur after prev in selected_tag_ids. Iterating windows(2).rev()
+        //    on the reversed vec with swapped indices yields the original-order pairs.
+        //    This corrects the file-name-panel order for locked=false, where stored-in-snapshot
+        //    items sit at their DB positions in display (which may differ from snapshot order).
+        //    For locked=true this loop is a no-op because step 5 already placed all snapshot items
+        //    in snapshot order in display.
+        for window in snapshot_deduped_reversed.windows(2).rev() {
+            let prev_name = &window[1]; // original order: prev (appears earlier in snapshot)
+            let cur_name = &window[0];  // original order: cur  (appears later  in snapshot)
+            if let (Some(&prev_id), Some(&cur_id)) =
+                (value_to_id.get(prev_name), value_to_id.get(cur_name))
+            {
+                let cur_is_after_prev = match (
+                    display_tag_ids.get_order(&prev_id),
+                    display_tag_ids.get_order(&cur_id),
+                ) {
+                    (Some(p), Some(c)) => c > p,
+                    _ => false,
+                };
+                if !cur_is_after_prev {
+                    selected_tag_ids.insert_after(cur_id, (), Some(&prev_id));
+                }
+            }
+        }
+
+        // 8. locked=true: sync selected order → display (no-op for locked=true since step 5
+        //    already placed all snapshot items in order, making selected == display after step 6).
+        if locked {
+            display_tag_ids.sync_order_from(&selected_tag_ids);
+        }
 
         let filter_query = String::new();
         // Start color counter at number of stored tags so sequential tags get distinct colors.
@@ -212,7 +268,8 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         };
         list.rebuild_filtered_display_tag_ids();
         log::info!(
-            "TagList::new snapshot: name={} ext={} initial={:?}",
+            "TagList::new_with_lock locked={} snapshot: name={} ext={} initial={:?}",
+            locked,
             list.name_without_extension,
             list.extension,
             list.initial_file_name
@@ -449,7 +506,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     /// Reinitialize the tag list from a snapshot, preserving the current store.
     /// Used by PasteTagsCommand to undo/redo paste operations.
     pub fn reinitialize_from_snapshot(&mut self, snapshot: FileSnapshot) {
-        *self = TagList::new(self.store.clone(), snapshot);
+        *self = TagList::new_unlocked(self.store.clone(), snapshot);
     }
 
     /// Capture all data needed to undo a delete for the tag with the given id.
@@ -748,7 +805,7 @@ mod tests {
         let first_id = list.filtered_display_tag_ids()[0];
         let first = list.get_tag(first_id).unwrap();
         assert_eq!(first.tag(), "OnlyInSnapshot");
-        assert!(!first.is_checked(), "snapshot-only tags init with checked=false per spec");
+        assert!(first.is_checked(), "snapshot-only tags appear in the file name so they init with checked=true");
         assert!(!first.is_stored());
         assert_eq!(first.color_index(), 0);
         assert!(!first.is_stored());

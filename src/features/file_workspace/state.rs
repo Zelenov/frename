@@ -165,10 +165,11 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     }
 
     /// Rebuild the tag list from scratch using the given snapshot (but keeping the same store).
-    /// Used by paste: constructs a new TagList with the pasted tags as the snapshot, so all
-    /// ordering/checked/stored logic runs fresh — identical to what happens when a file is opened.
+    /// Used by paste: constructs a new TagList with the pasted tags as the snapshot.
+    /// Uses unlocked mode: display keeps DB order (new unstored tags prepended), selected reflects
+    /// the pasted snapshot order.
     pub fn reinitialize_tags_from_snapshot(&mut self, snapshot: FileSnapshot) {
-        self.tag_list = TagList::new(self.store.clone(), snapshot);
+        self.tag_list = TagList::new_unlocked(self.store.clone(), snapshot);
     }
 
     /// Segment start in seconds for the current file, if set.
