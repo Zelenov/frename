@@ -37,7 +37,7 @@ impl VideoPlayerState {
         self.load_failed = false;
         self.current_video = None;
         self.video_path = Some(path.clone());
-        self.controls = VideoControlsState::default();
+        self.controls = VideoControlsState::with_volume(self.controls.volume());
 
         Task::future(async move {
             let success = tokio::task::spawn_blocking(move || {

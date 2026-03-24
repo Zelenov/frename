@@ -9,7 +9,7 @@ use crate::{FolderAndFile, StoredTag, TagColorMapping};
 
 use super::migrations;
 use super::schema;
-use super::traits::{AppStateStore, Initializable, StoredTagStore, WindowGeometry};
+use super::traits::{AppStateStore, Initializable, StoredTagStore, VideoSettings, WindowGeometry};
 
 /// The application database. Holds app state (last folder/file), and will hold user data
 /// and other application storage. SQLite-backed. Use `Initializable::initialize()` once at startup
@@ -196,6 +196,25 @@ impl AppStateStore for AppDatabase {
                 folder_panel_width: row.get::<_, f64>(8)? as f32,
             }),
         ).ok()
+    }
+
+    fn get_video_settings(&self) -> Option<VideoSettings> {
+        let conn = Connection::open(&self.path).ok()?;
+        conn.query_row(
+            "SELECT volume FROM video_settings WHERE id = 1",
+            [],
+            |row| Ok(VideoSettings { volume: row.get::<_, f64>(0)? as f32 }),
+        ).ok()
+    }
+
+    fn set_video_settings(&self, settings: VideoSettings) {
+        if let Ok(conn) = Connection::open(&self.path) {
+            let _ = conn.execute(
+                "INSERT INTO video_settings (id, volume) VALUES (1, ?1)
+                 ON CONFLICT(id) DO UPDATE SET volume = excluded.volume",
+                rusqlite::params![settings.volume as f64],
+            );
+        }
     }
 
     fn set_window_state(&self, geometry: WindowGeometry) {

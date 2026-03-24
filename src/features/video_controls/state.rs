@@ -1,5 +1,6 @@
 //! State for video controls feature
 
+use frename_core::{AppDatabase, AppStateStore, VideoSettings};
 use iced::{event, keyboard, Subscription};
 
 use super::Message;
@@ -20,18 +21,29 @@ pub struct VideoControlsState {
 
 impl Default for VideoControlsState {
     fn default() -> Self {
+        let volume = AppDatabase::new()
+            .get_video_settings()
+            .unwrap_or_default()
+            .volume;
+        Self::with_volume(volume)
+    }
+}
+
+impl VideoControlsState {
+    /// Creates state with a specific volume (preserves it across video loads).
+    pub fn with_volume(volume: f32) -> Self {
         Self {
             is_playing: false,
             duration_secs: 0.0,
             seeking: false,
             seek_position: 0.0,
-            volume: 1.0,
+            volume: volume.clamp(0.0, 1.0),
         }
     }
 }
 
 impl VideoControlsState {
-    /// Handle all controls messages
+    /// Handle all controls messages.
     pub fn update(&mut self, message: &Message) {
         match message {
             Message::TogglePlayPause => {
@@ -63,6 +75,7 @@ impl VideoControlsState {
             }
             Message::SetVolume(v) => {
                 self.volume = v.clamp(0.0, 1.0);
+                AppDatabase::new().set_video_settings(VideoSettings { volume: self.volume });
             }
         }
     }

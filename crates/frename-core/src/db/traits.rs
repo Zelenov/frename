@@ -23,6 +23,19 @@ pub struct WindowGeometry {
     pub folder_panel_width: f32,
 }
 
+/// Saved video player settings.
+#[derive(Debug, Clone, Copy)]
+pub struct VideoSettings {
+    /// Volume level 0.0..=1.0. Defaults to 1.0.
+    pub volume: f32,
+}
+
+impl Default for VideoSettings {
+    fn default() -> Self {
+        Self { volume: 1.0 }
+    }
+}
+
 /// Interface for storing and restoring app state (last folder and file, window geometry).
 /// Implemented by the application database and by the test fake (e.g. `FakeAppStorage`).
 /// Pass by value (e.g. `Box<dyn AppStateStore>`); no singleton, connection is opened per use.
@@ -39,6 +52,11 @@ pub trait AppStateStore: Send + Sync {
     /// Saves the window geometry (position + size).
     fn set_window_state(&self, _geometry: WindowGeometry) {}
 
+    /// Returns the saved video settings, if any.
+    fn get_video_settings(&self) -> Option<VideoSettings> { None }
+
+    /// Saves the video settings.
+    fn set_video_settings(&self, _settings: VideoSettings) {}
 }
 
 /// Interface for stored tags and tag color mapping. Tags are keyed by tag id (UUID); tag colors are keyed by tag name.

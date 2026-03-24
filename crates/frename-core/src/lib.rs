@@ -9,7 +9,7 @@ mod ordered;
 mod tags;
 pub mod undo;
 
-pub use db::{AppDatabase, AppStateStore, Initializable, LoggingAppStateStore, StoredTagStore, WindowGeometry};
+pub use db::{AppDatabase, AppStateStore, Initializable, LoggingAppStateStore, StoredTagStore, VideoSettings, WindowGeometry};
 pub use directory::Directory;
 pub use file_kind::FileKind;
 pub use folder_file::FolderAndFile;

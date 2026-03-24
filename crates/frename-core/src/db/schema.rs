@@ -47,6 +47,14 @@ ALTER TABLE window_state ADD COLUMN left_panel_width REAL DEFAULT 0;
 ALTER TABLE window_state ADD COLUMN folder_panel_width REAL DEFAULT 0;
 ";
 
+/// Migration 3: video settings table.
+pub const M3_VIDEO_SETTINGS: &str = "
+CREATE TABLE IF NOT EXISTS video_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    volume REAL NOT NULL DEFAULT 1.0
+);
+";
+
 /// Debug-only seed data: 100 tags with colors.
 /// Uses INSERT OR IGNORE so re-running is safe.
 /// IDs follow the pattern used by the original UUID migration.
