@@ -40,7 +40,7 @@ pub struct File {
     file_path: Box<Path>,
     /// File creation time (used for sorting).
     created_at: SystemTime,
-    /// Tags, name without extension, and extension. File name is built from this snapshot.
+    /// Tags, name without extension, extension, and comment. File name is built from this snapshot.
     file_snapshot: FileSnapshot,
 }
 
@@ -115,6 +115,11 @@ impl File {
     /// The file's snapshot (tags, name, extension; display and for building TagList from stored names).
     pub fn snapshot(&self) -> &FileSnapshot {
         &self.file_snapshot
+    }
+
+    /// Comment text for this file. Empty = no comment.
+    pub fn comment(&self) -> &str {
+        self.file_snapshot.comment()
     }
 
     /// Media type of this file based on its extension.

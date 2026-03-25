@@ -187,6 +187,14 @@ impl FolderWorkspace {
             Message::SetSegmentEnd => Task::done(Message::MediaViewer(
                 media_viewer::Message::Video(media_viewer_video::Message::CaptureSegmentEnd),
             )),
+            Message::CommentChanged(comment) => {
+                let Some(file) = self.file_workspace.file() else { return Task::none(); };
+                let file_path = file.file_path().to_path_buf();
+                self.file_workspace.set_comment(comment);
+                let snapshot = self.file_workspace.tag_list().file_snapshot();
+                frename_core::FileTagger::save(&snapshot, &file_path);
+                Task::none()
+            }
             Message::EscapePressed => {
                 if self.media_fullscreen {
                     self.media_fullscreen = false;

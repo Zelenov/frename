@@ -35,6 +35,11 @@ impl FileTagger {
     pub fn save(snapshot: &FileSnapshot, path: &Path) -> PathBuf {
         backend().save(snapshot, path)
     }
+
+    /// Returns true if `path` is a sidecar file that should be hidden from the file list.
+    pub fn is_sidecar_file(path: &Path) -> bool {
+        backend().is_sidecar_file(path)
+    }
 }
 
 /// Extension trait: save this snapshot then re-parse from the new path.

@@ -3,7 +3,7 @@
 //! Only this module knows the layout of the file workspace region. Folder list keeps using
 //! [crate::widgets::file_name_display] with wrap=false.
 
-use iced::widget::{column, container};
+use iced::widget::{column, container, text_input};
 use iced::{Element, Length};
 
 use crate::features::{file_name_panel, sync_panel, tag_grid, tag_panel};
@@ -55,7 +55,12 @@ where
         .width(Length::Fill)
         .height(Length::Fill);
 
-    let content = column![search_bar, middle]
+    let comment_input = text_input("Comment...", file_workspace.comment())
+        .on_input(Message::CommentChanged)
+        .width(Length::Fill)
+        .padding([4, 6]);
+
+    let content = column![search_bar, middle, comment_input]
         .spacing(4)
         .width(Length::Fill)
         .height(Length::Fill);

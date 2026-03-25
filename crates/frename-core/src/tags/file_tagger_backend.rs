@@ -6,10 +6,13 @@ use super::FileSnapshot;
 
 /// The interface that both InMemoryFileTagger and ProductionFileTagger implement.
 pub trait FileTaggerBackend: Send + Sync {
-    /// Parse the file at `path` and return its snapshot (tags, name, extension).
+    /// Parse the file at `path` and return its snapshot (tags, name, extension, comment).
     fn parse(&self, path: &Path) -> FileSnapshot;
 
     /// Save `snapshot` for the file at `path`.
     /// Returns the new path (which may differ from `path` if the file was renamed).
     fn save(&self, snapshot: &FileSnapshot, path: &Path) -> PathBuf;
+
+    /// Returns true if `path` is a sidecar file (should be hidden from the file list).
+    fn is_sidecar_file(&self, _path: &Path) -> bool { false }
 }

@@ -7,6 +7,7 @@ mod folder_file;
 mod file;
 mod ordered;
 mod tags;
+pub(crate) mod comment;
 pub mod undo;
 
 pub use db::{AppDatabase, AppStateStore, Initializable, LoggingAppStateStore, StoredTagStore, VideoSettings, WindowGeometry};

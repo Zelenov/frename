@@ -8,4 +8,6 @@ pub enum Message {
     TagPanel(tag_panel::Message),
     FileNamePanel(file_name_panel::Message),
     SyncPanel(sync_panel::Message),
+    /// User edited the comment field.
+    CommentChanged(String),
 }

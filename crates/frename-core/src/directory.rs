@@ -56,6 +56,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
         {
             let path = entry.path();
             if !path.is_file() { continue; }
+            if crate::FileTagger::is_sidecar_file(&path) { continue; }
             files.push(
                 File::open(&path)
                     .await

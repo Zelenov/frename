@@ -57,6 +57,8 @@ pub struct TagList<S> {
     segment_start: Option<f32>,
     /// Segment end in seconds, if set.
     segment_end: Option<f32>,
+    /// Comment text for this file (from snapshot at construction).
+    comment: String,
 }
 
 /// Returns the match rank for a non-empty, pre-lowercased query against a tag name.
@@ -149,6 +151,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let initial_file_name = file_snapshot.initial_file_name().to_string();
         let segment_start = file_snapshot.segment_start();
         let segment_end = file_snapshot.segment_end();
+        let comment = file_snapshot.comment().to_string();
         let stored_tags = store.get_stored_tags().unwrap_or_default();
         let color_mapping = store.get_tag_color_mapping().unwrap_or_default();
         let snapshot_tags = file_snapshot.tags();
@@ -265,6 +268,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             initial_file_name,
             segment_start,
             segment_end,
+            comment,
         };
         list.rebuild_filtered_display_tag_ids();
         log::info!(
@@ -452,8 +456,15 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         );
         snap.set_segment_start(self.segment_start);  // Option<f32>
         snap.set_segment_end(self.segment_end);      // Option<f32>
+        snap.set_comment(self.comment.clone());
         snap
     }
+
+    /// Comment text for the current file.
+    pub fn comment(&self) -> &str { &self.comment }
+
+    /// Update the comment (does not write to disk).
+    pub fn set_comment(&mut self, comment: String) { self.comment = comment; }
 
     /// Segment start in seconds, if set.
     pub fn segment_start_secs(&self) -> Option<f32> {

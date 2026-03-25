@@ -10,7 +10,9 @@ pub struct ProductionFileTagger;
 impl FileTaggerBackend for ProductionFileTagger {
     fn parse(&self, path: &Path) -> FileSnapshot {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        FileSnapshot::parse(name)
+        let mut snapshot = FileSnapshot::parse(name);
+        snapshot.set_comment(crate::comment::load_comment(path));
+        snapshot
     }
 
     fn save(&self, snapshot: &FileSnapshot, path: &Path) -> PathBuf {
@@ -21,12 +23,18 @@ impl FileTaggerBackend for ProductionFileTagger {
             .unwrap_or_else(|| PathBuf::from(&new_file_name));
 
         if new_path != path {
+            crate::comment::rename_comment_file(path, &new_path);
             if let Err(e) = std::fs::rename(path, &new_path) {
                 log::error!("ProductionFileTagger: rename {:?} → {:?} failed: {}", path, new_path, e);
                 return path.to_path_buf();
             }
             log::info!("Renamed on disk: {:?} → {:?}", path, new_path);
         }
+        crate::comment::save_comment(&new_path, snapshot.comment());
         new_path
+    }
+
+    fn is_sidecar_file(&self, path: &Path) -> bool {
+        crate::comment::is_comment_file(path)
     }
 }

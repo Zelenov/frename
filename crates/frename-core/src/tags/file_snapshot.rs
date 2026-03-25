@@ -30,6 +30,8 @@ pub struct FileSnapshot {
     segment_start: Option<f32>,
     /// Segment end in seconds, if set.
     segment_end: Option<f32>,
+    /// Comment text for this file (loaded from sidecar `.comment.txt`). Empty = no comment.
+    comment: String,
 }
 
 impl FileSnapshot {
@@ -46,6 +48,7 @@ impl FileSnapshot {
             initial_file_name: initial_file_name.into(),
             segment_start: None,
             segment_end: None,
+            comment: String::new(),
         }
     }
 
@@ -65,6 +68,8 @@ impl FileSnapshot {
     pub fn set_segment_start(&mut self, v: Option<f32>) { self.segment_start = v; }
     pub fn set_segment_end(&mut self, v: Option<f32>) { self.segment_end = v; }
     pub fn has_tag(&self, value: &str) -> bool { self.tags.iter().any(|t| t == value) }
+    pub fn comment(&self) -> &str { &self.comment }
+    pub fn set_comment(&mut self, comment: String) { self.comment = comment; }
 
     // ------------------------------------------------------------------
     // Serialise: snapshot → file name string
@@ -169,6 +174,7 @@ impl Default for FileSnapshot {
             initial_file_name: String::new(),
             segment_start: None,
             segment_end: None,
+            comment: String::new(),
         }
     }
 }

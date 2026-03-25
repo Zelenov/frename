@@ -86,6 +86,7 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
         file_workspace::Message::TagPanel(m) => Message::TagPanel(m),
         file_workspace::Message::FileNamePanel(m) => Message::FileNamePanel(m),
         file_workspace::Message::SyncPanel(m) => Message::SyncPanel(m),
+        file_workspace::Message::CommentChanged(s) => Message::CommentChanged(s),
     });
 
     let normal_layout = container(

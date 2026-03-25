@@ -77,6 +77,16 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.store.get_tag_color_mapping().unwrap_or_default()
     }
 
+    /// Comment text for the current file.
+    pub fn comment(&self) -> &str {
+        self.tag_list.comment()
+    }
+
+    /// Update the comment (does not write to disk).
+    pub fn set_comment(&mut self, comment: String) {
+        self.tag_list.set_comment(comment);
+    }
+
     /// Set the tag list filter query (case-insensitive contains). Used by the search bar.
     pub fn set_tag_filter(&mut self, query: String) {
         self.tag_list.set_filter(query);

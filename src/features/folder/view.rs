@@ -64,6 +64,22 @@ pub fn view<'a>(
             )
             .into();
 
+            let comment = file_info.comment();
+            let comment_icon: Element<'_, Message> = if !comment.is_empty() {
+                tooltip(
+                    container(text("💬").size(11).color(crate::theme::TEXT_MUTED))
+                        .center_x(Length::Fixed(22.0))
+                        .center_y(Length::Fill),
+                    text(comment),
+                    tooltip::Position::Right,
+                )
+                .into()
+            } else {
+                container(iced::widget::Space::new())
+                    .width(Length::Fixed(22.0))
+                    .into()
+            };
+
             let name_area: Element<'_, Message> = mouse_area(
                 container(name_display)
                     .padding(iced::Padding { top: 4.0, right: 8.0, bottom: 4.0, left: 0.0 })
@@ -76,7 +92,7 @@ pub fn view<'a>(
             .into();
 
             container(
-                row![copy_btn, name_area]
+                row![copy_btn, comment_icon, name_area]
                     .align_y(iced::Alignment::Center)
                     .width(Length::Fill)
                     .height(Length::Fill),

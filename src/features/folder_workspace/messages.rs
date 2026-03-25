@@ -85,4 +85,6 @@ pub enum Message {
     SetSegmentStart,
     /// Set segment end marker at the current video position (] key).
     SetSegmentEnd,
+    /// User edited the comment field for the current file.
+    CommentChanged(String),
 }
