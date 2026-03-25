@@ -38,6 +38,8 @@ pub struct ProgressBar<'a, Message> {
     segment_end: Option<f32>,
     /// Fill color for the progress portion (defaults to theme::ACCENT).
     fill_color: Option<Color>,
+    /// Marker positions (in the same unit as min/max) to draw as ticks above the bar.
+    markers: Vec<f32>,
 }
 
 impl<'a, Message> ProgressBar<'a, Message> {
@@ -59,6 +61,7 @@ impl<'a, Message> ProgressBar<'a, Message> {
             segment_start: None,
             segment_end: None,
             fill_color: None,
+            markers: Vec::new(),
         }
     }
 
@@ -78,6 +81,12 @@ impl<'a, Message> ProgressBar<'a, Message> {
     pub fn segment_range(mut self, start: Option<f32>, end: Option<f32>) -> Self {
         self.segment_start = start;
         self.segment_end = end;
+        self
+    }
+
+    /// Set screenshot marker positions (in the same unit as the range).
+    pub fn markers(mut self, positions: impl IntoIterator<Item = f32>) -> Self {
+        self.markers = positions.into_iter().collect();
         self
     }
 
@@ -181,13 +190,30 @@ where
             );
         }
 
-        // Segment highlight.
+        // Segment highlight + screenshot markers.
         // Positions are clamped to [min, max] so we never draw outside the bar.
         // Rules:
         //   only start OR only end  → single vertical marker line
         //   start < end             → filled rectangle (no rounded corners) between them
         //   start >= end            → two separate marker lines, no fill
         let span = self.max - self.min;
+
+        // Screenshot markers: small vertical tick spanning the bar height.
+        if span > 0.0 && !self.markers.is_empty() {
+            let to_x = |v: f32| bounds.x + ((v - self.min) / span).clamp(0.0, 1.0) * bounds.width;
+            for &pos in &self.markers {
+                let x = to_x(pos);
+                renderer.fill_quad(
+                    renderer::Quad {
+                        bounds: Rectangle { x: x - 1.0, y: bar_y, width: 2.0, height: BAR_HEIGHT },
+                        border: Border::default(),
+                        shadow: Shadow::default(),
+                        snap: true,
+                    },
+                    theme::SCREENSHOT_MARKER,
+                );
+            }
+        }
         if span > 0.0 {
             // Convert seconds to an x-coordinate, clamped to the bar's pixel range.
             let to_x = |secs: f32| {

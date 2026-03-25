@@ -13,12 +13,13 @@ const CONTROLS_HEIGHT: f32 = 32.0;
 /// Render the video player with controls below.
 /// `is_fullscreen` controls which icon the fullscreen button shows.
 /// `segment_start` and `segment_end` are passed to the progress bar for highlighting.
-pub fn view(
-    state: &VideoPlayerState,
+pub fn view<'a>(
+    state: &'a VideoPlayerState,
     is_fullscreen: bool,
     segment_start: Option<f32>,
     segment_end: Option<f32>,
-) -> Element<'_, Message> {
+    screenshot_positions_secs: Vec<f32>,
+) -> Element<'a, Message> {
     if let Some(video) = state.current_video() {
         let player = VideoPlayer::new(video)
             .width(Length::Fill)
@@ -37,7 +38,7 @@ pub fn view(
 
         let position_secs = video.position().as_secs_f32();
         let controls_inner =
-            video_controls::view::view(state.controls(), position_secs, segment_start, segment_end)
+            video_controls::view::view(state.controls(), position_secs, segment_start, segment_end, screenshot_positions_secs)
                 .map(Message::Controls);
 
         let fullscreen_icon = if is_fullscreen { "⊡" } else { "⛶" };

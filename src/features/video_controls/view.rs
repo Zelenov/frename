@@ -12,12 +12,13 @@ const CONTROLS_HEIGHT: f32 = 32.0;
 /// Render the video player controls.
 /// `position_secs` is the live playback position read from the video at view time.
 /// `segment_start` and `segment_end` are the optional segment markers (in seconds) for the current file.
-pub fn view(
-    state: &VideoControlsState,
+pub fn view<'a>(
+    state: &'a VideoControlsState,
     position_secs: f32,
     segment_start: Option<f32>,
     segment_end: Option<f32>,
-) -> Element<'_, Message> {
+    screenshot_positions_secs: Vec<f32>,
+) -> Element<'a, Message> {
     let back10_btn: Element<'_, Message> = tooltip(
         button(
             container(text("⏪").size(16))
@@ -109,7 +110,8 @@ pub fn view(
 
     let bar = ProgressBar::new(0.0..=duration, current_pos, Message::Seek)
         .on_release(Message::SeekReleased)
-        .segment_range(segment_start, segment_end);
+        .segment_range(segment_start, segment_end)
+        .markers(screenshot_positions_secs.iter().copied());
 
     let volume_icon: Element<'_, Message> = container(text("🔊").size(13))
         .center_y(Length::Fill)
@@ -123,8 +125,24 @@ pub fn view(
     .center_y(Length::Fill)
     .into();
 
+    let screenshot_btn: Element<'_, Message> = tooltip(
+        button(
+            container(text("📷").size(16))
+                .center_x(iced::Length::Fill)
+                .center_y(iced::Length::Fill),
+        )
+            .on_press(Message::TakeScreenshot)
+            .width(CONTROLS_HEIGHT)
+            .height(iced::Length::Fill)
+            .padding(0)
+            .style(theme::icon_button_style(true)),
+        text("F12"),
+        tooltip::Position::Top,
+    )
+        .into();
+
     let controls = row![
-        back10_btn, play_pause_btn, forward10_btn, seg_in_btn, seg_out_btn,
+        back10_btn, play_pause_btn, forward10_btn, seg_in_btn, seg_out_btn, screenshot_btn,
         bar,
         Space::new().width(8),
         volume_icon, volume_bar

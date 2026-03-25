@@ -3,7 +3,9 @@
 //! Only this module knows the layout of the file workspace region. Folder list keeps using
 //! [crate::widgets::file_name_display] with wrap=false.
 
-use iced::widget::{column, container, text_input};
+use iced::keyboard::key::Named;
+use iced::widget::text_editor::Binding;
+use iced::widget::{column, container, text_editor as text_editor_widget};
 use iced::{Element, Length};
 
 use crate::features::{file_name_panel, sync_panel, tag_grid, tag_panel};
@@ -55,10 +57,20 @@ where
         .width(Length::Fill)
         .height(Length::Fill);
 
-    let comment_input = text_input("Comment...", file_workspace.comment())
-        .on_input(Message::CommentChanged)
-        .width(Length::Fill)
-        .padding([4, 6]);
+    let comment_input = text_editor_widget(&file_workspace.comment_content)
+        .on_action(Message::CommentAction)
+        .placeholder("Comment...")
+        .height(80)
+        .padding([4, 6])
+        // Explicitly capture Enter so the event is not treated as Ignored by Iced,
+        // which prevents Windows from playing the system beep for unhandled WM_CHAR(0x0D).
+        .key_binding(|kp| {
+            if matches!(kp.key, iced::keyboard::Key::Named(Named::Enter)) {
+                Some(Binding::Enter)
+            } else {
+                Binding::from_key_press(kp)
+            }
+        });
 
     let content = column![search_bar, middle, comment_input]
         .spacing(4)

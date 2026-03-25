@@ -130,6 +130,9 @@ impl FolderWorkspace {
                 }
                 media_viewer::Message::SegmentStartMarked(secs) => self.set_segment_start(secs),
                 media_viewer::Message::SegmentEndMarked(secs) => self.set_segment_end(secs),
+                media_viewer::Message::ScreenshotTaken(position_ms, jpeg) => {
+                    Task::done(Message::ScreenshotTaken(position_ms, jpeg))
+                }
                 other => self.media_viewer.update(other).map(Message::MediaViewer),
             },
             Message::TagPanel(msg) => self.handle_tag_panel(msg),
@@ -187,12 +190,29 @@ impl FolderWorkspace {
             Message::SetSegmentEnd => Task::done(Message::MediaViewer(
                 media_viewer::Message::Video(media_viewer_video::Message::CaptureSegmentEnd),
             )),
-            Message::CommentChanged(comment) => {
+            Message::CommentAction(action) => {
+                self.file_workspace.apply_comment_action(action);
+                Task::none()
+            }
+            Message::ScreenshotTaken(position_ms, jpeg) => {
                 let Some(file) = self.file_workspace.file() else { return Task::none(); };
+                // Deduplicate: skip if any existing screenshot is within 100 ms.
+                let too_close = self.file_workspace.screenshots().iter().any(|s| {
+                    s.position_ms.abs_diff(position_ms) < 100
+                });
+                if too_close { return Task::none(); }
                 let file_path = file.file_path().to_path_buf();
-                self.file_workspace.set_comment(comment);
-                let snapshot = self.file_workspace.tag_list().file_snapshot();
-                frename_core::FileTagger::save(&snapshot, &file_path);
+                self.file_workspace.add_screenshot(frename_core::Screenshot::new(position_ms));
+                // Append timestamp to comment.
+                let time_str = frename_core::Screenshot::new(position_ms).format_time();
+                let current = self.file_workspace.comment().to_string();
+                let new_comment = if current.is_empty() {
+                    format!("{}:", time_str)
+                } else {
+                    format!("{}\n{}:", current, time_str)
+                };
+                self.file_workspace.set_comment(new_comment);
+                frename_core::FileTagger::save_screenshot(&file_path, position_ms, &jpeg);
                 Task::none()
             }
             Message::EscapePressed => {

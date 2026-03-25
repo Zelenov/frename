@@ -5,6 +5,7 @@
 //!
 //! Generic over the store type S (like Directory and TagList). Store is passed to the constructor; used to build the tag list.
 
+use iced::widget::text_editor;
 use frename_core::{AppDatabase, File, FileId, FileSnapshot, StoredTagStore, TagColorMapping, TagId, TagList};
 
 /// File workspace: current file and stored tags with checked state (source of truth for UI).
@@ -18,6 +19,8 @@ pub struct FileWorkspace<S> {
     store: S,
     /// Stored tags with checked state (synced from file on load; toggles update only this, not the file).
     tag_list: TagList<S>,
+    /// Backing state for the multiline comment editor.
+    pub comment_content: text_editor::Content,
 }
 
 impl<S: StoredTagStore + Clone> FileWorkspace<S> {
@@ -28,6 +31,7 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
             file: None,
             store: store.clone(),
             tag_list: TagList::new(store, FileSnapshot::default()),
+            comment_content: text_editor::Content::new(),
         }
     }
 
@@ -48,6 +52,7 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
                     return;
                 }
                 let snapshot = f.snapshot().clone();
+                self.comment_content = text_editor::Content::with_text(snapshot.comment());
                 self.file = Some(f);
                 self.tag_list = TagList::new(self.store.clone(), snapshot);
             }
@@ -84,7 +89,27 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
 
     /// Update the comment (does not write to disk).
     pub fn set_comment(&mut self, comment: String) {
+        self.comment_content = text_editor::Content::with_text(&comment);
         self.tag_list.set_comment(comment);
+    }
+
+    /// Apply a text_editor action to the comment content and sync the string to tag_list.
+    pub fn apply_comment_action(&mut self, action: text_editor::Action) {
+        self.comment_content.perform(action);
+        let text = self.comment_content.text();
+        // text() appends a trailing newline; strip it for storage.
+        let trimmed = text.trim_end_matches('\n').to_string();
+        self.tag_list.set_comment(trimmed);
+    }
+
+    /// Screenshot markers for the current file.
+    pub fn screenshots(&self) -> &[frename_core::Screenshot] {
+        self.tag_list.screenshots()
+    }
+
+    /// Add a screenshot marker (deduplicates, keeps sorted).
+    pub fn add_screenshot(&mut self, screenshot: frename_core::Screenshot) {
+        self.tag_list.add_screenshot(screenshot);
     }
 
     /// Set the tag list filter query (case-insensitive contains). Used by the search bar.

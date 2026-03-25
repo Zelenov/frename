@@ -33,8 +33,9 @@ libheif-rs = { version = "2", features = ["embedded-libheif"], optional = true }
 log = "0.4"
 simplelog = "0.12"
 
-# GStreamer bindings - for checking availability
+# GStreamer bindings - for screenshot frame capture
 gstreamer = "0.23"
+gstreamer-video = "0.23"
 
 # Async runtime (spawn_blocking for non-blocking video load)
 tokio = { version = "1", features = ["time", "rt"] }

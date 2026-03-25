@@ -26,6 +26,8 @@ pub fn view<'a, Message: Clone + 'a>(
     let create_msg: Option<Message> = on_create.map(|f| f(value.to_string()));
 
     let search_icon = text("🔍").size(12).color(theme::TEXT_MUTED);
+    // Compute submit message before moving on_input into the widget.
+    let submit_msg = create_msg.clone().unwrap_or_else(|| on_input(value.to_string()));
     let mut input = text_input("", value)
         .id(iced::widget::Id::from(SEARCH_BAR_INPUT_ID))
         .on_input(on_input)
@@ -45,9 +47,8 @@ pub fn view<'a, Message: Clone + 'a>(
                 selection: theme::ACCENT,
             }
         });
-    if let Some(ref msg) = create_msg {
-        input = input.on_submit(msg.clone());
-    }
+    // Always set on_submit so text_input captures Enter (prevents Windows Default Beep).
+    input = input.on_submit(submit_msg);
 
     let clear_icon: Option<Element<'a, Message>> = if value.is_empty() {
         None

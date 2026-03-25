@@ -59,6 +59,8 @@ pub struct TagList<S> {
     segment_end: Option<f32>,
     /// Comment text for this file (from snapshot at construction).
     comment: String,
+    /// Screenshot markers for this file (from snapshot at construction).
+    screenshots: Vec<crate::Screenshot>,
 }
 
 /// Returns the match rank for a non-empty, pre-lowercased query against a tag name.
@@ -152,6 +154,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let segment_start = file_snapshot.segment_start();
         let segment_end = file_snapshot.segment_end();
         let comment = file_snapshot.comment().to_string();
+        let screenshots = file_snapshot.screenshots().to_vec();
         let stored_tags = store.get_stored_tags().unwrap_or_default();
         let color_mapping = store.get_tag_color_mapping().unwrap_or_default();
         let snapshot_tags = file_snapshot.tags();
@@ -269,6 +272,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             segment_start,
             segment_end,
             comment,
+            screenshots,
         };
         list.rebuild_filtered_display_tag_ids();
         log::info!(
@@ -457,6 +461,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         snap.set_segment_start(self.segment_start);  // Option<f32>
         snap.set_segment_end(self.segment_end);      // Option<f32>
         snap.set_comment(self.comment.clone());
+        snap.set_screenshots(self.screenshots.clone());
         snap
     }
 
@@ -465,6 +470,17 @@ impl<S: StoredTagStore + Clone> TagList<S> {
 
     /// Update the comment (does not write to disk).
     pub fn set_comment(&mut self, comment: String) { self.comment = comment; }
+
+    /// Screenshot markers for the current file.
+    pub fn screenshots(&self) -> &[crate::Screenshot] { &self.screenshots }
+
+    /// Add a screenshot marker (deduplicates and keeps sorted).
+    pub fn add_screenshot(&mut self, screenshot: crate::Screenshot) {
+        if !self.screenshots.contains(&screenshot) {
+            self.screenshots.push(screenshot);
+            self.screenshots.sort();
+        }
+    }
 
     /// Segment start in seconds, if set.
     pub fn segment_start_secs(&self) -> Option<f32> {

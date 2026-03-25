@@ -23,4 +23,6 @@ pub enum Message {
     SetSegmentEnd,
     /// Set volume (0.0 = silent, 1.0 = full)
     SetVolume(f32),
+    /// Capture current video position as a screenshot marker (F12 or button).
+    TakeScreenshot,
 }

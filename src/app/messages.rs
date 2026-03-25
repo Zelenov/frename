@@ -21,4 +21,5 @@ pub enum Message {
     WindowMonitorSizeFetched(Option<Size>),
     DragDrop(drag_drop::Message),
     FolderWorkspace(folder_workspace::Message),
+    Noop,
 }

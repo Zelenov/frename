@@ -15,4 +15,12 @@ pub trait FileTaggerBackend: Send + Sync {
 
     /// Returns true if `path` is a sidecar file (should be hidden from the file list).
     fn is_sidecar_file(&self, _path: &Path) -> bool { false }
+
+    /// Save a screenshot image for the given file and position.
+    /// `image_data` is raw JPEG bytes (e.g. from GStreamer). Pass `&[]` to create an empty placeholder.
+    fn save_screenshot(&self, _file_path: &Path, _position_ms: u64, _image_data: &[u8]) {}
+
+    /// Load the raw image bytes for a screenshot by position.
+    #[allow(dead_code)]
+    fn load_screenshot_image(&self, _file_path: &Path, _position_ms: u64) -> Option<Vec<u8>> { None }
 }

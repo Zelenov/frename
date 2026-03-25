@@ -16,6 +16,10 @@ use super::{FolderWorkspace, Message};
 pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
     let seg_start = state.file_workspace().segment_start_secs();
     let seg_end = state.file_workspace().segment_end_secs();
+    let screenshot_secs: Vec<f32> = state.file_workspace().screenshots()
+        .iter()
+        .map(|s| s.position_secs())
+        .collect();
 
     if state.directory().is_none() && !state.media_fullscreen() {
         let icon = if state.is_loading() { "⏳" } else { "📂" };
@@ -37,7 +41,7 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
     }
 
     let video = container(
-        media_viewer::view::view(state.media_viewer(), false, seg_start, seg_end)
+        media_viewer::view::view(state.media_viewer(), false, seg_start, seg_end, screenshot_secs.clone())
             .map(Message::MediaViewer),
     )
     .width(Length::Fixed(state.left_width()))
@@ -86,7 +90,7 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
         file_workspace::Message::TagPanel(m) => Message::TagPanel(m),
         file_workspace::Message::FileNamePanel(m) => Message::FileNamePanel(m),
         file_workspace::Message::SyncPanel(m) => Message::SyncPanel(m),
-        file_workspace::Message::CommentChanged(s) => Message::CommentChanged(s),
+        file_workspace::Message::CommentAction(a) => Message::CommentAction(a),
     });
 
     let normal_layout = container(
@@ -103,7 +107,7 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
     // The overlay is the fullscreen media view when active, or an invisible space.
     let overlay: Element<'_, Message> = if state.media_fullscreen() {
         container(
-            media_viewer::view::view(state.media_viewer(), true, seg_start, seg_end)
+            media_viewer::view::view(state.media_viewer(), true, seg_start, seg_end, screenshot_secs)
                 .map(Message::MediaViewer),
         )
         .width(Length::Fill)

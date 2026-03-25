@@ -20,7 +20,7 @@ pub use tags::{
     install_file_tagger,
     FileSnapshot, FileTagger, FileTaggerBackend, LoggingFileTagger,
     InMemoryFileTagger, ProductionFileTagger,
-    SaveAndReparse, StoredTag, Tag, TagColorMapping, TagId, TagList,
+    SaveAndReparse, Screenshot, StoredTag, Tag, TagColorMapping, TagId, TagList,
 };
 pub use undo::{
     History, UndoContext, UndoError,

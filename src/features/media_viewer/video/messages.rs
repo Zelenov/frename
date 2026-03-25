@@ -35,4 +35,6 @@ pub enum Message {
     SegmentStartMarked(f32),
     /// Segment end was captured. Bubbles up to FolderWorkspace.
     SegmentEndMarked(f32),
+    /// Screenshot captured at position (ms) with JPEG bytes. Bubbles up to FolderWorkspace.
+    ScreenshotTaken(u64, Vec<u8>),
 }

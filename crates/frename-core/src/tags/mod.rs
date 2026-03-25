@@ -1,6 +1,7 @@
 //! Tag-related types: file tag list (tags + name + extension), snapshots, tagger, stored tags, tag color mapping, and tag list UI model.
 
 mod file_snapshot;
+mod screenshot;
 mod file_tagger_backend;
 mod file_tagger;
 mod file_tagger_logging;
@@ -12,6 +13,7 @@ mod tag_color_mapping;
 mod tag_list;
 
 pub use file_snapshot::FileSnapshot;
+pub use screenshot::Screenshot;
 pub use file_tagger::{install_file_tagger, FileTagger, SaveAndReparse};
 pub use file_tagger_backend::FileTaggerBackend;
 pub use file_tagger_logging::LoggingFileTagger;

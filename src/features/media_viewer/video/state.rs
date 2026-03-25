@@ -1,5 +1,8 @@
 //! State for the video player sub-feature.
 
+use gstreamer as gst;
+use gstreamer_video::VideoMeta;
+use gst::prelude::*;
 use iced::{Subscription, Task, time};
 use iced_video_player::Video;
 use std::path::PathBuf;
@@ -130,6 +133,7 @@ impl VideoPlayerState {
                     }
                     video_controls::Message::SetSegmentStart => self.capture_segment_start(),
                     video_controls::Message::SetSegmentEnd => self.capture_segment_end(),
+                    video_controls::Message::TakeScreenshot => self.capture_screenshot(),
                     video_controls::Message::SetVolume(v) => {
                         if let Some(video) = &mut self.current_video {
                             video.set_volume(v as f64);
@@ -142,6 +146,7 @@ impl VideoPlayerState {
             Message::CaptureSegmentStart => self.capture_segment_start(),
             Message::CaptureSegmentEnd => self.capture_segment_end(),
             Message::SegmentStartMarked(_) | Message::SegmentEndMarked(_) => Task::none(), // bubbles up via media_viewer
+            Message::ScreenshotTaken(_, _) => Task::none(),
             Message::Unload => {
                 self.current_video = None;
                 self.video_path = None;
@@ -171,6 +176,19 @@ impl VideoPlayerState {
         Task::done(Message::SegmentEndMarked(secs))
     }
 
+    fn capture_screenshot(&self) -> Task<Message> {
+        let Some(video) = self.current_video.as_ref() else {
+            log::warn!("capture_screenshot: no video loaded");
+            return Task::none();
+        };
+        let position_ms = video.position().as_millis() as u64;
+        log::info!("capture_screenshot: position_ms={position_ms}");
+        let jpeg = capture_jpeg(video);
+        log::info!("capture_screenshot: jpeg={:?}", jpeg.as_ref().map(|v| v.len()));
+        let jpeg = jpeg.unwrap_or_default();
+        Task::done(Message::ScreenshotTaken(position_ms, jpeg))
+    }
+
     /// True when a video is loaded or in the process of loading.
     pub fn is_active(&self) -> bool {
         self.current_video.is_some() || self.loading
@@ -187,4 +205,80 @@ impl VideoPlayerState {
             Subscription::none()
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Frame capture helpers
+// ---------------------------------------------------------------------------
+
+/// Capture the current video frame as JPEG bytes.
+///
+/// Reads the `last-sample` property of the iced_video AppSink.
+/// This holds the most recently delivered NV12 frame and does not
+/// compete with the worker thread's continuous pull loop.
+fn capture_jpeg(video: &Video) -> Option<Vec<u8>> {
+    let pipeline = video.pipeline();
+
+    // Locate the iced_video appsink inside the video-sink bin.
+    let video_sink: gst::Element = pipeline.property("video-sink");
+    let appsink_el = if let Ok(bin) = video_sink.clone().downcast::<gst::Bin>() {
+        bin.by_name("iced_video")?
+    } else {
+        // video-sink wraps its sink pad in a GhostPad; parent of that pad is the bin.
+        video_sink.pads().into_iter()
+            .find_map(|p| p.dynamic_cast::<gst::GhostPad>().ok())
+            .and_then(|gp| gp.parent_element())
+            .and_then(|e| e.downcast::<gst::Bin>().ok())
+            .and_then(|b| b.by_name("iced_video"))?
+    };
+
+    // last-sample holds the most recently delivered frame — no queue contention.
+    let sample: Option<gst::Sample> = appsink_el.property("last-sample");
+    let sample = match sample {
+        Some(s) => s,
+        None => {
+            log::warn!("last-sample is None — no frame delivered yet");
+            return None;
+        }
+    };
+
+    let caps = sample.caps()?;
+    let s = caps.structure(0)?;
+    let width = s.get::<i32>("width").ok()? as u32;
+    let height = s.get::<i32>("height").ok()? as u32;
+
+    let buffer = sample.buffer()?;
+    let map = buffer.map_readable().ok()?;
+
+    // Stride from VideoMeta when available; otherwise assume stride == width.
+    let stride = buffer
+        .meta::<VideoMeta>()
+        .map(|m| m.stride()[0] as u32)
+        .unwrap_or(width);
+
+    let rgb = nv12_to_rgb(map.as_slice(), width, height, stride);
+    drop(map);
+
+    let img = image::RgbImage::from_raw(width, height, rgb)?;
+    let mut cursor = std::io::Cursor::new(Vec::<u8>::new());
+    img.write_to(&mut cursor, image::ImageFormat::Jpeg).ok()?;
+    Some(cursor.into_inner())
+}
+
+fn nv12_to_rgb(yuv: &[u8], width: u32, height: u32, stride: u32) -> Vec<u8> {
+    let uv_start = (stride * height) as usize;
+    let mut rgb = Vec::with_capacity((width * height * 3) as usize);
+    for y in 0..height {
+        for x in 0..width {
+            let y_val = yuv[(y * stride + x) as usize] as f32;
+            let uv_off = uv_start + ((y / 2) * stride + (x / 2) * 2) as usize;
+            let u = yuv[uv_off] as f32;
+            let v = yuv[uv_off + 1] as f32;
+            let r = (1.164 * (y_val - 16.0) + 1.596 * (v - 128.0)).clamp(0.0, 255.0) as u8;
+            let g = (1.164 * (y_val - 16.0) - 0.813 * (v - 128.0) - 0.391 * (u - 128.0)).clamp(0.0, 255.0) as u8;
+            let b = (1.164 * (y_val - 16.0) + 2.018 * (u - 128.0)).clamp(0.0, 255.0) as u8;
+            rgb.extend_from_slice(&[r, g, b]);
+        }
+    }
+    rgb
 }

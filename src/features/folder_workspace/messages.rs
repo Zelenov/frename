@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use iced::widget::text_editor;
 use frename_core::{File, FileId, FileSnapshot, FolderAndFile};
 
 use super::Directory;
@@ -85,6 +86,8 @@ pub enum Message {
     SetSegmentStart,
     /// Set segment end marker at the current video position (] key).
     SetSegmentEnd,
-    /// User edited the comment field for the current file.
-    CommentChanged(String),
+    /// User interacted with the multiline comment editor.
+    CommentAction(text_editor::Action),
+    /// Screenshot captured at position (ms) with JPEG bytes.
+    ScreenshotTaken(u64, Vec<u8>),
 }

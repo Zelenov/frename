@@ -35,6 +35,8 @@ pub const ERROR: Color = Color::from_rgb(0.95, 0.35, 0.35);
 
 /// Segment range highlight on the progress bar (inverted accent – warm yellow-green).
 pub const SEGMENT: Color = Color::from_rgba(1.0, 0.85, 0.2, 0.75);
+/// Screenshot marker on the progress bar (bright teal tick).
+pub const SCREENSHOT_MARKER: Color = Color::from_rgba(0.2, 1.0, 0.85, 0.90);
 
 /// Splitter bar (matches track).
 pub const VOLUME: Color = Color::from_rgb(0.35, 0.80, 0.50);

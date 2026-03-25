@@ -7,6 +7,8 @@
 use regex::Regex;
 use std::sync::OnceLock;
 
+use super::screenshot::Screenshot;
+
 // ---------------------------------------------------------------------------
 // Shared regex for segment markers
 // ---------------------------------------------------------------------------
@@ -15,10 +17,6 @@ fn segment_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"^(in|out)_(\d{2})_(\d{2})_(\d{2})$").unwrap())
 }
-
-// ---------------------------------------------------------------------------
-// FileSnapshot
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
 pub struct FileSnapshot {
@@ -32,6 +30,8 @@ pub struct FileSnapshot {
     segment_end: Option<f32>,
     /// Comment text for this file (loaded from sidecar `.comment.txt`). Empty = no comment.
     comment: String,
+    /// Screenshot markers for this file (positions loaded from sidecar `.snap.*.jpg` files).
+    screenshots: Vec<Screenshot>,
 }
 
 impl FileSnapshot {
@@ -49,6 +49,7 @@ impl FileSnapshot {
             segment_start: None,
             segment_end: None,
             comment: String::new(),
+            screenshots: Vec::new(),
         }
     }
 
@@ -70,6 +71,15 @@ impl FileSnapshot {
     pub fn has_tag(&self, value: &str) -> bool { self.tags.iter().any(|t| t == value) }
     pub fn comment(&self) -> &str { &self.comment }
     pub fn set_comment(&mut self, comment: String) { self.comment = comment; }
+
+    pub fn screenshots(&self) -> &[Screenshot] { &self.screenshots }
+    pub fn set_screenshots(&mut self, screenshots: Vec<Screenshot>) { self.screenshots = screenshots; }
+    pub fn add_screenshot(&mut self, screenshot: Screenshot) {
+        if !self.screenshots.contains(&screenshot) {
+            self.screenshots.push(screenshot);
+            self.screenshots.sort();
+        }
+    }
 
     // ------------------------------------------------------------------
     // Serialise: snapshot → file name string
@@ -175,6 +185,7 @@ impl Default for FileSnapshot {
             segment_start: None,
             segment_end: None,
             comment: String::new(),
+            screenshots: Vec::new(),
         }
     }
 }

@@ -40,6 +40,17 @@ impl FileTagger {
     pub fn is_sidecar_file(path: &Path) -> bool {
         backend().is_sidecar_file(path)
     }
+
+    /// Save a screenshot image for the given file and position.
+    pub fn save_screenshot(file_path: &Path, position_ms: u64, image_data: &[u8]) {
+        backend().save_screenshot(file_path, position_ms, image_data);
+    }
+
+    /// Load the raw image bytes for a screenshot by position.
+    #[allow(dead_code)]
+    pub fn load_screenshot_image(file_path: &Path, position_ms: u64) -> Option<Vec<u8>> {
+        backend().load_screenshot_image(file_path, position_ms)
+    }
 }
 
 /// Extension trait: save this snapshot then re-parse from the new path.

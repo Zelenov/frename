@@ -122,6 +122,7 @@ impl FrenameApp {
                     folder_workspace::Message::OpenFile(path),
                 ))
             }
+            Message::Noop => Task::none(),
             Message::FolderWorkspace(msg) => {
                 let is_unloaded = matches!(
                     &msg,
@@ -208,6 +209,18 @@ impl FrenameApp {
                 }) => Some(Message::FolderWorkspace(
                     folder_workspace::Message::EscapePressed,
                 )),
+                // Enter: always consume to prevent Windows Default Beep (WM_CHAR 0x0D reaching
+                // DefWindowProc). Only trigger SaveSelectedTag when no widget captured the event.
+                iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: keyboard::Key::Named(keyboard::key::Named::Enter),
+                    ..
+                }) => {
+                    if matches!(status, event::Status::Ignored) {
+                        Some(Message::FolderWorkspace(folder_workspace::Message::SaveSelectedTag))
+                    } else {
+                        Some(Message::Noop)
+                    }
+                }
                 iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. })
                     if matches!(status, event::Status::Ignored) =>
                 {
@@ -271,11 +284,6 @@ impl FrenameApp {
                             keyboard::key::Named::Delete => {
                                 Some(Message::FolderWorkspace(
                                     folder_workspace::Message::RemoveTag,
-                                ))
-                            }
-                            keyboard::key::Named::Enter => {
-                                Some(Message::FolderWorkspace(
-                                    folder_workspace::Message::SaveSelectedTag,
                                 ))
                             }
                             _ => None,
