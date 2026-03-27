@@ -76,11 +76,19 @@ impl FileTaggerBackend for ProductionFileTagger {
 
         if new_path != path {
             crate::comment::rename_comment_file(path, &new_path);
+            log::info!(
+                "Renaming {} screenshot(s) for {:?} → {:?}",
+                snapshot.screenshots().len(), path, new_path
+            );
             for s in snapshot.screenshots() {
                 let old_shot = screenshot_path(path, s.position_ms);
                 let new_shot = screenshot_path(&new_path, s.position_ms);
+                log::info!("  screenshot: {:?} exists={} → {:?}", old_shot, old_shot.exists(), new_shot);
                 if old_shot.exists() {
-                    let _ = std::fs::rename(&old_shot, &new_shot);
+                    match std::fs::rename(&old_shot, &new_shot) {
+                        Ok(()) => log::info!("  screenshot renamed ok"),
+                        Err(e) => log::error!("  screenshot rename failed: {}", e),
+                    }
                 }
             }
             if let Err(e) = std::fs::rename(path, &new_path) {

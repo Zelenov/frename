@@ -683,6 +683,14 @@ impl FolderWorkspace {
     }
 
     fn handle_file_name_panel(&mut self, msg: file_name_panel::Message) -> Task<Message> {
+        if let file_name_panel::Message::RemoveTag(id) = msg {
+            let was_checked = self.file_workspace.tag_list().get_tag(id).map_or(false, |t| t.is_checked());
+            if was_checked {
+                self.file_workspace.toggle_tag_by_id(id);
+                self.history.push(Box::new(ToggleTagCommand { tag_id: id, was_checked }));
+            }
+            return Task::none();
+        }
         if let file_name_panel::Message::ClearSegmentStart = msg {
             let old_secs = self.file_workspace.segment_start_secs();
             self.file_workspace.set_segment_start_secs(None);

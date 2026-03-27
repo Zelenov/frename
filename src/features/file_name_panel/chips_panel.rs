@@ -1,6 +1,6 @@
 //! Widget: wrapping row of tag chips (draggable) with bounds reporter for drop index.
 
-use iced::widget::{container, row, stack};
+use iced::widget::{container, mouse_area, row, stack};
 use iced::{Alignment, Element, Length};
 
 use frename_core::{StoredTagStore, TagList};
@@ -68,6 +68,7 @@ where
             false,
             false,
         );
+        let chip = mouse_area(chip).on_middle_press(Message::RemoveTag(tag_id));
         chip_elements.push(chip.into());
     }
 
