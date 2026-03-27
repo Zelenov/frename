@@ -91,9 +91,8 @@ impl<S> TagList<S> {
 
     fn rebuild_filtered_display_tag_ids(&mut self) {
         // Filter (preserving display order), then stable-sort by (section, rank):
-        //   section: 0 = unstored, 1 = starred stored, 2 = unstarred stored
+        //   section: 0 = unstored, 1 = stored
         //   rank:    0 = full match, 1 = prefix match, 2 = contains match
-        // Starred tags always float to the top of their section.
         // sort_by_key is stable so ties keep the original display order.
         let mut filtered: Vec<TagId> = self
             .display_tag_ids
@@ -106,11 +105,7 @@ impl<S> TagList<S> {
         let q = self.filter_query.trim().to_lowercase();
         filtered.sort_by_key(|id| {
             let tag = self.tags_by_id.get(id);
-            let section: u8 = match tag {
-                Some(t) if !t.is_stored() => 0,
-                Some(t) if t.is_starred() => 1,
-                _ => 2,
-            };
+            let section: u8 = if tag.map_or(true, |t| !t.is_stored()) { 0 } else { 1 };
             let rank: u8 = if q.is_empty() {
                 0
             } else {
@@ -328,45 +323,21 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         self.tags_by_id.get(&id)
     }
 
-    /// Toggle the tag with the given id. No-op if id not found. [selected_tag_ids] is unchanged (has all tags).
+    /// Toggle the tag with the given id. No-op if id not found.
     pub fn toggle_by_id(&mut self, id: TagId) {
-        let was_checked = self.tags_by_id.get(&id).map_or(false, |t| t.is_checked());
         if let Some(tag) = self.tags_by_id.get_mut(&id) {
             tag.toggle();
         }
-        // When a tag becomes checked, reposition it in selected_tag_ids so starred tags
-        // always appear before non-starred tags in the file name chips panel.
-        if !was_checked {
-            let is_starred = self.tags_by_id.get(&id).map_or(false, |t| t.is_starred());
-            if is_starred {
-                // Move starred tag before the first checked non-starred tag.
-                let first_non_starred_checked = self.selected_tag_ids
-                    .iter()
-                    .find_map(|(tid, _, _)| {
-                        if *tid == id { return None; }
-                        self.tags_by_id.get(tid)
-                            .filter(|t| t.is_checked() && !t.is_starred())
-                            .map(|t| t.id())
-                    });
-                if let Some(anchor) = first_non_starred_checked {
-                    self.selected_tag_ids.insert_before(id, (), Some(&anchor));
-                }
-            } else {
-                // Move non-starred tag after the last checked starred tag.
-                let last_starred_checked = self.selected_tag_ids
-                    .iter()
-                    .filter_map(|(tid, _, _)| {
-                        if *tid == id { return None; }
-                        self.tags_by_id.get(tid)
-                            .filter(|t| t.is_checked() && t.is_starred())
-                            .map(|t| t.id())
-                    })
-                    .last();
-                if let Some(anchor) = last_starred_checked {
-                    self.selected_tag_ids.insert_after(id, (), Some(&anchor));
-                }
-            }
-        }
+    }
+
+    /// All starred stored tags in display_tag_ids order (unaffected by the search filter).
+    /// Used by the starred tags panel shown between the search bar and tag grid.
+    pub fn starred_tags_in_display_order(&self) -> Vec<&Tag> {
+        self.display_tag_ids
+            .iter()
+            .filter_map(|(id, _, _)| self.tags_by_id.get(id))
+            .filter(|t| t.is_starred())
+            .collect()
     }
 
 

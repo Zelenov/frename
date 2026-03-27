@@ -8,6 +8,8 @@ use iced::widget::text_editor::Binding;
 use iced::widget::{column, container, text_editor as text_editor_widget};
 use iced::{Element, Length};
 
+use crate::widgets::starred_tags_panel;
+
 use crate::features::{file_name_panel, sync_panel, tag_grid, tag_panel};
 use crate::widgets;
 
@@ -72,7 +74,26 @@ where
             }
         });
 
-    let content = column![search_bar, middle, comment_input]
+    // Starred panel: shown between search bar and tag grid; unaffected by search filter.
+    // Reuses the tag grid's panel_bounds for width (same container column).
+    let starred_content_width = tag_panel_state
+        .panel_bounds()
+        .map(|b| (b.width - 8.0).max(0.0));
+    let starred_panel = starred_tags_panel::view(
+        tag_list,
+        starred_content_width,
+        tag_panel_state.selected_tag_id(),
+    );
+
+    let mut content_items: Vec<Element<'_, Message>> = Vec::with_capacity(4);
+    content_items.push(search_bar);
+    if let Some(sp) = starred_panel {
+        content_items.push(sp.map(Message::TagPanel));
+    }
+    content_items.push(middle.into());
+    content_items.push(comment_input.into());
+
+    let content = column(content_items)
         .spacing(4)
         .width(Length::Fill)
         .height(Length::Fill);
