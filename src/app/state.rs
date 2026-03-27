@@ -173,11 +173,11 @@ impl FrenameApp {
                 }) if modifiers.shift() => Some(Message::FolderWorkspace(
                     folder_workspace::Message::TagPanel(tag_panel::Message::ToggleSelectedTag),
                 )),
-                // Space toggles video play/pause.
+                // Space toggles video play/pause — only when no text widget has focus.
                 iced::Event::Keyboard(keyboard::Event::KeyPressed {
                     key: keyboard::Key::Named(keyboard::key::Named::Space),
                     ..
-                }) => Some(Message::FolderWorkspace(
+                }) if matches!(status, event::Status::Ignored) => Some(Message::FolderWorkspace(
                     folder_workspace::Message::MediaViewer(
                         media_viewer::Message::Video(media_viewer_video::Message::TogglePause),
                     ),

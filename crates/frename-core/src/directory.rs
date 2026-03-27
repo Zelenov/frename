@@ -2,7 +2,7 @@
 //!
 //! Files are stored in two structures:
 //!   1. `files_by_id: HashMap<FileId, File>` — O(1) lookup and mutation by stable ID.
-//!   2. `order: Vec<FileId>`                 — creation-date order for indexed access.
+//!   2. `order: Vec<FileId>`                 — modification-date order for indexed access.
 //!
 //! Selection is stored as `selected_id: Option<FileId>`, stable across renames.
 
@@ -42,7 +42,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
         }
     }
 
-    /// Open a directory asynchronously: scan all files and sort by creation date.
+    /// Open a directory asynchronously: scan all files and sort by modification date.
     pub async fn open(directory: &Path, store: S) -> Result<Self, std::io::Error> {
         log::info!("Scanning directory: {}", directory.display());
         let mut files = Vec::new();
@@ -63,7 +63,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
                     .map_err(|e| { log::error!("Failed to scan directory: {e}"); e })?,
             );
         }
-        files.sort_by(|a, b| a.created_at().cmp(&b.created_at()));
+        files.sort_by(|a, b| a.modified_at().cmp(&b.modified_at()));
         store.set_last_folder_and_file(&FolderAndFile::new(directory, None::<PathBuf>));
         log::info!("Directory scan complete: {} files found", files.len());
         Ok(Self::with_files(directory, files, store))
@@ -75,7 +75,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
 
     pub fn is_empty(&self) -> bool { self.order.is_empty() }
 
-    /// Files in creation-date order (for rendering the list).
+    /// Files in modification-date order (for rendering the list).
     pub fn files_in_order(&self) -> impl Iterator<Item = &File> {
         self.order.iter().filter_map(|id| self.files_by_id.get(id))
     }
@@ -85,7 +85,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
         self.files_by_id.get(&id)
     }
 
-    /// Index of the selected file in creation-date order.
+    /// Index of the selected file in modification-date order.
     pub fn selected_index(&self) -> Option<usize> {
         self.selected_id.and_then(|id| self.order.iter().position(|oid| *oid == id))
     }
@@ -118,7 +118,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
         self.files_by_id.get(&id).cloned()
     }
 
-    /// Select by index in creation-date order. O(1).
+    /// Select by index in modification-date order. O(1).
     pub fn select_index(&mut self, index: usize) -> Option<File> {
         let id = *self.order.get(index)?;
         self.select_by_id(id)

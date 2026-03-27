@@ -40,10 +40,14 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
         .into();
     }
 
-    let video = container(
+    // When fullscreen overlay is active, render blank space here — otherwise the video
+    // controls' tooltips (rendered at window level) bleed through the fullscreen overlay.
+    let video = container(if state.media_fullscreen() {
+        iced::widget::Space::new().into()
+    } else {
         media_viewer::view::view(state.media_viewer(), false, seg_start, seg_end, screenshot_secs.clone())
-            .map(Message::MediaViewer),
-    )
+            .map(Message::MediaViewer)
+    })
     .width(Length::Fixed(state.left_width()))
     .height(Length::Fill);
 

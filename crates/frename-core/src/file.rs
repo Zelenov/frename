@@ -38,8 +38,8 @@ pub struct File {
     id: FileId,
     /// Full path to the file (updated after a rename).
     file_path: Box<Path>,
-    /// File creation time (used for sorting).
-    created_at: SystemTime,
+    /// File modification time (used for sorting).
+    modified_at: SystemTime,
     /// Tags, name without extension, extension, and comment. File name is built from this snapshot.
     file_snapshot: FileSnapshot,
 }
@@ -49,29 +49,29 @@ pub struct File {
 // ---------------------------------------------------------------------------
 
 impl File {
-    fn new_from_path_and_time(file_path: Box<Path>, created_at: SystemTime) -> Self {
+    fn new_from_path_and_time(file_path: Box<Path>, modified_at: SystemTime) -> Self {
         let file_snapshot = FileTagger::parse(&file_path);
         Self {
             id: FileId::new(),
             file_path,
-            created_at,
+            modified_at,
             file_snapshot,
         }
     }
 
-    /// Create a file from a path only: loads metadata (created_at) and tags via FileTagger::parse.
+    /// Create a file from a path only: loads metadata (modified_at) and tags via FileTagger::parse.
     pub async fn open(path: impl AsRef<Path> + Send) -> Result<Self, std::io::Error> {
         let path = path.as_ref();
         let metadata = tokio::fs::metadata(path).await?;
-        let created_at = metadata.created().unwrap_or(SystemTime::UNIX_EPOCH);
+        let modified_at = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
         let file_path = path.to_path_buf().into_boxed_path();
-        Ok(Self::new_from_path_and_time(file_path, created_at))
+        Ok(Self::new_from_path_and_time(file_path, modified_at))
     }
 
     /// Create a file from path and creation time. For tests and programmatic use.
-    pub fn from_path(file_path: impl AsRef<Path>, created_at: SystemTime) -> Self {
+    pub fn from_path(file_path: impl AsRef<Path>, modified_at: SystemTime) -> Self {
         let file_path = file_path.as_ref().to_path_buf().into_boxed_path();
-        Self::new_from_path_and_time(file_path, created_at)
+        Self::new_from_path_and_time(file_path, modified_at)
     }
 
     // -----------------------------------------------------------------------
@@ -93,9 +93,9 @@ impl File {
         self.file_snapshot.name_without_extension()
     }
 
-    /// Get the creation time.
-    pub fn created_at(&self) -> SystemTime {
-        self.created_at
+    /// Get the modification time.
+    pub fn modified_at(&self) -> SystemTime {
+        self.modified_at
     }
 
     // -----------------------------------------------------------------------
@@ -184,7 +184,7 @@ mod tests {
         let f = File::from_path("/some/path/file.mp4", now);
         assert_eq!(f.file_path(), Path::new("/some/path/file.mp4"));
         assert_eq!(f.initial_filename(), "file");
-        assert_eq!(f.created_at(), now);
+        assert_eq!(f.modified_at(), now);
     }
 
     #[test]

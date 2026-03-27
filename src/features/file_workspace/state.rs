@@ -87,9 +87,10 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.tag_list.comment()
     }
 
-    /// Update the comment (does not write to disk).
+    /// Update the comment (does not write to disk). Positions the cursor at the end.
     pub fn set_comment(&mut self, comment: String) {
         self.comment_content = text_editor::Content::with_text(&comment);
+        self.comment_content.perform(text_editor::Action::Move(text_editor::Motion::DocumentEnd));
         self.tag_list.set_comment(comment);
     }
 

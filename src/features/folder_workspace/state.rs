@@ -207,9 +207,9 @@ impl FolderWorkspace {
                 let time_str = frename_core::Screenshot::new(position_ms).format_time();
                 let current = self.file_workspace.comment().to_string();
                 let new_comment = if current.is_empty() {
-                    format!("{}:", time_str)
+                    format!("{}: ", time_str)
                 } else {
-                    format!("{}\n{}:", current, time_str)
+                    format!("{}\n{}: ", current, time_str)
                 };
                 self.file_workspace.set_comment(new_comment);
                 frename_core::FileTagger::save_screenshot(&file_path, position_ms, &jpeg);
