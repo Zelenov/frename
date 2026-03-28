@@ -81,7 +81,7 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
         .min_right(200.0);
 
     let file_ws = state.file_workspace();
-    let is_synced = file_ws.is_selected_order_same_as_display_order();
+    let is_synced = file_ws.tag_list().is_selected_match_display_order();
     let file_workspace_panel = file_workspace::view::view(
         file_ws,
         state.tag_panel(),
