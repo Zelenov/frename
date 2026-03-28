@@ -356,21 +356,33 @@ impl FolderWorkspace {
     }
 
     fn apply_file_opened(&mut self, file: frename_core::File) -> Task<Message> {
-        self.media_fullscreen = false;
+        // Detect same-file "refresh" (e.g. undo of a tag toggle on the current file).
+        // In that case, skip media reload and fullscreen reset — only persist state.
+        let same_file = self.file_workspace.file()
+            .map_or(false, |f| f.file_path() == file.file_path());
+        if !same_file {
+            self.media_fullscreen = false;
+        }
         let snapshot = self.file_workspace.get_snapshot();
         self.file_workspace.set_file(Some(file.clone()));
         log::info!("Opening file: {}", file.file_path().display());
         let Some((id, snap)) = snapshot else {
             self.pending_file_updated = None;
+            if same_file { return Task::none(); }
             return self.media_viewer.open(&file).map(Message::MediaViewer);
         };
         if self.media_viewer.needs_unload_before_rename() {
             self.pending_file_updated = Some((id, snap));
             Task::done(Message::MediaViewer(media_viewer::Message::Unload))
         } else {
+            let media_task = if same_file {
+                Task::none()
+            } else {
+                self.media_viewer.open(&file).map(Message::MediaViewer)
+            };
             Task::batch([
                 Task::done(Message::FileUpdated { id, snapshot: snap }),
-                self.media_viewer.open(&file).map(Message::MediaViewer),
+                media_task,
             ])
         }
     }

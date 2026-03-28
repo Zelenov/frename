@@ -2,6 +2,7 @@
 
 mod db;
 mod directory;
+pub(crate) mod transliteration;
 mod file_kind;
 mod folder_file;
 mod file;

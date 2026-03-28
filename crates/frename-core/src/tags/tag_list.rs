@@ -76,6 +76,21 @@ fn match_rank(query_lower: &str, tag_name: &str) -> Option<u8> {
     None
 }
 
+/// Like `match_rank`, but also tries the QWERTY-transliterated version of the query
+/// so that Russian-layout input matches English tag names.
+fn match_rank_translit(query_lower: &str, tag_name: &str) -> Option<u8> {
+    let direct = match_rank(query_lower, tag_name);
+    let qwerty = crate::transliteration::ru_to_qwerty(query_lower);
+    if qwerty == query_lower {
+        return direct;
+    }
+    let via_qwerty = match_rank(&qwerty, tag_name);
+    match (direct, via_qwerty) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    }
+}
+
 impl<S> TagList<S> {
     /// Returns the next color index from the sequential counter (cycles through 0..TAG_PALETTE_LEN).
     fn next_color_index(&mut self) -> u8 {
@@ -86,7 +101,7 @@ impl<S> TagList<S> {
 
     fn tag_matches_filter(&self, t: &Tag) -> bool {
         let q = self.filter_query.trim().to_lowercase();
-        q.is_empty() || match_rank(&q, t.tag()).is_some()
+        q.is_empty() || match_rank_translit(&q, t.tag()).is_some()
     }
 
     fn rebuild_filtered_display_tag_ids(&mut self) {
@@ -109,7 +124,7 @@ impl<S> TagList<S> {
             let rank: u8 = if q.is_empty() {
                 0
             } else {
-                tag.and_then(|t| match_rank(&q, t.tag())).unwrap_or(2)
+                tag.and_then(|t| match_rank_translit(&q, t.tag())).unwrap_or(2)
             };
             (section, rank)
         });
