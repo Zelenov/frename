@@ -1,46 +1,71 @@
-# GStreamer Setup Instructions for Windows
+# GStreamer Setup
 
-## Quick Setup
+frename uses GStreamer for video playback. Install it once — the app will work automatically.
 
-1. **Download GStreamer installers** from: https://gstreamer.freedesktop.org/download/
+**Download: https://gstreamer.freedesktop.org/download/**
 
-   Download BOTH files for MSVC x86_64:
-   - Runtime installer: `gstreamer-1.0-msvc-x86_64-{VERSION}.msi`
-   - Development installer: `gstreamer-1.0-devel-msvc-x86_64-{VERSION}.msi`
+---
 
-2. **Install Runtime**: Run the runtime MSI, use default location (usually `C:\gstreamer\1.0\msvc_x86_64\`)
+## Windows
 
-3. **Install Development**: Run the development MSI to the SAME location
+frename runtime requires a normal system GStreamer installation and `PATH` entry.
+The vendored `vendor\gstreamer\minimal_msvc_x86_64` bundle is for CI/build only.
 
-4. **Add to PATH**:
-   - Search Windows for "environment variables"
-   - Click "Edit the system environment variables"
-   - Click "Environment Variables" button
-   - Under "System variables", find "Path", click "Edit"
-   - Click "New" and add: `C:\gstreamer\1.0\msvc_x86_64\bin`
-   - Click OK on all dialogs
+1. Open **https://gstreamer.freedesktop.org/download/**
+2. Under **MSVC**, download the **Runtime** installer for your architecture:
+   - 64-bit: `gstreamer-1.0-msvc-x86_64-VERSION.msi`
+   - 32-bit: `gstreamer-1.0-msvc-x86-VERSION.msi`
+3. Run the installer. Default location: `C:\gstreamer\1.0\msvc_x86_64\`
+4. Add GStreamer to PATH:
+   - Open **Start → Edit the system environment variables → Environment Variables**
+   - Under System variables, edit **Path**, add: `C:\gstreamer\1.0\msvc_x86_64\bin`
+5. **Restart** the app or terminal.
 
-5. **Restart your terminal/IDE** - Environment variables won't be picked up until you restart
+---
 
-6. **Test installation**: 
-   ```powershell
-   gst-inspect-1.0 --version
+## Linux (Ubuntu / Debian)
+
+```bash
+sudo apt-get install \
+  gstreamer1.0-plugins-base \
+  gstreamer1.0-plugins-good \
+  gstreamer1.0-plugins-bad \
+  gstreamer1.0-plugins-ugly \
+  gstreamer1.0-libav
+```
+
+Other distributions: use `dnf`, `pacman`, or `zypper` with equivalent package names.
+
+---
+
+## macOS
+
+1. Open **https://gstreamer.freedesktop.org/download/**
+2. Under **macOS**, download:
+   - `gstreamer-1.0-VERSION-universal.pkg`
+3. Run the installer.
+4. Add to `~/.zshrc` or `~/.bash_profile`:
+   ```bash
+   export PATH="/Library/Frameworks/GStreamer.framework/Versions/1.0/bin:$PATH"
    ```
+5. Reload: `source ~/.zshrc`
 
-   Should show GStreamer version info.
+---
 
-7. **Try building again**:
-   ```powershell
-   cargo clean
-   cargo build
-   ```
+## Verify
 
-## If You Still Get Errors
+```bash
+gst-inspect-1.0 --version
+```
 
-If pkg-config is still missing, you may need to install it:
-- Download from: https://sourceforge.net/projects/pkgconfiglite/
-- Extract `pkg-config.exe` to a folder in your PATH (or to `C:\gstreamer\1.0\msvc_x86_64\bin\`)
+---
 
-## Alternative: Use Windows Video Player API Instead
+## Building from source
 
-If GStreamer is too problematic, I can implement a simpler solution using Windows Media Foundation or a different approach.
+In addition to the runtime, you need the **development package**:
+
+- **Windows:** download and install `gstreamer-1.0-devel-msvc-x86_64-VERSION.msi` from the same page
+- **Linux:** `sudo apt-get install libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev`
+- **macOS:** download `gstreamer-1.0-devel-VERSION-universal.pkg` from the same page
+
+Then: `cargo build`

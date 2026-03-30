@@ -3,6 +3,7 @@
 mod file_snapshot;
 mod screenshot;
 mod file_tagger_backend;
+mod folder_info;
 mod file_tagger;
 mod file_tagger_logging;
 mod in_memory_file_tagger;
@@ -16,6 +17,7 @@ pub use file_snapshot::FileSnapshot;
 pub use screenshot::Screenshot;
 pub use file_tagger::{install_file_tagger, FileTagger, SaveAndReparse};
 pub use file_tagger_backend::FileTaggerBackend;
+pub use folder_info::FolderInfo;
 pub use file_tagger_logging::LoggingFileTagger;
 pub use in_memory_file_tagger::InMemoryFileTagger;
 pub use production_file_tagger::ProductionFileTagger;

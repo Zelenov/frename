@@ -1,7 +1,7 @@
 //! File structure: path/metadata and tag-based rename state.
 //! File holds a FileSnapshot (tags + name + extension). From File's perspective we only update tags in it.
 
-use crate::{FileKind, FileSnapshot, FileTagger};
+use crate::{FileKind, FileSnapshot, FileTagger, FolderInfo};
 use std::path::Path;
 use std::time::SystemTime;
 use uuid::Uuid;
@@ -49,14 +49,19 @@ pub struct File {
 // ---------------------------------------------------------------------------
 
 impl File {
-    fn new_from_path_and_time(file_path: Box<Path>, modified_at: SystemTime) -> Self {
-        let file_snapshot = FileTagger::parse(&file_path);
+    fn new_from_parts(file_path: Box<Path>, modified_at: SystemTime, file_snapshot: FileSnapshot) -> Self {
         Self {
             id: FileId::new(),
             file_path,
             modified_at,
             file_snapshot,
         }
+    }
+
+    fn new_from_path_and_time(file_path: Box<Path>, modified_at: SystemTime) -> Self {
+        let folder_info = FolderInfo::default();
+        let file_snapshot = FileTagger::parse(&file_path, &folder_info);
+        Self::new_from_parts(file_path, modified_at, file_snapshot)
     }
 
     /// Create a file from a path only: loads metadata (modified_at) and tags via FileTagger::parse.
@@ -66,6 +71,19 @@ impl File {
         let modified_at = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
         let file_path = path.to_path_buf().into_boxed_path();
         Ok(Self::new_from_path_and_time(file_path, modified_at))
+    }
+
+    /// Create a file from path and folder info (used by directory scanner).
+    pub async fn open_with_folder_info(
+        path: impl AsRef<Path> + Send,
+        folder_info: &FolderInfo,
+    ) -> Result<Self, std::io::Error> {
+        let path = path.as_ref();
+        let metadata = tokio::fs::metadata(path).await?;
+        let modified_at = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+        let file_path = path.to_path_buf().into_boxed_path();
+        let file_snapshot = FileTagger::parse(&file_path, folder_info);
+        Ok(Self::new_from_parts(file_path, modified_at, file_snapshot))
     }
 
     /// Create a file from path and creation time. For tests and programmatic use.

@@ -8,6 +8,7 @@
 use std::path::PathBuf;
 
 use arboard;
+use rfd;
 use frename_core::{
     AppDatabase, AppStateStore, File, FileId, FileSnapshot, FolderAndFile, LoggingAppStateStore,
     NavigateFileCommand, ReorderTagCommand, ToggleTagCommand, PasteTagsCommand,
@@ -219,6 +220,20 @@ impl FolderWorkspace {
                 } else {
                     self.handle_tag_panel(tag_panel::Message::SetFilter(String::new()))
                 }
+            }
+            Message::OpenFilePicker => {
+                Task::perform(
+                    async {
+                        rfd::AsyncFileDialog::new()
+                            .pick_file()
+                            .await
+                            .map(|f| f.path().to_path_buf())
+                    },
+                    |opt| match opt {
+                        Some(path) => Message::OpenFile(path),
+                        None => Message::Noop,
+                    },
+                )
             }
         }
     }
@@ -449,6 +464,7 @@ impl FolderWorkspace {
             }
             folder::Message::ScrollToSelected => Task::done(Message::ScrollFolderListToSelected),
             folder::Message::CopyTagsFrom(id) => self.copy_tags_from_id(id),
+            folder::Message::OpenFolder => Task::done(Message::OpenFilePicker),
         }
     }
 

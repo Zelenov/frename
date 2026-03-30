@@ -19,7 +19,7 @@ pub use file::{File, FileId};
 pub use ordered::{OrderableEntry, OrderedCollection, OrderKey, OrderedThing};
 pub use tags::{
     install_file_tagger,
-    FileSnapshot, FileTagger, FileTaggerBackend, LoggingFileTagger,
+    FileSnapshot, FileTagger, FileTaggerBackend, FolderInfo, LoggingFileTagger,
     InMemoryFileTagger, ProductionFileTagger,
     SaveAndReparse, Screenshot, StoredTag, Tag, TagColorMapping, TagId, TagList,
 };

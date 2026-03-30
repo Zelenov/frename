@@ -10,20 +10,10 @@ struct Migration {
     sql: &'static str,
 }
 
-const MIGRATIONS: &[Migration] = &[
-    Migration {
-        version: 1,
-        sql: schema::M1_FULL_SCHEMA,
-    },
-    Migration {
-        version: 2,
-        sql: schema::M2_PANEL_WIDTHS,
-    },
-    Migration {
-        version: 3,
-        sql: schema::M3_VIDEO_SETTINGS,
-    },
-];
+const MIGRATIONS: &[Migration] = &[Migration {
+    version: 1,
+    sql: schema::M1_FULL_SCHEMA,
+}];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
 fn current_version(conn: &Connection) -> Result<u32, rusqlite::Error> {

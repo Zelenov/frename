@@ -2,12 +2,13 @@
 
 use std::path::{Path, PathBuf};
 
-use super::FileSnapshot;
+use super::file_snapshot::FileSnapshot;
+use super::folder_info::FolderInfo;
 
 /// The interface that both InMemoryFileTagger and ProductionFileTagger implement.
 pub trait FileTaggerBackend: Send + Sync {
     /// Parse the file at `path` and return its snapshot (tags, name, extension, comment).
-    fn parse(&self, path: &Path) -> FileSnapshot;
+    fn parse(&self, path: &Path, folder_info: &FolderInfo) -> FileSnapshot;
 
     /// Save `snapshot` for the file at `path`.
     /// Returns the new path (which may differ from `path` if the file was renamed).

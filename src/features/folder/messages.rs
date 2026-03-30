@@ -15,4 +15,6 @@ pub enum Message {
     ScrollToSelected,
     /// Copy tags from the file with this stable ID into the currently open file.
     CopyTagsFrom(frename_core::FileId),
+    /// Open a native file picker dialog (from the controls bar).
+    OpenFolder,
 }

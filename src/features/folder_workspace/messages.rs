@@ -90,4 +90,6 @@ pub enum Message {
     CommentAction(text_editor::Action),
     /// Screenshot captured at position (ms) with JPEG bytes.
     ScreenshotTaken(u64, Vec<u8>),
+    /// Open a native file picker dialog so the user can choose a file to open.
+    OpenFilePicker,
 }

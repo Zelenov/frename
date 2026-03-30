@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use super::file_snapshot::FileSnapshot;
 use super::screenshot::Screenshot;
 use super::file_tagger_backend::FileTaggerBackend;
+use super::FolderInfo;
 
 pub struct ProductionFileTagger;
 
@@ -32,20 +33,16 @@ fn is_screenshot_sidecar(name: &str) -> bool {
     false
 }
 
-fn load_screenshot_positions(file_path: &Path) -> Vec<Screenshot> {
+fn load_screenshot_positions(file_path: &Path, folder_info: &FolderInfo) -> Vec<Screenshot> {
     let Some(file_name) = file_path.file_name().and_then(|n| n.to_str()) else {
         return Vec::new();
     };
     let prefix = format!("{}.snap.", file_name);
-    let parent = file_path.parent().unwrap_or(Path::new("."));
-    let mut screenshots: Vec<Screenshot> = std::fs::read_dir(parent)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|entry| {
-            let name = entry.file_name();
-            let name = name.to_string_lossy();
-            let rest = name.strip_prefix(&*prefix)?;
+    let mut screenshots: Vec<Screenshot> = folder_info
+        .file_names()
+        .iter()
+        .filter_map(|name| {
+            let rest = name.strip_prefix(&prefix)?;
             let time_str = rest.strip_suffix(".jpg")?;
             Screenshot::parse_time(time_str).map(Screenshot::new)
         })
@@ -59,11 +56,27 @@ fn load_screenshot_positions(file_path: &Path) -> Vec<Screenshot> {
 // ---------------------------------------------------------------------------
 
 impl FileTaggerBackend for ProductionFileTagger {
-    fn parse(&self, path: &Path) -> FileSnapshot {
+    fn parse(&self, path: &Path, folder_info: &FolderInfo) -> FileSnapshot {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         let mut snapshot = FileSnapshot::parse(name);
         snapshot.set_comment(crate::comment::load_comment(path));
-        snapshot.set_screenshots(load_screenshot_positions(path));
+        // Fallback for non-directory parsing paths (e.g. save_and_reparse):
+        // if folder_info is empty, collect names once from the parent directory.
+        let owned_info;
+        let effective_info = if folder_info.file_names().is_empty() {
+            let parent = path.parent().unwrap_or(Path::new("."));
+            let file_names = std::fs::read_dir(parent)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .filter_map(|entry| entry.file_name().to_str().map(|s| s.to_string()))
+                .collect();
+            owned_info = FolderInfo::new(file_names);
+            &owned_info
+        } else {
+            folder_info
+        };
+        snapshot.set_screenshots(load_screenshot_positions(path, effective_info));
         snapshot
     }
 
