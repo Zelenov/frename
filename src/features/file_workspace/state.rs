@@ -183,11 +183,6 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.tag_list.unstar_tag(id)
     }
 
-    /// Returns `true` if checked tags have the same relative order in display (DB) and selected (file name panel).
-    pub fn is_selected_order_same_as_display_order(&self) -> bool {
-        self.tag_list.is_selected_order_same_as_display_order()
-    }
-
     /// Sync Up: copy file name panel order → display/DB. Returns error if persist fails.
     pub fn sync_selected_to_display(
         &mut self,
@@ -205,7 +200,7 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     /// Uses unlocked mode: display keeps DB order (new unstored tags prepended), selected reflects
     /// the pasted snapshot order.
     pub fn reinitialize_tags_from_snapshot(&mut self, snapshot: FileSnapshot) {
-        self.tag_list = TagList::new_unlocked(self.store.clone(), snapshot);
+        self.tag_list = TagList::new(self.store.clone(), snapshot);
     }
 
     /// Segment start in seconds for the current file, if set.

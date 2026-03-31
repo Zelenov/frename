@@ -6,6 +6,7 @@ use std::sync::Mutex;
 
 use super::file_snapshot::FileSnapshot;
 use super::file_tagger_backend::FileTaggerBackend;
+use super::FolderInfo;
 
 #[derive(Default)]
 pub struct InMemoryFileTagger {
@@ -13,7 +14,7 @@ pub struct InMemoryFileTagger {
 }
 
 impl FileTaggerBackend for InMemoryFileTagger {
-    fn parse(&self, path: &Path) -> FileSnapshot {
+    fn parse(&self, path: &Path, _folder_info: &FolderInfo) -> FileSnapshot {
         let stored = self.storage.lock().expect("lock").get(path).cloned();
         if let Some(snap) = stored { return snap; }
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");

@@ -3,19 +3,18 @@
 //!
 //! Storage: [tags_by_id] (hash) for all tag data; [tags_ordered] (order + tag id only). Display = ordered; filtered = display filtered by name.
 //!
-//! Initialization order (locked = initial file open; unlocked = paste):
+//! Initialization order:
 //! 1. Stored [all] → hash (checked = exists in snapshot, order = from db, starred = from db).
 //! 2. Snapshot [where value not in stored] → hash (checked = true, order = 0).
-//! 3. locked=true:  stored-NOT-in-snapshot → display (snapshot tags added in step 5).
-//!    locked=false: ALL stored → display (full DB view; snapshot-order correction applied only to selected).
+//! 3. ALL stored → display in DB order.
 //! 4. Dedupe snapshot (first occurrence wins), then reverse.
-//! 5. Snapshot items NOT yet in display → insert at beginning (reversed iteration → snapshot order at front).
-//!    locked=true:  all snapshot items inserted (stored-in-snapshot excluded from step 3 so not in display yet).
-//!    locked=false: only not-stored items inserted (stored-in-snapshot already in display at their DB positions).
+//! 5. Snapshot-only (unsaved) tags → insert in display after their nearest snapshot predecessor that is
+//!    already in display. Tags with no in-display predecessor go to the front.
 //! 6. selected_tag_ids = display_tag_ids.clone().
-//! 7. For each consecutive snapshot pair: if cur is not after prev in display, move cur after prev in selected.
-//!    Corrects snapshot ordering in selected for locked=false (stored items may be at non-snapshot positions in display).
-//! 8. locked=true: copy selected → display (final display matches snapshot order). Build filtered_display_tag_ids.
+//! 7. sync_order_from(snapshot): reorder snapshot items in selected to exactly match snapshot sequence.
+//!    Non-snapshot items keep their relative positions.
+//! 8. Compute is_selected_match_display_order (= checked tags in same relative order in both).
+//!    sync_locked starts true; clamped to sync_locked AND is_selected_match_display_order.
 
 use std::collections::{HashMap, HashSet};
 
@@ -61,6 +60,12 @@ pub struct TagList<S> {
     comment: String,
     /// Screenshot markers for this file (from snapshot at construction).
     screenshots: Vec<crate::Screenshot>,
+    /// Whether the checked-tag order in selected matches the order in display (cached, updated on every mutation).
+    is_selected_match_display_order: bool,
+    /// When true, reordering chips in the file name panel immediately syncs the new order to display/DB.
+    /// Toggled by the lock button (only when is_selected_match_display_order is true).
+    /// Automatically set to false when the two orders diverge.
+    sync_locked: bool,
 }
 
 /// Returns the match rank for a non-empty, pre-lowercased query against a tag name.
@@ -142,22 +147,8 @@ impl<S> TagList<S> {
 }
 
 impl<S: StoredTagStore + Clone> TagList<S> {
-    /// Create a new TagList from the store and the initial file snapshot (locked = true).
-    /// Use this for normal file opens. For paste operations use [`TagList::new_unlocked`].
+    /// Create a new TagList from the store and the initial file snapshot
     pub fn new(store: S, file_snapshot: FileSnapshot) -> Self {
-        Self::new_with_lock(store, file_snapshot, true)
-    }
-
-    /// Create a new TagList with locked = false (paste / reinitialize from pasted snapshot).
-    /// Display keeps the full DB order (new unstored tags prepended); selected is corrected to
-    /// snapshot order so the file-name panel reflects the pasted tag sequence.
-    pub fn new_unlocked(store: S, file_snapshot: FileSnapshot) -> Self {
-        Self::new_with_lock(store, file_snapshot, false)
-    }
-
-    /// Core constructor. `locked` controls how display_tag_ids and selected_tag_ids relate to the
-    /// snapshot order — see the module-level doc comment for the full step-by-step description.
-    fn new_with_lock(store: S, file_snapshot: FileSnapshot, locked: bool) -> Self {
         let name_without_extension = file_snapshot.name_without_extension().to_string();
         let extension = file_snapshot.extension().to_string();
         let initial_file_name = file_snapshot.initial_file_name().to_string();
@@ -193,21 +184,15 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             value_to_id.insert(name.clone(), id);
         }
 
-        // 3. Seed display_tag_ids from stored tags.
-        //    locked=true:  stored-NOT-in-snapshot only (snapshot tags will be prepended in step 5).
-        //    locked=false: ALL stored in DB order (paste keeps the grid order; only new tags prepend).
+        // 3. ALL stored → display in DB order.
         let mut display_tag_ids: OrderedCollection<TagId, ()> = OrderedCollection::new();
         for st in stored_tags.iter() {
-            if locked && file_snapshot.has_tag(st.value()) {
-                continue; // locked=true: skip; snapshot tags are positioned by step 5 + step 8
-            }
             let id = TagId(st.id());
             let order = st.sort_order();
             display_tag_ids.insert(id, (), order);
         }
 
-        // 4. Dedupe snapshot (first occurrence wins) and reverse in one pass for the insert loop.
-        //    The reversed vec is also used for the pair loop via windows(2).rev() with swapped indices.
+        // 4. Dedupe snapshot (first occurrence wins) and reverse for step 5 and 7 iteration.
         let snapshot_deduped_reversed: Vec<String> = {
             let mut seen = HashSet::new();
             let mut v: Vec<String> = snapshot_tags
@@ -219,51 +204,41 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             v
         };
 
-        // 5. Snapshot items NOT yet in display → insert at beginning (reversed → snapshot order at front).
-        //    locked=true:  all snapshot items qualify (stored-in-snapshot excluded from step 3).
-        //    locked=false: only not-stored items qualify (stored-in-snapshot already in display).
+        // 5. Snapshot-only (unsaved) tags → insert in display after their nearest snapshot
+        //    predecessor that is already in display. Tags with no in-display predecessor go first.
+        //    Stored snapshot tags are already at their DB positions from step 3.
+        let snapshot_forward_ids: Vec<TagId> = snapshot_deduped_reversed.iter().rev()
+            .filter_map(|n| value_to_id.get(n.as_str()))
+            .copied()
+            .collect();
         let mut display_tags_rebalanced = false;
-        for id in snapshot_deduped_reversed.iter().filter_map(|n| value_to_id.get(n)).copied() {
-            if display_tag_ids.get(&id).is_none() {
-                display_tags_rebalanced |= display_tag_ids.insert_after(id, (), None);
-            }
+        for (idx, &id) in snapshot_forward_ids.iter().enumerate() {
+            if display_tag_ids.get(&id).is_some() { continue; } // stored → already in display
+            // Nearest in-display predecessor (scan backwards through snapshot up to this tag).
+            let after_id = snapshot_forward_ids[..idx].iter().rev()
+                .find(|&&pred| display_tag_ids.get(&pred).is_some())
+                .copied();
+            display_tags_rebalanced |= display_tag_ids.insert_after(id, (), after_id.as_ref());
         }
 
         // 6. selected_tag_ids starts as a copy of display order.
         let mut selected_tag_ids = display_tag_ids.clone();
 
-        // 7. For each consecutive snapshot pair (original order): if cur is not after prev in
-        //    display_tag_ids, move cur after prev in selected_tag_ids. Iterating windows(2).rev()
-        //    on the reversed vec with swapped indices yields the original-order pairs.
-        //    This corrects the file-name-panel order for locked=false, where stored-in-snapshot
-        //    items sit at their DB positions in display (which may differ from snapshot order).
-        //    For locked=true this loop is a no-op because step 5 already placed all snapshot items
-        //    in snapshot order in display.
-        for window in snapshot_deduped_reversed.windows(2).rev() {
-            let prev_name = &window[1]; // original order: prev (appears earlier in snapshot)
-            let cur_name = &window[0];  // original order: cur  (appears later  in snapshot)
-            if let (Some(&prev_id), Some(&cur_id)) =
-                (value_to_id.get(prev_name), value_to_id.get(cur_name))
-            {
-                let cur_is_after_prev = match (
-                    display_tag_ids.get_order(&prev_id),
-                    display_tag_ids.get_order(&cur_id),
-                ) {
-                    (Some(p), Some(c)) => c > p,
-                    _ => false,
-                };
-                if !cur_is_after_prev {
-                    selected_tag_ids.insert_after(cur_id, (), Some(&prev_id));
+        // 7. Sync checked-tag order in selected_tag_ids to exactly match snapshot order.
+        //    Non-snapshot tags keep their relative positions among themselves.
+        {
+            let mut snapshot_ordered: OrderedCollection<TagId, ()> = OrderedCollection::new();
+            let mut last: Option<TagId> = None;
+            for name in snapshot_deduped_reversed.iter().rev() {
+                if let Some(&id) = value_to_id.get(name.as_str()) {
+                    snapshot_ordered.insert_after(id, (), last.as_ref());
+                    last = Some(id);
                 }
             }
+            selected_tag_ids.sync_order_from(&snapshot_ordered);
         }
-
-        // 8. locked=true: sync selected order → display (no-op for locked=true since step 5
-        //    already placed all snapshot items in order, making selected == display after step 6).
-        if locked {
-            display_tag_ids.sync_order_from(&selected_tag_ids);
-        }
-
+        // 8. Compute is_selected_match_display_order and initialise sync_locked.
+        //    sync_locked starts true and is clamped to (sync_locked AND is_selected_match) below.
         let filter_query = String::new();
         // Start color counter at number of stored tags so sequential tags get distinct colors.
         let color_counter = stored_tags.len() as u8;
@@ -283,11 +258,13 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             segment_end,
             comment,
             screenshots,
+            is_selected_match_display_order: false,
+            sync_locked: true,
         };
         list.rebuild_filtered_display_tag_ids();
+        list.update_is_selected_match_display_order();
         log::info!(
-            "TagList::new_with_lock locked={} snapshot: name={} ext={} initial={:?}",
-            locked,
+            "TagList::new_with_lock snapshot: name={} ext={} initial={:?}",
             list.name_without_extension,
             list.extension,
             list.initial_file_name
@@ -343,16 +320,19 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         if let Some(tag) = self.tags_by_id.get_mut(&id) {
             tag.toggle();
         }
+        self.update_is_selected_match_display_order();
     }
 
     /// All starred stored tags in display_tag_ids order (unaffected by the search filter).
     /// Used by the starred tags panel shown between the search bar and tag grid.
     pub fn starred_tags_in_display_order(&self) -> Vec<&Tag> {
-        self.display_tag_ids
+        let mut tags: Vec<&Tag> = self.display_tag_ids
             .iter()
             .filter_map(|(id, _, _)| self.tags_by_id.get(id))
             .filter(|t| t.is_starred())
-            .collect()
+            .collect();
+        tags.sort_by(|a, b| a.tag().to_lowercase().cmp(&b.tag().to_lowercase()));
+        tags
     }
 
 
@@ -407,7 +387,9 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     }
 
     /// Reorders tags (file name panel): place `moved_id` at `index` in the checked (selected) list. Index is in the checked-only view; order is changed only in [selected_tag_ids].
+    /// When `sync_locked` is true, the new order is immediately persisted to display/DB as well.
     pub fn reorder_tag_to_index(&mut self, moved_id: TagId, index: usize) {
+        let was_locked = self.sync_locked;
         let checked = self.checked_ids_in_selected_order();
         if !checked.contains(&moved_id) {
             return;
@@ -428,6 +410,12 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         } else {
             self.selected_tag_ids.insert_before(moved_id, (), None);
         }
+        if was_locked {
+            if let Err(e) = self.sync_selected_to_display() {
+                log::error!("reorder locked: failed to persist display order: {}", e);
+            }
+        }
+        self.update_is_selected_match_display_order();
     }
 
     /// Build a FileSnapshot from checked (selected) tags in [selected_tag_ids] order (file name panel order).
@@ -513,13 +501,14 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let tag = self.tags_by_id.get_mut(&id).unwrap();
         tag.set_order(order);
         self.rebuild_filtered_display_tag_ids();
+        self.update_is_selected_match_display_order();
         Some(id)
     }
 
     /// Reinitialize the tag list from a snapshot, preserving the current store.
     /// Used by PasteTagsCommand to undo/redo paste operations.
     pub fn reinitialize_from_snapshot(&mut self, snapshot: FileSnapshot) {
-        *self = TagList::new_unlocked(self.store.clone(), snapshot);
+        *self = TagList::new(self.store.clone(), snapshot);
     }
 
     /// Capture all data needed to undo a delete for the tag with the given id.
@@ -562,6 +551,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         self.display_tag_ids.insert(tag_id, (), sort_order);
         self.selected_tag_ids.insert(tag_id, (), sort_order);
         self.rebuild_filtered_display_tag_ids();
+        self.update_is_selected_match_display_order();
         Ok(())
     }
 
@@ -581,6 +571,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             t.set_order(order);
         }
         self.rebuild_filtered_display_tag_ids();
+        self.update_is_selected_match_display_order();
         true
     }
 
@@ -646,6 +637,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         self.display_tag_ids.remove(&id);
         self.selected_tag_ids.remove(&id);
         self.rebuild_filtered_display_tag_ids();
+        self.update_is_selected_match_display_order();
         Ok(())
     }
 
@@ -660,6 +652,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             .sync_order_from(&self.selected_tag_ids);
         self.persist_display_order()?;
         self.rebuild_filtered_display_tag_ids();
+        self.update_is_selected_match_display_order();
         Ok(())
     }
 
@@ -668,6 +661,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     pub fn sync_display_to_selected(&mut self) {
         self.selected_tag_ids
             .sync_order_from(&self.display_tag_ids);
+        self.update_is_selected_match_display_order();
     }
 
     /// Returns `true` if the checked tags have the same relative order in both
@@ -680,6 +674,44 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             .collect();
         let in_selected = self.checked_ids_in_selected_order();
         in_display == in_selected
+    }
+
+    /// Recompute `is_selected_match_display_order` and clamp `sync_locked`:
+    /// if the orders diverge, `sync_locked` is forced to false.
+    /// Call after every mutation to `selected_tag_ids`, `display_tag_ids`, or checked state.
+    fn update_is_selected_match_display_order(&mut self) {
+        self.is_selected_match_display_order = self.is_selected_order_same_as_display_order();
+        if !self.is_selected_match_display_order {
+            self.sync_locked = false;
+        }
+    }
+
+    /// Cached result of whether the checked-tag order matches in both collections.
+    /// Updated automatically on every mutation; use this in the view instead of recomputing.
+    /// All tag names in raw display order (no section sorting, no filter). Test/diagnostic use.
+    #[cfg(test)]
+    pub fn display_tag_names_ordered(&self) -> Vec<String> {
+        self.display_tag_ids
+            .iter()
+            .filter_map(|(id, _, _)| self.tags_by_id.get(id))
+            .map(|t| t.tag().to_string())
+            .collect()
+    }
+
+    pub fn is_selected_match_display_order(&self) -> bool {
+        self.is_selected_match_display_order
+    }
+
+    /// Whether lock mode is active: reordering chips immediately syncs to display/DB.
+    pub fn sync_locked(&self) -> bool {
+        self.sync_locked
+    }
+
+    /// Set lock mode. Only takes effect when `is_selected_match_display_order` is true.
+    pub fn set_sync_locked(&mut self, locked: bool) {
+        if self.is_selected_match_display_order {
+            self.sync_locked = locked;
+        }
     }
 
     // --- Star / unstar ---
@@ -1063,5 +1095,57 @@ mod tests {
             .map(|t| t.tag().to_string())
             .collect();
         assert_eq!(names, ["A", "B", "C"], "filtered order = display order when filter empty");
+    }
+
+    /// Paste (new_unlocked) must produce selected order = snapshot order regardless of DB order.
+    #[test]
+    fn new_selected_matches_snapshot_order_regardless_of_db_order() {
+        // DB stores tags in order C, A, D, B (different from snapshot A, B, C, D).
+        let store = FakeAppStorage::new()
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "C", 1, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "A", 2, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "D", 3, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "B", 4, false), 0);
+        let snapshot = FileSnapshot::new(
+            vec!["A".into(), "B".into(), "C".into(), "D".into()],
+            "name", "mp4", "A.B.C.D.name.mp4",
+        );
+        let list = TagList::new(store, snapshot);
+        // file_snapshot() returns checked tags in selected order — must be A, B, C, D.
+        assert_eq!(list.file_snapshot().tags(), ["A", "B", "C", "D"]);
+    }
+
+    /// FILE=A B C D F, DB=G A H D C.
+    /// Display must keep DB order for stored tags; unsaved B goes after A, unsaved F after D.
+    /// Selected must be snapshot order. is_selected_match must be false (D before C in display, C before D in selected).
+    #[test]
+    fn display_db_order_unsaved_after_predecessor_is_selected_match_false() {
+        let store = FakeAppStorage::new()
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "G", 1, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "A", 2, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "H", 3, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "D", 4, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "C", 5, false), 0);
+        let snapshot = FileSnapshot::new(
+            vec!["A".into(), "B".into(), "C".into(), "D".into(), "F".into()],
+            "name", "mp4", "A.B.C.D.F.name.mp4",
+        );
+        let list = TagList::new(store, snapshot);
+
+        // Selected (file name panel) must follow snapshot order.
+        assert_eq!(list.file_snapshot().tags(), ["A", "B", "C", "D", "F"]);
+
+        // Display must have B after A and F after D (unsaved tags inserted near predecessors).
+        let display_names = list.display_tag_names_ordered();
+        let b_pos = display_names.iter().position(|n| n == "B").unwrap();
+        let a_pos = display_names.iter().position(|n| n == "A").unwrap();
+        let f_pos = display_names.iter().position(|n| n == "F").unwrap();
+        let d_pos = display_names.iter().position(|n| n == "D").unwrap();
+        assert!(b_pos == a_pos + 1, "B must be immediately after A in display, got display={display_names:?}");
+        assert!(f_pos == d_pos + 1, "F must be immediately after D in display, got display={display_names:?}");
+
+        // Orders differ (D before C in display, C before D in selected) → is_selected_match = false.
+        assert!(!list.is_selected_match_display_order());
+        assert!(!list.sync_locked());
     }
 }

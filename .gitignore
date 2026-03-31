@@ -1,6 +1,7 @@
 # Rust
 /target/
-Cargo.lock
+# Keep workspace root lockfile tracked for reproducible CI builds.
+crates/*/Cargo.lock
 
 # IDE
 .vscode/

@@ -9,6 +9,7 @@ use std::sync::OnceLock;
 
 use super::file_snapshot::FileSnapshot;
 use super::file_tagger_backend::FileTaggerBackend;
+use super::folder_info::FolderInfo;
 use super::in_memory_file_tagger::InMemoryFileTagger;
 
 static BACKEND: OnceLock<Box<dyn FileTaggerBackend>> = OnceLock::new();
@@ -27,8 +28,8 @@ fn backend() -> &'static dyn FileTaggerBackend {
 pub struct FileTagger;
 
 impl FileTagger {
-    pub fn parse(path: &Path) -> FileSnapshot {
-        backend().parse(path)
+    pub fn parse(path: &Path, folder_info: &FolderInfo) -> FileSnapshot {
+        backend().parse(path, folder_info)
     }
 
     /// Returns the new path (may differ from `path` after a disk rename).
@@ -62,7 +63,8 @@ pub trait SaveAndReparse {
 impl SaveAndReparse for FileSnapshot {
     fn save_and_reparse(&self, path: &Path) -> (PathBuf, FileSnapshot) {
         let new_path = FileTagger::save(self, path);
-        let snapshot = FileTagger::parse(&new_path);
+        let folder_info = FolderInfo::default();
+        let snapshot = FileTagger::parse(&new_path, &folder_info);
         (new_path, snapshot)
     }
 }

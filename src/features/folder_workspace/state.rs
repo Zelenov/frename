@@ -8,6 +8,7 @@
 use std::path::PathBuf;
 
 use arboard;
+use rfd;
 use frename_core::{
     AppDatabase, AppStateStore, File, FileId, FileSnapshot, FolderAndFile, LoggingAppStateStore,
     NavigateFileCommand, ReorderTagCommand, ToggleTagCommand, PasteTagsCommand,
@@ -50,8 +51,6 @@ pub struct FolderWorkspace {
     media_viewer: MediaViewerState,
     tag_panel: TagPanelState,
     file_name_panel: FileNamePanelState,
-    /// Whether lock mode is active (sync drag → DB). Shown when sequences are equal.
-    sync_locked: bool,
     /// Deferred rename: set when media must unload before the previous file can be renamed.
     /// Stores the file's stable ID and the tag snapshot to save.
     pending_file_updated: Option<(FileId, FileSnapshot)>,
@@ -92,7 +91,6 @@ impl FolderWorkspace {
             media_viewer: MediaViewerState::default(),
             tag_panel: TagPanelState::default(),
             file_name_panel: FileNamePanelState::default(),
-            sync_locked: true,
             pending_file_updated: None,
             pending_to_file_id: None,
             left_width,
@@ -223,6 +221,20 @@ impl FolderWorkspace {
                     self.handle_tag_panel(tag_panel::Message::SetFilter(String::new()))
                 }
             }
+            Message::OpenFilePicker => {
+                Task::perform(
+                    async {
+                        rfd::AsyncFileDialog::new()
+                            .pick_file()
+                            .await
+                            .map(|f| f.path().to_path_buf())
+                    },
+                    |opt| match opt {
+                        Some(path) => Message::OpenFile(path),
+                        None => Message::Noop,
+                    },
+                )
+            }
         }
     }
 
@@ -286,7 +298,6 @@ impl FolderWorkspace {
         self.file_workspace.set_tag_filter(String::new());
         self.clamp_selection_to_filtered();
         self.history.push(Box::new(PasteTagsCommand { snapshot_before, snapshot_after }));
-        self.sync_locked = false;
         Task::none()
     }
 
@@ -453,6 +464,7 @@ impl FolderWorkspace {
             }
             folder::Message::ScrollToSelected => Task::done(Message::ScrollFolderListToSelected),
             folder::Message::CopyTagsFrom(id) => self.copy_tags_from_id(id),
+            folder::Message::OpenFolder => Task::done(Message::OpenFilePicker),
         }
     }
 
@@ -737,12 +749,6 @@ impl FolderWorkspace {
                     to_index: idx,
                 }));
             }
-            // When locked: immediately push the new order to DB as well.
-            if self.sync_locked {
-                if let Err(e) = self.file_workspace.sync_selected_to_display() {
-                    log::error!("sync locked: failed to persist display order: {}", e);
-                }
-            }
         }
         Task::none()
     }
@@ -753,18 +759,16 @@ impl FolderWorkspace {
                 if let Err(e) = self.file_workspace.sync_selected_to_display() {
                     log::error!("SyncUp failed: {}", e);
                 } else {
-                    self.sync_locked = true;
+                    self.file_workspace.tag_list_mut().set_sync_locked(true);
                 }
             }
             sync_panel::Message::SyncDown => {
                 self.file_workspace.sync_display_to_selected();
-                self.sync_locked = true;
+                self.file_workspace.tag_list_mut().set_sync_locked(true);
             }
             sync_panel::Message::ToggleLock => {
-                // Only toggle when sequences are equal (i.e. lock button is active).
-                if self.file_workspace.is_selected_order_same_as_display_order() {
-                    self.sync_locked = !self.sync_locked;
-                }
+                let tl = self.file_workspace.tag_list_mut();
+                tl.set_sync_locked(!tl.sync_locked());
             }
         }
         Task::none()
@@ -1071,7 +1075,7 @@ impl FolderWorkspace {
     }
 
     pub fn sync_locked(&self) -> bool {
-        self.sync_locked
+        self.file_workspace.tag_list().sync_locked()
     }
 
     pub fn left_width(&self) -> f32 {

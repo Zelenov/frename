@@ -59,7 +59,23 @@ pub fn view(has_previous: bool, has_next: bool, has_selected: bool) -> Element<'
     )
         .into();
 
-    let controls = row![prev_btn, next_btn, scroll_btn]
+    let open_btn: Element<'_, folder::Message> = tooltip(
+        button(
+            container(text("📂").size(16))
+                .center_x(iced::Length::Fill)
+                .center_y(iced::Length::Fill),
+        )
+            .on_press(folder::Message::OpenFolder)
+            .width(CONTROLS_HEIGHT)
+            .height(iced::Length::Fill)
+            .padding(0)
+            .style(theme::icon_button_style(true)),
+        text("Open file"),
+        iced::widget::tooltip::Position::Top,
+    )
+        .into();
+
+    let controls = row![prev_btn, next_btn, scroll_btn, open_btn]
         .spacing(8)
         .height(iced::Length::Fill)
         .align_y(iced::Alignment::Center);

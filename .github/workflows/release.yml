@@ -1,0 +1,202 @@
+name: Release
+run-name: Release - ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["**"]
+    paths: ["version.md"]
+
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.vars.outputs.tag }}
+      version: ${{ steps.vars.outputs.version }}
+      name: ${{ steps.vars.outputs.name }}
+      draft: ${{ steps.vars.outputs.draft }}
+      should_build: ${{ steps.vars.outputs.should_build }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute variables
+        id: vars
+        run: |
+          VERSION=$(sed -n '1s/^#[[:space:]]*//p' version.md | tr -d '[:space:]')
+          [ -z "$VERSION" ] && { echo "::error::version.md first line must be '# VERSION'"; exit 1; }
+          BRANCH="${{ github.ref_name }}"
+          SAFE=$(echo "$BRANCH" | sed 's/\//-/g;s/[^a-zA-Z0-9._-]/-/g;s/-*$//')
+          [ -z "$SAFE" ] && SAFE=branch
+          if [ "$BRANCH" = main ] || [ "$BRANCH" = master ]; then
+            TAG="v$VERSION"; NAME="frename v$VERSION"; DRAFT=false
+          else
+            TAG="v$VERSION-$SAFE"; NAME="frename v$VERSION - $SAFE"; DRAFT=true
+          fi
+
+          if gh release view "$TAG" --repo ${{ github.repository }} 2>/dev/null; then
+            EXISTS=true
+          else
+            EXISTS=false
+          fi
+
+          if [ "$DRAFT" = true ] || [ "$EXISTS" = false ]; then SHOULD_BUILD=true; else SHOULD_BUILD=false; fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "draft=$DRAFT" >> "$GITHUB_OUTPUT"
+          echo "should_build=$SHOULD_BUILD" >> "$GITHUB_OUTPUT"
+
+          awk '/^# / { if (found) exit; found=1 } found' version.md > release-notes.md
+          [ -s release-notes.md ] || echo "See version.md" > release-notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - uses: actions/upload-artifact@v4
+        if: steps.vars.outputs.should_build == 'true'
+        with:
+          name: release-notes
+          path: release-notes.md
+
+  build-windows:
+    needs: prepare
+    if: needs.prepare.outputs.should_build == 'true'
+    runs-on: windows-2022
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Restore vendored GStreamer directory
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $gstRoot = Join-Path $env:GITHUB_WORKSPACE "vendor\gstreamer\minimal_msvc_x86_64"
+          if (Test-Path $gstRoot) {
+            Write-Host "Vendored GStreamer already present: $gstRoot"
+            exit 0
+          }
+
+          $zipPath = Join-Path $env:GITHUB_WORKSPACE "gstreamer-minimal-msvc-x86_64.zip"
+          if (!(Test-Path $zipPath)) {
+            Write-Error "Vendored GStreamer not found at '$gstRoot' and archive missing at '$zipPath'. Commit either the folder or the zip archive."
+          }
+
+          $targetBase = Join-Path $env:GITHUB_WORKSPACE "vendor\gstreamer"
+          New-Item -ItemType Directory -Path $targetBase -Force | Out-Null
+          Expand-Archive -Path $zipPath -DestinationPath $targetBase -Force
+
+          if (!(Test-Path $gstRoot)) {
+            Write-Error "Archive extracted, but '$gstRoot' still does not exist."
+          }
+          Write-Host "Restored vendored GStreamer from archive."
+
+      - name: Configure local vendored GStreamer
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $gstRoot = Join-Path $env:GITHUB_WORKSPACE "vendor\gstreamer\minimal_msvc_x86_64"
+          $pkgConfigPath = Join-Path $gstRoot "lib\pkgconfig"
+          $pkgConfigExe = Join-Path $gstRoot "bin\pkg-config.exe"
+
+          if (!(Test-Path $gstRoot)) { Write-Error "Vendored GStreamer root not found: $gstRoot" }
+          if (!(Test-Path $pkgConfigPath)) { Write-Error "pkgconfig directory not found: $pkgConfigPath" }
+          if (!(Test-Path $pkgConfigExe)) { Write-Error "pkg-config.exe not found: $pkgConfigExe" }
+          if (!(Test-Path (Join-Path $pkgConfigPath "glib-2.0.pc"))) { Write-Error "glib-2.0.pc not found in: $pkgConfigPath" }
+
+          Add-Content $env:GITHUB_ENV "PKG_CONFIG_PATH=$pkgConfigPath"
+          Add-Content $env:GITHUB_ENV "PKG_CONFIG=$pkgConfigExe"
+          Add-Content $env:GITHUB_ENV "GSTREAMER_1_0_ROOT_MSVC_X86_64=$gstRoot"
+          Add-Content $env:GITHUB_ENV "PATH=$gstRoot\bin;$env:PATH"
+          Write-Host "Detected pkg-config path: $pkgConfigPath"
+          Write-Host "Detected GStreamer root: $gstRoot"
+
+      - name: Print lib\pkgconfig contents
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $pkgConfigPath = Join-Path $env:GITHUB_WORKSPACE "vendor\gstreamer\minimal_msvc_x86_64\lib\pkgconfig"
+          if (!(Test-Path (Join-Path $pkgConfigPath "glib-2.0.pc"))) { Write-Error "glib-2.0.pc not found for listing in $pkgConfigPath" }
+          Write-Host "Listing files in $pkgConfigPath"
+          Get-ChildItem -Path $pkgConfigPath -File | Sort-Object Name | ForEach-Object {
+            Write-Host $_.Name
+          }
+
+      - name: Build release binary
+        shell: powershell
+        env:
+          APP_VERSION: ${{ needs.prepare.outputs.version }}.0
+        run: |
+          Write-Host "Building with APP_VERSION=$env:APP_VERSION"
+          cargo build --release --locked
+
+      - name: Package frename.exe
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $exeName = "frename-windows-x64-v${{ needs.prepare.outputs.version }}.0.exe"
+          $gstGuideName = "GSTREAMER_SETUP.md"
+          New-Item -ItemType Directory -Path "dist" -Force | Out-Null
+          Copy-Item "target\release\frename.exe" "dist\$exeName" -Force
+          Copy-Item "GSTREAMER_SETUP.md" "dist\$gstGuideName" -Force
+          Add-Content $env:GITHUB_ENV "WINDOWS_EXE_NAME=$exeName"
+          Add-Content $env:GITHUB_ENV "GSTREAMER_GUIDE_NAME=$gstGuideName"
+          Write-Host "Prepared executable artifact: $exeName"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frename-windows-x64-v${{ needs.prepare.outputs.version }}.0
+          path: |
+            dist/${{ env.WINDOWS_EXE_NAME }}
+            dist/${{ env.GSTREAMER_GUIDE_NAME }}
+
+  release:
+    needs: [prepare, build-windows]
+    if: needs.prepare.outputs.should_build == 'true'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Remove existing draft and tag
+        if: needs.prepare.outputs.draft == 'true'
+        uses: ClementTsang/delete-tag-and-release@v0.3.1
+        continue-on-error: true
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          delete_release: true
+          repo: ${{ github.repository }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Package release zip
+        run: |
+          cd artifacts
+          zip -j "frename-windows-x64-v${{ needs.prepare.outputs.version }}.0.zip" *.exe *.md
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ needs.prepare.outputs.name }}
+          body_path: artifacts/release-notes.md
+          draft: ${{ needs.prepare.outputs.draft }}
+          files: |
+            artifacts/frename-windows-x64-v${{ needs.prepare.outputs.version }}.0.zip
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

@@ -3,7 +3,7 @@
 //! We pass only data to each feature view (directory, current_file, selected_file, etc.).
 //! We do not tell any feature how to look (scrollable, rectangular, etc.); each feature view owns its appearance.
 
-use iced::widget::{column, container, row, stack, text};
+use iced::widget::{column, container, mouse_area, row, stack, text};
 use iced::{Element, Length};
 
 use crate::features::{file_workspace, folder, folder_controls, media_viewer};
@@ -23,7 +23,7 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
 
     if state.directory().is_none() && !state.media_fullscreen() {
         let icon = if state.is_loading() { "⏳" } else { "📂" };
-        return container(
+        let inner = container(
             container(
                 text(icon)
                     .size(120)
@@ -36,8 +36,15 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
         )
         .width(Length::Fill)
         .height(Length::Fill)
-        .style(theme::panel_container_style)
-        .into();
+        .style(theme::panel_container_style);
+
+        return if state.is_loading() {
+            inner.into()
+        } else {
+            mouse_area(inner)
+                .on_press(Message::OpenFilePicker)
+                .into()
+        };
     }
 
     // When fullscreen overlay is active, render blank space here — otherwise the video
@@ -81,7 +88,7 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
         .min_right(200.0);
 
     let file_ws = state.file_workspace();
-    let is_synced = file_ws.is_selected_order_same_as_display_order();
+    let is_synced = file_ws.tag_list().is_selected_match_display_order();
     let file_workspace_panel = file_workspace::view::view(
         file_ws,
         state.tag_panel(),

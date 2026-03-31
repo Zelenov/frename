@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::db::AppStateStore;
-use crate::{File, FileId, FileSnapshot, FolderAndFile};
+use crate::{File, FileId, FileSnapshot, FileTagger, FolderAndFile, FolderInfo};
 
 /// A scanned directory. Generic over the store type S; store is used only for session persistence.
 #[derive(Clone, Debug)]
@@ -45,6 +45,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
     /// Open a directory asynchronously: scan all files and sort by modification date.
     pub async fn open(directory: &Path, store: S) -> Result<Self, std::io::Error> {
         log::info!("Scanning directory: {}", directory.display());
+        let folder_info = get_folder_info(directory);
         let mut files = Vec::new();
         let mut entries = tokio::fs::read_dir(directory)
             .await
@@ -56,9 +57,10 @@ impl<S: AppStateStore + Clone> Directory<S> {
         {
             let path = entry.path();
             if !path.is_file() { continue; }
-            if crate::FileTagger::is_sidecar_file(&path) { continue; }
+            if FileTagger::is_sidecar_file(&path) { continue; }
+
             files.push(
-                File::open(&path)
+                File::open_with_folder_info(&path, &folder_info)
                     .await
                     .map_err(|e| { log::error!("Failed to scan directory: {e}"); e })?,
             );
@@ -178,4 +180,14 @@ impl<S: AppStateStore + Clone> Directory<S> {
             self.selected_file().map(|f| f.file_path().to_path_buf()),
         ));
     }
+}
+
+fn get_folder_info(folder: &Path) -> FolderInfo {
+    let file_names = std::fs::read_dir(folder)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| entry.file_name().to_str().map(|s| s.to_string()))
+        .collect();
+    FolderInfo::new(file_names)
 }
