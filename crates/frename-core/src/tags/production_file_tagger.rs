@@ -39,10 +39,9 @@ fn load_screenshot_positions(file_path: &Path, folder_info: &FolderInfo) -> Vec<
     };
     let prefix = format!("{}.snap.", file_name);
     let mut screenshots: Vec<Screenshot> = folder_info
-        .file_names()
-        .iter()
+        .names_starting_with(&prefix)
         .filter_map(|name| {
-            let rest = name.strip_prefix(&prefix)?;
+            let rest = name.strip_prefix(prefix.as_str())?;
             let time_str = rest.strip_suffix(".jpg")?;
             Screenshot::parse_time(time_str).map(Screenshot::new)
         })
@@ -59,7 +58,6 @@ impl FileTaggerBackend for ProductionFileTagger {
     fn parse(&self, path: &Path, folder_info: &FolderInfo) -> FileSnapshot {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         let mut snapshot = FileSnapshot::parse(name);
-        snapshot.set_comment(crate::comment::load_comment(path));
         // Fallback for non-directory parsing paths (e.g. save_and_reparse):
         // if folder_info is empty, collect names once from the parent directory.
         let owned_info;
@@ -76,6 +74,11 @@ impl FileTaggerBackend for ProductionFileTagger {
         } else {
             folder_info
         };
+        // Read the comment sidecar only when the listing shows one. Probing the disk instead
+        // cost a failed file open per file, which a folder scan pays for every file it finds.
+        if effective_info.contains(&format!("{name}.comment.txt")) {
+            snapshot.set_comment(crate::comment::load_comment(path));
+        }
         snapshot.set_screenshots(load_screenshot_positions(path, effective_info));
         snapshot
     }

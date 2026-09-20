@@ -46,6 +46,12 @@ arboard = "3"
 # Native file/folder picker dialogs
 rfd = "0.17"
 
+[profile.dev.package."*"]
+# Dependencies are rebuilt rarely but run on every frame (text layout, image decode, SQLite,
+# shader compilation), so optimise them even in debug builds. Own crates stay at opt-level 0
+# so rebuilds stay fast and stepping through app code still works.
+opt-level = 3
+
 [profile.release]
 opt-level = 3
 # Faster release builds in CI while keeping good optimization quality.

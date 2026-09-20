@@ -47,7 +47,7 @@ where
         .and_then(|id| tag_list.get_tag(id))
         .map(|tag| {
             tag_chip::view_display_only(
-                tag.tag().to_string(),
+                tag.tag(),
                 tag_colors::TagColors::color(tag.color_index()),
             )
         });

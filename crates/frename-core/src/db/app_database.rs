@@ -1,6 +1,9 @@
 //! Application database (SQLite): app state storage and future user data.
 
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+use std::time::Duration;
 
 use rusqlite::Connection;
 use uuid::Uuid;
@@ -10,6 +13,34 @@ use crate::{FolderAndFile, StoredTag, TagColorMapping};
 use super::migrations;
 use super::schema;
 use super::traits::{AppStateStore, Initializable, StoredTagStore, VideoSettings, WindowGeometry};
+
+/// Open connections, keyed by database path.
+///
+/// Opening a SQLite file costs ~2.5 ms on Windows (file open + journal setup), which is paid on
+/// every call when a connection is short-lived. Panel-drag and window-move handlers write on every
+/// mouse event, so connections are opened once per path and reused for the life of the process.
+static CONNECTIONS: OnceLock<Mutex<HashMap<PathBuf, Arc<Mutex<Connection>>>>> = OnceLock::new();
+
+/// Locks a connection, recovering the guard if another thread panicked while holding it.
+/// A poisoned lock means a previous caller panicked mid-query, not that the connection is unusable.
+fn lock_connection(conn: &Arc<Mutex<Connection>>) -> MutexGuard<'_, Connection> {
+    conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Opens a connection and applies the pragmas that make repeated small writes cheap.
+///
+/// WAL keeps writers from rewriting the rollback journal on every commit, and `synchronous=NORMAL`
+/// drops the per-commit fsync (a crash can lose the last transactions — only UI geometry and
+/// volume, which are rewritten on the next interaction). Together with connection reuse this takes
+/// a panel-width write from ~2.6 ms to ~0.03 ms.
+fn open_tuned(path: &Path) -> Result<Connection, rusqlite::Error> {
+    let conn = Connection::open(path)?;
+    // journal_mode returns the resulting mode as a row, so it cannot go through pragma_update.
+    let _: String = conn.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0))?;
+    conn.pragma_update(None, "synchronous", "NORMAL")?;
+    conn.busy_timeout(Duration::from_secs(5))?;
+    Ok(conn)
+}
 
 /// The application database. Holds app state (last folder/file), and will hold user data
 /// and other application storage. SQLite-backed. Use `Initializable::initialize()` once at startup
@@ -34,17 +65,31 @@ impl AppDatabase {
         Self { path: path.into() }
     }
 
+    /// Returns the shared connection for this database's path, opening it on first use.
+    fn conn(&self) -> Result<Arc<Mutex<Connection>>, rusqlite::Error> {
+        let cache = CONNECTIONS.get_or_init(|| Mutex::new(HashMap::new()));
+        let mut cache = cache.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(conn) = cache.get(&self.path) {
+            return Ok(Arc::clone(conn));
+        }
+        let conn = Arc::new(Mutex::new(open_tuned(&self.path)?));
+        cache.insert(self.path.clone(), Arc::clone(&conn));
+        Ok(conn)
+    }
+
     /// Inserts the built-in tag seed data (INSERT OR IGNORE — safe to call multiple times).
     /// Call this only in debug/development mode.
     pub fn seed_debug_tags(&self) -> Result<(), rusqlite::Error> {
-        let conn = Connection::open(&self.path)?;
+        let conn = self.conn()?;
+        let conn = lock_connection(&conn);
         conn.execute_batch(schema::SEED_TAGS)
     }
 }
 
 impl Initializable for AppDatabase {
     fn initialize(&self) -> Result<(), rusqlite::Error> {
-        let conn = Connection::open(&self.path)?;
+        let conn = self.conn()?;
+        let conn = lock_connection(&conn);
         migrations::run(&conn)?;
         Ok(())
     }
@@ -52,7 +97,8 @@ impl Initializable for AppDatabase {
 
 impl StoredTagStore for AppDatabase {
     fn get_stored_tags(&self) -> Result<Vec<StoredTag>, Box<dyn std::error::Error + Send + Sync>> {
-        let conn = Connection::open(&self.path)?;
+        let conn = self.conn()?;
+        let conn = lock_connection(&conn);
         let mut stmt = conn.prepare("SELECT id, name, sort_order, starred FROM stored_tags ORDER BY sort_order")?;
         let tags = stmt
             .query_map([], |row| {
@@ -68,7 +114,8 @@ impl StoredTagStore for AppDatabase {
     }
 
     fn get_tag_color_mapping(&self) -> Result<TagColorMapping, Box<dyn std::error::Error + Send + Sync>> {
-        let conn = Connection::open(&self.path)?;
+        let conn = self.conn()?;
+        let conn = lock_connection(&conn);
         let mut stmt = conn.prepare("SELECT tag_name, color_index FROM tag_color_mapping")?;
         let entries: Vec<(String, u8)> = stmt
             .query_map([], |row| {
@@ -85,7 +132,8 @@ impl StoredTagStore for AppDatabase {
         tag: StoredTag,
         color_index: u8,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let conn = Connection::open(&self.path)?;
+        let conn = self.conn()?;
+        let conn = lock_connection(&conn);
         let id_str = tag.id().to_string();
         let name = tag.value();
         let color = i32::from(color_index);
@@ -110,7 +158,8 @@ impl StoredTagStore for AppDatabase {
     }
 
     fn remove_stored_tag_by_id(&mut self, tag_id: Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let conn = Connection::open(&self.path)?;
+        let conn = self.conn()?;
+        let conn = lock_connection(&conn);
         let name: String = conn.query_row(
             "SELECT name FROM stored_tags WHERE id = ?1",
             [tag_id.to_string()],
@@ -128,7 +177,8 @@ impl StoredTagStore for AppDatabase {
         if tag_orders.is_empty() {
             return Ok(());
         }
-        let mut conn = Connection::open(&self.path)?;
+        let conn = self.conn()?;
+        let mut conn = lock_connection(&conn);
         let tx = conn.transaction()?;
         {
             let mut stmt = tx.prepare("UPDATE stored_tags SET sort_order = ?1 WHERE id = ?2")?;
@@ -143,7 +193,8 @@ impl StoredTagStore for AppDatabase {
 
 impl AppStateStore for AppDatabase {
     fn get_last_session(&self) -> Option<FolderAndFile> {
-        let conn = Connection::open(&self.path).ok()?;
+        let conn = self.conn().ok()?;
+        let conn = lock_connection(&conn);
         let mut stmt = conn
             .prepare(
                 "SELECT folder_path, last_file_path FROM folder_history ORDER BY opened_at DESC LIMIT 1",
@@ -163,10 +214,8 @@ impl AppStateStore for AppDatabase {
     }
 
     fn set_last_folder_and_file(&self, value: &FolderAndFile) {
-        let conn = match Connection::open(&self.path) {
-            Ok(c) => c,
-            Err(_) => return,
-        };
+        let Ok(conn) = self.conn() else { return };
+        let conn = lock_connection(&conn);
         let folder_str = value.folder().to_string_lossy().to_string();
         let file_str = value
             .file()
@@ -180,7 +229,8 @@ impl AppStateStore for AppDatabase {
     }
 
     fn get_window_state(&self) -> Option<WindowGeometry> {
-        let conn = Connection::open(&self.path).ok()?;
+        let conn = self.conn().ok()?;
+        let conn = lock_connection(&conn);
         conn.query_row(
             "SELECT x, y, width, height, is_maximized, monitor_width, monitor_height, left_panel_width, folder_panel_width FROM window_state WHERE id = 1",
             [],
@@ -199,7 +249,8 @@ impl AppStateStore for AppDatabase {
     }
 
     fn get_video_settings(&self) -> Option<VideoSettings> {
-        let conn = Connection::open(&self.path).ok()?;
+        let conn = self.conn().ok()?;
+        let conn = lock_connection(&conn);
         conn.query_row(
             "SELECT volume FROM video_settings WHERE id = 1",
             [],
@@ -208,7 +259,8 @@ impl AppStateStore for AppDatabase {
     }
 
     fn set_video_settings(&self, settings: VideoSettings) {
-        if let Ok(conn) = Connection::open(&self.path) {
+        if let Ok(conn) = self.conn() {
+            let conn = lock_connection(&conn);
             let _ = conn.execute(
                 "INSERT INTO video_settings (id, volume) VALUES (1, ?1)
                  ON CONFLICT(id) DO UPDATE SET volume = excluded.volume",
@@ -218,7 +270,8 @@ impl AppStateStore for AppDatabase {
     }
 
     fn set_window_state(&self, geometry: WindowGeometry) {
-        if let Ok(conn) = Connection::open(&self.path) {
+        if let Ok(conn) = self.conn() {
+            let conn = lock_connection(&conn);
             let _ = conn.execute(
                 "INSERT INTO window_state (id, x, y, width, height, is_maximized, monitor_width, monitor_height, left_panel_width, folder_panel_width)
                  VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
@@ -245,7 +298,8 @@ impl AppStateStore for AppDatabase {
 impl AppDatabase {
     /// Updates only the panel width columns in window_state (row must already exist).
     pub fn set_panel_widths(&self, left_panel_width: f32, folder_panel_width: f32) {
-        if let Ok(conn) = Connection::open(&self.path) {
+        if let Ok(conn) = self.conn() {
+            let conn = lock_connection(&conn);
             match conn.execute(
                 "UPDATE window_state SET left_panel_width = ?1, folder_panel_width = ?2 WHERE id = 1",
                 rusqlite::params![left_panel_width as f64, folder_panel_width as f64],

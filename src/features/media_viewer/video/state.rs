@@ -196,14 +196,21 @@ impl VideoPlayerState {
 
     /// Subscriptions active while a video is loaded.
     pub fn subscription(&self) -> Subscription<Message> {
-        if self.current_video.is_some() {
-            Subscription::batch([
-                time::every(Duration::from_millis(250)).map(|_| Message::NewFrame),
-                self.controls.subscription().map(Message::Controls),
-            ])
-        } else {
+        let Some(video) = self.current_video.as_ref() else {
+            return Subscription::none();
+        };
+        // The tick exists only to advance the progress bar, so it is pointless while paused:
+        // it used to force a full view rebuild 4x/second for as long as a video stayed open.
+        // Iced re-evaluates subscriptions after every update, so pausing stops it immediately.
+        let frame_tick = if video.paused() {
             Subscription::none()
-        }
+        } else {
+            time::every(Duration::from_millis(250)).map(|_| Message::NewFrame)
+        };
+        Subscription::batch([
+            frame_tick,
+            self.controls.subscription().map(Message::Controls),
+        ])
     }
 }
 
