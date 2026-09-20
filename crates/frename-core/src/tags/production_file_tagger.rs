@@ -119,7 +119,9 @@ impl FileTaggerBackend for ProductionFileTagger {
 
     fn is_sidecar_file(&self, path: &Path) -> bool {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        crate::comment::is_comment_file(path) || is_screenshot_sidecar(name)
+        crate::comment::is_comment_file(path)
+            || is_screenshot_sidecar(name)
+            || crate::FolderTagStore::is_tag_file(path)
     }
 
     fn save_screenshot(&self, file_path: &Path, position_ms: u64, image_data: &[u8]) {

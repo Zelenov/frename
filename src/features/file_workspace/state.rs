@@ -6,7 +6,7 @@
 //! Generic over the store type S (like Directory and TagList). Store is passed to the constructor; used to build the tag list.
 
 use iced::widget::text_editor;
-use frename_core::{AppDatabase, File, FileId, FileSnapshot, StoredTagStore, TagColorMapping, TagId, TagList};
+use frename_core::{File, FileId, FileSnapshot, FolderTagStore, StoredTagStore, TagColorMapping, TagId, TagList};
 
 /// File workspace: current file and stored tags with checked state (source of truth for UI).
 /// Generic over the store type S; store is set only in the constructor.
@@ -233,8 +233,9 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     }
 }
 
-impl Default for FileWorkspace<AppDatabase> {
+impl Default for FileWorkspace<FolderTagStore> {
+    /// Workspace with no folder open yet: the tag store holds nothing until a folder is loaded.
     fn default() -> Self {
-        Self::new(AppDatabase::new())
+        Self::new(FolderTagStore::empty())
     }
 }

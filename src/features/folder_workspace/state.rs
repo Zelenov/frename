@@ -10,7 +10,8 @@ use std::path::PathBuf;
 use arboard;
 use rfd;
 use frename_core::{
-    AppDatabase, AppStateStore, File, FileId, FileSnapshot, FolderAndFile, LoggingAppStateStore,
+    AppDatabase, AppStateStore, File, FileId, FileSnapshot, FolderAndFile, FolderTagStore,
+    LoggingAppStateStore,
     NavigateFileCommand, ReorderTagCommand, ToggleTagCommand, PasteTagsCommand,
     DeleteTagCommand, CreateTagCommand, SaveTagCommand, StarTagCommand,
     SetSegmentStartCommand, SetSegmentEndCommand,
@@ -37,17 +38,19 @@ use super::Message;
 const DEFAULT_LEFT_WIDTH: f32 = 460.0;
 const DEFAULT_FOLDER_WIDTH: f32 = 200.0;
 const MIN_FOLDER_WIDTH: f32 = 120.0;
+/// How many actions undo/redo keeps. Reset per folder, since tags are per folder.
+const HISTORY_DEPTH: usize = 50;
 
 /// Concrete history type for this workspace: Directory uses LoggingAppStateStore<AppDatabase>,
-/// TagList uses AppDatabase.
-type WorkspaceHistory = History<LoggingAppStateStore<AppDatabase>, AppDatabase>;
+/// TagList uses the tag store of the open folder.
+type WorkspaceHistory = History<LoggingAppStateStore<AppDatabase>, FolderTagStore>;
 
 /// Folder workspace: owns directory, loading. Current file is the directory's selection.
 pub struct FolderWorkspace {
     directory: Option<Directory>,
     loading: bool,
     /// File currently being edited: copy of file + tag selection. Rename panel reads/updates this.
-    file_workspace: FileWorkspace<AppDatabase>,
+    file_workspace: FileWorkspace<FolderTagStore>,
     media_viewer: MediaViewerState,
     tag_panel: TagPanelState,
     file_name_panel: FileNamePanelState,
@@ -87,7 +90,7 @@ impl FolderWorkspace {
         Self {
             directory: None,
             loading: false,
-            file_workspace: FileWorkspace::<AppDatabase>::default(),
+            file_workspace: FileWorkspace::<FolderTagStore>::default(),
             media_viewer: MediaViewerState::default(),
             tag_panel: TagPanelState::default(),
             file_name_panel: FileNamePanelState::default(),
@@ -100,7 +103,7 @@ impl FolderWorkspace {
             folder_scroll_y: None,
             folder_viewport_height: None,
             copied_tags: None,
-            history: WorkspaceHistory::new(50),
+            history: WorkspaceHistory::new(HISTORY_DEPTH),
             media_fullscreen: false,
         }
     }
@@ -355,6 +358,11 @@ impl FolderWorkspace {
         let untagged_only = self.directory.as_ref().is_some_and(|d| d.untagged_only());
         directory.set_untagged_only(untagged_only);
         self.directory = Some(directory); // replace previous directory only on success
+        let folder = self.directory.as_ref().expect("just set").path().to_path_buf();
+        // Tags belong to the folder, so the workspace starts over on a new one. The history goes
+        // with them: undoing "create tag" from the previous folder would delete it from this one.
+        self.file_workspace = FileWorkspace::new(FolderTagStore::for_folder(&folder));
+        self.history = WorkspaceHistory::new(HISTORY_DEPTH);
         let dir = self.directory.as_mut().expect("just set");
         let selected = target_file.as_deref().and_then(|p| dir.open_path(p));
         if let Some(file) = selected {
@@ -1043,7 +1051,7 @@ impl FolderWorkspace {
     }
 
     /// File workspace: current file and its tag selection (for rename panel). Use this for display and tag toggles.
-    pub fn file_workspace(&self) -> &FileWorkspace<AppDatabase> {
+    pub fn file_workspace(&self) -> &FileWorkspace<FolderTagStore> {
         &self.file_workspace
     }
 

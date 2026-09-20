@@ -69,6 +69,9 @@ impl<S: AppStateStore + Clone> Directory<S> {
     /// True when the directory holds no files at all (regardless of the untagged filter).
     pub fn is_empty(&self) -> bool { self.order.is_empty() }
 
+    /// Folder this directory was scanned from. Used to scope the folder's tag store.
+    pub fn path(&self) -> &Path { &self.path }
+
     /// Whether the "untagged only" filter is active.
     pub fn untagged_only(&self) -> bool { self.untagged_only }
 
