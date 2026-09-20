@@ -1,3 +1,12 @@
+# 0.62
+## Added
+- Show only the files that have no tags yet, so a folder can be worked through to the end.
+- Each folder now keeps its own tags in a `.frename` text file next to the footage. It travels with the folder and can be edited by hand or by an AI: one tag per line, and the line order is the tag order.
+
+## Changed
+- Tags belong to the folder instead of being shared by every folder. A folder without a tag file starts from the built-in set.
+- Tags saved in earlier versions are not carried over: the app database no longer stores tags.
+
 # 0.61
 ## Changed
 - Dragging the panel splitters, moving the window and the volume slider no longer stutter.
