@@ -1119,6 +1119,7 @@ impl FolderWorkspace {
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::SystemTime;
 
     use frename_core::{AppDatabase, File, FileId, FileSnapshot, Initializable, LoggingAppStateStore};
@@ -1139,18 +1140,22 @@ mod tests {
     }
 
     /// Test fixture: a directory with a given number of files. Use in folder workspace tests.
+    ///
+    /// The folder is created on disk, because opening it writes the folder's tag file. Fields are
+    /// cloned rather than moved out so the fixture stays alive to delete the folder afterwards.
     pub struct TestDirectory {
-        pub directory: Directory,
-        pub target_file: PathBuf,
+        directory: Directory,
+        path: PathBuf,
     }
 
     impl TestDirectory {
         pub fn new(file_count: usize) -> Self {
-            let dir = PathBuf::from("C:/test/folder");
+            let path = unique_test_folder();
+            std::fs::create_dir_all(&path).expect("create test folder");
             let files: Vec<File> = (0..file_count)
                 .map(|i| {
                     File::from_path(
-                        dir.join(format!("file_{}.mp4", i)),
+                        path.join(format!("file_{}.mp4", i)),
                         SystemTime::UNIX_EPOCH,
                     )
                 })
@@ -1158,13 +1163,37 @@ mod tests {
             let db = AppDatabase::new();
             let store = LoggingAppStateStore::new(db);
             store.initialize().unwrap();
-            let directory = Directory::with_files(&dir, files, store);
-            let target_file = dir.join("file_0.mp4");
-            Self {
-                directory,
-                target_file,
-            }
+            let directory = Directory::with_files(&path, files, store);
+            Self { directory, path }
         }
+
+        /// The scanned directory, ready to hand to `Message::FolderLoaded`.
+        pub fn directory(&self) -> Directory {
+            self.directory.clone()
+        }
+
+        /// The file the workspace should open once the folder is loaded.
+        pub fn target_file(&self) -> PathBuf {
+            self.path.join("file_0.mp4")
+        }
+
+        /// Path of a file in this folder, for asserting on renames.
+        pub fn file_path(&self, name: &str) -> PathBuf {
+            self.path.join(name)
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
+    /// A folder name no other test, and no concurrent test run, will pick.
+    fn unique_test_folder() -> PathBuf {
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!("frename-test-{}-{n}", std::process::id()))
     }
 
     #[test]
@@ -1172,8 +1201,8 @@ mod tests {
         let test_dir = TestDirectory::new(2);
         let mut workspace = FolderWorkspace::new();
         let _task = workspace.update(Message::FolderLoaded {
-            directory: test_dir.directory,
-            target_file: Some(test_dir.target_file),
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
         });
         flush_file_opened(&mut workspace);
 
@@ -1198,22 +1227,22 @@ mod tests {
         let test_dir = TestDirectory::new(2);
         let mut workspace = FolderWorkspace::new();
         let _ = workspace.update(Message::FolderLoaded {
-            directory: test_dir.directory,
-            target_file: Some(test_dir.target_file),
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
         });
         flush_file_opened(&mut workspace);
 
         // Capture file_0's stable ID before any navigation.
         let file_0_id = file_id_at(&workspace, 0);
 
-        let tag_name = "Comedy";
+        let tag_name = "pick";
         let tag_list = workspace.file_workspace().tag_list();
         let tag_id = tag_list
             .filtered_display_tag_ids()
             .iter()
             .find(|id| tag_list.get_tag(**id).map(|t| t.tag() == tag_name).unwrap_or(false))
             .copied()
-            .expect("Comedy is a stored tag");
+            .expect("pick is a built-in tag");
         let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
 
         let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
@@ -1242,8 +1271,8 @@ mod tests {
         let mut workspace = FolderWorkspace::new();
         // Load folder; file_0 is selected and the video pipeline starts loading.
         let _ = workspace.update(Message::FolderLoaded {
-            directory: test_dir.directory,
-            target_file: Some(test_dir.target_file),
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
         });
         flush_file_opened(&mut workspace);
         // After opening file_0.mp4: video.loading = true → needs_unload_before_rename() = true.
@@ -1253,9 +1282,9 @@ mod tests {
         let tag_id = tag_list
             .filtered_display_tag_ids()
             .iter()
-            .find(|id| tag_list.get_tag(**id).map(|t| t.tag() == "Comedy").unwrap_or(false))
+            .find(|id| tag_list.get_tag(**id).map(|t| t.tag() == "pick").unwrap_or(false))
             .copied()
-            .expect("Comedy is a stored tag");
+            .expect("pick is a built-in tag");
         let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
 
         // Navigate to file_1; because media is "loading", rename is deferred.
@@ -1285,7 +1314,7 @@ mod tests {
         let _ = workspace.update(Message::FileUpdated {
             id: file_0_id,
             snapshot: frename_core::FileSnapshot::new(
-                vec!["Comedy".to_string()],
+                vec!["pick".to_string()],
                 "file_0",
                 ".mp4",
                 "file_0.mp4",
@@ -1302,8 +1331,8 @@ mod tests {
                 .file()
                 .unwrap()
                 .snapshot()
-                .has_tag("Comedy"),
-            "Comedy tag must survive the deferred rename on file_0"
+                .has_tag("pick"),
+            "pick tag must survive the deferred rename on file_0"
         );
     }
 
@@ -1315,8 +1344,8 @@ mod tests {
 
         let mut workspace = FolderWorkspace::new();
         let _ = workspace.update(Message::FolderLoaded {
-            directory: test_dir.directory,
-            target_file: Some(test_dir.target_file),
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
         });
         flush_file_opened(&mut workspace);
         // file_0.mp4 is loading → needs_unload_before_rename() = true.
@@ -1347,8 +1376,8 @@ mod tests {
         let test_dir = TestDirectory::new(3);
         let mut workspace = FolderWorkspace::new();
         let _ = workspace.update(Message::FolderLoaded {
-            directory: test_dir.directory,
-            target_file: Some(test_dir.target_file),
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
         });
         flush_file_opened(&mut workspace);
         let _ = workspace.update(Message::Folder(folder::Message::SetUntaggedOnly(true)));
@@ -1381,8 +1410,8 @@ mod tests {
         let test_dir = TestDirectory::new(2);
         let mut workspace = FolderWorkspace::new();
         let _ = workspace.update(Message::FolderLoaded {
-            directory: test_dir.directory,
-            target_file: Some(test_dir.target_file),
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
         });
         flush_file_opened(&mut workspace);
 
@@ -1404,7 +1433,7 @@ mod tests {
 
         // The directory should now track the file under its new path.
         let dir = workspace.directory().expect("directory should be loaded");
-        let new_path = PathBuf::from("C:/test/folder/Comedy.file_0.mp4");
+        let new_path = test_dir.file_path("Comedy.file_0.mp4");
         let file_renamed = dir.files_in_order().any(|f| f.file_path() == new_path.as_path());
         assert!(
             file_renamed,
