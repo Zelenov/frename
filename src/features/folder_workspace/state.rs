@@ -219,10 +219,14 @@ impl FolderWorkspace {
             Message::EscapePressed => {
                 if self.media_fullscreen {
                     self.media_fullscreen = false;
-                    Task::none()
-                } else {
-                    self.handle_tag_panel(tag_panel::Message::SetFilter(String::new()))
+                    return Task::none();
                 }
+                // Both search bars label their clear button "Esc", so clear both.
+                let clear_files = self.set_file_name_filter(String::new());
+                Task::batch([
+                    self.handle_tag_panel(tag_panel::Message::SetFilter(String::new())),
+                    clear_files,
+                ])
             }
             Message::OpenFilePicker => {
                 Task::perform(
@@ -484,6 +488,7 @@ impl FolderWorkspace {
             folder::Message::SetUntaggedOnly(untagged_only) => {
                 self.set_untagged_only(untagged_only)
             }
+            folder::Message::SetNameFilter(query) => self.set_file_name_filter(query),
         }
     }
 
@@ -494,6 +499,16 @@ impl FolderWorkspace {
             return Task::none();
         };
         dir.set_untagged_only(untagged_only);
+        Task::done(Message::ScrollFolderListToSelected)
+    }
+
+    /// Narrow the file list by name. Like the untagged filter, the selected file stays listed,
+    /// so the cursor keeps pointing at a real row while the query is being typed.
+    fn set_file_name_filter(&mut self, query: String) -> Task<Message> {
+        let Some(dir) = self.directory.as_mut() else {
+            return Task::none();
+        };
+        dir.set_name_filter(query);
         Task::done(Message::ScrollFolderListToSelected)
     }
 
@@ -1401,6 +1416,33 @@ mod tests {
             Some(0),
             "the cursor must keep the row freed by the tagged file"
         );
+    }
+
+    /// The file search narrows the list, and the file under the cursor stays listed so the
+    /// selection keeps pointing at a real row while the query is typed.
+    #[test]
+    fn file_search_narrows_the_list() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+
+        let _ = workspace.update(Message::Folder(folder::Message::SetNameFilter(
+            "file_2".to_string(),
+        )));
+        let dir = workspace.directory().expect("directory should be loaded");
+        assert_eq!(
+            dir.files_in_order().count(),
+            2,
+            "the match plus the selected file stay listed"
+        );
+
+        let _ = workspace.update(Message::Folder(folder::Message::SetNameFilter(String::new())));
+        let dir = workspace.directory().expect("directory should be loaded");
+        assert_eq!(dir.files_in_order().count(), 3, "clearing the query restores the list");
     }
 
     /// Verify that `save_and_reparse` (called by FileUpdated) updates the file path in the

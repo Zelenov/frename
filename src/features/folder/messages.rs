@@ -19,4 +19,6 @@ pub enum Message {
     OpenFolder,
     /// Show only files without tags (true) or every file (false).
     SetUntaggedOnly(bool),
+    /// Narrow the list to files whose name contains this text (empty = no filter).
+    SetNameFilter(String),
 }

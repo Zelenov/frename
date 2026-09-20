@@ -43,6 +43,7 @@ where
         None
     };
     let search_bar = widgets::search_bar::view(
+        widgets::search_bar::SEARCH_BAR_INPUT_ID,
         filter,
         |s| Message::TagPanel(tag_panel::Message::SetFilter(s)),
         || Message::TagPanel(tag_panel::Message::SetFilter(String::new())),

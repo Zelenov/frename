@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use super::file_snapshot::FileSnapshot;
 use super::folder_info::FolderInfo;
+use super::production_file_tagger::is_screenshot_sidecar;
 
 /// The interface that both InMemoryFileTagger and ProductionFileTagger implement.
 pub trait FileTaggerBackend: Send + Sync {
@@ -14,8 +15,18 @@ pub trait FileTaggerBackend: Send + Sync {
     /// Returns the new path (which may differ from `path` if the file was renamed).
     fn save(&self, snapshot: &FileSnapshot, path: &Path) -> PathBuf;
 
-    /// Returns true if `path` is a sidecar file (should be hidden from the file list).
-    fn is_sidecar_file(&self, _path: &Path) -> bool { false }
+    /// Returns true if `path` is a sidecar file (should be hidden from the file list):
+    /// a comment, a screenshot, or the folder's tag file.
+    ///
+    /// Which names are sidecars follows from the tag format, not from the backend, so every
+    /// backend shares this. A debug build saves nothing to disk, but it still lists a real
+    /// folder, and those files are no more part of it there than in a release build.
+    fn is_sidecar_file(&self, path: &Path) -> bool {
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        crate::comment::is_comment_file(path)
+            || is_screenshot_sidecar(name)
+            || crate::FolderTagStore::is_tag_file(path)
+    }
 
     /// Save a screenshot image for the given file and position.
     /// `image_data` is raw JPEG bytes (e.g. from GStreamer). Pass `&[]` to create an empty placeholder.
@@ -24,4 +35,23 @@ pub trait FileTaggerBackend: Send + Sync {
     /// Load the raw image bytes for a screenshot by position.
     #[allow(dead_code)]
     fn load_screenshot_image(&self, _file_path: &Path, _position_ms: u64) -> Option<Vec<u8>> { None }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::FileTaggerBackend;
+    use crate::InMemoryFileTagger;
+
+    /// Every backend hides sidecars, the in-memory one used by debug builds included:
+    /// they back the folder list rather than appearing in it.
+    #[test]
+    fn default_backend_hides_sidecar_files() {
+        let backend = InMemoryFileTagger::default();
+        assert!(backend.is_sidecar_file(Path::new(r"C:\shoots\.frename")));
+        assert!(backend.is_sidecar_file(Path::new(r"C:\shoots\clip.mp4.comment.txt")));
+        assert!(backend.is_sidecar_file(Path::new(r"C:\shoots\clip.mp4.snap.00-00-10-936.jpg")));
+        assert!(!backend.is_sidecar_file(Path::new(r"C:\shoots\clip.mp4")));
+    }
 }

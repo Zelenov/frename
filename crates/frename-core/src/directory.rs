@@ -24,6 +24,10 @@ pub struct Directory<S> {
     selected_id: Option<FileId>,
     /// When true, only files without tags are listed (the selected file always stays listed).
     untagged_only: bool,
+    /// Name filter as the user typed it (for display in the search bar).
+    name_filter: String,
+    /// Same filter lowercased once, so matching a file never allocates.
+    name_filter_lower: String,
     store: S,
 }
 
@@ -42,6 +46,8 @@ impl<S: AppStateStore + Clone> Directory<S> {
             order,
             selected_id: None,
             untagged_only: false,
+            name_filter: String::new(),
+            name_filter_lower: String::new(),
             store,
         }
     }
@@ -89,12 +95,38 @@ impl<S: AppStateStore + Clone> Directory<S> {
             .count()
     }
 
-    /// Whether a file is part of the listed set under the current filter.
-    /// The selected file is always listed: tagging it must not pull the row out from under the cursor.
+    /// Name filter as the user typed it. Empty means every file passes.
+    pub fn name_filter(&self) -> &str { &self.name_filter }
+
+    /// Set the name filter. Matching is case-insensitive on the file name as it is on disk,
+    /// so the tags in the name are searchable too.
+    pub fn set_name_filter(&mut self, query: String) {
+        self.name_filter_lower = query.trim().to_lowercase();
+        self.name_filter = query;
+    }
+
+    /// Whether a file's name passes the current name filter.
+    fn matches_name_filter(&self, file: &File) -> bool {
+        if self.name_filter_lower.is_empty() {
+            return true;
+        }
+        file.file_path()
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| contains_ignore_case(name, &self.name_filter_lower))
+    }
+
+    /// Whether a file is part of the listed set under the current filters.
+    /// The selected file is always listed: tagging it, or typing a query it no longer matches,
+    /// must not pull the row out from under the cursor.
     fn is_listed(&self, file: &File) -> bool {
-        !self.untagged_only
-            || self.selected_id == Some(file.id())
-            || file.snapshot().tags().is_empty()
+        if self.selected_id == Some(file.id()) {
+            return true;
+        }
+        if self.untagged_only && !file.snapshot().tags().is_empty() {
+            return false;
+        }
+        self.matches_name_filter(file)
     }
 
     /// Files in modification-date order, filtered (for rendering the list).
@@ -215,6 +247,27 @@ impl<S: AppStateStore + Clone> Directory<S> {
             self.selected_file().map(|f| f.file_path().to_path_buf()),
         ));
     }
+}
+
+/// Case-insensitive "contains", without allocating a lowercased copy of the haystack.
+/// `needle_lower` must already be lowercase; an empty needle matches everything.
+/// Called for every file on every keystroke, which is why it does not allocate.
+fn contains_ignore_case(haystack: &str, needle_lower: &str) -> bool {
+    if needle_lower.is_empty() {
+        return true;
+    }
+    haystack.char_indices().any(|(start, _)| {
+        let mut rest = haystack[start..].chars().flat_map(char::to_lowercase);
+        let mut needle = needle_lower.chars();
+        loop {
+            match (needle.next(), rest.next()) {
+                (None, _) => return true,
+                (Some(_), None) => return false,
+                (Some(wanted), Some(found)) if wanted != found => return false,
+                _ => {}
+            }
+        }
+    })
 }
 
 /// Reads the folder in one pass and returns its files in modification-date order.
@@ -351,6 +404,47 @@ mod tests {
         dir.set_untagged_only(true);
         dir.select_index(1);
         assert_eq!(dir.has_previous_next(), (true, false));
+    }
+
+    #[test]
+    fn name_filter_keeps_only_matching_files() {
+        let mut dir = directory_with(&["holiday.mp4", "work.mp4", "Holiday_2.mp4"]);
+        dir.set_name_filter("holiday".to_string());
+        assert_eq!(listed_names(&dir), vec!["holiday.mp4", "Holiday_2.mp4"]);
+    }
+
+    #[test]
+    fn name_filter_matches_tags_in_the_name() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4"]);
+        tag_file_at(&mut dir, 0, &["Action"]);
+        dir.set_name_filter("action".to_string());
+        assert_eq!(listed_names(&dir), vec!["Action.a.mp4"]);
+    }
+
+    #[test]
+    fn empty_name_filter_lists_every_file() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4"]);
+        dir.set_name_filter("   ".to_string());
+        assert_eq!(listed_names(&dir).len(), 2);
+    }
+
+    /// Both filters narrow the list together.
+    #[test]
+    fn name_filter_and_untagged_filter_combine() {
+        let mut dir = directory_with(&["trip_a.mp4", "trip_b.mp4", "other.mp4"]);
+        tag_file_at(&mut dir, 0, &["Action"]);
+        dir.set_untagged_only(true);
+        dir.set_name_filter("trip".to_string());
+        assert_eq!(listed_names(&dir), vec!["trip_b.mp4"]);
+    }
+
+    #[test]
+    fn selected_file_stays_listed_while_typing_a_query_it_does_not_match() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4", "c.mp4"]);
+        dir.select_index(1);
+        dir.set_name_filter("c".to_string());
+        assert_eq!(listed_names(&dir), vec!["b.mp4", "c.mp4"]);
+        assert_eq!(dir.selected_index(), Some(0), "cursor still points at its file");
     }
 
     #[test]
