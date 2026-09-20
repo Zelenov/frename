@@ -1,4 +1,5 @@
-//! Schema for the app state DB. Single combined migration.
+//! Schema for the app state DB. Migrations are append-only: M1 is kept as it shipped, and
+//! later migrations correct it, so an old database and a fresh one end up in the same shape.
 
 /// Bootstrap: creates schema_version if not present, initializes to 0.
 /// Always run first by migrations::current_version().
@@ -46,4 +47,11 @@ CREATE TABLE IF NOT EXISTS video_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     volume REAL NOT NULL DEFAULT 1.0
 );
+";
+
+/// Migration 2: drop the tag tables. Tags live in each folder's own `.frename` file now, so
+/// these have no reader left; the rows are not migrated, by design.
+pub const M2_DROP_TAG_TABLES: &str = "
+DROP TABLE IF EXISTS stored_tags;
+DROP TABLE IF EXISTS tag_color_mapping;
 ";
