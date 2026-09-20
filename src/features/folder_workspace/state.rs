@@ -349,8 +349,11 @@ impl FolderWorkspace {
         Task::none()
     }
 
-    fn folder_loaded(&mut self, directory: Directory, target_file: Option<PathBuf>) -> Task<Message> {
+    fn folder_loaded(&mut self, mut directory: Directory, target_file: Option<PathBuf>) -> Task<Message> {
         self.loading = false;
+        // The untagged filter is a user setting, not a property of the folder: carry it over.
+        let untagged_only = self.directory.as_ref().is_some_and(|d| d.untagged_only());
+        directory.set_untagged_only(untagged_only);
         self.directory = Some(directory); // replace previous directory only on success
         let dir = self.directory.as_mut().expect("just set");
         let selected = target_file.as_deref().and_then(|p| dir.open_path(p));
@@ -449,6 +452,11 @@ impl FolderWorkspace {
             }));
         }
 
+        // The saved file may have just dropped out of the untagged list, shifting every row
+        // below it up by one; re-run scroll-into-view so the cursor stays where the user sees it.
+        if self.directory.as_ref().is_some_and(|d| d.untagged_only()) {
+            return Task::done(Message::ScrollFolderListToSelected);
+        }
         Task::none()
     }
 
@@ -465,7 +473,20 @@ impl FolderWorkspace {
             folder::Message::ScrollToSelected => Task::done(Message::ScrollFolderListToSelected),
             folder::Message::CopyTagsFrom(id) => self.copy_tags_from_id(id),
             folder::Message::OpenFolder => Task::done(Message::OpenFilePicker),
+            folder::Message::SetUntaggedOnly(untagged_only) => {
+                self.set_untagged_only(untagged_only)
+            }
         }
+    }
+
+    /// Turn the untagged-only filter on or off. The list changes shape, so bring the selected
+    /// file back into view (it stays listed even when it already has tags).
+    fn set_untagged_only(&mut self, untagged_only: bool) -> Task<Message> {
+        let Some(dir) = self.directory.as_mut() else {
+            return Task::none();
+        };
+        dir.set_untagged_only(untagged_only);
+        Task::done(Message::ScrollFolderListToSelected)
     }
 
     /// Copy tags from the file with the given stable ID into the currently open file.
@@ -1308,6 +1329,41 @@ mod tests {
             crate::features::media_viewer::Message::Unloaded,
         ));
         assert!(!workspace.has_pending_rename(), "still None after second Unloaded");
+    }
+
+    /// With the untagged filter on, a file leaves the list only once the cursor has left it,
+    /// and the row it frees is taken by the file the cursor moved to — the selection does not
+    /// jump to another row while the list shrinks.
+    #[test]
+    fn untagged_filter_keeps_the_cursor_row_when_a_file_is_tagged() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory,
+            target_file: Some(test_dir.target_file),
+        });
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::Folder(folder::Message::SetUntaggedOnly(true)));
+
+        let file_0_id = file_id_at(&workspace, 0);
+
+        // Move to file_1; the deferred save then writes file_0's tags.
+        let _ = workspace.update(Message::Folder(folder::Message::NextFile));
+        flush_file_opened(&mut workspace);
+        let snapshot = FileSnapshot::new(vec!["Comedy".to_string()], "file_0", ".mp4", "file_0.mp4");
+        let _ = workspace.update(Message::FileUpdated { id: file_0_id, snapshot });
+
+        let dir = workspace.directory().expect("directory should be loaded");
+        assert_eq!(
+            dir.files_in_order().count(),
+            2,
+            "the file that got tags must leave the untagged list"
+        );
+        assert_eq!(
+            dir.selected_index(),
+            Some(0),
+            "the cursor must keep the row freed by the tagged file"
+        );
     }
 
     /// Verify that `save_and_reparse` (called by FileUpdated) updates the file path in the

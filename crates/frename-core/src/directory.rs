@@ -22,6 +22,8 @@ pub struct Directory<S> {
     order: Vec<FileId>,
     /// Identity of the currently selected file (stable across renames).
     selected_id: Option<FileId>,
+    /// When true, only files without tags are listed (the selected file always stays listed).
+    untagged_only: bool,
     store: S,
 }
 
@@ -39,6 +41,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
             files_by_id,
             order,
             selected_id: None,
+            untagged_only: false,
             store,
         }
     }
@@ -63,21 +66,62 @@ impl<S: AppStateStore + Clone> Directory<S> {
     // Accessors
     // -----------------------------------------------------------------------
 
+    /// True when the directory holds no files at all (regardless of the untagged filter).
     pub fn is_empty(&self) -> bool { self.order.is_empty() }
 
-    /// Files in modification-date order (for rendering the list).
-    pub fn files_in_order(&self) -> impl Iterator<Item = &File> {
-        self.order.iter().filter_map(|id| self.files_by_id.get(id))
+    /// Whether the "untagged only" filter is active.
+    pub fn untagged_only(&self) -> bool { self.untagged_only }
+
+    /// Turn the "untagged only" filter on or off. Selection is kept: the selected file stays
+    /// listed even once it has tags, so the row under the cursor never disappears under the user.
+    pub fn set_untagged_only(&mut self, untagged_only: bool) {
+        self.untagged_only = untagged_only;
     }
 
-    /// Look up a file by its stable ID. O(1).
+    /// Number of files without tags (ignores the filter and the selection exemption).
+    pub fn untagged_count(&self) -> usize {
+        self.files_by_id
+            .values()
+            .filter(|f| f.snapshot().tags().is_empty())
+            .count()
+    }
+
+    /// Whether a file is part of the listed set under the current filter.
+    /// The selected file is always listed: tagging it must not pull the row out from under the cursor.
+    fn is_listed(&self, file: &File) -> bool {
+        !self.untagged_only
+            || self.selected_id == Some(file.id())
+            || file.snapshot().tags().is_empty()
+    }
+
+    /// Files in modification-date order, filtered (for rendering the list).
+    /// All index-based operations (`selected_index`, `select_index`, prev/next) use this same order.
+    pub fn files_in_order(&self) -> impl Iterator<Item = &File> {
+        self.order
+            .iter()
+            .filter_map(|id| self.files_by_id.get(id))
+            .filter(|file| self.is_listed(file))
+    }
+
+    /// IDs of the listed files, in list order.
+    fn listed_ids(&self) -> impl Iterator<Item = FileId> + '_ {
+        self.files_in_order().map(|f| f.id())
+    }
+
+    /// Number of listed files under the current filter.
+    pub fn listed_count(&self) -> usize {
+        self.files_in_order().count()
+    }
+
+    /// Look up a file by its stable ID. O(1). Ignores the filter.
     pub fn file_by_id(&self, id: FileId) -> Option<&File> {
         self.files_by_id.get(&id)
     }
 
-    /// Index of the selected file in modification-date order.
+    /// Index of the selected file within the listed files.
     pub fn selected_index(&self) -> Option<usize> {
-        self.selected_id.and_then(|id| self.order.iter().position(|oid| *oid == id))
+        let selected = self.selected_id?;
+        self.listed_ids().position(|id| id == selected)
     }
 
     pub fn selected_file(&self) -> Option<&File> {
@@ -86,7 +130,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
 
     pub fn has_previous_next(&self) -> (bool, bool) {
         let idx = self.selected_index().unwrap_or(0);
-        (idx > 0, idx + 1 < self.order.len())
+        (idx > 0, idx + 1 < self.listed_count())
     }
 
     // -----------------------------------------------------------------------
@@ -108,9 +152,9 @@ impl<S: AppStateStore + Clone> Directory<S> {
         self.files_by_id.get(&id).cloned()
     }
 
-    /// Select by index in modification-date order. O(1).
+    /// Select by index within the listed files (same order the list is rendered in).
     pub fn select_index(&mut self, index: usize) -> Option<File> {
-        let id = *self.order.get(index)?;
+        let id = self.listed_ids().nth(index)?;
         self.select_by_id(id)
     }
 
@@ -122,7 +166,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
 
     pub fn select_next(&mut self) -> Option<File> {
         let current = self.selected_index().unwrap_or(0);
-        if current + 1 >= self.order.len() { return None; }
+        if current + 1 >= self.listed_count() { return None; }
         self.select_index(current + 1)
     }
 
@@ -203,4 +247,114 @@ fn scan_files(directory: &Path) -> Result<Vec<File>, std::io::Error> {
     }
     files.sort_by(|a, b| a.modified_at().cmp(&b.modified_at()));
     Ok(files)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::{Path, PathBuf};
+    use std::time::SystemTime;
+
+    use crate::db::fake_app_storage::FakeAppStorage;
+    use crate::{Directory, File};
+
+    /// Directory of `file_0.mp4` … `file_n.mp4`, all without tags.
+    fn directory_with(names: &[&str]) -> Directory<FakeAppStorage> {
+        let root = PathBuf::from("C:/test");
+        let files: Vec<File> = names
+            .iter()
+            .map(|name| File::from_path(root.join(name), SystemTime::UNIX_EPOCH))
+            .collect();
+        Directory::with_files(root, files, FakeAppStorage::new())
+    }
+
+    fn listed_names(dir: &Directory<FakeAppStorage>) -> Vec<String> {
+        dir.files_in_order()
+            .map(|f| {
+                f.file_path()
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or_default()
+                    .to_string()
+            })
+            .collect()
+    }
+
+    /// Apply tags to a file the way a deferred rename does, by its listed position.
+    fn tag_file_at(dir: &mut Directory<FakeAppStorage>, index: usize, tags: &[&str]) {
+        let file = dir.files_in_order().nth(index).expect("file at index");
+        let id = file.id();
+        let mut snapshot = file.snapshot().clone();
+        snapshot.set_tags(tags.iter().copied());
+        let new_path: PathBuf = Path::new("C:/test").join(snapshot.file_name());
+        dir.rename_file(id, &new_path, &snapshot);
+    }
+
+    #[test]
+    fn filter_off_lists_every_file() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4"]);
+        tag_file_at(&mut dir, 0, &["Action"]);
+        assert_eq!(listed_names(&dir).len(), 2);
+    }
+
+    #[test]
+    fn filter_hides_tagged_files() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4", "c.mp4"]);
+        tag_file_at(&mut dir, 1, &["Action"]);
+        dir.set_untagged_only(true);
+        assert_eq!(listed_names(&dir), vec!["a.mp4", "c.mp4"]);
+    }
+
+    #[test]
+    fn selected_file_stays_listed_after_it_is_tagged() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4", "c.mp4"]);
+        dir.set_untagged_only(true);
+        dir.select_index(1);
+        tag_file_at(&mut dir, 1, &["Action"]);
+        assert_eq!(listed_names(&dir), vec!["a.mp4", "Action.b.mp4", "c.mp4"]);
+        assert_eq!(dir.selected_index(), Some(1));
+    }
+
+    /// Leaving a file that was just tagged drops it from the list, and the cursor keeps the
+    /// screen row it had: the new selection takes over the index the old file occupied.
+    #[test]
+    fn tagged_file_drops_out_once_the_cursor_leaves_it() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4", "c.mp4", "d.mp4"]);
+        dir.set_untagged_only(true);
+        dir.select_index(1);
+        tag_file_at(&mut dir, 1, &["Action"]);
+        dir.select_next();
+        assert_eq!(listed_names(&dir), vec!["a.mp4", "c.mp4", "d.mp4"]);
+        assert_eq!(dir.selected_index(), Some(1), "cursor keeps its screen row");
+        assert_eq!(
+            dir.selected_file().map(|f| f.file_path().to_path_buf()),
+            Some(PathBuf::from("C:/test/c.mp4"))
+        );
+    }
+
+    #[test]
+    fn next_skips_tagged_files() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4", "c.mp4"]);
+        tag_file_at(&mut dir, 1, &["Action"]);
+        dir.set_untagged_only(true);
+        dir.select_index(0);
+        let next = dir.select_next().expect("c.mp4 is the next untagged file");
+        assert_eq!(next.file_path(), Path::new("C:/test/c.mp4"));
+    }
+
+    #[test]
+    fn has_previous_next_follows_the_filtered_list() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4", "c.mp4"]);
+        tag_file_at(&mut dir, 2, &["Action"]);
+        dir.set_untagged_only(true);
+        dir.select_index(1);
+        assert_eq!(dir.has_previous_next(), (true, false));
+    }
+
+    #[test]
+    fn untagged_count_ignores_the_filter() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4", "c.mp4"]);
+        tag_file_at(&mut dir, 0, &["Action"]);
+        dir.set_untagged_only(true);
+        assert_eq!(dir.untagged_count(), 2);
+    }
 }

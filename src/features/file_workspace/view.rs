@@ -18,6 +18,10 @@ use super::{FileWorkspace, Message};
 /// Horizontal padding for the file workspace panel (same inset from splitter and window edge).
 const PANEL_PADDING_X: f32 = 8.0;
 
+/// Bottom inset so the comment box keeps the same margin as the sides instead of sitting
+/// flush against the window edge. The top stays at 0 to line up with the other columns.
+const PANEL_PADDING_BOTTOM: f32 = 8.0;
+
 /// Render the file workspace: search bar, tag list, file name panel (feature, wrap=true) below.
 pub fn view<'a, S>(
     file_workspace: &'a FileWorkspace<S>,
@@ -101,6 +105,11 @@ where
     container(content)
         .width(Length::Fill)
         .height(Length::Fill)
-        .padding([0.0, PANEL_PADDING_X])
+        .padding(iced::Padding {
+            top: 0.0,
+            right: PANEL_PADDING_X,
+            bottom: PANEL_PADDING_BOTTOM,
+            left: PANEL_PADDING_X,
+        })
         .into()
 }
