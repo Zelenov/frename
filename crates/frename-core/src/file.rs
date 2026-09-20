@@ -73,17 +73,18 @@ impl File {
         Ok(Self::new_from_path_and_time(file_path, modified_at))
     }
 
-    /// Create a file from path and folder info (used by directory scanner).
-    pub async fn open_with_folder_info(
-        path: impl AsRef<Path> + Send,
+    /// Create a file from path, modification time and folder info (used by the directory scanner).
+    ///
+    /// Synchronous by design: the scanner already runs on a blocking thread and already holds the
+    /// modification time the OS returned with the directory entry, so there is nothing to await.
+    pub fn from_path_with_folder_info(
+        path: impl AsRef<Path>,
+        modified_at: SystemTime,
         folder_info: &FolderInfo,
-    ) -> Result<Self, std::io::Error> {
-        let path = path.as_ref();
-        let metadata = tokio::fs::metadata(path).await?;
-        let modified_at = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-        let file_path = path.to_path_buf().into_boxed_path();
+    ) -> Self {
+        let file_path = path.as_ref().to_path_buf().into_boxed_path();
         let file_snapshot = FileTagger::parse(&file_path, folder_info);
-        Ok(Self::new_from_parts(file_path, modified_at, file_snapshot))
+        Self::new_from_parts(file_path, modified_at, file_snapshot)
     }
 
     /// Create a file from path and creation time. For tests and programmatic use.

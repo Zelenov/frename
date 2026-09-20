@@ -8,6 +8,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use crate::db::AppStateStore;
 use crate::{File, FileId, FileSnapshot, FileTagger, FolderAndFile, FolderInfo};
@@ -45,27 +46,14 @@ impl<S: AppStateStore + Clone> Directory<S> {
     /// Open a directory asynchronously: scan all files and sort by modification date.
     pub async fn open(directory: &Path, store: S) -> Result<Self, std::io::Error> {
         log::info!("Scanning directory: {}", directory.display());
-        let folder_info = get_folder_info(directory);
-        let mut files = Vec::new();
-        let mut entries = tokio::fs::read_dir(directory)
+        let scan_path = directory.to_path_buf();
+        let files = tokio::task::spawn_blocking(move || scan_files(&scan_path))
             .await
+            .map_err(|e| {
+                log::error!("Directory scan task failed: {e}");
+                std::io::Error::other(e)
+            })?
             .map_err(|e| { log::error!("Failed to scan directory: {e}"); e })?;
-        while let Some(entry) = entries
-            .next_entry()
-            .await
-            .map_err(|e| { log::error!("Failed to scan directory: {e}"); e })?
-        {
-            let path = entry.path();
-            if !path.is_file() { continue; }
-            if FileTagger::is_sidecar_file(&path) { continue; }
-
-            files.push(
-                File::open_with_folder_info(&path, &folder_info)
-                    .await
-                    .map_err(|e| { log::error!("Failed to scan directory: {e}"); e })?,
-            );
-        }
-        files.sort_by(|a, b| a.modified_at().cmp(&b.modified_at()));
         store.set_last_folder_and_file(&FolderAndFile::new(directory, None::<PathBuf>));
         log::info!("Directory scan complete: {} files found", files.len());
         Ok(Self::with_files(directory, files, store))
@@ -182,12 +170,37 @@ impl<S: AppStateStore + Clone> Directory<S> {
     }
 }
 
-fn get_folder_info(folder: &Path) -> FolderInfo {
-    let file_names = std::fs::read_dir(folder)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|entry| entry.file_name().to_str().map(|s| s.to_string()))
-        .collect();
-    FolderInfo::new(file_names)
+/// Reads the folder in one pass and returns its files in modification-date order.
+///
+/// Blocking on purpose — it runs on the blocking pool. `std`'s `DirEntry` carries the metadata
+/// Windows already returned from `FindNextFile`, so `file_type` and `metadata` cost nothing here.
+/// The previous version enumerated the folder twice (once for [FolderInfo], once for the files)
+/// and awaited a separate `metadata()` syscall per entry.
+fn scan_files(directory: &Path) -> Result<Vec<File>, std::io::Error> {
+    let entries: Vec<std::fs::DirEntry> =
+        std::fs::read_dir(directory)?.collect::<Result<Vec<_>, _>>()?;
+    let folder_info = FolderInfo::new(
+        entries
+            .iter()
+            .filter_map(|e| e.file_name().to_str().map(str::to_string))
+            .collect(),
+    );
+
+    let mut files = Vec::with_capacity(entries.len());
+    for entry in &entries {
+        let Ok(file_type) = entry.file_type() else { continue };
+        let path = entry.path();
+        // file_type does not follow symlinks, so linked media needs the extra stat to be seen.
+        let is_file = if file_type.is_symlink() { path.is_file() } else { file_type.is_file() };
+        if !is_file { continue; }
+        if FileTagger::is_sidecar_file(&path) { continue; }
+        // An unreadable entry sorts to the front rather than failing the whole scan.
+        let modified_at = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .unwrap_or(SystemTime::UNIX_EPOCH);
+        files.push(File::from_path_with_folder_info(path, modified_at, &folder_info));
+    }
+    files.sort_by(|a, b| a.modified_at().cmp(&b.modified_at()));
+    Ok(files)
 }

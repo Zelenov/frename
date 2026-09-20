@@ -6,7 +6,7 @@
 
 use iced::{Task, window};
 use simplelog::{
-    CombinedLogger, ColorChoice, Config, LevelFilter, TermLogger, TerminalMode, WriteLogger,
+    CombinedLogger, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode, WriteLogger,
 };
 use std::fs::File;
 
@@ -46,16 +46,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .join("frename_debug.log");
     let log_file = File::create(log_path)?;
 
+    // Log only this app's crates. Dependencies are far noisier than they look: cosmic_text emits a
+    // `relayout` record per text layout and naga one per shader-validation step, which measured at
+    // ~7000 records/second during interaction — each one an unbuffered write on the UI thread.
+    // The target filter drops them inside the logger, before the record is formatted or written.
+    let log_config = ConfigBuilder::new().add_filter_allow_str("frename").build();
+    // Full detail while developing; release keeps the log small and the UI thread free.
+    let log_level = if cfg!(debug_assertions) {
+        LevelFilter::Debug
+    } else {
+        LevelFilter::Info
+    };
+
     CombinedLogger::init(vec![
         TermLogger::new(
-            LevelFilter::Debug,
-            Config::default(),
+            log_level,
+            log_config.clone(),
             TerminalMode::Mixed,
             ColorChoice::Auto
         ),
         WriteLogger::new(
-            LevelFilter::Debug,
-            Config::default(),
+            log_level,
+            log_config,
             log_file,
         ),
     ])?;

@@ -26,26 +26,31 @@ fn fmt_timecode(secs: f32) -> String {
 /// Renders the file name as tag chips + optional timecodes + name.extension (no outer container).
 /// `seg_start`/`seg_end`: optional IN/OUT timecodes shown between tags and file name.
 /// Callers wrap in a container when they need panel style (e.g. file workspace, folder list rows).
-pub fn view<Message: 'static>(
-    snapshot: FileSnapshot,
+///
+/// Borrows the snapshot: the folder list renders one of these per row on every redraw, so taking
+/// it by value cost a full `FileSnapshot` clone (plus a `Vec<String>` and a `String` per tag) per
+/// row per frame. `color_mapping` is only read for colour lookups, so its borrow does not escape.
+pub fn view<'a, Message: 'a>(
+    snapshot: &'a FileSnapshot,
     color_mapping: &TagColorMapping,
     wrap: bool,
-) -> Element<'static, Message> {
+) -> Element<'a, Message> {
     let seg_start = snapshot.segment_start();
     let seg_end = snapshot.segment_end();
-    let tags: Vec<String> = snapshot.tags().to_vec();
-    let name = snapshot.name_without_extension().to_string();
-    let ext = snapshot.extension().to_string();
-    let name_ext = name_ext_from_parts(&name, &ext);
+    let tags = snapshot.tags();
+    let name_ext = name_ext_from_parts(
+        snapshot.name_without_extension(),
+        snapshot.extension(),
+    );
 
-    let mut parts: Vec<Element<'static, Message>> = Vec::new();
+    let mut parts: Vec<Element<'a, Message>> = Vec::new();
     for (i, tag_name) in tags.iter().enumerate() {
         if i > 0 {
             parts.push(dot_text().into());
         }
         let color_index = color_mapping.color_index_for(tag_name);
         let tag_color = tag_colors::TagColors::color(color_index);
-        parts.push(tag_chip::view_display_only(tag_name.clone(), tag_color));
+        parts.push(tag_chip::view_display_only(tag_name, tag_color));
     }
     // Timecode badges between tags and file name.
     for secs in seg_start.into_iter().chain(seg_end) {
@@ -82,7 +87,7 @@ pub fn view<Message: 'static>(
     }
 }
 
-fn dot_text<Message: 'static>() -> Element<'static, Message> {
+fn dot_text<'a, Message: 'a>() -> Element<'a, Message> {
     text(DOT)
         .size(14)
         .color(theme::TEXT_MUTED)

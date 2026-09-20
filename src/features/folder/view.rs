@@ -16,7 +16,7 @@ use super::Message;
 pub fn view<'a>(
     directory: Option<&'a crate::features::folder_workspace::Directory>,
     loading: bool,
-    tag_color_mapping: frename_core::TagColorMapping,
+    tag_color_mapping: &frename_core::TagColorMapping,
 ) -> Element<'a, Message> {
     let placeholder_icon = |icon: &'static str| {
         container(text(icon).size(48).color(theme::TEXT_MUTED))
@@ -46,8 +46,8 @@ pub fn view<'a>(
         .map(|(index, file_info)| {
             let is_selected = selected_index == Some(index);
             let name_display = widgets::file_name_display::view(
-                file_info.snapshot().clone(),
-                &tag_color_mapping,
+                file_info.snapshot(),
+                tag_color_mapping,
                 false,
             );
 

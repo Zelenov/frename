@@ -26,11 +26,11 @@ pub const LABEL_TO_TRAILING_SPACING: f32 = 4.0;
 
 /// Renders a display-only tag chip: colored pill with label. No interactions, no leading content.
 /// Use in the folder list (file name display).
-pub fn view_display_only<Message: 'static>(
-    tag_name: impl Into<String>,
+pub fn view_display_only<'a, Message: 'a>(
+    tag_name: &'a str,
     tag_color: iced::Color,
-) -> Element<'static, Message> {
-    let label = text(tag_name.into())
+) -> Element<'a, Message> {
+    let label = text(tag_name)
         .size(14)
         .color(iced::Color::from_rgb(0.0, 0.0, 0.0));
     let chip_inner = container(label)
