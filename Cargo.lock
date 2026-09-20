@@ -1197,6 +1197,7 @@ dependencies = [
  "arboard",
  "frename-core",
  "gstreamer",
+ "gstreamer-app",
  "gstreamer-video",
  "iced",
  "iced_video_player",
