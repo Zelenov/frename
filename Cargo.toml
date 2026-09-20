@@ -15,7 +15,7 @@ heic = ["dep:libheif-rs"]
 frename-core = { path = "crates/frename-core" }
 
 # GUI framework - Iced for cross-platform GUI
-iced = { version = "0.14.0-dev", features = ["tokio", "image"] }
+iced = { version = "0.14", features = ["tokio", "image"] }
 
 # Video playback - GStreamer-based (requires GStreamer installation on Windows)
 # See GSTREAMER_SETUP.md for installation instructions
@@ -27,7 +27,7 @@ url = "2.5"
 image = "0.25"
 
 # HEIC/HEIF decoding (optional; requires cmake at build time)
-libheif-rs = { version = "2", features = ["embedded-libheif"], optional = true }
+libheif-rs = { version = "3", features = ["embedded-libheif"], optional = true }
 
 # Logging - simple file logging for debugging
 log = "0.4"
@@ -44,7 +44,7 @@ tokio = { version = "1", features = ["time", "rt"] }
 arboard = "3"
 
 # Native file/folder picker dialogs
-rfd = "0.15"
+rfd = "0.17"
 
 [profile.release]
 opt-level = 3
