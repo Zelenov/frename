@@ -786,12 +786,6 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     }
 }
 
-impl Default for TagList<crate::db::AppDatabase> {
-    fn default() -> Self {
-        Self::new(crate::db::AppDatabase::new(), FileSnapshot::default())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use uuid::Uuid;

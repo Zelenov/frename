@@ -17,4 +17,8 @@ pub enum Message {
     CopyTagsFrom(frename_core::FileId),
     /// Open a native file picker dialog (from the controls bar).
     OpenFolder,
+    /// Show only files without tags (true) or every file (false).
+    SetUntaggedOnly(bool),
+    /// Narrow the list to files whose name contains this text (empty = no filter).
+    SetNameFilter(String),
 }

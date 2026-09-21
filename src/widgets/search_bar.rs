@@ -6,8 +6,12 @@ use iced::{mouse, Element, Length};
 
 use crate::theme;
 
-/// Widget id for the search bar text input (for focus and global key capture).
+/// Widget id for the tag search bar text input (for focus and global key capture).
 pub const SEARCH_BAR_INPUT_ID: &str = "search-bar-input";
+
+/// Widget id for the file search bar text input. Every bar needs its own id, otherwise a
+/// focus operation would target both of them.
+pub const FILE_SEARCH_BAR_INPUT_ID: &str = "file-search-bar-input";
 
 /// Render a search bar: search icon left, text input, optional create-tag "○" button (when text is
 /// a new tag name), optional clear "×" button (when non-empty).
@@ -16,6 +20,7 @@ pub const SEARCH_BAR_INPUT_ID: &str = "search-bar-input";
 /// Enter calls `f(current_input_text)` to produce the message. Pass `Some(...)` only when the
 /// current `value` does not match any existing tag name.
 pub fn view<'a, Message: Clone + 'a>(
+    input_id: &'static str,
     value: &'a str,
     on_input: impl Fn(String) -> Message + 'a,
     on_clear: impl Fn() -> Message + 'a,
@@ -29,7 +34,7 @@ pub fn view<'a, Message: Clone + 'a>(
     // Compute submit message before moving on_input into the widget.
     let submit_msg = create_msg.clone().unwrap_or_else(|| on_input(value.to_string()));
     let mut input = text_input("", value)
-        .id(iced::widget::Id::from(SEARCH_BAR_INPUT_ID))
+        .id(iced::widget::Id::from(input_id))
         .on_input(on_input)
         .padding([8, 8])
         .size(14)

@@ -1,11 +1,13 @@
 //! State for the video player sub-feature.
 
 use gstreamer as gst;
+use gstreamer_app as gst_app;
 use gstreamer_video::VideoMeta;
 use gst::prelude::*;
 use iced::{Subscription, Task, time};
-use iced_video_player::Video;
+use iced_video_player::{Error as VideoError, Video};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::features::video_controls::{self, VideoControlsState};
@@ -16,7 +18,6 @@ pub struct VideoPlayerState {
     current_video: Option<Video>,
     loading: bool,
     load_failed: bool,
-    video_path: Option<PathBuf>,
     controls: VideoControlsState,
 }
 
@@ -26,7 +27,6 @@ impl Default for VideoPlayerState {
             current_video: None,
             loading: false,
             load_failed: false,
-            video_path: None,
             controls: VideoControlsState::default(),
         }
     }
@@ -39,49 +39,50 @@ impl VideoPlayerState {
         self.loading = true;
         self.load_failed = false;
         self.current_video = None;
-        self.video_path = Some(path.clone());
         self.controls = VideoControlsState::with_volume(self.controls.volume());
 
         Task::future(async move {
-            let success = tokio::task::spawn_blocking(move || {
+            // The video is opened once, here on a blocking thread, and handed to the
+            // update below. Opening it a second time on the update thread would stall
+            // the UI for as long as the pipeline takes to preroll.
+            let opened = tokio::task::spawn_blocking(move || {
                 let Ok(url) = url::Url::from_file_path(&path) else {
                     log::warn!("Failed to create URL from path: {}", path.display());
-                    return false;
+                    return None;
                 };
                 log::debug!("File URL created: {url}");
-                match Video::new(&url) {
-                    Ok(_) => { log::info!("Video loaded successfully"); true }
-                    Err(e) => { log::error!("Failed to load video: {e}"); false }
+                match open_video(&url) {
+                    Ok(video) => {
+                        log::info!("Video loaded successfully");
+                        Some(video)
+                    }
+                    Err(e) => {
+                        log::error!("Failed to load video: {e}");
+                        None
+                    }
                 }
             })
             .await
-            .unwrap_or(false);
+            .unwrap_or(None);
 
-            Message::VideoLoaded(success)
+            Message::VideoLoaded(Arc::new(Mutex::new(opened)))
         })
     }
 
     /// Handle all video player messages.
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::VideoLoaded(success) => {
+            Message::VideoLoaded(slot) => {
                 self.loading = false;
-                self.load_failed = !success;
-                if !success {
+                // A poisoned lock is as unusable as a failed open, so both land in the
+                // error state rather than the neutral "nothing loaded" placeholder.
+                let video = slot.lock().ok().and_then(|mut slot| slot.take());
+                let Some(video) = video else {
+                    self.load_failed = true;
                     log::info!("Video load failed; showing error state");
                     return Task::none();
-                }
-                let Some(path) = self.video_path.as_ref() else {
-                    return Task::none();
                 };
-                let Ok(url) = url::Url::from_file_path(path) else {
-                    log::error!("Failed to create URL from path: {}", path.display());
-                    return Task::none();
-                };
-                let Ok(video) = Video::new(&url) else {
-                    log::error!("Failed to reload video from: {url}");
-                    return Task::none();
-                };
+                self.load_failed = false;
                 let duration_secs = video.duration().as_secs_f32();
                 self.current_video = Some(video);
                 Task::done(Message::VideoReady { duration_secs })
@@ -149,7 +150,6 @@ impl VideoPlayerState {
             Message::ScreenshotTaken(_, _) => Task::none(),
             Message::Unload => {
                 self.current_video = None;
-                self.video_path = None;
                 self.loading = false;
                 Task::done(Message::VideoUnloaded)
             }
@@ -212,6 +212,131 @@ impl VideoPlayerState {
             self.controls.subscription().map(Message::Controls),
         ])
     }
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline construction
+// ---------------------------------------------------------------------------
+
+/// How long the pipeline may take to reach `Playing` before the load is abandoned.
+///
+/// The 5 seconds `Video::new` allows is not enough for a file on cloud-backed
+/// storage (Dropbox or OneDrive "online-only"): the provider downloads the whole file
+/// on the first read, so a large 4K clip needs minutes before the demuxer sees a byte.
+const PREROLL_TIMEOUT_SECS: u64 = 300;
+
+/// Framerate written into the caps of a variable-framerate source.
+///
+/// GStreamer signals "variable framerate" as `framerate=0/1`, which many iPhone
+/// recordings negotiate, and `Video::from_gst_pipeline` rejects any framerate of zero.
+/// The value is informational: the crate only exposes it through `Video::framerate()`,
+/// which frename never calls, and frame timing comes from buffer timestamps. So a
+/// source that reports no fixed rate is relabelled rather than refused.
+const VFR_NOMINAL_FRAMERATE: &str = "30/1";
+
+/// Open a video for playback.
+///
+/// Variable-framerate sources are rejected outright by the player, so a load that fails
+/// for that reason alone is retried once with the framerate relabelled. Everything else
+/// takes the first path, which builds exactly the graph `Video::new` builds.
+fn open_video(uri: &url::Url) -> Result<Video, VideoError> {
+    gst::init()?;
+
+    match open_pipeline(uri, false) {
+        Err(VideoError::Framerate(rate)) => {
+            log::info!(
+                "Source reports framerate {rate} (variable); retrying as {VFR_NOMINAL_FRAMERATE}"
+            );
+            open_pipeline(uri, true)
+        }
+        other => other,
+    }
+}
+
+/// Build a `playbin`, bring it to `Playing` and hand it to the player.
+///
+/// The preroll happens here rather than inside `Video::from_gst_pipeline`, which allows
+/// only 5 seconds — too little for a cold file on cloud-backed storage (Dropbox or
+/// OneDrive "online-only"), where the first read waits on a full download. Reaching
+/// `Playing` up front means the wait inside the player returns immediately.
+fn open_pipeline(uri: &url::Url, relabel_framerate: bool) -> Result<Video, VideoError> {
+    let pipeline = gst::parse::launch(&description(uri, relabel_framerate))?
+        .downcast::<gst::Pipeline>()
+        .map_err(|_| VideoError::Cast)?;
+
+    // Every failure past this point has to stop the pipeline, or playbin keeps the
+    // audio device open and the sound of an abandoned load carries on in the background.
+    if let Err(e) = preroll(&pipeline) {
+        let _ = pipeline.set_state(gst::State::Null);
+        return Err(e);
+    }
+
+    let (video_sink, text_sink) = match sinks(&pipeline) {
+        Ok(sinks) => sinks,
+        Err(e) => {
+            let _ = pipeline.set_state(gst::State::Null);
+            return Err(e);
+        }
+    };
+
+    Video::from_gst_pipeline(pipeline, video_sink, Some(text_sink))
+}
+
+/// The `playbin` description, optionally rewriting the framerate on the way to the sink.
+fn description(uri: &url::Url, relabel_framerate: bool) -> String {
+    // capssetter has to sit behind the NV12 filter, not in front of it: offering its own
+    // framerate to a filter that then has to negotiate it upstream collapses the whole
+    // graph with "internal data stream error" — including on files that were fine.
+    let video_sink = if relabel_framerate {
+        format!(
+            "videoscale ! videoconvert ! video/x-raw,format=NV12,pixel-aspect-ratio=1/1 \
+             ! capssetter caps=video/x-raw,framerate={VFR_NOMINAL_FRAMERATE} \
+             ! appsink name=iced_video drop=true"
+        )
+    } else {
+        "videoscale ! videoconvert ! appsink name=iced_video drop=true \
+         caps=video/x-raw,format=NV12,pixel-aspect-ratio=1/1"
+            .to_string()
+    };
+
+    format!(
+        "playbin uri=\"{}\" text-sink=\"appsink name=iced_text sync=true drop=true\" \
+         video-sink=\"{video_sink}\"",
+        uri.as_str()
+    )
+}
+
+/// Bring the pipeline to `Playing`, giving a cold cloud-backed file time to download.
+fn preroll(pipeline: &gst::Pipeline) -> Result<(), VideoError> {
+    pipeline.set_state(gst::State::Playing)?;
+    pipeline
+        .state(gst::ClockTime::from_seconds(PREROLL_TIMEOUT_SECS))
+        .0?;
+    Ok(())
+}
+
+/// Pull the two appsinks that `Video::from_gst_pipeline` expects out of the playbin.
+fn sinks(pipeline: &gst::Pipeline) -> Result<(gst_app::AppSink, gst_app::AppSink), VideoError> {
+    // playbin wraps the video-sink description in a bin and exposes it through a
+    // GhostPad, so the appsink has to be looked up by name inside that bin.
+    let video_sink: gst::Element = pipeline.property("video-sink");
+    let video_sink = video_sink
+        .pads()
+        .first()
+        .cloned()
+        .and_then(|pad| pad.dynamic_cast::<gst::GhostPad>().ok())
+        .and_then(|pad| pad.parent_element())
+        .and_then(|element| element.downcast::<gst::Bin>().ok())
+        .and_then(|bin| bin.by_name("iced_video"))
+        .and_then(|element| element.downcast::<gst_app::AppSink>().ok())
+        .ok_or_else(|| VideoError::AppSink("iced_video".to_string()))?;
+
+    let text_sink: gst::Element = pipeline.property("text-sink");
+    let text_sink = text_sink
+        .downcast::<gst_app::AppSink>()
+        .map_err(|_| VideoError::AppSink("iced_text".to_string()))?;
+
+    Ok((video_sink, text_sink))
 }
 
 // ---------------------------------------------------------------------------

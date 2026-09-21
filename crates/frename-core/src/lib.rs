@@ -19,9 +19,9 @@ pub use file::{File, FileId};
 pub use ordered::{OrderableEntry, OrderedCollection, OrderKey, OrderedThing};
 pub use tags::{
     install_file_tagger,
-    FileSnapshot, FileTagger, FileTaggerBackend, FolderInfo, LoggingFileTagger,
-    InMemoryFileTagger, ProductionFileTagger,
-    SaveAndReparse, Screenshot, StoredTag, Tag, TagColorMapping, TagId, TagList,
+    DefaultTag, FileSnapshot, FileTagger, FileTaggerBackend, FolderInfo, FolderTagStore,
+    LoggingFileTagger, InMemoryFileTagger, ProductionFileTagger,
+    SaveAndReparse, Screenshot, StoredTag, Tag, TagColorMapping, TagId, TagList, DEFAULT_TAGS,
 };
 pub use undo::{
     History, UndoContext, UndoError,

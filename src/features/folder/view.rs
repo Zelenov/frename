@@ -7,6 +7,7 @@ use iced::{mouse, Element, Length};
 
 use crate::theme;
 use crate::widgets;
+use crate::widgets::search_bar::FILE_SEARCH_BAR_INPUT_ID;
 
 use super::{FOLDER_LIST_SCROLLABLE_ID, FOLDER_ROW_HEIGHT};
 use super::Message;
@@ -104,19 +105,37 @@ pub fn view<'a>(
         })
         .collect();
 
-    let list = scrollable(column(items).width(Length::Fill))
-        .id(iced::widget::Id::new(FOLDER_LIST_SCROLLABLE_ID))
-        .height(Length::Fill)
-        .on_scroll(|viewport| {
-            let offset = viewport.absolute_offset();
-            Message::Scrolled {
-                scroll_y: offset.y,
-                viewport_height: viewport.bounds().height,
-            }
-        })
-        .style(theme::dark_scrollable_style);
+    // A filter hides everything: say so instead of showing an empty scrollable.
+    let body: Element<'_, Message> = if items.is_empty() {
+        let icon = if dir.name_filter().trim().is_empty() { "✓" } else { "🔍" };
+        container(text(icon).size(48).color(theme::TEXT_MUTED))
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+    } else {
+        scrollable(column(items).width(Length::Fill))
+            .id(iced::widget::Id::new(FOLDER_LIST_SCROLLABLE_ID))
+            .height(Length::Fill)
+            .on_scroll(|viewport| {
+                let offset = viewport.absolute_offset();
+                Message::Scrolled {
+                    scroll_y: offset.y,
+                    viewport_height: viewport.bounds().height,
+                }
+            })
+            .style(theme::dark_scrollable_style)
+            .into()
+    };
 
-    container(list)
+    let search = widgets::search_bar::view(
+        FILE_SEARCH_BAR_INPUT_ID,
+        dir.name_filter(),
+        Message::SetNameFilter,
+        || Message::SetNameFilter(String::new()),
+        None::<fn(String) -> Message>,
+    );
+
+    container(column![search, body].spacing(4))
         .width(Length::Fill)
         .height(Length::Fill)
         .style(theme::panel_container_style)

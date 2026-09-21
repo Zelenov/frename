@@ -1,4 +1,6 @@
-//! Application database (SQLite): app state storage and future user data.
+//! Application database (SQLite): session, window geometry and video settings.
+//!
+//! Tags are not here — they live in each folder's own tag file (see `FolderTagStore`).
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -6,13 +8,11 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
 
 use rusqlite::Connection;
-use uuid::Uuid;
 
-use crate::{FolderAndFile, StoredTag, TagColorMapping};
+use crate::FolderAndFile;
 
 use super::migrations;
-use super::schema;
-use super::traits::{AppStateStore, Initializable, StoredTagStore, VideoSettings, WindowGeometry};
+use super::traits::{AppStateStore, Initializable, VideoSettings, WindowGeometry};
 
 /// Open connections, keyed by database path.
 ///
@@ -77,13 +77,6 @@ impl AppDatabase {
         Ok(conn)
     }
 
-    /// Inserts the built-in tag seed data (INSERT OR IGNORE — safe to call multiple times).
-    /// Call this only in debug/development mode.
-    pub fn seed_debug_tags(&self) -> Result<(), rusqlite::Error> {
-        let conn = self.conn()?;
-        let conn = lock_connection(&conn);
-        conn.execute_batch(schema::SEED_TAGS)
-    }
 }
 
 impl Initializable for AppDatabase {
@@ -91,102 +84,6 @@ impl Initializable for AppDatabase {
         let conn = self.conn()?;
         let conn = lock_connection(&conn);
         migrations::run(&conn)?;
-        Ok(())
-    }
-}
-
-impl StoredTagStore for AppDatabase {
-    fn get_stored_tags(&self) -> Result<Vec<StoredTag>, Box<dyn std::error::Error + Send + Sync>> {
-        let conn = self.conn()?;
-        let conn = lock_connection(&conn);
-        let mut stmt = conn.prepare("SELECT id, name, sort_order, starred FROM stored_tags ORDER BY sort_order")?;
-        let tags = stmt
-            .query_map([], |row| {
-                let id_str: String = row.get(0)?;
-                let value: String = row.get(1)?;
-                let sort_order: i64 = row.get(2)?;
-                let starred: i64 = row.get(3)?;
-                let id = Uuid::parse_str(&id_str).map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
-                Ok(StoredTag::with_all(id, value, sort_order, starred != 0))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(tags)
-    }
-
-    fn get_tag_color_mapping(&self) -> Result<TagColorMapping, Box<dyn std::error::Error + Send + Sync>> {
-        let conn = self.conn()?;
-        let conn = lock_connection(&conn);
-        let mut stmt = conn.prepare("SELECT tag_name, color_index FROM tag_color_mapping")?;
-        let entries: Vec<(String, u8)> = stmt
-            .query_map([], |row| {
-                let name: String = row.get(0)?;
-                let idx: i32 = row.get(1)?;
-                Ok((name, idx as u8))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(TagColorMapping::from_entries(entries))
-    }
-
-    fn save_tag(
-        &mut self,
-        tag: StoredTag,
-        color_index: u8,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let conn = self.conn()?;
-        let conn = lock_connection(&conn);
-        let id_str = tag.id().to_string();
-        let name = tag.value();
-        let color = i32::from(color_index);
-        // Remove old tag_color_mapping row for this id (if any) before updating name, so we don't leave a stale name.
-        conn.execute(
-            "DELETE FROM tag_color_mapping WHERE tag_name IN (SELECT name FROM stored_tags WHERE id = ?1)",
-            [&id_str],
-        )?;
-        // Add or update stored_tags: insert with sort_order and starred, or update on conflict.
-        let sort_order = tag.sort_order();
-        let starred = tag.starred() as i32;
-        conn.execute(
-            "INSERT INTO stored_tags (id, name, sort_order, starred) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(id) DO UPDATE SET name = excluded.name, sort_order = excluded.sort_order, starred = excluded.starred",
-            rusqlite::params![id_str, name, sort_order, starred],
-        )?;
-        // Add or replace color mapping for the current name.
-        conn.execute(
-            "INSERT OR REPLACE INTO tag_color_mapping (tag_name, color_index) VALUES (?1, ?2)",
-            rusqlite::params![name, color],
-        )?;
-        Ok(())
-    }
-
-    fn remove_stored_tag_by_id(&mut self, tag_id: Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let conn = self.conn()?;
-        let conn = lock_connection(&conn);
-        let name: String = conn.query_row(
-            "SELECT name FROM stored_tags WHERE id = ?1",
-            [tag_id.to_string()],
-            |row| row.get(0),
-        )?;
-        conn.execute("DELETE FROM tag_color_mapping WHERE tag_name = ?1", [&name])?;
-        conn.execute("DELETE FROM stored_tags WHERE id = ?1", [tag_id.to_string()])?;
-        Ok(())
-    }
-
-    fn update_tag_orders(
-        &mut self,
-        tag_orders: &[(Uuid, i64)],
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if tag_orders.is_empty() {
-            return Ok(());
-        }
-        let conn = self.conn()?;
-        let mut conn = lock_connection(&conn);
-        let tx = conn.transaction()?;
-        {
-            let mut stmt = tx.prepare("UPDATE stored_tags SET sort_order = ?1 WHERE id = ?2")?;
-            for (id, sort_order) in tag_orders {
-                stmt.execute(rusqlite::params![sort_order, id.to_string()])?;
-            }
-        }
-        tx.commit()?;
         Ok(())
     }
 }

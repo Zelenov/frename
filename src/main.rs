@@ -96,13 +96,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize app database (migrations) before iced; decorator logs.
     let _ = LoggingAppStateStore::new(AppDatabase::new()).initialize();
 
-    // Seed built-in tags only in debug/development mode.
-    if is_debug_mode {
-        if let Err(e) = AppDatabase::new().seed_debug_tags() {
-            log::warn!("Failed to seed debug tags: {e}");
-        }
-    }
-
     // Restore saved window geometry (size + position + maximized), or use defaults.
     let saved = AppDatabase::new().get_window_state();
     let window_size = saved.map(|g| iced::Size::new(g.width, g.height))

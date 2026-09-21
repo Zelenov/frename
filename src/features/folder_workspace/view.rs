@@ -64,6 +64,10 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
 
     let (has_previous, has_next) = state.has_previous_next();
     let has_selected = state.current_file().is_some();
+    let (untagged_only, untagged_count) = state
+        .directory()
+        .map(|d| (d.untagged_only(), d.untagged_count()))
+        .unwrap_or((false, 0));
 
     // Bound to a local so the folder list can borrow it instead of taking a clone per frame.
     let tag_color_mapping = state.file_workspace().tag_color_mapping();
@@ -74,7 +78,13 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
             &tag_color_mapping,
         ))
         .height(Length::Fill),
-        folder_controls::view::view(has_previous, has_next, has_selected),
+        folder_controls::view::view(
+            has_previous,
+            has_next,
+            has_selected,
+            untagged_only,
+            untagged_count,
+        ),
     ]
     .height(Length::Fill)
     .into();

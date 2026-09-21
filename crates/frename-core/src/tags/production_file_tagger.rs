@@ -23,7 +23,7 @@ fn screenshot_path(file_path: &Path, position_ms: u64) -> PathBuf {
         .join(sidecar_name)
 }
 
-fn is_screenshot_sidecar(name: &str) -> bool {
+pub(super) fn is_screenshot_sidecar(name: &str) -> bool {
     if let Some(idx) = name.find(".snap.") {
         let rest = &name[idx + 6..];
         if let Some(time_str) = rest.strip_suffix(".jpg") {
@@ -115,11 +115,6 @@ impl FileTaggerBackend for ProductionFileTagger {
         }
         crate::comment::save_comment(&new_path, snapshot.comment());
         new_path
-    }
-
-    fn is_sidecar_file(&self, path: &Path) -> bool {
-        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        crate::comment::is_comment_file(path) || is_screenshot_sidecar(name)
     }
 
     fn save_screenshot(&self, file_path: &Path, position_ms: u64, image_data: &[u8]) {

@@ -1,12 +1,21 @@
 //! Messages for the video player sub-feature.
 
+use iced_video_player::Video;
+use std::sync::{Arc, Mutex};
+
 use crate::features::video_controls;
+
+/// A video handed from the loading thread to the update thread.
+///
+/// `Message` has to be `Clone` but `Video` is not, so the video travels in a shared
+/// slot that the handler empties with `take()`. `None` means the open failed.
+pub type LoadedVideo = Arc<Mutex<Option<Video>>>;
 
 /// Messages handled by the video player.
 #[derive(Debug, Clone)]
 pub enum Message {
-    /// Video finished loading (success flag)
-    VideoLoaded(bool),
+    /// Video finished loading; carries the opened video, or `None` when the open failed.
+    VideoLoaded(LoadedVideo),
     /// Video became available after loading
     VideoReady { duration_secs: f32 },
     /// New video frame rendered (triggers view refresh for progress bar)

@@ -10,7 +10,8 @@ use std::path::PathBuf;
 use arboard;
 use rfd;
 use frename_core::{
-    AppDatabase, AppStateStore, File, FileId, FileSnapshot, FolderAndFile, LoggingAppStateStore,
+    AppDatabase, AppStateStore, File, FileId, FileSnapshot, FolderAndFile, FolderTagStore,
+    LoggingAppStateStore,
     NavigateFileCommand, ReorderTagCommand, ToggleTagCommand, PasteTagsCommand,
     DeleteTagCommand, CreateTagCommand, SaveTagCommand, StarTagCommand,
     SetSegmentStartCommand, SetSegmentEndCommand,
@@ -37,17 +38,19 @@ use super::Message;
 const DEFAULT_LEFT_WIDTH: f32 = 460.0;
 const DEFAULT_FOLDER_WIDTH: f32 = 200.0;
 const MIN_FOLDER_WIDTH: f32 = 120.0;
+/// How many actions undo/redo keeps. Reset per folder, since tags are per folder.
+const HISTORY_DEPTH: usize = 50;
 
 /// Concrete history type for this workspace: Directory uses LoggingAppStateStore<AppDatabase>,
-/// TagList uses AppDatabase.
-type WorkspaceHistory = History<LoggingAppStateStore<AppDatabase>, AppDatabase>;
+/// TagList uses the tag store of the open folder.
+type WorkspaceHistory = History<LoggingAppStateStore<AppDatabase>, FolderTagStore>;
 
 /// Folder workspace: owns directory, loading. Current file is the directory's selection.
 pub struct FolderWorkspace {
     directory: Option<Directory>,
     loading: bool,
     /// File currently being edited: copy of file + tag selection. Rename panel reads/updates this.
-    file_workspace: FileWorkspace<AppDatabase>,
+    file_workspace: FileWorkspace<FolderTagStore>,
     media_viewer: MediaViewerState,
     tag_panel: TagPanelState,
     file_name_panel: FileNamePanelState,
@@ -87,7 +90,7 @@ impl FolderWorkspace {
         Self {
             directory: None,
             loading: false,
-            file_workspace: FileWorkspace::<AppDatabase>::default(),
+            file_workspace: FileWorkspace::<FolderTagStore>::default(),
             media_viewer: MediaViewerState::default(),
             tag_panel: TagPanelState::default(),
             file_name_panel: FileNamePanelState::default(),
@@ -100,7 +103,7 @@ impl FolderWorkspace {
             folder_scroll_y: None,
             folder_viewport_height: None,
             copied_tags: None,
-            history: WorkspaceHistory::new(50),
+            history: WorkspaceHistory::new(HISTORY_DEPTH),
             media_fullscreen: false,
         }
     }
@@ -216,10 +219,14 @@ impl FolderWorkspace {
             Message::EscapePressed => {
                 if self.media_fullscreen {
                     self.media_fullscreen = false;
-                    Task::none()
-                } else {
-                    self.handle_tag_panel(tag_panel::Message::SetFilter(String::new()))
+                    return Task::none();
                 }
+                // Both search bars label their clear button "Esc", so clear both.
+                let clear_files = self.set_file_name_filter(String::new());
+                Task::batch([
+                    self.handle_tag_panel(tag_panel::Message::SetFilter(String::new())),
+                    clear_files,
+                ])
             }
             Message::OpenFilePicker => {
                 Task::perform(
@@ -349,9 +356,17 @@ impl FolderWorkspace {
         Task::none()
     }
 
-    fn folder_loaded(&mut self, directory: Directory, target_file: Option<PathBuf>) -> Task<Message> {
+    fn folder_loaded(&mut self, mut directory: Directory, target_file: Option<PathBuf>) -> Task<Message> {
         self.loading = false;
+        // The untagged filter is a user setting, not a property of the folder: carry it over.
+        let untagged_only = self.directory.as_ref().is_some_and(|d| d.untagged_only());
+        directory.set_untagged_only(untagged_only);
         self.directory = Some(directory); // replace previous directory only on success
+        let folder = self.directory.as_ref().expect("just set").path().to_path_buf();
+        // Tags belong to the folder, so the workspace starts over on a new one. The history goes
+        // with them: undoing "create tag" from the previous folder would delete it from this one.
+        self.file_workspace = FileWorkspace::new(FolderTagStore::for_folder(&folder));
+        self.history = WorkspaceHistory::new(HISTORY_DEPTH);
         let dir = self.directory.as_mut().expect("just set");
         let selected = target_file.as_deref().and_then(|p| dir.open_path(p));
         if let Some(file) = selected {
@@ -449,6 +464,11 @@ impl FolderWorkspace {
             }));
         }
 
+        // The saved file may have just dropped out of the untagged list, shifting every row
+        // below it up by one; re-run scroll-into-view so the cursor stays where the user sees it.
+        if self.directory.as_ref().is_some_and(|d| d.untagged_only()) {
+            return Task::done(Message::ScrollFolderListToSelected);
+        }
         Task::none()
     }
 
@@ -465,7 +485,31 @@ impl FolderWorkspace {
             folder::Message::ScrollToSelected => Task::done(Message::ScrollFolderListToSelected),
             folder::Message::CopyTagsFrom(id) => self.copy_tags_from_id(id),
             folder::Message::OpenFolder => Task::done(Message::OpenFilePicker),
+            folder::Message::SetUntaggedOnly(untagged_only) => {
+                self.set_untagged_only(untagged_only)
+            }
+            folder::Message::SetNameFilter(query) => self.set_file_name_filter(query),
         }
+    }
+
+    /// Turn the untagged-only filter on or off. The list changes shape, so bring the selected
+    /// file back into view (it stays listed even when it already has tags).
+    fn set_untagged_only(&mut self, untagged_only: bool) -> Task<Message> {
+        let Some(dir) = self.directory.as_mut() else {
+            return Task::none();
+        };
+        dir.set_untagged_only(untagged_only);
+        Task::done(Message::ScrollFolderListToSelected)
+    }
+
+    /// Narrow the file list by name. Like the untagged filter, the selected file stays listed,
+    /// so the cursor keeps pointing at a real row while the query is being typed.
+    fn set_file_name_filter(&mut self, query: String) -> Task<Message> {
+        let Some(dir) = self.directory.as_mut() else {
+            return Task::none();
+        };
+        dir.set_name_filter(query);
+        Task::done(Message::ScrollFolderListToSelected)
     }
 
     /// Copy tags from the file with the given stable ID into the currently open file.
@@ -1022,7 +1066,7 @@ impl FolderWorkspace {
     }
 
     /// File workspace: current file and its tag selection (for rename panel). Use this for display and tag toggles.
-    pub fn file_workspace(&self) -> &FileWorkspace<AppDatabase> {
+    pub fn file_workspace(&self) -> &FileWorkspace<FolderTagStore> {
         &self.file_workspace
     }
 
@@ -1090,6 +1134,7 @@ impl FolderWorkspace {
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::SystemTime;
 
     use frename_core::{AppDatabase, File, FileId, FileSnapshot, Initializable, LoggingAppStateStore};
@@ -1110,18 +1155,22 @@ mod tests {
     }
 
     /// Test fixture: a directory with a given number of files. Use in folder workspace tests.
+    ///
+    /// The folder is created on disk, because opening it writes the folder's tag file. Fields are
+    /// cloned rather than moved out so the fixture stays alive to delete the folder afterwards.
     pub struct TestDirectory {
-        pub directory: Directory,
-        pub target_file: PathBuf,
+        directory: Directory,
+        path: PathBuf,
     }
 
     impl TestDirectory {
         pub fn new(file_count: usize) -> Self {
-            let dir = PathBuf::from("C:/test/folder");
+            let path = unique_test_folder();
+            std::fs::create_dir_all(&path).expect("create test folder");
             let files: Vec<File> = (0..file_count)
                 .map(|i| {
                     File::from_path(
-                        dir.join(format!("file_{}.mp4", i)),
+                        path.join(format!("file_{}.mp4", i)),
                         SystemTime::UNIX_EPOCH,
                     )
                 })
@@ -1129,13 +1178,37 @@ mod tests {
             let db = AppDatabase::new();
             let store = LoggingAppStateStore::new(db);
             store.initialize().unwrap();
-            let directory = Directory::with_files(&dir, files, store);
-            let target_file = dir.join("file_0.mp4");
-            Self {
-                directory,
-                target_file,
-            }
+            let directory = Directory::with_files(&path, files, store);
+            Self { directory, path }
         }
+
+        /// The scanned directory, ready to hand to `Message::FolderLoaded`.
+        pub fn directory(&self) -> Directory {
+            self.directory.clone()
+        }
+
+        /// The file the workspace should open once the folder is loaded.
+        pub fn target_file(&self) -> PathBuf {
+            self.path.join("file_0.mp4")
+        }
+
+        /// Path of a file in this folder, for asserting on renames.
+        pub fn file_path(&self, name: &str) -> PathBuf {
+            self.path.join(name)
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
+    /// A folder name no other test, and no concurrent test run, will pick.
+    fn unique_test_folder() -> PathBuf {
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!("frename-test-{}-{n}", std::process::id()))
     }
 
     #[test]
@@ -1143,8 +1216,8 @@ mod tests {
         let test_dir = TestDirectory::new(2);
         let mut workspace = FolderWorkspace::new();
         let _task = workspace.update(Message::FolderLoaded {
-            directory: test_dir.directory,
-            target_file: Some(test_dir.target_file),
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
         });
         flush_file_opened(&mut workspace);
 
@@ -1169,22 +1242,22 @@ mod tests {
         let test_dir = TestDirectory::new(2);
         let mut workspace = FolderWorkspace::new();
         let _ = workspace.update(Message::FolderLoaded {
-            directory: test_dir.directory,
-            target_file: Some(test_dir.target_file),
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
         });
         flush_file_opened(&mut workspace);
 
         // Capture file_0's stable ID before any navigation.
         let file_0_id = file_id_at(&workspace, 0);
 
-        let tag_name = "Comedy";
+        let tag_name = "pick";
         let tag_list = workspace.file_workspace().tag_list();
         let tag_id = tag_list
             .filtered_display_tag_ids()
             .iter()
             .find(|id| tag_list.get_tag(**id).map(|t| t.tag() == tag_name).unwrap_or(false))
             .copied()
-            .expect("Comedy is a stored tag");
+            .expect("pick is a built-in tag");
         let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
 
         let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
@@ -1213,8 +1286,8 @@ mod tests {
         let mut workspace = FolderWorkspace::new();
         // Load folder; file_0 is selected and the video pipeline starts loading.
         let _ = workspace.update(Message::FolderLoaded {
-            directory: test_dir.directory,
-            target_file: Some(test_dir.target_file),
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
         });
         flush_file_opened(&mut workspace);
         // After opening file_0.mp4: video.loading = true → needs_unload_before_rename() = true.
@@ -1224,9 +1297,9 @@ mod tests {
         let tag_id = tag_list
             .filtered_display_tag_ids()
             .iter()
-            .find(|id| tag_list.get_tag(**id).map(|t| t.tag() == "Comedy").unwrap_or(false))
+            .find(|id| tag_list.get_tag(**id).map(|t| t.tag() == "pick").unwrap_or(false))
             .copied()
-            .expect("Comedy is a stored tag");
+            .expect("pick is a built-in tag");
         let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
 
         // Navigate to file_1; because media is "loading", rename is deferred.
@@ -1256,7 +1329,7 @@ mod tests {
         let _ = workspace.update(Message::FileUpdated {
             id: file_0_id,
             snapshot: frename_core::FileSnapshot::new(
-                vec!["Comedy".to_string()],
+                vec!["pick".to_string()],
                 "file_0",
                 ".mp4",
                 "file_0.mp4",
@@ -1273,8 +1346,8 @@ mod tests {
                 .file()
                 .unwrap()
                 .snapshot()
-                .has_tag("Comedy"),
-            "Comedy tag must survive the deferred rename on file_0"
+                .has_tag("pick"),
+            "pick tag must survive the deferred rename on file_0"
         );
     }
 
@@ -1286,8 +1359,8 @@ mod tests {
 
         let mut workspace = FolderWorkspace::new();
         let _ = workspace.update(Message::FolderLoaded {
-            directory: test_dir.directory,
-            target_file: Some(test_dir.target_file),
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
         });
         flush_file_opened(&mut workspace);
         // file_0.mp4 is loading → needs_unload_before_rename() = true.
@@ -1310,6 +1383,68 @@ mod tests {
         assert!(!workspace.has_pending_rename(), "still None after second Unloaded");
     }
 
+    /// With the untagged filter on, a file leaves the list only once the cursor has left it,
+    /// and the row it frees is taken by the file the cursor moved to — the selection does not
+    /// jump to another row while the list shrinks.
+    #[test]
+    fn untagged_filter_keeps_the_cursor_row_when_a_file_is_tagged() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::Folder(folder::Message::SetUntaggedOnly(true)));
+
+        let file_0_id = file_id_at(&workspace, 0);
+
+        // Move to file_1; the deferred save then writes file_0's tags.
+        let _ = workspace.update(Message::Folder(folder::Message::NextFile));
+        flush_file_opened(&mut workspace);
+        let snapshot = FileSnapshot::new(vec!["Comedy".to_string()], "file_0", ".mp4", "file_0.mp4");
+        let _ = workspace.update(Message::FileUpdated { id: file_0_id, snapshot });
+
+        let dir = workspace.directory().expect("directory should be loaded");
+        assert_eq!(
+            dir.files_in_order().count(),
+            2,
+            "the file that got tags must leave the untagged list"
+        );
+        assert_eq!(
+            dir.selected_index(),
+            Some(0),
+            "the cursor must keep the row freed by the tagged file"
+        );
+    }
+
+    /// The file search narrows the list, and the file under the cursor stays listed so the
+    /// selection keeps pointing at a real row while the query is typed.
+    #[test]
+    fn file_search_narrows_the_list() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+
+        let _ = workspace.update(Message::Folder(folder::Message::SetNameFilter(
+            "file_2".to_string(),
+        )));
+        let dir = workspace.directory().expect("directory should be loaded");
+        assert_eq!(
+            dir.files_in_order().count(),
+            2,
+            "the match plus the selected file stay listed"
+        );
+
+        let _ = workspace.update(Message::Folder(folder::Message::SetNameFilter(String::new())));
+        let dir = workspace.directory().expect("directory should be loaded");
+        assert_eq!(dir.files_in_order().count(), 3, "clearing the query restores the list");
+    }
+
     /// Verify that `save_and_reparse` (called by FileUpdated) updates the file path in the
     /// directory when tags change the file name.
     #[test]
@@ -1317,8 +1452,8 @@ mod tests {
         let test_dir = TestDirectory::new(2);
         let mut workspace = FolderWorkspace::new();
         let _ = workspace.update(Message::FolderLoaded {
-            directory: test_dir.directory,
-            target_file: Some(test_dir.target_file),
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
         });
         flush_file_opened(&mut workspace);
 
@@ -1340,7 +1475,7 @@ mod tests {
 
         // The directory should now track the file under its new path.
         let dir = workspace.directory().expect("directory should be loaded");
-        let new_path = PathBuf::from("C:/test/folder/Comedy.file_0.mp4");
+        let new_path = test_dir.file_path("Comedy.file_0.mp4");
         let file_renamed = dir.files_in_order().any(|f| f.file_path() == new_path.as_path());
         assert!(
             file_renamed,
