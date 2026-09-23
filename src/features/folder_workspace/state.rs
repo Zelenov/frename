@@ -483,7 +483,6 @@ impl FolderWorkspace {
                 Task::none()
             }
             folder::Message::ScrollToSelected => Task::done(Message::ScrollFolderListToSelected),
-            folder::Message::CopyTagsFrom(id) => self.copy_tags_from_id(id),
             folder::Message::OpenFolder => Task::done(Message::OpenFilePicker),
             folder::Message::SetUntaggedOnly(untagged_only) => {
                 self.set_untagged_only(untagged_only)
@@ -512,24 +511,6 @@ impl FolderWorkspace {
         };
         dir.set_name_filter(query);
         Task::done(Message::ScrollFolderListToSelected)
-    }
-
-    /// Copy tags from the file with the given stable ID into the currently open file.
-    /// Sets internal clipboard + OS clipboard, then immediately pastes into the current file.
-    fn copy_tags_from_id(&mut self, id: frename_core::FileId) -> Task<Message> {
-        let Some(snapshot) = self
-            .directory
-            .as_ref()
-            .and_then(|dir| dir.file_by_id(id))
-            .map(|f| f.snapshot().clone())
-        else {
-            return Task::none();
-        };
-        if let Ok(mut cb) = arboard::Clipboard::new() {
-            let _ = cb.set_text(snapshot.file_name());
-        }
-        self.copied_tags = Some(snapshot.tags().to_vec());
-        self.paste_tags()
     }
 
     fn select_file_at(&mut self, index: usize) -> Task<Message> {

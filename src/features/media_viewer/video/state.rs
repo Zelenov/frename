@@ -11,7 +11,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::features::video_controls::{self, VideoControlsState};
-use frename_core::{AppDatabase, AppStateStore};
+use super::view::{CUE_LIST_SCROLLABLE_ID, CUE_ROW_PITCH};
+use frename_core::{load_subtitles, AppDatabase, AppStateStore, Subtitles};
 use super::Message;
 
 /// Video player component state.
@@ -22,6 +23,24 @@ pub struct VideoPlayerState {
     controls: VideoControlsState,
     /// Start playback as soon as a video is opened; otherwise it opens paused.
     autoplay: bool,
+    /// Path of the video being loaded or shown; lets a late subtitle load for a
+    /// previous file be recognized and dropped.
+    current_path: Option<PathBuf>,
+    /// Subtitles found next to the current video, if any.
+    subtitles: Option<Arc<Subtitles>>,
+    /// Windowed mode shows the subtitle list over the picture (fullscreen always does).
+    /// Kept across files, like volume.
+    show_cue_list: bool,
+    /// Playback position the whole view agrees on: progress bar, caption and list.
+    ///
+    /// Stored rather than queried at view time: the pipeline query fails while a seek is
+    /// in flight (the player reports that as 0) and lags behind a seek made while paused,
+    /// so querying per view made the caption, list and bar each show a different moment.
+    /// Refreshed on every playback tick; set to the target the moment a seek is made.
+    position: Duration,
+    /// Cue the list last scrolled to; the list follows only when this changes, so a
+    /// user scrolling it by hand is not fought on every tick.
+    followed_cue: Option<usize>,
 }
 
 impl Default for VideoPlayerState {
@@ -36,6 +55,11 @@ impl Default for VideoPlayerState {
             load_failed: false,
             controls: VideoControlsState::default(),
             autoplay,
+            current_path: None,
+            subtitles: None,
+            show_cue_list: false,
+            position: Duration::ZERO,
+            followed_cue: None,
         }
     }
 }
@@ -48,9 +72,14 @@ impl VideoPlayerState {
         self.load_failed = false;
         self.current_video = None;
         self.controls = VideoControlsState::with_volume(self.controls.volume());
+        self.current_path = Some(path.clone());
+        self.subtitles = None;
+        self.position = Duration::ZERO;
+        self.followed_cue = None;
         let autoplay = self.autoplay;
 
-        Task::future(async move {
+        let subtitles_task = Self::load_subtitles(path.clone());
+        let video_task = Task::future(async move {
             // The video is opened once, here on a blocking thread, and handed to the
             // update below. Opening it a second time on the update thread would stall
             // the UI for as long as the pipeline takes to preroll.
@@ -79,6 +108,19 @@ impl VideoPlayerState {
             .unwrap_or(None);
 
             Message::VideoLoaded(Arc::new(Mutex::new(opened)))
+        });
+        Task::batch([video_task, subtitles_task])
+    }
+
+    /// Read the `.srt` next to the video on a blocking thread.
+    fn load_subtitles(video_path: PathBuf) -> Task<Message> {
+        Task::future(async move {
+            let path = video_path.clone();
+            let subtitles = tokio::task::spawn_blocking(move || load_subtitles(&path))
+                .await
+                .unwrap_or(None)
+                .map(Arc::new);
+            Message::SubtitlesLoaded { video_path, subtitles }
         })
     }
 
@@ -110,11 +152,20 @@ impl VideoPlayerState {
                 }
                 ready.chain(Task::done(Message::Controls(video_controls::Message::SetPlaying(false))))
             }
-            Message::NewFrame => Task::none(),
+            Message::NewFrame => {
+                if let Some(position) = self.current_video.as_ref().and_then(query_position) {
+                    self.position = position;
+                }
+                self.follow_cue(false)
+            }
             Message::EndOfStream => {
                 Task::done(Message::Controls(video_controls::Message::SetPlaying(false)))
             }
             Message::TogglePause => {
+                // Pausing stops the ticks, so take the exact position playback stopped at.
+                if let Some(position) = self.current_video.as_ref().and_then(query_position) {
+                    self.position = position;
+                }
                 if let Some(video) = &mut self.current_video {
                     let paused = video.paused();
                     video.set_paused(!paused);
@@ -122,13 +173,7 @@ impl VideoPlayerState {
                 Task::none()
             }
             Message::Seek(position_secs) => {
-                if let Some(video) = &mut self.current_video {
-                    let duration = Duration::from_secs_f64(position_secs as f64);
-                    if let Err(e) = video.seek(duration, false) {
-                        log::error!("Failed to seek: {e}");
-                    }
-                }
-                Task::none()
+                self.seek_to(Duration::from_secs_f64(position_secs.max(0.0) as f64), false)
             }
             Message::Controls(ctrl_msg) => {
                 self.controls.update(&ctrl_msg);
@@ -136,21 +181,17 @@ impl VideoPlayerState {
                     video_controls::Message::TogglePlayPause => Task::done(Message::TogglePause),
                     video_controls::Message::Seek(pos) => Task::done(Message::Seek(pos)),
                     video_controls::Message::SeekBack10 => {
-                        if let Some(video) = self.current_video.as_ref() {
-                            let new_pos = (video.position().as_secs_f32() - 10.0).max(0.0);
-                            Task::done(Message::Seek(new_pos))
-                        } else {
-                            Task::none()
+                        if self.current_video.is_none() {
+                            return Task::none();
                         }
+                        Task::done(Message::Seek((self.position.as_secs_f32() - 10.0).max(0.0)))
                     }
                     video_controls::Message::SeekForward10 => {
-                        if let Some(video) = self.current_video.as_ref() {
-                            let pos = video.position().as_secs_f32();
-                            let dur = video.duration().as_secs_f32();
-                            Task::done(Message::Seek((pos + 10.0).min(dur)))
-                        } else {
-                            Task::none()
-                        }
+                        let Some(video) = self.current_video.as_ref() else {
+                            return Task::none();
+                        };
+                        let dur = video.duration().as_secs_f32();
+                        Task::done(Message::Seek((self.position.as_secs_f32() + 10.0).min(dur)))
                     }
                     video_controls::Message::SetSegmentStart => self.capture_segment_start(),
                     video_controls::Message::SetSegmentEnd => self.capture_segment_end(),
@@ -168,9 +209,31 @@ impl VideoPlayerState {
             Message::CaptureSegmentEnd => self.capture_segment_end(),
             Message::SegmentStartMarked(_) | Message::SegmentEndMarked(_) => Task::none(), // bubbles up via media_viewer
             Message::ScreenshotTaken(_, _) => Task::none(),
+            Message::SubtitlesLoaded { video_path, subtitles } => {
+                if self.current_path.as_ref() == Some(&video_path) {
+                    self.subtitles = subtitles;
+                }
+                Task::none()
+            }
+            Message::ToggleCueList => {
+                self.show_cue_list = !self.show_cue_list;
+                // The list is built afresh at the top; bring the current cue into view.
+                self.follow_cue(true)
+            }
+            Message::SeekToCue(index) => {
+                let Some(cue) = self.subtitles.as_ref().and_then(|s| s.cues().get(index)) else {
+                    return Task::none();
+                };
+                // Exact, not keyframe: a keyframe before the cue would land playback on
+                // the previous cue, and the highlight would jump back to it.
+                let start = cue.start;
+                self.seek_to(start, true)
+            }
             Message::Unload => {
                 self.current_video = None;
                 self.loading = false;
+                self.current_path = None;
+                self.subtitles = None;
                 Task::done(Message::VideoUnloaded)
             }
             Message::VideoUnloaded => Task::none(),
@@ -187,6 +250,53 @@ impl VideoPlayerState {
     pub fn load_failed(&self) -> bool { self.load_failed }
     pub fn current_video(&self) -> Option<&Video> { self.current_video.as_ref() }
     pub fn controls(&self) -> &VideoControlsState { &self.controls }
+    pub fn subtitles(&self) -> Option<&Subtitles> { self.subtitles.as_deref() }
+    pub fn show_cue_list(&self) -> bool { self.show_cue_list }
+
+    /// Position to draw: the drag position while the progress bar is held, otherwise the
+    /// stored playback position. Everything position-dependent in the view reads this.
+    pub fn display_position(&self) -> Duration {
+        if self.controls.is_seeking() {
+            Duration::from_secs_f32(self.controls.seek_position_secs().max(0.0))
+        } else {
+            self.position
+        }
+    }
+
+    /// Seek and adopt the target as the position right away, so the view shows where
+    /// playback is going rather than wherever the pipeline is mid-seek.
+    fn seek_to(&mut self, target: Duration, accurate: bool) -> Task<Message> {
+        let Some(video) = self.current_video.as_mut() else {
+            return Task::none();
+        };
+        if let Err(e) = video.seek(target, accurate) {
+            log::error!("Failed to seek: {e}");
+            return Task::none();
+        }
+        self.position = target.min(video.duration());
+        self.follow_cue(false)
+    }
+
+    /// Scroll the subtitle list so the current cue sits near its top. Only when that cue
+    /// changed since the last follow, unless `force`.
+    fn follow_cue(&mut self, force: bool) -> Task<Message> {
+        let Some(subtitles) = self.subtitles.as_ref() else {
+            return Task::none();
+        };
+        let cue = subtitles.last_started_index(self.display_position());
+        if cue == self.followed_cue && !force {
+            return Task::none();
+        }
+        self.followed_cue = cue;
+        // One cue of context above the current one.
+        let rows_above = cue.unwrap_or(0).saturating_sub(1);
+        let offset = iced::widget::scrollable::AbsoluteOffset {
+            x: None,
+            y: Some(rows_above as f32 * CUE_ROW_PITCH),
+        };
+        iced::widget::operation::scroll_to::<()>(iced::widget::Id::new(CUE_LIST_SCROLLABLE_ID), offset)
+            .discard()
+    }
 
     fn capture_segment_start(&self) -> Task<Message> {
         let Some(video) = self.current_video.as_ref() else { return Task::none(); };
@@ -236,6 +346,15 @@ impl VideoPlayerState {
             self.controls.subscription().map(Message::Controls),
         ])
     }
+}
+
+/// Where the pipeline is now; `None` when it cannot say (mid-seek, state change).
+/// `Video::position` reports that as 0, which would flash the view back to the start.
+fn query_position(video: &Video) -> Option<Duration> {
+    video
+        .pipeline()
+        .query_position::<gst::ClockTime>()
+        .map(|t| Duration::from_nanos(t.nseconds()))
 }
 
 // ---------------------------------------------------------------------------

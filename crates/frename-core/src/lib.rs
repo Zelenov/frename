@@ -9,12 +9,14 @@ mod file;
 mod ordered;
 mod tags;
 pub(crate) mod comment;
+mod subtitles;
 pub mod undo;
 
 pub use db::{AppDatabase, AppSettings, AppStateStore, Initializable, LoggingAppStateStore, StoredTagStore, VideoSettings, WindowGeometry};
 pub use directory::Directory;
 pub use file_kind::FileKind;
 pub use folder_file::FolderAndFile;
+pub use subtitles::{load_subtitles, subtitle_path, SubtitleCue, Subtitles};
 pub use file::{File, FileId};
 pub use ordered::{OrderableEntry, OrderedCollection, OrderKey, OrderedThing};
 pub use tags::{

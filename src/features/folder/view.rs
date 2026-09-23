@@ -13,6 +13,8 @@ use crate::widgets::search_bar::FILE_SEARCH_BAR_INPUT_ID;
 use super::{FOLDER_LIST_SCROLLABLE_ID, FOLDER_ROW_HEIGHT};
 use super::Message;
 
+const SUBTITLES_MARKER_WIDTH: f32 = 28.0;
+
 /// Render the folder panel: a scrollable list of file names (tag chips + name.extension, no wrap).
 /// Selection comes from the directory; view emits SelectFile/Previous/Next.
 pub fn view<'a>(
@@ -55,18 +57,20 @@ pub fn view<'a>(
                 false,
             );
 
-            let copy_btn: Element<'_, Message> = tooltip(
-                mouse_area(
-                    container(text("⎘").size(14).color(crate::theme::TEXT_MUTED))
-                        .center_x(Length::Fixed(28.0))
+            let subtitles_icon: Element<'_, Message> = if file_info.has_subtitles() {
+                tooltip(
+                    container(text("SRT").size(9).color(theme::ACCENT))
+                        .center_x(Length::Fixed(SUBTITLES_MARKER_WIDTH))
                         .center_y(Length::Fill),
+                    container(text("Has subtitles")).padding([2, 6]).style(theme::elevated_container_style),
+                    tooltip::Position::Right,
                 )
-                .on_press(Message::CopyTagsFrom(file_info.id()))
-                .interaction(mouse::Interaction::Pointer),
-                text("Paste tags"),
-                tooltip::Position::Bottom,
-            )
-            .into();
+                .into()
+            } else {
+                container(iced::widget::Space::new())
+                    .width(Length::Fixed(SUBTITLES_MARKER_WIDTH))
+                    .into()
+            };
 
             let comment = file_info.comment();
             let comment_icon: Element<'_, Message> = if !comment.is_empty() {
@@ -96,7 +100,7 @@ pub fn view<'a>(
             .into();
 
             container(
-                row![copy_btn, comment_icon, name_area]
+                row![subtitles_icon, comment_icon, name_area]
                     .align_y(iced::Alignment::Center)
                     .width(Length::Fill)
                     .height(Length::Fill),

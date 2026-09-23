@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use crate::db::AppStateStore;
-use crate::{File, FileId, FileSnapshot, FileTagger, FolderAndFile, FolderInfo};
+use crate::{File, FileId, FileKind, FileSnapshot, FileTagger, FolderAndFile, FolderInfo};
 
 /// A scanned directory. Generic over the store type S; store is used only for session persistence.
 #[derive(Clone, Debug)]
@@ -294,6 +294,9 @@ fn scan_files(directory: &Path) -> Result<Vec<File>, std::io::Error> {
         let is_file = if file_type.is_symlink() { path.is_file() } else { file_type.is_file() };
         if !is_file { continue; }
         if FileTagger::is_sidecar_file(&path) { continue; }
+        // Only videos are listed. Checked before the file is parsed, so the subtitles,
+        // transcripts and images a shoot folder is full of cost nothing.
+        if !is_listed_kind(&path) { continue; }
         // An unreadable entry sorts to the front rather than failing the whole scan.
         let modified_at = entry
             .metadata()
@@ -305,6 +308,12 @@ fn scan_files(directory: &Path) -> Result<Vec<File>, std::io::Error> {
     Ok(files)
 }
 
+/// Whether a file of this kind belongs in the folder list: videos only.
+fn is_listed_kind(path: &Path) -> bool {
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    FileKind::from_extension(ext) == FileKind::Video
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::{Path, PathBuf};
@@ -312,6 +321,16 @@ mod tests {
 
     use crate::db::fake_app_storage::FakeAppStorage;
     use crate::{Directory, File};
+    use super::is_listed_kind;
+
+    #[test]
+    fn only_videos_are_listed() {
+        assert!(is_listed_kind(Path::new(r"C:\shoot\clip.MP4")));
+        assert!(is_listed_kind(Path::new(r"C:\shoot\clip.mov")));
+        for name in ["clip.srt", "notes.txt", "photo.jpg", "photo.HEIC", "clip.soniox.json", "noext"] {
+            assert!(!is_listed_kind(&Path::new(r"C:\shoot").join(name)), "{name} must be hidden");
+        }
+    }
 
     /// Directory of `file_0.mp4` … `file_n.mp4`, all without tags.
     fn directory_with(names: &[&str]) -> Directory<FakeAppStorage> {

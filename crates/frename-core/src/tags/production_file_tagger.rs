@@ -92,6 +92,7 @@ impl FileTaggerBackend for ProductionFileTagger {
 
         if new_path != path {
             crate::comment::rename_comment_file(path, &new_path);
+            crate::subtitles::rename_subtitle_file(path, &new_path);
             log::info!(
                 "Renaming {} screenshot(s) for {:?} → {:?}",
                 snapshot.screenshots().len(), path, new_path

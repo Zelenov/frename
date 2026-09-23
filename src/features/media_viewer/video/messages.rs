@@ -1,6 +1,8 @@
 //! Messages for the video player sub-feature.
 
+use frename_core::Subtitles;
 use iced_video_player::Video;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crate::features::video_controls;
@@ -46,6 +48,12 @@ pub enum Message {
     SegmentEndMarked(f32),
     /// Screenshot captured at position (ms) with JPEG bytes. Bubbles up to FolderWorkspace.
     ScreenshotTaken(u64, Vec<u8>),
+    /// Subtitle file next to `video_path` was read; `None` when there is none.
+    SubtitlesLoaded { video_path: PathBuf, subtitles: Option<Arc<Subtitles>> },
+    /// User picked a cue in the subtitle list: seek to its start.
+    SeekToCue(usize),
+    /// Show or hide the subtitle list over the picture in windowed mode.
+    ToggleCueList,
     /// Autoplay setting changed: whether videos opened from now on start playing.
     SetAutoplay(bool),
 }

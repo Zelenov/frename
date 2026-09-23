@@ -38,6 +38,9 @@ pub const SEGMENT: Color = Color::from_rgba(1.0, 0.85, 0.2, 0.75);
 /// Screenshot marker on the progress bar (bright teal tick).
 pub const SCREENSHOT_MARKER: Color = Color::from_rgba(0.2, 1.0, 0.85, 0.90);
 
+/// Secondary text on dark translucent surfaces (subtitle list); brighter than TEXT_MUTED.
+pub const TEXT_SOFT: Color = Color::from_rgb(0.75, 0.75, 0.8);
+
 /// Splitter bar (matches track).
 pub const VOLUME: Color = Color::from_rgb(0.35, 0.80, 0.50);
 
@@ -109,6 +112,47 @@ pub fn elevated_container_bordered_style(
             color: TEXT_MUTED,
         },
         ..Default::default()
+    }
+}
+
+/// Fullscreen subtitle caption: dark translucent pill so text reads over any picture.
+pub fn subtitle_caption_style(
+    _theme: &iced::Theme,
+) -> iced::widget::container::Style {
+    iced::widget::container::Style {
+        background: Some(Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.62))),
+        border: iced::border::rounded(8),
+        ..Default::default()
+    }
+}
+
+/// Fullscreen subtitle list panel: translucent so the picture stays visible behind it.
+pub fn subtitle_list_style(
+    _theme: &iced::Theme,
+) -> iced::widget::container::Style {
+    iced::widget::container::Style {
+        background: Some(Background::Color(Color::from_rgba(0.06, 0.06, 0.06, 0.72))),
+        ..Default::default()
+    }
+}
+
+/// Row in the subtitle list: accent tint for the cue on screen, hover highlight otherwise.
+pub fn cue_row_style(
+    active: bool,
+) -> impl Fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style + Clone {
+    move |_theme: &iced::Theme, status: iced::widget::button::Status| {
+        let bg = match (active, status) {
+            (true, _) => ACCENT_TAG_ROW,
+            (false, iced::widget::button::Status::Hovered) => Color::from_rgba(1.0, 1.0, 1.0, 0.08),
+            _ => Color::TRANSPARENT,
+        };
+        iced::widget::button::Style {
+            background: Some(Background::Color(bg)),
+            text_color: TEXT,
+            border: iced::border::rounded(4),
+            shadow: iced::Shadow::default(),
+            snap: true,
+        }
     }
 }
 

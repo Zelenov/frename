@@ -13,8 +13,6 @@ pub enum Message {
     Scrolled { scroll_y: f32, viewport_height: f32 },
     /// Scroll the folder list to the currently selected file.
     ScrollToSelected,
-    /// Copy tags from the file with this stable ID into the currently open file.
-    CopyTagsFrom(frename_core::FileId),
     /// Open a native file picker dialog (from the controls bar).
     OpenFolder,
     /// Show only files without tags (true) or every file (false).
