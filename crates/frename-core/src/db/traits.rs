@@ -36,6 +36,24 @@ impl Default for VideoSettings {
     }
 }
 
+/// User-facing app settings, edited in the settings window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AppSettings {
+    /// Start playing a video as soon as it is opened. Defaults to true.
+    pub autoplay_video: bool,
+    /// Draw every tag in one neutral color instead of its own palette color. Defaults to false.
+    pub monochrome_tags: bool,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            autoplay_video: true,
+            monochrome_tags: false,
+        }
+    }
+}
+
 /// Interface for storing and restoring app state (last folder and file, window geometry).
 /// Implemented by the application database and by the test fake (e.g. `FakeAppStorage`).
 /// Pass by value (e.g. `Box<dyn AppStateStore>`); no singleton, connection is opened per use.
@@ -57,6 +75,12 @@ pub trait AppStateStore: Send + Sync {
 
     /// Saves the video settings.
     fn set_video_settings(&self, _settings: VideoSettings) {}
+
+    /// Returns the saved app settings, if any.
+    fn get_app_settings(&self) -> Option<AppSettings> { None }
+
+    /// Saves the app settings.
+    fn set_app_settings(&self, _settings: AppSettings) {}
 }
 
 /// Interface for stored tags and tag color mapping. Tags are keyed by tag id (UUID); tag colors are keyed by tag name.

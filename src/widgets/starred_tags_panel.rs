@@ -9,7 +9,7 @@ use iced::{mouse, Alignment, Border, Element, Length};
 use frename_core::{StoredTagStore, TagId, TagList};
 
 use crate::features::tag_panel::Message;
-use crate::tag_colors;
+use crate::tag_colors::TagPalette;
 use crate::theme;
 use crate::widgets::tag_chip;
 
@@ -63,6 +63,7 @@ pub fn view<'a, S>(
     tag_list: &'a TagList<S>,
     panel_content_width: Option<f32>,
     selected_id: Option<TagId>,
+    tag_palette: TagPalette,
 ) -> Option<Element<'a, Message>>
 where
     S: StoredTagStore + Clone,
@@ -107,7 +108,7 @@ where
                     let id = tag.id();
                     let is_checked = tag.is_checked();
                     let is_selected = selected_id == Some(id);
-                    let tag_color = tag_colors::TagColors::color(tag.color_index());
+                    let tag_color = tag_palette.color(tag.color_index());
 
                     let checkbox_el: Element<'static, Message> = checkbox(is_checked)
                         .on_toggle(move |_| Message::ToggleTag(id))

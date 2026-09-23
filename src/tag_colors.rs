@@ -32,3 +32,32 @@ impl TagColors {
         Self::PALETTE[index as usize % Self::PALETTE.len()]
     }
 }
+
+/// How tag colors are resolved. Chosen from the monochrome tags setting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TagPalette {
+    /// Each tag gets its own palette color.
+    #[default]
+    Colored,
+    /// Every tag gets the neutral first palette color.
+    Monochrome,
+}
+
+impl TagPalette {
+    /// Palette for the monochrome tags setting.
+    pub fn from_monochrome(monochrome: bool) -> Self {
+        if monochrome {
+            Self::Monochrome
+        } else {
+            Self::Colored
+        }
+    }
+
+    /// Returns the color for the given tag color index under this palette.
+    pub fn color(self, index: u8) -> Color {
+        match self {
+            Self::Colored => TagColors::color(index),
+            Self::Monochrome => TagColors::PALETTE[0],
+        }
+    }
+}

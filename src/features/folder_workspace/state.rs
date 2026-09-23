@@ -489,6 +489,8 @@ impl FolderWorkspace {
                 self.set_untagged_only(untagged_only)
             }
             folder::Message::SetNameFilter(query) => self.set_file_name_filter(query),
+            // Intercepted by the app, which owns the windows; no-op here.
+            folder::Message::OpenSettings => Task::none(),
         }
     }
 

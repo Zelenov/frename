@@ -8,7 +8,7 @@ use iced::{Element, Length};
 
 use frename_core::{StoredTagStore, TagList};
 
-use crate::tag_colors;
+use crate::tag_colors::TagPalette;
 use crate::theme;
 use crate::widgets::bounds_reporter::BoundsReporter;
 use crate::widgets::tag_chip;
@@ -20,6 +20,7 @@ use super::{FileNamePanelState, Message, TRASH_SIDE};
 pub fn view<'a, S>(
     state: &'a FileNamePanelState,
     tag_list: &'a TagList<S>,
+    tag_palette: TagPalette,
 ) -> Element<'a, Message>
 where
     S: StoredTagStore + Clone,
@@ -48,7 +49,7 @@ where
         .map(|tag| {
             tag_chip::view_display_only(
                 tag.tag(),
-                tag_colors::TagColors::color(tag.color_index()),
+                tag_palette.color(tag.color_index()),
             )
         });
 

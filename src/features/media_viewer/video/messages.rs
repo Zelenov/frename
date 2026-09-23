@@ -46,4 +46,6 @@ pub enum Message {
     SegmentEndMarked(f32),
     /// Screenshot captured at position (ms) with JPEG bytes. Bubbles up to FolderWorkspace.
     ScreenshotTaken(u64, Vec<u8>),
+    /// Autoplay setting changed: whether videos opened from now on start playing.
+    SetAutoplay(bool),
 }

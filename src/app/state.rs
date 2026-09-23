@@ -9,7 +9,8 @@
 
 use iced::{event, keyboard, window, Element, Subscription, Task};
 
-use crate::features::{drag_drop, folder, folder_workspace, media_viewer, media_viewer::video as media_viewer_video, tag_panel};
+use crate::features::{drag_drop, folder, folder_workspace, media_viewer, media_viewer::video as media_viewer_video, settings, tag_panel};
+use crate::tag_colors::TagPalette;
 use frename_core::{AppDatabase, AppStateStore, WindowGeometry};
 
 use super::Message;
@@ -35,14 +36,194 @@ fn ctrl_v_paste_tags_handler(
     None
 }
 
+/// Global keyboard and window events of the main window: shortcuts, typing into the search bar,
+/// and window geometry. The subscription filters them to the main window, so keys pressed in the
+/// settings window do not reach the workspace.
+fn main_window_event(
+    ev: iced::Event,
+    status: event::Status,
+    _window_id: window::Id,
+) -> Option<Message> {
+    match ev {
+        iced::Event::Window(window::Event::Opened { .. }) => Some(Message::WindowReady),
+        iced::Event::Window(window::Event::Moved(point)) => {
+            Some(Message::WindowMoved(point.x, point.y))
+        }
+        iced::Event::Window(window::Event::Resized(size)) => {
+            Some(Message::WindowResized(size.width, size.height))
+        }
+        // Shift+Space toggles the selected tag.
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(keyboard::key::Named::Space),
+            modifiers,
+            ..
+        }) if modifiers.shift() => Some(Message::FolderWorkspace(
+            folder_workspace::Message::TagPanel(tag_panel::Message::ToggleSelectedTag),
+        )),
+        // Space toggles video play/pause — only when no text widget has focus.
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(keyboard::key::Named::Space),
+            ..
+        }) if matches!(status, event::Status::Ignored) => Some(Message::FolderWorkspace(
+            folder_workspace::Message::MediaViewer(
+                media_viewer::Message::Video(media_viewer_video::Message::TogglePause),
+            ),
+        )),
+        // F5 toggles fullscreen for the media viewer.
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(keyboard::key::Named::F5),
+            ..
+        }) => Some(Message::FolderWorkspace(
+            folder_workspace::Message::ToggleMediaFullscreen,
+        )),
+        // [ / ] always set segment IN/OUT (even when search bar has focus).
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Character(c),
+            ..
+        }) if c.as_ref() == "[" => Some(Message::FolderWorkspace(
+            folder_workspace::Message::SetSegmentStart,
+        )),
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Character(c),
+            ..
+        }) if c.as_ref() == "]" => Some(Message::FolderWorkspace(
+            folder_workspace::Message::SetSegmentEnd,
+        )),
+        // Escape: handled by FolderWorkspace (exits fullscreen or clears search filter).
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(keyboard::key::Named::Escape),
+            ..
+        }) => Some(Message::FolderWorkspace(
+            folder_workspace::Message::EscapePressed,
+        )),
+        // Enter: always consume to prevent Windows Default Beep (WM_CHAR 0x0D reaching
+        // DefWindowProc). Only trigger SaveSelectedTag when no widget captured the event.
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(keyboard::key::Named::Enter),
+            ..
+        }) => {
+            if matches!(status, event::Status::Ignored) {
+                Some(Message::FolderWorkspace(folder_workspace::Message::SaveSelectedTag))
+            } else {
+                Some(Message::Noop)
+            }
+        }
+        iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. })
+            if matches!(status, event::Status::Ignored) =>
+        {
+            if modifiers.command() {
+                return match key.as_ref() {
+                    keyboard::Key::Character("c") => Some(Message::FolderWorkspace(
+                        folder_workspace::Message::CopyTags,
+                    )),
+                    keyboard::Key::Character("z") if modifiers.shift() => {
+                        Some(Message::FolderWorkspace(folder_workspace::Message::Redo))
+                    }
+                    keyboard::Key::Character("z") => {
+                        Some(Message::FolderWorkspace(folder_workspace::Message::Undo))
+                    }
+                    keyboard::Key::Character("y") => {
+                        Some(Message::FolderWorkspace(folder_workspace::Message::Redo))
+                    }
+                    _ => None,
+                };
+            }
+            if let keyboard::Key::Named(name) = key.as_ref() {
+                let msg = match name {
+                    keyboard::key::Named::ArrowLeft => {
+                        Some(Message::FolderWorkspace(
+                            folder_workspace::Message::TagPanel(
+                                tag_panel::Message::SelectLeft,
+                            ),
+                        ))
+                    }
+                    keyboard::key::Named::ArrowRight => {
+                        Some(Message::FolderWorkspace(
+                            folder_workspace::Message::TagPanel(
+                                tag_panel::Message::SelectRight,
+                            ),
+                        ))
+                    }
+                    keyboard::key::Named::ArrowUp => {
+                        Some(Message::FolderWorkspace(
+                            folder_workspace::Message::TagPanel(
+                                tag_panel::Message::SelectUp,
+                            ),
+                        ))
+                    }
+                    keyboard::key::Named::ArrowDown => {
+                        Some(Message::FolderWorkspace(
+                            folder_workspace::Message::TagPanel(
+                                tag_panel::Message::SelectDown,
+                            ),
+                        ))
+                    }
+                    keyboard::key::Named::PageUp => {
+                        Some(Message::FolderWorkspace(
+                            folder_workspace::Message::Folder(folder::Message::PreviousFile),
+                        ))
+                    }
+                    keyboard::key::Named::PageDown => {
+                        Some(Message::FolderWorkspace(
+                            folder_workspace::Message::Folder(folder::Message::NextFile),
+                        ))
+                    }
+                    keyboard::key::Named::Delete => {
+                        Some(Message::FolderWorkspace(
+                            folder_workspace::Message::RemoveTag,
+                        ))
+                    }
+                    _ => None,
+                };
+                if msg.is_some() {
+                    return msg;
+                }
+            }
+            let k = match key.as_ref() {
+                keyboard::Key::Character(c) => {
+                    c.chars().next().map(folder_workspace::GlobalSearchKey::Char)
+                }
+                keyboard::Key::Named(keyboard::key::Named::Backspace) => {
+                    Some(folder_workspace::GlobalSearchKey::Backspace)
+                }
+                keyboard::Key::Named(keyboard::key::Named::Delete) => {
+                    Some(folder_workspace::GlobalSearchKey::Delete)
+                }
+                _ => None,
+            };
+            k.map(|key| {
+                Message::FolderWorkspace(
+                    folder_workspace::Message::FocusSearchBarAndKey(key),
+                )
+            })
+        }
+        _ => None,
+    }
+}
+
+/// Keeps a window-tagged event only when it came from the main window.
+fn only_from_main_window(
+    (main_window, (window_id, message)): (window::Id, (window::Id, Message)),
+) -> Option<Message> {
+    (window_id == main_window).then_some(message)
+}
+
+/// Settings window size (logical px).
+const SETTINGS_WINDOW_SIZE: iced::Size = iced::Size::new(420.0, 200.0);
+
 /// Application state: top-level features only. No knowledge of child UI or structure.
 pub struct FrenameApp {
     drag_drop_state: drag_drop::DragDropState,
     folder_workspace: folder_workspace::FolderWorkspace,
+    settings: settings::SettingsState,
     /// Window ID waiting for GStreamer unload before we close.
     pending_close: Option<window::Id>,
-    /// The main window ID (captured from the first Opened event).
-    window_id: Option<window::Id>,
+    /// The main window; closing it ends the app.
+    main_window: window::Id,
+    /// The settings window, while it is open.
+    settings_window: Option<window::Id>,
+    /// Icon shared by every window the app opens.
+    window_icon: Option<window::Icon>,
     /// Last known window position (logical px); updated on Moved events when not maximized.
     window_pos: (f32, f32),
     /// Last known window size (logical px); updated on Resized events when not maximized.
@@ -54,13 +235,18 @@ pub struct FrenameApp {
 }
 
 impl FrenameApp {
-    pub fn new() -> Self {
+    /// `main_window` is the id the main window was opened with; `window_icon` is reused for
+    /// the windows the app opens later.
+    pub fn new(main_window: window::Id, window_icon: Option<window::Icon>) -> Self {
         let saved = AppDatabase::new().get_window_state();
         Self {
             drag_drop_state: drag_drop::DragDropState::default(),
             folder_workspace: folder_workspace::FolderWorkspace::new(),
+            settings: settings::SettingsState::default(),
             pending_close: None,
-            window_id: None,
+            main_window,
+            settings_window: None,
+            window_icon,
             window_pos: saved.map(|g| (g.x, g.y)).unwrap_or((0.0, 0.0)),
             window_size: saved.map(|g| (g.width, g.height)).unwrap_or((1200.0, 600.0)),
             is_maximized: saved.map(|g| g.is_maximized).unwrap_or(false),
@@ -72,11 +258,32 @@ impl FrenameApp {
 impl FrenameApp {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::WindowReady(id) => {
-                self.window_id = Some(id);
-                Task::done(Message::FolderWorkspace(
-                    folder_workspace::Message::LoadLastSession,
-                ))
+            // Only the main window's events get through the subscription filter.
+            Message::WindowReady => Task::done(Message::FolderWorkspace(
+                folder_workspace::Message::LoadLastSession,
+            )),
+            Message::WindowClosed(id) => {
+                if id == self.main_window {
+                    return iced::exit();
+                }
+                if self.settings_window == Some(id) {
+                    self.settings_window = None;
+                }
+                Task::none()
+            }
+            Message::OpenSettings => self.open_settings_window(),
+            Message::Settings(msg) => {
+                self.settings.update(msg.clone());
+                // Tag colors are read from the settings at view time; autoplay lives in the player.
+                let settings::Message::SetAutoplayVideo(autoplay) = msg else {
+                    return Task::none();
+                };
+                Task::done(Message::FolderWorkspace(folder_workspace::Message::MediaViewer(
+                    media_viewer::Message::Video(media_viewer_video::Message::SetAutoplay(autoplay)),
+                )))
+            }
+            Message::FolderWorkspace(folder_workspace::Message::Folder(folder::Message::OpenSettings)) => {
+                Task::done(Message::OpenSettings)
             }
             Message::CloseRequested(id) => {
                 crate::crash_guard::mark_closing();
@@ -137,8 +344,28 @@ impl FrenameApp {
         }
     }
 
-    pub fn view(&self) -> Element<'_, Message> {
-        folder_workspace::view::view(&self.folder_workspace).map(Message::FolderWorkspace)
+    pub fn view(&self, window_id: window::Id) -> Element<'_, Message> {
+        if self.settings_window == Some(window_id) {
+            return settings::view::view(&self.settings).map(Message::Settings);
+        }
+        let tag_palette = TagPalette::from_monochrome(self.settings.settings().monochrome_tags);
+        folder_workspace::view::view(&self.folder_workspace, tag_palette).map(Message::FolderWorkspace)
+    }
+
+    /// Open the settings window, or focus it when it is already open.
+    fn open_settings_window(&mut self) -> Task<Message> {
+        if let Some(id) = self.settings_window {
+            return window::gain_focus(id);
+        }
+        let (id, open) = window::open(window::Settings {
+            size: SETTINGS_WINDOW_SIZE,
+            position: window::Position::Centered,
+            resizable: false,
+            icon: self.window_icon.clone(),
+            ..window::Settings::default()
+        });
+        self.settings_window = Some(id);
+        open.discard()
     }
 
     /// Feature subscriptions (file drop, window opened, global keyboard to search bar).
@@ -146,7 +373,11 @@ impl FrenameApp {
         // Conditional: when tags are on the internal clipboard, intercept Ctrl+V globally
         // (even when search bar has focus) so it pastes tags instead of text.
         let paste_tags_sub = if self.folder_workspace.has_copied_tags() {
-            event::listen_with(ctrl_v_paste_tags_handler)
+            event::listen_with(|ev, status, window_id| {
+                ctrl_v_paste_tags_handler(ev, status, window_id).map(|m| (window_id, m))
+            })
+            .with(self.main_window)
+            .filter_map(only_from_main_window)
         } else {
             Subscription::none()
         };
@@ -157,161 +388,12 @@ impl FrenameApp {
                 .map(Message::FolderWorkspace),
             window::close_requests().map(Message::CloseRequested),
             paste_tags_sub,
-            event::listen_with(|ev, status, window_id| match ev {
-                iced::Event::Window(window::Event::Opened { .. }) => Some(Message::WindowReady(window_id)),
-                iced::Event::Window(window::Event::Moved(point)) => {
-                    Some(Message::WindowMoved(point.x, point.y))
-                }
-                iced::Event::Window(window::Event::Resized(size)) => {
-                    Some(Message::WindowResized(size.width, size.height))
-                }
-                // Shift+Space toggles the selected tag.
-                iced::Event::Keyboard(keyboard::Event::KeyPressed {
-                    key: keyboard::Key::Named(keyboard::key::Named::Space),
-                    modifiers,
-                    ..
-                }) if modifiers.shift() => Some(Message::FolderWorkspace(
-                    folder_workspace::Message::TagPanel(tag_panel::Message::ToggleSelectedTag),
-                )),
-                // Space toggles video play/pause — only when no text widget has focus.
-                iced::Event::Keyboard(keyboard::Event::KeyPressed {
-                    key: keyboard::Key::Named(keyboard::key::Named::Space),
-                    ..
-                }) if matches!(status, event::Status::Ignored) => Some(Message::FolderWorkspace(
-                    folder_workspace::Message::MediaViewer(
-                        media_viewer::Message::Video(media_viewer_video::Message::TogglePause),
-                    ),
-                )),
-                // F5 toggles fullscreen for the media viewer.
-                iced::Event::Keyboard(keyboard::Event::KeyPressed {
-                    key: keyboard::Key::Named(keyboard::key::Named::F5),
-                    ..
-                }) => Some(Message::FolderWorkspace(
-                    folder_workspace::Message::ToggleMediaFullscreen,
-                )),
-                // [ / ] always set segment IN/OUT (even when search bar has focus).
-                iced::Event::Keyboard(keyboard::Event::KeyPressed {
-                    key: keyboard::Key::Character(c),
-                    ..
-                }) if c.as_ref() == "[" => Some(Message::FolderWorkspace(
-                    folder_workspace::Message::SetSegmentStart,
-                )),
-                iced::Event::Keyboard(keyboard::Event::KeyPressed {
-                    key: keyboard::Key::Character(c),
-                    ..
-                }) if c.as_ref() == "]" => Some(Message::FolderWorkspace(
-                    folder_workspace::Message::SetSegmentEnd,
-                )),
-                // Escape: handled by FolderWorkspace (exits fullscreen or clears search filter).
-                iced::Event::Keyboard(keyboard::Event::KeyPressed {
-                    key: keyboard::Key::Named(keyboard::key::Named::Escape),
-                    ..
-                }) => Some(Message::FolderWorkspace(
-                    folder_workspace::Message::EscapePressed,
-                )),
-                // Enter: always consume to prevent Windows Default Beep (WM_CHAR 0x0D reaching
-                // DefWindowProc). Only trigger SaveSelectedTag when no widget captured the event.
-                iced::Event::Keyboard(keyboard::Event::KeyPressed {
-                    key: keyboard::Key::Named(keyboard::key::Named::Enter),
-                    ..
-                }) => {
-                    if matches!(status, event::Status::Ignored) {
-                        Some(Message::FolderWorkspace(folder_workspace::Message::SaveSelectedTag))
-                    } else {
-                        Some(Message::Noop)
-                    }
-                }
-                iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. })
-                    if matches!(status, event::Status::Ignored) =>
-                {
-                    if modifiers.command() {
-                        return match key.as_ref() {
-                            keyboard::Key::Character("c") => Some(Message::FolderWorkspace(
-                                folder_workspace::Message::CopyTags,
-                            )),
-                            keyboard::Key::Character("z") if modifiers.shift() => {
-                                Some(Message::FolderWorkspace(folder_workspace::Message::Redo))
-                            }
-                            keyboard::Key::Character("z") => {
-                                Some(Message::FolderWorkspace(folder_workspace::Message::Undo))
-                            }
-                            keyboard::Key::Character("y") => {
-                                Some(Message::FolderWorkspace(folder_workspace::Message::Redo))
-                            }
-                            _ => None,
-                        };
-                    }
-                    if let keyboard::Key::Named(name) = key.as_ref() {
-                        let msg = match name {
-                            keyboard::key::Named::ArrowLeft => {
-                                Some(Message::FolderWorkspace(
-                                    folder_workspace::Message::TagPanel(
-                                        tag_panel::Message::SelectLeft,
-                                    ),
-                                ))
-                            }
-                            keyboard::key::Named::ArrowRight => {
-                                Some(Message::FolderWorkspace(
-                                    folder_workspace::Message::TagPanel(
-                                        tag_panel::Message::SelectRight,
-                                    ),
-                                ))
-                            }
-                            keyboard::key::Named::ArrowUp => {
-                                Some(Message::FolderWorkspace(
-                                    folder_workspace::Message::TagPanel(
-                                        tag_panel::Message::SelectUp,
-                                    ),
-                                ))
-                            }
-                            keyboard::key::Named::ArrowDown => {
-                                Some(Message::FolderWorkspace(
-                                    folder_workspace::Message::TagPanel(
-                                        tag_panel::Message::SelectDown,
-                                    ),
-                                ))
-                            }
-                            keyboard::key::Named::PageUp => {
-                                Some(Message::FolderWorkspace(
-                                    folder_workspace::Message::Folder(folder::Message::PreviousFile),
-                                ))
-                            }
-                            keyboard::key::Named::PageDown => {
-                                Some(Message::FolderWorkspace(
-                                    folder_workspace::Message::Folder(folder::Message::NextFile),
-                                ))
-                            }
-                            keyboard::key::Named::Delete => {
-                                Some(Message::FolderWorkspace(
-                                    folder_workspace::Message::RemoveTag,
-                                ))
-                            }
-                            _ => None,
-                        };
-                        if msg.is_some() {
-                            return msg;
-                        }
-                    }
-                    let k = match key.as_ref() {
-                        keyboard::Key::Character(c) => {
-                            c.chars().next().map(folder_workspace::GlobalSearchKey::Char)
-                        }
-                        keyboard::Key::Named(keyboard::key::Named::Backspace) => {
-                            Some(folder_workspace::GlobalSearchKey::Backspace)
-                        }
-                        keyboard::Key::Named(keyboard::key::Named::Delete) => {
-                            Some(folder_workspace::GlobalSearchKey::Delete)
-                        }
-                        _ => None,
-                    };
-                    k.map(|key| {
-                        Message::FolderWorkspace(
-                            folder_workspace::Message::FocusSearchBarAndKey(key),
-                        )
-                    })
-                }
-                _ => None,
-            }),
+            event::listen_with(|ev, status, window_id| {
+                main_window_event(ev, status, window_id).map(|m| (window_id, m))
+            })
+            .with(self.main_window)
+            .filter_map(only_from_main_window),
+            window::close_events().map(Message::WindowClosed),
         ])
     }
 
@@ -331,17 +413,18 @@ impl FrenameApp {
 
     /// Spawn tasks to fetch is_maximized and monitor_size for the current window.
     fn fetch_window_extra(&self) -> Task<Message> {
-        let Some(id) = self.window_id else {
-            return Task::none();
-        };
+        let id = self.main_window;
         Task::batch([
             window::is_maximized(id).map(Message::WindowMaximizedFetched),
             window::monitor_size(id).map(Message::WindowMonitorSizeFetched),
         ])
     }
 
-    /// Get the window title based on the currently open file
-    pub fn title(&self) -> String {
+    /// Window title: the settings window has a fixed one; the main window shows the open file.
+    pub fn title(&self, window_id: window::Id) -> String {
+        if self.settings_window == Some(window_id) {
+            return String::from("Settings");
+        }
         self.folder_workspace
             .current_file()
             .map_or_else(|| String::from("frename"), |f| f.file_path().display().to_string())
@@ -354,6 +437,6 @@ mod tests {
 
     #[test]
     fn test_app_creation() {
-        let _app = FrenameApp::new();
+        let _app = FrenameApp::new(window::Id::unique(), None);
     }
 }

@@ -7,7 +7,7 @@ use iced::Element;
 
 use frename_core::{FileSnapshot, TagColorMapping};
 
-use crate::tag_colors;
+use crate::tag_colors::TagPalette;
 use crate::theme;
 use crate::widgets::tag_chip;
 
@@ -33,6 +33,7 @@ fn fmt_timecode(secs: f32) -> String {
 pub fn view<'a, Message: 'a>(
     snapshot: &'a FileSnapshot,
     color_mapping: &TagColorMapping,
+    tag_palette: TagPalette,
     wrap: bool,
 ) -> Element<'a, Message> {
     let seg_start = snapshot.segment_start();
@@ -49,7 +50,7 @@ pub fn view<'a, Message: 'a>(
             parts.push(dot_text().into());
         }
         let color_index = color_mapping.color_index_for(tag_name);
-        let tag_color = tag_colors::TagColors::color(color_index);
+        let tag_color = tag_palette.color(color_index);
         parts.push(tag_chip::view_display_only(tag_name, tag_color));
     }
     // Timecode badges between tags and file name.

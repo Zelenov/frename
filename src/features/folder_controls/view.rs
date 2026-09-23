@@ -67,7 +67,7 @@ fn untagged_filter(untagged_only: bool, untagged_count: usize) -> Element<'stati
     .into()
 }
 
-/// Render the folder controls: Previous File, Next File, and Scroll-to-Selected buttons.
+/// Render the folder controls: Previous File, Next File, Scroll-to-Selected, Open and Settings buttons.
 /// Buttons are enabled only when applicable.
 pub fn view(
     has_previous: bool,
@@ -140,11 +140,28 @@ pub fn view(
     )
         .into();
 
+    let settings_btn: Element<'_, folder::Message> = tooltip(
+        button(
+            container(text("⚙").size(16))
+                .center_x(iced::Length::Fill)
+                .center_y(iced::Length::Fill),
+        )
+            .on_press(folder::Message::OpenSettings)
+            .width(CONTROLS_HEIGHT)
+            .height(iced::Length::Fill)
+            .padding(0)
+            .style(theme::icon_button_style(true)),
+        text("Settings"),
+        iced::widget::tooltip::Position::Top,
+    )
+        .into();
+
     let controls = row![
         prev_btn,
         next_btn,
         scroll_btn,
         open_btn,
+        settings_btn,
         container(iced::widget::Space::new()).width(iced::Length::Fill),
         untagged_filter(untagged_only, untagged_count),
     ]

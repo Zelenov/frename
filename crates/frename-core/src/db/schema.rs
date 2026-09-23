@@ -55,3 +55,13 @@ pub const M2_DROP_TAG_TABLES: &str = "
 DROP TABLE IF EXISTS stored_tags;
 DROP TABLE IF EXISTS tag_color_mapping;
 ";
+
+/// Migration 3: user-facing app settings, edited in the settings window. One row, like
+/// `video_settings`; a missing row means every setting is at its default.
+pub const M3_APP_SETTINGS: &str = "
+CREATE TABLE IF NOT EXISTS app_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    autoplay_video INTEGER NOT NULL DEFAULT 1,
+    monochrome_tags INTEGER NOT NULL DEFAULT 0
+);
+";

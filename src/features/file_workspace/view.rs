@@ -8,6 +8,7 @@ use iced::widget::text_editor::Binding;
 use iced::widget::{column, container, text_editor as text_editor_widget};
 use iced::{Element, Length};
 
+use crate::tag_colors::TagPalette;
 use crate::widgets::starred_tags_panel;
 
 use crate::features::{file_name_panel, sync_panel, tag_grid, tag_panel};
@@ -30,12 +31,13 @@ pub fn view<'a, S>(
     is_synced: bool,
     sync_locked: bool,
     tag_list: &'a frename_core::TagList<S>,
+    tag_palette: TagPalette,
 ) -> Element<'a, Message>
 where
     S: frename_core::StoredTagStore + Clone,
 {
     let file_name =
-        file_name_panel::view::view(file_name_panel_state, tag_list).map(Message::FileNamePanel);
+        file_name_panel::view::view(file_name_panel_state, tag_list, tag_palette).map(Message::FileNamePanel);
     let filter = tag_list.filter_query();
     let on_create = if !filter.trim().is_empty() && !file_workspace.has_tag_with_name(filter.trim()) {
         Some(|text: String| Message::TagPanel(tag_panel::Message::CreateTag(text.trim().to_string())))
@@ -49,7 +51,7 @@ where
         || Message::TagPanel(tag_panel::Message::SetFilter(String::new())),
         on_create,
     );
-    let tag_grid = tag_grid::view::view(tag_panel_state, file_workspace.file(), tag_list)
+    let tag_grid = tag_grid::view::view(tag_panel_state, file_workspace.file(), tag_list, tag_palette)
         .map(Message::TagPanel);
     let tag_grid = container(tag_grid)
         .height(Length::Fill)
@@ -88,6 +90,7 @@ where
         tag_list,
         starred_content_width,
         tag_panel_state.selected_tag_id(),
+        tag_palette,
     );
 
     let mut content_items: Vec<Element<'_, Message>> = Vec::with_capacity(4);

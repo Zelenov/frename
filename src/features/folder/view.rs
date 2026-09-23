@@ -5,6 +5,7 @@
 use iced::widget::{column, container, mouse_area, row, scrollable, text, tooltip};
 use iced::{mouse, Element, Length};
 
+use crate::tag_colors::TagPalette;
 use crate::theme;
 use crate::widgets;
 use crate::widgets::search_bar::FILE_SEARCH_BAR_INPUT_ID;
@@ -18,6 +19,7 @@ pub fn view<'a>(
     directory: Option<&'a crate::features::folder_workspace::Directory>,
     loading: bool,
     tag_color_mapping: &frename_core::TagColorMapping,
+    tag_palette: TagPalette,
 ) -> Element<'a, Message> {
     let placeholder_icon = |icon: &'static str| {
         container(text(icon).size(48).color(theme::TEXT_MUTED))
@@ -49,6 +51,7 @@ pub fn view<'a>(
             let name_display = widgets::file_name_display::view(
                 file_info.snapshot(),
                 tag_color_mapping,
+                tag_palette,
                 false,
             );
 

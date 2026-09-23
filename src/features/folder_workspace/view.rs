@@ -7,13 +7,14 @@ use iced::widget::{column, container, mouse_area, row, stack, text};
 use iced::{Element, Length};
 
 use crate::features::{file_workspace, folder, folder_controls, media_viewer};
+use crate::tag_colors::TagPalette;
 use crate::theme;
 use crate::widgets::splitter::{Splitter, HIT_WIDTH};
 
 use super::{FolderWorkspace, Message};
 
 /// Workspace layout: one big drop panel when no folder is open; otherwise regions and splitters.
-pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
+pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Message> {
     let seg_start = state.file_workspace().segment_start_secs();
     let seg_end = state.file_workspace().segment_end_secs();
     let screenshot_secs: Vec<f32> = state.file_workspace().screenshots()
@@ -76,6 +77,7 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
             state.directory(),
             state.is_loading(),
             &tag_color_mapping,
+            tag_palette,
         ))
         .height(Length::Fill),
         folder_controls::view::view(
@@ -108,6 +110,7 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
         is_synced,
         state.sync_locked(),
         file_ws.tag_list(),
+        tag_palette,
     )
     .map(|m| match m {
         file_workspace::Message::TagPanel(m) => Message::TagPanel(m),

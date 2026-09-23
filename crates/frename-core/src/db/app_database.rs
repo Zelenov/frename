@@ -1,4 +1,4 @@
-//! Application database (SQLite): session, window geometry and video settings.
+//! Application database (SQLite): session, window geometry, video and app settings.
 //!
 //! Tags are not here — they live in each folder's own tag file (see `FolderTagStore`).
 
@@ -12,7 +12,7 @@ use rusqlite::Connection;
 use crate::FolderAndFile;
 
 use super::migrations;
-use super::traits::{AppStateStore, Initializable, VideoSettings, WindowGeometry};
+use super::traits::{AppSettings, AppStateStore, Initializable, VideoSettings, WindowGeometry};
 
 /// Open connections, keyed by database path.
 ///
@@ -162,6 +162,32 @@ impl AppStateStore for AppDatabase {
                 "INSERT INTO video_settings (id, volume) VALUES (1, ?1)
                  ON CONFLICT(id) DO UPDATE SET volume = excluded.volume",
                 rusqlite::params![settings.volume as f64],
+            );
+        }
+    }
+
+    fn get_app_settings(&self) -> Option<AppSettings> {
+        let conn = self.conn().ok()?;
+        let conn = lock_connection(&conn);
+        conn.query_row(
+            "SELECT autoplay_video, monochrome_tags FROM app_settings WHERE id = 1",
+            [],
+            |row| Ok(AppSettings {
+                autoplay_video: row.get::<_, i64>(0)? != 0,
+                monochrome_tags: row.get::<_, i64>(1)? != 0,
+            }),
+        ).ok()
+    }
+
+    fn set_app_settings(&self, settings: AppSettings) {
+        if let Ok(conn) = self.conn() {
+            let conn = lock_connection(&conn);
+            let _ = conn.execute(
+                "INSERT INTO app_settings (id, autoplay_video, monochrome_tags) VALUES (1, ?1, ?2)
+                 ON CONFLICT(id) DO UPDATE SET
+                     autoplay_video = excluded.autoplay_video,
+                     monochrome_tags = excluded.monochrome_tags",
+                rusqlite::params![settings.autoplay_video, settings.monochrome_tags],
             );
         }
     }

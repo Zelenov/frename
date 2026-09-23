@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::features::video_controls::{self, VideoControlsState};
+use frename_core::{AppDatabase, AppStateStore};
 use super::Message;
 
 /// Video player component state.
@@ -19,15 +20,22 @@ pub struct VideoPlayerState {
     loading: bool,
     load_failed: bool,
     controls: VideoControlsState,
+    /// Start playback as soon as a video is opened; otherwise it opens paused.
+    autoplay: bool,
 }
 
 impl Default for VideoPlayerState {
     fn default() -> Self {
+        let autoplay = AppDatabase::new()
+            .get_app_settings()
+            .unwrap_or_default()
+            .autoplay_video;
         Self {
             current_video: None,
             loading: false,
             load_failed: false,
             controls: VideoControlsState::default(),
+            autoplay,
         }
     }
 }
@@ -40,6 +48,7 @@ impl VideoPlayerState {
         self.load_failed = false;
         self.current_video = None;
         self.controls = VideoControlsState::with_volume(self.controls.volume());
+        let autoplay = self.autoplay;
 
         Task::future(async move {
             // The video is opened once, here on a blocking thread, and handed to the
@@ -52,8 +61,12 @@ impl VideoPlayerState {
                 };
                 log::debug!("File URL created: {url}");
                 match open_video(&url) {
-                    Ok(video) => {
+                    Ok(mut video) => {
                         log::info!("Video loaded successfully");
+                        // Paused here, before the update thread sees it, so no audio slips out.
+                        if !autoplay {
+                            video.set_paused(true);
+                        }
                         Some(video)
                     }
                     Err(e) => {
@@ -88,7 +101,14 @@ impl VideoPlayerState {
                 Task::done(Message::VideoReady { duration_secs })
             }
             Message::VideoReady { duration_secs } => {
-                Task::done(Message::Controls(video_controls::Message::VideoReady { duration_secs }))
+                let ready =
+                    Task::done(Message::Controls(video_controls::Message::VideoReady { duration_secs }));
+                // Controls assume playback on ready; a video opened paused has to say otherwise.
+                let paused = self.current_video.as_ref().is_some_and(Video::paused);
+                if !paused {
+                    return ready;
+                }
+                ready.chain(Task::done(Message::Controls(video_controls::Message::SetPlaying(false))))
             }
             Message::NewFrame => Task::none(),
             Message::EndOfStream => {
@@ -156,6 +176,10 @@ impl VideoPlayerState {
             Message::VideoUnloaded => Task::none(),
             // Intercepted by media_viewer/folder_workspace; no-op here.
             Message::ToggleFullscreen => Task::none(),
+            Message::SetAutoplay(autoplay) => {
+                self.autoplay = autoplay;
+                Task::none()
+            }
         }
     }
 
