@@ -27,12 +27,14 @@ pub fn is_comment_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// UTF-8 byte order mark. Written at the start of comment files so Windows editors
+/// don't guess the ANSI codepage (1251/1252) for BOM-less UTF-8.
+const UTF8_BOM: char = '\u{feff}';
+
 /// Load the comment for a file from disk. Returns empty string if absent or empty.
 pub fn load_comment(file_path: &Path) -> String {
-    std::fs::read_to_string(comment_path(file_path))
-        .unwrap_or_default()
-        .trim()
-        .to_string()
+    let text = std::fs::read_to_string(comment_path(file_path)).unwrap_or_default();
+    text.strip_prefix(UTF8_BOM).unwrap_or(&text).trim().to_string()
 }
 
 /// Save (or delete) the comment file for a file.
@@ -43,7 +45,7 @@ pub fn save_comment(file_path: &Path, comment: &str) {
     if trimmed.is_empty() {
         let _ = std::fs::remove_file(&path);
     } else {
-        let _ = std::fs::write(&path, trimmed);
+        let _ = std::fs::write(&path, format!("{UTF8_BOM}{trimmed}"));
     }
 }
 
@@ -59,5 +61,32 @@ pub fn rename_comment_file(old_file_path: &Path, new_file_path: &Path) {
                 old_comment, new_comment, e
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_folder(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("frename-comment-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        dir
+    }
+
+    #[test]
+    fn saved_comment_has_bom_and_loads_without_it() {
+        let file = temp_folder("bom").join("clip.mp4");
+        save_comment(&file, "Café 5G");
+        let bytes = std::fs::read(comment_path(&file)).expect("comment file");
+        assert!(bytes.starts_with(&[0xEF, 0xBB, 0xBF]));
+        assert_eq!(load_comment(&file), "Café 5G");
+    }
+
+    #[test]
+    fn loads_comment_without_bom() {
+        let file = temp_folder("plain").join("clip.mp4");
+        std::fs::write(comment_path(&file), "  plain  ").expect("write");
+        assert_eq!(load_comment(&file), "plain");
     }
 }
