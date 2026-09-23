@@ -1,3 +1,16 @@
+# 0.63
+## Added
+- Subtitles: a `.srt` next to a video is shown under the picture, and over it in fullscreen with a list of every line. Click a line to jump to it; the list follows playback.
+- The CC button opens the subtitle list outside fullscreen too.
+- The file list marks videos that have subtitles.
+- A settings window (gear button): start videos playing when opened, and draw every tag in one neutral color.
+
+## Changed
+- The file list shows only videos; subtitles, text files and images are hidden.
+- Subtitles are renamed together with their video, undo included.
+- Comments are saved as UTF-8 with a BOM, so Windows editors no longer show Cyrillic as garbage.
+- The per-file "Paste tags" button is gone; Ctrl+C / Ctrl+V still copy tags.
+
 # 0.62
 ## Added
 - Show only the files that have no tags yet, so a folder can be worked through to the end.
