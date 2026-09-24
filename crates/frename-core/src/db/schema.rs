@@ -65,3 +65,15 @@ CREATE TABLE IF NOT EXISTS app_settings (
     monochrome_tags INTEGER NOT NULL DEFAULT 0
 );
 ";
+
+/// Migration 4: where file comments are saved (`CommentStorage::as_str`). Existing users move
+/// to XMP too; their `.comment.txt` files are still read and move into the media file on save.
+pub const M4_COMMENT_STORAGE: &str = "
+ALTER TABLE app_settings ADD COLUMN comment_storage TEXT NOT NULL DEFAULT 'xmp';
+";
+
+/// Migration 5: where in/out points are saved (`InOutStorage::as_str`). Defaults to the file
+/// name, where they always were.
+pub const M5_IN_OUT_STORAGE: &str = "
+ALTER TABLE app_settings ADD COLUMN in_out_storage TEXT NOT NULL DEFAULT 'file_name';
+";

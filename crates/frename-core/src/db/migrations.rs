@@ -23,6 +23,14 @@ const MIGRATIONS: &[Migration] = &[
         version: 3,
         sql: schema::M3_APP_SETTINGS,
     },
+    Migration {
+        version: 4,
+        sql: schema::M4_COMMENT_STORAGE,
+    },
+    Migration {
+        version: 5,
+        sql: schema::M5_IN_OUT_STORAGE,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
@@ -99,6 +107,6 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 3);
+        assert_eq!(current_version(&conn).expect("version"), 5);
     }
 }

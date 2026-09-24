@@ -24,6 +24,10 @@ pub struct Directory<S> {
     selected_id: Option<FileId>,
     /// When true, only files without tags are listed (the selected file always stays listed).
     untagged_only: bool,
+    /// When true, only files with a subtitle file are listed.
+    subtitled_only: bool,
+    /// When true, only files with a comment are listed.
+    commented_only: bool,
     /// Name filter as the user typed it (for display in the search bar).
     name_filter: String,
     /// Same filter lowercased once, so matching a file never allocates.
@@ -46,6 +50,8 @@ impl<S: AppStateStore + Clone> Directory<S> {
             order,
             selected_id: None,
             untagged_only: false,
+            subtitled_only: false,
+            commented_only: false,
             name_filter: String::new(),
             name_filter_lower: String::new(),
             store,
@@ -95,6 +101,48 @@ impl<S: AppStateStore + Clone> Directory<S> {
             .count()
     }
 
+    /// Whether the "with subtitles only" filter is active.
+    pub fn subtitled_only(&self) -> bool { self.subtitled_only }
+
+    /// Turn the "with subtitles only" filter on or off. The selected file stays listed.
+    pub fn set_subtitled_only(&mut self, subtitled_only: bool) {
+        self.subtitled_only = subtitled_only;
+    }
+
+    /// Number of files with a subtitle file (ignores the filters).
+    pub fn subtitled_count(&self) -> usize {
+        self.files_by_id.values().filter(|f| f.has_subtitles()).count()
+    }
+
+    /// Whether the "with comments only" filter is active.
+    pub fn commented_only(&self) -> bool { self.commented_only }
+
+    /// Turn the "with comments only" filter on or off. The selected file stays listed, even
+    /// once its comment is cleared.
+    pub fn set_commented_only(&mut self, commented_only: bool) {
+        self.commented_only = commented_only;
+    }
+
+    /// Number of files with a comment (ignores the filters).
+    pub fn commented_count(&self) -> usize {
+        self.files_by_id.values().filter(|f| !f.comment().is_empty()).count()
+    }
+
+    /// Paths of every file in the folder, ignoring the filters.
+    pub fn all_file_paths(&self) -> Vec<PathBuf> {
+        self.order
+            .iter()
+            .filter_map(|id| self.files_by_id.get(id))
+            .map(|file| file.file_path().to_path_buf())
+            .collect()
+    }
+
+    /// Whether any filter that depends on a file's content (tags, subtitles, comment) is on.
+    /// Saving a file can move it in or out of the list while one is.
+    pub fn has_content_filter(&self) -> bool {
+        self.untagged_only || self.subtitled_only || self.commented_only
+    }
+
     /// Name filter as the user typed it. Empty means every file passes.
     pub fn name_filter(&self) -> &str { &self.name_filter }
 
@@ -124,6 +172,12 @@ impl<S: AppStateStore + Clone> Directory<S> {
             return true;
         }
         if self.untagged_only && !file.snapshot().tags().is_empty() {
+            return false;
+        }
+        if self.subtitled_only && !file.has_subtitles() {
+            return false;
+        }
+        if self.commented_only && file.comment().is_empty() {
             return false;
         }
         self.matches_name_filter(file)
@@ -320,7 +374,7 @@ mod tests {
     use std::time::SystemTime;
 
     use crate::db::fake_app_storage::FakeAppStorage;
-    use crate::{Directory, File};
+    use crate::{Directory, File, FolderInfo};
     use super::is_listed_kind;
 
     #[test]
@@ -464,6 +518,59 @@ mod tests {
         dir.set_name_filter("c".to_string());
         assert_eq!(listed_names(&dir), vec!["b.mp4", "c.mp4"]);
         assert_eq!(dir.selected_index(), Some(0), "cursor still points at its file");
+    }
+
+    /// Set a comment on a file the way a save does, by its listed position.
+    fn comment_file_at(dir: &mut Directory<FakeAppStorage>, index: usize, comment: &str) {
+        let file = dir.files_in_order().nth(index).expect("file at index");
+        let (id, path) = (file.id(), file.file_path().to_path_buf());
+        let mut snapshot = file.snapshot().clone();
+        snapshot.set_comment(comment.to_string());
+        dir.rename_file(id, &path, &snapshot);
+    }
+
+    #[test]
+    fn comment_filter_lists_only_commented_files() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4", "c.mp4"]);
+        comment_file_at(&mut dir, 1, "goat");
+        dir.set_commented_only(true);
+        assert_eq!(listed_names(&dir), vec!["b.mp4"]);
+        assert_eq!(dir.commented_count(), 1);
+    }
+
+    #[test]
+    fn subtitle_filter_lists_only_files_with_subtitles() {
+        let root = PathBuf::from("C:/test");
+        let info = FolderInfo::new(vec!["a.mp4".into(), "b.mp4".into(), "b.srt".into()]);
+        let files = ["a.mp4", "b.mp4"]
+            .iter()
+            .map(|name| File::from_path_with_folder_info(root.join(name), SystemTime::UNIX_EPOCH, &info))
+            .collect();
+        let mut dir = Directory::with_files(root, files, FakeAppStorage::new());
+        dir.set_subtitled_only(true);
+        assert_eq!(listed_names(&dir), vec!["b.mp4"]);
+        assert_eq!(dir.subtitled_count(), 1);
+    }
+
+    #[test]
+    fn content_filters_combine() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4", "c.mp4"]);
+        comment_file_at(&mut dir, 0, "one");
+        comment_file_at(&mut dir, 1, "two");
+        tag_file_at(&mut dir, 0, &["Action"]);
+        dir.set_commented_only(true);
+        dir.set_untagged_only(true);
+        assert_eq!(listed_names(&dir), vec!["b.mp4"]);
+    }
+
+    #[test]
+    fn selected_file_stays_listed_when_its_comment_is_cleared() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4"]);
+        comment_file_at(&mut dir, 0, "goat");
+        dir.set_commented_only(true);
+        dir.select_index(0);
+        comment_file_at(&mut dir, 0, "");
+        assert_eq!(listed_names(&dir), vec!["a.mp4"]);
     }
 
     #[test]

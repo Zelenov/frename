@@ -2,7 +2,7 @@
 
 use uuid::Uuid;
 
-use crate::{FolderAndFile, StoredTag, TagColorMapping};
+use crate::{CommentStorage, FolderAndFile, InOutStorage, StoredTag, TagColorMapping};
 
 /// Saved window position and size (logical pixels).
 #[derive(Debug, Clone, Copy)]
@@ -43,6 +43,10 @@ pub struct AppSettings {
     pub autoplay_video: bool,
     /// Draw every tag in one neutral color instead of its own palette color. Defaults to false.
     pub monochrome_tags: bool,
+    /// Where file comments are saved. Defaults to XMP inside the media file.
+    pub comment_storage: CommentStorage,
+    /// Where in/out points are saved. Defaults to the file name.
+    pub in_out_storage: InOutStorage,
 }
 
 impl Default for AppSettings {
@@ -50,6 +54,8 @@ impl Default for AppSettings {
         Self {
             autoplay_video: true,
             monochrome_tags: false,
+            comment_storage: CommentStorage::default(),
+            in_out_storage: InOutStorage::default(),
         }
     }
 }

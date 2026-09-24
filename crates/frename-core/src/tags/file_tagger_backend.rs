@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use super::file_snapshot::FileSnapshot;
 use super::folder_info::FolderInfo;
 use super::production_file_tagger::is_screenshot_sidecar;
+use crate::metadata::{FileConversion, MetadataStorage};
 
 /// The interface that both InMemoryFileTagger and ProductionFileTagger implement.
 pub trait FileTaggerBackend: Send + Sync {
@@ -26,6 +27,19 @@ pub trait FileTaggerBackend: Send + Sync {
         crate::comment::is_comment_file(path)
             || is_screenshot_sidecar(name)
             || crate::FolderTagStore::is_tag_file(path)
+    }
+
+    /// What converting the file's comment and in/out points to `storage` would move.
+    /// Backends that never touch the disk have nothing to convert.
+    fn metadata_conversion(&self, _path: &Path, _storage: MetadataStorage) -> FileConversion {
+        FileConversion::default()
+    }
+
+    /// Move the file's comment and in/out points into `storage`, reading both of their homes.
+    /// Returns the file's path afterwards, which changes when in/out points move in or out
+    /// of the name.
+    fn convert_metadata(&self, path: &Path, _storage: MetadataStorage) -> PathBuf {
+        path.to_path_buf()
     }
 
     /// Save a screenshot image for the given file and position.

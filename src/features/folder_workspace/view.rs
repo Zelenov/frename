@@ -65,10 +65,17 @@ pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Mes
 
     let (has_previous, has_next) = state.has_previous_next();
     let has_selected = state.current_file().is_some();
-    let (untagged_only, untagged_count) = state
+    let filters = state
         .directory()
-        .map(|d| (d.untagged_only(), d.untagged_count()))
-        .unwrap_or((false, 0));
+        .map(|d| folder_controls::view::ListFilters {
+            untagged_only: d.untagged_only(),
+            untagged_count: d.untagged_count(),
+            subtitled_only: d.subtitled_only(),
+            subtitled_count: d.subtitled_count(),
+            commented_only: d.commented_only(),
+            commented_count: d.commented_count(),
+        })
+        .unwrap_or_default();
 
     // Bound to a local so the folder list can borrow it instead of taking a clone per frame.
     let tag_color_mapping = state.file_workspace().tag_color_mapping();
@@ -78,14 +85,14 @@ pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Mes
             state.is_loading(),
             &tag_color_mapping,
             tag_palette,
+            state.inline_rename(),
         ))
         .height(Length::Fill),
         folder_controls::view::view(
             has_previous,
             has_next,
             has_selected,
-            untagged_only,
-            untagged_count,
+            filters,
         ),
     ]
     .height(Length::Fill)

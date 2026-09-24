@@ -17,8 +17,18 @@ pub enum Message {
     OpenFolder,
     /// Show only files without tags (true) or every file (false).
     SetUntaggedOnly(bool),
+    /// Show only files with a subtitle file (true) or every file (false).
+    SetSubtitledOnly(bool),
+    /// Show only files with a comment (true) or every file (false).
+    SetCommentedOnly(bool),
     /// Narrow the list to files whose name contains this text (empty = no filter).
     SetNameFilter(String),
     /// Open the settings window (from the controls bar). Handled by the app.
     OpenSettings,
+    /// Double-click on a row's name: edit that file's name in place.
+    StartRename(usize),
+    /// Text typed into the in-place rename editor.
+    RenameInput(String),
+    /// Enter in the in-place rename editor: rename the file.
+    SubmitRename,
 }

@@ -11,6 +11,7 @@ use super::file_snapshot::FileSnapshot;
 use super::file_tagger_backend::FileTaggerBackend;
 use super::folder_info::FolderInfo;
 use super::in_memory_file_tagger::InMemoryFileTagger;
+use crate::metadata::{FileConversion, MetadataStorage};
 
 static BACKEND: OnceLock<Box<dyn FileTaggerBackend>> = OnceLock::new();
 
@@ -40,6 +41,16 @@ impl FileTagger {
     /// Returns true if `path` is a sidecar file that should be hidden from the file list.
     pub fn is_sidecar_file(path: &Path) -> bool {
         backend().is_sidecar_file(path)
+    }
+
+    /// What converting the file's comment and in/out points to `storage` would move.
+    pub fn metadata_conversion(path: &Path, storage: MetadataStorage) -> FileConversion {
+        backend().metadata_conversion(path, storage)
+    }
+
+    /// Move the file's comment and in/out points into `storage`; returns the path afterwards.
+    pub fn convert_metadata(path: &Path, storage: MetadataStorage) -> PathBuf {
+        backend().convert_metadata(path, storage)
     }
 
     /// Save a screenshot image for the given file and position.

@@ -5,4 +5,4 @@ mod state;
 pub mod view;
 
 pub use messages::Message;
-pub use state::SettingsState;
+pub use state::{FolderConversion, SettingsState};

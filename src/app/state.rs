@@ -208,8 +208,9 @@ fn only_from_main_window(
     (window_id == main_window).then_some(message)
 }
 
-/// Settings window size (logical px).
-const SETTINGS_WINDOW_SIZE: iced::Size = iced::Size::new(420.0, 200.0);
+/// Settings window size (logical px). The window is not resizable, so this must fit every
+/// section: a setting below the bottom edge is simply not seen.
+const SETTINGS_WINDOW_SIZE: iced::Size = iced::Size::new(560.0, 560.0);
 
 /// Application state: top-level features only. No knowledge of child UI or structure.
 pub struct FrenameApp {
@@ -239,10 +240,14 @@ impl FrenameApp {
     /// the windows the app opens later.
     pub fn new(main_window: window::Id, window_icon: Option<window::Icon>) -> Self {
         let saved = AppDatabase::new().get_window_state();
+        let settings = settings::SettingsState::default();
+        // Before the first folder scan, which already reads comments and in/out points.
+        frename_core::set_comment_storage(settings.settings().comment_storage);
+        frename_core::set_in_out_storage(settings.settings().in_out_storage);
         Self {
             drag_drop_state: drag_drop::DragDropState::default(),
             folder_workspace: folder_workspace::FolderWorkspace::new(),
-            settings: settings::SettingsState::default(),
+            settings,
             pending_close: None,
             main_window,
             settings_window: None,
@@ -271,16 +276,41 @@ impl FrenameApp {
                 }
                 Task::none()
             }
-            Message::OpenSettings => self.open_settings_window(),
+            Message::OpenSettings => {
+                let check = if self.settings_window.is_none() { self.check_folder_conversion() } else { Task::none() };
+                Task::batch([self.open_settings_window(), check])
+            }
             Message::Settings(msg) => {
                 self.settings.update(msg.clone());
-                // Tag colors are read from the settings at view time; autoplay lives in the player.
-                let settings::Message::SetAutoplayVideo(autoplay) = msg else {
-                    return Task::none();
-                };
-                Task::done(Message::FolderWorkspace(folder_workspace::Message::MediaViewer(
-                    media_viewer::Message::Video(media_viewer_video::Message::SetAutoplay(autoplay)),
-                )))
+                // Tag colors are read from the settings at view time; autoplay lives in the player;
+                // comment and in/out storage live in core, which saves them. A storage change
+                // re-checks the open folder, which offers converting it.
+                match msg {
+                    settings::Message::SetCommentStorage(storage) => {
+                        frename_core::set_comment_storage(storage);
+                        self.check_folder_conversion()
+                    }
+                    settings::Message::SetInOutStorage(storage) => {
+                        frename_core::set_in_out_storage(storage);
+                        self.check_folder_conversion()
+                    }
+                    settings::Message::ConvertFolder => {
+                        self.settings.set_conversion(settings::FolderConversion::Converting);
+                        Task::done(Message::FolderWorkspace(folder_workspace::Message::ConvertMetadata(
+                            self.settings.metadata_storage(),
+                        )))
+                    }
+                    settings::Message::SetAutoplayVideo(autoplay) => {
+                        Task::done(Message::FolderWorkspace(folder_workspace::Message::MediaViewer(
+                            media_viewer::Message::Video(media_viewer_video::Message::SetAutoplay(autoplay)),
+                        )))
+                    }
+                    settings::Message::SetMonochromeTags(_) => Task::none(),
+                }
+            }
+            Message::FolderConversionPlanned(plan) => {
+                self.settings.set_plan(plan);
+                Task::none()
             }
             Message::FolderWorkspace(folder_workspace::Message::Folder(folder::Message::OpenSettings)) => {
                 Task::done(Message::OpenSettings)
@@ -331,6 +361,19 @@ impl FrenameApp {
             }
             Message::Noop => Task::none(),
             Message::FolderWorkspace(msg) => {
+                // The settings window reports the conversion it started, and re-checks when
+                // another folder opens (but keeps a report the user has not seen replaced).
+                if let folder_workspace::Message::MetadataConverted { report, .. } = &msg {
+                    self.settings
+                        .set_conversion(settings::FolderConversion::Done(report.clone()));
+                }
+                let recheck = matches!(msg, folder_workspace::Message::FolderLoaded { .. })
+                    && self.settings_window.is_some()
+                    && !matches!(
+                        self.settings.conversion(),
+                        settings::FolderConversion::Converting
+                            | settings::FolderConversion::Done(_)
+                    );
                 let is_unloaded = matches!(
                     &msg,
                     folder_workspace::Message::MediaViewer(media_viewer::Message::Unloaded)
@@ -338,6 +381,12 @@ impl FrenameApp {
                 let task = self.folder_workspace.update(msg).map(Message::FolderWorkspace);
                 let Some(id) = is_unloaded.then(|| self.pending_close.take()).flatten() else {
                     return task;
+                };
+                // After the update: the check reads the folder the workspace now holds.
+                let task = if recheck {
+                    Task::batch([task, self.check_folder_conversion()])
+                } else {
+                    task
                 };
                 Task::batch([task, window::close(id)])
             }
@@ -350,6 +399,33 @@ impl FrenameApp {
         }
         let tag_palette = TagPalette::from_monochrome(self.settings.settings().monochrome_tags);
         folder_workspace::view::view(&self.folder_workspace, tag_palette).map(Message::FolderWorkspace)
+    }
+
+    /// Check the open folder against the storage settings on a blocking thread, for the
+    /// "Current folder" part of the settings window.
+    fn check_folder_conversion(&mut self) -> Task<Message> {
+        let Some(dir) = self.folder_workspace.directory() else {
+            self.settings
+                .set_conversion(settings::FolderConversion::NoFolder);
+            return Task::none();
+        };
+        let paths = dir.all_file_paths();
+        let storage = self.settings.metadata_storage();
+        self.settings
+            .set_conversion(settings::FolderConversion::Checking);
+        Task::future(async move {
+            let plan =
+                tokio::task::spawn_blocking(move || frename_core::plan_conversion(&paths, storage))
+                    .await
+                    .unwrap_or_else(|e| {
+                        log::error!("folder conversion check failed: {e}");
+                        frename_core::ConversionPlan {
+                            storage,
+                            ..Default::default()
+                        }
+                    });
+            Message::FolderConversionPlanned(plan)
+        })
     }
 
     /// Open the settings window, or focus it when it is already open.

@@ -1,7 +1,8 @@
-//! Comment file utilities.
+//! Comment text files.
 //!
-//! Each file may have an associated comment stored in `{filename}.comment.txt`
-//! in the same directory. An empty or absent file means no comment.
+//! A file's comment may be stored in `{filename}.comment.txt` in the same directory; see
+//! [`crate::metadata`] for when this is used instead of the file's XMP.
+//! An empty or absent file means no comment.
 
 use std::path::{Path, PathBuf};
 
@@ -31,7 +32,7 @@ pub fn is_comment_file(path: &Path) -> bool {
 /// don't guess the ANSI codepage (1251/1252) for BOM-less UTF-8.
 const UTF8_BOM: char = '\u{feff}';
 
-/// Load the comment for a file from disk. Returns empty string if absent or empty.
+/// Load the comment file for a file. Returns empty string if absent or empty.
 pub fn load_comment(file_path: &Path) -> String {
     let text = std::fs::read_to_string(comment_path(file_path)).unwrap_or_default();
     text.strip_prefix(UTF8_BOM).unwrap_or(&text).trim().to_string()
@@ -40,12 +41,21 @@ pub fn load_comment(file_path: &Path) -> String {
 /// Save (or delete) the comment file for a file.
 /// If `comment` is empty/whitespace, removes the comment file (if any).
 pub fn save_comment(file_path: &Path, comment: &str) {
-    let path = comment_path(file_path);
     let trimmed = comment.trim();
     if trimmed.is_empty() {
-        let _ = std::fs::remove_file(&path);
-    } else {
-        let _ = std::fs::write(&path, format!("{UTF8_BOM}{trimmed}"));
+        remove_comment_file(file_path);
+    } else if let Err(e) = std::fs::write(comment_path(file_path), format!("{UTF8_BOM}{trimmed}")) {
+        log::error!("comment: failed to write comment file for {:?}: {}", file_path, e);
+    }
+}
+
+/// Remove the comment file for a file, if there is one.
+pub fn remove_comment_file(file_path: &Path) {
+    let path = comment_path(file_path);
+    if let Err(e) = std::fs::remove_file(&path) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            log::warn!("comment: failed to remove {:?}: {}", path, e);
+        }
     }
 }
 
@@ -88,5 +98,13 @@ mod tests {
         let file = temp_folder("plain").join("clip.mp4");
         std::fs::write(comment_path(&file), "  plain  ").expect("write");
         assert_eq!(load_comment(&file), "plain");
+    }
+
+    #[test]
+    fn empty_comment_removes_the_file() {
+        let file = temp_folder("remove").join("clip.mp4");
+        save_comment(&file, "x");
+        save_comment(&file, "  ");
+        assert!(!comment_path(&file).exists());
     }
 }

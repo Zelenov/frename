@@ -9,6 +9,7 @@ mod file;
 mod ordered;
 mod tags;
 pub(crate) mod comment;
+mod metadata;
 mod subtitles;
 pub mod undo;
 
@@ -16,6 +17,10 @@ pub use db::{AppDatabase, AppSettings, AppStateStore, Initializable, LoggingAppS
 pub use directory::Directory;
 pub use file_kind::FileKind;
 pub use folder_file::FolderAndFile;
+pub use metadata::{
+    convert as convert_metadata, metadata_storage, plan_conversion, set_comment_storage, set_in_out_storage,
+    CommentStorage, ConversionPlan, ConversionReport, FileConversion, InOutStorage, MetadataStorage,
+};
 pub use subtitles::{load_subtitles, subtitle_path, SubtitleCue, Subtitles};
 pub use file::{File, FileId};
 pub use ordered::{OrderableEntry, OrderedCollection, OrderKey, OrderedThing};

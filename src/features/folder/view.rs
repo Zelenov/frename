@@ -2,7 +2,7 @@
 //!
 //! Receives only data (directory, loading, tag color mapping) from workspace; selection from directory; no parent knows our layout or widgets.
 
-use iced::widget::{column, container, mouse_area, row, scrollable, text, tooltip};
+use iced::widget::{column, container, mouse_area, row, scrollable, text, text_input, tooltip};
 use iced::{mouse, Element, Length};
 
 use crate::tag_colors::TagPalette;
@@ -10,7 +10,7 @@ use crate::theme;
 use crate::widgets;
 use crate::widgets::search_bar::FILE_SEARCH_BAR_INPUT_ID;
 
-use super::{FOLDER_LIST_SCROLLABLE_ID, FOLDER_ROW_HEIGHT};
+use super::{InlineRename, FOLDER_LIST_SCROLLABLE_ID, FOLDER_RENAME_INPUT_ID, FOLDER_ROW_HEIGHT};
 use super::Message;
 
 const SUBTITLES_MARKER_WIDTH: f32 = 28.0;
@@ -22,6 +22,7 @@ pub fn view<'a>(
     loading: bool,
     tag_color_mapping: &frename_core::TagColorMapping,
     tag_palette: TagPalette,
+    rename: Option<&'a InlineRename>,
 ) -> Element<'a, Message> {
     let placeholder_icon = |icon: &'static str| {
         container(text(icon).size(48).color(theme::TEXT_MUTED))
@@ -88,16 +89,22 @@ pub fn view<'a>(
                     .into()
             };
 
-            let name_area: Element<'_, Message> = mouse_area(
-                container(name_display)
-                    .padding(iced::Padding { top: 4.0, right: 8.0, bottom: 4.0, left: 0.0 })
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .center_y(Length::Fill),
-            )
-            .on_press(Message::SelectFile(index))
-            .interaction(mouse::Interaction::Pointer)
-            .into();
+            let editing = rename.filter(|r| r.id == file_info.id());
+            let name_area: Element<'_, Message> = if let Some(rename) = editing {
+                rename_editor(rename)
+            } else {
+                mouse_area(
+                    container(name_display)
+                        .padding(iced::Padding { top: 4.0, right: 8.0, bottom: 4.0, left: 0.0 })
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .center_y(Length::Fill),
+                )
+                .on_press(Message::SelectFile(index))
+                .on_double_click(Message::StartRename(index))
+                .interaction(mouse::Interaction::Pointer)
+                .into()
+            };
 
             container(
                 row![subtitles_icon, comment_icon, name_area]
@@ -123,6 +130,9 @@ pub fn view<'a>(
         scrollable(column(items).width(Length::Fill))
             .id(iced::widget::Id::new(FOLDER_LIST_SCROLLABLE_ID))
             .height(Length::Fill)
+            // Scrollbar beside the rows, not over them: long names and the rename field
+            // would otherwise run underneath it.
+            .spacing(2)
             .on_scroll(|viewport| {
                 let offset = viewport.absolute_offset();
                 Message::Scrolled {
@@ -146,5 +156,50 @@ pub fn view<'a>(
         .width(Length::Fill)
         .height(Length::Fill)
         .style(theme::panel_container_style)
+        .into()
+}
+
+/// The in-place rename editor that replaces a row's name: the whole file name in a text
+/// field, with a red border and the reason next to it when Enter was refused.
+fn rename_editor(rename: &InlineRename) -> Element<'_, Message> {
+    let border = if rename.error.is_some() {
+        theme::ERROR
+    } else {
+        theme::ACCENT
+    };
+    let input = text_input("", &rename.text)
+        .id(iced::widget::Id::from(FOLDER_RENAME_INPUT_ID))
+        .on_input(Message::RenameInput)
+        .on_submit(Message::SubmitRename)
+        .size(14)
+        .padding([4, 6])
+        .style(
+            move |_theme: &iced::Theme, _status: text_input::Status| text_input::Style {
+                background: iced::Background::Color(theme::BG_ELEVATED),
+                border: iced::Border {
+                    radius: 2.0.into(),
+                    width: 1.0,
+                    color: border,
+                },
+                icon: theme::TEXT_MUTED,
+                placeholder: theme::TEXT_MUTED,
+                value: theme::TEXT,
+                selection: theme::ACCENT_SELECTED,
+            },
+        );
+    let mut content = row![input].spacing(6).align_y(iced::Alignment::Center);
+    if let Some(error) = rename.error {
+        content = content.push(text(error).size(11).color(theme::ERROR));
+    }
+    container(content)
+        .padding(iced::Padding {
+            top: 0.0,
+            right: 8.0,
+            bottom: 0.0,
+            left: 0.0,
+        })
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .center_y(Length::Fill)
         .into()
 }
