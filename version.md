@@ -1,3 +1,16 @@
+# 0.64
+## Added
+- Comments can be saved inside the video file (XMP), where Premiere Pro shows them in its Description column and finds them by search. Settings choose this (the default) or a `.comment.txt` next to the video.
+- In/out points can be saved inside the video as an Adobe marker, which Premiere Pro turns into a subclip; the file name then carries no in/out. Settings choose this or the file name (the default).
+- Settings show which files in the open folder still keep comments or in/out the other way, and convert the whole folder in one click, in either direction.
+- Filter the file list to files with subtitles or with a comment. All filters are in one Filter dropdown, with counts.
+- Double-click a file in the list to rename it in place: Enter renames, Esc cancels. A name another file already has is refused.
+
+## Changed
+- Writing comments or in/out into a video keeps its modified and created dates.
+- A video no longer fails to play after it was renamed while open.
+- The file list scrollbar no longer covers long names.
+
 # 0.63
 ## Added
 - Subtitles: a `.srt` next to a video is shown under the picture, and over it in fullscreen with a list of every line. Click a line to jump to it; the list follows playback.
