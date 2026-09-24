@@ -5,7 +5,7 @@ use iced::{Alignment, Element, Length};
 
 use frename_core::{StoredTagStore, TagList};
 
-use crate::tag_colors;
+use crate::tag_colors::TagPalette;
 use crate::widgets::bounds_reporter::BoundsReporter;
 use crate::widgets::tag_chip;
 
@@ -17,6 +17,7 @@ use super::{
 pub fn view<'a, S>(
     state: &'a FileNamePanelState,
     tag_list: &'a TagList<S>,
+    tag_palette: TagPalette,
 ) -> Element<'a, Message>
 where
     S: StoredTagStore + Clone,
@@ -50,7 +51,7 @@ where
             None => continue,
         };
         let tag_name = tag.tag().to_string();
-        let tag_color = tag_colors::TagColors::color(tag.color_index());
+        let tag_color = tag_palette.color(tag.color_index());
         let is_dragging = dragging_index == Some(idx);
         let chip = tag_chip::view_with_leading(
             tag_name,

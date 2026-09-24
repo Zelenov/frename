@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use iced::widget::text_editor;
-use frename_core::{File, FileId, FileSnapshot, FolderAndFile};
+use frename_core::{ConversionReport, File, FileId, FileSnapshot, FolderAndFile, MetadataStorage};
 
 use super::Directory;
 use crate::features::{file_name_panel, folder, media_viewer, sync_panel, tag_panel};
@@ -92,4 +92,13 @@ pub enum Message {
     ScreenshotTaken(u64, Vec<u8>),
     /// Open a native file picker dialog so the user can choose a file to open.
     OpenFilePicker,
+    /// Move every file's comment and in/out points in the open folder into this storage.
+    ConvertMetadata(MetadataStorage),
+    /// Folder conversion finished (internal): rescan `folder` and reselect `selected`,
+    /// which is the selected file's path after the conversion.
+    MetadataConverted {
+        folder: PathBuf,
+        selected: Option<PathBuf>,
+        report: ConversionReport,
+    },
 }

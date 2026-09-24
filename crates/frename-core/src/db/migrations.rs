@@ -19,6 +19,18 @@ const MIGRATIONS: &[Migration] = &[
         version: 2,
         sql: schema::M2_DROP_TAG_TABLES,
     },
+    Migration {
+        version: 3,
+        sql: schema::M3_APP_SETTINGS,
+    },
+    Migration {
+        version: 4,
+        sql: schema::M4_COMMENT_STORAGE,
+    },
+    Migration {
+        version: 5,
+        sql: schema::M5_IN_OUT_STORAGE,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
@@ -85,7 +97,7 @@ mod tests {
     fn migrating_keeps_the_tables_the_app_still_uses() {
         let conn = database_at_version_1();
         run(&conn).expect("migrate");
-        for table in ["folder_history", "window_state", "video_settings"] {
+        for table in ["folder_history", "window_state", "video_settings", "app_settings"] {
             assert!(table_exists(&conn, table), "{table} must survive");
         }
     }
@@ -95,6 +107,6 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 2);
+        assert_eq!(current_version(&conn).expect("version"), 5);
     }
 }

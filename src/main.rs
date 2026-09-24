@@ -4,7 +4,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // Hide console in release mode
 
-use iced::{Task, window};
+use iced::window;
 use simplelog::{
     CombinedLogger, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode, WriteLogger,
 };
@@ -117,20 +117,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Install AFTER gstreamer::init() so our filter is registered last.
     crash_guard::install();
 
-    iced::application(
-        || (FrenameApp::new(), Task::none()),
-        FrenameApp::update,
-        FrenameApp::view,
-    )
-    .theme(iced::Theme::Dark)
-    .window(window::Settings {
+    let main_window = window::Settings {
         size: window_size,
         position: window_position,
         resizable: true,
         maximized: start_maximized,
-        icon: window_icon,
+        icon: window_icon.clone(),
         ..window::Settings::default()
-    })
+    };
+
+    // A daemon rather than an application: the app opens more than one window (settings), and
+    // the app itself decides that closing the main window ends it.
+    iced::daemon(
+        move || {
+            let (id, open) = window::open(main_window.clone());
+            (FrenameApp::new(id, window_icon.clone()), open.discard())
+        },
+        FrenameApp::update,
+        FrenameApp::view,
+    )
+    .theme(iced::Theme::Dark)
     .title(FrenameApp::title)
     .antialiasing(false)
     .subscription(FrenameApp::subscription)

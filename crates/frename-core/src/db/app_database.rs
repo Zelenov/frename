@@ -1,4 +1,4 @@
-//! Application database (SQLite): session, window geometry and video settings.
+//! Application database (SQLite): session, window geometry, video and app settings.
 //!
 //! Tags are not here — they live in each folder's own tag file (see `FolderTagStore`).
 
@@ -9,10 +9,10 @@ use std::time::Duration;
 
 use rusqlite::Connection;
 
-use crate::FolderAndFile;
+use crate::{CommentStorage, FolderAndFile, InOutStorage};
 
 use super::migrations;
-use super::traits::{AppStateStore, Initializable, VideoSettings, WindowGeometry};
+use super::traits::{AppSettings, AppStateStore, Initializable, VideoSettings, WindowGeometry};
 
 /// Open connections, keyed by database path.
 ///
@@ -162,6 +162,42 @@ impl AppStateStore for AppDatabase {
                 "INSERT INTO video_settings (id, volume) VALUES (1, ?1)
                  ON CONFLICT(id) DO UPDATE SET volume = excluded.volume",
                 rusqlite::params![settings.volume as f64],
+            );
+        }
+    }
+
+    fn get_app_settings(&self) -> Option<AppSettings> {
+        let conn = self.conn().ok()?;
+        let conn = lock_connection(&conn);
+        conn.query_row(
+            "SELECT autoplay_video, monochrome_tags, comment_storage, in_out_storage FROM app_settings WHERE id = 1",
+            [],
+            |row| Ok(AppSettings {
+                autoplay_video: row.get::<_, i64>(0)? != 0,
+                monochrome_tags: row.get::<_, i64>(1)? != 0,
+                comment_storage: CommentStorage::from_name(&row.get::<_, String>(2)?),
+                in_out_storage: InOutStorage::from_name(&row.get::<_, String>(3)?),
+            }),
+        ).ok()
+    }
+
+    fn set_app_settings(&self, settings: AppSettings) {
+        if let Ok(conn) = self.conn() {
+            let conn = lock_connection(&conn);
+            let _ = conn.execute(
+                "INSERT INTO app_settings (id, autoplay_video, monochrome_tags, comment_storage, in_out_storage)
+                 VALUES (1, ?1, ?2, ?3, ?4)
+                 ON CONFLICT(id) DO UPDATE SET
+                     autoplay_video = excluded.autoplay_video,
+                     monochrome_tags = excluded.monochrome_tags,
+                     comment_storage = excluded.comment_storage,
+                     in_out_storage = excluded.in_out_storage",
+                rusqlite::params![
+                    settings.autoplay_video,
+                    settings.monochrome_tags,
+                    settings.comment_storage.as_str(),
+                    settings.in_out_storage.as_str(),
+                ],
             );
         }
     }

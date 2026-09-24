@@ -5,6 +5,7 @@ use iced::{Alignment, Element, Length};
 
 use frename_core::{StoredTagStore, TagList};
 
+use crate::tag_colors::TagPalette;
 use crate::theme;
 
 use crate::widgets::timecode_badge;
@@ -21,6 +22,7 @@ use super::{FileNamePanelState, Message, TRASH_SPACING};
 pub fn view<'a, S>(
     state: &'a FileNamePanelState,
     tag_list: &'a TagList<S>,
+    tag_palette: TagPalette,
 ) -> Element<'a, Message>
 where
     S: StoredTagStore + Clone,
@@ -30,8 +32,8 @@ where
     let ext = snapshot.extension().to_string();
     let name_ext = file_name_line::name_ext_from_parts(&name, &ext);
 
-    let chips = chips_panel::view(state, tag_list);
-    let trash = trash_zone::view(state, tag_list);
+    let chips = chips_panel::view(state, tag_list, tag_palette);
+    let trash = trash_zone::view(state, tag_list, tag_palette);
     let top_row = row![chips, trash]
         .spacing(TRASH_SPACING)
         .align_y(Alignment::Center)

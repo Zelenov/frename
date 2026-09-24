@@ -1,6 +1,6 @@
 //! UI for folder controls (prev/next). Only this module knows they are buttons; receives only booleans.
 
-use iced::widget::{button, checkbox, container, mouse_area, row, text, tooltip};
+use iced::widget::{button, container, pick_list, row, text, tooltip};
 use iced::Element;
 
 use crate::features::folder;
@@ -8,73 +8,89 @@ use crate::theme;
 
 const CONTROLS_HEIGHT: f32 = 32.0;
 
-/// Dark checkbox style for the untagged filter: dark background, accent when checked.
-fn dark_checkbox_style(
-    _theme: &iced::Theme,
-    status: iced::widget::checkbox::Status,
-) -> iced::widget::checkbox::Style {
-    let (is_checked, hovered) = match status {
-        iced::widget::checkbox::Status::Hovered { is_checked } => (is_checked, true),
-        iced::widget::checkbox::Status::Active { is_checked }
-        | iced::widget::checkbox::Status::Disabled { is_checked } => (is_checked, false),
-    };
-    let background = match (is_checked, hovered) {
-        (true, _) => theme::ACCENT,
-        (false, true) => theme::SPLITTER_ACTIVE,
-        (false, false) => theme::TRACK,
-    };
-    iced::widget::checkbox::Style {
-        background: iced::Background::Color(background),
-        icon_color: theme::TEXT,
-        border: iced::Border {
-            radius: 2.0.into(),
-            width: 1.0,
-            color: theme::TEXT_MUTED,
-        },
-        text_color: Some(theme::TEXT),
+/// The folder list filters: whether each is on, and how many files in the folder match it.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ListFilters {
+    pub untagged_only: bool,
+    pub untagged_count: usize,
+    pub subtitled_only: bool,
+    pub subtitled_count: usize,
+    pub commented_only: bool,
+    pub commented_count: usize,
+}
+
+/// Which filter a dropdown row controls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FilterKind {
+    Untagged,
+    Subtitles,
+    Comments,
+}
+
+impl FilterKind {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Untagged => "Untagged",
+            Self::Subtitles => "Subtitles",
+            Self::Comments => "Comments",
+        }
+    }
+
+    fn set(self, on: bool) -> folder::Message {
+        match self {
+            Self::Untagged => folder::Message::SetUntaggedOnly(on),
+            Self::Subtitles => folder::Message::SetSubtitledOnly(on),
+            Self::Comments => folder::Message::SetCommentedOnly(on),
+        }
     }
 }
 
-/// "Untagged only" toggle plus the number of files still without tags.
-/// Sits at the right end of the controls bar, in the space the buttons leave free.
-fn untagged_filter(untagged_only: bool, untagged_count: usize) -> Element<'static, folder::Message> {
-    let label_color = if untagged_only { theme::TEXT } else { theme::TEXT_MUTED };
-    let toggle = checkbox(untagged_only)
-        .on_toggle(folder::Message::SetUntaggedOnly)
-        .size(14)
-        .spacing(0)
-        .style(dark_checkbox_style);
-
-    // The label toggles too; the checkbox itself is excluded so one click is one toggle.
-    let label = mouse_area(
-        row![
-            text("Untagged").size(12).color(label_color),
-            text(untagged_count.to_string()).size(12).color(theme::TEXT_MUTED),
-        ]
-        .spacing(6)
-        .align_y(iced::Alignment::Center),
-    )
-    .on_press(folder::Message::SetUntaggedOnly(!untagged_only))
-    .interaction(iced::mouse::Interaction::Pointer);
-
-    tooltip(
-        row![toggle, label]
-            .spacing(6)
-            .align_y(iced::Alignment::Center),
-        text("Show only files without tags"),
-        iced::widget::tooltip::Position::Top,
-    )
-    .into()
+/// One row of the filter dropdown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FilterItem {
+    kind: FilterKind,
+    active: bool,
+    count: usize,
 }
 
-/// Render the folder controls: Previous File, Next File, and Scroll-to-Selected buttons.
+impl std::fmt::Display for FilterItem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mark = if self.active { "✓" } else { "   " };
+        write!(f, "{mark} {}  {}", self.kind.label(), self.count)
+    }
+}
+
+impl ListFilters {
+    fn items(self) -> [FilterItem; 3] {
+        [
+            FilterItem { kind: FilterKind::Untagged, active: self.untagged_only, count: self.untagged_count },
+            FilterItem { kind: FilterKind::Subtitles, active: self.subtitled_only, count: self.subtitled_count },
+            FilterItem { kind: FilterKind::Comments, active: self.commented_only, count: self.commented_count },
+        ]
+    }
+}
+
+/// Filter dropdown: one row per filter with its match count; picking a row toggles it.
+/// The button shows how many filters are on. Sits at the right end of the controls bar.
+fn filter_dropdown(filters: ListFilters) -> Element<'static, folder::Message> {
+    let items = filters.items();
+    let active = items.iter().filter(|item| item.active).count();
+    let placeholder = if active == 0 { "Filter".to_string() } else { format!("Filter ({active})") };
+    // No tooltip: it would draw over the open list.
+    pick_list(items.to_vec(), None::<FilterItem>, |item| item.kind.set(!item.active))
+        .placeholder(placeholder)
+        .text_size(12)
+        .padding([2, 8])
+        .into()
+}
+
+/// Render the folder controls: Previous File, Next File, Scroll-to-Selected, Open and Settings buttons.
 /// Buttons are enabled only when applicable.
 pub fn view(
     has_previous: bool,
     has_next: bool,
     has_selected: bool,
-    untagged_only: bool,
-    untagged_count: usize,
+    filters: ListFilters,
 ) -> Element<'static, folder::Message> {
     let prev_btn: Element<'_, folder::Message> = tooltip(
         button(
@@ -140,13 +156,30 @@ pub fn view(
     )
         .into();
 
+    let settings_btn: Element<'_, folder::Message> = tooltip(
+        button(
+            container(text("⚙").size(16))
+                .center_x(iced::Length::Fill)
+                .center_y(iced::Length::Fill),
+        )
+            .on_press(folder::Message::OpenSettings)
+            .width(CONTROLS_HEIGHT)
+            .height(iced::Length::Fill)
+            .padding(0)
+            .style(theme::icon_button_style(true)),
+        text("Settings"),
+        iced::widget::tooltip::Position::Top,
+    )
+        .into();
+
     let controls = row![
         prev_btn,
         next_btn,
         scroll_btn,
         open_btn,
+        settings_btn,
         container(iced::widget::Space::new()).width(iced::Length::Fill),
-        untagged_filter(untagged_only, untagged_count),
+        filter_dropdown(filters),
     ]
         .spacing(8)
         .height(iced::Length::Fill)

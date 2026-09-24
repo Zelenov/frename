@@ -1,6 +1,7 @@
 //! File structure: path/metadata and tag-based rename state.
 //! File holds a FileSnapshot (tags + name + extension). From File's perspective we only update tags in it.
 
+use crate::subtitles::subtitle_path;
 use crate::{FileKind, FileSnapshot, FileTagger, FolderInfo};
 use std::path::Path;
 use std::time::SystemTime;
@@ -42,6 +43,9 @@ pub struct File {
     modified_at: SystemTime,
     /// Tags, name without extension, extension, and comment. File name is built from this snapshot.
     file_snapshot: FileSnapshot,
+    /// A `.srt` with the same stem sits next to the file. Checked once when the file is
+    /// listed; renames carry the `.srt` along, so it stays true.
+    has_subtitles: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -49,19 +53,27 @@ pub struct File {
 // ---------------------------------------------------------------------------
 
 impl File {
-    fn new_from_parts(file_path: Box<Path>, modified_at: SystemTime, file_snapshot: FileSnapshot) -> Self {
+    fn new_from_parts(
+        file_path: Box<Path>,
+        modified_at: SystemTime,
+        file_snapshot: FileSnapshot,
+        has_subtitles: bool,
+    ) -> Self {
         Self {
             id: FileId::new(),
             file_path,
             modified_at,
             file_snapshot,
+            has_subtitles,
         }
     }
 
     fn new_from_path_and_time(file_path: Box<Path>, modified_at: SystemTime) -> Self {
         let folder_info = FolderInfo::default();
         let file_snapshot = FileTagger::parse(&file_path, &folder_info);
-        Self::new_from_parts(file_path, modified_at, file_snapshot)
+        // No folder listing here, so ask the disk; this path opens one file, not a folder.
+        let has_subtitles = subtitle_path(&file_path).is_file();
+        Self::new_from_parts(file_path, modified_at, file_snapshot, has_subtitles)
     }
 
     /// Create a file from a path only: loads metadata (modified_at) and tags via FileTagger::parse.
@@ -84,7 +96,11 @@ impl File {
     ) -> Self {
         let file_path = path.as_ref().to_path_buf().into_boxed_path();
         let file_snapshot = FileTagger::parse(&file_path, folder_info);
-        Self::new_from_parts(file_path, modified_at, file_snapshot)
+        let has_subtitles = subtitle_path(&file_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|name| folder_info.contains(name));
+        Self::new_from_parts(file_path, modified_at, file_snapshot, has_subtitles)
     }
 
     /// Create a file from path and creation time. For tests and programmatic use.
@@ -139,6 +155,11 @@ impl File {
     /// Comment text for this file. Empty = no comment.
     pub fn comment(&self) -> &str {
         self.file_snapshot.comment()
+    }
+
+    /// Whether a `.srt` subtitle file sits next to this file.
+    pub fn has_subtitles(&self) -> bool {
+        self.has_subtitles
     }
 
     /// Media type of this file based on its extension.

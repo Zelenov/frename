@@ -31,6 +31,7 @@ where
                 return Err(UndoError::FileNotFound(self.path_after.clone()));
             }
             std::fs::rename(&self.path_after, &self.path_before)?;
+            crate::subtitles::rename_subtitle_file(&self.path_after, &self.path_before);
         }
         ctx.directory.rename_file(self.file_id, &self.path_before, &self.snapshot_before);
         ctx.directory
@@ -45,6 +46,7 @@ where
                 return Err(UndoError::FileNotFound(self.path_before.clone()));
             }
             std::fs::rename(&self.path_before, &self.path_after)?;
+            crate::subtitles::rename_subtitle_file(&self.path_before, &self.path_after);
         }
         ctx.directory.rename_file(self.file_id, &self.path_after, &self.snapshot_after);
         ctx.directory

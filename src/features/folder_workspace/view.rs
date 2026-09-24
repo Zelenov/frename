@@ -7,13 +7,14 @@ use iced::widget::{column, container, mouse_area, row, stack, text};
 use iced::{Element, Length};
 
 use crate::features::{file_workspace, folder, folder_controls, media_viewer};
+use crate::tag_colors::TagPalette;
 use crate::theme;
 use crate::widgets::splitter::{Splitter, HIT_WIDTH};
 
 use super::{FolderWorkspace, Message};
 
 /// Workspace layout: one big drop panel when no folder is open; otherwise regions and splitters.
-pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
+pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Message> {
     let seg_start = state.file_workspace().segment_start_secs();
     let seg_end = state.file_workspace().segment_end_secs();
     let screenshot_secs: Vec<f32> = state.file_workspace().screenshots()
@@ -64,10 +65,17 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
 
     let (has_previous, has_next) = state.has_previous_next();
     let has_selected = state.current_file().is_some();
-    let (untagged_only, untagged_count) = state
+    let filters = state
         .directory()
-        .map(|d| (d.untagged_only(), d.untagged_count()))
-        .unwrap_or((false, 0));
+        .map(|d| folder_controls::view::ListFilters {
+            untagged_only: d.untagged_only(),
+            untagged_count: d.untagged_count(),
+            subtitled_only: d.subtitled_only(),
+            subtitled_count: d.subtitled_count(),
+            commented_only: d.commented_only(),
+            commented_count: d.commented_count(),
+        })
+        .unwrap_or_default();
 
     // Bound to a local so the folder list can borrow it instead of taking a clone per frame.
     let tag_color_mapping = state.file_workspace().tag_color_mapping();
@@ -76,14 +84,15 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
             state.directory(),
             state.is_loading(),
             &tag_color_mapping,
+            tag_palette,
+            state.inline_rename(),
         ))
         .height(Length::Fill),
         folder_controls::view::view(
             has_previous,
             has_next,
             has_selected,
-            untagged_only,
-            untagged_count,
+            filters,
         ),
     ]
     .height(Length::Fill)
@@ -108,6 +117,7 @@ pub fn view(state: &FolderWorkspace) -> Element<'_, Message> {
         is_synced,
         state.sync_locked(),
         file_ws.tag_list(),
+        tag_palette,
     )
     .map(|m| match m {
         file_workspace::Message::TagPanel(m) => Message::TagPanel(m),

@@ -6,7 +6,7 @@ use iced::{mouse, Alignment, Border, Element, Length};
 
 use frename_core::{File, StoredTagStore, TagList};
 
-use crate::tag_colors;
+use crate::tag_colors::TagPalette;
 use crate::theme;
 use crate::widgets::bounds_reporter::BoundsReporter;
 use crate::widgets::tag_chip;
@@ -82,6 +82,7 @@ pub fn view<'a, S>(
     state: &'a TagPanelState,
     selected_file: Option<&'a File>,
     tag_list: &'a TagList<S>,
+    tag_palette: TagPalette,
 ) -> Element<'a, Message>
 where
     S: StoredTagStore + Clone,
@@ -149,7 +150,7 @@ where
                     let is_selected = selected_id == Some(id);
                     let is_stored = tag.is_stored();
                     let is_starred = tag.is_starred();
-                    let tag_color = tag_colors::TagColors::color(tag.color_index());
+                    let tag_color = tag_palette.color(tag.color_index());
                     let checkbox_el = checkbox(is_checked)
                         .on_toggle(move |_| Message::ToggleTag(id))
                         .size(16)

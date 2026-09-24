@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use arboard;
 use rfd;
 use frename_core::{
-    AppDatabase, AppStateStore, File, FileId, FileSnapshot, FolderAndFile, FolderTagStore,
-    LoggingAppStateStore,
+    AppDatabase, AppStateStore, ConversionReport, File, FileId, FileSnapshot, FolderAndFile, FolderTagStore,
+    LoggingAppStateStore, MetadataStorage,
     NavigateFileCommand, ReorderTagCommand, ToggleTagCommand, PasteTagsCommand,
     DeleteTagCommand, CreateTagCommand, SaveTagCommand, StarTagCommand,
     SetSegmentStartCommand, SetSegmentEndCommand,
@@ -57,6 +57,11 @@ pub struct FolderWorkspace {
     /// Deferred rename: set when media must unload before the previous file can be renamed.
     /// Stores the file's stable ID and the tag snapshot to save.
     pending_file_updated: Option<(FileId, FileSnapshot)>,
+    /// Deferred folder conversion: set while a playing video unloads, since conversion may
+    /// write into and rename that very file.
+    pending_conversion: Option<MetadataStorage>,
+    /// The file being renamed in place in the folder list, if any.
+    inline_rename: Option<folder::InlineRename>,
     /// The ID of the file navigated to (captured after dir.select_*).
     /// Consumed by apply_file_updated to build NavigateFileCommand.
     pending_to_file_id: Option<FileId>,
@@ -95,6 +100,8 @@ impl FolderWorkspace {
             tag_panel: TagPanelState::default(),
             file_name_panel: FileNamePanelState::default(),
             pending_file_updated: None,
+            pending_conversion: None,
+            inline_rename: None,
             pending_to_file_id: None,
             left_width,
             folder_width,
@@ -120,6 +127,12 @@ impl FolderWorkspace {
             Message::FolderLoadFailed => self.folder_load_failed(),
             Message::FileOpened(file) => self.apply_file_opened(file),
             Message::FileUpdated { id, snapshot } => self.apply_file_updated(id, snapshot),
+            Message::ConvertMetadata(storage) => self.convert_metadata(storage),
+            Message::MetadataConverted {
+                folder,
+                selected,
+                report: _,
+            } => Task::done(Message::ScanFolder(FolderAndFile::new(folder, selected))),
             Message::Folder(folder_msg) => self.handle_folder_message(folder_msg),
             Message::MediaViewer(msg) => match msg {
                 media_viewer::Message::Unloaded => self.on_media_unloaded(),
@@ -185,6 +198,9 @@ impl FolderWorkspace {
                 }
                 Task::none()
             }
+            Message::SetSegmentStart | Message::SetSegmentEnd if self.inline_rename.is_some() => {
+                Task::none()
+            }
             Message::SetSegmentStart => Task::done(Message::MediaViewer(
                 media_viewer::Message::Video(media_viewer_video::Message::CaptureSegmentStart),
             )),
@@ -217,6 +233,9 @@ impl FolderWorkspace {
                 Task::none()
             }
             Message::EscapePressed => {
+                if self.inline_rename.take().is_some() {
+                    return Task::none();
+                }
                 if self.media_fullscreen {
                     self.media_fullscreen = false;
                     return Task::none();
@@ -333,6 +352,7 @@ impl FolderWorkspace {
     }
 
     fn scan_folder(&mut self, pair: FolderAndFile) -> Task<Message> {
+        self.inline_rename = None;
         let folder = pair.folder().to_path_buf();
         let target_file = pair.file().map(|p| p.to_path_buf());
         let store = LoggingAppStateStore::new(AppDatabase::new());
@@ -358,9 +378,12 @@ impl FolderWorkspace {
 
     fn folder_loaded(&mut self, mut directory: Directory, target_file: Option<PathBuf>) -> Task<Message> {
         self.loading = false;
-        // The untagged filter is a user setting, not a property of the folder: carry it over.
-        let untagged_only = self.directory.as_ref().is_some_and(|d| d.untagged_only());
-        directory.set_untagged_only(untagged_only);
+        // The list filters are user settings, not properties of the folder: carry them over.
+        if let Some(previous) = self.directory.as_ref() {
+            directory.set_untagged_only(previous.untagged_only());
+            directory.set_subtitled_only(previous.subtitled_only());
+            directory.set_commented_only(previous.commented_only());
+        }
         self.directory = Some(directory); // replace previous directory only on success
         let folder = self.directory.as_ref().expect("just set").path().to_path_buf();
         // Tags belong to the folder, so the workspace starts over on a new one. The history goes
@@ -382,6 +405,10 @@ impl FolderWorkspace {
     }
 
     fn apply_file_opened(&mut self, file: frename_core::File) -> Task<Message> {
+        // Opening another file closes the in-place rename editor, like leaving the row.
+        if self.inline_rename.as_ref().is_some_and(|r| r.id != file.id()) {
+            self.inline_rename = None;
+        }
         // Detect same-file "refresh" (e.g. undo of a tag toggle on the current file).
         // In that case, skip media reload and fullscreen reset — only persist state.
         let same_file = self.file_workspace.file()
@@ -413,23 +440,81 @@ impl FolderWorkspace {
         }
     }
 
+    /// Convert the open folder's comments and in/out points to `storage`. A playing video is
+    /// unloaded first; see [`Self::run_conversion`].
+    fn convert_metadata(&mut self, storage: MetadataStorage) -> Task<Message> {
+        if self.directory.is_none() {
+            return Task::none();
+        }
+        if self.media_viewer.needs_unload_before_rename() {
+            self.pending_conversion = Some(storage);
+            return Task::done(Message::MediaViewer(media_viewer::Message::Unload));
+        }
+        self.run_conversion(storage)
+    }
+
+    /// Save the current file's edits, then convert every file in the folder on a blocking
+    /// thread. The folder is rescanned afterwards: files may have been renamed, and parsing
+    /// is what reads the converted values back.
+    fn run_conversion(&mut self, storage: MetadataStorage) -> Task<Message> {
+        if let Some((id, snapshot)) = self.file_workspace.get_snapshot() {
+            let _ = self.apply_file_updated(id, snapshot);
+        }
+        let Some(dir) = self.directory.as_ref() else {
+            return Task::none();
+        };
+        let folder = dir.path().to_path_buf();
+        let paths = dir.all_file_paths();
+        let selected = dir.selected_file().map(|f| f.file_path().to_path_buf());
+        self.loading = true;
+        self.file_workspace.set_file(None);
+        self.pending_file_updated = None;
+
+        Task::future(async move {
+            let report = tokio::task::spawn_blocking(move || {
+                frename_core::convert_metadata(&frename_core::plan_conversion(&paths, storage))
+            })
+            .await
+            .unwrap_or_else(|e| {
+                log::error!("metadata conversion task failed: {e}");
+                ConversionReport::default()
+            });
+            let selected = selected.map(|path| {
+                report
+                    .renamed
+                    .iter()
+                    .find(|(old, _)| *old == path)
+                    .map_or(path, |(_, new)| new.clone())
+            });
+            Message::MetadataConverted {
+                folder,
+                selected,
+                report,
+            }
+        })
+    }
+
     /// Called when media has unloaded. Persist pending snapshot (FileUpdated) then open the new media.
     fn on_media_unloaded(&mut self) -> Task<Message> {
+        if let Some(storage) = self.pending_conversion.take() {
+            return self.run_conversion(storage);
+        }
         let Some((id, snapshot)) = self.pending_file_updated.take() else {
             return Task::none();
         };
+        // Save before opening media, not alongside it: when the selected file is the one being
+        // saved (re-clicking it, renaming it in place), opening it first would lock it against
+        // the rename, or point the player at the name it had before the save.
+        let saved = self.apply_file_updated(id, snapshot);
         let Some(file) = self
             .directory
             .as_ref()
             .and_then(|d| d.selected_file())
             .cloned()
         else {
-            return Task::none();
+            return saved;
         };
-        Task::batch([
-            Task::done(Message::FileUpdated { id, snapshot }),
-            self.media_viewer.open(&file).map(Message::MediaViewer),
-        ])
+        Task::batch([saved, self.media_viewer.open(&file).map(Message::MediaViewer)])
     }
 
     fn apply_file_updated(&mut self, id: FileId, snapshot: frename_core::FileSnapshot) -> Task<Message> {
@@ -464,9 +549,13 @@ impl FolderWorkspace {
             }));
         }
 
-        // The saved file may have just dropped out of the untagged list, shifting every row
+        // The saved file may have just dropped out of a filtered list, shifting every row
         // below it up by one; re-run scroll-into-view so the cursor stays where the user sees it.
-        if self.directory.as_ref().is_some_and(|d| d.untagged_only()) {
+        if self
+            .directory
+            .as_ref()
+            .is_some_and(|d| d.has_content_filter())
+        {
             return Task::done(Message::ScrollFolderListToSelected);
         }
         Task::none()
@@ -483,22 +572,117 @@ impl FolderWorkspace {
                 Task::none()
             }
             folder::Message::ScrollToSelected => Task::done(Message::ScrollFolderListToSelected),
-            folder::Message::CopyTagsFrom(id) => self.copy_tags_from_id(id),
             folder::Message::OpenFolder => Task::done(Message::OpenFilePicker),
             folder::Message::SetUntaggedOnly(untagged_only) => {
-                self.set_untagged_only(untagged_only)
+                self.set_list_filter(|dir| dir.set_untagged_only(untagged_only))
+            }
+            folder::Message::SetSubtitledOnly(subtitled_only) => {
+                self.set_list_filter(|dir| dir.set_subtitled_only(subtitled_only))
+            }
+            folder::Message::SetCommentedOnly(commented_only) => {
+                self.set_list_filter(|dir| dir.set_commented_only(commented_only))
             }
             folder::Message::SetNameFilter(query) => self.set_file_name_filter(query),
+            // Intercepted by the app, which owns the windows; no-op here.
+            folder::Message::OpenSettings => Task::none(),
+            folder::Message::StartRename(index) => self.start_rename(index),
+            folder::Message::RenameInput(text) => {
+                if let Some(rename) = self.inline_rename.as_mut() {
+                    rename.text = text;
+                    rename.error = None;
+                }
+                Task::none()
+            }
+            folder::Message::SubmitRename => self.submit_rename(),
         }
     }
 
-    /// Turn the untagged-only filter on or off. The list changes shape, so bring the selected
-    /// file back into view (it stays listed even when it already has tags).
-    fn set_untagged_only(&mut self, untagged_only: bool) -> Task<Message> {
+    /// Open the in-place rename editor on the row at `index` (selecting that file first when
+    /// needed), with the name before the extension selected, as Windows Explorer does.
+    fn start_rename(&mut self, index: usize) -> Task<Message> {
+        let Some(dir) = self.directory.as_ref() else {
+            return Task::none();
+        };
+        let Some(file) = dir.files_in_order().nth(index) else {
+            return Task::none();
+        };
+        let id = file.id();
+        let name = file
+            .file_path()
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default()
+            .to_string();
+        let stem_chars = name.rfind('.').map_or(name.as_str(), |dot| &name[..dot]).chars().count();
+        let select = if dir.selected_index() == Some(index) { Task::none() } else { self.select_file_at(index) };
+        self.inline_rename = Some(folder::InlineRename { id, text: name, error: None });
+        let input = iced::widget::Id::from(folder::FOLDER_RENAME_INPUT_ID);
+        Task::batch([
+            select,
+            operation::focus(input.clone()),
+            operation::select_range(input, 0, stem_chars),
+        ])
+    }
+
+    /// Rename the file being edited in place to the typed name. A refused name keeps the
+    /// editor open with the reason. The new name goes through the workspace like any other
+    /// edit of the open file, so tags, in/out points, comment and sidecars stay consistent.
+    fn submit_rename(&mut self) -> Task<Message> {
+        let Some(rename) = self.inline_rename.clone() else {
+            return Task::none();
+        };
+        let Some(file) = self.directory.as_ref().and_then(|d| d.file_by_id(rename.id)).cloned() else {
+            self.inline_rename = None;
+            return Task::none();
+        };
+        // The editor only opens on the open file; anything else is a stale editor.
+        let Some((_, current)) = self.file_workspace.get_snapshot().filter(|_| {
+            self.file_workspace.file().is_some_and(|f| f.id() == rename.id)
+        }) else {
+            self.inline_rename = None;
+            return Task::none();
+        };
+        let current_name = file.file_path().file_name().and_then(|n| n.to_str()).unwrap_or_default();
+        let typed = rename.text.trim();
+        if typed == current_name {
+            self.inline_rename = None;
+            return Task::none();
+        }
+
+        let mut snapshot = FileSnapshot::parse(typed);
+        snapshot.set_comment(current.comment().to_string());
+        snapshot.set_screenshots(current.screenshots().to_vec());
+        // With in/out stored in XMP the name never shows them, so a typed name without them
+        // does not mean "remove them".
+        let name_has_in_out = snapshot.segment_start().is_some() || snapshot.segment_end().is_some();
+        if !name_has_in_out && frename_core::metadata_storage().in_out == frename_core::InOutStorage::Xmp {
+            snapshot.set_segment_start(current.segment_start());
+            snapshot.set_segment_end(current.segment_end());
+        }
+        let folder = file.file_path().parent().map(|p| p.to_path_buf()).unwrap_or_default();
+        let checked = check_new_file_name(&folder, current_name, typed)
+            .and_then(|()| check_new_file_name(&folder, current_name, &snapshot.file_name()));
+        if let Err(reason) = checked {
+            if let Some(rename) = self.inline_rename.as_mut() {
+                rename.error = Some(reason);
+            }
+            return Task::none();
+        }
+
+        self.inline_rename = None;
+        self.file_workspace.reinitialize_tags_from_snapshot(snapshot);
+        // Same-file refresh: persists the workspace snapshot (renaming on disk) without
+        // reopening the media unless it must unload first.
+        Task::done(Message::FileOpened(file))
+    }
+
+    /// Turn a list filter (untagged, subtitles, comments) on or off. The list changes shape,
+    /// so bring the selected file back into view (it stays listed even when it does not match).
+    fn set_list_filter(&mut self, apply: impl FnOnce(&mut Directory)) -> Task<Message> {
         let Some(dir) = self.directory.as_mut() else {
             return Task::none();
         };
-        dir.set_untagged_only(untagged_only);
+        apply(dir);
         Task::done(Message::ScrollFolderListToSelected)
     }
 
@@ -510,24 +694,6 @@ impl FolderWorkspace {
         };
         dir.set_name_filter(query);
         Task::done(Message::ScrollFolderListToSelected)
-    }
-
-    /// Copy tags from the file with the given stable ID into the currently open file.
-    /// Sets internal clipboard + OS clipboard, then immediately pastes into the current file.
-    fn copy_tags_from_id(&mut self, id: frename_core::FileId) -> Task<Message> {
-        let Some(snapshot) = self
-            .directory
-            .as_ref()
-            .and_then(|dir| dir.file_by_id(id))
-            .map(|f| f.snapshot().clone())
-        else {
-            return Task::none();
-        };
-        if let Ok(mut cb) = arboard::Clipboard::new() {
-            let _ = cb.set_text(snapshot.file_name());
-        }
-        self.copied_tags = Some(snapshot.tags().to_vec());
-        self.paste_tags()
     }
 
     fn select_file_at(&mut self, index: usize) -> Task<Message> {
@@ -1057,6 +1223,11 @@ impl FolderWorkspace {
             .and_then(|d| d.selected_file())
     }
 
+    /// The file being renamed in place in the folder list, if any.
+    pub fn inline_rename(&self) -> Option<&folder::InlineRename> {
+        self.inline_rename.as_ref()
+    }
+
     pub fn directory(&self) -> Option<&Directory> {
         self.directory.as_ref()
     }
@@ -1129,6 +1300,25 @@ impl FolderWorkspace {
     pub fn folder_width(&self) -> f32 {
         self.folder_width
     }
+}
+
+/// Why `typed` cannot replace `current` as a file name in `folder`, if it cannot. A rename
+/// on Windows replaces an existing file of the same name, so a clash must be refused here.
+fn check_new_file_name(folder: &std::path::Path, current: &str, typed: &str) -> Result<(), &'static str> {
+    if typed.is_empty() {
+        return Err("Name is empty");
+    }
+    if typed.chars().any(|c| matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || c.is_control()) {
+        return Err("Not allowed: \\ / : * ? \" < > |");
+    }
+    if typed.ends_with('.') || typed.ends_with(' ') {
+        return Err("Cannot end with a dot or space");
+    }
+    // A change of case only is the same file on Windows, not a clash.
+    if !typed.eq_ignore_ascii_case(current) && folder.join(typed).exists() {
+        return Err("A file with this name exists");
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1383,6 +1573,32 @@ mod tests {
         assert!(!workspace.has_pending_rename(), "still None after second Unloaded");
     }
 
+    /// Re-saving the selected file after an unload (re-clicking it, renaming it in place) must
+    /// rename it before its media is opened again, so the player gets the new name rather
+    /// than the one the file no longer has.
+    #[test]
+    fn unload_saves_the_selected_file_before_reopening_it() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+
+        let file = workspace.current_file().cloned().expect("a file is open");
+        let mut snapshot = file.snapshot().clone();
+        snapshot.set_tags(["Goat"]);
+        workspace.inject_pending_rename(file.id(), snapshot);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+
+        let selected = workspace.directory().and_then(|d| d.selected_file()).expect("still selected");
+        let name = selected.file_path().file_name().and_then(|n| n.to_str()).expect("name");
+        assert!(name.starts_with("Goat."), "saved before reopening, got {name}");
+    }
+
     /// With the untagged filter on, a file leaves the list only once the cursor has left it,
     /// and the row it frees is taken by the file the cursor moved to — the selection does not
     /// jump to another row while the list shrinks.
@@ -1481,5 +1697,19 @@ mod tests {
             file_renamed,
             "directory must track the renamed path Comedy.file_0.mp4"
         );
+    }
+
+    #[test]
+    fn new_file_names_follow_windows_rules() {
+        let folder = std::env::temp_dir().join(format!("frename-rename-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).expect("temp dir");
+        std::fs::write(folder.join("taken.mp4"), b"").expect("write");
+
+        assert_eq!(crate::features::folder_workspace::state::check_new_file_name(&folder, "a.mp4", "b.mp4"), Ok(()));
+        assert!(crate::features::folder_workspace::state::check_new_file_name(&folder, "a.mp4", "").is_err());
+        assert!(crate::features::folder_workspace::state::check_new_file_name(&folder, "a.mp4", "a:b.mp4").is_err());
+        assert!(crate::features::folder_workspace::state::check_new_file_name(&folder, "a.mp4", "a.mp4.").is_err());
+        assert!(crate::features::folder_workspace::state::check_new_file_name(&folder, "a.mp4", "taken.mp4").is_err(), "must not overwrite");
+        assert_eq!(crate::features::folder_workspace::state::check_new_file_name(&folder, "taken.mp4", "TAKEN.mp4"), Ok(()), "case-only rename");
     }
 }
