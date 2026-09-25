@@ -18,7 +18,7 @@ use std::sync::RwLock;
 
 use crate::tags::FileSnapshot;
 
-pub use conversion::{convert, plan_conversion, ConversionPlan, ConversionReport, FileConversion};
+pub use conversion::{MetadataMove, MoveOutcome};
 pub(crate) use conversion::{clear_moved_xmp, Inspection};
 pub use xmp::Segment;
 
@@ -103,9 +103,10 @@ pub fn set_in_out_storage(storage: InOutStorage) {
     IN_OUT_XMP.store(u8::from(storage == InOutStorage::InVideo), Ordering::Relaxed);
 }
 
-/// The tag frename puts in the name of every video with a comment while comments are stored
-/// in XMP, e.g. `Food.Commented.IMG_0424.MOV`. The comment itself is not visible in the file
-/// name or in Explorer; the tag is, and it is searchable and filterable like any other tag.
+/// The tag frename checks on a video when it gets a comment while comments are stored in XMP,
+/// e.g. `Food.Commented.IMG_0424.MOV`; see [`active_commented_tag`]. The comment itself is not
+/// visible in the file name or in Explorer; the tag is, and it is searchable and filterable
+/// like any other tag.
 pub const DEFAULT_COMMENTED_TAG: &str = "Commented";
 
 static COMMENTED_TAG: RwLock<Cow<'static, str>> = RwLock::new(Cow::Borrowed(DEFAULT_COMMENTED_TAG));
@@ -137,26 +138,14 @@ pub fn clean_commented_tag(tag: &str) -> Option<String> {
     (!cleaned.is_empty()).then(|| cleaned.to_string())
 }
 
-/// The snapshot with the commented tag added (comment set) or removed (comment empty),
-/// or `None` when it already matches. Only while comments are stored in XMP: a text file
-/// shows next to the video already, so the tag is left alone then.
-pub(crate) fn with_commented_tag(snapshot: &FileSnapshot, storage: MetadataStorage, tag: Option<&str>) -> Option<FileSnapshot> {
-    // Unread XMP: whether the file has a comment is not known yet.
-    if storage.comment != CommentStorage::InVideo || snapshot.comment_loading() {
-        return None;
-    }
-    let tag = tag?;
-    let commented = !snapshot.comment().trim().is_empty();
-    if snapshot.has_tag(tag) == commented {
-        return None;
-    }
-    let mut tags: Vec<String> = snapshot.tags().iter().filter(|t| *t != tag).cloned().collect();
-    if commented {
-        tags.push(tag.to_string());
-    }
-    let mut updated = snapshot.clone();
-    updated.set_tags(tags);
-    Some(updated)
+/// The commented tag to follow comments with now: [`commented_tag`] while comments are stored
+/// in XMP, `None` otherwise (a text file shows next to the video already) or when it is off.
+///
+/// The tag is checked when a file's comment goes from empty to non-empty and unchecked when
+/// it is cleared, like a click in the tag panel; it is never enforced on save, so the user can
+/// still remove or move it.
+pub fn active_commented_tag() -> Option<String> {
+    (metadata_storage().comment == CommentStorage::InVideo).then(commented_tag).flatten()
 }
 
 /// The storage chosen by [`set_comment_storage`] and [`set_in_out_storage`].
@@ -441,32 +430,6 @@ mod tests {
         std::fs::write(&file, b"not really a zip").expect("write");
         let saved = save_to_xmp(&file, &snapshot("fallback", Some(1.0), None), XMP_BOTH);
         assert_eq!(saved, SavedToXmp::default());
-    }
-
-    fn tagged(tags: &[&str], comment: &str) -> FileSnapshot {
-        let mut snapshot = FileSnapshot::parse("clip.mov");
-        snapshot.set_tags(tags.iter().copied());
-        snapshot.set_comment(comment.to_string());
-        snapshot
-    }
-
-    #[test]
-    fn commented_tag_follows_the_comment_in_xmp_storage() {
-        let add = with_commented_tag(&tagged(&["Food"], "goat"), XMP_BOTH, Some("Commented"));
-        assert_eq!(add.expect("tag added").tags(), ["Food", "Commented"]);
-
-        let remove = with_commented_tag(&tagged(&["Commented", "Food"], "  "), XMP_BOTH, Some("Commented"));
-        assert_eq!(remove.expect("tag removed").tags(), ["Food"]);
-
-        assert!(with_commented_tag(&tagged(&["Food", "Commented"], "goat"), XMP_BOTH, Some("Commented")).is_none());
-        assert!(with_commented_tag(&tagged(&["Food"], ""), XMP_BOTH, Some("Commented")).is_none());
-    }
-
-    #[test]
-    fn commented_tag_is_left_alone_in_text_file_storage_or_when_off() {
-        assert!(with_commented_tag(&tagged(&["Food"], "goat"), PLAIN, Some("Commented")).is_none());
-        assert!(with_commented_tag(&tagged(&["Commented"], ""), PLAIN, Some("Commented")).is_none());
-        assert!(with_commented_tag(&tagged(&["Food"], "goat"), XMP_BOTH, None).is_none());
     }
 
     #[test]

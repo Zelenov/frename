@@ -26,7 +26,5 @@ pub enum Message {
     DragDrop(drag_drop::Message),
     FolderWorkspace(folder_workspace::Message),
     Settings(settings::Message),
-    /// Async result of checking the open folder against the storage settings.
-    FolderConversionPlanned(frename_core::ConversionPlan),
     Noop,
 }

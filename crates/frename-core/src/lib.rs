@@ -18,9 +18,9 @@ pub use directory::Directory;
 pub use file_kind::FileKind;
 pub use folder_file::FolderAndFile;
 pub use metadata::{
-    cache::modified_ms, clean_commented_tag, commented_tag, convert as convert_metadata, metadata_storage, plan_conversion,
+    active_commented_tag, cache::modified_ms, clean_commented_tag, commented_tag, metadata_storage,
     set_comment_storage, set_commented_tag, set_in_out_storage, DEFAULT_COMMENTED_TAG,
-    CommentStorage, ConversionPlan, ConversionReport, FileConversion, InOutStorage, MetadataStorage,
+    CommentStorage, InOutStorage, MetadataMove, MetadataStorage, MoveOutcome,
 };
 pub use subtitles::{load_subtitles, subtitle_path, SubtitleCue, Subtitles};
 pub use file::{File, FileId};

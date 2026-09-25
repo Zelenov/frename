@@ -3,10 +3,10 @@
 use std::path::PathBuf;
 
 use iced::widget::text_editor;
-use frename_core::{ConversionPlan, ConversionReport, File, FileId, FileSnapshot, FolderAndFile};
+use frename_core::{File, FileId, FileSnapshot, FolderAndFile};
 
 use super::Directory;
-use crate::features::{file_name_panel, folder, media_viewer, sync_panel, tag_panel};
+use crate::features::{batch, file_name_panel, folder, media_viewer, sync_panel, tag_panel};
 
 /// Key that triggered global focus (we emulate it into the search bar; Iced cannot replay the event).
 #[derive(Debug, Clone)]
@@ -92,15 +92,15 @@ pub enum Message {
     ScreenshotTaken(u64, Vec<u8>),
     /// Open a native file picker dialog so the user can choose a file to open.
     OpenFilePicker,
-    /// Move the comments and in/out points of the plan's files into its storage.
-    ConvertMetadata(ConversionPlan),
-    /// Stop a running conversion after the batch in progress.
-    CancelConversion,
-    /// A batch of the running conversion finished (internal).
-    ConversionBatchDone(ConversionReport),
-    /// How far the running conversion is: `done` of `total` files. Read by the app, which
-    /// shows it in the settings window.
-    ConversionProgress { done: usize, total: usize },
+    /// Batch mode messages (batch panel, and folder list checks translated by the workspace).
+    Batch(batch::Message),
+    /// Enter batch mode with every listed file checked and the action set up for `operation`
+    /// (from the settings window after a storage change).
+    PrepareBatch(batch::Operation),
+    /// A file of the running batch job is done (internal).
+    BatchItemDone { id: FileId, result: batch::ItemResult },
+    /// The batch job ended, finished or cancelled (internal): the open file comes back.
+    BatchFinished,
     /// Background load of comments the folder scan deferred (internal). `generation` ties the
     /// batch to the folder it was started for; `results` are `(id, path loaded, snapshot)`.
     CommentBatchLoaded {
@@ -109,13 +109,4 @@ pub enum Message {
     },
     /// Advance the loading spinner in the folder list (internal, only while files load).
     SpinnerTick,
-    /// Folder conversion finished (internal): rescan `folder` and reselect `selected`,
-    /// which is the selected file's path after the conversion.
-    MetadataConverted {
-        folder: PathBuf,
-        selected: Option<PathBuf>,
-        report: ConversionReport,
-        /// The conversion was cancelled before its last file.
-        cancelled: bool,
-    },
 }

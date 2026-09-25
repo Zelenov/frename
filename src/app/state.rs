@@ -9,7 +9,7 @@
 
 use iced::{event, keyboard, window, Element, Subscription, Task};
 
-use crate::features::{drag_drop, folder, folder_workspace, media_viewer, media_viewer::video as media_viewer_video, settings, tag_panel};
+use crate::features::{batch, drag_drop, folder, folder_workspace, media_viewer, media_viewer::video as media_viewer_video, settings, tag_panel};
 use crate::tag_colors::TagPalette;
 use frename_core::{AppDatabase, AppStateStore, WindowGeometry};
 
@@ -244,7 +244,7 @@ impl FrenameApp {
         // Before the first folder scan, which already reads comments and in/out points.
         frename_core::set_comment_storage(settings.settings().comment_storage);
         frename_core::set_in_out_storage(settings.settings().in_out_storage);
-        frename_core::set_commented_tag(&settings.settings().commented_tag);
+        frename_core::set_commented_tag(settings.settings().effective_commented_tag());
         Self {
             drag_drop_state: drag_drop::DragDropState::default(),
             folder_workspace: folder_workspace::FolderWorkspace::new(),
@@ -277,44 +277,30 @@ impl FrenameApp {
                 }
                 Task::none()
             }
-            Message::OpenSettings => {
-                let check = if self.settings_window.is_none() { self.check_folder_conversion() } else { Task::none() };
-                Task::batch([self.open_settings_window(), check])
-            }
+            Message::OpenSettings => self.open_settings_window(),
             Message::Settings(msg) => {
                 self.settings.update(msg.clone());
                 // Tag colors are read from the settings at view time; autoplay lives in the player;
-                // comment and in/out storage live in core, which saves them. A storage change
-                // re-checks the open folder, which offers converting it.
+                // comment and in/out storage live in core, which saves them. Moving what the
+                // files already have is a batch action in the main window.
                 match msg {
                     settings::Message::SetCommentStorage(storage) => {
                         frename_core::set_comment_storage(storage);
-                        self.check_folder_conversion()
+                        Task::none()
                     }
                     settings::Message::SetInOutStorage(storage) => {
                         frename_core::set_in_out_storage(storage);
-                        self.check_folder_conversion()
+                        Task::none()
                     }
-                    settings::Message::SetCommentedTag(_) => {
+                    settings::Message::SetCommentedTag(_) | settings::Message::SetCommentedTagEnabled(_) => {
                         // The field holds the cleaned tag by now.
-                        frename_core::set_commented_tag(&self.settings.settings().commented_tag);
-                        self.check_folder_conversion()
+                        frename_core::set_commented_tag(self.settings.settings().effective_commented_tag());
+                        Task::none()
                     }
-                    settings::Message::ConvertFolder => {
-                        // The check already found the files that need converting.
-                        let settings::FolderConversion::Planned(plan) = self.settings.conversion().clone() else {
-                            return Task::none();
-                        };
-                        let total = plan.files.len();
-                        self.settings.set_conversion(settings::FolderConversion::Converting { done: 0, total, stopping: false });
-                        Task::done(Message::FolderWorkspace(folder_workspace::Message::ConvertMetadata(plan)))
-                    }
-                    settings::Message::CancelConversion => {
-                        if let settings::FolderConversion::Converting { done, total, .. } = *self.settings.conversion() {
-                            self.settings.set_conversion(settings::FolderConversion::Converting { done, total, stopping: true });
-                        }
-                        Task::done(Message::FolderWorkspace(folder_workspace::Message::CancelConversion))
-                    }
+                    settings::Message::OpenBatchAction(operation) => Task::batch([
+                        Task::done(Message::FolderWorkspace(folder_workspace::Message::PrepareBatch(operation))),
+                        window::gain_focus(self.main_window),
+                    ]),
                     settings::Message::SetAutoplayVideo(autoplay) => {
                         Task::done(Message::FolderWorkspace(folder_workspace::Message::MediaViewer(
                             media_viewer::Message::Video(media_viewer_video::Message::SetAutoplay(autoplay)),
@@ -323,15 +309,19 @@ impl FrenameApp {
                     settings::Message::SetMonochromeTags(_) => Task::none(),
                 }
             }
-            Message::FolderConversionPlanned(plan) => {
-                self.settings.set_plan(plan);
-                Task::none()
-            }
-            Message::FolderWorkspace(folder_workspace::Message::Folder(folder::Message::OpenSettings)) => {
-                Task::done(Message::OpenSettings)
-            }
+            Message::FolderWorkspace(folder_workspace::Message::Folder(folder::Message::OpenSettings))
+            | Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
+                batch::ActionMessage::OpenSettings,
+            ))) => Task::done(Message::OpenSettings),
             Message::CloseRequested(id) => {
                 crate::crash_guard::mark_closing();
+                // A batch job may be writing a file: stop it after that file, then close.
+                if self.folder_workspace.is_batch_running() {
+                    self.pending_close = Some(id);
+                    return Task::done(Message::FolderWorkspace(folder_workspace::Message::Batch(
+                        crate::features::batch::Message::Cancel,
+                    )));
+                }
                 if !self.folder_workspace.needs_media_unload() {
                     return window::close(id);
                 }
@@ -376,51 +366,32 @@ impl FrenameApp {
             }
             Message::Noop => Task::none(),
             Message::FolderWorkspace(msg) => {
-                // The settings window reports the conversion it started, and re-checks when
-                // another folder opens (but keeps a report the user has not seen replaced).
-                match &msg {
-                    folder_workspace::Message::MetadataConverted { report, cancelled, .. } => {
-                        self.settings.set_conversion(settings::FolderConversion::Done {
-                            report: report.clone(),
-                            cancelled: *cancelled,
-                        });
-                    }
-                    folder_workspace::Message::ConversionProgress { done, total } => {
-                        // Keeps "stopping" once Cancel was pressed.
-                        if let settings::FolderConversion::Converting { stopping, .. } = *self.settings.conversion() {
-                            self.settings.set_conversion(settings::FolderConversion::Converting {
-                                done: *done,
-                                total: *total,
-                                stopping,
-                            });
-                        }
-                    }
-                    _ => {}
-                }
-                let recheck = matches!(msg, folder_workspace::Message::FolderLoaded { .. })
-                    && self.settings_window.is_some()
-                    && !matches!(
-                        self.settings.conversion(),
-                        settings::FolderConversion::Converting { .. }
-                            | settings::FolderConversion::Done { .. }
-                    );
                 let is_unloaded = matches!(
                     &msg,
                     folder_workspace::Message::MediaViewer(media_viewer::Message::Unloaded)
                 );
+                let batch_finished = matches!(&msg, folder_workspace::Message::BatchFinished);
                 let task = self.folder_workspace.update(msg).map(Message::FolderWorkspace);
+                // Closing waits for a batch job to stop; the file it reopens is unloaded then.
+                if batch_finished && self.pending_close.is_some() {
+                    return Task::batch([task, self.close_pending()]);
+                }
                 let Some(id) = is_unloaded.then(|| self.pending_close.take()).flatten() else {
                     return task;
-                };
-                // After the update: the check reads the folder the workspace now holds.
-                let task = if recheck {
-                    Task::batch([task, self.check_folder_conversion()])
-                } else {
-                    task
                 };
                 Task::batch([task, window::close(id)])
             }
         }
+    }
+
+    /// Close the window waiting to close, unloading a video first (it closes on `Unloaded`).
+    fn close_pending(&mut self) -> Task<Message> {
+        if self.folder_workspace.needs_media_unload() {
+            return Task::done(Message::FolderWorkspace(folder_workspace::Message::MediaViewer(
+                media_viewer::Message::Unload,
+            )));
+        }
+        self.pending_close.take().map_or_else(Task::none, window::close)
     }
 
     pub fn view(&self, window_id: window::Id) -> Element<'_, Message> {
@@ -429,33 +400,6 @@ impl FrenameApp {
         }
         let tag_palette = TagPalette::from_monochrome(self.settings.settings().monochrome_tags);
         folder_workspace::view::view(&self.folder_workspace, tag_palette).map(Message::FolderWorkspace)
-    }
-
-    /// Check the open folder against the storage settings on a blocking thread, for the
-    /// "Current folder" part of the settings window.
-    fn check_folder_conversion(&mut self) -> Task<Message> {
-        let Some(dir) = self.folder_workspace.directory() else {
-            self.settings
-                .set_conversion(settings::FolderConversion::NoFolder);
-            return Task::none();
-        };
-        let paths = dir.all_file_paths();
-        let storage = self.settings.metadata_storage();
-        self.settings
-            .set_conversion(settings::FolderConversion::Checking);
-        Task::future(async move {
-            let plan =
-                tokio::task::spawn_blocking(move || frename_core::plan_conversion(&paths, storage))
-                    .await
-                    .unwrap_or_else(|e| {
-                        log::error!("folder conversion check failed: {e}");
-                        frename_core::ConversionPlan {
-                            storage,
-                            ..Default::default()
-                        }
-                    });
-            Message::FolderConversionPlanned(plan)
-        })
     }
 
     /// Open the settings window, or focus it when it is already open.

@@ -6,7 +6,7 @@
 use iced::widget::{column, container, mouse_area, row, stack, text};
 use iced::{Element, Length};
 
-use crate::features::{file_workspace, folder, folder_controls, media_viewer};
+use crate::features::{batch, file_workspace, folder, folder_controls, media_viewer};
 use crate::tag_colors::TagPalette;
 use crate::theme;
 use crate::widgets::splitter::{Splitter, HIT_WIDTH};
@@ -87,6 +87,7 @@ pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Mes
             tag_palette,
             state.inline_rename(),
             state.spinner_frame(),
+            state.batch().is_active().then_some(state.batch()),
         ))
         .height(Length::Fill),
         folder_controls::view::view(
@@ -94,6 +95,8 @@ pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Mes
             has_next,
             has_selected,
             filters,
+            state.batch().is_active(),
+            state.batch().is_running(),
         ),
     ]
     .height(Length::Fill)
@@ -109,26 +112,31 @@ pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Mes
         .min_left(right_min_left)
         .min_right(200.0);
 
-    let file_ws = state.file_workspace();
-    let is_synced = file_ws.tag_list().is_selected_match_display_order();
-    let file_workspace_panel = file_workspace::view::view(
-        file_ws,
-        state.tag_panel(),
-        state.file_name_panel(),
-        is_synced,
-        state.sync_locked(),
-        file_ws.tag_list(),
-        tag_palette,
-    )
-    .map(|m| match m {
-        file_workspace::Message::TagPanel(m) => Message::TagPanel(m),
-        file_workspace::Message::FileNamePanel(m) => Message::FileNamePanel(m),
-        file_workspace::Message::SyncPanel(m) => Message::SyncPanel(m),
-        file_workspace::Message::CommentAction(a) => Message::CommentAction(a),
-    });
+    // Batch mode shows the batch actions where the open file's tags and name are.
+    let right_panel: Element<'_, Message> = if state.batch().is_active() {
+        batch::view::view(state.batch(), state.directory()).map(Message::Batch)
+    } else {
+        let file_ws = state.file_workspace();
+        let is_synced = file_ws.tag_list().is_selected_match_display_order();
+        file_workspace::view::view(
+            file_ws,
+            state.tag_panel(),
+            state.file_name_panel(),
+            is_synced,
+            state.sync_locked(),
+            file_ws.tag_list(),
+            tag_palette,
+        )
+        .map(|m| match m {
+            file_workspace::Message::TagPanel(m) => Message::TagPanel(m),
+            file_workspace::Message::FileNamePanel(m) => Message::FileNamePanel(m),
+            file_workspace::Message::SyncPanel(m) => Message::SyncPanel(m),
+            file_workspace::Message::CommentAction(a) => Message::CommentAction(a),
+        })
+    };
 
     let normal_layout = container(
-        row![video, left_splitter, folder_list, right_splitter, file_workspace_panel]
+        row![video, left_splitter, folder_list, right_splitter, right_panel]
             .width(Length::Fill)
             .height(Length::Fill),
     )

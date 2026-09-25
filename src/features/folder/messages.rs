@@ -31,4 +31,12 @@ pub enum Message {
     RenameInput(String),
     /// Enter in the in-place rename editor: rename the file.
     SubmitRename,
+    /// Switch between editing the open file (false) and batch actions on checked files (true).
+    SetBatchMode(bool),
+    /// Check or uncheck a file for batch actions.
+    ToggleChecked(frename_core::FileId),
+    /// Header check box: check every listed file, or uncheck all when they all are.
+    ToggleAllChecked,
+    /// Flip the check of every listed file.
+    InvertChecks,
 }

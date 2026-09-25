@@ -323,13 +323,39 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         self.update_is_selected_match_display_order();
     }
 
-    /// All starred stored tags in display_tag_ids order (unaffected by the search filter).
+    /// Check or uncheck the tag named `name` (case-insensitive), as a click in the tag panel
+    /// would. Checking a name the list does not have yet adds it as a new, checked, saved tag
+    /// with the lowest priority: last in the tag panel and last among the file name's tags.
+    pub fn set_checked_by_name(&mut self, name: &str, checked: bool) {
+        let existing = self
+            .tags_by_id
+            .values()
+            .find(|t| t.tag().eq_ignore_ascii_case(name))
+            .map(|t| (t.id(), t.is_checked()));
+        match existing {
+            Some((id, is_checked)) if is_checked != checked => self.toggle_by_id(id),
+            Some(_) => {}
+            // Saved right away, like a tag created in the search bar: an unsaved tag is listed
+            // first, and this one belongs last.
+            None if checked => {
+                let Some(id) = self.insert_new_tag(name, Position::Last) else { return };
+                if let Err(e) = self.save_tag(id) {
+                    log::error!("TagList: could not save the new tag {name:?}: {e}");
+                }
+                // Now stored, it leaves the unsaved section at the top of the panel.
+                self.rebuild_filtered_display_tag_ids();
+            }
+            None => {}
+        }
+    }
+
+    /// Starred stored tags that match the search filter, sorted by name.
     /// Used by the starred tags panel shown between the search bar and tag grid.
     pub fn starred_tags_in_display_order(&self) -> Vec<&Tag> {
         let mut tags: Vec<&Tag> = self.display_tag_ids
             .iter()
             .filter_map(|(id, _, _)| self.tags_by_id.get(id))
-            .filter(|t| t.is_starred())
+            .filter(|t| t.is_starred() && self.tag_matches_filter(t))
             .collect();
         tags.sort_by(|a, b| a.tag().to_lowercase().cmp(&b.tag().to_lowercase()));
         tags
@@ -487,6 +513,11 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     /// selected collections, mark it checked=true. Returns the new tag's id.
     /// Returns None if a tag with this name already exists (case-insensitive).
     pub fn create_new_tag(&mut self, name: impl Into<String>) -> Option<TagId> {
+        self.insert_new_tag(name, Position::First)
+    }
+
+    /// [`Self::create_new_tag`], placed first or last in both collections.
+    fn insert_new_tag(&mut self, name: impl Into<String>, position: Position) -> Option<TagId> {
         let name = name.into();
         if self.has_tag_with_name(&name) {
             return None;
@@ -494,8 +525,18 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let id = TagId::new();
         let tag = Tag::with_id_order_checked(id, &name, 0, false, 0, true);
         self.tags_by_id.insert(id, tag);
-        self.display_tags_rebalanced |= self.display_tag_ids.insert_before(id, (), Option::None);
-        self.selected_tag_ids.insert_before(id, (), Option::None);
+        match position {
+            Position::First => {
+                self.display_tags_rebalanced |= self.display_tag_ids.insert_before(id, (), Option::None);
+                self.selected_tag_ids.insert_before(id, (), Option::None);
+            }
+            Position::Last => {
+                let last_display = self.display_tag_ids.iter().last().map(|(k, _, _)| *k);
+                self.display_tags_rebalanced |= self.display_tag_ids.insert_after(id, (), last_display.as_ref());
+                let last_selected = self.selected_tag_ids.iter().last().map(|(k, _, _)| *k);
+                self.selected_tag_ids.insert_after(id, (), last_selected.as_ref());
+            }
+        }
 
         let order = self.display_tag_ids.get_order(&id).unwrap_or(0);
         let tag = self.tags_by_id.get_mut(&id).unwrap();
@@ -786,6 +827,13 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     }
 }
 
+/// Where [`TagList::insert_new_tag`] puts a new tag.
+#[derive(Clone, Copy)]
+enum Position {
+    First,
+    Last,
+}
+
 #[cfg(test)]
 mod tests {
     use uuid::Uuid;
@@ -815,6 +863,48 @@ mod tests {
         assert_eq!(list.get_tag(list.filtered_display_tag_ids()[0]).unwrap().tag(), "A");
         assert_eq!(list.get_tag(list.filtered_display_tag_ids()[1]).unwrap().tag(), "B");
         assert_eq!(list.get_tag(list.filtered_display_tag_ids()[2]).unwrap().tag(), "C");
+    }
+
+    #[test]
+    fn set_checked_by_name_checks_unchecks_and_adds_a_missing_tag() {
+        let store = FakeAppStorage::new().add_stored_tag(StoredTag::new(Uuid::new_v4(), "Commented"), 0);
+        let mut list = TagList::new(store, FileSnapshot::default());
+        list.set_checked_by_name("commented", true);
+        assert_eq!(list.file_snapshot().tags(), ["Commented"]);
+        list.set_checked_by_name("Commented", true);
+        assert_eq!(list.file_snapshot().tags(), ["Commented"], "already checked stays checked");
+        list.set_checked_by_name("Commented", false);
+        assert!(list.file_snapshot().tags().is_empty());
+
+        list.set_checked_by_name("Noted", false);
+        assert!(!list.has_tag_with_name("Noted"), "unchecking a missing tag adds nothing");
+        list.set_checked_by_name("Noted", true);
+        assert_eq!(list.file_snapshot().tags(), ["Noted"]);
+    }
+
+    #[test]
+    fn a_tag_added_by_name_goes_last() {
+        let store = FakeAppStorage::new()
+            .add_stored_tag(StoredTag::new(Uuid::new_v4(), "A"), 0)
+            .add_stored_tag(StoredTag::new(Uuid::new_v4(), "B"), 1);
+        let snapshot = FileSnapshot::new(vec!["A".to_string(), "B".to_string()], "clip", ".mp4", "A.B.clip.mp4");
+        let mut list = TagList::new(store, snapshot);
+        list.set_checked_by_name("Commented", true);
+        assert_eq!(list.file_snapshot().tags(), ["A", "B", "Commented"]);
+        let last_shown = list.filtered_display_tag_ids().last().and_then(|id| list.get_tag(*id)).map(|t| t.tag());
+        assert_eq!(last_shown, Some("Commented"));
+    }
+
+    #[test]
+    fn starred_tags_follow_the_search_filter() {
+        let store = FakeAppStorage::new()
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Airplane", 1, true), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Boat", 2, true), 1);
+        let mut list = TagList::new(store, FileSnapshot::default());
+        assert_eq!(list.starred_tags_in_display_order().len(), 2);
+        list.set_filter("air");
+        let names: Vec<&str> = list.starred_tags_in_display_order().iter().map(|t| t.tag()).collect();
+        assert_eq!(names, ["Airplane"]);
     }
 
     #[test]

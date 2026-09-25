@@ -1,5 +1,6 @@
 //! Feature modules
 
+pub mod batch;
 pub mod drag_drop;
 pub mod file_name_panel;
 pub mod file_workspace;

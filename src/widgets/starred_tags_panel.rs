@@ -1,6 +1,6 @@
 //! Panel showing all starred tags in a flow grid layout.
 //! Located between the search bar and the tag grid in the file workspace.
-//! Unaffected by the search filter — all starred tags are always visible.
+//! Narrowed by the search filter like the tag grid.
 //! Returns None when there are no starred tags (panel occupies no space).
 
 use iced::widget::{checkbox, column, container, mouse_area, row, text, tooltip};

@@ -2,6 +2,8 @@
 
 use frename_core::{CommentStorage, InOutStorage};
 
+use crate::features::batch::Operation;
+
 /// User changes in the settings window. Each one is saved immediately.
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -13,10 +15,11 @@ pub enum Message {
     SetCommentStorage(CommentStorage),
     /// Save in/out points inside the video file (as a Premiere Pro marker) or in the file name.
     SetInOutStorage(InOutStorage),
-    /// The tag added to videos with a comment while comments are inside the video (empty: off).
+    /// The tag checked on videos that get a comment while comments are inside the video.
     SetCommentedTag(String),
-    /// Move the open folder's comments and in/out points into the chosen storage.
-    ConvertFolder,
-    /// Stop the running folder conversion.
-    CancelConversion,
+    /// Whether videos that get a comment get the tag at all.
+    SetCommentedTagEnabled(bool),
+    /// After a storage change: open batch mode in the main window, set up to move the files'
+    /// comments or in/out points to the new storage. Handled by the app.
+    OpenBatchAction(Operation),
 }
