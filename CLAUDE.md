@@ -59,9 +59,16 @@ Ideas of your own become new issues labelled `idea`, never extra code in the cur
 
 ## Owner setup (one-time, GitHub settings)
 
-Branch ruleset on `main`: require the `CI / linux` and `CI / windows` checks, require branches to be
-up to date, squash merge only, block force-push and deletion. This makes the gates enforceable,
-not just written down.
+Settings → Rules → Rulesets → new branch ruleset for `main`, enforcement Active, **no bypass list
+(administrators included)**:
+- require a pull request before merging (0 approvals: the agent uses the owner's account);
+- require status checks `ci-linux` and `ci-windows`, and branches up to date before merging;
+- block force pushes; restrict deletions.
+
+Settings → General → Pull Requests: allow squash merging only.
+
+This makes the gates enforceable, not just written down: the agent merges with the owner's account,
+so without the ruleset nothing stops a merge on red CI.
 
 ## Looking at the UI
 

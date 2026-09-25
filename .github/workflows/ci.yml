@@ -15,6 +15,7 @@ env:
 
 jobs:
   linux:
+    name: ci-linux
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +43,7 @@ jobs:
         run: cargo test --workspace --locked
 
   windows:
+    name: ci-windows
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
@@ -79,6 +81,8 @@ jobs:
       - name: Upload test build
         uses: actions/upload-artifact@v4
         with:
-          name: frename-windows-x64-${{ github.sha }}
-          path: target/release/frename.exe
+          name: frename-windows-x64-${{ github.sha }}-needs-system-gstreamer
+          path: |
+            target/release/frename.exe
+            GSTREAMER_SETUP.md
           retention-days: 14

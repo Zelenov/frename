@@ -20,9 +20,11 @@ Code PR — all three, every round:
    logic errors, panics/`unwrap` in production paths, data loss (renames, XMP writes, comment
    sidecars, undo), Windows path issues, race conditions in async tasks, regressions in untouched
    callers. Runs the local gate. Where it suspects a bug it writes a failing test to prove it.
-   Checks `git diff main -- '*.rs'` for weakened tests: removed or loosened asserts, new `#[ignore]`,
-   deleted tests, `cfg` that hides a test on the CI platforms. Each is a blocker unless the issue
-   requires it.
+   Checks `git diff origin/main... -- '*.rs' Cargo.toml '.cargo/**' '.github/**'` for weakened
+   gates: removed or loosened asserts, new `#[ignore]`, deleted tests, `cfg` that hides a test on
+   the CI platforms, CI steps or flags removed or relaxed. Each is a blocker unless the issue
+   requires it. Any change to a guarded file (list in `nightly` → Trust) that the issue does not
+   explicitly ask for is a blocker.
 2. **Design and quality** — could this be simpler, smaller, more in line with the codebase? Checks
    Iced Elm architecture rules (`.cursor/skills/iced-elm-architecture`), core/UI separation, naming,
    duplication, dead code, scope creep beyond the issue, missing tests for new core behaviour.
