@@ -52,10 +52,11 @@ Ideas of your own become new issues labelled `idea`, never extra code in the cur
 | `idea` | agent | Agent's own proposal; not implemented until `approved`. |
 | `in-progress` | agent | An agent session is working on it (see heartbeat lock). |
 | `awaiting-owner` | agent | Design questions for the owner; owner removes it after answering. |
-| `needs-owner` | agent | Agent is stuck; owner removes it to let the agent retry. |
+| `needs-owner` | agent | On an issue: agent is stuck; owner answers and removes it to let the agent retry. |
 | `hold` | owner | Do not work on / merge this. |
 | `blocked`, `rejected` | owner | Not now / never. |
 | `agent` | agent | PR opened by the agent pipeline. |
+| `release-failed` | agent | A release run failed twice; blocks version bumps until fixed. |
 
 ## Owner setup (one-time, GitHub settings)
 
