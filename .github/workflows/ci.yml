@@ -47,6 +47,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - uses: Swatinem/rust-cache@v2
 
@@ -65,8 +67,18 @@ jobs:
           Add-Content $env:GITHUB_ENV "GSTREAMER_1_0_ROOT_MSVC_X86_64=$gstRoot"
           Add-Content $env:GITHUB_PATH "$gstRoot\bin"
 
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
       - name: Test
         run: cargo test --workspace --locked
 
       - name: Build release
         run: cargo build --release --locked
+
+      - name: Upload test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: frename-windows-x64-${{ github.sha }}
+          path: target/release/frename.exe
+          retention-days: 14

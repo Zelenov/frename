@@ -9,7 +9,8 @@ description: >
 # Review gate
 
 The author of a change never judges it. Reviewers are subagents started with fresh context: they get
-the issue, the design doc (if any), and the diff — not the author's reasoning. Run them in parallel.
+the issue, the design doc (if any), the commit SHA under review, and the diff against `main` — not
+the author's reasoning. Run them in parallel. A verdict applies to that SHA only.
 
 ## Reviewers
 
@@ -19,6 +20,9 @@ Code PR — all three, every round:
    logic errors, panics/`unwrap` in production paths, data loss (renames, XMP writes, comment
    sidecars, undo), Windows path issues, race conditions in async tasks, regressions in untouched
    callers. Runs the local gate. Where it suspects a bug it writes a failing test to prove it.
+   Checks `git diff main -- '*.rs'` for weakened tests: removed or loosened asserts, new `#[ignore]`,
+   deleted tests, `cfg` that hides a test on the CI platforms. Each is a blocker unless the issue
+   requires it.
 2. **Design and quality** — could this be simpler, smaller, more in line with the codebase? Checks
    Iced Elm architecture rules (`.cursor/skills/iced-elm-architecture`), core/UI separation, naming,
    duplication, dead code, scope creep beyond the issue, missing tests for new core behaviour.
@@ -52,4 +56,4 @@ A finding without a concrete failure scenario or a concrete improvement is dropp
 4. Repeat until all three approve in the same round. Four rounds without that → `needs-owner`
    (see `nightly` step 6).
 
-Record every round (reviewer, verdict, findings count, what was fixed) in the PR description.
+Record every round in the PR description: SHA, each reviewer's verdict, findings count, what was fixed.

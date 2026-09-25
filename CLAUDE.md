@@ -40,6 +40,48 @@ In autonomous mode the "implement only what is explicitly requested" rule of `AG
 the issue is the request. Do exactly what the issue and its approved design ask, nothing beyond it.
 Ideas of your own become new issues labelled `idea`, never extra code in the current PR.
 
+## Labels
+
+| Label | Set by | Meaning |
+|---|---|---|
+| `P1` `P2` `P3` | owner/agent | Priority (lower number first). |
+| `regression` | owner | A release broke something; picked before everything else. |
+| `feature`, `process` | owner/agent | Kind of work. |
+| `needs-design` | owner/agent | A design doc in `docs/design/` must be merged before code. |
+| `approved` | owner | Makes an `idea` or a non-owner issue implementable. |
+| `idea` | agent | Agent's own proposal; not implemented until `approved`. |
+| `in-progress` | agent | An agent session is working on it (see heartbeat lock). |
+| `awaiting-owner` | agent | Design questions for the owner; owner removes it after answering. |
+| `needs-owner` | agent | Agent is stuck; owner removes it to let the agent retry. |
+| `hold` | owner | Do not work on / merge this. |
+| `blocked`, `rejected` | owner | Not now / never. |
+| `agent` | agent | PR opened by the agent pipeline. |
+
+## Owner setup (one-time, GitHub settings)
+
+Branch ruleset on `main`: require the `CI / linux` and `CI / windows` checks, require branches to be
+up to date, squash merge only, block force-push and deletion. This makes the gates enforceable,
+not just written down.
+
+## Looking at the UI
+
+The app runs on Linux under Xvfb:
+
+```sh
+sudo apt-get install -y xvfb imagemagick mesa-vulkan-drivers
+Xvfb :99 -screen 0 1600x900x24 &
+(cd tests/folder && DISPLAY=:99 ../../target/debug/frename) &
+sleep 15 && DISPLAY=:99 import -window root screenshot.png
+```
+
+Verified: it renders under Xvfb (software rendering). Today it starts on the empty "open a folder"
+screen and has no command-line option to open a folder, so screens past it cannot be reached yet;
+issue #14 (demo mode) adds that. Until then the product reviewer reviews the `view` code plus a
+written description of the UI, and screenshots are taken wherever they can be.
+
+Look at the screenshot of every screen a change touches before asking for review; give the product
+reviewer the screenshot path.
+
 ## Never
 
 - Commit secrets. API keys (Soniox, Anthropic, OpenAI) live in the user's settings at runtime,

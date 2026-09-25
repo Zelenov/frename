@@ -1,7 +1,7 @@
 ---
 name: changelog
 description: Generate a changelog entry in HISTORY.md from git changes. Use when user requests changelog, version update, or history entry.
-disable-model-invocation: false
+disable-model-invocation: true
 ---
 
 # Changelog Generation Skill

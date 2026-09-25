@@ -4,7 +4,7 @@ run-name: Release - ${{ github.ref_name }}
 on:
   workflow_dispatch:
   push:
-    branches: ["**"]
+    branches: [main]
     paths: ["version.md"]
 
 jobs:
@@ -26,6 +26,7 @@ jobs:
         run: |
           VERSION=$(sed -n '1s/^#[[:space:]]*//p' version.md | tr -d '[:space:]')
           [ -z "$VERSION" ] && { echo "::error::version.md first line must be '# VERSION'"; exit 1; }
+          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+(\.[0-9]+)?$' || { echo "::error::version.md heading '$VERSION' is not a version number (unreleased '# NEXT' must be replaced before merging to main)"; exit 1; }
           BRANCH="${{ github.ref_name }}"
           SAFE=$(echo "$BRANCH" | sed 's/\//-/g;s/[^a-zA-Z0-9._-]/-/g;s/-*$//')
           [ -z "$SAFE" ] && SAFE=branch
@@ -41,6 +42,10 @@ jobs:
             EXISTS=false
           fi
 
+          if [ "$DRAFT" = false ] && [ "$EXISTS" = true ] && [ "${{ github.event_name }}" = push ]; then
+            echo "::error::Release $TAG already exists. Bump the version in version.md instead of reusing a published one."
+            exit 1
+          fi
           if [ "$DRAFT" = true ] || [ "$EXISTS" = false ]; then SHOULD_BUILD=true; else SHOULD_BUILD=false; fi
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
