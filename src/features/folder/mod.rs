@@ -9,8 +9,9 @@ pub use messages::Message;
 /// Scrollable ID for the folder file list (shared between view and workspace for scroll-to-selected).
 pub const FOLDER_LIST_SCROLLABLE_ID: &str = "folder-file-list";
 
-/// Fixed height of one file row (pixels). Applied in view and used to compute scroll position.
-pub const FOLDER_ROW_HEIGHT: f32 = 40.0;
+/// Fixed height of one file row (pixels): the name, and a line for its comment under it.
+/// Applied in view and used to compute scroll position.
+pub const FOLDER_ROW_HEIGHT: f32 = 52.0;
 
 /// Text input ID of the in-place rename editor (shared between view and workspace for focus).
 pub const FOLDER_RENAME_INPUT_ID: &str = "folder-rename-input";

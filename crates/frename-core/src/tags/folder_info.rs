@@ -1,5 +1,9 @@
 //! Folder-level metadata used during bulk file parsing.
 
+use std::collections::HashMap;
+
+use super::CachedFile;
+
 /// The names of every entry in a folder, held sorted so lookups are a binary search.
 ///
 /// Bulk parsing asks this the same two questions per file — "is there a `X.comment.txt`?" and
@@ -9,12 +13,43 @@
 pub struct FolderInfo {
     /// Sorted; see [FolderInfo::contains] and [FolderInfo::names_starting_with].
     file_names: Vec<String>,
+    /// Set for a folder scan: parsing must not open files, and takes comments stored inside
+    /// videos from `cache` when a line still matches, leaving them to load later otherwise.
+    scan: Option<ScanInfo>,
+}
+
+/// What a folder scan knows about each file without opening it.
+#[derive(Debug, Clone, Default)]
+struct ScanInfo {
+    /// Size and modification time (ms since the Unix epoch) by file name, from the listing.
+    stats: HashMap<String, (u64, u64)>,
+    /// The tag file's file list, by name.
+    cache: HashMap<String, CachedFile>,
 }
 
 impl FolderInfo {
     pub fn new(mut file_names: Vec<String>) -> Self {
         file_names.sort();
-        Self { file_names }
+        Self { file_names, scan: None }
+    }
+
+    /// Folder info for a scan: file sizes and modification times from the listing, and the
+    /// tag file's file list. Parsing with it never opens a file.
+    pub fn for_scan(file_names: Vec<String>, stats: HashMap<String, (u64, u64)>, cache: Vec<CachedFile>) -> Self {
+        let cache = cache.into_iter().map(|c| (c.name.clone(), c)).collect();
+        Self { scan: Some(ScanInfo { stats, cache }), ..Self::new(file_names) }
+    }
+
+    /// Whether this is a folder scan, which leaves comments stored inside videos to load later.
+    pub fn defers_comment_loading(&self) -> bool {
+        self.scan.is_some()
+    }
+
+    /// The file list line for `name`, if it still matches the file.
+    pub fn cached_file(&self, name: &str) -> Option<&CachedFile> {
+        let scan = self.scan.as_ref()?;
+        let cached = scan.cache.get(name)?;
+        (scan.stats.get(name) == Some(&(cached.size, cached.modified_ms))).then_some(cached)
     }
 
     /// All entry names, in sorted order.

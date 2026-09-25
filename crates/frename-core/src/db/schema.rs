@@ -67,7 +67,8 @@ CREATE TABLE IF NOT EXISTS app_settings (
 ";
 
 /// Migration 4: where file comments are saved (`CommentStorage::as_str`). Existing users move
-/// to XMP too; their `.comment.txt` files are still read and move into the media file on save.
+/// to comments inside the video too; their `.comment.txt` files are still read and move into
+/// the video on save.
 pub const M4_COMMENT_STORAGE: &str = "
 ALTER TABLE app_settings ADD COLUMN comment_storage TEXT NOT NULL DEFAULT 'xmp';
 ";
@@ -76,4 +77,10 @@ ALTER TABLE app_settings ADD COLUMN comment_storage TEXT NOT NULL DEFAULT 'xmp';
 /// name, where they always were.
 pub const M5_IN_OUT_STORAGE: &str = "
 ALTER TABLE app_settings ADD COLUMN in_out_storage TEXT NOT NULL DEFAULT 'file_name';
+";
+
+/// Migration 6: the tag added to commented videos while comments are stored inside them
+/// (empty: off).
+pub const M6_COMMENTED_TAG: &str = "
+ALTER TABLE app_settings ADD COLUMN commented_tag TEXT NOT NULL DEFAULT 'Commented';
 ";

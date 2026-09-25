@@ -23,6 +23,7 @@ pub fn view<'a>(
     tag_color_mapping: &frename_core::TagColorMapping,
     tag_palette: TagPalette,
     rename: Option<&'a InlineRename>,
+    spinner_frame: usize,
 ) -> Element<'a, Message> {
     let placeholder_icon = |icon: &'static str| {
         container(text(icon).size(48).color(theme::TEXT_MUTED))
@@ -58,11 +59,12 @@ pub fn view<'a>(
                 false,
             );
 
+            // On the name line, next to the tags: centred on the whole row it would float
+            // between the name and the comment line.
             let subtitles_icon: Element<'_, Message> = if file_info.has_subtitles() {
                 tooltip(
                     container(text("SRT").size(9).color(theme::ACCENT))
-                        .center_x(Length::Fixed(SUBTITLES_MARKER_WIDTH))
-                        .center_y(Length::Fill),
+                        .center_x(Length::Fixed(SUBTITLES_MARKER_WIDTH)),
                     container(text("Has subtitles")).padding([2, 6]).style(theme::elevated_container_style),
                     tooltip::Position::Right,
                 )
@@ -73,32 +75,28 @@ pub fn view<'a>(
                     .into()
             };
 
-            let comment = file_info.comment();
-            let comment_icon: Element<'_, Message> = if !comment.is_empty() {
-                tooltip(
-                    container(text("💬").size(11).color(crate::theme::TEXT_MUTED))
-                        .center_x(Length::Fixed(22.0))
-                        .center_y(Length::Fill),
-                    text(comment),
-                    tooltip::Position::Right,
-                )
-                .into()
-            } else {
-                container(iced::widget::Space::new())
-                    .width(Length::Fixed(22.0))
-                    .into()
-            };
+            // Indented like the name, so the comment starts under it and not under the marker.
+            let comment_line = row![
+                iced::widget::Space::new().width(Length::Fixed(SUBTITLES_MARKER_WIDTH)),
+                comment_line(file_info.snapshot(), spinner_frame),
+            ];
+            let name_line = row![subtitles_icon, name_display].align_y(iced::Alignment::Center);
 
             let editing = rename.filter(|r| r.id == file_info.id());
             let name_area: Element<'_, Message> = if let Some(rename) = editing {
-                rename_editor(rename)
+                row![
+                    iced::widget::Space::new().width(Length::Fixed(SUBTITLES_MARKER_WIDTH)),
+                    rename_editor(rename),
+                ]
+                .into()
             } else {
                 mouse_area(
-                    container(name_display)
+                    container(column![name_line, comment_line].spacing(2))
                         .padding(iced::Padding { top: 4.0, right: 8.0, bottom: 4.0, left: 0.0 })
                         .width(Length::Fill)
                         .height(Length::Fill)
-                        .center_y(Length::Fill),
+                        .center_y(Length::Fill)
+                        .clip(true),
                 )
                 .on_press(Message::SelectFile(index))
                 .on_double_click(Message::StartRename(index))
@@ -107,7 +105,7 @@ pub fn view<'a>(
             };
 
             container(
-                row![subtitles_icon, comment_icon, name_area]
+                row![name_area]
                     .align_y(iced::Alignment::Center)
                     .width(Length::Fill)
                     .height(Length::Fill),
@@ -156,6 +154,25 @@ pub fn view<'a>(
         .width(Length::Fill)
         .height(Length::Fill)
         .style(theme::panel_container_style)
+        .into()
+}
+
+/// Spinner frames for rows whose comment is still loading.
+const SPINNER: [&str; 4] = ["◐", "◓", "◑", "◒"];
+
+/// The line under a file's name: the first line of its comment, a spinner while the comment
+/// is still loading, or nothing. Always one line high, so every row
+/// keeps [`FOLDER_ROW_HEIGHT`] and the comment never wraps into the next row.
+fn comment_line(snapshot: &frename_core::FileSnapshot, spinner_frame: usize) -> Element<'_, Message> {
+    let line = if snapshot.comment_loading() {
+        SPINNER[spinner_frame % SPINNER.len()]
+    } else {
+        snapshot.comment().lines().next().unwrap_or_default()
+    };
+    text(line)
+        .size(11)
+        .color(theme::TEXT_MUTED)
+        .wrapping(iced::widget::text::Wrapping::None)
         .into()
 }
 

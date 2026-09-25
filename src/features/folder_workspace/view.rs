@@ -86,6 +86,7 @@ pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Mes
             &tag_color_mapping,
             tag_palette,
             state.inline_rename(),
+            state.spinner_frame(),
         ))
         .height(Length::Fill),
         folder_controls::view::view(

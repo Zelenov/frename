@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use arboard;
 use rfd;
 use frename_core::{
-    AppDatabase, AppStateStore, ConversionReport, File, FileId, FileSnapshot, FolderAndFile, FolderTagStore,
+    AppDatabase, AppStateStore, ConversionPlan, ConversionReport, File, FileId, FileSnapshot, FolderAndFile, FolderTagStore,
     LoggingAppStateStore, MetadataStorage,
     NavigateFileCommand, ReorderTagCommand, ToggleTagCommand, PasteTagsCommand,
     DeleteTagCommand, CreateTagCommand, SaveTagCommand, StarTagCommand,
@@ -59,9 +59,15 @@ pub struct FolderWorkspace {
     pending_file_updated: Option<(FileId, FileSnapshot)>,
     /// Deferred folder conversion: set while a playing video unloads, since conversion may
     /// write into and rename that very file.
-    pending_conversion: Option<MetadataStorage>,
+    pending_conversion: Option<ConversionPlan>,
+    /// The folder conversion in progress, if any.
+    conversion: Option<ConversionRun>,
     /// The file being renamed in place in the folder list, if any.
     inline_rename: Option<folder::InlineRename>,
+    /// Bumped per folder, so a comment batch for a folder no longer open is dropped.
+    comment_load_generation: u64,
+    /// Frame of the loading spinner shown in rows whose comment is still loading.
+    spinner_frame: usize,
     /// The ID of the file navigated to (captured after dir.select_*).
     /// Consumed by apply_file_updated to build NavigateFileCommand.
     pending_to_file_id: Option<FileId>,
@@ -101,7 +107,10 @@ impl FolderWorkspace {
             file_name_panel: FileNamePanelState::default(),
             pending_file_updated: None,
             pending_conversion: None,
+            conversion: None,
             inline_rename: None,
+            comment_load_generation: 0,
+            spinner_frame: 0,
             pending_to_file_id: None,
             left_width,
             folder_width,
@@ -127,12 +136,29 @@ impl FolderWorkspace {
             Message::FolderLoadFailed => self.folder_load_failed(),
             Message::FileOpened(file) => self.apply_file_opened(file),
             Message::FileUpdated { id, snapshot } => self.apply_file_updated(id, snapshot),
-            Message::ConvertMetadata(storage) => self.convert_metadata(storage),
-            Message::MetadataConverted {
-                folder,
-                selected,
-                report: _,
-            } => Task::done(Message::ScanFolder(FolderAndFile::new(folder, selected))),
+            Message::ConvertMetadata(plan) => self.convert_metadata(plan),
+            Message::CancelConversion => {
+                if let Some(run) = self.conversion.as_mut() {
+                    run.cancelled = true;
+                }
+                Task::none()
+            }
+            Message::ConversionBatchDone(report) => {
+                if let Some(run) = self.conversion.as_mut() {
+                    run.report.merge(report);
+                }
+                self.next_conversion_batch()
+            }
+            // For the app, which shows it in the settings window.
+            Message::ConversionProgress { .. } => Task::none(),
+            Message::CommentBatchLoaded { generation, results } => self.comment_batch_loaded(generation, results),
+            Message::SpinnerTick => {
+                self.spinner_frame = self.spinner_frame.wrapping_add(1);
+                Task::none()
+            }
+            Message::MetadataConverted { folder, selected, .. } => {
+                Task::done(Message::ScanFolder(FolderAndFile::new(folder, selected)))
+            }
             Message::Folder(folder_msg) => self.handle_folder_message(folder_msg),
             Message::MediaViewer(msg) => match msg {
                 media_viewer::Message::Unloaded => self.on_media_unloaded(),
@@ -353,6 +379,8 @@ impl FolderWorkspace {
 
     fn scan_folder(&mut self, pair: FolderAndFile) -> Task<Message> {
         self.inline_rename = None;
+        // Batches for the folder being left must not land in the next one.
+        self.comment_load_generation += 1;
         let folder = pair.folder().to_path_buf();
         let target_file = pair.file().map(|p| p.to_path_buf());
         let store = LoggingAppStateStore::new(AppDatabase::new());
@@ -390,21 +418,89 @@ impl FolderWorkspace {
         // with them: undoing "create tag" from the previous folder would delete it from this one.
         self.file_workspace = FileWorkspace::new(FolderTagStore::for_folder(&folder));
         self.history = WorkspaceHistory::new(HISTORY_DEPTH);
+        let load_comments_task = self.load_next_comment_batch(true);
         let dir = self.directory.as_mut().expect("just set");
         let selected = target_file.as_deref().and_then(|p| dir.open_path(p));
         if let Some(file) = selected {
             Task::batch([
                 Task::done(Message::FileOpened(file)),
                 Task::done(Message::ScrollFolderListToSelected),
+                load_comments_task,
             ])
         } else {
             self.file_workspace.set_file(None);
             self.pending_file_updated = None;
-            Task::none()
+            load_comments_task
         }
     }
 
+    /// Load the next batch of comments the folder scan deferred, on a blocking thread. `start`
+    /// begins a new run for a newly opened folder, which drops any batch still in flight.
+    fn load_next_comment_batch(&mut self, start: bool) -> Task<Message> {
+        /// Files per batch: each costs about 20 ms cold, so a batch fills in the list about
+        /// twice a second, and writes the folder's file list once.
+        const BATCH: usize = 32;
+        if start {
+            self.comment_load_generation += 1;
+        }
+        let Some(dir) = self.directory.as_ref() else {
+            return Task::none();
+        };
+        let batch: Vec<(FileId, PathBuf, FileSnapshot)> = dir.files_loading_comments().into_iter().take(BATCH).collect();
+        if batch.is_empty() {
+            return Task::none();
+        }
+        let generation = self.comment_load_generation;
+        Task::future(async move {
+            let results = tokio::task::spawn_blocking(move || {
+                let items: Vec<(PathBuf, FileSnapshot)> =
+                    batch.iter().map(|(_, path, snapshot)| (path.clone(), snapshot.clone())).collect();
+                let resolved = frename_core::FileTagger::load_comments(&items);
+                batch
+                    .into_iter()
+                    .zip(resolved)
+                    .map(|((id, path, _), snapshot)| (id, path, snapshot))
+                    .collect()
+            })
+            .await
+            .unwrap_or_else(|e| {
+                log::error!("background comment load failed: {e}");
+                Vec::new()
+            });
+            Message::CommentBatchLoaded { generation, results }
+        })
+    }
+
+    /// Take a background batch into the list, then start the next one.
+    fn comment_batch_loaded(&mut self, generation: u64, results: Vec<(FileId, PathBuf, FileSnapshot)>) -> Task<Message> {
+        if generation != self.comment_load_generation || results.is_empty() {
+            return Task::none();
+        }
+        let Some(dir) = self.directory.as_mut() else {
+            return Task::none();
+        };
+        for (id, path, snapshot) in &results {
+            dir.apply_loaded_comment(*id, path, snapshot);
+        }
+        self.load_next_comment_batch(false)
+    }
+
+    /// The file with its comment loaded, so a file opens with its comment and in/out already
+    /// there instead of having them pop up after it was shown.
+    fn with_comment_loaded(&mut self, file: frename_core::File) -> frename_core::File {
+        if !file.snapshot().comment_loading() {
+            return file;
+        }
+        let resolved = frename_core::FileTagger::load_comment(file.file_path(), file.snapshot());
+        let Some(dir) = self.directory.as_mut() else {
+            return file;
+        };
+        dir.apply_loaded_comment(file.id(), file.file_path(), &resolved);
+        dir.file_by_id(file.id()).cloned().unwrap_or(file)
+    }
+
     fn apply_file_opened(&mut self, file: frename_core::File) -> Task<Message> {
+        let file = self.with_comment_loaded(file);
         // Opening another file closes the in-place rename editor, like leaving the row.
         if self.inline_rename.as_ref().is_some_and(|r| r.id != file.id()) {
             self.inline_rename = None;
@@ -442,56 +538,85 @@ impl FolderWorkspace {
 
     /// Convert the open folder's comments and in/out points to `storage`. A playing video is
     /// unloaded first; see [`Self::run_conversion`].
-    fn convert_metadata(&mut self, storage: MetadataStorage) -> Task<Message> {
-        if self.directory.is_none() {
+    fn convert_metadata(&mut self, plan: ConversionPlan) -> Task<Message> {
+        if self.directory.is_none() || self.conversion.is_some() {
             return Task::none();
         }
         if self.media_viewer.needs_unload_before_rename() {
-            self.pending_conversion = Some(storage);
+            self.pending_conversion = Some(plan);
             return Task::done(Message::MediaViewer(media_viewer::Message::Unload));
         }
-        self.run_conversion(storage)
+        self.run_conversion(plan)
     }
 
-    /// Save the current file's edits, then convert every file in the folder on a blocking
-    /// thread. The folder is rescanned afterwards: files may have been renamed, and parsing
-    /// is what reads the converted values back.
-    fn run_conversion(&mut self, storage: MetadataStorage) -> Task<Message> {
+    /// Save the current file's edits, then convert the plan's files a batch at a time on a
+    /// blocking thread, reporting progress after each batch. The folder is rescanned
+    /// afterwards: files may have been renamed, and parsing is what reads the converted
+    /// values back.
+    fn run_conversion(&mut self, plan: ConversionPlan) -> Task<Message> {
         if let Some((id, snapshot)) = self.file_workspace.get_snapshot() {
             let _ = self.apply_file_updated(id, snapshot);
         }
         let Some(dir) = self.directory.as_ref() else {
             return Task::none();
         };
-        let folder = dir.path().to_path_buf();
-        let paths = dir.all_file_paths();
-        let selected = dir.selected_file().map(|f| f.file_path().to_path_buf());
+        self.conversion = Some(ConversionRun {
+            folder: dir.path().to_path_buf(),
+            selected: dir.selected_file().map(|f| f.file_path().to_path_buf()),
+            total: plan.files.len(),
+            remaining: plan.files,
+            storage: plan.storage,
+            report: ConversionReport::default(),
+            cancelled: false,
+        });
         self.loading = true;
         self.file_workspace.set_file(None);
         self.pending_file_updated = None;
+        self.next_conversion_batch()
+    }
 
-        Task::future(async move {
-            let report = tokio::task::spawn_blocking(move || {
-                frename_core::convert_metadata(&frename_core::plan_conversion(&paths, storage))
-            })
-            .await
-            .unwrap_or_else(|e| {
-                log::error!("metadata conversion task failed: {e}");
-                ConversionReport::default()
-            });
-            let selected = selected.map(|path| {
-                report
+    /// Convert the next batch, or finish when nothing is left or the user cancelled.
+    /// Cancelling takes effect between batches, so no file is left half converted.
+    fn next_conversion_batch(&mut self) -> Task<Message> {
+        /// Files per batch: a few hundred milliseconds of work, so progress moves and a
+        /// cancel is picked up quickly.
+        const BATCH: usize = 4;
+        let Some(run) = self.conversion.as_mut() else {
+            return Task::none();
+        };
+        if run.cancelled || run.remaining.is_empty() {
+            let run = self.conversion.take().expect("checked above");
+            let cancelled = !run.remaining.is_empty();
+            let selected = run.selected.map(|path| {
+                run.report
                     .renamed
                     .iter()
                     .find(|(old, _)| *old == path)
                     .map_or(path, |(_, new)| new.clone())
             });
-            Message::MetadataConverted {
-                folder,
+            return Task::done(Message::MetadataConverted {
+                folder: run.folder,
                 selected,
-                report,
-            }
-        })
+                report: run.report,
+                cancelled,
+            });
+        }
+        let batch: Vec<PathBuf> = run.remaining.drain(..run.remaining.len().min(BATCH)).collect();
+        let progress = Message::ConversionProgress {
+            done: run.total - run.remaining.len() - batch.len(),
+            total: run.total,
+        };
+        let plan = ConversionPlan { storage: run.storage, files: batch, ..ConversionPlan::default() };
+        let convert = Task::future(async move {
+            let report = tokio::task::spawn_blocking(move || frename_core::convert_metadata(&plan))
+                .await
+                .unwrap_or_else(|e| {
+                    log::error!("metadata conversion task failed: {e}");
+                    ConversionReport::default()
+                });
+            Message::ConversionBatchDone(report)
+        });
+        Task::batch([Task::done(progress), convert])
     }
 
     /// Called when media has unloaded. Persist pending snapshot (FileUpdated) then open the new media.
@@ -652,10 +777,10 @@ impl FolderWorkspace {
         let mut snapshot = FileSnapshot::parse(typed);
         snapshot.set_comment(current.comment().to_string());
         snapshot.set_screenshots(current.screenshots().to_vec());
-        // With in/out stored in XMP the name never shows them, so a typed name without them
+        // With in/out stored inside the video the name never shows them, so a typed name without them
         // does not mean "remove them".
         let name_has_in_out = snapshot.segment_start().is_some() || snapshot.segment_end().is_some();
-        if !name_has_in_out && frename_core::metadata_storage().in_out == frename_core::InOutStorage::Xmp {
+        if !name_has_in_out && frename_core::metadata_storage().in_out == frename_core::InOutStorage::InVideo {
             snapshot.set_segment_start(current.segment_start());
             snapshot.set_segment_end(current.segment_end());
         }
@@ -1209,11 +1334,24 @@ impl FolderWorkspace {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
+        // The spinner only turns while rows are loading, so an idle list does not redraw.
+        let loading_comments = self.directory.as_ref().is_some_and(|d| d.loading_comment_count() > 0);
+        let spinner = if loading_comments {
+            iced::time::every(std::time::Duration::from_millis(150)).map(|_| Message::SpinnerTick)
+        } else {
+            Subscription::none()
+        };
         Subscription::batch([
             self.media_viewer.subscription().map(Message::MediaViewer),
             self.file_name_panel.subscription().map(Message::FileNamePanel),
             self.tag_panel.subscription().map(Message::TagPanel),
+            spinner,
         ])
+    }
+
+    /// Frame of the loading spinner in the folder list.
+    pub fn spinner_frame(&self) -> usize {
+        self.spinner_frame
     }
 
     /// Currently selected file (from directory selection).
@@ -1275,6 +1413,12 @@ impl FolderWorkspace {
         self.pending_file_updated = Some((id, snapshot));
     }
 
+    /// Test helper: files the running conversion has not started yet, `None` when none runs.
+    #[cfg(test)]
+    pub fn conversion_remaining(&self) -> Option<usize> {
+        self.conversion.as_ref().map(|run| run.remaining.len())
+    }
+
     /// Test helper: check whether a deferred rename is pending.
     #[cfg(test)]
     pub fn has_pending_rename(&self) -> bool {
@@ -1300,6 +1444,19 @@ impl FolderWorkspace {
     pub fn folder_width(&self) -> f32 {
         self.folder_width
     }
+}
+
+/// A folder conversion in progress; see `FolderWorkspace::run_conversion`.
+struct ConversionRun {
+    folder: PathBuf,
+    /// The selected file's path before the conversion, to reselect it afterwards.
+    selected: Option<PathBuf>,
+    storage: MetadataStorage,
+    /// Files not converted yet, in plan order.
+    remaining: Vec<PathBuf>,
+    total: usize,
+    report: ConversionReport,
+    cancelled: bool,
 }
 
 /// Why `typed` cannot replace `current` as a file name in `folder`, if it cannot. A rename
@@ -1571,6 +1728,62 @@ mod tests {
             crate::features::media_viewer::Message::Unloaded,
         ));
         assert!(!workspace.has_pending_rename(), "still None after second Unloaded");
+    }
+
+    /// A file whose comment the scan left loading is loaded when it is opened, before the
+    /// workspace shows it: its comment must be there from the start, not pop up afterwards.
+    #[test]
+    fn a_file_is_opened_with_its_comment_already_loaded() {
+        let test_dir = TestDirectory::new(2);
+        let mut directory = test_dir.directory();
+        let (id, path, mut snapshot) = {
+            let file = directory.files_in_order().next().expect("a file");
+            (file.id(), file.file_path().to_path_buf(), file.snapshot().clone())
+        };
+        snapshot.set_comment_loading(true);
+        directory.rename_file(id, &path, &snapshot);
+        assert_eq!(directory.loading_comment_count(), 1);
+
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory,
+            target_file: Some(path.clone()),
+        });
+        flush_file_opened(&mut workspace);
+
+        let opened = workspace.file_workspace().get_snapshot().expect("open file").1;
+        assert!(!opened.comment_loading(), "read before it is shown");
+        assert_eq!(workspace.directory().expect("dir").loading_comment_count(), 0);
+    }
+
+    /// A conversion runs in batches and a cancel stops it between batches, leaving the files
+    /// not reached yet as they were.
+    #[test]
+    fn a_conversion_runs_in_batches_and_stops_between_them_when_cancelled() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+
+        let plan = frename_core::ConversionPlan {
+            files: (0..10).map(|i| PathBuf::from(format!("C:/none/{i}.mp4"))).collect(),
+            ..frename_core::ConversionPlan::default()
+        };
+        let _ = workspace.update(Message::ConvertMetadata(plan));
+        // A playing video is unloaded first; the conversion starts once it is.
+        let _ = workspace.update(Message::MediaViewer(crate::features::media_viewer::Message::Unloaded));
+        assert_eq!(workspace.conversion_remaining(), Some(6), "first batch of 4 taken");
+
+        let _ = workspace.update(Message::ConversionBatchDone(frename_core::ConversionReport::default()));
+        assert_eq!(workspace.conversion_remaining(), Some(2));
+
+        let _ = workspace.update(Message::CancelConversion);
+        assert_eq!(workspace.conversion_remaining(), Some(2), "the batch in flight finishes");
+        let _ = workspace.update(Message::ConversionBatchDone(frename_core::ConversionReport::default()));
+        assert_eq!(workspace.conversion_remaining(), None, "stopped with 2 files left");
     }
 
     /// Re-saving the selected file after an unload (re-clicking it, renaming it in place) must

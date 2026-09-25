@@ -11,7 +11,7 @@ use super::file_snapshot::FileSnapshot;
 use super::file_tagger_backend::FileTaggerBackend;
 use super::folder_info::FolderInfo;
 use super::in_memory_file_tagger::InMemoryFileTagger;
-use crate::metadata::{FileConversion, MetadataStorage};
+use crate::metadata::{self, FileConversion, MetadataStorage};
 
 static BACKEND: OnceLock<Box<dyn FileTaggerBackend>> = OnceLock::new();
 
@@ -34,13 +34,30 @@ impl FileTagger {
     }
 
     /// Returns the new path (may differ from `path` after a disk rename).
+    /// The commented tag is brought in line with the comment first; see
+    /// [`crate::metadata::DEFAULT_COMMENTED_TAG`].
     pub fn save(snapshot: &FileSnapshot, path: &Path) -> PathBuf {
-        backend().save(snapshot, path)
+        let tag = metadata::commented_tag();
+        match metadata::with_commented_tag(snapshot, metadata::metadata_storage(), tag.as_deref()) {
+            Some(updated) => backend().save(&updated, path),
+            None => backend().save(snapshot, path),
+        }
     }
 
     /// Returns true if `path` is a sidecar file that should be hidden from the file list.
     pub fn is_sidecar_file(path: &Path) -> bool {
         backend().is_sidecar_file(path)
+    }
+
+    /// Load the comment a folder scan deferred; see [`FileSnapshot::comment_loading`].
+    pub fn load_comment(path: &Path, snapshot: &FileSnapshot) -> FileSnapshot {
+        let items = [(path.to_path_buf(), snapshot.clone())];
+        backend().load_comments(&items).pop().unwrap_or_else(|| snapshot.clone())
+    }
+
+    /// [`Self::load_comment`] for many files at once. Returns the snapshots in the same order.
+    pub fn load_comments(items: &[(PathBuf, FileSnapshot)]) -> Vec<FileSnapshot> {
+        backend().load_comments(items)
     }
 
     /// What converting the file's comment and in/out points to `storage` would move.

@@ -37,16 +37,19 @@ impl Default for VideoSettings {
 }
 
 /// User-facing app settings, edited in the settings window.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppSettings {
     /// Start playing a video as soon as it is opened. Defaults to true.
     pub autoplay_video: bool,
     /// Draw every tag in one neutral color instead of its own palette color. Defaults to false.
     pub monochrome_tags: bool,
-    /// Where file comments are saved. Defaults to XMP inside the media file.
+    /// Where file comments are saved. Defaults to inside the video file.
     pub comment_storage: CommentStorage,
     /// Where in/out points are saved. Defaults to the file name.
     pub in_out_storage: InOutStorage,
+    /// Tag added to commented videos while comments are stored inside them; empty turns it off.
+    /// Defaults to [`crate::DEFAULT_COMMENTED_TAG`].
+    pub commented_tag: String,
 }
 
 impl Default for AppSettings {
@@ -56,6 +59,7 @@ impl Default for AppSettings {
             monochrome_tags: false,
             comment_storage: CommentStorage::default(),
             in_out_storage: InOutStorage::default(),
+            commented_tag: crate::DEFAULT_COMMENTED_TAG.to_string(),
         }
     }
 }

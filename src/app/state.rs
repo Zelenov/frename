@@ -244,6 +244,7 @@ impl FrenameApp {
         // Before the first folder scan, which already reads comments and in/out points.
         frename_core::set_comment_storage(settings.settings().comment_storage);
         frename_core::set_in_out_storage(settings.settings().in_out_storage);
+        frename_core::set_commented_tag(&settings.settings().commented_tag);
         Self {
             drag_drop_state: drag_drop::DragDropState::default(),
             folder_workspace: folder_workspace::FolderWorkspace::new(),
@@ -294,11 +295,25 @@ impl FrenameApp {
                         frename_core::set_in_out_storage(storage);
                         self.check_folder_conversion()
                     }
+                    settings::Message::SetCommentedTag(_) => {
+                        // The field holds the cleaned tag by now.
+                        frename_core::set_commented_tag(&self.settings.settings().commented_tag);
+                        self.check_folder_conversion()
+                    }
                     settings::Message::ConvertFolder => {
-                        self.settings.set_conversion(settings::FolderConversion::Converting);
-                        Task::done(Message::FolderWorkspace(folder_workspace::Message::ConvertMetadata(
-                            self.settings.metadata_storage(),
-                        )))
+                        // The check already found the files that need converting.
+                        let settings::FolderConversion::Planned(plan) = self.settings.conversion().clone() else {
+                            return Task::none();
+                        };
+                        let total = plan.files.len();
+                        self.settings.set_conversion(settings::FolderConversion::Converting { done: 0, total, stopping: false });
+                        Task::done(Message::FolderWorkspace(folder_workspace::Message::ConvertMetadata(plan)))
+                    }
+                    settings::Message::CancelConversion => {
+                        if let settings::FolderConversion::Converting { done, total, .. } = *self.settings.conversion() {
+                            self.settings.set_conversion(settings::FolderConversion::Converting { done, total, stopping: true });
+                        }
+                        Task::done(Message::FolderWorkspace(folder_workspace::Message::CancelConversion))
                     }
                     settings::Message::SetAutoplayVideo(autoplay) => {
                         Task::done(Message::FolderWorkspace(folder_workspace::Message::MediaViewer(
@@ -363,16 +378,31 @@ impl FrenameApp {
             Message::FolderWorkspace(msg) => {
                 // The settings window reports the conversion it started, and re-checks when
                 // another folder opens (but keeps a report the user has not seen replaced).
-                if let folder_workspace::Message::MetadataConverted { report, .. } = &msg {
-                    self.settings
-                        .set_conversion(settings::FolderConversion::Done(report.clone()));
+                match &msg {
+                    folder_workspace::Message::MetadataConverted { report, cancelled, .. } => {
+                        self.settings.set_conversion(settings::FolderConversion::Done {
+                            report: report.clone(),
+                            cancelled: *cancelled,
+                        });
+                    }
+                    folder_workspace::Message::ConversionProgress { done, total } => {
+                        // Keeps "stopping" once Cancel was pressed.
+                        if let settings::FolderConversion::Converting { stopping, .. } = *self.settings.conversion() {
+                            self.settings.set_conversion(settings::FolderConversion::Converting {
+                                done: *done,
+                                total: *total,
+                                stopping,
+                            });
+                        }
+                    }
+                    _ => {}
                 }
                 let recheck = matches!(msg, folder_workspace::Message::FolderLoaded { .. })
                     && self.settings_window.is_some()
                     && !matches!(
                         self.settings.conversion(),
-                        settings::FolderConversion::Converting
-                            | settings::FolderConversion::Done(_)
+                        settings::FolderConversion::Converting { .. }
+                            | settings::FolderConversion::Done { .. }
                     );
                 let is_unloaded = matches!(
                     &msg,

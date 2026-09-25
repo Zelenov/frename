@@ -2,20 +2,46 @@
 //!
 //! Tags belong to the folder, not to the application: a Kenya shoot wants `nairobi`, a China
 //! trip wants `guangzhou`. Each folder therefore carries its own tag file, which travels with
-//! the footage and can be read and edited by hand or by an AI:
+//! the footage and can be read and edited by hand or by an AI. It is TOML:
 //!
-//! ```json
-//! {
-//!   "version": 1,
-//!   "tags": [
-//!     {"id":"00000000-0000-0000-0000-000000000000","name":"pick","color":9,"starred":true},
-//!     {"id":"00000000-0000-0000-0000-000000000003","name":"wide","color":3}
-//!   ]
-//! }
+//! ```toml
+//! version = 3
+//!
+//! tags = [
+//!   { id = "00000000-0000-0000-0000-000000000000", name = "pick", color = 9, starred = true },
+//!   { id = "00000000-0000-0000-0000-000000000003", name = "wide", color = 3 },
+//! ]
+//!
+//! [[files]]
+//! name = "Food.Commented.IMG_0424.MOV"
+//! size = 10568817
+//! modified_ms = 1753632259000
+//! comment = """
+//! 00-00-02-909: Goat
+//! Second line of the comment"""
+//! in = 1.0
+//! out = 2.5
+//!
+//! [[files]]
+//! name = "IMG_0425.MOV"
+//! size = 8812342
+//! modified_ms = 1753632300000
 //! ```
 //!
 //! Array order is the tag order — there are no sort keys in the file, so reordering tags means
 //! moving lines. One tag per line keeps that edit, and its diff, to a single line.
+//!
+//! The `[[files]]` blocks list the folder's videos with the comment and in/out points stored
+//! inside each video. Comments are multi-line, so they are written as `"""` strings: the text
+//! between the quotes is the comment, line breaks and all.
+//!
+//! Opening a video costs about 20 ms on a synced drive, so a folder scan cannot open every one
+//! for its comment; it reads this list instead. The video stays the truth: a line counts only while
+//! `name`, `size` and `modified_ms` still match the file, and anything else is read again. A
+//! comment or in/out edited here is shown by frename and written into the video when that file
+//! is next saved. `comment`, `in` and `out` are omitted when empty; `in`/`out` are seconds.
+//!
+//! Earlier versions wrote JSON; such a file no longer parses and is left untouched.
 //!
 //! A folder with no tag file gets one written from [`DEFAULT_TAGS`] the first time it is opened.
 //! A store with no folder at all (before anything is open) holds no tags and drops writes.
@@ -42,7 +68,12 @@ pub const TAG_FILE_NAME: &str = ".frename";
 const TAG_FILE_TEMP_NAME: &str = ".frename.tmp";
 
 /// Format version written into new files. Bump only on a breaking layout change.
-const FORMAT_VERSION: u32 = 1;
+/// 3 is the first TOML version; 1 and 2 were JSON.
+const FORMAT_VERSION: u32 = 3;
+
+/// Serializes read-modify-write of tag files: the tag list and the file list are written from
+/// different threads (the UI and the background comment loader), and each keeps the other's part.
+static TAG_FILE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Gap between the order keys derived from adjacent lines, leaving room to insert a tag
 /// between two neighbours without respreading every key.
@@ -53,6 +84,26 @@ const ORDER_GAP: i64 = 1_000_000;
 struct TagFile {
     version: u32,
     tags: Vec<TagEntry>,
+    #[serde(default)]
+    files: Vec<CachedFile>,
+}
+
+/// One video in the tag file's `files` list: the comment and in/out points stored inside the
+/// video, valid while the name, size and modification time still match it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CachedFile {
+    pub name: String,
+    pub size: u64,
+    /// Modification time, milliseconds since the Unix epoch.
+    pub modified_ms: u64,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub comment: String,
+    /// In point in seconds.
+    #[serde(default, rename = "in", skip_serializing_if = "Option::is_none")]
+    pub start: Option<f32>,
+    /// Out point in seconds.
+    #[serde(default, rename = "out", skip_serializing_if = "Option::is_none")]
+    pub end: Option<f32>,
 }
 
 /// One tag line in the file. Position in `tags` is the tag's order.
@@ -149,8 +200,7 @@ impl FolderTagStore {
             }
             Err(e) => return Err(with_path("read tag file", &path, e)),
         };
-        let file: TagFile = serde_json::from_str(&contents)
-            .map_err(|e| with_path("parse tag file", &path, e))?;
+        let file = parse(&contents).map_err(|e| with_path("parse tag file", &path, e))?;
         if file.version > FORMAT_VERSION {
             log::warn!(
                 "Tag file {} is version {}, newer than the supported {FORMAT_VERSION}; reading it anyway",
@@ -161,10 +211,8 @@ impl FolderTagStore {
         Ok(file.tags)
     }
 
-    /// Writes the tags, replacing the file. Does nothing when no folder is open.
-    ///
-    /// The file is written to a scratch file and then renamed over the real one, which is atomic
-    /// on Windows and POSIX alike: an interrupted write leaves the previous tag list intact.
+    /// Writes the tags, replacing them in the file and keeping its file list. Does nothing
+    /// when no folder is open.
     fn write_entries(
         &self,
         entries: &[TagEntry],
@@ -172,16 +220,31 @@ impl FolderTagStore {
         let Some(folder) = self.folder.as_ref() else {
             return Ok(());
         };
-        let path = folder.join(TAG_FILE_NAME);
-        let temp_path = folder.join(TAG_FILE_TEMP_NAME);
-        std::fs::write(&temp_path, render(entries)?)
-            .map_err(|e| with_path("write tag file", &temp_path, e))?;
-        std::fs::rename(&temp_path, &path).map_err(|e| {
-            // The scratch file would otherwise be left behind next to the user's footage.
-            let _ = std::fs::remove_file(&temp_path);
-            with_path("replace tag file", &path, e)
-        })?;
-        Ok(())
+        let _lock = TAG_FILE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let files = read_file(folder).map(|f| f.files).unwrap_or_default();
+        write_file(folder, entries, &files)
+    }
+
+    /// The folder's file list (see the module docs), in file order. Empty when there is no tag
+    /// file or it cannot be parsed.
+    pub fn read_file_cache(folder: &Path) -> Vec<CachedFile> {
+        read_file(folder).map(|f| f.files).unwrap_or_default()
+    }
+
+    /// Change the folder's file list: drop the lines named in `remove`, then replace or add the
+    /// lines in `upsert` by name, keeping the tags. A folder without a tag file gets one with
+    /// the built-in tags. Failures are logged; the list is only a cache.
+    pub fn update_file_cache(folder: &Path, remove: &[String], upsert: Vec<CachedFile>) {
+        let _lock = TAG_FILE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let (tags, mut files) = match read_file(folder) {
+            Some(file) => (file.tags, file.files),
+            None => (Self::default_entries(), Vec::new()),
+        };
+        let replaced: std::collections::HashSet<&str> = upsert.iter().map(|f| f.name.as_str()).collect();
+        files.retain(|f| !remove.contains(&f.name) && !replaced.contains(f.name.as_str()));
+        files.extend(upsert);
+        files.sort_by(|a, b| a.name.cmp(&b.name));
+        let _ = write_file(folder, &tags, &files);
     }
 
     /// Reads the tags paired with the order key each one currently has.
@@ -207,17 +270,111 @@ impl FolderTagStore {
     }
 }
 
-/// Renders the file with one tag per line, so reordering a tag is a one-line edit and shows up
-/// as a one-line diff. `serde_json`'s pretty printer would spread every tag over six lines.
-fn render(entries: &[TagEntry]) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let mut lines = Vec::with_capacity(entries.len());
-    for entry in entries {
-        lines.push(format!("    {}", serde_json::to_string(entry)?));
+fn parse(contents: &str) -> Result<TagFile, toml::de::Error> {
+    toml::from_str(contents)
+}
+
+/// The folder's tag file, or `None` when there is none or it cannot be read or parsed.
+fn read_file(folder: &Path) -> Option<TagFile> {
+    let contents = std::fs::read_to_string(folder.join(TAG_FILE_NAME)).ok()?;
+    parse(&contents).ok()
+}
+
+/// Write the tag file through a scratch file renamed over the real one, which is atomic on
+/// Windows and POSIX alike: an interrupted write leaves the previous file intact.
+fn write_file(
+    folder: &Path,
+    tags: &[TagEntry],
+    files: &[CachedFile],
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let path = folder.join(TAG_FILE_NAME);
+    let temp_path = folder.join(TAG_FILE_TEMP_NAME);
+    std::fs::write(&temp_path, render(tags, files)?)
+        .map_err(|e| with_path("write tag file", &temp_path, e))?;
+    std::fs::rename(&temp_path, &path).map_err(|e| {
+        // The scratch file would otherwise be left behind next to the user's footage.
+        let _ = std::fs::remove_file(&temp_path);
+        with_path("replace tag file", &path, e)
+    })?;
+    Ok(())
+}
+
+/// Renders the file by hand rather than through a TOML serializer, for a layout that reads
+/// and diffs well: one tag per line, so reordering a tag is a one-line edit, and one block per
+/// video with its comment as a multi-line string, the way a person would write it.
+fn render(tags: &[TagEntry], files: &[CachedFile]) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let mut out = format!("version = {FORMAT_VERSION}\n\ntags = [\n");
+    for tag in tags {
+        let mut fields = vec![format!("id = {}", basic_string(&tag.id.to_string())), format!("name = {}", basic_string(&tag.name))];
+        if let Some(color) = tag.color {
+            fields.push(format!("color = {color}"));
+        }
+        if tag.starred {
+            fields.push("starred = true".to_string());
+        }
+        out.push_str(&format!("  {{ {} }},\n", fields.join(", ")));
     }
-    Ok(format!(
-        "{{\n  \"version\": {FORMAT_VERSION},\n  \"tags\": [\n{}\n  ]\n}}\n",
-        lines.join(",\n")
-    ))
+    out.push_str("]\n");
+    for file in files {
+        out.push_str(&format!(
+            "\n[[files]]\nname = {}\nsize = {}\nmodified_ms = {}\n",
+            basic_string(&file.name),
+            file.size,
+            file.modified_ms
+        ));
+        if !file.comment.is_empty() {
+            out.push_str(&format!("comment = {}\n", text_string(&file.comment)));
+        }
+        if let Some(start) = file.start {
+            out.push_str(&format!("in = {start:?}\n"));
+        }
+        if let Some(end) = file.end {
+            out.push_str(&format!("out = {end:?}\n"));
+        }
+    }
+    Ok(out)
+}
+
+/// A TOML basic string: `"..."`, with quotes, backslashes and control characters escaped.
+fn basic_string(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    for c in value.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            '\r' => out.push_str("\\r"),
+            c if c.is_control() => out.push_str(&format!("\\u{:04X}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// A comment as TOML: a multi-line `"""` string when it has line breaks, so each line of the
+/// comment is a line of the file, otherwise a basic string. The line break right after the
+/// opening quotes is not part of the value (TOML trims it).
+fn text_string(value: &str) -> String {
+    if !value.contains('\n') {
+        return basic_string(value);
+    }
+    let mut out = String::from("\"\"\"\n");
+    for c in value.chars() {
+        match c {
+            // Escaping every quote rules out an accidental closing `"""`.
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\r' => out.push_str("\\r"),
+            '\n' | '\t' => out.push(c),
+            c if c.is_control() => out.push_str(&format!("\\u{:04X}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push_str("\"\"\"");
+    out
 }
 
 /// Wraps an error with the file it happened on, so a failure names the path in the log.
@@ -368,10 +525,12 @@ mod tests {
     fn file_order_is_tag_order() {
         let folder = TempFolder::new("order");
         folder.write_tag_file(
-            r#"{"version":1,"tags":[
-                {"id":"00000000-0000-0000-0000-000000000001","name":"nairobi"},
-                {"id":"00000000-0000-0000-0000-000000000002","name":"villa"}
-            ]}"#,
+            r#"version = 3
+tags = [
+  { id = "00000000-0000-0000-0000-000000000001", name = "nairobi" },
+  { id = "00000000-0000-0000-0000-000000000002", name = "villa" },
+]
+"#,
         );
         let tags = folder.store().get_stored_tags().expect("read tags");
         assert_eq!(names(&folder.store()), vec!["nairobi", "villa"]);
@@ -382,7 +541,9 @@ mod tests {
     fn a_hand_written_tag_needs_only_a_name_and_an_id() {
         let folder = TempFolder::new("minimal");
         folder.write_tag_file(
-            r#"{"version":1,"tags":[{"id":"00000000-0000-0000-0000-0000000000ff","name":"guangzhou"}]}"#,
+            r#"version = 3
+tags = [{ id = "00000000-0000-0000-0000-0000000000ff", name = "guangzhou" }]
+"#,
         );
         let store = folder.store();
         assert_eq!(names(&store), vec!["guangzhou"]);
@@ -394,7 +555,7 @@ mod tests {
     #[test]
     fn saving_a_new_tag_appends_it_with_its_color() {
         let folder = TempFolder::new("save-new");
-        folder.write_tag_file(r#"{"version":1,"tags":[]}"#);
+        folder.write_tag_file("version = 3\ntags = []\n");
         let mut store = folder.store();
         let id = Uuid::new_v4();
         store
@@ -465,18 +626,18 @@ mod tests {
         let folder = TempFolder::new("layout");
         let _ = folder.store().get_stored_tags().expect("read tags");
         let contents = folder.tag_file();
-        let tag_lines = contents.lines().filter(|l| l.trim_start().starts_with("{\"id\"")).count();
+        let tag_lines = contents.lines().filter(|l| l.trim_start().starts_with("{ id = ")).count();
         assert_eq!(tag_lines, DEFAULT_TAGS.len());
-        assert!(contents.starts_with("{\n  \"version\": 1,"));
+        assert!(contents.starts_with("version = 3\n"));
     }
 
     #[test]
     fn a_broken_file_is_reported_and_left_alone() {
         let folder = TempFolder::new("broken");
-        folder.write_tag_file("{ not json");
+        folder.write_tag_file("tags = [ not toml");
         let store = folder.store();
         assert!(store.get_stored_tags().is_err());
-        assert_eq!(folder.tag_file(), "{ not json", "user's file is untouched");
+        assert_eq!(folder.tag_file(), "tags = [ not toml", "user's file is untouched");
     }
 
     #[test]
@@ -502,5 +663,81 @@ mod tests {
         assert!(FolderTagStore::is_tag_file(Path::new(r"C:\shoots\kenya\.frename")));
         assert!(FolderTagStore::is_tag_file(Path::new(r"C:\shoots\kenya\.frename.tmp")));
         assert!(!FolderTagStore::is_tag_file(Path::new(r"C:\shoots\kenya\clip.mp4")));
+    }
+
+    #[test]
+    fn the_file_list_and_the_tags_keep_each_other() {
+        let folder = TempFolder::new("file-list");
+        let mut store = folder.store();
+        let _ = names(&store); // writes the built-in tags
+        let entry = CachedFile {
+            name: "IMG_1.MOV".into(),
+            size: 10,
+            modified_ms: 20,
+            comment: "Goat".into(),
+            start: Some(1.0),
+            end: None,
+        };
+        FolderTagStore::update_file_cache(&folder.0, &[], vec![entry.clone()]);
+        assert_eq!(FolderTagStore::read_file_cache(&folder.0), vec![entry.clone()]);
+
+        // A tag change keeps the file list, and the file list keeps the tags.
+        let before = names(&store);
+        store.remove_stored_tag_by_id(store.get_stored_tags().expect("tags")[0].id()).expect("remove");
+        assert_eq!(FolderTagStore::read_file_cache(&folder.0), vec![entry.clone()]);
+        assert_eq!(names(&store).len(), before.len() - 1);
+
+        let text = folder.tag_file();
+        assert!(
+            text.contains("[[files]]\nname = \"IMG_1.MOV\"\nsize = 10\nmodified_ms = 20\ncomment = \"Goat\"\nin = 1.0\n"),
+            "{text}"
+        );
+
+        FolderTagStore::update_file_cache(&folder.0, &["IMG_1.MOV".to_string()], Vec::new());
+        assert!(FolderTagStore::read_file_cache(&folder.0).is_empty());
+        assert!(!folder.tag_file().contains("[[files]]"));
+    }
+
+    #[test]
+    fn a_multi_line_comment_is_written_as_its_lines_and_reads_back_exactly() {
+        let folder = TempFolder::new("multiline");
+        let _ = names(&folder.store());
+        let comment = "00-00-01-140: АФРИКАНСКИЙ размер\n\nQuote \" and \"\"\" and back\\slash\n\tindented";
+        let entry = CachedFile {
+            name: "Ad.MP4".into(),
+            size: 1,
+            modified_ms: 2,
+            comment: comment.into(),
+            start: None,
+            end: Some(2.5),
+        };
+        FolderTagStore::update_file_cache(&folder.0, &[], vec![entry.clone()]);
+
+        let text = folder.tag_file();
+        assert!(text.contains("comment = \"\"\"\n00-00-01-140: АФРИКАНСКИЙ размер\n\nQuote"), "{text}");
+        assert_eq!(FolderTagStore::read_file_cache(&folder.0), vec![entry]);
+    }
+
+    #[test]
+    fn a_file_list_written_by_hand_or_by_an_ai_is_read() {
+        let folder = TempFolder::new("hand-files");
+        folder.write_tag_file(
+            r#"version = 3
+tags = []
+
+[[files]]
+name = "IMG_1.MOV"
+size = 10
+modified_ms = 20
+comment = '''
+Written by hand,
+over two lines'''
+out = 3.0
+"#,
+        );
+        let files = FolderTagStore::read_file_cache(&folder.0);
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].comment, "Written by hand,\nover two lines");
+        assert_eq!((files[0].start, files[0].end), (None, Some(3.0)));
     }
 }

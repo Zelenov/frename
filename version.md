@@ -1,3 +1,14 @@
+# 0.65
+## Added
+- While comments are stored inside the video, every video with a comment gets a "Commented" tag in its name, removed again with the comment. The tag's wording is a setting.
+- The file list shows the first line of each file's comment under its name.
+- Converting a folder shows progress and can be cancelled.
+
+## Changed
+- Folders open instantly again with comments stored inside the videos: comments load in the background, with a spinner in the list, and are remembered in the folder's `.frename` file. A file you open always shows its comment right away.
+- `.frename` is now TOML, with multi-line comments as plain text. The older JSON files are no longer read.
+- The subtitles marker sits on the file name line.
+
 # 0.64
 ## Added
 - Comments can be saved inside the video file (XMP), where Premiere Pro shows them in its Description column and finds them by search. Settings choose this (the default) or a `.comment.txt` next to the video.

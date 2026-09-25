@@ -17,7 +17,7 @@ mod tag_list;
 
 pub use default_tags::{DefaultTag, DEFAULT_TAGS};
 pub use file_snapshot::FileSnapshot;
-pub use folder_tag_store::FolderTagStore;
+pub use folder_tag_store::{CachedFile, FolderTagStore};
 pub use screenshot::Screenshot;
 pub use file_tagger::{install_file_tagger, FileTagger, SaveAndReparse};
 pub use file_tagger_backend::FileTaggerBackend;

@@ -1,7 +1,7 @@
 //! Comment text files.
 //!
 //! A file's comment may be stored in `{filename}.comment.txt` in the same directory; see
-//! [`crate::metadata`] for when this is used instead of the file's XMP.
+//! [`crate::metadata`] for when this is used instead of storing it inside the video.
 //! An empty or absent file means no comment.
 
 use std::path::{Path, PathBuf};
