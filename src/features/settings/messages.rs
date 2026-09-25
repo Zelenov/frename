@@ -9,10 +9,14 @@ pub enum Message {
     SetAutoplayVideo(bool),
     /// Draw every tag in one neutral color.
     SetMonochromeTags(bool),
-    /// Save comments inside the media file (XMP) or in a text file next to it.
+    /// Save comments inside the video file or in a text file next to it.
     SetCommentStorage(CommentStorage),
-    /// Save in/out points as an Adobe XMP marker inside the media file, or in the file name.
+    /// Save in/out points inside the video file (as a Premiere Pro marker) or in the file name.
     SetInOutStorage(InOutStorage),
+    /// The tag added to videos with a comment while comments are inside the video (empty: off).
+    SetCommentedTag(String),
     /// Move the open folder's comments and in/out points into the chosen storage.
     ConvertFolder,
+    /// Stop the running folder conversion.
+    CancelConversion,
 }

@@ -6,11 +6,15 @@
 //! each with [`CommentStorage`] and [`InOutStorage`]. A file that cannot hold XMP keeps both
 //! in the other home, so switching storage never loses anything.
 
+mod bmff;
+pub(crate) mod cache;
 mod conversion;
 mod xmp;
 
+use std::borrow::Cow;
 use std::path::Path;
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::RwLock;
 
 use crate::tags::FileSnapshot;
 
@@ -21,9 +25,9 @@ pub use xmp::Segment;
 /// Where comments are saved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CommentStorage {
-    /// Inside the media file as XMP `dc:description` (Premiere's Description column).
+    /// Inside the video file, as XMP `dc:description` (Premiere's Description column).
     #[default]
-    Xmp,
+    InVideo,
     /// In a `{filename}.comment.txt` file next to the media file.
     TextFile,
 }
@@ -32,7 +36,7 @@ impl CommentStorage {
     /// Stable name for persisting the setting.
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Xmp => "xmp",
+            Self::InVideo => "xmp",
             Self::TextFile => "text_file",
         }
     }
@@ -41,7 +45,7 @@ impl CommentStorage {
     pub fn from_name(name: &str) -> Self {
         match name {
             "text_file" => Self::TextFile,
-            _ => Self::Xmp,
+            _ => Self::InVideo,
         }
     }
 }
@@ -52,9 +56,9 @@ pub enum InOutStorage {
     /// In the file name as `in_HH_MM_SS` / `out_HH_MM_SS`.
     #[default]
     FileName,
-    /// Inside the media file as an XMP clip marker, which Premiere Pro turns into a subclip.
+    /// Inside the video file, as an XMP clip marker, which Premiere Pro turns into a subclip.
     /// The file name then carries no in/out.
-    Xmp,
+    InVideo,
 }
 
 impl InOutStorage {
@@ -62,14 +66,14 @@ impl InOutStorage {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::FileName => "file_name",
-            Self::Xmp => "xmp",
+            Self::InVideo => "xmp",
         }
     }
 
     /// Parse a persisted name; unknown names fall back to the default.
     pub fn from_name(name: &str) -> Self {
         match name {
-            "xmp" => Self::Xmp,
+            "xmp" => Self::InVideo,
             _ => Self::FileName,
         }
     }
@@ -96,7 +100,63 @@ pub fn set_comment_storage(storage: CommentStorage) {
 /// Choose where in/out points are saved from now on. Loaded files keep their points and
 /// move them to the new storage when they are next saved.
 pub fn set_in_out_storage(storage: InOutStorage) {
-    IN_OUT_XMP.store(u8::from(storage == InOutStorage::Xmp), Ordering::Relaxed);
+    IN_OUT_XMP.store(u8::from(storage == InOutStorage::InVideo), Ordering::Relaxed);
+}
+
+/// The tag frename puts in the name of every video with a comment while comments are stored
+/// in XMP, e.g. `Food.Commented.IMG_0424.MOV`. The comment itself is not visible in the file
+/// name or in Explorer; the tag is, and it is searchable and filterable like any other tag.
+pub const DEFAULT_COMMENTED_TAG: &str = "Commented";
+
+static COMMENTED_TAG: RwLock<Cow<'static, str>> = RwLock::new(Cow::Borrowed(DEFAULT_COMMENTED_TAG));
+
+/// Choose the tag for commented videos; see [`DEFAULT_COMMENTED_TAG`]. Characters a tag
+/// cannot hold are dropped; an empty tag turns the feature off. Videos keep the old tag
+/// until they are saved, and the old one is not removed.
+pub fn set_commented_tag(tag: &str) {
+    let tag = clean_commented_tag(tag).map_or(Cow::Borrowed(""), Cow::Owned);
+    if let Ok(mut current) = COMMENTED_TAG.write() {
+        *current = tag;
+    }
+}
+
+/// The tag chosen by [`set_commented_tag`]; `None` when it is off.
+pub fn commented_tag() -> Option<String> {
+    let tag = COMMENTED_TAG.read().ok()?;
+    (!tag.is_empty()).then(|| tag.to_string())
+}
+
+/// The tag as it can appear in a file name: without dots, which separate tags, and without
+/// characters Windows forbids in names. `None` when nothing is left.
+pub fn clean_commented_tag(tag: &str) -> Option<String> {
+    let cleaned: String = tag
+        .chars()
+        .filter(|c| !matches!(c, '.' | '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') && !c.is_control())
+        .collect();
+    let cleaned = cleaned.trim();
+    (!cleaned.is_empty()).then(|| cleaned.to_string())
+}
+
+/// The snapshot with the commented tag added (comment set) or removed (comment empty),
+/// or `None` when it already matches. Only while comments are stored in XMP: a text file
+/// shows next to the video already, so the tag is left alone then.
+pub(crate) fn with_commented_tag(snapshot: &FileSnapshot, storage: MetadataStorage, tag: Option<&str>) -> Option<FileSnapshot> {
+    // Unread XMP: whether the file has a comment is not known yet.
+    if storage.comment != CommentStorage::InVideo || snapshot.comment_loading() {
+        return None;
+    }
+    let tag = tag?;
+    let commented = !snapshot.comment().trim().is_empty();
+    if snapshot.has_tag(tag) == commented {
+        return None;
+    }
+    let mut tags: Vec<String> = snapshot.tags().iter().filter(|t| *t != tag).cloned().collect();
+    if commented {
+        tags.push(tag.to_string());
+    }
+    let mut updated = snapshot.clone();
+    updated.set_tags(tags);
+    Some(updated)
 }
 
 /// The storage chosen by [`set_comment_storage`] and [`set_in_out_storage`].
@@ -105,10 +165,10 @@ pub fn metadata_storage() -> MetadataStorage {
         comment: if COMMENT_TEXT_FILE.load(Ordering::Relaxed) == 1 {
             CommentStorage::TextFile
         } else {
-            CommentStorage::Xmp
+            CommentStorage::InVideo
         },
         in_out: if IN_OUT_XMP.load(Ordering::Relaxed) == 1 {
-            InOutStorage::Xmp
+            InOutStorage::InVideo
         } else {
             InOutStorage::FileName
         },
@@ -122,18 +182,34 @@ pub fn metadata_storage() -> MetadataStorage {
 /// A text file wins over XMP: in XMP storage one only exists as a legacy comment or as the
 /// fallback for a failed XMP write, and either way it holds the newest text. In/out points
 /// in the file name win over XMP the same way. The file is opened only when XMP is needed.
-pub(crate) fn load(path: &Path, has_text_file: bool, snapshot: &mut FileSnapshot, storage: MetadataStorage) {
+pub(crate) fn load(
+    path: &Path,
+    has_text_file: bool,
+    snapshot: &mut FileSnapshot,
+    storage: MetadataStorage,
+    source: XmpSource<'_>,
+) {
     let name_has_in_out = snapshot.segment_start().is_some() || snapshot.segment_end().is_some();
-    let comment_from_xmp = storage.comment == CommentStorage::Xmp && !has_text_file;
-    let in_out_from_xmp = storage.in_out == InOutStorage::Xmp && !name_has_in_out;
-    let fields = if comment_from_xmp || in_out_from_xmp {
-        xmp::read(path)
-    } else {
-        xmp::XmpFields::default()
-    };
+    let comment_from_xmp = storage.comment == CommentStorage::InVideo && !has_text_file;
+    let in_out_from_xmp = storage.in_out == InOutStorage::InVideo && !name_has_in_out;
     if has_text_file {
         snapshot.set_comment(crate::comment::load_comment(path));
-    } else if comment_from_xmp {
+    }
+    if !comment_from_xmp && !in_out_from_xmp {
+        return;
+    }
+    let fields = match source {
+        XmpSource::Read => xmp::read(path),
+        XmpSource::Cached(cached) => xmp::XmpFields {
+            comment: cached.comment.trim().to_string(),
+            segment: Segment { start: cached.start, end: cached.end },
+        },
+        XmpSource::Deferred => {
+            snapshot.set_comment_loading(true);
+            return;
+        }
+    };
+    if comment_from_xmp {
         snapshot.set_comment(fields.comment);
     }
     if in_out_from_xmp {
@@ -141,6 +217,17 @@ pub(crate) fn load(path: &Path, has_text_file: bool, snapshot: &mut FileSnapshot
         snapshot.set_segment_end(fields.segment.end);
     }
 }
+
+/// Where [`load`] gets a file's XMP from.
+pub(crate) enum XmpSource<'a> {
+    /// Open the file and read it.
+    Read,
+    /// The tag file's line for it, which still matches the file.
+    Cached(&'a crate::tags::CachedFile),
+    /// Not now: mark the snapshot [`FileSnapshot::comment_loading`].
+    Deferred,
+}
+
 
 /// What [`save_to_xmp`] put into the file.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -153,8 +240,12 @@ pub(crate) struct SavedToXmp {
 /// write belongs in the other home: the caller keeps in/out in the file name and the comment
 /// in the text file (see [`save_comment_text_file`]).
 pub(crate) fn save_to_xmp(path: &Path, snapshot: &FileSnapshot, storage: MetadataStorage) -> SavedToXmp {
-    let comment = (storage.comment == CommentStorage::Xmp).then(|| snapshot.comment().trim());
-    let segment = (storage.in_out == InOutStorage::Xmp)
+    // Unread XMP is unknown, not empty: writing it would wipe the file's real comment.
+    if snapshot.comment_loading() {
+        return SavedToXmp::default();
+    }
+    let comment = (storage.comment == CommentStorage::InVideo).then(|| snapshot.comment().trim());
+    let segment = (storage.in_out == InOutStorage::InVideo)
         .then(|| Segment { start: snapshot.segment_start(), end: snapshot.segment_end() });
     if comment.is_none() && segment.is_none() {
         return SavedToXmp::default();
@@ -172,6 +263,8 @@ pub(crate) fn save_to_xmp(path: &Path, snapshot: &FileSnapshot, storage: Metadat
 /// Bring the `.comment.txt` of the file at `path` in line with a save: removed when the
 /// comment went into XMP (which moves legacy comments into the file), written otherwise.
 pub(crate) fn save_comment_text_file(path: &Path, comment: &str, saved_to_xmp: bool) {
+    // A pending snapshot's comment came from the text file if there is one, and is unknown
+    // otherwise; either way there is nothing to change.
     if saved_to_xmp {
         crate::comment::remove_comment_file(path);
     } else {
@@ -186,7 +279,7 @@ mod tests {
     use std::path::PathBuf;
 
     const XMP_BOTH: MetadataStorage =
-        MetadataStorage { comment: CommentStorage::Xmp, in_out: InOutStorage::Xmp };
+        MetadataStorage { comment: CommentStorage::InVideo, in_out: InOutStorage::InVideo };
     const PLAIN: MetadataStorage =
         MetadataStorage { comment: CommentStorage::TextFile, in_out: InOutStorage::FileName };
 
@@ -210,19 +303,19 @@ mod tests {
 
     fn loaded(path: &Path, has_text_file: bool, storage: MetadataStorage) -> FileSnapshot {
         let mut snapshot = FileSnapshot::parse("clip.mov");
-        load(path, has_text_file, &mut snapshot, storage);
+        load(path, has_text_file, &mut snapshot, storage, XmpSource::Read);
         snapshot
     }
 
     #[test]
     fn storage_names_round_trip() {
-        for storage in [CommentStorage::Xmp, CommentStorage::TextFile] {
+        for storage in [CommentStorage::InVideo, CommentStorage::TextFile] {
             assert_eq!(CommentStorage::from_name(storage.as_str()), storage);
         }
-        for storage in [InOutStorage::Xmp, InOutStorage::FileName] {
+        for storage in [InOutStorage::InVideo, InOutStorage::FileName] {
             assert_eq!(InOutStorage::from_name(storage.as_str()), storage);
         }
-        assert_eq!(CommentStorage::from_name("garbage"), CommentStorage::Xmp);
+        assert_eq!(CommentStorage::from_name("garbage"), CommentStorage::InVideo);
         assert_eq!(InOutStorage::from_name("garbage"), InOutStorage::FileName);
     }
 
@@ -230,9 +323,9 @@ mod tests {
     fn setters_change_the_active_storage() {
         // The only test touching the process-wide storage; every other one passes it explicitly.
         set_comment_storage(CommentStorage::TextFile);
-        set_in_out_storage(InOutStorage::Xmp);
-        assert_eq!(metadata_storage(), MetadataStorage { comment: CommentStorage::TextFile, in_out: InOutStorage::Xmp });
-        set_comment_storage(CommentStorage::Xmp);
+        set_in_out_storage(InOutStorage::InVideo);
+        assert_eq!(metadata_storage(), MetadataStorage { comment: CommentStorage::TextFile, in_out: InOutStorage::InVideo });
+        set_comment_storage(CommentStorage::InVideo);
         set_in_out_storage(InOutStorage::FileName);
         assert_eq!(metadata_storage(), MetadataStorage::default());
     }
@@ -284,7 +377,7 @@ mod tests {
         assert_eq!(plain.comment(), "");
         assert_eq!((plain.segment_start(), plain.segment_end()), (None, None));
 
-        let comment_only = loaded(&file, false, MetadataStorage { comment: CommentStorage::Xmp, in_out: InOutStorage::FileName });
+        let comment_only = loaded(&file, false, MetadataStorage { comment: CommentStorage::InVideo, in_out: InOutStorage::FileName });
         assert_eq!(comment_only.comment(), "in xmp");
         assert_eq!(comment_only.segment_start(), None);
     }
@@ -293,7 +386,7 @@ mod tests {
     fn in_out_only_storage_leaves_the_xmp_comment_alone() {
         let file = copy_of_clip("in-out-only");
         save_to_xmp(&file, &snapshot("keep me", None, None), XMP_BOTH);
-        let in_out_only = MetadataStorage { comment: CommentStorage::TextFile, in_out: InOutStorage::Xmp };
+        let in_out_only = MetadataStorage { comment: CommentStorage::TextFile, in_out: InOutStorage::InVideo };
         let saved = save_to_xmp(&file, &snapshot("text comment", Some(0.05), Some(0.15)), in_out_only);
         assert_eq!(saved, SavedToXmp { comment: false, in_out: true });
         assert_eq!(loaded(&file, false, XMP_BOTH).comment(), "keep me");
@@ -306,7 +399,7 @@ mod tests {
         crate::comment::save_comment(&file, "newer");
 
         let mut from_name = FileSnapshot::parse("clip.in_00_00_07.mov");
-        load(&file, true, &mut from_name, XMP_BOTH);
+        load(&file, true, &mut from_name, XMP_BOTH, XmpSource::Read);
         assert_eq!(from_name.comment(), "newer");
         assert_eq!((from_name.segment_start(), from_name.segment_end()), (Some(7.0), None));
     }
@@ -348,5 +441,37 @@ mod tests {
         std::fs::write(&file, b"not really a zip").expect("write");
         let saved = save_to_xmp(&file, &snapshot("fallback", Some(1.0), None), XMP_BOTH);
         assert_eq!(saved, SavedToXmp::default());
+    }
+
+    fn tagged(tags: &[&str], comment: &str) -> FileSnapshot {
+        let mut snapshot = FileSnapshot::parse("clip.mov");
+        snapshot.set_tags(tags.iter().copied());
+        snapshot.set_comment(comment.to_string());
+        snapshot
+    }
+
+    #[test]
+    fn commented_tag_follows_the_comment_in_xmp_storage() {
+        let add = with_commented_tag(&tagged(&["Food"], "goat"), XMP_BOTH, Some("Commented"));
+        assert_eq!(add.expect("tag added").tags(), ["Food", "Commented"]);
+
+        let remove = with_commented_tag(&tagged(&["Commented", "Food"], "  "), XMP_BOTH, Some("Commented"));
+        assert_eq!(remove.expect("tag removed").tags(), ["Food"]);
+
+        assert!(with_commented_tag(&tagged(&["Food", "Commented"], "goat"), XMP_BOTH, Some("Commented")).is_none());
+        assert!(with_commented_tag(&tagged(&["Food"], ""), XMP_BOTH, Some("Commented")).is_none());
+    }
+
+    #[test]
+    fn commented_tag_is_left_alone_in_text_file_storage_or_when_off() {
+        assert!(with_commented_tag(&tagged(&["Food"], "goat"), PLAIN, Some("Commented")).is_none());
+        assert!(with_commented_tag(&tagged(&["Commented"], ""), PLAIN, Some("Commented")).is_none());
+        assert!(with_commented_tag(&tagged(&["Food"], "goat"), XMP_BOTH, None).is_none());
+    }
+
+    #[test]
+    fn commented_tag_names_are_cleaned_for_file_names() {
+        assert_eq!(clean_commented_tag(" Com.ment:ed "), Some("Commented".to_string()));
+        assert_eq!(clean_commented_tag(" . "), None);
     }
 }

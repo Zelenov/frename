@@ -128,6 +128,34 @@ impl<S: AppStateStore + Clone> Directory<S> {
         self.files_by_id.values().filter(|f| !f.comment().is_empty()).count()
     }
 
+    /// Files whose comment is still loading (see [`FileSnapshot::comment_loading`]), in list
+    /// order.
+    pub fn files_loading_comments(&self) -> Vec<(FileId, PathBuf, FileSnapshot)> {
+        self.order
+            .iter()
+            .filter_map(|id| self.files_by_id.get(id))
+            .filter(|file| file.snapshot().comment_loading())
+            .map(|file| (file.id(), file.file_path().to_path_buf(), file.snapshot().clone()))
+            .collect()
+    }
+
+    /// Number of files whose comment is still loading.
+    pub fn loading_comment_count(&self) -> usize {
+        self.files_by_id.values().filter(|f| f.snapshot().comment_loading()).count()
+    }
+
+    /// Take the snapshot loaded from `path` for a file whose comment was loading. Ignored when
+    /// the file has since moved or has its comment already (it was opened, or saved).
+    pub fn apply_loaded_comment(&mut self, id: FileId, path: &Path, snapshot: &FileSnapshot) -> bool {
+        match self.files_by_id.get_mut(&id) {
+            Some(file) if file.file_path() == path && file.snapshot().comment_loading() => {
+                file.set_file_snapshot(snapshot);
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// Paths of every file in the folder, ignoring the filters.
     pub fn all_file_paths(&self) -> Vec<PathBuf> {
         self.order
@@ -333,11 +361,24 @@ fn contains_ignore_case(haystack: &str, needle_lower: &str) -> bool {
 fn scan_files(directory: &Path) -> Result<Vec<File>, std::io::Error> {
     let entries: Vec<std::fs::DirEntry> =
         std::fs::read_dir(directory)?.collect::<Result<Vec<_>, _>>()?;
-    let folder_info = FolderInfo::new(
+    // Sizes and times come with the listing, so they cost nothing; with the tag file's file
+    // list they let parsing take comments from the list instead of opening each video.
+    let stats = entries
+        .iter()
+        .filter_map(|e| {
+            let name = e.file_name().to_str()?.to_string();
+            let metadata = e.metadata().ok().filter(|m| m.is_file())?;
+            let modified = crate::metadata::cache::modified_ms(metadata.modified().ok()?);
+            Some((name, (metadata.len(), modified)))
+        })
+        .collect();
+    let folder_info = FolderInfo::for_scan(
         entries
             .iter()
             .filter_map(|e| e.file_name().to_str().map(str::to_string))
             .collect(),
+        stats,
+        crate::FolderTagStore::read_file_cache(directory),
     );
 
     let mut files = Vec::with_capacity(entries.len());

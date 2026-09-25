@@ -6,7 +6,7 @@ use super::file_snapshot::FileSnapshot;
 use super::screenshot::Screenshot;
 use super::file_tagger_backend::FileTaggerBackend;
 use super::FolderInfo;
-use crate::metadata::{self, CommentStorage, FileConversion, InOutStorage, MetadataStorage};
+use crate::metadata::{self, CommentStorage, FileConversion, InOutStorage, MetadataStorage, XmpSource};
 
 pub struct ProductionFileTagger;
 
@@ -79,7 +79,13 @@ impl ProductionFileTagger {
         // Look for the comment sidecar in the listing. Probing the disk instead cost a failed
         // file open per file, which a folder scan pays for every file it finds.
         let has_text_file = effective_info.contains(&format!("{name}.comment.txt"));
-        metadata::load(path, has_text_file, &mut snapshot, storage);
+        // A folder scan does not open files: XMP comes from the tag file's file list or waits.
+        let source = match (folder_info.defers_comment_loading(), folder_info.cached_file(name)) {
+            (false, _) => XmpSource::Read,
+            (true, Some(cached)) => XmpSource::Cached(cached),
+            (true, None) => XmpSource::Deferred,
+        };
+        metadata::load(path, has_text_file, &mut snapshot, storage, source);
         snapshot.set_screenshots(load_screenshot_positions(path, effective_info));
         snapshot
     }
@@ -126,7 +132,11 @@ impl ProductionFileTagger {
             }
             log::info!("Renamed on disk: {:?} → {:?}", path, new_path);
         }
-        metadata::save_comment_text_file(&new_path, snapshot.comment(), saved.comment);
+        // A pending snapshot does not know an XMP comment, so it has no text file to write.
+        if !(snapshot.comment_loading() && storage.comment == CommentStorage::InVideo) {
+            metadata::save_comment_text_file(&new_path, snapshot.comment(), saved.comment);
+        }
+        metadata::cache::refresh_after_save(path, &new_path, storage);
         new_path
     }
 }
@@ -140,19 +150,25 @@ impl FileTaggerBackend for ProductionFileTagger {
         self.save_with(snapshot, path, metadata::metadata_storage())
     }
 
+    fn load_comments(&self, items: &[(PathBuf, FileSnapshot)]) -> Vec<FileSnapshot> {
+        metadata::cache::resolve_batch(items, metadata::metadata_storage())
+    }
+
     fn metadata_conversion(&self, path: &Path, storage: MetadataStorage) -> FileConversion {
-        metadata::Inspection::of(path).needed(storage)
+        metadata::Inspection::of(path).needed(storage, metadata::commented_tag().as_deref())
     }
 
     fn convert_metadata(&self, path: &Path, storage: MetadataStorage) -> PathBuf {
-        let moved = metadata::Inspection::of(path).needed(storage);
+        let tag = metadata::commented_tag();
+        let moved = metadata::Inspection::of(path).needed(storage, tag.as_deref());
         if !moved.is_needed() {
             return path.to_path_buf();
         }
         // Parsing with XMP storage for both reads both homes: the text file and the name
         // first, XMP where they are empty.
-        let both_homes = MetadataStorage { comment: CommentStorage::Xmp, in_out: InOutStorage::Xmp };
+        let both_homes = MetadataStorage { comment: CommentStorage::InVideo, in_out: InOutStorage::InVideo };
         let snapshot = self.parse_with(path, &FolderInfo::default(), both_homes);
+        let snapshot = metadata::with_commented_tag(&snapshot, storage, tag.as_deref()).unwrap_or(snapshot);
         let new_path = self.save_with(&snapshot, path, storage);
         metadata::clear_moved_xmp(&new_path, moved, storage);
         log::info!("metadata: converted {:?} → {:?} ({:?})", path, new_path, moved);
@@ -179,7 +195,7 @@ mod tests {
     use super::*;
 
     const ADOBE: MetadataStorage =
-        MetadataStorage { comment: CommentStorage::Xmp, in_out: InOutStorage::Xmp };
+        MetadataStorage { comment: CommentStorage::InVideo, in_out: InOutStorage::InVideo };
     const FILE_NAME: MetadataStorage =
         MetadataStorage { comment: CommentStorage::TextFile, in_out: InOutStorage::FileName };
 
@@ -269,10 +285,11 @@ mod tests {
         let path = clip_named("convert", "goat.in_00_00_00.mov");
         crate::comment::save_comment(&path, "old comment");
 
+        // Comments in XMP also tag the name (the default commented tag).
         let needed = tagger.metadata_conversion(&path, ADOBE);
-        assert_eq!(needed, FileConversion { comment: true, in_out: true });
+        assert_eq!(needed, FileConversion { comment: true, in_out: true, commented_tag: true });
         let path = tagger.convert_metadata(&path, ADOBE);
-        assert_eq!(file_name(&path), "goat.mov");
+        assert_eq!(file_name(&path), "Commented.goat.mov");
         assert!(!crate::comment::comment_path(&path).exists());
         assert!(!tagger.metadata_conversion(&path, ADOBE).is_needed());
         let snapshot = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
@@ -280,10 +297,11 @@ mod tests {
         assert_eq!(snapshot.segment_start(), Some(0.0));
 
         // And back: the old copies leave the XMP, so nothing stale is left for Premiere.
+        // The tag is only managed while comments are in XMP, so it stays.
         let needed = tagger.metadata_conversion(&path, FILE_NAME);
-        assert_eq!(needed, FileConversion { comment: true, in_out: true });
+        assert_eq!(needed, FileConversion { comment: true, in_out: true, commented_tag: false });
         let path = tagger.convert_metadata(&path, FILE_NAME);
-        assert_eq!(file_name(&path), "goat.in_00_00_00.mov");
+        assert_eq!(file_name(&path), "Commented.goat.in_00_00_00.mov");
         assert_eq!(crate::comment::load_comment(&path), "old comment");
         assert!(!tagger.metadata_conversion(&path, FILE_NAME).is_needed());
 
@@ -317,5 +335,105 @@ mod tests {
         crate::comment::save_comment(&path, "text");
         assert!(!tagger.metadata_conversion(&path, FILE_NAME).is_needed());
         assert_eq!(tagger.convert_metadata(&path, FILE_NAME), path);
+    }
+
+    /// Folder info as a scan builds it: the listing's sizes and times, and the tag file's list.
+    fn scan_info(folder: &Path) -> FolderInfo {
+        let mut names = Vec::new();
+        let mut stats = std::collections::HashMap::new();
+        for entry in std::fs::read_dir(folder).expect("folder").flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let metadata = entry.metadata().expect("metadata");
+            if metadata.is_file() {
+                let modified = crate::metadata::cache::modified_ms(metadata.modified().expect("time"));
+                stats.insert(name.clone(), (metadata.len(), modified));
+            }
+            names.push(name);
+        }
+        FolderInfo::for_scan(names, stats, crate::FolderTagStore::read_file_cache(folder))
+    }
+
+    /// A clip whose XMP holds `comment`, written as the app would.
+    fn commented_clip(test: &str, comment: &str) -> PathBuf {
+        let tagger = ProductionFileTagger;
+        let path = clip_named(test, "goat.mov");
+        let mut snapshot = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
+        snapshot.set_comment(comment.to_string());
+        tagger.save_with(&snapshot, &path, ADOBE)
+    }
+
+    #[test]
+    fn a_scan_takes_xmp_from_the_file_list_and_defers_the_rest() {
+        let tagger = ProductionFileTagger;
+        let path = commented_clip("scan-cache", "goat");
+        let folder = path.parent().expect("folder").to_path_buf();
+
+        // Saving recorded the file in the list, so the scan knows its comment unopened.
+        let hit = tagger.parse_with(&path, &scan_info(&folder), ADOBE);
+        assert!(!hit.comment_loading());
+        assert_eq!(hit.comment(), "goat");
+
+        // Without a line for it, the scan leaves the file for later rather than opening it.
+        crate::FolderTagStore::update_file_cache(&folder, &[file_name(&path).to_string()], Vec::new());
+        let miss = tagger.parse_with(&path, &scan_info(&folder), ADOBE);
+        assert!(miss.comment_loading());
+        assert_eq!(miss.comment(), "");
+
+        // Reading it later gives the comment, and records it for the next scan.
+        let items = [(path.clone(), miss)];
+        let resolved = tagger.load_comments(&items);
+        assert_eq!(resolved[0].comment(), "goat");
+        assert!(!resolved[0].comment_loading());
+        assert_eq!(tagger.parse_with(&path, &scan_info(&folder), ADOBE).comment(), "goat");
+    }
+
+    #[test]
+    fn a_line_that_no_longer_matches_the_file_is_not_trusted() {
+        let tagger = ProductionFileTagger;
+        let path = commented_clip("scan-stale", "goat");
+        let folder = path.parent().expect("folder").to_path_buf();
+        let mut line = crate::FolderTagStore::read_file_cache(&folder).pop().expect("line");
+        line.size += 1;
+        line.comment = "stale".into();
+        crate::FolderTagStore::update_file_cache(&folder, &[], vec![line]);
+
+        let snapshot = tagger.parse_with(&path, &scan_info(&folder), ADOBE);
+        assert!(snapshot.comment_loading(), "a changed file is read again");
+    }
+
+    #[test]
+    fn a_comment_edited_in_the_file_list_is_shown_and_saved_into_the_video() {
+        let tagger = ProductionFileTagger;
+        let path = commented_clip("scan-ai-edit", "goat");
+        let folder = path.parent().expect("folder").to_path_buf();
+        let mut line = crate::FolderTagStore::read_file_cache(&folder).pop().expect("line");
+        line.comment = "edited by hand".into();
+        crate::FolderTagStore::update_file_cache(&folder, &[], vec![line]);
+
+        let snapshot = tagger.parse_with(&path, &scan_info(&folder), ADOBE);
+        assert_eq!(snapshot.comment(), "edited by hand");
+        let path = tagger.save_with(&snapshot, &path, ADOBE);
+        assert_eq!(tagger.parse_with(&path, &FolderInfo::default(), ADOBE).comment(), "edited by hand");
+    }
+
+    #[test]
+    fn saving_a_file_whose_xmp_was_not_read_keeps_its_comment_and_tag() {
+        let tagger = ProductionFileTagger;
+        let path = commented_clip("scan-pending-save", "goat");
+        let path = {
+            // The default commented tag is in the name now.
+            let snapshot = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
+            let snapshot = crate::metadata::with_commented_tag(&snapshot, ADOBE, Some("Commented")).unwrap_or(snapshot);
+            tagger.save_with(&snapshot, &path, ADOBE)
+        };
+        let folder = path.parent().expect("folder").to_path_buf();
+        crate::FolderTagStore::update_file_cache(&folder, &[file_name(&path).to_string()], Vec::new());
+
+        let pending = tagger.parse_with(&path, &scan_info(&folder), ADOBE);
+        assert!(pending.comment_loading());
+        assert!(crate::metadata::with_commented_tag(&pending, ADOBE, Some("Commented")).is_none());
+        let path = tagger.save_with(&pending, &path, ADOBE);
+        assert_eq!(file_name(&path), "Commented.goat.mov", "tag kept");
+        assert_eq!(tagger.parse_with(&path, &FolderInfo::default(), ADOBE).comment(), "goat", "comment kept");
     }
 }

@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use iced::widget::text_editor;
-use frename_core::{ConversionReport, File, FileId, FileSnapshot, FolderAndFile, MetadataStorage};
+use frename_core::{ConversionPlan, ConversionReport, File, FileId, FileSnapshot, FolderAndFile};
 
 use super::Directory;
 use crate::features::{file_name_panel, folder, media_viewer, sync_panel, tag_panel};
@@ -92,13 +92,30 @@ pub enum Message {
     ScreenshotTaken(u64, Vec<u8>),
     /// Open a native file picker dialog so the user can choose a file to open.
     OpenFilePicker,
-    /// Move every file's comment and in/out points in the open folder into this storage.
-    ConvertMetadata(MetadataStorage),
+    /// Move the comments and in/out points of the plan's files into its storage.
+    ConvertMetadata(ConversionPlan),
+    /// Stop a running conversion after the batch in progress.
+    CancelConversion,
+    /// A batch of the running conversion finished (internal).
+    ConversionBatchDone(ConversionReport),
+    /// How far the running conversion is: `done` of `total` files. Read by the app, which
+    /// shows it in the settings window.
+    ConversionProgress { done: usize, total: usize },
+    /// Background load of comments the folder scan deferred (internal). `generation` ties the
+    /// batch to the folder it was started for; `results` are `(id, path loaded, snapshot)`.
+    CommentBatchLoaded {
+        generation: u64,
+        results: Vec<(FileId, PathBuf, FileSnapshot)>,
+    },
+    /// Advance the loading spinner in the folder list (internal, only while files load).
+    SpinnerTick,
     /// Folder conversion finished (internal): rescan `folder` and reselect `selected`,
     /// which is the selected file's path after the conversion.
     MetadataConverted {
         folder: PathBuf,
         selected: Option<PathBuf>,
         report: ConversionReport,
+        /// The conversion was cancelled before its last file.
+        cancelled: bool,
     },
 }

@@ -32,6 +32,10 @@ pub struct FileSnapshot {
     comment: String,
     /// Screenshot markers for this file (positions loaded from sidecar `.snap.*.jpg` files).
     screenshots: Vec<Screenshot>,
+    /// The comment and in/out points are stored inside the video and are still loading: a
+    /// folder scan defers that. Until they are loaded the snapshot does not know them, so
+    /// saving it leaves them as they are in the file.
+    comment_loading: bool,
 }
 
 impl FileSnapshot {
@@ -50,6 +54,7 @@ impl FileSnapshot {
             segment_end: None,
             comment: String::new(),
             screenshots: Vec::new(),
+            comment_loading: false,
         }
     }
 
@@ -74,6 +79,9 @@ impl FileSnapshot {
 
     pub fn screenshots(&self) -> &[Screenshot] { &self.screenshots }
     pub fn set_screenshots(&mut self, screenshots: Vec<Screenshot>) { self.screenshots = screenshots; }
+    /// Whether the comment and in/out points are still loading.
+    pub fn comment_loading(&self) -> bool { self.comment_loading }
+    pub fn set_comment_loading(&mut self, pending: bool) { self.comment_loading = pending; }
     pub fn add_screenshot(&mut self, screenshot: Screenshot) {
         if !self.screenshots.contains(&screenshot) {
             self.screenshots.push(screenshot);
@@ -186,6 +194,7 @@ impl Default for FileSnapshot {
             segment_end: None,
             comment: String::new(),
             screenshots: Vec::new(),
+            comment_loading: false,
         }
     }
 }

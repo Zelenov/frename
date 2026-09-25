@@ -66,18 +66,29 @@ pub(super) fn probe(path: &Path) -> Option<XmpFields> {
     if is_cloud_placeholder(path) {
         return None;
     }
+    // MOV/MP4: read the packet straight from its box, which a folder scan needs to be fast.
+    if let Some(packet) = super::bmff::find_xmp_packet(path) {
+        let meta = packet.and_then(|packet| packet.parse::<XmpMeta>().ok());
+        return Some(meta.map(|meta| fields_of(&meta)).unwrap_or_default());
+    }
+    probe_with_toolkit(path)
+}
+
+/// [`probe`] through the XMP Toolkit's file handlers, for every format they know.
+fn probe_with_toolkit(path: &Path) -> Option<XmpFields> {
     let mut file = open(path, OpenFileOptions::default().for_read()).ok()?;
-    let fields = file
-        .xmp()
-        .map(|meta| XmpFields {
-            comment: description(&meta),
-            segment: in_out_range(&meta)
-                .map(|range| range.to_segment(clip_duration_ms(&meta)))
-                .unwrap_or_default(),
-        })
-        .unwrap_or_default();
+    let fields = file.xmp().map(|meta| fields_of(&meta)).unwrap_or_default();
     file.close();
     Some(fields)
+}
+
+fn fields_of(meta: &XmpMeta) -> XmpFields {
+    XmpFields {
+        comment: description(meta),
+        segment: in_out_range(meta)
+            .map(|range| range.to_segment(clip_duration_ms(meta)))
+            .unwrap_or_default(),
+    }
 }
 
 /// Write the given fields into the file's XMP; `None` leaves a field as it is. An empty
@@ -405,5 +416,42 @@ mod tests {
         assert_eq!(segment(Some(2.0), Some(1.0)).range_ms(None), None);
         assert_eq!(segment(Some(1.0), None).range_ms(None), None);
         assert_eq!(segment(None, None).range_ms(Some(5000)), None);
+    }
+
+    #[test]
+    fn the_fast_reader_sees_what_the_toolkit_wrote() {
+        let file = copy_of_clip("fast-read");
+        assert!(super::super::bmff::find_xmp_packet(&file).expect("a MOV").is_none(), "no XMP yet");
+
+        write(&file, Some("Козёл 🐐"), Some(segment(Some(0.05), Some(0.15)))).expect("write");
+        let fast = probe(&file).expect("fields");
+        assert_eq!(fast, probe_with_toolkit(&file).expect("fields"));
+        assert_eq!(fast.comment, "Козёл 🐐");
+        assert_eq!(fast.segment, segment(Some(0.05), Some(0.15)));
+    }
+
+    #[test]
+    fn files_that_are_not_mov_or_mp4_are_left_to_the_toolkit() {
+        let file = copy_of_clip("not-bmff").with_file_name("clip.mp4");
+        std::fs::write(&file, b"definitely not a movie").expect("write");
+        assert!(super::super::bmff::find_xmp_packet(&file).is_none());
+    }
+
+    /// Compares the fast reader with the toolkit on every video of a real folder.
+    /// Run with `FRENAME_XMP_DIR=<folder> cargo test -p frename-core -- --ignored fast_reader`.
+    #[test]
+    #[ignore]
+    fn fast_reader_matches_the_toolkit_on_a_real_folder() {
+        let Ok(dir) = std::env::var("FRENAME_XMP_DIR") else { return };
+        let mut compared = 0;
+        for entry in std::fs::read_dir(dir).expect("folder").flatten() {
+            let path = entry.path();
+            if super::super::bmff::find_xmp_packet(&path).is_none() {
+                continue;
+            }
+            assert_eq!(probe(&path), probe_with_toolkit(&path), "{}", path.display());
+            compared += 1;
+        }
+        println!("compared {compared} files");
     }
 }

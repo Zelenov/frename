@@ -29,6 +29,20 @@ pub trait FileTaggerBackend: Send + Sync {
             || crate::FolderTagStore::is_tag_file(path)
     }
 
+    /// Load the comments a folder scan deferred (see [`FileSnapshot::comment_loading`]) for
+    /// each `(path, snapshot)`, returning the snapshots in the same order. Backends that keep
+    /// no comments inside videos have nothing to load.
+    fn load_comments(&self, items: &[(PathBuf, FileSnapshot)]) -> Vec<FileSnapshot> {
+        items
+            .iter()
+            .map(|(_, snapshot)| {
+                let mut resolved = snapshot.clone();
+                resolved.set_comment_loading(false);
+                resolved
+            })
+            .collect()
+    }
+
     /// What converting the file's comment and in/out points to `storage` would move.
     /// Backends that never touch the disk have nothing to convert.
     fn metadata_conversion(&self, _path: &Path, _storage: MetadataStorage) -> FileConversion {
