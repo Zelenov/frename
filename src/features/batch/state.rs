@@ -354,11 +354,15 @@ mod tests {
     }
 
     #[test]
-    fn actions_that_are_not_available_do_not_start() {
+    fn every_action_runs_and_none_runs_without_files() {
         let mut batch = state();
+        assert!(!batch.start(Vec::new()), "nothing checked");
+        for action in Action::ALL {
+            batch.update(Message::SelectAction(action));
+            assert_eq!(batch.operation().map(|op| op.action()), Some(action));
+        }
         batch.update(Message::SelectAction(Action::FixTags));
-        assert!(!batch.start(ids(2)));
-        assert!(!batch.start(Vec::new()));
+        assert!(batch.start(ids(2)));
     }
 
     #[test]

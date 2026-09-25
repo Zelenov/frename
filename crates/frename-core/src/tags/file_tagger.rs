@@ -11,6 +11,8 @@ use super::file_snapshot::FileSnapshot;
 use super::file_tagger_backend::FileTaggerBackend;
 use super::folder_info::FolderInfo;
 use super::in_memory_file_tagger::InMemoryFileTagger;
+use super::folder_tag_store::FolderTagStore;
+use super::tag_list::TagList;
 use crate::metadata::{MetadataMove, MoveOutcome};
 
 static BACKEND: OnceLock<Box<dyn FileTaggerBackend>> = OnceLock::new();
@@ -54,7 +56,35 @@ impl FileTagger {
             tags.push(tag.to_string());
         }
         snapshot.set_tags(tags);
-        let new_path = Self::save(&snapshot, path);
+        Self::renamed(Self::save(&snapshot, path), path)
+    }
+
+    /// Put the tags in the file's name in the folder's tag order (the tag panel's order), as the
+    /// tag panel's "sync down" does for the open file. Returns the outcome like a move.
+    pub fn sort_tags_by_folder_order(path: &Path) -> MoveOutcome {
+        let Some(folder) = path.parent() else {
+            return MoveOutcome::NothingToMove;
+        };
+        let mut snapshot = Self::parse(path, &FolderInfo::default());
+        let mut list = TagList::new(FolderTagStore::for_folder(folder), snapshot.clone());
+        list.sync_display_to_selected();
+        let sorted = list.file_snapshot().tags().to_vec();
+        if sorted == snapshot.tags() {
+            return MoveOutcome::NothingToMove;
+        }
+        snapshot.set_tags(sorted);
+        Self::renamed(Self::save(&snapshot, path), path)
+    }
+
+    /// Read the comment and in/out points of the file at `path` from the file again, replacing
+    /// what the folder's file list cached for it. Returns whether the cached values were missing
+    /// or stale.
+    pub fn reload_metadata(path: &Path) -> bool {
+        backend().reload_metadata(path)
+    }
+
+    /// The outcome of a save that must rename `path`: a save that failed keeps the old path.
+    fn renamed(new_path: PathBuf, path: &Path) -> MoveOutcome {
         if new_path == path {
             MoveOutcome::Failed(new_path)
         } else {
@@ -126,6 +156,26 @@ impl SaveAndReparse for FileSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{StoredTag, StoredTagStore};
+
+    /// Tags follow the folder's order; a file already in order is left alone.
+    #[test]
+    fn tags_are_sorted_in_the_folder_order() {
+        let folder = std::env::temp_dir().join(format!("frename-sort-test-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).expect("temp dir");
+        let mut store = FolderTagStore::for_folder(&folder);
+        // Orders after the built-in tags', Zeta first.
+        store.save_tag(StoredTag::with_all(uuid::Uuid::new_v4(), "Zeta", 1_000_000, false), 0).expect("save");
+        store.save_tag(StoredTag::with_all(uuid::Uuid::new_v4(), "Alpha", 2_000_000, false), 1).expect("save");
+
+        let path = folder.join("Alpha.Zeta.clip.mp4");
+        let MoveOutcome::Moved(sorted) = FileTagger::sort_tags_by_folder_order(&path) else {
+            panic!("the tags must be reordered");
+        };
+        assert_eq!(sorted, folder.join("Zeta.Alpha.clip.mp4"));
+        assert_eq!(FileTagger::sort_tags_by_folder_order(&sorted), MoveOutcome::NothingToMove);
+        let _ = std::fs::remove_dir_all(&folder);
+    }
 
     /// Core tests run with the default in-memory backend, so paths need not exist.
     #[test]

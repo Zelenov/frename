@@ -50,6 +50,21 @@ pub(crate) fn refresh_after_save(old: &Path, new: &Path, storage: MetadataStorag
     }
 }
 
+/// Drop the file list's line for the file at `path` and read one from the file again. Returns
+/// whether the line changed: it was missing, or no longer matched the file.
+pub(crate) fn reload_line(path: &Path) -> bool {
+    let (Some(folder), Some(name)) = (path.parent(), path.file_name().and_then(|n| n.to_str())) else {
+        return false;
+    };
+    let old = FolderTagStore::read_file_cache(folder).into_iter().find(|line| line.name == name);
+    let new = line_for(path).map(|(line, _)| line);
+    if old == new {
+        return false;
+    }
+    FolderTagStore::update_file_cache(folder, &[name.to_string()], new.into_iter().collect());
+    true
+}
+
 /// Read the XMP a folder scan deferred for each `(path, snapshot)`, once per file, and record
 /// what was read in the file list in one write per folder. Returns the resolved snapshots in
 /// the same order.

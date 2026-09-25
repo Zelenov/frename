@@ -3,11 +3,13 @@
 //! file. This module only lists them and dispatches to them; the checked files and the job
 //! that runs an action over them are shared (see [`super::state`]).
 //!
-//! Adding an action: a module with `Options` (+ `Message`/`update` when it has settings),
-//! `view`, `operation` and `run`, then one line in each match below.
+//! Adding an action: a module with `LABEL`, `view` and `run` (plus `Options` with `Message`
+//! and `update` when it has settings), then one line in each match below.
 
+mod fix_tags;
 mod move_comments;
 mod move_in_out;
+mod reload_files;
 mod tag_commented;
 
 use std::path::{Path, PathBuf};
@@ -19,45 +21,29 @@ use iced::Element;
 use super::{ItemResult, ItemStatus};
 use crate::theme;
 
-/// An entry of the action list, including the ones not built yet.
+/// An entry of the action list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     MoveComments,
     MoveInOut,
     TagCommented,
     FixTags,
-    SubtitlesToComment,
-    TagShortVideos,
     ReloadFiles,
 }
 
 impl Action {
     /// Every action, in list order.
-    pub const ALL: [Action; 7] = [
-        Action::MoveComments,
-        Action::MoveInOut,
-        Action::TagCommented,
-        Action::FixTags,
-        Action::SubtitlesToComment,
-        Action::TagShortVideos,
-        Action::ReloadFiles,
-    ];
+    pub const ALL: [Action; 5] =
+        [Action::MoveComments, Action::MoveInOut, Action::TagCommented, Action::FixTags, Action::ReloadFiles];
 
     pub fn label(self) -> &'static str {
         match self {
             Self::MoveComments => move_comments::LABEL,
             Self::MoveInOut => move_in_out::LABEL,
             Self::TagCommented => tag_commented::LABEL,
-            Self::FixTags => "Fix tags by priority",
-            Self::SubtitlesToComment => "Subtitles into comment",
-            Self::TagShortVideos => "Tag short videos",
-            Self::ReloadFiles => "Reset cache and reload",
+            Self::FixTags => fix_tags::LABEL,
+            Self::ReloadFiles => reload_files::LABEL,
         }
-    }
-
-    /// Whether the action is built. The others are listed to show what is coming.
-    pub fn is_available(self) -> bool {
-        matches!(self, Self::MoveComments | Self::MoveInOut | Self::TagCommented)
     }
 }
 
@@ -67,6 +53,8 @@ pub enum Operation {
     MoveComments(CommentStorage),
     MoveInOut(InOutStorage),
     TagCommented,
+    FixTags,
+    ReloadFiles,
 }
 
 impl Operation {
@@ -76,6 +64,8 @@ impl Operation {
             Self::MoveComments(to) => move_comments::run(to, path),
             Self::MoveInOut(to) => move_in_out::run(to, path),
             Self::TagCommented => tag_commented::run(path),
+            Self::FixTags => fix_tags::run(path),
+            Self::ReloadFiles => reload_files::run(path),
         }
     }
 
@@ -85,6 +75,8 @@ impl Operation {
             Self::MoveComments(_) => Action::MoveComments,
             Self::MoveInOut(_) => Action::MoveInOut,
             Self::TagCommented => Action::TagCommented,
+            Self::FixTags => Action::FixTags,
+            Self::ReloadFiles => Action::ReloadFiles,
         }
     }
 }
@@ -120,7 +112,7 @@ impl Actions {
         match operation {
             Operation::MoveComments(to) => self.move_comments.prepare(to),
             Operation::MoveInOut(to) => self.move_in_out.prepare(to),
-            Operation::TagCommented => {}
+            Operation::TagCommented | Operation::FixTags | Operation::ReloadFiles => {}
         }
     }
 
@@ -130,7 +122,8 @@ impl Actions {
             Action::MoveComments => Some(self.move_comments.operation()),
             Action::MoveInOut => Some(self.move_in_out.operation()),
             Action::TagCommented => tag_commented::operation(),
-            Action::FixTags | Action::SubtitlesToComment | Action::TagShortVideos | Action::ReloadFiles => None,
+            Action::FixTags => Some(Operation::FixTags),
+            Action::ReloadFiles => Some(Operation::ReloadFiles),
         }
     }
 
@@ -140,7 +133,8 @@ impl Actions {
             Action::MoveComments => self.move_comments.view().map(ActionMessage::MoveComments),
             Action::MoveInOut => self.move_in_out.view().map(ActionMessage::MoveInOut),
             Action::TagCommented => tag_commented::view(),
-            other => panel(other.label(), "Not available yet.".to_string(), column![].into()),
+            Action::FixTags => fix_tags::view(),
+            Action::ReloadFiles => reload_files::view(),
         }
     }
 }

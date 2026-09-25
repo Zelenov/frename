@@ -70,7 +70,7 @@ impl SettingsState {
             // Opened by the app, which owns the folder; the offer is taken.
             Message::OpenBatchAction(Operation::MoveComments(_)) => self.comment_storage_changed = false,
             Message::OpenBatchAction(Operation::MoveInOut(_)) => self.in_out_storage_changed = false,
-            Message::OpenBatchAction(Operation::TagCommented) => {}
+            Message::OpenBatchAction(Operation::TagCommented | Operation::FixTags | Operation::ReloadFiles) => {}
         }
     }
 }

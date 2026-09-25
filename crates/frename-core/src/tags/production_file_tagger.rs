@@ -175,6 +175,10 @@ impl FileTaggerBackend for ProductionFileTagger {
         new_path
     }
 
+    fn reload_metadata(&self, path: &Path) -> bool {
+        metadata::cache::reload_line(path)
+    }
+
     fn save_screenshot(&self, file_path: &Path, position_ms: u64, image_data: &[u8]) {
         let path = screenshot_path(file_path, position_ms);
         log::info!("save_screenshot: writing {} bytes to {:?}", image_data.len(), path);
@@ -433,6 +437,21 @@ mod tests {
 
         let snapshot = tagger.parse_with(&path, &scan_info(&folder), ADOBE);
         assert!(snapshot.comment_loading(), "a changed file is read again");
+    }
+
+    #[test]
+    fn reloading_replaces_a_stale_line_and_leaves_a_good_one() {
+        let tagger = ProductionFileTagger;
+        let path = commented_clip("reload", "goat");
+        let folder = path.parent().expect("folder").to_path_buf();
+        assert!(!tagger.reload_metadata(&path), "saving wrote a matching line");
+
+        let mut line = crate::FolderTagStore::read_file_cache(&folder).pop().expect("line");
+        line.comment = "stale".into();
+        crate::FolderTagStore::update_file_cache(&folder, &[], vec![line]);
+        assert!(tagger.reload_metadata(&path));
+        let line = crate::FolderTagStore::read_file_cache(&folder).pop().expect("line");
+        assert_eq!(line.comment, "goat", "read again from the video");
     }
 
     #[test]

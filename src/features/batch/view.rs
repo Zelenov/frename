@@ -61,13 +61,13 @@ pub fn view<'a>(state: &'a BatchState, directory: Option<&'a Directory>) -> Elem
         .into()
 }
 
-/// One entry of the action list. Actions that are not available yet are shown, but disabled.
+/// One entry of the action list.
 fn action_entry(action: Action, selected: Action) -> Element<'static, Message> {
     button(text(action.label()).size(13))
-        .on_press_maybe(action.is_available().then_some(Message::SelectAction(action)))
+        .on_press(Message::SelectAction(action))
         .width(Length::Fill)
         .padding([6, 10])
-        .style(theme::list_item_button_style(action == selected, action.is_available()))
+        .style(theme::list_item_button_style(action == selected, true))
         .into()
 }
 

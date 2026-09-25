@@ -56,6 +56,13 @@ pub trait FileTaggerBackend: Send + Sync {
         path.to_path_buf()
     }
 
+    /// Read the file's comment and in/out points again and replace the folder file list's line
+    /// for it. Returns whether the line was missing or stale. Backends that never touch the
+    /// disk keep no file list.
+    fn reload_metadata(&self, _path: &Path) -> bool {
+        false
+    }
+
     /// Where the file at `path` is on disk. A backend that renames files only in memory
     /// keeps the files where they were; reading one (e.g. to play it) must use this path.
     fn disk_path(&self, path: &Path) -> PathBuf {
