@@ -66,8 +66,12 @@ impl StoredTagStore for FakeAppStorage {
         Ok(tags)
     }
 
-    fn get_tag_color_mapping(&self) -> Result<TagColorMapping, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(TagColorMapping::from_entries(self.tag_colors.clone().into_iter()))
+    fn get_tag_color_mapping(
+        &self,
+    ) -> Result<TagColorMapping, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(TagColorMapping::from_entries(
+            self.tag_colors.clone().into_iter(),
+        ))
     }
 
     fn save_tag(
@@ -80,7 +84,10 @@ impl StoredTagStore for FakeAppStorage {
         Ok(())
     }
 
-    fn remove_stored_tag_by_id(&mut self, tag_id: Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    fn remove_stored_tag_by_id(
+        &mut self,
+        tag_id: Uuid,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let Some(tag) = self.stored_tags.get(&tag_id) {
             self.tag_colors.remove(tag.value());
         }
@@ -94,7 +101,8 @@ impl StoredTagStore for FakeAppStorage {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         for (id, order) in tag_orders {
             if let Some(tag) = self.stored_tags.get(id) {
-                let updated = StoredTag::with_all(*id, tag.value().to_string(), *order, tag.starred());
+                let updated =
+                    StoredTag::with_all(*id, tag.value().to_string(), *order, tag.starred());
                 self.stored_tags.insert(*id, updated);
             }
         }

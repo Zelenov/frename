@@ -9,7 +9,10 @@
 
 use iced::{event, keyboard, window, Element, Subscription, Task};
 
-use crate::features::{batch, drag_drop, folder, folder_workspace, media_viewer, media_viewer::video as media_viewer_video, settings, tag_panel};
+use crate::features::{
+    batch, drag_drop, folder, folder_workspace, media_viewer,
+    media_viewer::video as media_viewer_video, settings, tag_panel,
+};
 use crate::tag_colors::TagPalette;
 use frename_core::{AppDatabase, AppStateStore, WindowGeometry};
 
@@ -30,7 +33,9 @@ fn ctrl_v_paste_tags_handler(
     }) = ev
     {
         if c.as_ref() == "v" && modifiers.command() {
-            return Some(Message::FolderWorkspace(folder_workspace::Message::PasteTags));
+            return Some(Message::FolderWorkspace(
+                folder_workspace::Message::PasteTags,
+            ));
         }
     }
     None
@@ -65,9 +70,9 @@ fn main_window_event(
             key: keyboard::Key::Named(keyboard::key::Named::Space),
             ..
         }) if matches!(status, event::Status::Ignored) => Some(Message::FolderWorkspace(
-            folder_workspace::Message::MediaViewer(
-                media_viewer::Message::Video(media_viewer_video::Message::TogglePause),
-            ),
+            folder_workspace::Message::MediaViewer(media_viewer::Message::Video(
+                media_viewer_video::Message::TogglePause,
+            )),
         )),
         // F5 toggles fullscreen for the media viewer.
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
@@ -103,7 +108,9 @@ fn main_window_event(
             ..
         }) => {
             if matches!(status, event::Status::Ignored) {
-                Some(Message::FolderWorkspace(folder_workspace::Message::SaveSelectedTag))
+                Some(Message::FolderWorkspace(
+                    folder_workspace::Message::SaveSelectedTag,
+                ))
             } else {
                 Some(Message::Noop)
             }
@@ -130,49 +137,27 @@ fn main_window_event(
             }
             if let keyboard::Key::Named(name) = key.as_ref() {
                 let msg = match name {
-                    keyboard::key::Named::ArrowLeft => {
-                        Some(Message::FolderWorkspace(
-                            folder_workspace::Message::TagPanel(
-                                tag_panel::Message::SelectLeft,
-                            ),
-                        ))
-                    }
-                    keyboard::key::Named::ArrowRight => {
-                        Some(Message::FolderWorkspace(
-                            folder_workspace::Message::TagPanel(
-                                tag_panel::Message::SelectRight,
-                            ),
-                        ))
-                    }
-                    keyboard::key::Named::ArrowUp => {
-                        Some(Message::FolderWorkspace(
-                            folder_workspace::Message::TagPanel(
-                                tag_panel::Message::SelectUp,
-                            ),
-                        ))
-                    }
-                    keyboard::key::Named::ArrowDown => {
-                        Some(Message::FolderWorkspace(
-                            folder_workspace::Message::TagPanel(
-                                tag_panel::Message::SelectDown,
-                            ),
-                        ))
-                    }
-                    keyboard::key::Named::PageUp => {
-                        Some(Message::FolderWorkspace(
-                            folder_workspace::Message::Folder(folder::Message::PreviousFile),
-                        ))
-                    }
-                    keyboard::key::Named::PageDown => {
-                        Some(Message::FolderWorkspace(
-                            folder_workspace::Message::Folder(folder::Message::NextFile),
-                        ))
-                    }
-                    keyboard::key::Named::Delete => {
-                        Some(Message::FolderWorkspace(
-                            folder_workspace::Message::RemoveTag,
-                        ))
-                    }
+                    keyboard::key::Named::ArrowLeft => Some(Message::FolderWorkspace(
+                        folder_workspace::Message::TagPanel(tag_panel::Message::SelectLeft),
+                    )),
+                    keyboard::key::Named::ArrowRight => Some(Message::FolderWorkspace(
+                        folder_workspace::Message::TagPanel(tag_panel::Message::SelectRight),
+                    )),
+                    keyboard::key::Named::ArrowUp => Some(Message::FolderWorkspace(
+                        folder_workspace::Message::TagPanel(tag_panel::Message::SelectUp),
+                    )),
+                    keyboard::key::Named::ArrowDown => Some(Message::FolderWorkspace(
+                        folder_workspace::Message::TagPanel(tag_panel::Message::SelectDown),
+                    )),
+                    keyboard::key::Named::PageUp => Some(Message::FolderWorkspace(
+                        folder_workspace::Message::Folder(folder::Message::PreviousFile),
+                    )),
+                    keyboard::key::Named::PageDown => Some(Message::FolderWorkspace(
+                        folder_workspace::Message::Folder(folder::Message::NextFile),
+                    )),
+                    keyboard::key::Named::Delete => Some(Message::FolderWorkspace(
+                        folder_workspace::Message::RemoveTag,
+                    )),
                     _ => None,
                 };
                 if msg.is_some() {
@@ -180,9 +165,10 @@ fn main_window_event(
                 }
             }
             let k = match key.as_ref() {
-                keyboard::Key::Character(c) => {
-                    c.chars().next().map(folder_workspace::GlobalSearchKey::Char)
-                }
+                keyboard::Key::Character(c) => c
+                    .chars()
+                    .next()
+                    .map(folder_workspace::GlobalSearchKey::Char),
                 keyboard::Key::Named(keyboard::key::Named::Backspace) => {
                     Some(folder_workspace::GlobalSearchKey::Backspace)
                 }
@@ -192,9 +178,7 @@ fn main_window_event(
                 _ => None,
             };
             k.map(|key| {
-                Message::FolderWorkspace(
-                    folder_workspace::Message::FocusSearchBarAndKey(key),
-                )
+                Message::FolderWorkspace(folder_workspace::Message::FocusSearchBarAndKey(key))
             })
         }
         _ => None,
@@ -254,9 +238,13 @@ impl FrenameApp {
             settings_window: None,
             window_icon,
             window_pos: saved.map(|g| (g.x, g.y)).unwrap_or((0.0, 0.0)),
-            window_size: saved.map(|g| (g.width, g.height)).unwrap_or((1200.0, 600.0)),
+            window_size: saved
+                .map(|g| (g.width, g.height))
+                .unwrap_or((1200.0, 600.0)),
             is_maximized: saved.map(|g| g.is_maximized).unwrap_or(false),
-            monitor_size: saved.map(|g| (g.monitor_width, g.monitor_height)).unwrap_or((0.0, 0.0)),
+            monitor_size: saved
+                .map(|g| (g.monitor_width, g.monitor_height))
+                .unwrap_or((0.0, 0.0)),
         }
     }
 }
@@ -292,24 +280,33 @@ impl FrenameApp {
                         frename_core::set_in_out_storage(storage);
                         Task::none()
                     }
-                    settings::Message::SetCommentedTag(_) | settings::Message::SetCommentedTagEnabled(_) => {
+                    settings::Message::SetCommentedTag(_)
+                    | settings::Message::SetCommentedTagEnabled(_) => {
                         // The field holds the cleaned tag by now.
-                        frename_core::set_commented_tag(self.settings.settings().effective_commented_tag());
+                        frename_core::set_commented_tag(
+                            self.settings.settings().effective_commented_tag(),
+                        );
                         Task::none()
                     }
                     settings::Message::OpenBatchAction(operation) => Task::batch([
-                        Task::done(Message::FolderWorkspace(folder_workspace::Message::PrepareBatch(operation))),
+                        Task::done(Message::FolderWorkspace(
+                            folder_workspace::Message::PrepareBatch(operation),
+                        )),
                         window::gain_focus(self.main_window),
                     ]),
                     settings::Message::SetAutoplayVideo(autoplay) => {
-                        Task::done(Message::FolderWorkspace(folder_workspace::Message::MediaViewer(
-                            media_viewer::Message::Video(media_viewer_video::Message::SetAutoplay(autoplay)),
-                        )))
+                        Task::done(Message::FolderWorkspace(
+                            folder_workspace::Message::MediaViewer(media_viewer::Message::Video(
+                                media_viewer_video::Message::SetAutoplay(autoplay),
+                            )),
+                        ))
                     }
                     settings::Message::SetMonochromeTags(_) => Task::none(),
                 }
             }
-            Message::FolderWorkspace(folder_workspace::Message::Folder(folder::Message::OpenSettings))
+            Message::FolderWorkspace(folder_workspace::Message::Folder(
+                folder::Message::OpenSettings,
+            ))
             | Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
                 batch::ActionMessage::OpenSettings,
             ))) => Task::done(Message::OpenSettings),
@@ -371,7 +368,10 @@ impl FrenameApp {
                     folder_workspace::Message::MediaViewer(media_viewer::Message::Unloaded)
                 );
                 let batch_finished = matches!(&msg, folder_workspace::Message::BatchFinished);
-                let task = self.folder_workspace.update(msg).map(Message::FolderWorkspace);
+                let task = self
+                    .folder_workspace
+                    .update(msg)
+                    .map(Message::FolderWorkspace);
                 // Closing waits for a batch job to stop; the file it reopens is unloaded then.
                 if batch_finished && self.pending_close.is_some() {
                     return Task::batch([task, self.close_pending()]);
@@ -387,11 +387,13 @@ impl FrenameApp {
     /// Close the window waiting to close, unloading a video first (it closes on `Unloaded`).
     fn close_pending(&mut self) -> Task<Message> {
         if self.folder_workspace.needs_media_unload() {
-            return Task::done(Message::FolderWorkspace(folder_workspace::Message::MediaViewer(
-                media_viewer::Message::Unload,
-            )));
+            return Task::done(Message::FolderWorkspace(
+                folder_workspace::Message::MediaViewer(media_viewer::Message::Unload),
+            ));
         }
-        self.pending_close.take().map_or_else(Task::none, window::close)
+        self.pending_close
+            .take()
+            .map_or_else(Task::none, window::close)
     }
 
     pub fn view(&self, window_id: window::Id) -> Element<'_, Message> {
@@ -399,7 +401,8 @@ impl FrenameApp {
             return settings::view::view(&self.settings).map(Message::Settings);
         }
         let tag_palette = TagPalette::from_monochrome(self.settings.settings().monochrome_tags);
-        folder_workspace::view::view(&self.folder_workspace, tag_palette).map(Message::FolderWorkspace)
+        folder_workspace::view::view(&self.folder_workspace, tag_palette)
+            .map(Message::FolderWorkspace)
     }
 
     /// Open the settings window, or focus it when it is already open.
@@ -475,9 +478,10 @@ impl FrenameApp {
         if self.settings_window == Some(window_id) {
             return String::from("Settings");
         }
-        self.folder_workspace
-            .current_file()
-            .map_or_else(|| String::from("frename"), |f| f.file_path().display().to_string())
+        self.folder_workspace.current_file().map_or_else(
+            || String::from("frename"),
+            |f| f.file_path().display().to_string(),
+        )
     }
 }
 

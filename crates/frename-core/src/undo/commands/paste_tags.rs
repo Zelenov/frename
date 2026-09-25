@@ -1,7 +1,7 @@
+use super::super::traits::Undoable;
+use super::super::{UndoContext, UndoError};
 use crate::db::{AppStateStore, StoredTagStore};
 use crate::FileSnapshot;
-use super::super::{UndoContext, UndoError};
-use super::super::traits::Undoable;
 
 /// Records a paste-tags operation (replaces all checked tags on the current file).
 pub struct PasteTagsCommand {
@@ -17,12 +17,14 @@ where
     ST: StoredTagStore + Clone,
 {
     fn undo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
-        ctx.tag_list.reinitialize_from_snapshot(self.snapshot_before.clone());
+        ctx.tag_list
+            .reinitialize_from_snapshot(self.snapshot_before.clone());
         Ok(())
     }
 
     fn redo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
-        ctx.tag_list.reinitialize_from_snapshot(self.snapshot_after.clone());
+        ctx.tag_list
+            .reinitialize_from_snapshot(self.snapshot_after.clone());
         Ok(())
     }
 }

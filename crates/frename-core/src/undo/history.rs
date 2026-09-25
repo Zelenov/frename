@@ -1,7 +1,7 @@
 use crate::db::{AppStateStore, StoredTagStore};
 
-use super::{UndoContext, UndoError};
 use super::traits::Undoable;
+use super::{UndoContext, UndoError};
 
 /// Undo/redo history stack. Owned by the app workspace; one instance per app run.
 ///

@@ -35,7 +35,10 @@ const UTF8_BOM: char = '\u{feff}';
 /// Load the comment file for a file. Returns empty string if absent or empty.
 pub fn load_comment(file_path: &Path) -> String {
     let text = std::fs::read_to_string(comment_path(file_path)).unwrap_or_default();
-    text.strip_prefix(UTF8_BOM).unwrap_or(&text).trim().to_string()
+    text.strip_prefix(UTF8_BOM)
+        .unwrap_or(&text)
+        .trim()
+        .to_string()
 }
 
 /// Save (or delete) the comment file for a file.
@@ -45,7 +48,11 @@ pub fn save_comment(file_path: &Path, comment: &str) {
     if trimmed.is_empty() {
         remove_comment_file(file_path);
     } else if let Err(e) = std::fs::write(comment_path(file_path), format!("{UTF8_BOM}{trimmed}")) {
-        log::error!("comment: failed to write comment file for {:?}: {}", file_path, e);
+        log::error!(
+            "comment: failed to write comment file for {:?}: {}",
+            file_path,
+            e
+        );
     }
 }
 
@@ -68,7 +75,9 @@ pub fn rename_comment_file(old_file_path: &Path, new_file_path: &Path) {
         if let Err(e) = std::fs::rename(&old_comment, &new_comment) {
             log::warn!(
                 "comment: failed to rename {:?} → {:?}: {}",
-                old_comment, new_comment, e
+                old_comment,
+                new_comment,
+                e
             );
         }
     }
@@ -79,7 +88,8 @@ mod tests {
     use super::*;
 
     fn temp_folder(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("frename-comment-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("frename-comment-{name}-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("temp dir");
         dir
     }

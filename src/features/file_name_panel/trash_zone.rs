@@ -25,9 +25,7 @@ pub fn view<'a, S>(
 where
     S: StoredTagStore + Clone,
 {
-    let trash_icon = text("🗑")
-        .size(20)
-        .color(theme::TEXT_MUTED);
+    let trash_icon = text("🗑").size(20).color(theme::TEXT_MUTED);
     let trash_bounds = BoundsReporter::new(Message::TrashBounds);
     let trash_square = container(stack![
         trash_bounds,
@@ -46,12 +44,7 @@ where
         .then(|| state.dragging_tag_id())
         .flatten()
         .and_then(|id| tag_list.get_tag(id))
-        .map(|tag| {
-            tag_chip::view_display_only(
-                tag.tag(),
-                tag_palette.color(tag.color_index()),
-            )
-        });
+        .map(|tag| tag_chip::view_display_only(tag.tag(), tag_palette.color(tag.color_index())));
 
     let tooltip_body = match tooltip_content {
         Some(chip) => chip,
@@ -62,14 +55,10 @@ where
     };
 
     let trash_zone = container(
-        tooltip(
-            trash_square,
-            tooltip_body,
-            tooltip::Position::Top,
-        )
-        .gap(4)
-        .delay(Duration::ZERO)
-        .snap_within_viewport(true),
+        tooltip(trash_square, tooltip_body, tooltip::Position::Top)
+            .gap(4)
+            .delay(Duration::ZERO)
+            .snap_within_viewport(true),
     )
     .width(Length::Fixed(TRASH_SIDE));
 

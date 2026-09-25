@@ -5,9 +5,7 @@ use iced::{event, mouse, Rectangle, Subscription};
 
 use frename_core::{StoredTagStore, TagId, TagList};
 
-use super::{
-    Message, TAG_CHIP_CELL_HEIGHT, TAG_CHIP_ESTIMATED_WIDTH, TAG_CHIP_SPACING,
-};
+use super::{Message, TAG_CHIP_CELL_HEIGHT, TAG_CHIP_ESTIMATED_WIDTH, TAG_CHIP_SPACING};
 
 #[derive(Default)]
 pub struct FileNamePanelState {
@@ -58,7 +56,10 @@ impl FileNamePanelState {
     }
 
     /// Current index of the dragged tag in the tag list's checked order (same as file name chips).
-    fn resolved_dragging_index<S: StoredTagStore + Clone>(&self, tag_list: &TagList<S>) -> Option<usize> {
+    fn resolved_dragging_index<S: StoredTagStore + Clone>(
+        &self,
+        tag_list: &TagList<S>,
+    ) -> Option<usize> {
         self.dragging_tag_id
             .and_then(|id| tag_list.checked_index_of(id))
     }
@@ -95,7 +96,10 @@ impl FileNamePanelState {
     pub fn update<S: StoredTagStore + Clone>(&mut self, message: Message, tag_list: &TagList<S>) {
         let tag_count = tag_list.file_snapshot().tags().len();
         match message {
-            Message::DragStarted { tag_id, initial_index } => {
+            Message::DragStarted {
+                tag_id,
+                initial_index,
+            } => {
                 self.set_dragging(tag_id, initial_index.min(tag_count.saturating_sub(1)));
             }
             Message::DragHoverCursor { x, y } => {

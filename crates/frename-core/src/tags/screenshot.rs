@@ -34,7 +34,9 @@ impl Screenshot {
     /// Parse a `HH-MM-SS-mmm` timecode string back to milliseconds.
     pub fn parse_time(s: &str) -> Option<u64> {
         let parts: Vec<&str> = s.split('-').collect();
-        if parts.len() != 4 { return None; }
+        if parts.len() != 4 {
+            return None;
+        }
         let h: u64 = parts[0].parse().ok()?;
         let m: u64 = parts[1].parse().ok()?;
         let sec: u64 = parts[2].parse().ok()?;

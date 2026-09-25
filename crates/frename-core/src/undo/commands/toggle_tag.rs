@@ -1,7 +1,7 @@
+use super::super::traits::Undoable;
+use super::super::{UndoContext, UndoError};
 use crate::db::{AppStateStore, StoredTagStore};
 use crate::TagId;
-use super::super::{UndoContext, UndoError};
-use super::super::traits::Undoable;
 
 /// Records a single tag toggle (check ↔ uncheck).
 /// Covers ToggleTag, ToggleSelectedTag (Space key), and UnselectTag (chip X click).

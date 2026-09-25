@@ -50,15 +50,12 @@ pub const SPLITTER: Color = Color::from_rgb(0.25, 0.25, 0.25);
 pub const SPLITTER_ACTIVE: Color = Color::from_rgb(0.40, 0.40, 0.40);
 
 /// Container style for panels (tag list, folder list, controls bars).
-pub fn panel_container_style(
-    _theme: &iced::Theme,
-) -> iced::widget::container::Style {
+pub fn panel_container_style(_theme: &iced::Theme) -> iced::widget::container::Style {
     iced::widget::container::Style {
         background: Some(Background::Color(BG_PANEL)),
         ..Default::default()
     }
 }
-
 
 /// Container style for tag list/grid rows: selected = accent tint matching selected chip border opacity, unselected = panel.
 pub fn tag_row_background_style(
@@ -91,9 +88,7 @@ pub fn selectable_row_style(
 }
 
 /// Container style for elevated surfaces (file name area).
-pub fn elevated_container_style(
-    _theme: &iced::Theme,
-) -> iced::widget::container::Style {
+pub fn elevated_container_style(_theme: &iced::Theme) -> iced::widget::container::Style {
     iced::widget::container::Style {
         background: Some(Background::Color(BG_ELEVATED)),
         ..Default::default()
@@ -101,9 +96,7 @@ pub fn elevated_container_style(
 }
 
 /// Container style for elevated surfaces with a visible border (e.g. search bar).
-pub fn elevated_container_bordered_style(
-    _theme: &iced::Theme,
-) -> iced::widget::container::Style {
+pub fn elevated_container_bordered_style(_theme: &iced::Theme) -> iced::widget::container::Style {
     iced::widget::container::Style {
         background: Some(Background::Color(BG_ELEVATED)),
         border: iced::Border {
@@ -116,9 +109,7 @@ pub fn elevated_container_bordered_style(
 }
 
 /// Fullscreen subtitle caption: dark translucent pill so text reads over any picture.
-pub fn subtitle_caption_style(
-    _theme: &iced::Theme,
-) -> iced::widget::container::Style {
+pub fn subtitle_caption_style(_theme: &iced::Theme) -> iced::widget::container::Style {
     iced::widget::container::Style {
         background: Some(Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.62))),
         border: iced::border::rounded(8),
@@ -127,9 +118,7 @@ pub fn subtitle_caption_style(
 }
 
 /// Fullscreen subtitle list panel: translucent so the picture stays visible behind it.
-pub fn subtitle_list_style(
-    _theme: &iced::Theme,
-) -> iced::widget::container::Style {
+pub fn subtitle_list_style(_theme: &iced::Theme) -> iced::widget::container::Style {
     iced::widget::container::Style {
         background: Some(Background::Color(Color::from_rgba(0.06, 0.06, 0.06, 0.72))),
         ..Default::default()
@@ -157,9 +146,7 @@ pub fn cue_row_style(
 }
 
 /// Container style for main app background.
-pub fn main_container_style(
-    _theme: &iced::Theme,
-) -> iced::widget::container::Style {
+pub fn main_container_style(_theme: &iced::Theme) -> iced::widget::container::Style {
     iced::widget::container::Style {
         background: Some(Background::Color(BG_MAIN)),
         ..Default::default()
@@ -206,7 +193,10 @@ pub fn list_item_button_style(
         iced::widget::button::Style {
             background: Some(Background::Color(bg)),
             text_color: if enabled { TEXT } else { TEXT_MUTED },
-            border: iced::Border { radius: 3.0.into(), ..iced::Border::default() },
+            border: iced::Border {
+                radius: 3.0.into(),
+                ..iced::Border::default()
+            },
             shadow: iced::Shadow::default(),
             snap: true,
         }
@@ -223,7 +213,10 @@ pub fn outcome_checkbox_style(
         iced::widget::checkbox::Style {
             background: Background::Color(color),
             icon_color: Color::WHITE,
-            border: iced::Border { color, ..style.border },
+            border: iced::Border {
+                color,
+                ..style.border
+            },
             ..style
         }
     }
@@ -291,9 +284,7 @@ pub fn dark_scrollable_style(
         gap: None,
         auto_scroll: AutoScroll {
             background: iced::Background::Color(BG_ELEVATED),
-            border: iced::border::rounded(u32::MAX)
-                .width(1)
-                .color(TEXT_MUTED),
+            border: iced::border::rounded(u32::MAX).width(1).color(TEXT_MUTED),
             shadow: iced::Shadow::default(),
             icon: TEXT_MUTED,
         },

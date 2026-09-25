@@ -25,7 +25,9 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         // A move usually brings files in line with the storage chosen in the settings.
-        Self { to: frename_core::metadata_storage().in_out }
+        Self {
+            to: frename_core::metadata_storage().in_out,
+        }
     }
 }
 
@@ -53,8 +55,13 @@ impl Options {
                 Message::SetTo,
             )
             .text_size(13),
-            radio("From the videos (XMP marker) into file names", InOutStorage::FileName, Some(self.to), Message::SetTo)
-                .text_size(13),
+            radio(
+                "From the videos (XMP marker) into file names",
+                InOutStorage::FileName,
+                Some(self.to),
+                Message::SetTo
+            )
+            .text_size(13),
         ]
         .spacing(8);
         super::panel(

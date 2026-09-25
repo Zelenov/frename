@@ -36,11 +36,14 @@ pub fn view<'a, S>(
 where
     S: frename_core::StoredTagStore + Clone,
 {
-    let file_name =
-        file_name_panel::view::view(file_name_panel_state, tag_list, tag_palette).map(Message::FileNamePanel);
+    let file_name = file_name_panel::view::view(file_name_panel_state, tag_list, tag_palette)
+        .map(Message::FileNamePanel);
     let filter = tag_list.filter_query();
-    let on_create = if !filter.trim().is_empty() && !file_workspace.has_tag_with_name(filter.trim()) {
-        Some(|text: String| Message::TagPanel(tag_panel::Message::CreateTag(text.trim().to_string())))
+    let on_create = if !filter.trim().is_empty() && !file_workspace.has_tag_with_name(filter.trim())
+    {
+        Some(|text: String| {
+            Message::TagPanel(tag_panel::Message::CreateTag(text.trim().to_string()))
+        })
     } else {
         None
     };
@@ -51,11 +54,14 @@ where
         || Message::TagPanel(tag_panel::Message::SetFilter(String::new())),
         on_create,
     );
-    let tag_grid = tag_grid::view::view(tag_panel_state, file_workspace.file(), tag_list, tag_palette)
-        .map(Message::TagPanel);
-    let tag_grid = container(tag_grid)
-        .height(Length::Fill)
-        .width(Length::Fill);
+    let tag_grid = tag_grid::view::view(
+        tag_panel_state,
+        file_workspace.file(),
+        tag_list,
+        tag_palette,
+    )
+    .map(Message::TagPanel);
+    let tag_grid = container(tag_grid).height(Length::Fill).width(Length::Fill);
 
     let sync: Element<'_, Message> =
         sync_panel::view::view(is_synced, sync_locked).map(Message::SyncPanel);

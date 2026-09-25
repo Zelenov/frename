@@ -33,8 +33,7 @@ pub fn view_display_only<'a, Message: 'a>(
     let label = text(tag_name)
         .size(14)
         .color(iced::Color::from_rgb(0.0, 0.0, 0.0));
-    let chip_inner = container(label)
-        .padding([CHIP_PADDING_VERTICAL, CHIP_PADDING_HORIZONTAL]);
+    let chip_inner = container(label).padding([CHIP_PADDING_VERTICAL, CHIP_PADDING_HORIZONTAL]);
     let style = move |_theme: &_| iced::widget::container::Style {
         background: Some(Background::Color(tag_color)),
         border: iced::border::rounded(2),
@@ -202,15 +201,9 @@ pub fn view_with_leading<Message: Clone + 'static>(
         Some((cell_height, is_dragging)) => {
             let lift_px = cell_height - row_height;
             let col = if is_dragging {
-                column![
-                    chip,
-                    container(space()).height(Length::Fixed(lift_px)),
-                ]
+                column![chip, container(space()).height(Length::Fixed(lift_px)),]
             } else {
-                column![
-                    container(space()).height(Length::Fixed(lift_px)),
-                    chip,
-                ]
+                column![container(space()).height(Length::Fixed(lift_px)), chip,]
             };
             col.into()
         }

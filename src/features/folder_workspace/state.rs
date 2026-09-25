@@ -8,21 +8,19 @@
 use std::path::PathBuf;
 
 use arboard;
-use rfd;
-use frename_core::{
-    AppDatabase, AppStateStore, File, FileId, FileSnapshot, FolderAndFile, FolderTagStore,
-    LoggingAppStateStore,
-    NavigateFileCommand, ReorderTagCommand, ToggleTagCommand, PasteTagsCommand,
-    DeleteTagCommand, CreateTagCommand, SaveTagCommand, StarTagCommand,
-    SetSegmentStartCommand, SetSegmentEndCommand,
-    SaveAndReparse, UndoContext, UndoError,
-};
 use frename_core::undo::History;
+use frename_core::{
+    AppDatabase, AppStateStore, CreateTagCommand, DeleteTagCommand, File, FileId, FileSnapshot,
+    FolderAndFile, FolderTagStore, LoggingAppStateStore, NavigateFileCommand, PasteTagsCommand,
+    ReorderTagCommand, SaveAndReparse, SaveTagCommand, SetSegmentEndCommand,
+    SetSegmentStartCommand, StarTagCommand, ToggleTagCommand, UndoContext, UndoError,
+};
+use rfd;
 
 use super::messages::GlobalSearchKey;
 use super::Directory;
-use iced::{Subscription, Task};
 use iced::widget::operation;
+use iced::{Subscription, Task};
 
 use crate::features::batch::{self, BatchState, ItemResult, ItemStatus};
 use crate::features::file_name_panel::{self, FileNamePanelState};
@@ -90,7 +88,8 @@ pub struct FolderWorkspace {
 
 impl FolderWorkspace {
     pub fn new() -> Self {
-        let (left_width, folder_width) = AppDatabase::new().get_window_state()
+        let (left_width, folder_width) = AppDatabase::new()
+            .get_window_state()
             .and_then(|w| {
                 if w.left_panel_width > 0.0 && w.folder_panel_width > 0.0 {
                     Some((w.left_panel_width, w.folder_panel_width))
@@ -147,7 +146,10 @@ impl FolderWorkspace {
             }
             Message::BatchItemDone { id, result } => self.batch_item_done(id, result),
             Message::BatchFinished => self.batch_finished(),
-            Message::CommentBatchLoaded { generation, results } => self.comment_batch_loaded(generation, results),
+            Message::CommentBatchLoaded {
+                generation,
+                results,
+            } => self.comment_batch_loaded(generation, results),
             Message::SpinnerTick => {
                 self.spinner_frame = self.spinner_frame.wrapping_add(1);
                 Task::none()
@@ -231,14 +233,21 @@ impl FolderWorkspace {
                 Task::none()
             }
             Message::ScreenshotTaken(position_ms, jpeg) => {
-                let Some(file) = self.file_workspace.file() else { return Task::none(); };
+                let Some(file) = self.file_workspace.file() else {
+                    return Task::none();
+                };
                 // Deduplicate: skip if any existing screenshot is within 100 ms.
-                let too_close = self.file_workspace.screenshots().iter().any(|s| {
-                    s.position_ms.abs_diff(position_ms) < 100
-                });
-                if too_close { return Task::none(); }
+                let too_close = self
+                    .file_workspace
+                    .screenshots()
+                    .iter()
+                    .any(|s| s.position_ms.abs_diff(position_ms) < 100);
+                if too_close {
+                    return Task::none();
+                }
                 let file_path = file.file_path().to_path_buf();
-                self.file_workspace.add_screenshot(frename_core::Screenshot::new(position_ms));
+                self.file_workspace
+                    .add_screenshot(frename_core::Screenshot::new(position_ms));
                 // Append timestamp to comment.
                 let time_str = frename_core::Screenshot::new(position_ms).format_time();
                 let current = self.file_workspace.comment().to_string();
@@ -266,20 +275,18 @@ impl FolderWorkspace {
                     clear_files,
                 ])
             }
-            Message::OpenFilePicker => {
-                Task::perform(
-                    async {
-                        rfd::AsyncFileDialog::new()
-                            .pick_file()
-                            .await
-                            .map(|f| f.path().to_path_buf())
-                    },
-                    |opt| match opt {
-                        Some(path) => Message::OpenFile(path),
-                        None => Message::Noop,
-                    },
-                )
-            }
+            Message::OpenFilePicker => Task::perform(
+                async {
+                    rfd::AsyncFileDialog::new()
+                        .pick_file()
+                        .await
+                        .map(|f| f.path().to_path_buf())
+                },
+                |opt| match opt {
+                    Some(path) => Message::OpenFile(path),
+                    None => Message::Noop,
+                },
+            ),
         }
     }
 
@@ -295,23 +302,32 @@ impl FolderWorkspace {
             }
         };
         self.file_workspace.set_tag_filter(new_value);
-        operation::focus(iced::widget::Id::from(SEARCH_BAR_INPUT_ID))
-            .map(|_: ()| Message::Noop)
+        operation::focus(iced::widget::Id::from(SEARCH_BAR_INPUT_ID)).map(|_: ()| Message::Noop)
     }
 
     fn set_segment_start(&mut self, secs: f32) -> Task<Message> {
-        if self.file_workspace.file().is_none() { return Task::none(); }
+        if self.file_workspace.file().is_none() {
+            return Task::none();
+        }
         let old_secs = self.file_workspace.segment_start_secs();
         self.file_workspace.set_segment_start_secs(Some(secs));
-        self.history.push(Box::new(SetSegmentStartCommand { old_secs, new_secs: Some(secs) }));
+        self.history.push(Box::new(SetSegmentStartCommand {
+            old_secs,
+            new_secs: Some(secs),
+        }));
         Task::none()
     }
 
     fn set_segment_end(&mut self, secs: f32) -> Task<Message> {
-        if self.file_workspace.file().is_none() { return Task::none(); }
+        if self.file_workspace.file().is_none() {
+            return Task::none();
+        }
         let old_secs = self.file_workspace.segment_end_secs();
         self.file_workspace.set_segment_end_secs(Some(secs));
-        self.history.push(Box::new(SetSegmentEndCommand { old_secs, new_secs: Some(secs) }));
+        self.history.push(Box::new(SetSegmentEndCommand {
+            old_secs,
+            new_secs: Some(secs),
+        }));
         Task::none()
     }
 
@@ -339,10 +355,14 @@ impl FolderWorkspace {
             snapshot_before.extension(),
             snapshot_before.initial_file_name(),
         );
-        self.file_workspace.reinitialize_tags_from_snapshot(snapshot_after.clone());
+        self.file_workspace
+            .reinitialize_tags_from_snapshot(snapshot_after.clone());
         self.file_workspace.set_tag_filter(String::new());
         self.clamp_selection_to_filtered();
-        self.history.push(Box::new(PasteTagsCommand { snapshot_before, snapshot_after }));
+        self.history.push(Box::new(PasteTagsCommand {
+            snapshot_before,
+            snapshot_after,
+        }));
         Task::none()
     }
 
@@ -355,11 +375,7 @@ impl FolderWorkspace {
     }
 
     fn open_file(&mut self, path: PathBuf) -> Task<Message> {
-        let Some(file) = self
-            .directory
-            .as_mut()
-            .and_then(|dir| dir.open_path(&path))
-        else {
+        let Some(file) = self.directory.as_mut().and_then(|dir| dir.open_path(&path)) else {
             self.file_workspace.set_file(None);
             self.pending_file_updated = None;
             return Task::done(Message::ScanFolder(FolderAndFile::new(
@@ -397,7 +413,11 @@ impl FolderWorkspace {
         Task::none()
     }
 
-    fn folder_loaded(&mut self, mut directory: Directory, target_file: Option<PathBuf>) -> Task<Message> {
+    fn folder_loaded(
+        &mut self,
+        mut directory: Directory,
+        target_file: Option<PathBuf>,
+    ) -> Task<Message> {
         self.loading = false;
         // The list filters are user settings, not properties of the folder: carry them over.
         if let Some(previous) = self.directory.as_ref() {
@@ -407,7 +427,12 @@ impl FolderWorkspace {
         }
         self.directory = Some(directory); // replace previous directory only on success
         self.batch.reset_files();
-        let folder = self.directory.as_ref().expect("just set").path().to_path_buf();
+        let folder = self
+            .directory
+            .as_ref()
+            .expect("just set")
+            .path()
+            .to_path_buf();
         // Tags belong to the folder, so the workspace starts over on a new one. The history goes
         // with them: undoing "create tag" from the previous folder would delete it from this one.
         self.file_workspace = FileWorkspace::new(FolderTagStore::for_folder(&folder));
@@ -440,15 +465,21 @@ impl FolderWorkspace {
         let Some(dir) = self.directory.as_ref() else {
             return Task::none();
         };
-        let batch: Vec<(FileId, PathBuf, FileSnapshot)> = dir.files_loading_comments().into_iter().take(BATCH).collect();
+        let batch: Vec<(FileId, PathBuf, FileSnapshot)> = dir
+            .files_loading_comments()
+            .into_iter()
+            .take(BATCH)
+            .collect();
         if batch.is_empty() {
             return Task::none();
         }
         let generation = self.comment_load_generation;
         Task::future(async move {
             let results = tokio::task::spawn_blocking(move || {
-                let items: Vec<(PathBuf, FileSnapshot)> =
-                    batch.iter().map(|(_, path, snapshot)| (path.clone(), snapshot.clone())).collect();
+                let items: Vec<(PathBuf, FileSnapshot)> = batch
+                    .iter()
+                    .map(|(_, path, snapshot)| (path.clone(), snapshot.clone()))
+                    .collect();
                 let resolved = frename_core::FileTagger::load_comments(&items);
                 batch
                     .into_iter()
@@ -461,12 +492,19 @@ impl FolderWorkspace {
                 log::error!("background comment load failed: {e}");
                 Vec::new()
             });
-            Message::CommentBatchLoaded { generation, results }
+            Message::CommentBatchLoaded {
+                generation,
+                results,
+            }
         })
     }
 
     /// Take a background batch into the list, then start the next one.
-    fn comment_batch_loaded(&mut self, generation: u64, results: Vec<(FileId, PathBuf, FileSnapshot)>) -> Task<Message> {
+    fn comment_batch_loaded(
+        &mut self,
+        generation: u64,
+        results: Vec<(FileId, PathBuf, FileSnapshot)>,
+    ) -> Task<Message> {
         if generation != self.comment_load_generation || results.is_empty() {
             return Task::none();
         }
@@ -500,12 +538,18 @@ impl FolderWorkspace {
     fn apply_file_opened(&mut self, file: frename_core::File) -> Task<Message> {
         let file = self.with_comment_loaded(file);
         // Opening another file closes the in-place rename editor, like leaving the row.
-        if self.inline_rename.as_ref().is_some_and(|r| r.id != file.id()) {
+        if self
+            .inline_rename
+            .as_ref()
+            .is_some_and(|r| r.id != file.id())
+        {
             self.inline_rename = None;
         }
         // Detect same-file "refresh" (e.g. undo of a tag toggle on the current file).
         // In that case, skip media reload and fullscreen reset — only persist state.
-        let same_file = self.file_workspace.file()
+        let same_file = self
+            .file_workspace
+            .file()
             .map_or(false, |f| f.file_path() == file.file_path());
         if !same_file {
             self.media_fullscreen = false;
@@ -515,7 +559,9 @@ impl FolderWorkspace {
         log::info!("Opening file: {}", file.file_path().display());
         let Some((id, snap)) = snapshot else {
             self.pending_file_updated = None;
-            if same_file { return Task::none(); }
+            if same_file {
+                return Task::none();
+            }
             return self.media_viewer.open(&file).map(Message::MediaViewer);
         };
         if self.media_viewer.needs_unload_before_rename() {
@@ -555,7 +601,9 @@ impl FolderWorkspace {
                 | Message::FocusSearchBarAndKey(_)
                 | Message::ScreenshotTaken(..)
                 | Message::Folder(
-                    folder::Message::StartRename(_) | folder::Message::RenameInput(_) | folder::Message::SubmitRename
+                    folder::Message::StartRename(_)
+                        | folder::Message::RenameInput(_)
+                        | folder::Message::SubmitRename
                 )
         );
         if edits_open_file && self.batch.is_active() {
@@ -585,9 +633,9 @@ impl FolderWorkspace {
 
     /// IDs of the files the folder list shows, in list order.
     fn listed_ids(&self) -> Vec<FileId> {
-        self.directory
-            .as_ref()
-            .map_or_else(Vec::new, |dir| dir.files_in_order().map(|f| f.id()).collect())
+        self.directory.as_ref().map_or_else(Vec::new, |dir| {
+            dir.files_in_order().map(|f| f.id()).collect()
+        })
     }
 
     fn handle_batch(&mut self, msg: batch::Message) -> Task<Message> {
@@ -606,7 +654,11 @@ impl FolderWorkspace {
         let Some(dir) = self.directory.as_ref() else {
             return Task::none();
         };
-        let files: Vec<FileId> = dir.all_files().map(|f| f.id()).filter(|id| self.batch.is_checked(*id)).collect();
+        let files: Vec<FileId> = dir
+            .all_files()
+            .map(|f| f.id())
+            .filter(|id| self.batch.is_checked(*id))
+            .collect();
         if !self.batch.start(files) {
             return Task::none();
         }
@@ -638,7 +690,11 @@ impl FolderWorkspace {
         let Some((id, operation)) = self.batch.begin_next() else {
             return Task::done(Message::BatchFinished);
         };
-        let Some(path) = self.directory.as_ref().and_then(|d| d.file_by_id(id)).map(|f| f.file_path().to_path_buf())
+        let Some(path) = self
+            .directory
+            .as_ref()
+            .and_then(|d| d.file_by_id(id))
+            .map(|f| f.file_path().to_path_buf())
         else {
             self.batch.finish(id, ItemStatus::Failed);
             return self.next_batch_item();
@@ -648,7 +704,10 @@ impl FolderWorkspace {
                 .await
                 .unwrap_or_else(|e| {
                     log::error!("batch operation task failed: {e}");
-                    ItemResult { status: ItemStatus::Failed, update: None }
+                    ItemResult {
+                        status: ItemStatus::Failed,
+                        update: None,
+                    }
                 });
             Message::BatchItemDone { id, result }
         })
@@ -656,7 +715,9 @@ impl FolderWorkspace {
 
     /// Take a finished file into the list (it may have been renamed), then start the next.
     fn batch_item_done(&mut self, id: FileId, result: ItemResult) -> Task<Message> {
-        if let (Some(dir), Some((path, snapshot))) = (self.directory.as_mut(), result.update.as_ref()) {
+        if let (Some(dir), Some((path, snapshot))) =
+            (self.directory.as_mut(), result.update.as_ref())
+        {
             dir.rename_file(id, path, snapshot);
         }
         self.batch.finish(id, result.status);
@@ -668,7 +729,12 @@ impl FolderWorkspace {
         // The job renamed files behind the history: undoing across it would use stale paths.
         self.history = WorkspaceHistory::new(HISTORY_DEPTH);
         let load_comments = self.load_next_comment_batch(false);
-        let Some(file) = self.directory.as_ref().and_then(|d| d.selected_file()).cloned() else {
+        let Some(file) = self
+            .directory
+            .as_ref()
+            .and_then(|d| d.selected_file())
+            .cloned()
+        else {
             return load_comments;
         };
         Task::batch([Task::done(Message::FileOpened(file)), load_comments])
@@ -694,10 +760,17 @@ impl FolderWorkspace {
         else {
             return saved;
         };
-        Task::batch([saved, self.media_viewer.open(&file).map(Message::MediaViewer)])
+        Task::batch([
+            saved,
+            self.media_viewer.open(&file).map(Message::MediaViewer),
+        ])
     }
 
-    fn apply_file_updated(&mut self, id: FileId, snapshot: frename_core::FileSnapshot) -> Task<Message> {
+    fn apply_file_updated(
+        &mut self,
+        id: FileId,
+        snapshot: frename_core::FileSnapshot,
+    ) -> Task<Message> {
         // Resolve the current on-disk path via the stable file ID.
         let Some(current_path) = self
             .directory
@@ -746,7 +819,10 @@ impl FolderWorkspace {
             folder::Message::SelectFile(index) => self.select_file_at(index),
             folder::Message::PreviousFile => self.select_previous(),
             folder::Message::NextFile => self.select_next(),
-            folder::Message::Scrolled { scroll_y, viewport_height } => {
+            folder::Message::Scrolled {
+                scroll_y,
+                viewport_height,
+            } => {
                 self.folder_scroll_y = Some(scroll_y);
                 self.folder_viewport_height = Some(viewport_height);
                 Task::none()
@@ -774,15 +850,26 @@ impl FolderWorkspace {
                 Task::none()
             }
             folder::Message::SubmitRename => self.submit_rename(),
-            folder::Message::SetBatchMode(on) => Task::done(Message::Batch(batch::Message::SetActive(on))),
-            folder::Message::ToggleChecked(id) => Task::done(Message::Batch(batch::Message::Toggle(id))),
+            folder::Message::SetBatchMode(on) => {
+                Task::done(Message::Batch(batch::Message::SetActive(on)))
+            }
+            folder::Message::ToggleChecked(id) => {
+                Task::done(Message::Batch(batch::Message::Toggle(id)))
+            }
             folder::Message::ToggleAllChecked => {
                 let listed = self.listed_ids();
-                let all_checked = !listed.is_empty() && listed.iter().all(|id| self.batch.is_checked(*id));
-                let msg = if all_checked { batch::Message::CheckNone } else { batch::Message::CheckAll(listed) };
+                let all_checked =
+                    !listed.is_empty() && listed.iter().all(|id| self.batch.is_checked(*id));
+                let msg = if all_checked {
+                    batch::Message::CheckNone
+                } else {
+                    batch::Message::CheckAll(listed)
+                };
                 Task::done(Message::Batch(msg))
             }
-            folder::Message::InvertChecks => Task::done(Message::Batch(batch::Message::Invert(self.listed_ids()))),
+            folder::Message::InvertChecks => {
+                Task::done(Message::Batch(batch::Message::Invert(self.listed_ids())))
+            }
         }
     }
 
@@ -802,9 +889,21 @@ impl FolderWorkspace {
             .and_then(|n| n.to_str())
             .unwrap_or_default()
             .to_string();
-        let stem_chars = name.rfind('.').map_or(name.as_str(), |dot| &name[..dot]).chars().count();
-        let select = if dir.selected_index() == Some(index) { Task::none() } else { self.select_file_at(index) };
-        self.inline_rename = Some(folder::InlineRename { id, text: name, error: None });
+        let stem_chars = name
+            .rfind('.')
+            .map_or(name.as_str(), |dot| &name[..dot])
+            .chars()
+            .count();
+        let select = if dir.selected_index() == Some(index) {
+            Task::none()
+        } else {
+            self.select_file_at(index)
+        };
+        self.inline_rename = Some(folder::InlineRename {
+            id,
+            text: name,
+            error: None,
+        });
         let input = iced::widget::Id::from(folder::FOLDER_RENAME_INPUT_ID);
         Task::batch([
             select,
@@ -820,18 +919,29 @@ impl FolderWorkspace {
         let Some(rename) = self.inline_rename.clone() else {
             return Task::none();
         };
-        let Some(file) = self.directory.as_ref().and_then(|d| d.file_by_id(rename.id)).cloned() else {
+        let Some(file) = self
+            .directory
+            .as_ref()
+            .and_then(|d| d.file_by_id(rename.id))
+            .cloned()
+        else {
             self.inline_rename = None;
             return Task::none();
         };
         // The editor only opens on the open file; anything else is a stale editor.
         let Some((_, current)) = self.file_workspace.get_snapshot().filter(|_| {
-            self.file_workspace.file().is_some_and(|f| f.id() == rename.id)
+            self.file_workspace
+                .file()
+                .is_some_and(|f| f.id() == rename.id)
         }) else {
             self.inline_rename = None;
             return Task::none();
         };
-        let current_name = file.file_path().file_name().and_then(|n| n.to_str()).unwrap_or_default();
+        let current_name = file
+            .file_path()
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
         let typed = rename.text.trim();
         if typed == current_name {
             self.inline_rename = None;
@@ -843,12 +953,19 @@ impl FolderWorkspace {
         snapshot.set_screenshots(current.screenshots().to_vec());
         // With in/out stored inside the video the name never shows them, so a typed name without them
         // does not mean "remove them".
-        let name_has_in_out = snapshot.segment_start().is_some() || snapshot.segment_end().is_some();
-        if !name_has_in_out && frename_core::metadata_storage().in_out == frename_core::InOutStorage::InVideo {
+        let name_has_in_out =
+            snapshot.segment_start().is_some() || snapshot.segment_end().is_some();
+        if !name_has_in_out
+            && frename_core::metadata_storage().in_out == frename_core::InOutStorage::InVideo
+        {
             snapshot.set_segment_start(current.segment_start());
             snapshot.set_segment_end(current.segment_end());
         }
-        let folder = file.file_path().parent().map(|p| p.to_path_buf()).unwrap_or_default();
+        let folder = file
+            .file_path()
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_default();
         let checked = check_new_file_name(&folder, current_name, typed)
             .and_then(|()| check_new_file_name(&folder, current_name, &snapshot.file_name()));
         if let Err(reason) = checked {
@@ -859,7 +976,8 @@ impl FolderWorkspace {
         }
 
         self.inline_rename = None;
-        self.file_workspace.reinitialize_tags_from_snapshot(snapshot);
+        self.file_workspace
+            .reinitialize_tags_from_snapshot(snapshot);
         // Same-file refresh: persists the workspace snapshot (renaming on disk) without
         // reopening the media unless it must unload first.
         Task::done(Message::FileOpened(file))
@@ -915,11 +1033,7 @@ impl FolderWorkspace {
     }
 
     fn select_next(&mut self) -> Task<Message> {
-        let Some(file) = self
-            .directory
-            .as_mut()
-            .and_then(|dir| dir.select_next())
-        else {
+        let Some(file) = self.directory.as_mut().and_then(|dir| dir.select_next()) else {
             self.pending_to_file_id = None;
             return Task::none();
         };
@@ -930,18 +1044,17 @@ impl FolderWorkspace {
         ])
     }
 
-    fn handle_tag_panel(
-        &mut self,
-        msg: tag_panel::Message,
-    ) -> Task<Message> {
+    fn handle_tag_panel(&mut self, msg: tag_panel::Message) -> Task<Message> {
         // Capture drag state before update() clears it on DragEnded.
         let drag_on_end = if let tag_panel::Message::DragEnded = &msg {
-            Some((self.tag_panel.dragging_tag_id(), self.tag_panel.drop_target_index()))
+            Some((
+                self.tag_panel.dragging_tag_id(),
+                self.tag_panel.drop_target_index(),
+            ))
         } else {
             None
         };
-        self.tag_panel
-            .update(&msg, self.file_workspace.tag_list());
+        self.tag_panel.update(&msg, self.file_workspace.tag_list());
         match msg {
             tag_panel::Message::SetFilter(query) => {
                 self.file_workspace.set_tag_filter(query);
@@ -954,8 +1067,16 @@ impl FolderWorkspace {
                 if !name.is_empty() {
                     match self.file_workspace.create_and_save_new_tag(name.clone()) {
                         Ok(id) => {
-                            let color_index = self.file_workspace.tag_list().get_tag(id).map_or(0, |t| t.color_index());
-                            self.history.push(Box::new(CreateTagCommand { tag_id: id, tag_name: name, color_index }));
+                            let color_index = self
+                                .file_workspace
+                                .tag_list()
+                                .get_tag(id)
+                                .map_or(0, |t| t.color_index());
+                            self.history.push(Box::new(CreateTagCommand {
+                                tag_id: id,
+                                tag_name: name,
+                                color_index,
+                            }));
                             self.tag_panel.set_selected(Some(id));
                             self.clamp_selection_to_filtered();
                             return Task::done(Message::ScrollTagListToSelection);
@@ -974,10 +1095,17 @@ impl FolderWorkspace {
                 Task::none()
             }
             tag_panel::Message::ToggleTag(id) => {
-                let was_checked = self.file_workspace.tag_list().get_tag(id).map_or(false, |t| t.is_checked());
+                let was_checked = self
+                    .file_workspace
+                    .tag_list()
+                    .get_tag(id)
+                    .map_or(false, |t| t.is_checked());
                 self.file_workspace.toggle_tag_by_id(id);
                 self.tag_panel.set_selected(Some(id));
-                self.history.push(Box::new(ToggleTagCommand { tag_id: id, was_checked }));
+                self.history.push(Box::new(ToggleTagCommand {
+                    tag_id: id,
+                    was_checked,
+                }));
                 Task::none()
             }
             tag_panel::Message::SelectLeft => {
@@ -1006,14 +1134,25 @@ impl FolderWorkspace {
                 // Decide which tag to toggle:
                 // - If selected tag is visible → toggle it (keep selection).
                 // - Otherwise → toggle the first visible tag and move selection to it.
-                let filtered = self.file_workspace.tag_list().filtered_display_tag_ids().to_vec();
+                let filtered = self
+                    .file_workspace
+                    .tag_list()
+                    .filtered_display_tag_ids()
+                    .to_vec();
                 let selected_id = self.tag_panel.selected_tag_id();
                 let selected_visible = selected_id.filter(|id| filtered.contains(id));
                 let id_to_toggle = selected_visible.or_else(|| filtered.first().copied());
                 if let Some(id) = id_to_toggle {
-                    let was_checked = self.file_workspace.tag_list().get_tag(id).map_or(false, |t| t.is_checked());
+                    let was_checked = self
+                        .file_workspace
+                        .tag_list()
+                        .get_tag(id)
+                        .map_or(false, |t| t.is_checked());
                     self.file_workspace.toggle_tag_by_id(id);
-                    self.history.push(Box::new(ToggleTagCommand { tag_id: id, was_checked }));
+                    self.history.push(Box::new(ToggleTagCommand {
+                        tag_id: id,
+                        was_checked,
+                    }));
                     if selected_visible.is_none() {
                         self.tag_panel.set_selected(Some(id));
                     }
@@ -1022,24 +1161,46 @@ impl FolderWorkspace {
             }
             tag_panel::Message::DeleteTag(id) => {
                 // Find the deleted tag's position in the filtered list before removal.
-                let filtered_before = self.file_workspace.tag_list().filtered_display_tag_ids().to_vec();
+                let filtered_before = self
+                    .file_workspace
+                    .tag_list()
+                    .filtered_display_tag_ids()
+                    .to_vec();
                 let deleted_pos = filtered_before.iter().position(|&fid| fid == id);
 
                 let delete_data = self.file_workspace.tag_list().capture_delete_data(id);
                 if let Err(e) = self.file_workspace.remove_stored_tag_by_id(id) {
                     log::error!("Failed to delete tag: {}", e);
-                } else if let Some((name, color, was_stored, was_starred, was_checked, sort_order)) = delete_data {
+                } else if let Some((
+                    name,
+                    color,
+                    was_stored,
+                    was_starred,
+                    was_checked,
+                    sort_order,
+                )) = delete_data
+                {
                     self.history.push(Box::new(DeleteTagCommand {
-                        tag_id: id, tag_name: name, color_index: color,
-                        was_stored, was_starred, was_checked, sort_order,
+                        tag_id: id,
+                        tag_name: name,
+                        color_index: color,
+                        was_stored,
+                        was_starred,
+                        was_checked,
+                        sort_order,
                     }));
                 }
 
                 // Select the neighbor: left (or first if deleted was first).
                 if let Some(pos) = deleted_pos {
-                    let filtered_after = self.file_workspace.tag_list().filtered_display_tag_ids().to_vec();
+                    let filtered_after = self
+                        .file_workspace
+                        .tag_list()
+                        .filtered_display_tag_ids()
+                        .to_vec();
                     let new_i = if pos == 0 { 0 } else { pos - 1 };
-                    self.tag_panel.set_selected(filtered_after.get(new_i).copied());
+                    self.tag_panel
+                        .set_selected(filtered_after.get(new_i).copied());
                 } else {
                     self.clamp_selection_to_filtered();
                 }
@@ -1056,8 +1217,15 @@ impl FolderWorkspace {
                 if let Err(e) = self.file_workspace.save_tag(id) {
                     log::error!("Failed to save tag to store: {}", e);
                 } else {
-                    let color_index = self.file_workspace.tag_list().get_tag(id).map_or(0, |t| t.color_index());
-                    self.history.push(Box::new(SaveTagCommand { tag_id: id, color_index }));
+                    let color_index = self
+                        .file_workspace
+                        .tag_list()
+                        .get_tag(id)
+                        .map_or(0, |t| t.color_index());
+                    self.history.push(Box::new(SaveTagCommand {
+                        tag_id: id,
+                        color_index,
+                    }));
                 }
                 Task::none()
             }
@@ -1073,7 +1241,10 @@ impl FolderWorkspace {
                     self.file_workspace.star_tag(id)
                 };
                 match result {
-                    Ok(()) => self.history.push(Box::new(StarTagCommand { tag_id: id, was_starred })),
+                    Ok(()) => self.history.push(Box::new(StarTagCommand {
+                        tag_id: id,
+                        was_starred,
+                    })),
                     Err(e) => log::error!("Failed to toggle star: {}", e),
                 }
                 Task::none()
@@ -1095,7 +1266,9 @@ impl FolderWorkspace {
                     self.file_workspace.reorder_tag_to_index(did, checked_idx);
                     if let Some(fi) = from_index {
                         self.history.push(Box::new(ReorderTagCommand {
-                            moved_id: did, from_index: fi, to_index: checked_idx,
+                            moved_id: did,
+                            from_index: fi,
+                            to_index: checked_idx,
                         }));
                     }
                 }
@@ -1107,23 +1280,36 @@ impl FolderWorkspace {
 
     fn handle_file_name_panel(&mut self, msg: file_name_panel::Message) -> Task<Message> {
         if let file_name_panel::Message::RemoveTag(id) = msg {
-            let was_checked = self.file_workspace.tag_list().get_tag(id).map_or(false, |t| t.is_checked());
+            let was_checked = self
+                .file_workspace
+                .tag_list()
+                .get_tag(id)
+                .map_or(false, |t| t.is_checked());
             if was_checked {
                 self.file_workspace.toggle_tag_by_id(id);
-                self.history.push(Box::new(ToggleTagCommand { tag_id: id, was_checked }));
+                self.history.push(Box::new(ToggleTagCommand {
+                    tag_id: id,
+                    was_checked,
+                }));
             }
             return Task::none();
         }
         if let file_name_panel::Message::ClearSegmentStart = msg {
             let old_secs = self.file_workspace.segment_start_secs();
             self.file_workspace.set_segment_start_secs(None);
-            self.history.push(Box::new(SetSegmentStartCommand { old_secs, new_secs: None }));
+            self.history.push(Box::new(SetSegmentStartCommand {
+                old_secs,
+                new_secs: None,
+            }));
             return Task::none();
         }
         if let file_name_panel::Message::ClearSegmentEnd = msg {
             let old_secs = self.file_workspace.segment_end_secs();
             self.file_workspace.set_segment_end_secs(None);
-            self.history.push(Box::new(SetSegmentEndCommand { old_secs, new_secs: None }));
+            self.history.push(Box::new(SetSegmentEndCommand {
+                old_secs,
+                new_secs: None,
+            }));
             return Task::none();
         }
         let (dragged_id, drop_index) = if let file_name_panel::Message::DragEnded = &msg {
@@ -1181,7 +1367,10 @@ impl FolderWorkspace {
         let result: Result<(), UndoError> = {
             let dir = self.directory.as_mut().expect("checked above");
             let tl = self.file_workspace.tag_list_mut();
-            let mut ctx = UndoContext { directory: dir, tag_list: tl };
+            let mut ctx = UndoContext {
+                directory: dir,
+                tag_list: tl,
+            };
             self.history.undo(&mut ctx)
         };
         match result {
@@ -1200,7 +1389,10 @@ impl FolderWorkspace {
         let result: Result<(), UndoError> = {
             let dir = self.directory.as_mut().expect("checked above");
             let tl = self.file_workspace.tag_list_mut();
-            let mut ctx = UndoContext { directory: dir, tag_list: tl };
+            let mut ctx = UndoContext {
+                directory: dir,
+                tag_list: tl,
+            };
             self.history.redo(&mut ctx)
         };
         match result {
@@ -1238,9 +1430,18 @@ impl FolderWorkspace {
 
     /// Left: move by -1, wrap last→first.
     fn move_selection_left(&mut self) {
-        let filtered = self.file_workspace.tag_list().filtered_display_tag_ids().to_vec();
-        if filtered.is_empty() { self.tag_panel.set_selected(None); return; }
-        let cur = self.tag_panel.selected_tag_id()
+        let filtered = self
+            .file_workspace
+            .tag_list()
+            .filtered_display_tag_ids()
+            .to_vec();
+        if filtered.is_empty() {
+            self.tag_panel.set_selected(None);
+            return;
+        }
+        let cur = self
+            .tag_panel
+            .selected_tag_id()
             .and_then(|id| filtered.iter().position(|&fid| fid == id));
         let new_i = match cur {
             None | Some(0) => filtered.len() - 1,
@@ -1251,10 +1452,19 @@ impl FolderWorkspace {
 
     /// Right: move by +1, wrap last→first.
     fn move_selection_right(&mut self) {
-        let filtered = self.file_workspace.tag_list().filtered_display_tag_ids().to_vec();
-        if filtered.is_empty() { self.tag_panel.set_selected(None); return; }
+        let filtered = self
+            .file_workspace
+            .tag_list()
+            .filtered_display_tag_ids()
+            .to_vec();
+        if filtered.is_empty() {
+            self.tag_panel.set_selected(None);
+            return;
+        }
         let last = filtered.len() - 1;
-        let cur = self.tag_panel.selected_tag_id()
+        let cur = self
+            .tag_panel
+            .selected_tag_id()
             .and_then(|id| filtered.iter().position(|&fid| fid == id));
         let new_i = match cur {
             None => 0,
@@ -1266,11 +1476,20 @@ impl FolderWorkspace {
 
     /// Up: move one visual row up; top row wraps to last row at same column.
     fn move_selection_up(&mut self) {
-        let filtered = self.file_workspace.tag_list().filtered_display_tag_ids().to_vec();
-        if filtered.is_empty() { self.tag_panel.set_selected(None); return; }
+        let filtered = self
+            .file_workspace
+            .tag_list()
+            .filtered_display_tag_ids()
+            .to_vec();
+        if filtered.is_empty() {
+            self.tag_panel.set_selected(None);
+            return;
+        }
         let cols = self.tag_panel.cols().max(1) as usize;
         let count = filtered.len();
-        let cur = self.tag_panel.selected_tag_id()
+        let cur = self
+            .tag_panel
+            .selected_tag_id()
             .and_then(|id| filtered.iter().position(|&fid| fid == id));
         let new_i = match cur {
             None => count - 1,
@@ -1279,7 +1498,11 @@ impl FolderWorkspace {
                 let x = i % cols;
                 let last_row = (count - 1) / cols;
                 let new_i = last_row * cols + x;
-                if new_i >= count { new_i - cols } else { new_i }
+                if new_i >= count {
+                    new_i - cols
+                } else {
+                    new_i
+                }
             }
             Some(i) => i - cols,
         };
@@ -1288,17 +1511,30 @@ impl FolderWorkspace {
 
     /// Down: move one visual row down; last row wraps to first row at same column.
     fn move_selection_down(&mut self) {
-        let filtered = self.file_workspace.tag_list().filtered_display_tag_ids().to_vec();
-        if filtered.is_empty() { self.tag_panel.set_selected(None); return; }
+        let filtered = self
+            .file_workspace
+            .tag_list()
+            .filtered_display_tag_ids()
+            .to_vec();
+        if filtered.is_empty() {
+            self.tag_panel.set_selected(None);
+            return;
+        }
         let cols = self.tag_panel.cols().max(1) as usize;
         let count = filtered.len();
-        let cur = self.tag_panel.selected_tag_id()
+        let cur = self
+            .tag_panel
+            .selected_tag_id()
             .and_then(|id| filtered.iter().position(|&fid| fid == id));
         let new_i = match cur {
             None => 0,
             Some(i) => {
                 let new_i = i + cols;
-                if new_i >= count { i % cols } else { new_i }
+                if new_i >= count {
+                    i % cols
+                } else {
+                    new_i
+                }
             }
         };
         self.tag_panel.set_selected(filtered.get(new_i).copied());
@@ -1320,10 +1556,7 @@ impl FolderWorkspace {
         };
         let cols = self.tag_panel.cols() as usize;
         let row_stride = self.tag_panel.row_height();
-        let row_extent = self
-            .tag_panel
-            .row_content_height()
-            .unwrap_or(row_stride);
+        let row_extent = self.tag_panel.row_content_height().unwrap_or(row_stride);
         let visual_row = flat_index / cols;
         let row_top = (visual_row as f32) * row_stride;
         let row_bottom = row_top + row_extent;
@@ -1354,11 +1587,8 @@ impl FolderWorkspace {
             x: None,
             y: Some(target_y),
         };
-        let scroll_op = operation::scroll_to(
-            iced::widget::Id::new(TAG_LIST_SCROLLABLE_ID),
-            offset,
-        )
-        .map(|_: ()| Message::Noop);
+        let scroll_op = operation::scroll_to(iced::widget::Id::new(TAG_LIST_SCROLLABLE_ID), offset)
+            .map(|_: ()| Message::Noop);
         Task::batch([
             scroll_op,
             Task::done(Message::TagListScrollAdjusted(target_y)),
@@ -1391,15 +1621,21 @@ impl FolderWorkspace {
             y: Some(target_y),
         };
         Task::batch([
-            operation::scroll_to(iced::widget::Id::new(folder::FOLDER_LIST_SCROLLABLE_ID), offset)
-                .map(|_: ()| Message::Noop),
+            operation::scroll_to(
+                iced::widget::Id::new(folder::FOLDER_LIST_SCROLLABLE_ID),
+                offset,
+            )
+            .map(|_: ()| Message::Noop),
             Task::done(Message::FolderListScrollAdjusted(target_y)),
         ])
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
         // The spinner only turns while rows are loading, so an idle list does not redraw.
-        let loading_comments = self.directory.as_ref().is_some_and(|d| d.loading_comment_count() > 0);
+        let loading_comments = self
+            .directory
+            .as_ref()
+            .is_some_and(|d| d.loading_comment_count() > 0);
         let spinner = if loading_comments {
             iced::time::every(std::time::Duration::from_millis(150)).map(|_| Message::SpinnerTick)
         } else {
@@ -1407,7 +1643,9 @@ impl FolderWorkspace {
         };
         Subscription::batch([
             self.media_viewer.subscription().map(Message::MediaViewer),
-            self.file_name_panel.subscription().map(Message::FileNamePanel),
+            self.file_name_panel
+                .subscription()
+                .map(Message::FileNamePanel),
             self.tag_panel.subscription().map(Message::TagPanel),
             spinner,
         ])
@@ -1430,9 +1668,7 @@ impl FolderWorkspace {
 
     /// Currently selected file (from directory selection).
     pub fn current_file(&self) -> Option<&File> {
-        self.directory
-            .as_ref()
-            .and_then(|d| d.selected_file())
+        self.directory.as_ref().and_then(|d| d.selected_file())
     }
 
     /// The file being renamed in place in the folder list, if any.
@@ -1516,11 +1752,17 @@ impl FolderWorkspace {
 
 /// Why `typed` cannot replace `current` as a file name in `folder`, if it cannot. A rename
 /// on Windows replaces an existing file of the same name, so a clash must be refused here.
-fn check_new_file_name(folder: &std::path::Path, current: &str, typed: &str) -> Result<(), &'static str> {
+fn check_new_file_name(
+    folder: &std::path::Path,
+    current: &str,
+    typed: &str,
+) -> Result<(), &'static str> {
     if typed.is_empty() {
         return Err("Name is empty");
     }
-    if typed.chars().any(|c| matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || c.is_control()) {
+    if typed.chars().any(|c| {
+        matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || c.is_control()
+    }) {
         return Err("Not allowed: \\ / : * ? \" < > |");
     }
     if typed.ends_with('.') || typed.ends_with(' ') {
@@ -1539,7 +1781,9 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::SystemTime;
 
-    use frename_core::{AppDatabase, File, FileId, FileSnapshot, Initializable, LoggingAppStateStore};
+    use frename_core::{
+        AppDatabase, File, FileId, FileSnapshot, Initializable, LoggingAppStateStore,
+    };
 
     use crate::features::{batch, folder, tag_panel};
 
@@ -1571,10 +1815,7 @@ mod tests {
             std::fs::create_dir_all(&path).expect("create test folder");
             let files: Vec<File> = (0..file_count)
                 .map(|i| {
-                    File::from_path(
-                        path.join(format!("file_{}.mp4", i)),
-                        SystemTime::UNIX_EPOCH,
-                    )
+                    File::from_path(path.join(format!("file_{}.mp4", i)), SystemTime::UNIX_EPOCH)
                 })
                 .collect();
             let db = AppDatabase::new();
@@ -1657,7 +1898,12 @@ mod tests {
         let tag_id = tag_list
             .filtered_display_tag_ids()
             .iter()
-            .find(|id| tag_list.get_tag(**id).map(|t| t.tag() == tag_name).unwrap_or(false))
+            .find(|id| {
+                tag_list
+                    .get_tag(**id)
+                    .map(|t| t.tag() == tag_name)
+                    .unwrap_or(false)
+            })
             .copied()
             .expect("pick is a built-in tag");
         let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
@@ -1666,14 +1912,23 @@ mod tests {
         flush_file_opened(&mut workspace);
 
         // Manually drive the FileUpdated that would fire from the iced runtime.
-        let snapshot = FileSnapshot::new(vec![tag_name.to_string()], "file_0", ".mp4", "file_0.mp4");
-        let _ = workspace.update(Message::FileUpdated { id: file_0_id, snapshot });
+        let snapshot =
+            FileSnapshot::new(vec![tag_name.to_string()], "file_0", ".mp4", "file_0.mp4");
+        let _ = workspace.update(Message::FileUpdated {
+            id: file_0_id,
+            snapshot,
+        });
 
         let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
         flush_file_opened(&mut workspace);
 
         assert!(
-            workspace.file_workspace().file().unwrap().snapshot().has_tag(tag_name),
+            workspace
+                .file_workspace()
+                .file()
+                .unwrap()
+                .snapshot()
+                .has_tag(tag_name),
             "tags should be saved after selecting another file"
         );
     }
@@ -1699,7 +1954,12 @@ mod tests {
         let tag_id = tag_list
             .filtered_display_tag_ids()
             .iter()
-            .find(|id| tag_list.get_tag(**id).map(|t| t.tag() == "pick").unwrap_or(false))
+            .find(|id| {
+                tag_list
+                    .get_tag(**id)
+                    .map(|t| t.tag() == "pick")
+                    .unwrap_or(false)
+            })
             .copied()
             .expect("pick is a built-in tag");
         let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
@@ -1776,13 +2036,19 @@ mod tests {
         let _ = workspace.update(Message::MediaViewer(
             crate::features::media_viewer::Message::Unloaded,
         ));
-        assert!(!workspace.has_pending_rename(), "pending must be None after Unloaded");
+        assert!(
+            !workspace.has_pending_rename(),
+            "pending must be None after Unloaded"
+        );
 
         // Second Unloaded: must be a no-op (nothing to consume).
         let _ = workspace.update(Message::MediaViewer(
             crate::features::media_viewer::Message::Unloaded,
         ));
-        assert!(!workspace.has_pending_rename(), "still None after second Unloaded");
+        assert!(
+            !workspace.has_pending_rename(),
+            "still None after second Unloaded"
+        );
     }
 
     /// A file whose comment the scan left loading is loaded when it is opened, before the
@@ -1793,7 +2059,11 @@ mod tests {
         let mut directory = test_dir.directory();
         let (id, path, mut snapshot) = {
             let file = directory.files_in_order().next().expect("a file");
-            (file.id(), file.file_path().to_path_buf(), file.snapshot().clone())
+            (
+                file.id(),
+                file.file_path().to_path_buf(),
+                file.snapshot().clone(),
+            )
         };
         snapshot.set_comment_loading(true);
         directory.rename_file(id, &path, &snapshot);
@@ -1806,9 +2076,16 @@ mod tests {
         });
         flush_file_opened(&mut workspace);
 
-        let opened = workspace.file_workspace().get_snapshot().expect("open file").1;
+        let opened = workspace
+            .file_workspace()
+            .get_snapshot()
+            .expect("open file")
+            .1;
         assert!(!opened.comment_loading(), "read before it is shown");
-        assert_eq!(workspace.directory().expect("dir").loading_comment_count(), 0);
+        assert_eq!(
+            workspace.directory().expect("dir").loading_comment_count(),
+            0
+        );
     }
 
     /// Loads a folder and turns batch mode on with every file checked.
@@ -1819,7 +2096,12 @@ mod tests {
             target_file: Some(test_dir.target_file()),
         });
         flush_file_opened(&mut workspace);
-        let ids: Vec<FileId> = workspace.directory().expect("dir").files_in_order().map(|f| f.id()).collect();
+        let ids: Vec<FileId> = workspace
+            .directory()
+            .expect("dir")
+            .files_in_order()
+            .map(|f| f.id())
+            .collect();
         let _ = workspace.update(Message::Batch(batch::Message::SetActive(true)));
         let _ = workspace.update(Message::Batch(batch::Message::CheckAll(ids)));
         workspace
@@ -1834,23 +2116,47 @@ mod tests {
 
         let _ = workspace.update(Message::Batch(batch::Message::Run));
         assert!(workspace.is_batch_running());
-        assert!(workspace.file_workspace().file().is_some(), "waits for the video to unload");
-        let _ = workspace.update(Message::MediaViewer(crate::features::media_viewer::Message::Unloaded));
-        assert!(workspace.file_workspace().file().is_none(), "the open file is closed during the job");
+        assert!(
+            workspace.file_workspace().file().is_some(),
+            "waits for the video to unload"
+        );
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert!(
+            workspace.file_workspace().file().is_none(),
+            "the open file is closed during the job"
+        );
 
         let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
-        assert_eq!(workspace.directory().and_then(|d| d.selected_index()), Some(0), "navigation is locked");
+        assert_eq!(
+            workspace.directory().and_then(|d| d.selected_index()),
+            Some(0),
+            "navigation is locked"
+        );
 
-        let skipped = || ItemResult { status: ItemStatus::Skipped, update: None };
-        let _ = workspace.update(Message::BatchItemDone { id: file_id_at(&workspace, 0), result: skipped() });
+        let skipped = || ItemResult {
+            status: ItemStatus::Skipped,
+            update: None,
+        };
+        let _ = workspace.update(Message::BatchItemDone {
+            id: file_id_at(&workspace, 0),
+            result: skipped(),
+        });
         assert!(workspace.is_batch_running());
-        let _ = workspace.update(Message::BatchItemDone { id: file_id_at(&workspace, 1), result: skipped() });
+        let _ = workspace.update(Message::BatchItemDone {
+            id: file_id_at(&workspace, 1),
+            result: skipped(),
+        });
         assert!(!workspace.is_batch_running(), "ended after the last file");
         assert_eq!(workspace.batch().progress().map(|p| p.skipped), Some(2));
 
         let _ = workspace.update(Message::BatchFinished);
         flush_file_opened(&mut workspace);
-        assert!(workspace.file_workspace().file().is_some(), "the file is open again");
+        assert!(
+            workspace.file_workspace().file().is_some(),
+            "the file is open again"
+        );
     }
 
     /// A cancelled job stops after the file in work and leaves the rest untouched.
@@ -1859,12 +2165,20 @@ mod tests {
         let test_dir = TestDirectory::new(3);
         let mut workspace = batch_workspace(&test_dir);
         let _ = workspace.update(Message::Batch(batch::Message::Run));
-        let _ = workspace.update(Message::MediaViewer(crate::features::media_viewer::Message::Unloaded));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
 
         let _ = workspace.update(Message::Batch(batch::Message::Cancel));
         let first = file_id_at(&workspace, 0);
-        let done = ItemResult { status: ItemStatus::Done, update: None };
-        let _ = workspace.update(Message::BatchItemDone { id: first, result: done });
+        let done = ItemResult {
+            status: ItemStatus::Done,
+            update: None,
+        };
+        let _ = workspace.update(Message::BatchItemDone {
+            id: first,
+            result: done,
+        });
         assert!(!workspace.is_batch_running());
         let progress = workspace.batch().progress().expect("report");
         assert_eq!((progress.finished, progress.total), (1, 3));
@@ -1882,20 +2196,37 @@ mod tests {
             target_file: Some(test_dir.target_file()),
         });
         flush_file_opened(&mut workspace);
-        let tags = |w: &FolderWorkspace| w.file_workspace().tag_list().file_snapshot().tags().to_vec();
+        let tags = |w: &FolderWorkspace| {
+            w.file_workspace()
+                .tag_list()
+                .file_snapshot()
+                .tags()
+                .to_vec()
+        };
 
         let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('g'))));
         assert_eq!(tags(&workspace), ["Commented"]);
 
-        let id = workspace.file_workspace().tag_list().checked_tag_id_at(0).expect("tag");
+        let id = workspace
+            .file_workspace()
+            .tag_list()
+            .checked_tag_id_at(0)
+            .expect("tag");
         let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(id)));
         let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('o'))));
-        assert!(tags(&workspace).is_empty(), "editing a comment leaves the tag to the user");
+        assert!(
+            tags(&workspace).is_empty(),
+            "editing a comment leaves the tag to the user"
+        );
 
         let _ = workspace.update(Message::CommentAction(Action::SelectAll));
         let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Delete)));
         let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('x'))));
-        assert_eq!(tags(&workspace), ["Commented"], "a new comment after clearing checks it again");
+        assert_eq!(
+            tags(&workspace),
+            ["Commented"],
+            "a new comment after clearing checks it again"
+        );
     }
 
     /// Batch mode shows batch actions instead of the open file, so tag edits do not reach it.
@@ -1907,11 +2238,20 @@ mod tests {
         let tag_id = tag_list
             .filtered_display_tag_ids()
             .iter()
-            .find(|id| tag_list.get_tag(**id).map(|t| t.tag() == "pick").unwrap_or(false))
+            .find(|id| {
+                tag_list
+                    .get_tag(**id)
+                    .map(|t| t.tag() == "pick")
+                    .unwrap_or(false)
+            })
             .copied()
             .expect("pick is a built-in tag");
         let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
-        let checked = workspace.file_workspace().tag_list().get_tag(tag_id).map(|t| t.is_checked());
+        let checked = workspace
+            .file_workspace()
+            .tag_list()
+            .get_tag(tag_id)
+            .map(|t| t.is_checked());
         assert_eq!(checked, Some(false));
     }
 
@@ -1936,9 +2276,19 @@ mod tests {
             crate::features::media_viewer::Message::Unloaded,
         ));
 
-        let selected = workspace.directory().and_then(|d| d.selected_file()).expect("still selected");
-        let name = selected.file_path().file_name().and_then(|n| n.to_str()).expect("name");
-        assert!(name.starts_with("Goat."), "saved before reopening, got {name}");
+        let selected = workspace
+            .directory()
+            .and_then(|d| d.selected_file())
+            .expect("still selected");
+        let name = selected
+            .file_path()
+            .file_name()
+            .and_then(|n| n.to_str())
+            .expect("name");
+        assert!(
+            name.starts_with("Goat."),
+            "saved before reopening, got {name}"
+        );
     }
 
     /// With the untagged filter on, a file leaves the list only once the cursor has left it,
@@ -1960,8 +2310,12 @@ mod tests {
         // Move to file_1; the deferred save then writes file_0's tags.
         let _ = workspace.update(Message::Folder(folder::Message::NextFile));
         flush_file_opened(&mut workspace);
-        let snapshot = FileSnapshot::new(vec!["Comedy".to_string()], "file_0", ".mp4", "file_0.mp4");
-        let _ = workspace.update(Message::FileUpdated { id: file_0_id, snapshot });
+        let snapshot =
+            FileSnapshot::new(vec!["Comedy".to_string()], "file_0", ".mp4", "file_0.mp4");
+        let _ = workspace.update(Message::FileUpdated {
+            id: file_0_id,
+            snapshot,
+        });
 
         let dir = workspace.directory().expect("directory should be loaded");
         assert_eq!(
@@ -1998,9 +2352,15 @@ mod tests {
             "the match plus the selected file stay listed"
         );
 
-        let _ = workspace.update(Message::Folder(folder::Message::SetNameFilter(String::new())));
+        let _ = workspace.update(Message::Folder(folder::Message::SetNameFilter(
+            String::new(),
+        )));
         let dir = workspace.directory().expect("directory should be loaded");
-        assert_eq!(dir.files_in_order().count(), 3, "clearing the query restores the list");
+        assert_eq!(
+            dir.files_in_order().count(),
+            3,
+            "clearing the query restores the list"
+        );
     }
 
     /// Verify that `save_and_reparse` (called by FileUpdated) updates the file path in the
@@ -2029,12 +2389,17 @@ mod tests {
             ".mp4",
             "file_0.mp4",
         );
-        let _ = workspace.update(Message::FileUpdated { id: file_0_id, snapshot });
+        let _ = workspace.update(Message::FileUpdated {
+            id: file_0_id,
+            snapshot,
+        });
 
         // The directory should now track the file under its new path.
         let dir = workspace.directory().expect("directory should be loaded");
         let new_path = test_dir.file_path("Comedy.file_0.mp4");
-        let file_renamed = dir.files_in_order().any(|f| f.file_path() == new_path.as_path());
+        let file_renamed = dir
+            .files_in_order()
+            .any(|f| f.file_path() == new_path.as_path());
         assert!(
             file_renamed,
             "directory must track the renamed path Comedy.file_0.mp4"
@@ -2047,11 +2412,45 @@ mod tests {
         std::fs::create_dir_all(&folder).expect("temp dir");
         std::fs::write(folder.join("taken.mp4"), b"").expect("write");
 
-        assert_eq!(crate::features::folder_workspace::state::check_new_file_name(&folder, "a.mp4", "b.mp4"), Ok(()));
-        assert!(crate::features::folder_workspace::state::check_new_file_name(&folder, "a.mp4", "").is_err());
-        assert!(crate::features::folder_workspace::state::check_new_file_name(&folder, "a.mp4", "a:b.mp4").is_err());
-        assert!(crate::features::folder_workspace::state::check_new_file_name(&folder, "a.mp4", "a.mp4.").is_err());
-        assert!(crate::features::folder_workspace::state::check_new_file_name(&folder, "a.mp4", "taken.mp4").is_err(), "must not overwrite");
-        assert_eq!(crate::features::folder_workspace::state::check_new_file_name(&folder, "taken.mp4", "TAKEN.mp4"), Ok(()), "case-only rename");
+        assert_eq!(
+            crate::features::folder_workspace::state::check_new_file_name(
+                &folder, "a.mp4", "b.mp4"
+            ),
+            Ok(())
+        );
+        assert!(
+            crate::features::folder_workspace::state::check_new_file_name(&folder, "a.mp4", "")
+                .is_err()
+        );
+        assert!(
+            crate::features::folder_workspace::state::check_new_file_name(
+                &folder, "a.mp4", "a:b.mp4"
+            )
+            .is_err()
+        );
+        assert!(
+            crate::features::folder_workspace::state::check_new_file_name(
+                &folder, "a.mp4", "a.mp4."
+            )
+            .is_err()
+        );
+        assert!(
+            crate::features::folder_workspace::state::check_new_file_name(
+                &folder,
+                "a.mp4",
+                "taken.mp4"
+            )
+            .is_err(),
+            "must not overwrite"
+        );
+        assert_eq!(
+            crate::features::folder_workspace::state::check_new_file_name(
+                &folder,
+                "taken.mp4",
+                "TAKEN.mp4"
+            ),
+            Ok(()),
+            "case-only rename"
+        );
     }
 }

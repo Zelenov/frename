@@ -3,10 +3,12 @@
 use std::path::{Path, PathBuf};
 
 use super::file_snapshot::FileSnapshot;
-use super::screenshot::Screenshot;
 use super::file_tagger_backend::FileTaggerBackend;
+use super::screenshot::Screenshot;
 use super::FolderInfo;
-use crate::metadata::{self, CommentStorage, InOutStorage, MetadataMove, MetadataStorage, XmpSource};
+use crate::metadata::{
+    self, CommentStorage, InOutStorage, MetadataMove, MetadataStorage, XmpSource,
+};
 
 pub struct ProductionFileTagger;
 
@@ -57,7 +59,12 @@ fn load_screenshot_positions(file_path: &Path, folder_info: &FolderInfo) -> Vec<
 
 impl ProductionFileTagger {
     /// [`FileTaggerBackend::parse`] with the comment and in/out storage given explicitly.
-    fn parse_with(&self, path: &Path, folder_info: &FolderInfo, storage: MetadataStorage) -> FileSnapshot {
+    fn parse_with(
+        &self,
+        path: &Path,
+        folder_info: &FolderInfo,
+        storage: MetadataStorage,
+    ) -> FileSnapshot {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         let mut snapshot = FileSnapshot::parse(name);
         // Fallback for non-directory parsing paths (e.g. save_and_reparse):
@@ -80,7 +87,10 @@ impl ProductionFileTagger {
         // file open per file, which a folder scan pays for every file it finds.
         let has_text_file = effective_info.contains(&format!("{name}.comment.txt"));
         // A folder scan does not open files: XMP comes from the tag file's file list or waits.
-        let source = match (folder_info.defers_comment_loading(), folder_info.cached_file(name)) {
+        let source = match (
+            folder_info.defers_comment_loading(),
+            folder_info.cached_file(name),
+        ) {
             (false, _) => XmpSource::Read,
             (true, Some(cached)) => XmpSource::Cached(cached),
             (true, None) => XmpSource::Deferred,
@@ -113,12 +123,19 @@ impl ProductionFileTagger {
             crate::subtitles::rename_subtitle_file(path, &new_path);
             log::info!(
                 "Renaming {} screenshot(s) for {:?} → {:?}",
-                snapshot.screenshots().len(), path, new_path
+                snapshot.screenshots().len(),
+                path,
+                new_path
             );
             for s in snapshot.screenshots() {
                 let old_shot = screenshot_path(path, s.position_ms);
                 let new_shot = screenshot_path(&new_path, s.position_ms);
-                log::info!("  screenshot: {:?} exists={} → {:?}", old_shot, old_shot.exists(), new_shot);
+                log::info!(
+                    "  screenshot: {:?} exists={} → {:?}",
+                    old_shot,
+                    old_shot.exists(),
+                    new_shot
+                );
                 if old_shot.exists() {
                     match std::fs::rename(&old_shot, &new_shot) {
                         Ok(()) => log::info!("  screenshot renamed ok"),
@@ -127,7 +144,12 @@ impl ProductionFileTagger {
                 }
             }
             if let Err(e) = std::fs::rename(path, &new_path) {
-                log::error!("ProductionFileTagger: rename {:?} → {:?} failed: {}", path, new_path, e);
+                log::error!(
+                    "ProductionFileTagger: rename {:?} → {:?} failed: {}",
+                    path,
+                    new_path,
+                    e
+                );
                 return path.to_path_buf();
             }
             log::info!("Renamed on disk: {:?} → {:?}", path, new_path);
@@ -167,11 +189,20 @@ impl FileTaggerBackend for ProductionFileTagger {
         let storage = inspection.storage_after(what);
         // Parsing with XMP storage for both reads both homes: the text file and the name
         // first, XMP where they are empty.
-        let both_homes = MetadataStorage { comment: CommentStorage::InVideo, in_out: InOutStorage::InVideo };
+        let both_homes = MetadataStorage {
+            comment: CommentStorage::InVideo,
+            in_out: InOutStorage::InVideo,
+        };
         let snapshot = self.parse_with(path, &FolderInfo::default(), both_homes);
         let new_path = self.save_with(&snapshot, path, storage);
         metadata::clear_moved_xmp(&new_path, moved, storage);
-        log::info!("metadata: moved {:?} → {:?} ({:?}: {:?})", path, new_path, what, moved);
+        log::info!(
+            "metadata: moved {:?} → {:?} ({:?}: {:?})",
+            path,
+            new_path,
+            what,
+            moved
+        );
         new_path
     }
 
@@ -181,7 +212,11 @@ impl FileTaggerBackend for ProductionFileTagger {
 
     fn save_screenshot(&self, file_path: &Path, position_ms: u64, image_data: &[u8]) {
         let path = screenshot_path(file_path, position_ms);
-        log::info!("save_screenshot: writing {} bytes to {:?}", image_data.len(), path);
+        log::info!(
+            "save_screenshot: writing {} bytes to {:?}",
+            image_data.len(),
+            path
+        );
         match std::fs::write(&path, image_data) {
             Ok(()) => log::info!("save_screenshot: ok"),
             Err(e) => log::error!("save_screenshot: failed {:?}: {}", path, e),
@@ -198,15 +233,20 @@ impl FileTaggerBackend for ProductionFileTagger {
 mod tests {
     use super::*;
 
-    const ADOBE: MetadataStorage =
-        MetadataStorage { comment: CommentStorage::InVideo, in_out: InOutStorage::InVideo };
-    const FILE_NAME: MetadataStorage =
-        MetadataStorage { comment: CommentStorage::TextFile, in_out: InOutStorage::FileName };
+    const ADOBE: MetadataStorage = MetadataStorage {
+        comment: CommentStorage::InVideo,
+        in_out: InOutStorage::InVideo,
+    };
+    const FILE_NAME: MetadataStorage = MetadataStorage {
+        comment: CommentStorage::TextFile,
+        in_out: InOutStorage::FileName,
+    };
 
     /// A fresh copy of the tiny QuickTime fixture named `name`, in its own temp folder.
     fn clip_named(test: &str, name: &str) -> PathBuf {
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
-        let dir = std::env::temp_dir().join(format!("frename-tagger-{test}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("frename-tagger-{test}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("temp dir");
         let file = dir.join(name);
@@ -215,7 +255,9 @@ mod tests {
     }
 
     fn file_name(path: &Path) -> &str {
-        path.file_name().and_then(|n| n.to_str()).expect("file name")
+        path.file_name()
+            .and_then(|n| n.to_str())
+            .expect("file name")
     }
 
     #[test]
@@ -227,7 +269,10 @@ mod tests {
         assert_eq!(file_name(&new_path), "goat.mov");
 
         let back = tagger.parse_with(&new_path, &FolderInfo::default(), ADOBE);
-        assert_eq!((back.segment_start(), back.segment_end()), (Some(1.0), Some(2.0)));
+        assert_eq!(
+            (back.segment_start(), back.segment_end()),
+            (Some(1.0), Some(2.0))
+        );
     }
 
     #[test]
@@ -280,7 +325,12 @@ mod tests {
         assert_eq!(snapshot.comment(), "in a text file");
         let path = tagger.save_with(&snapshot, &path, ADOBE);
         assert!(!crate::comment::comment_path(&path).exists());
-        assert_eq!(tagger.parse_with(&path, &FolderInfo::default(), ADOBE).comment(), "in a text file");
+        assert_eq!(
+            tagger
+                .parse_with(&path, &FolderInfo::default(), ADOBE)
+                .comment(),
+            "in a text file"
+        );
     }
 
     #[test]
@@ -292,7 +342,11 @@ mod tests {
 
         assert!(tagger.metadata_move_needed(&path, into_video));
         let path = tagger.move_metadata(&path, into_video);
-        assert_eq!(file_name(&path), "goat.in_00_00_00.mov", "in/out stays in the name, tags too");
+        assert_eq!(
+            file_name(&path),
+            "goat.in_00_00_00.mov",
+            "in/out stays in the name, tags too"
+        );
         assert!(!crate::comment::comment_path(&path).exists());
         assert!(!tagger.metadata_move_needed(&path, into_video));
         let snapshot = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
@@ -307,7 +361,12 @@ mod tests {
         assert_eq!(crate::comment::load_comment(&path), "old comment");
         assert!(!tagger.metadata_move_needed(&path, into_text));
         std::fs::remove_file(crate::comment::comment_path(&path)).expect("remove text file");
-        assert_eq!(tagger.parse_with(&path, &FolderInfo::default(), ADOBE).comment(), "");
+        assert_eq!(
+            tagger
+                .parse_with(&path, &FolderInfo::default(), ADOBE)
+                .comment(),
+            ""
+        );
     }
 
     #[test]
@@ -320,8 +379,17 @@ mod tests {
         assert!(tagger.metadata_move_needed(&path, into_video));
         let path = tagger.move_metadata(&path, into_video);
         assert_eq!(file_name(&path), "goat.mov");
-        assert_eq!(crate::comment::load_comment(&path), "note", "the text file moved along");
-        assert_eq!(tagger.parse_with(&path, &FolderInfo::default(), ADOBE).segment_start(), Some(0.0));
+        assert_eq!(
+            crate::comment::load_comment(&path),
+            "note",
+            "the text file moved along"
+        );
+        assert_eq!(
+            tagger
+                .parse_with(&path, &FolderInfo::default(), ADOBE)
+                .segment_start(),
+            Some(0.0)
+        );
         assert!(!tagger.metadata_move_needed(&path, into_video));
 
         let into_name = MetadataMove::InOut(InOutStorage::FileName);
@@ -350,7 +418,12 @@ mod tests {
         assert!(!tagger.metadata_move_needed(&path, into_text));
         let path = tagger.move_metadata(&path, into_text);
         std::fs::remove_file(crate::comment::comment_path(&path)).expect("remove text file");
-        assert_eq!(tagger.parse_with(&path, &FolderInfo::default(), ADOBE).comment(), "in xmp");
+        assert_eq!(
+            tagger
+                .parse_with(&path, &FolderInfo::default(), ADOBE)
+                .comment(),
+            "in xmp"
+        );
     }
 
     #[test]
@@ -371,7 +444,9 @@ mod tests {
         let path = clip_named("move-unsupported", "notes.in_00_00_01.zip");
         std::fs::write(&path, b"not really a zip").expect("write");
         crate::comment::save_comment(&path, "text");
-        assert!(!tagger.metadata_move_needed(&path, MetadataMove::Comments(CommentStorage::InVideo)));
+        assert!(
+            !tagger.metadata_move_needed(&path, MetadataMove::Comments(CommentStorage::InVideo))
+        );
         assert!(!tagger.metadata_move_needed(&path, MetadataMove::InOut(InOutStorage::InVideo)));
     }
 
@@ -383,7 +458,8 @@ mod tests {
             let name = entry.file_name().to_string_lossy().into_owned();
             let metadata = entry.metadata().expect("metadata");
             if metadata.is_file() {
-                let modified = crate::metadata::cache::modified_ms(metadata.modified().expect("time"));
+                let modified =
+                    crate::metadata::cache::modified_ms(metadata.modified().expect("time"));
                 stats.insert(name.clone(), (metadata.len(), modified));
             }
             names.push(name);
@@ -412,7 +488,11 @@ mod tests {
         assert_eq!(hit.comment(), "goat");
 
         // Without a line for it, the scan leaves the file for later rather than opening it.
-        crate::FolderTagStore::update_file_cache(&folder, &[file_name(&path).to_string()], Vec::new());
+        crate::FolderTagStore::update_file_cache(
+            &folder,
+            &[file_name(&path).to_string()],
+            Vec::new(),
+        );
         let miss = tagger.parse_with(&path, &scan_info(&folder), ADOBE);
         assert!(miss.comment_loading());
         assert_eq!(miss.comment(), "");
@@ -422,7 +502,12 @@ mod tests {
         let resolved = tagger.load_comments(&items);
         assert_eq!(resolved[0].comment(), "goat");
         assert!(!resolved[0].comment_loading());
-        assert_eq!(tagger.parse_with(&path, &scan_info(&folder), ADOBE).comment(), "goat");
+        assert_eq!(
+            tagger
+                .parse_with(&path, &scan_info(&folder), ADOBE)
+                .comment(),
+            "goat"
+        );
     }
 
     #[test]
@@ -430,7 +515,9 @@ mod tests {
         let tagger = ProductionFileTagger;
         let path = commented_clip("scan-stale", "goat");
         let folder = path.parent().expect("folder").to_path_buf();
-        let mut line = crate::FolderTagStore::read_file_cache(&folder).pop().expect("line");
+        let mut line = crate::FolderTagStore::read_file_cache(&folder)
+            .pop()
+            .expect("line");
         line.size += 1;
         line.comment = "stale".into();
         crate::FolderTagStore::update_file_cache(&folder, &[], vec![line]);
@@ -444,13 +531,20 @@ mod tests {
         let tagger = ProductionFileTagger;
         let path = commented_clip("reload", "goat");
         let folder = path.parent().expect("folder").to_path_buf();
-        assert!(!tagger.reload_metadata(&path), "saving wrote a matching line");
+        assert!(
+            !tagger.reload_metadata(&path),
+            "saving wrote a matching line"
+        );
 
-        let mut line = crate::FolderTagStore::read_file_cache(&folder).pop().expect("line");
+        let mut line = crate::FolderTagStore::read_file_cache(&folder)
+            .pop()
+            .expect("line");
         line.comment = "stale".into();
         crate::FolderTagStore::update_file_cache(&folder, &[], vec![line]);
         assert!(tagger.reload_metadata(&path));
-        let line = crate::FolderTagStore::read_file_cache(&folder).pop().expect("line");
+        let line = crate::FolderTagStore::read_file_cache(&folder)
+            .pop()
+            .expect("line");
         assert_eq!(line.comment, "goat", "read again from the video");
     }
 
@@ -459,14 +553,21 @@ mod tests {
         let tagger = ProductionFileTagger;
         let path = commented_clip("scan-ai-edit", "goat");
         let folder = path.parent().expect("folder").to_path_buf();
-        let mut line = crate::FolderTagStore::read_file_cache(&folder).pop().expect("line");
+        let mut line = crate::FolderTagStore::read_file_cache(&folder)
+            .pop()
+            .expect("line");
         line.comment = "edited by hand".into();
         crate::FolderTagStore::update_file_cache(&folder, &[], vec![line]);
 
         let snapshot = tagger.parse_with(&path, &scan_info(&folder), ADOBE);
         assert_eq!(snapshot.comment(), "edited by hand");
         let path = tagger.save_with(&snapshot, &path, ADOBE);
-        assert_eq!(tagger.parse_with(&path, &FolderInfo::default(), ADOBE).comment(), "edited by hand");
+        assert_eq!(
+            tagger
+                .parse_with(&path, &FolderInfo::default(), ADOBE)
+                .comment(),
+            "edited by hand"
+        );
     }
 
     #[test]
@@ -479,12 +580,22 @@ mod tests {
             tagger.save_with(&snapshot, &path, ADOBE)
         };
         let folder = path.parent().expect("folder").to_path_buf();
-        crate::FolderTagStore::update_file_cache(&folder, &[file_name(&path).to_string()], Vec::new());
+        crate::FolderTagStore::update_file_cache(
+            &folder,
+            &[file_name(&path).to_string()],
+            Vec::new(),
+        );
 
         let pending = tagger.parse_with(&path, &scan_info(&folder), ADOBE);
         assert!(pending.comment_loading());
         let path = tagger.save_with(&pending, &path, ADOBE);
         assert_eq!(file_name(&path), "Commented.goat.mov", "tag kept");
-        assert_eq!(tagger.parse_with(&path, &FolderInfo::default(), ADOBE).comment(), "goat", "comment kept");
+        assert_eq!(
+            tagger
+                .parse_with(&path, &FolderInfo::default(), ADOBE)
+                .comment(),
+            "goat",
+            "comment kept"
+        );
     }
 }

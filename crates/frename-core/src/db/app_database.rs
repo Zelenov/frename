@@ -68,7 +68,9 @@ impl AppDatabase {
     /// Returns the shared connection for this database's path, opening it on first use.
     fn conn(&self) -> Result<Arc<Mutex<Connection>>, rusqlite::Error> {
         let cache = CONNECTIONS.get_or_init(|| Mutex::new(HashMap::new()));
-        let mut cache = cache.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut cache = cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if let Some(conn) = cache.get(&self.path) {
             return Ok(Arc::clone(conn));
         }
@@ -76,7 +78,6 @@ impl AppDatabase {
         cache.insert(self.path.clone(), Arc::clone(&conn));
         Ok(conn)
     }
-
 }
 
 impl Initializable for AppDatabase {
@@ -151,8 +152,13 @@ impl AppStateStore for AppDatabase {
         conn.query_row(
             "SELECT volume FROM video_settings WHERE id = 1",
             [],
-            |row| Ok(VideoSettings { volume: row.get::<_, f64>(0)? as f32 }),
-        ).ok()
+            |row| {
+                Ok(VideoSettings {
+                    volume: row.get::<_, f64>(0)? as f32,
+                })
+            },
+        )
+        .ok()
     }
 
     fn set_video_settings(&self, settings: VideoSettings) {
@@ -232,7 +238,6 @@ impl AppStateStore for AppDatabase {
             );
         }
     }
-
 }
 
 impl AppDatabase {

@@ -9,7 +9,8 @@ use crate::tags::{CachedFile, FileSnapshot, FolderTagStore};
 
 /// A modification time as the file list stores it: milliseconds since the Unix epoch.
 pub fn modified_ms(time: SystemTime) -> u64 {
-    time.duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
+    time.duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as u64)
 }
 
 /// Whether anything is kept in XMP, i.e. whether the file list is used at all.
@@ -53,10 +54,13 @@ pub(crate) fn refresh_after_save(old: &Path, new: &Path, storage: MetadataStorag
 /// Drop the file list's line for the file at `path` and read one from the file again. Returns
 /// whether the line changed: it was missing, or no longer matched the file.
 pub(crate) fn reload_line(path: &Path) -> bool {
-    let (Some(folder), Some(name)) = (path.parent(), path.file_name().and_then(|n| n.to_str())) else {
+    let (Some(folder), Some(name)) = (path.parent(), path.file_name().and_then(|n| n.to_str()))
+    else {
         return false;
     };
-    let old = FolderTagStore::read_file_cache(folder).into_iter().find(|line| line.name == name);
+    let old = FolderTagStore::read_file_cache(folder)
+        .into_iter()
+        .find(|line| line.name == name);
     let new = line_for(path).map(|(line, _)| line);
     if old == new {
         return false;
@@ -68,7 +72,10 @@ pub(crate) fn reload_line(path: &Path) -> bool {
 /// Read the XMP a folder scan deferred for each `(path, snapshot)`, once per file, and record
 /// what was read in the file list in one write per folder. Returns the resolved snapshots in
 /// the same order.
-pub(crate) fn resolve_batch(items: &[(PathBuf, FileSnapshot)], storage: MetadataStorage) -> Vec<FileSnapshot> {
+pub(crate) fn resolve_batch(
+    items: &[(PathBuf, FileSnapshot)],
+    storage: MetadataStorage,
+) -> Vec<FileSnapshot> {
     let mut lines: Vec<(PathBuf, CachedFile)> = Vec::new();
     let resolved = items
         .iter()
@@ -81,7 +88,13 @@ pub(crate) fn resolve_batch(items: &[(PathBuf, FileSnapshot)], storage: Metadata
             let has_text_file = crate::comment::comment_path(path).is_file();
             match line_for(path) {
                 Some((line, _)) => {
-                    super::load(path, has_text_file, &mut resolved, storage, XmpSource::Cached(&line));
+                    super::load(
+                        path,
+                        has_text_file,
+                        &mut resolved,
+                        storage,
+                        XmpSource::Cached(&line),
+                    );
                     let folder = path.parent().map(Path::to_path_buf).unwrap_or_default();
                     lines.push((folder, line));
                 }
@@ -94,7 +107,11 @@ pub(crate) fn resolve_batch(items: &[(PathBuf, FileSnapshot)], storage: Metadata
     let mut folders: Vec<PathBuf> = lines.iter().map(|(folder, _)| folder.clone()).collect();
     folders.dedup();
     for folder in folders {
-        let upsert = lines.iter().filter(|(f, _)| *f == folder).map(|(_, line)| line.clone()).collect();
+        let upsert = lines
+            .iter()
+            .filter(|(f, _)| *f == folder)
+            .map(|(_, line)| line.clone())
+            .collect();
         FolderTagStore::update_file_cache(&folder, &[], upsert);
     }
     resolved

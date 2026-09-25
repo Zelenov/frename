@@ -44,10 +44,18 @@ where
 
     let mut bottom_items: Vec<Element<'_, Message>> = Vec::new();
     if let Some(s) = seg_start {
-        bottom_items.push(timecode_badge::view("IN", timecode_badge::fmt_timecode(s), Message::ClearSegmentStart));
+        bottom_items.push(timecode_badge::view(
+            "IN",
+            timecode_badge::fmt_timecode(s),
+            Message::ClearSegmentStart,
+        ));
     }
     if let Some(e) = seg_end {
-        bottom_items.push(timecode_badge::view("OUT", timecode_badge::fmt_timecode(e), Message::ClearSegmentEnd));
+        bottom_items.push(timecode_badge::view(
+            "OUT",
+            timecode_badge::fmt_timecode(e),
+            Message::ClearSegmentEnd,
+        ));
     }
     bottom_items.push(file_name_line::view(name_ext).into());
 
@@ -56,16 +64,10 @@ where
         .align_y(Alignment::Center)
         .width(Length::Fill);
 
-    let inner = container(
-        column![top_row, bottom_row]
-            .spacing(8)
-            .width(Length::Fill),
-    )
-    .padding([8, 8])
-    .width(Length::Fill)
-    .style(theme::elevated_container_style);
-
-    container(inner)
+    let inner = container(column![top_row, bottom_row].spacing(8).width(Length::Fill))
+        .padding([8, 8])
         .width(Length::Fill)
-        .into()
+        .style(theme::elevated_container_style);
+
+    container(inner).width(Length::Fill).into()
 }

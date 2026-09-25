@@ -20,7 +20,11 @@ fn fmt_timecode(secs: f32) -> String {
     let h = total / 3600;
     let m = (total % 3600) / 60;
     let s = total % 60;
-    if h == 0 { format!("{:02}:{:02}", m, s) } else { format!("{:02}:{:02}:{:02}", h, m, s) }
+    if h == 0 {
+        format!("{:02}:{:02}", m, s)
+    } else {
+        format!("{:02}:{:02}:{:02}", h, m, s)
+    }
 }
 
 /// Renders the file name as tag chips + optional timecodes + name.extension (no outer container).
@@ -39,10 +43,7 @@ pub fn view<'a, Message: 'a>(
     let seg_start = snapshot.segment_start();
     let seg_end = snapshot.segment_end();
     let tags = snapshot.tags();
-    let name_ext = name_ext_from_parts(
-        snapshot.name_without_extension(),
-        snapshot.extension(),
-    );
+    let name_ext = name_ext_from_parts(snapshot.name_without_extension(), snapshot.extension());
 
     let mut parts: Vec<Element<'a, Message>> = Vec::new();
     for (i, tag_name) in tags.iter().enumerate() {
@@ -67,17 +68,10 @@ pub fn view<'a, Message: 'a>(
         if !tags.is_empty() || seg_start.is_some() || seg_end.is_some() {
             parts.push(dot_text().into());
         }
-        parts.push(
-            text(name_ext)
-                .size(14)
-                .color(theme::TEXT)
-                .into(),
-        );
+        parts.push(text(name_ext).size(14).color(theme::TEXT).into());
     }
 
-    let row = row(parts)
-        .spacing(0)
-        .align_y(iced::Alignment::Center);
+    let row = row(parts).spacing(0).align_y(iced::Alignment::Center);
     if wrap {
         row.wrap()
             .vertical_spacing(4)
@@ -89,10 +83,7 @@ pub fn view<'a, Message: 'a>(
 }
 
 fn dot_text<'a, Message: 'a>() -> Element<'a, Message> {
-    text(DOT)
-        .size(14)
-        .color(theme::TEXT_MUTED)
-        .into()
+    text(DOT).size(14).color(theme::TEXT_MUTED).into()
 }
 
 fn name_ext_from_parts(name: &str, ext: &str) -> String {

@@ -75,7 +75,9 @@ pub trait FileTaggerBackend: Send + Sync {
 
     /// Load the raw image bytes for a screenshot by position.
     #[allow(dead_code)]
-    fn load_screenshot_image(&self, _file_path: &Path, _position_ms: u64) -> Option<Vec<u8>> { None }
+    fn load_screenshot_image(&self, _file_path: &Path, _position_ms: u64) -> Option<Vec<u8>> {
+        None
+    }
 }
 
 #[cfg(test)]

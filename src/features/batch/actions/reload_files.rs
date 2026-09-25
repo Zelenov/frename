@@ -25,6 +25,13 @@ pub fn view<'a, M: 'a>() -> Element<'a, M> {
 /// Reload the file at `path`. Its row is refreshed either way; it counts as changed when the
 /// cached values were missing or stale.
 pub fn run(path: &Path) -> ItemResult {
-    let status = if FileTagger::reload_metadata(path) { ItemStatus::Done } else { ItemStatus::Skipped };
-    ItemResult { status, update: Some(super::reparsed(path.to_path_buf())) }
+    let status = if FileTagger::reload_metadata(path) {
+        ItemStatus::Done
+    } else {
+        ItemStatus::Skipped
+    };
+    ItemResult {
+        status,
+        update: Some(super::reparsed(path.to_path_buf())),
+    }
 }

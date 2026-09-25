@@ -80,7 +80,10 @@ where
         let changed = state
             .last_bounds
             .map(|b| {
-                b.x != bounds.x || b.y != bounds.y || b.width != bounds.width || b.height != bounds.height
+                b.x != bounds.x
+                    || b.y != bounds.y
+                    || b.width != bounds.width
+                    || b.height != bounds.height
             })
             .unwrap_or(true);
         if changed {

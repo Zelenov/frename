@@ -71,10 +71,7 @@ where
             None => (None, self.iter().next().map(|k| k.0.clone())),
             Some(b) => {
                 if self.by_id.contains_key(b) {
-                    (
-                        self.left_neighbor_of(b).map(|k| k.clone()),
-                        Some(b.clone()),
-                    )
+                    (self.left_neighbor_of(b).map(|k| k.clone()), Some(b.clone()))
                 } else {
                     (None, None)
                 }
@@ -206,10 +203,8 @@ where
     ///
     /// Elements that exist only in one collection are ignored. An empty intersection is always `true`.
     pub fn is_same_order_as<V2>(&self, other: &OrderedCollection<K, V2>) -> bool {
-        let other_keys: std::collections::HashSet<&K> =
-            other.iter().map(|(k, _, _)| k).collect();
-        let self_keys: std::collections::HashSet<&K> =
-            self.iter().map(|(k, _, _)| k).collect();
+        let other_keys: std::collections::HashSet<&K> = other.iter().map(|(k, _, _)| k).collect();
+        let self_keys: std::collections::HashSet<&K> = self.iter().map(|(k, _, _)| k).collect();
 
         let self_common: Vec<&K> = self
             .iter()
@@ -278,11 +273,7 @@ where
     }
 
     /// Returns (order_key, rebalanced). rebalanced is true when no integer fit between prev and next and rebalance was run.
-    fn order_between(
-        &mut self,
-        prev: Option<&K>,
-        next: Option<&K>,
-    ) -> (OrderKey, bool) {
+    fn order_between(&mut self, prev: Option<&K>, next: Option<&K>) -> (OrderKey, bool) {
         // Use 0 for "no previous" to avoid i64 overflow in midpoint (next.checked_sub(i64::MIN) overflows).
         let prev_order = match prev {
             Some(id) => self.order_of.get(&id).copied().unwrap_or(0),
@@ -478,7 +469,11 @@ mod tests {
 
         let ids: Vec<&str> = this.iter().map(|(k, _, _)| *k).collect();
         // A, B, C still in same relative order; x, y, z also in their original relative positions
-        let common: Vec<&str> = ids.iter().copied().filter(|k| ["A","B","C"].contains(k)).collect();
+        let common: Vec<&str> = ids
+            .iter()
+            .copied()
+            .filter(|k| ["A", "B", "C"].contains(k))
+            .collect();
         assert_eq!(common, ["A", "B", "C"]);
     }
 
@@ -554,10 +549,18 @@ mod tests {
 
         let all: Vec<u32> = this.iter().map(|(k, _, _)| *k).collect();
         // non-common [0, 1, 2] must still appear in the same relative order
-        let non_common: Vec<u32> = all.iter().copied().filter(|k| [0u32,1,2].contains(k)).collect();
+        let non_common: Vec<u32> = all
+            .iter()
+            .copied()
+            .filter(|k| [0u32, 1, 2].contains(k))
+            .collect();
         assert_eq!(non_common, [0, 1, 2]);
         // common [10, 20, 30] must be in other's order: 30, 10, 20
-        let common: Vec<u32> = all.iter().copied().filter(|k| [10u32,20,30].contains(k)).collect();
+        let common: Vec<u32> = all
+            .iter()
+            .copied()
+            .filter(|k| [10u32, 20, 30].contains(k))
+            .collect();
         assert_eq!(common, [30, 10, 20]);
     }
 

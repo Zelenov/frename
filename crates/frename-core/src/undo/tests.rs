@@ -8,19 +8,25 @@ mod tests {
     use std::time::SystemTime;
 
     use crate::db::fake_app_storage::FakeAppStorage;
-    use crate::{Directory, File, FileId, FileSnapshot, StoredTag, TagList};
     use crate::undo::{
-        History, NavigateFileCommand, ReorderTagCommand, ToggleTagCommand, PasteTagsCommand,
-        DeleteTagCommand, CreateTagCommand, SaveTagCommand, StarTagCommand, UndoContext,
+        CreateTagCommand, DeleteTagCommand, History, NavigateFileCommand, PasteTagsCommand,
+        ReorderTagCommand, SaveTagCommand, StarTagCommand, ToggleTagCommand, UndoContext,
     };
+    use crate::{Directory, File, FileId, FileSnapshot, StoredTag, TagList};
     use uuid::Uuid;
 
     // --- helpers ---
 
     fn make_store_with_tags(names: &[&str]) -> FakeAppStorage {
-        names.iter().enumerate().fold(FakeAppStorage::new(), |store, (i, name)| {
-            store.add_stored_tag(StoredTag::with_all(Uuid::new_v4(), *name, (i + 1) as i64, false), 0)
-        })
+        names
+            .iter()
+            .enumerate()
+            .fold(FakeAppStorage::new(), |store, (i, name)| {
+                store.add_stored_tag(
+                    StoredTag::with_all(Uuid::new_v4(), *name, (i + 1) as i64, false),
+                    0,
+                )
+            })
     }
 
     fn snapshot_with_tags(names: &[&str]) -> FileSnapshot {
@@ -56,17 +62,27 @@ mod tests {
         let id_a = tag_list.checked_tag_id_at(0).unwrap();
         let fi = tag_list.checked_index_of(id_a).unwrap();
         tag_list.reorder_tag_to_index(id_a, 1);
-        history.push(Box::new(ReorderTagCommand { moved_id: id_a, from_index: fi, to_index: 1 }));
+        history.push(Box::new(ReorderTagCommand {
+            moved_id: id_a,
+            from_index: fi,
+            to_index: 1,
+        }));
 
         assert!(history.can_undo());
         assert!(!history.can_redo());
 
-        let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
         history.undo(&mut ctx).unwrap();
         assert!(!history.can_undo());
         assert!(history.can_redo());
 
-        let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
         history.redo(&mut ctx).unwrap();
         assert!(history.can_undo());
         assert!(!history.can_redo());
@@ -85,19 +101,34 @@ mod tests {
         let id_b = tag_list.checked_tag_id_at(1).unwrap();
 
         tag_list.reorder_tag_to_index(id_a, 2);
-        history.push(Box::new(ReorderTagCommand { moved_id: id_a, from_index: 0, to_index: 2 }));
+        history.push(Box::new(ReorderTagCommand {
+            moved_id: id_a,
+            from_index: 0,
+            to_index: 2,
+        }));
         tag_list.reorder_tag_to_index(id_b, 1);
-        history.push(Box::new(ReorderTagCommand { moved_id: id_b, from_index: 0, to_index: 1 }));
+        history.push(Box::new(ReorderTagCommand {
+            moved_id: id_b,
+            from_index: 0,
+            to_index: 1,
+        }));
 
         // Undo one → redo stack has 1
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
         assert!(history.can_redo());
 
         // Push new action → redo stack cleared
-        history.push(Box::new(ReorderTagCommand { moved_id: id_a, from_index: 0, to_index: 1 }));
+        history.push(Box::new(ReorderTagCommand {
+            moved_id: id_a,
+            from_index: 0,
+            to_index: 1,
+        }));
         assert!(!history.can_redo());
         assert!(history.can_undo());
     }
@@ -114,15 +145,26 @@ mod tests {
 
         // Push 3 commands (fills max)
         for _ in 0..3 {
-            history.push(Box::new(ReorderTagCommand { moved_id: id_a, from_index: 0, to_index: 0 }));
+            history.push(Box::new(ReorderTagCommand {
+                moved_id: id_a,
+                from_index: 0,
+                to_index: 0,
+            }));
         }
         // Push one more — should drop the oldest
-        history.push(Box::new(ReorderTagCommand { moved_id: id_a, from_index: 0, to_index: 0 }));
+        history.push(Box::new(ReorderTagCommand {
+            moved_id: id_a,
+            from_index: 0,
+            to_index: 0,
+        }));
 
         // Still exactly max_depth entries: undo 3 times and then can_undo should be false
         let mut count = 0;
         while history.can_undo() {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
             count += 1;
         }
@@ -136,7 +178,10 @@ mod tests {
         let mut dir = empty_directory();
         let mut history = History::<FakeAppStorage, FakeAppStorage>::new(50);
 
-        let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
         assert!(history.undo(&mut ctx).is_ok());
         assert!(!history.can_undo());
         assert!(!history.can_redo());
@@ -149,7 +194,10 @@ mod tests {
         let mut dir = empty_directory();
         let mut history = History::<FakeAppStorage, FakeAppStorage>::new(50);
 
-        let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
         assert!(history.redo(&mut ctx).is_ok());
     }
 
@@ -166,17 +214,30 @@ mod tests {
         assert_eq!(fi, 0);
 
         tag_list.reorder_tag_to_index(id_action, 2);
-        assert_eq!(tag_list.file_snapshot().tags(), ["Comedy", "Summer", "Action"]);
+        assert_eq!(
+            tag_list.file_snapshot().tags(),
+            ["Comedy", "Summer", "Action"]
+        );
 
         let mut history = History::new(50);
-        history.push(Box::new(ReorderTagCommand { moved_id: id_action, from_index: 0, to_index: 2 }));
+        history.push(Box::new(ReorderTagCommand {
+            moved_id: id_action,
+            from_index: 0,
+            to_index: 2,
+        }));
 
         let mut dir = empty_directory();
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
-        assert_eq!(tag_list.file_snapshot().tags(), ["Action", "Comedy", "Summer"]);
+        assert_eq!(
+            tag_list.file_snapshot().tags(),
+            ["Action", "Comedy", "Summer"]
+        );
         assert!(!history.can_undo());
         assert!(history.can_redo());
     }
@@ -191,20 +252,36 @@ mod tests {
         tag_list.reorder_tag_to_index(id_action, 2);
 
         let mut history = History::new(50);
-        history.push(Box::new(ReorderTagCommand { moved_id: id_action, from_index: 0, to_index: 2 }));
+        history.push(Box::new(ReorderTagCommand {
+            moved_id: id_action,
+            from_index: 0,
+            to_index: 2,
+        }));
 
         let mut dir = empty_directory();
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
-        assert_eq!(tag_list.file_snapshot().tags(), ["Action", "Comedy", "Summer"]);
+        assert_eq!(
+            tag_list.file_snapshot().tags(),
+            ["Action", "Comedy", "Summer"]
+        );
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.redo(&mut ctx).unwrap();
         }
-        assert_eq!(tag_list.file_snapshot().tags(), ["Comedy", "Summer", "Action"]);
+        assert_eq!(
+            tag_list.file_snapshot().tags(),
+            ["Comedy", "Summer", "Action"]
+        );
         assert!(history.can_undo());
         assert!(!history.can_redo());
     }
@@ -217,15 +294,28 @@ mod tests {
 
         let id_summer = tag_list.checked_tag_id_at(2).unwrap();
         tag_list.reorder_tag_to_index(id_summer, 0);
-        assert_eq!(tag_list.file_snapshot().tags(), ["Summer", "Action", "Comedy"]);
+        assert_eq!(
+            tag_list.file_snapshot().tags(),
+            ["Summer", "Action", "Comedy"]
+        );
 
         let mut history = History::new(50);
-        history.push(Box::new(ReorderTagCommand { moved_id: id_summer, from_index: 2, to_index: 0 }));
+        history.push(Box::new(ReorderTagCommand {
+            moved_id: id_summer,
+            from_index: 2,
+            to_index: 0,
+        }));
 
         let mut dir = empty_directory();
-        let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
         history.undo(&mut ctx).unwrap();
-        assert_eq!(tag_list.file_snapshot().tags(), ["Action", "Comedy", "Summer"]);
+        assert_eq!(
+            tag_list.file_snapshot().tags(),
+            ["Action", "Comedy", "Summer"]
+        );
     }
 
     #[test]
@@ -241,30 +331,53 @@ mod tests {
 
         // Move Action 0→2: Comedy, Summer, Action
         tag_list.reorder_tag_to_index(id_action, 2);
-        history.push(Box::new(ReorderTagCommand { moved_id: id_action, from_index: 0, to_index: 2 }));
+        history.push(Box::new(ReorderTagCommand {
+            moved_id: id_action,
+            from_index: 0,
+            to_index: 2,
+        }));
 
         // In new order: Comedy(0), Summer(1), Action(2). Move Summer (now at 1) to 0: Summer, Comedy, Action
         // We need the new id_summer position
         let id_summer_new = tag_list.checked_tag_id_at(1).unwrap();
         assert_eq!(id_summer_new, id_summer);
         tag_list.reorder_tag_to_index(id_summer, 0);
-        history.push(Box::new(ReorderTagCommand { moved_id: id_summer, from_index: 1, to_index: 0 }));
+        history.push(Box::new(ReorderTagCommand {
+            moved_id: id_summer,
+            from_index: 1,
+            to_index: 0,
+        }));
 
-        assert_eq!(tag_list.file_snapshot().tags(), ["Summer", "Comedy", "Action"]);
+        assert_eq!(
+            tag_list.file_snapshot().tags(),
+            ["Summer", "Comedy", "Action"]
+        );
 
         // Undo second: back to Comedy, Summer, Action
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
-        assert_eq!(tag_list.file_snapshot().tags(), ["Comedy", "Summer", "Action"]);
+        assert_eq!(
+            tag_list.file_snapshot().tags(),
+            ["Comedy", "Summer", "Action"]
+        );
 
         // Undo first: back to Action, Comedy, Summer
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
-        assert_eq!(tag_list.file_snapshot().tags(), ["Action", "Comedy", "Summer"]);
+        assert_eq!(
+            tag_list.file_snapshot().tags(),
+            ["Action", "Comedy", "Summer"]
+        );
         assert!(!history.can_undo());
         assert!(history.can_redo());
     }
@@ -279,13 +392,20 @@ mod tests {
         tag_list.reorder_tag_to_index(id_action, 1);
 
         let mut history = History::new(50);
-        history.push(Box::new(ReorderTagCommand { moved_id: id_action, from_index: 0, to_index: 1 }));
+        history.push(Box::new(ReorderTagCommand {
+            moved_id: id_action,
+            from_index: 0,
+            to_index: 1,
+        }));
 
         // Delete the tag from the list (simulate external deletion)
         tag_list.remove_stored_tag_by_id(id_action).unwrap();
 
         let mut dir = empty_directory();
-        let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
         let result = history.undo(&mut ctx);
         assert!(result.is_err());
         // Stack unchanged — still can_undo
@@ -324,7 +444,10 @@ mod tests {
         }));
 
         {
-            let mut ctx = UndoContext { directory: &mut directory, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut directory,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
         assert_eq!(directory.selected_index(), Some(0));
@@ -356,13 +479,19 @@ mod tests {
         }));
 
         {
-            let mut ctx = UndoContext { directory: &mut directory, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut directory,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
         assert_eq!(directory.selected_index(), Some(0));
 
         {
-            let mut ctx = UndoContext { directory: &mut directory, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut directory,
+                tag_list: &mut tag_list,
+            };
             history.redo(&mut ctx).unwrap();
         }
         assert_eq!(directory.selected_index(), Some(1));
@@ -382,10 +511,16 @@ mod tests {
         tag_list.toggle_by_id(id); // now unchecked
 
         let mut history = History::new(50);
-        history.push(Box::new(ToggleTagCommand { tag_id: id, was_checked }));
+        history.push(Box::new(ToggleTagCommand {
+            tag_id: id,
+            was_checked,
+        }));
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
         // Should be checked again
@@ -403,16 +538,25 @@ mod tests {
         tag_list.toggle_by_id(id); // now unchecked
 
         let mut history = History::new(50);
-        history.push(Box::new(ToggleTagCommand { tag_id: id, was_checked: true }));
+        history.push(Box::new(ToggleTagCommand {
+            tag_id: id,
+            was_checked: true,
+        }));
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
         assert!(tag_list.get_tag(id).unwrap().is_checked());
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.redo(&mut ctx).unwrap();
         }
         assert!(!tag_list.get_tag(id).unwrap().is_checked());
@@ -435,7 +579,10 @@ mod tests {
         }));
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
         assert_eq!(tag_list.file_snapshot().tags(), ["Action"]);
@@ -456,13 +603,19 @@ mod tests {
         }));
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
         assert_eq!(tag_list.file_snapshot().tags(), ["Action"]);
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.redo(&mut ctx).unwrap();
         }
         assert_eq!(tag_list.file_snapshot().tags(), ["Action", "Comedy"]);
@@ -486,11 +639,20 @@ mod tests {
 
         let mut history = History::new(50);
         history.push(Box::new(DeleteTagCommand {
-            tag_id: id, tag_name: name, color_index, was_stored, was_starred, was_checked, sort_order,
+            tag_id: id,
+            tag_name: name,
+            color_index,
+            was_stored,
+            was_starred,
+            was_checked,
+            sort_order,
         }));
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
         assert!(tag_list.get_tag(id).is_some());
@@ -510,17 +672,29 @@ mod tests {
 
         let mut history = History::new(50);
         history.push(Box::new(DeleteTagCommand {
-            tag_id: id, tag_name: name, color_index, was_stored, was_starred, was_checked, sort_order,
+            tag_id: id,
+            tag_name: name,
+            color_index,
+            was_stored,
+            was_starred,
+            was_checked,
+            sort_order,
         }));
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
         assert!(tag_list.get_tag(id).is_some());
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.redo(&mut ctx).unwrap();
         }
         assert!(tag_list.get_tag(id).is_none());
@@ -545,7 +719,10 @@ mod tests {
         }));
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
         assert!(tag_list.get_tag(id).is_none());
@@ -569,13 +746,19 @@ mod tests {
         }));
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
         assert!(tag_list.get_tag(id).is_none());
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.redo(&mut ctx).unwrap();
         }
         assert!(tag_list.get_tag(id).is_some());
@@ -598,10 +781,16 @@ mod tests {
         assert!(tag_list.get_tag(id).unwrap().is_stored());
 
         let mut history = History::new(50);
-        history.push(Box::new(SaveTagCommand { tag_id: id, color_index }));
+        history.push(Box::new(SaveTagCommand {
+            tag_id: id,
+            color_index,
+        }));
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
         assert!(!tag_list.get_tag(id).unwrap().is_stored());
@@ -618,16 +807,25 @@ mod tests {
         let color_index = tag_list.get_tag(id).unwrap().color_index();
 
         let mut history = History::new(50);
-        history.push(Box::new(SaveTagCommand { tag_id: id, color_index }));
+        history.push(Box::new(SaveTagCommand {
+            tag_id: id,
+            color_index,
+        }));
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
         assert!(!tag_list.get_tag(id).unwrap().is_stored());
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.redo(&mut ctx).unwrap();
         }
         assert!(tag_list.get_tag(id).unwrap().is_stored());
@@ -650,10 +848,16 @@ mod tests {
         assert!(tag_list.get_tag(id).unwrap().is_starred());
 
         let mut history = History::new(50);
-        history.push(Box::new(StarTagCommand { tag_id: id, was_starred: false }));
+        history.push(Box::new(StarTagCommand {
+            tag_id: id,
+            was_starred: false,
+        }));
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
         assert!(!tag_list.get_tag(id).unwrap().is_starred());
@@ -670,16 +874,25 @@ mod tests {
         tag_list.star_tag(id).unwrap();
 
         let mut history = History::new(50);
-        history.push(Box::new(StarTagCommand { tag_id: id, was_starred: false }));
+        history.push(Box::new(StarTagCommand {
+            tag_id: id,
+            was_starred: false,
+        }));
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap();
         }
         assert!(!tag_list.get_tag(id).unwrap().is_starred());
 
         {
-            let mut ctx = UndoContext { directory: &mut dir, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
             history.redo(&mut ctx).unwrap();
         }
         assert!(tag_list.get_tag(id).unwrap().is_starred());
@@ -688,9 +901,10 @@ mod tests {
     #[test]
     fn navigate_command_undo_fails_gracefully_when_file_not_found() {
         let dir_path = PathBuf::from("C:/test");
-        let files = vec![
-            File::from_path(dir_path.join("a.mp4"), SystemTime::UNIX_EPOCH),
-        ];
+        let files = vec![File::from_path(
+            dir_path.join("a.mp4"),
+            SystemTime::UNIX_EPOCH,
+        )];
         let file_a_id = files[0].id();
         let mut directory = Directory::with_files(&dir_path, files, FakeAppStorage::new());
         directory.select_index(0);
@@ -713,11 +927,17 @@ mod tests {
         }));
 
         {
-            let mut ctx = UndoContext { directory: &mut directory, tag_list: &mut tag_list };
+            let mut ctx = UndoContext {
+                directory: &mut directory,
+                tag_list: &mut tag_list,
+            };
             history.undo(&mut ctx).unwrap(); // undo selects file_a_id — succeeds
         }
         // redo should fail: to_file_id is bogus
-        let mut ctx = UndoContext { directory: &mut directory, tag_list: &mut tag_list };
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
         let result = history.redo(&mut ctx);
         assert!(result.is_err());
         // Stack unchanged after error

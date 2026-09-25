@@ -1,7 +1,7 @@
+use super::super::traits::Undoable;
+use super::super::{UndoContext, UndoError};
 use crate::db::{AppStateStore, StoredTagStore};
 use crate::TagId;
-use super::super::{UndoContext, UndoError};
-use super::super::traits::Undoable;
 
 /// Records a tag deletion (stored or snapshot-only).
 /// Undo re-inserts the tag at its original position; redo removes it again.

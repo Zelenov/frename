@@ -11,7 +11,7 @@ use super::Message;
 pub const PANEL_HEIGHT: f32 = 36.0;
 
 const BG_BRIDGE: Color = Color::from_rgb(0.098, 0.098, 0.098); // #191919
-const BG_BLOCK: Color = Color::from_rgb(0.18, 0.18, 0.18);     // #2e2e2e
+const BG_BLOCK: Color = Color::from_rgb(0.18, 0.18, 0.18); // #2e2e2e
 const BG_BLOCK_HOV: Color = Color::from_rgb(0.24, 0.24, 0.24);
 const BG_BLOCK_PRS: Color = Color::from_rgb(0.30, 0.30, 0.30);
 const BG_BLOCK_DIM: Color = Color::from_rgb(0.12, 0.12, 0.12); // grayed-out

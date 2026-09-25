@@ -2,7 +2,9 @@
 //! every action shares.
 
 use frename_core::FileId;
-use iced::widget::{button, column, container, progress_bar, row, scrollable, text, tooltip, Space};
+use iced::widget::{
+    button, column, container, progress_bar, row, scrollable, text, tooltip, Space,
+};
 use iced::{Element, Length};
 
 use crate::features::folder_workspace::Directory;
@@ -16,9 +18,13 @@ const FAILED_LIST_HEIGHT: f32 = 120.0;
 
 /// Render the batch panel. `directory` names the files of the job.
 pub fn view<'a>(state: &'a BatchState, directory: Option<&'a Directory>) -> Element<'a, Message> {
-    let actions = column(Action::ALL.iter().map(|action| action_entry(*action, state.action())))
-        .spacing(2)
-        .width(Length::Fixed(ACTION_LIST_WIDTH));
+    let actions = column(
+        Action::ALL
+            .iter()
+            .map(|action| action_entry(*action, state.action())),
+    )
+    .spacing(2)
+    .width(Length::Fixed(ACTION_LIST_WIDTH));
 
     let options = container(action_options(state))
         .padding([4, 16])
@@ -29,7 +35,9 @@ pub fn view<'a>(state: &'a BatchState, directory: Option<&'a Directory>) -> Elem
     // checked files.
     let heading = row![
         text("Batch actions").size(18),
-        text(format!("on {} checked", files(state.checked_count()))).size(13).color(theme::TEXT_MUTED),
+        text(format!("on {} checked", files(state.checked_count())))
+            .size(13)
+            .color(theme::TEXT_MUTED),
     ]
     .spacing(10)
     .align_y(iced::Alignment::End);
@@ -39,10 +47,13 @@ pub fn view<'a>(state: &'a BatchState, directory: Option<&'a Directory>) -> Elem
             .on_press_maybe((!state.is_running()).then_some(Message::SetActive(false)))
             .padding([2, 8])
             .style(theme::icon_button_style(!state.is_running())),
-        container(text("Back to the open file")).padding([2, 6]).style(theme::elevated_container_style),
+        container(text("Back to the open file"))
+            .padding([2, 6])
+            .style(theme::elevated_container_style),
         tooltip::Position::Left,
     );
-    let title = row![heading, Space::new().width(Length::Fill), close].align_y(iced::Alignment::Center);
+    let title =
+        row![heading, Space::new().width(Length::Fill), close].align_y(iced::Alignment::Center);
 
     let mut content = column![
         container(title).padding([4, 10]),
@@ -79,14 +90,21 @@ fn action_options(state: &BatchState) -> Element<'_, Message> {
         .on_press_maybe(can_run.then_some(Message::Run))
         .padding([6, 14]);
 
-    column![state.actions().view(state.action()).map(Message::Action), run]
-        .spacing(12)
-        .into()
+    column![
+        state.actions().view(state.action()).map(Message::Action),
+        run
+    ]
+    .spacing(12)
+    .into()
 }
 
 /// The job panel shared by every action: progress, the file in work, the outcome counts, and
 /// Cancel while it runs; a summary, the failed files and Close once it has ended.
-fn job_panel<'a>(state: &'a BatchState, progress: Progress, directory: Option<&'a Directory>) -> Element<'a, Message> {
+fn job_panel<'a>(
+    state: &'a BatchState,
+    progress: Progress,
+    directory: Option<&'a Directory>,
+) -> Element<'a, Message> {
     let name = |id: FileId| -> String {
         directory
             .and_then(|d| d.file_by_id(id))
@@ -120,14 +138,24 @@ fn job_panel<'a>(state: &'a BatchState, progress: Progress, directory: Option<&'
                 ]
                 .spacing(10),
             )
-            .push(progress_bar(0.0..=progress.total.max(1) as f32, progress.finished as f32).girth(6))
             .push(
-                row![counts, Space::new().width(Length::Fill), button(text(label).size(13)).on_press_maybe(cancel)]
-                    .align_y(iced::Alignment::Center),
+                progress_bar(0.0..=progress.total.max(1) as f32, progress.finished as f32).girth(6),
+            )
+            .push(
+                row![
+                    counts,
+                    Space::new().width(Length::Fill),
+                    button(text(label).size(13)).on_press_maybe(cancel)
+                ]
+                .align_y(iced::Alignment::Center),
             );
     } else {
         let summary = if progress.finished < progress.total {
-            format!("Stopped after {} of {}.", progress.finished, files(progress.total))
+            format!(
+                "Stopped after {} of {}.",
+                progress.finished,
+                files(progress.total)
+            )
         } else {
             format!("Finished {}.", files(progress.total))
         };
@@ -141,12 +169,24 @@ fn job_panel<'a>(state: &'a BatchState, progress: Progress, directory: Option<&'
         );
         let failed = state.failed();
         if !failed.is_empty() {
-            let names = column(failed.into_iter().map(|id| text(name(id)).size(12).color(theme::ERROR).into()));
+            let names = column(
+                failed
+                    .into_iter()
+                    .map(|id| text(name(id)).size(12).color(theme::ERROR).into()),
+            );
             panel = panel
-                .push(text("Failed (see the log for why):").size(12).color(theme::TEXT_MUTED))
                 .push(
-                    container(scrollable(names).width(Length::Fill).style(theme::dark_scrollable_style))
-                        .max_height(FAILED_LIST_HEIGHT),
+                    text("Failed (see the log for why):")
+                        .size(12)
+                        .color(theme::TEXT_MUTED),
+                )
+                .push(
+                    container(
+                        scrollable(names)
+                            .width(Length::Fill)
+                            .style(theme::dark_scrollable_style),
+                    )
+                    .max_height(FAILED_LIST_HEIGHT),
                 );
         }
     }

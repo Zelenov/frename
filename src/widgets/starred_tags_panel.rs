@@ -38,18 +38,30 @@ fn dark_checkbox_style(
     };
     let (background, border_color) = match status {
         iced::widget::checkbox::Status::Hovered { .. } => (
-            if is_checked { theme::ACCENT } else { theme::SPLITTER_ACTIVE },
+            if is_checked {
+                theme::ACCENT
+            } else {
+                theme::SPLITTER_ACTIVE
+            },
             theme::TEXT_MUTED,
         ),
         _ => (
-            if is_checked { theme::ACCENT } else { theme::TRACK },
+            if is_checked {
+                theme::ACCENT
+            } else {
+                theme::TRACK
+            },
             theme::TEXT_MUTED,
         ),
     };
     iced::widget::checkbox::Style {
         background: iced::Background::Color(background),
         icon_color: theme::TEXT,
-        border: Border { radius: 2.0.into(), width: 1.0, color: border_color },
+        border: Border {
+            radius: 2.0.into(),
+            width: 1.0,
+            color: border_color,
+        },
         text_color: Some(theme::TEXT),
     }
 }

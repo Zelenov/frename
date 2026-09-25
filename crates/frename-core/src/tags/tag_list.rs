@@ -20,13 +20,15 @@ use std::collections::{HashMap, HashSet};
 
 use uuid::Uuid;
 
-use crate::{OrderedThing, db::StoredTagStore};
+use super::{
+    tag::{Tag, TagId},
+    FileSnapshot, StoredTag,
+};
 use crate::ordered::OrderedCollection;
-use super::{tag::{Tag, TagId}, FileSnapshot, StoredTag};
+use crate::{db::StoredTagStore, OrderedThing};
 
 /// Number of tag colors in the UI palette (must match the UI crate).
 const TAG_PALETTE_LEN: u8 = 16;
-
 
 /// A collection of available tags. Generic over the store type S (load and add stored tags).
 #[derive(Clone, Debug)]
@@ -75,9 +77,15 @@ pub struct TagList<S> {
 /// Some(2) = contains match
 fn match_rank(query_lower: &str, tag_name: &str) -> Option<u8> {
     let name_lower = tag_name.to_lowercase();
-    if name_lower == query_lower            { return Some(0); }
-    if name_lower.starts_with(query_lower)  { return Some(1); }
-    if name_lower.contains(query_lower)     { return Some(2); }
+    if name_lower == query_lower {
+        return Some(0);
+    }
+    if name_lower.starts_with(query_lower) {
+        return Some(1);
+    }
+    if name_lower.contains(query_lower) {
+        return Some(2);
+    }
     None
 }
 
@@ -125,11 +133,16 @@ impl<S> TagList<S> {
         let q = self.filter_query.trim().to_lowercase();
         filtered.sort_by_key(|id| {
             let tag = self.tags_by_id.get(id);
-            let section: u8 = if tag.map_or(true, |t| !t.is_stored()) { 0 } else { 1 };
+            let section: u8 = if tag.map_or(true, |t| !t.is_stored()) {
+                0
+            } else {
+                1
+            };
             let rank: u8 = if q.is_empty() {
                 0
             } else {
-                tag.and_then(|t| match_rank_translit(&q, t.tag())).unwrap_or(2)
+                tag.and_then(|t| match_rank_translit(&q, t.tag()))
+                    .unwrap_or(2)
             };
             (section, rank)
         });
@@ -159,8 +172,10 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let stored_tags = store.get_stored_tags().unwrap_or_default();
         let color_mapping = store.get_tag_color_mapping().unwrap_or_default();
         let snapshot_tags = file_snapshot.tags();
-        let stored_values: HashSet<String> =
-            stored_tags.iter().map(|st| st.value().to_string()).collect();
+        let stored_values: HashSet<String> = stored_tags
+            .iter()
+            .map(|st| st.value().to_string())
+            .collect();
 
         // 1. Stored [all] → hash (checked = exists in snapshot, order = from db, starred = from db)
         let mut tags_by_id = HashMap::new();
@@ -170,14 +185,18 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             let color_index = color_mapping.color_index_for(st.value());
             let order = st.sort_order();
             let checked = file_snapshot.has_tag(st.value());
-            let mut tag = Tag::with_id_order_checked(id, st.value(), color_index, true, order, checked);
+            let mut tag =
+                Tag::with_id_order_checked(id, st.value(), color_index, true, order, checked);
             tag.set_starred(st.starred());
             tags_by_id.insert(id, tag);
             value_to_id.insert(st.value().to_string(), id);
         }
 
         // 2. Snapshot [where value not in stored] → hash (checked = true, order = 0)
-        for name in snapshot_tags.iter().filter(|name| !stored_values.contains(name.as_str())) {
+        for name in snapshot_tags
+            .iter()
+            .filter(|name| !stored_values.contains(name.as_str()))
+        {
             let id = TagId::new();
             let tag = Tag::with_id_order_checked(id, name.as_str(), 0, false, 0, true);
             tags_by_id.insert(id, tag);
@@ -207,15 +226,21 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         // 5. Snapshot-only (unsaved) tags → insert in display after their nearest snapshot
         //    predecessor that is already in display. Tags with no in-display predecessor go first.
         //    Stored snapshot tags are already at their DB positions from step 3.
-        let snapshot_forward_ids: Vec<TagId> = snapshot_deduped_reversed.iter().rev()
+        let snapshot_forward_ids: Vec<TagId> = snapshot_deduped_reversed
+            .iter()
+            .rev()
             .filter_map(|n| value_to_id.get(n.as_str()))
             .copied()
             .collect();
         let mut display_tags_rebalanced = false;
         for (idx, &id) in snapshot_forward_ids.iter().enumerate() {
-            if display_tag_ids.get(&id).is_some() { continue; } // stored → already in display
-            // Nearest in-display predecessor (scan backwards through snapshot up to this tag).
-            let after_id = snapshot_forward_ids[..idx].iter().rev()
+            if display_tag_ids.get(&id).is_some() {
+                continue;
+            } // stored → already in display
+              // Nearest in-display predecessor (scan backwards through snapshot up to this tag).
+            let after_id = snapshot_forward_ids[..idx]
+                .iter()
+                .rev()
                 .find(|&&pred| display_tag_ids.get(&pred).is_some())
                 .copied();
             display_tags_rebalanced |= display_tag_ids.insert_after(id, (), after_id.as_ref());
@@ -338,7 +363,9 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             // Saved right away, like a tag created in the search bar: an unsaved tag is listed
             // first, and this one belongs last.
             None if checked => {
-                let Some(id) = self.insert_new_tag(name, Position::Last) else { return };
+                let Some(id) = self.insert_new_tag(name, Position::Last) else {
+                    return;
+                };
                 if let Err(e) = self.save_tag(id) {
                     log::error!("TagList: could not save the new tag {name:?}: {e}");
                 }
@@ -352,7 +379,8 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     /// Starred stored tags that match the search filter, sorted by name.
     /// Used by the starred tags panel shown between the search bar and tag grid.
     pub fn starred_tags_in_display_order(&self) -> Vec<&Tag> {
-        let mut tags: Vec<&Tag> = self.display_tag_ids
+        let mut tags: Vec<&Tag> = self
+            .display_tag_ids
             .iter()
             .filter_map(|(id, _, _)| self.tags_by_id.get(id))
             .filter(|t| t.is_starred() && self.tag_matches_filter(t))
@@ -361,13 +389,9 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         tags
     }
 
-
     /// Save a tag to the store: find by id, then upsert in the DB (insert or update name/color/order).
     /// For a tag not yet stored: set stored=true, assign random color, save to DB, update the in-list tag.
-    pub fn save_tag(
-        &mut self,
-        id: TagId,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn save_tag(&mut self, id: TagId) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let (text, stored_already, color_index, starred) = self
             .tags_by_id
             .get(&id)
@@ -388,7 +412,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let order = self.display_tag_ids.get_order(&id).unwrap_or(0);
 
         let color_index = match stored_already {
-            true =>  color_index,
+            true => color_index,
             false => self.next_color_index(),
         };
 
@@ -403,7 +427,10 @@ impl<S: StoredTagStore + Clone> TagList<S> {
                 .display_tag_ids
                 .iter()
                 .filter_map(|(tid, _, ord)| {
-                    self.tags_by_id.get(tid).filter(|t| t.is_stored()).map(|_| (tid.0, ord))
+                    self.tags_by_id
+                        .get(tid)
+                        .filter(|t| t.is_stored())
+                        .map(|_| (tid.0, ord))
                 })
                 .collect();
             self.store.update_tag_orders(&tag_orders)?;
@@ -429,7 +456,8 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             // Place before everything (None anchor = absolute first in collection).
             self.selected_tag_ids.insert_before(moved_id, (), None);
         } else if index < checked_after.len() {
-            self.selected_tag_ids.insert_before(moved_id, (), Some(&checked_after[index]));
+            self.selected_tag_ids
+                .insert_before(moved_id, (), Some(&checked_after[index]));
         } else if let Some(last) = checked_after.last() {
             // Append after the last checked tag (not insert_before(None) which goes to the front).
             self.selected_tag_ids.insert_after(moved_id, (), Some(last));
@@ -458,21 +486,27 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             self.extension.as_str(),
             self.initial_file_name.as_str(),
         );
-        snap.set_segment_start(self.segment_start);  // Option<f32>
-        snap.set_segment_end(self.segment_end);      // Option<f32>
+        snap.set_segment_start(self.segment_start); // Option<f32>
+        snap.set_segment_end(self.segment_end); // Option<f32>
         snap.set_comment(self.comment.clone());
         snap.set_screenshots(self.screenshots.clone());
         snap
     }
 
     /// Comment text for the current file.
-    pub fn comment(&self) -> &str { &self.comment }
+    pub fn comment(&self) -> &str {
+        &self.comment
+    }
 
     /// Update the comment (does not write to disk).
-    pub fn set_comment(&mut self, comment: String) { self.comment = comment; }
+    pub fn set_comment(&mut self, comment: String) {
+        self.comment = comment;
+    }
 
     /// Screenshot markers for the current file.
-    pub fn screenshots(&self) -> &[crate::Screenshot] { &self.screenshots }
+    pub fn screenshots(&self) -> &[crate::Screenshot] {
+        &self.screenshots
+    }
 
     /// Add a screenshot marker (deduplicates and keeps sorted).
     pub fn add_screenshot(&mut self, screenshot: crate::Screenshot) {
@@ -527,14 +561,18 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         self.tags_by_id.insert(id, tag);
         match position {
             Position::First => {
-                self.display_tags_rebalanced |= self.display_tag_ids.insert_before(id, (), Option::None);
+                self.display_tags_rebalanced |=
+                    self.display_tag_ids.insert_before(id, (), Option::None);
                 self.selected_tag_ids.insert_before(id, (), Option::None);
             }
             Position::Last => {
                 let last_display = self.display_tag_ids.iter().last().map(|(k, _, _)| *k);
-                self.display_tags_rebalanced |= self.display_tag_ids.insert_after(id, (), last_display.as_ref());
+                self.display_tags_rebalanced |=
+                    self.display_tag_ids
+                        .insert_after(id, (), last_display.as_ref());
                 let last_selected = self.selected_tag_ids.iter().last().map(|(k, _, _)| *k);
-                self.selected_tag_ids.insert_after(id, (), last_selected.as_ref());
+                self.selected_tag_ids
+                    .insert_after(id, (), last_selected.as_ref());
             }
         }
 
@@ -585,7 +623,12 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             self.store.save_tag(st, color_index)?;
         }
         let mut tag = Tag::with_id_order_checked(
-            tag_id, tag_name, color_index, was_stored, sort_order, was_checked,
+            tag_id,
+            tag_name,
+            color_index,
+            was_stored,
+            sort_order,
+            was_checked,
         );
         tag.set_starred(was_starred);
         self.tags_by_id.insert(tag_id, tag);
@@ -628,8 +671,10 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             .get(&id)
             .map(|t| (t.tag().to_string(), t.is_starred()))
             .ok_or_else(|| {
-                Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, "tag not found"))
-                    as Box<dyn std::error::Error + Send + Sync>
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "tag not found",
+                )) as Box<dyn std::error::Error + Send + Sync>
             })?;
         let order = self.display_tag_ids.get_order(&id).unwrap_or(0);
         let st = StoredTag::with_all(id.0, &text, order, starred);
@@ -643,7 +688,10 @@ impl<S: StoredTagStore + Clone> TagList<S> {
                 .display_tag_ids
                 .iter()
                 .filter_map(|(tid, _, ord)| {
-                    self.tags_by_id.get(tid).filter(|t| t.is_stored()).map(|_| (tid.0, ord))
+                    self.tags_by_id
+                        .get(tid)
+                        .filter(|t| t.is_stored())
+                        .map(|_| (tid.0, ord))
                 })
                 .collect();
             self.store.update_tag_orders(&tag_orders)?;
@@ -689,8 +737,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     pub fn sync_selected_to_display(
         &mut self,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.display_tag_ids
-            .sync_order_from(&self.selected_tag_ids);
+        self.display_tag_ids.sync_order_from(&self.selected_tag_ids);
         self.persist_display_order()?;
         self.rebuild_filtered_display_tag_ids();
         self.update_is_selected_match_display_order();
@@ -700,15 +747,15 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     /// Sync Down: apply the order from `display_tag_ids` (grid/DB) onto
     /// `selected_tag_ids` (file name panel). No DB write needed.
     pub fn sync_display_to_selected(&mut self) {
-        self.selected_tag_ids
-            .sync_order_from(&self.display_tag_ids);
+        self.selected_tag_ids.sync_order_from(&self.display_tag_ids);
         self.update_is_selected_match_display_order();
     }
 
     /// Returns `true` if the checked tags have the same relative order in both
     /// `display_tag_ids` (grid/DB) and `selected_tag_ids` (file name panel).
     pub fn is_selected_order_same_as_display_order(&self) -> bool {
-        let in_display: Vec<TagId> = self.display_tag_ids
+        let in_display: Vec<TagId> = self
+            .display_tag_ids
             .iter()
             .map(|(id, _, _)| *id)
             .filter(|id| self.tags_by_id.get(id).map_or(false, |t| t.is_checked()))
@@ -763,7 +810,10 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             .display_tag_ids
             .iter()
             .filter_map(|(tid, _, ord)| {
-                self.tags_by_id.get(tid).filter(|t| t.is_stored()).map(|_| (tid.0, ord))
+                self.tags_by_id
+                    .get(tid)
+                    .filter(|t| t.is_stored())
+                    .map(|_| (tid.0, ord))
             })
             .collect();
         self.store.update_tag_orders(&tag_orders)
@@ -778,8 +828,10 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             .get(&id)
             .map(|t| (t.is_stored(), t.is_starred()))
             .ok_or_else(|| {
-                Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, "tag not found"))
-                    as Box<dyn std::error::Error + Send + Sync>
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "tag not found",
+                )) as Box<dyn std::error::Error + Send + Sync>
             })?;
         if !is_stored {
             return Err(Box::new(std::io::Error::new(
@@ -800,14 +852,19 @@ impl<S: StoredTagStore + Clone> TagList<S> {
 
     /// Unstar a stored tag: set `starred = false` and persist the flag.
     /// Does not change the tag's position in either ordered collection.
-    pub fn unstar_tag(&mut self, id: TagId) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn unstar_tag(
+        &mut self,
+        id: TagId,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let (is_stored, already_unstarred) = self
             .tags_by_id
             .get(&id)
             .map(|t| (t.is_stored(), !t.is_starred()))
             .ok_or_else(|| {
-                Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, "tag not found"))
-                    as Box<dyn std::error::Error + Send + Sync>
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "tag not found",
+                )) as Box<dyn std::error::Error + Send + Sync>
             })?;
         if !is_stored {
             return Err(Box::new(std::io::Error::new(
@@ -838,8 +895,8 @@ enum Position {
 mod tests {
     use uuid::Uuid;
 
-    use crate::db::fake_app_storage::FakeAppStorage;
     use super::StoredTag;
+    use crate::db::fake_app_storage::FakeAppStorage;
 
     use super::*;
 
@@ -860,24 +917,47 @@ mod tests {
             .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "C", 3, false), 2);
         let list = TagList::new(store, FileSnapshot::default());
         assert_eq!(list.filtered_display_tag_ids().len(), 3);
-        assert_eq!(list.get_tag(list.filtered_display_tag_ids()[0]).unwrap().tag(), "A");
-        assert_eq!(list.get_tag(list.filtered_display_tag_ids()[1]).unwrap().tag(), "B");
-        assert_eq!(list.get_tag(list.filtered_display_tag_ids()[2]).unwrap().tag(), "C");
+        assert_eq!(
+            list.get_tag(list.filtered_display_tag_ids()[0])
+                .unwrap()
+                .tag(),
+            "A"
+        );
+        assert_eq!(
+            list.get_tag(list.filtered_display_tag_ids()[1])
+                .unwrap()
+                .tag(),
+            "B"
+        );
+        assert_eq!(
+            list.get_tag(list.filtered_display_tag_ids()[2])
+                .unwrap()
+                .tag(),
+            "C"
+        );
     }
 
     #[test]
     fn set_checked_by_name_checks_unchecks_and_adds_a_missing_tag() {
-        let store = FakeAppStorage::new().add_stored_tag(StoredTag::new(Uuid::new_v4(), "Commented"), 0);
+        let store =
+            FakeAppStorage::new().add_stored_tag(StoredTag::new(Uuid::new_v4(), "Commented"), 0);
         let mut list = TagList::new(store, FileSnapshot::default());
         list.set_checked_by_name("commented", true);
         assert_eq!(list.file_snapshot().tags(), ["Commented"]);
         list.set_checked_by_name("Commented", true);
-        assert_eq!(list.file_snapshot().tags(), ["Commented"], "already checked stays checked");
+        assert_eq!(
+            list.file_snapshot().tags(),
+            ["Commented"],
+            "already checked stays checked"
+        );
         list.set_checked_by_name("Commented", false);
         assert!(list.file_snapshot().tags().is_empty());
 
         list.set_checked_by_name("Noted", false);
-        assert!(!list.has_tag_with_name("Noted"), "unchecking a missing tag adds nothing");
+        assert!(
+            !list.has_tag_with_name("Noted"),
+            "unchecking a missing tag adds nothing"
+        );
         list.set_checked_by_name("Noted", true);
         assert_eq!(list.file_snapshot().tags(), ["Noted"]);
     }
@@ -887,11 +967,20 @@ mod tests {
         let store = FakeAppStorage::new()
             .add_stored_tag(StoredTag::new(Uuid::new_v4(), "A"), 0)
             .add_stored_tag(StoredTag::new(Uuid::new_v4(), "B"), 1);
-        let snapshot = FileSnapshot::new(vec!["A".to_string(), "B".to_string()], "clip", ".mp4", "A.B.clip.mp4");
+        let snapshot = FileSnapshot::new(
+            vec!["A".to_string(), "B".to_string()],
+            "clip",
+            ".mp4",
+            "A.B.clip.mp4",
+        );
         let mut list = TagList::new(store, snapshot);
         list.set_checked_by_name("Commented", true);
         assert_eq!(list.file_snapshot().tags(), ["A", "B", "Commented"]);
-        let last_shown = list.filtered_display_tag_ids().last().and_then(|id| list.get_tag(*id)).map(|t| t.tag());
+        let last_shown = list
+            .filtered_display_tag_ids()
+            .last()
+            .and_then(|id| list.get_tag(*id))
+            .map(|t| t.tag());
         assert_eq!(last_shown, Some("Commented"));
     }
 
@@ -903,7 +992,11 @@ mod tests {
         let mut list = TagList::new(store, FileSnapshot::default());
         assert_eq!(list.starred_tags_in_display_order().len(), 2);
         list.set_filter("air");
-        let names: Vec<&str> = list.starred_tags_in_display_order().iter().map(|t| t.tag()).collect();
+        let names: Vec<&str> = list
+            .starred_tags_in_display_order()
+            .iter()
+            .map(|t| t.tag())
+            .collect();
         assert_eq!(names, ["Airplane"]);
     }
 
@@ -934,14 +1027,21 @@ mod tests {
         let first_id = list.filtered_display_tag_ids()[0];
         let first = list.get_tag(first_id).unwrap();
         assert_eq!(first.tag(), "OnlyInSnapshot");
-        assert!(first.is_checked(), "snapshot-only tags appear in the file name so they init with checked=true");
+        assert!(
+            first.is_checked(),
+            "snapshot-only tags appear in the file name so they init with checked=true"
+        );
         assert!(!first.is_stored());
         assert_eq!(first.color_index(), 0);
         assert!(!first.is_stored());
         let stored_tag_id = list
             .filtered_display_tag_ids()
             .iter()
-            .find(|id| list.get_tag(**id).map(|t| t.tag() == "StoredA").unwrap_or(false))
+            .find(|id| {
+                list.get_tag(**id)
+                    .map(|t| t.tag() == "StoredA")
+                    .unwrap_or(false)
+            })
             .copied()
             .unwrap();
         let stored_tag = list.get_tag(stored_tag_id).unwrap();
@@ -957,13 +1057,16 @@ mod tests {
             .add_stored_tag(StoredTag::new(Uuid::new_v4(), "Sci-Fi"), 0)
             .add_stored_tag(StoredTag::new(Uuid::new_v4(), "Documentary"), 0);
         let mut list = TagList::new(store, FileSnapshot::default());
-        assert_eq!(
-            list.filtered_display_tag_ids().len(),
-            4
-        );
+        assert_eq!(list.filtered_display_tag_ids().len(), 4);
         list.set_filter("com");
         assert_eq!(list.filtered_display_tag_ids().len(), 1);
-        assert_eq!(list.filtered_display_tag_ids().first().and_then(|id| list.get_tag(*id)).map(|t| t.tag()), Some("Comedy"));
+        assert_eq!(
+            list.filtered_display_tag_ids()
+                .first()
+                .and_then(|id| list.get_tag(*id))
+                .map(|t| t.tag()),
+            Some("Comedy")
+        );
         list.set_filter("COM");
         assert_eq!(list.filtered_display_tag_ids().len(), 1);
         list.set_filter("i");
@@ -978,7 +1081,8 @@ mod tests {
             .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "A", 1, false), 0)
             .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "B", 2, false), 0)
             .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "C", 3, false), 0);
-        let snapshot = FileSnapshot::new(vec!["A".into(), "B".into(), "C".into()], "n", "ext", "init");
+        let snapshot =
+            FileSnapshot::new(vec!["A".into(), "B".into(), "C".into()], "n", "ext", "init");
         let mut list = TagList::new(store, snapshot);
         assert_eq!(list.file_snapshot().tags(), ["A", "B", "C"]);
         let a_id = list.checked_tag_id_at(0).unwrap();
@@ -1042,12 +1146,7 @@ mod tests {
         let store = FakeAppStorage::new()
             .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Stored1", 10, false), 0)
             .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Stored2", 20, false), 0);
-        let snapshot = FileSnapshot::new(
-            vec!["SnapX".into(), "SnapY".into()],
-            "n",
-            "ext",
-            "init",
-        );
+        let snapshot = FileSnapshot::new(vec!["SnapX".into(), "SnapY".into()], "n", "ext", "init");
         let list = TagList::new(store, snapshot);
         let ids = list.filtered_display_tag_ids();
         let names: Vec<String> = ids
@@ -1064,12 +1163,8 @@ mod tests {
     #[test]
     fn init_stored_empty_ordered_equals_snapshot_order() {
         let store = FakeAppStorage::new();
-        let snapshot = FileSnapshot::new(
-            vec!["P".into(), "Q".into(), "R".into()],
-            "n",
-            "ext",
-            "init",
-        );
+        let snapshot =
+            FileSnapshot::new(vec!["P".into(), "Q".into(), "R".into()], "n", "ext", "init");
         let list = TagList::new(store, snapshot);
         let ids = list.filtered_display_tag_ids();
         let names: Vec<String> = ids
@@ -1115,7 +1210,10 @@ mod tests {
     fn make_stored_list(names: &[&str]) -> TagList<FakeAppStorage> {
         let mut store = FakeAppStorage::new();
         for (i, name) in names.iter().enumerate() {
-            store = store.add_stored_tag(StoredTag::with_all(Uuid::new_v4(), *name, (i + 1) as i64, false), 0);
+            store = store.add_stored_tag(
+                StoredTag::with_all(Uuid::new_v4(), *name, (i + 1) as i64, false),
+                0,
+            );
         }
         TagList::new(store, FileSnapshot::default())
     }
@@ -1178,7 +1276,11 @@ mod tests {
             .filter_map(|id| list.get_tag(*id))
             .map(|t| t.tag().to_string())
             .collect();
-        assert_eq!(names, ["A", "B", "C"], "filtered order = display order when filter empty");
+        assert_eq!(
+            names,
+            ["A", "B", "C"],
+            "filtered order = display order when filter empty"
+        );
     }
 
     /// Paste (new_unlocked) must produce selected order = snapshot order regardless of DB order.
@@ -1192,7 +1294,9 @@ mod tests {
             .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "B", 4, false), 0);
         let snapshot = FileSnapshot::new(
             vec!["A".into(), "B".into(), "C".into(), "D".into()],
-            "name", "mp4", "A.B.C.D.name.mp4",
+            "name",
+            "mp4",
+            "A.B.C.D.name.mp4",
         );
         let list = TagList::new(store, snapshot);
         // file_snapshot() returns checked tags in selected order — must be A, B, C, D.
@@ -1212,7 +1316,9 @@ mod tests {
             .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "C", 5, false), 0);
         let snapshot = FileSnapshot::new(
             vec!["A".into(), "B".into(), "C".into(), "D".into(), "F".into()],
-            "name", "mp4", "A.B.C.D.F.name.mp4",
+            "name",
+            "mp4",
+            "A.B.C.D.F.name.mp4",
         );
         let list = TagList::new(store, snapshot);
 
@@ -1225,8 +1331,14 @@ mod tests {
         let a_pos = display_names.iter().position(|n| n == "A").unwrap();
         let f_pos = display_names.iter().position(|n| n == "F").unwrap();
         let d_pos = display_names.iter().position(|n| n == "D").unwrap();
-        assert!(b_pos == a_pos + 1, "B must be immediately after A in display, got display={display_names:?}");
-        assert!(f_pos == d_pos + 1, "F must be immediately after D in display, got display={display_names:?}");
+        assert!(
+            b_pos == a_pos + 1,
+            "B must be immediately after A in display, got display={display_names:?}"
+        );
+        assert!(
+            f_pos == d_pos + 1,
+            "F must be immediately after D in display, got display={display_names:?}"
+        );
 
         // Orders differ (D before C in display, C before D in selected) → is_selected_match = false.
         assert!(!list.is_selected_match_display_order());

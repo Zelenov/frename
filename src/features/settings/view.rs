@@ -53,7 +53,10 @@ pub fn view(state: &SettingsState) -> Element<'_, Message> {
     match settings.comment_storage {
         CommentStorage::InVideo => {
             comment_options = comment_options
-                .push(commented_tag(settings.commented_tag_enabled, &settings.commented_tag))
+                .push(commented_tag(
+                    settings.commented_tag_enabled,
+                    &settings.commented_tag,
+                ))
                 .extend(comment_offer);
         }
         CommentStorage::TextFile => text_file_offer = comment_offer,
@@ -72,20 +75,26 @@ pub fn view(state: &SettingsState) -> Element<'_, Message> {
     let in_out_offer = |storage: InOutStorage| {
         (state.in_out_storage_changed() && settings.in_out_storage == storage).then(|| {
             let label = match storage {
-                InOutStorage::InVideo => "Move existing in/out points from file names into the videos…",
-                InOutStorage::FileName => "Move existing in/out points from the videos into file names…",
+                InOutStorage::InVideo => {
+                    "Move existing in/out points from file names into the videos…"
+                }
+                InOutStorage::FileName => {
+                    "Move existing in/out points from the videos into file names…"
+                }
             };
-            move_offer("Files keep their in/out points where they are until moved.", label, Operation::MoveInOut(storage))
+            move_offer(
+                "Files keep their in/out points where they are until moved.",
+                label,
+                Operation::MoveInOut(storage),
+            )
         })
     };
-    let in_out_options = column![
-        radio(
-            "Adobe: a marker inside the video file (XMP, a subclip in Premiere Pro)",
-            InOutStorage::InVideo,
-            selected_in_out,
-            Message::SetInOutStorage,
-        ),
-    ]
+    let in_out_options = column![radio(
+        "Adobe: a marker inside the video file (XMP, a subclip in Premiere Pro)",
+        InOutStorage::InVideo,
+        selected_in_out,
+        Message::SetInOutStorage,
+    ),]
     .extend(in_out_offer(InOutStorage::InVideo))
     .push(radio(
         "In the file name (in_HH_MM_SS / out_HH_MM_SS)",
@@ -135,7 +144,12 @@ fn commented_tag(enabled: bool, tag: &str) -> Element<'_, Message> {
         text(hint).size(12).color(theme::TEXT_MUTED),
     ]
     .spacing(4)
-    .padding(iced::Padding { top: 0.0, right: 0.0, bottom: 0.0, left: 26.0 })
+    .padding(iced::Padding {
+        top: 0.0,
+        right: 0.0,
+        bottom: 0.0,
+        left: 26.0,
+    })
     .into()
 }
 
@@ -147,12 +161,21 @@ fn section<'a>(title: &'a str, content: Element<'a, Message>) -> Element<'a, Mes
 
 /// Shown after a storage change: the setting only decides where things are saved from now
 /// on, so moving what the files already have is a separate batch action, one click away.
-fn move_offer(note: &'static str, label: &'static str, operation: Operation) -> Element<'static, Message> {
+fn move_offer(
+    note: &'static str,
+    label: &'static str,
+    operation: Operation,
+) -> Element<'static, Message> {
     column![
         text(note).size(12).color(theme::TEXT_MUTED),
         button(text(label).size(13)).on_press(Message::OpenBatchAction(operation)),
     ]
     .spacing(6)
-    .padding(iced::Padding { top: 0.0, right: 0.0, bottom: 0.0, left: 26.0 })
+    .padding(iced::Padding {
+        top: 0.0,
+        right: 0.0,
+        bottom: 0.0,
+        left: 26.0,
+    })
     .into()
 }

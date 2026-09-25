@@ -120,7 +120,8 @@ impl TagPanelState {
                     .or(Some(0));
             }
             Message::DragHoverCursor { x, y } => {
-                self.drop_target_index = self.row_index_at_cursor(*x, *y, tag_list.filtered_display_tag_ids().len());
+                self.drop_target_index =
+                    self.row_index_at_cursor(*x, *y, tag_list.filtered_display_tag_ids().len());
             }
             Message::DragEnded => {
                 self.dragging_tag_id = None;
@@ -157,10 +158,7 @@ impl TagPanelState {
             TAG_ROW_HEIGHT
         };
         let cols = self.cols.max(1) as usize;
-        if cursor_x < bounds.x
-            || cursor_x >= bounds.x + bounds.width
-            || cursor_y < content_y
-        {
+        if cursor_x < bounds.x || cursor_x >= bounds.x + bounds.width || cursor_y < content_y {
             return None;
         }
         let rel_y = cursor_y - content_y + self.scroll_y;

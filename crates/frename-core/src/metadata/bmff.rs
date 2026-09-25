@@ -22,7 +22,9 @@ const MAX_PACKET: u64 = 16 * 1024 * 1024;
 
 /// Top-level box types a MOV/MP4 file can start with. Anything else is not one, whatever
 /// its extension says.
-const FIRST_BOXES: [&[u8; 4]; 7] = [b"ftyp", b"moov", b"mdat", b"wide", b"free", b"skip", b"pnot"];
+const FIRST_BOXES: [&[u8; 4]; 7] = [
+    b"ftyp", b"moov", b"mdat", b"wide", b"free", b"skip", b"pnot",
+];
 
 /// The XMP packet of a MOV/MP4 file: `Some(None)` when the file has none, `None` when this
 /// reader cannot tell (not a MOV/MP4, or a layout it does not understand), in which case
@@ -51,7 +53,9 @@ fn scan(path: &Path) -> io::Result<Option<Option<String>>> {
     let mut pos = 0;
     while let Some(b) = read_header(&mut file, pos, len)? {
         match &b.kind {
-            b"ftyp" if b.len() >= 4 => quicktime = &read_bytes(&mut file, b.payload, 4)?[..] == b"qt  ",
+            b"ftyp" if b.len() >= 4 => {
+                quicktime = &read_bytes(&mut file, b.payload, 4)?[..] == b"qt  "
+            }
             b"uuid" if b.len() >= 16 => {
                 if read_bytes(&mut file, b.payload, 16)? == XMP_UUID {
                     in_uuid = Some(read_packet(&mut file, b.payload + 16, b.end)?);
@@ -62,7 +66,11 @@ fn scan(path: &Path) -> io::Result<Option<Option<String>>> {
         }
         pos = b.end;
     }
-    let packet = if quicktime { in_udta.or(in_uuid) } else { in_uuid.or(in_udta) };
+    let packet = if quicktime {
+        in_udta.or(in_uuid)
+    } else {
+        in_uuid.or(in_udta)
+    };
     Ok(Some(packet))
 }
 

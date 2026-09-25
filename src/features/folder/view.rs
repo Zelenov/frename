@@ -2,7 +2,9 @@
 //!
 //! Receives only data (directory, loading, tag color mapping) from workspace; selection from directory; no parent knows our layout or widgets.
 
-use iced::widget::{button, checkbox, column, container, mouse_area, row, scrollable, text, text_input, tooltip};
+use iced::widget::{
+    button, checkbox, column, container, mouse_area, row, scrollable, text, text_input, tooltip,
+};
 use iced::{mouse, Element, Length};
 
 use crate::features::batch::{BatchState, ItemStatus};
@@ -11,8 +13,8 @@ use crate::theme;
 use crate::widgets;
 use crate::widgets::search_bar::FILE_SEARCH_BAR_INPUT_ID;
 
-use super::{InlineRename, FOLDER_LIST_SCROLLABLE_ID, FOLDER_RENAME_INPUT_ID, FOLDER_ROW_HEIGHT};
 use super::Message;
+use super::{InlineRename, FOLDER_LIST_SCROLLABLE_ID, FOLDER_RENAME_INPUT_ID, FOLDER_ROW_HEIGHT};
 
 const SUBTITLES_MARKER_WIDTH: f32 = 28.0;
 /// Width of the check box column in batch mode.
@@ -91,7 +93,8 @@ pub fn view<'a>(
             let name_line = name_line.push(subtitles_icon).push(name_display);
             // Indented like the name, so the comment starts under it and not under the marker.
             let comment_line = row![
-                iced::widget::Space::new().width(Length::Fixed(check_width + SUBTITLES_MARKER_WIDTH)),
+                iced::widget::Space::new()
+                    .width(Length::Fixed(check_width + SUBTITLES_MARKER_WIDTH)),
                 comment_line(file_info.snapshot(), spinner_frame),
             ];
 
@@ -105,7 +108,12 @@ pub fn view<'a>(
             } else {
                 let area = mouse_area(
                     container(column![name_line, comment_line].spacing(2))
-                        .padding(iced::Padding { top: 4.0, right: 8.0, bottom: 4.0, left: 0.0 })
+                        .padding(iced::Padding {
+                            top: 4.0,
+                            right: 8.0,
+                            bottom: 4.0,
+                            left: 0.0,
+                        })
                         .width(Length::Fill)
                         .height(Length::Fill)
                         .center_y(Length::Fill)
@@ -114,7 +122,10 @@ pub fn view<'a>(
                 match (locked, batch.is_some()) {
                     (true, _) => area.into(),
                     // Batch mode previews files but does not edit them, renaming included.
-                    (false, true) => area.on_press(Message::SelectFile(index)).interaction(mouse::Interaction::Pointer).into(),
+                    (false, true) => area
+                        .on_press(Message::SelectFile(index))
+                        .interaction(mouse::Interaction::Pointer)
+                        .into(),
                     (false, false) => area
                         .on_press(Message::SelectFile(index))
                         .on_double_click(Message::StartRename(index))
@@ -138,7 +149,11 @@ pub fn view<'a>(
 
     // A filter hides everything: say so instead of showing an empty scrollable.
     let body: Element<'_, Message> = if items.is_empty() {
-        let icon = if dir.name_filter().trim().is_empty() { "✓" } else { "🔍" };
+        let icon = if dir.name_filter().trim().is_empty() {
+            "✓"
+        } else {
+            "🔍"
+        };
         container(text(icon).size(48).color(theme::TEXT_MUTED))
             .center_x(Length::Fill)
             .center_y(Length::Fill)
@@ -181,11 +196,18 @@ pub fn view<'a>(
 }
 
 /// Batch mode header: check or uncheck every listed file, invert, and how many are checked.
-fn batch_header<'a>(dir: &'a crate::features::folder_workspace::Directory, batch: &'a BatchState, locked: bool) -> Element<'a, Message> {
+fn batch_header<'a>(
+    dir: &'a crate::features::folder_workspace::Directory,
+    batch: &'a BatchState,
+    locked: bool,
+) -> Element<'a, Message> {
     let mut listed = dir.files_in_order().peekable();
     let any_listed = listed.peek().is_some();
     let all_checked = any_listed && listed.all(|f| batch.is_checked(f.id()));
-    let mut all = checkbox(all_checked).label("All").text_size(12).size(CHECK_SIZE);
+    let mut all = checkbox(all_checked)
+        .label("All")
+        .text_size(12)
+        .size(CHECK_SIZE);
     if !locked {
         all = all.on_toggle(|_| Message::ToggleAllChecked);
     }
@@ -196,13 +218,25 @@ fn batch_header<'a>(dir: &'a crate::features::folder_workspace::Directory, batch
     // The box sits where the rows' boxes sit: centred in the same first column.
     let inset = (CHECK_WIDTH - CHECK_SIZE) / 2.0;
     row![
-        container(all).padding(iced::Padding { top: 0.0, right: 0.0, bottom: 0.0, left: inset }),
+        container(all).padding(iced::Padding {
+            top: 0.0,
+            right: 0.0,
+            bottom: 0.0,
+            left: inset
+        }),
         invert,
         iced::widget::Space::new().width(Length::Fill),
-        text(format!("{} checked", batch.checked_count())).size(12).color(theme::TEXT_MUTED),
+        text(format!("{} checked", batch.checked_count()))
+            .size(12)
+            .color(theme::TEXT_MUTED),
     ]
     .spacing(8)
-    .padding(iced::Padding { top: 0.0, right: 8.0, bottom: 0.0, left: 0.0 })
+    .padding(iced::Padding {
+        top: 0.0,
+        right: 8.0,
+        bottom: 0.0,
+        left: 0.0,
+    })
     .align_y(iced::Alignment::Center)
     .into()
 }
@@ -210,7 +244,11 @@ fn batch_header<'a>(dir: &'a crate::features::folder_workspace::Directory, batch
 /// The check box leading a row in batch mode. A file the last job finished keeps its box, tinted
 /// with the outcome until it is clicked (which unchecks it) or the report is closed: green when
 /// the file now is as the action wants it, red with a cross when it failed.
-fn check_cell(batch: &BatchState, id: frename_core::FileId, locked: bool) -> Element<'static, Message> {
+fn check_cell(
+    batch: &BatchState,
+    id: frename_core::FileId,
+    locked: bool,
+) -> Element<'static, Message> {
     // The file in work keeps its plain box: most files take milliseconds, so anything shown
     // for them would only flicker. The job panel names the file in work.
     let outcome = match batch.status(id) {
@@ -238,13 +276,17 @@ fn check_cell(batch: &BatchState, id: frename_core::FileId, locked: bool) -> Ele
             }
             tooltip(
                 check,
-                container(text(hint)).padding([2, 6]).style(theme::elevated_container_style),
+                container(text(hint))
+                    .padding([2, 6])
+                    .style(theme::elevated_container_style),
                 tooltip::Position::Right,
             )
             .into()
         }
     };
-    container(content).center_x(Length::Fixed(CHECK_WIDTH)).into()
+    container(content)
+        .center_x(Length::Fixed(CHECK_WIDTH))
+        .into()
 }
 
 /// Spinner frames for rows whose comment is still loading.
@@ -253,7 +295,10 @@ const SPINNER: [&str; 4] = ["◐", "◓", "◑", "◒"];
 /// The line under a file's name: the first line of its comment, a spinner while the comment
 /// is still loading, or nothing. Always one line high, so every row
 /// keeps [`FOLDER_ROW_HEIGHT`] and the comment never wraps into the next row.
-fn comment_line(snapshot: &frename_core::FileSnapshot, spinner_frame: usize) -> Element<'_, Message> {
+fn comment_line(
+    snapshot: &frename_core::FileSnapshot,
+    spinner_frame: usize,
+) -> Element<'_, Message> {
     let line = if snapshot.comment_loading() {
         SPINNER[spinner_frame % SPINNER.len()]
     } else {

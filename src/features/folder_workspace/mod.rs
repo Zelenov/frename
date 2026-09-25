@@ -9,7 +9,8 @@ mod state;
 pub mod view;
 
 /// Directory type used in this workspace (app state store wrapped with logging).
-pub type Directory = frename_core::Directory<frename_core::LoggingAppStateStore<frename_core::AppDatabase>>;
+pub type Directory =
+    frename_core::Directory<frename_core::LoggingAppStateStore<frename_core::AppDatabase>>;
 
 pub use messages::{GlobalSearchKey, Message};
 pub use state::FolderWorkspace;

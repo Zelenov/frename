@@ -1,7 +1,7 @@
+use super::super::traits::Undoable;
+use super::super::{UndoContext, UndoError};
 use crate::db::{AppStateStore, StoredTagStore};
 use crate::TagId;
-use super::super::{UndoContext, UndoError};
-use super::super::traits::Undoable;
 
 /// Records a tag reorder in the file-name panel (drag-drop).
 pub struct ReorderTagCommand {
@@ -21,7 +21,8 @@ where
         if ctx.tag_list.checked_index_of(self.moved_id).is_none() {
             return Err(UndoError::TagNotFound(self.moved_id));
         }
-        ctx.tag_list.reorder_tag_to_index(self.moved_id, self.from_index);
+        ctx.tag_list
+            .reorder_tag_to_index(self.moved_id, self.from_index);
         Ok(())
     }
 
@@ -29,7 +30,8 @@ where
         if ctx.tag_list.checked_index_of(self.moved_id).is_none() {
             return Err(UndoError::TagNotFound(self.moved_id));
         }
-        ctx.tag_list.reorder_tag_to_index(self.moved_id, self.to_index);
+        ctx.tag_list
+            .reorder_tag_to_index(self.moved_id, self.to_index);
         Ok(())
     }
 }

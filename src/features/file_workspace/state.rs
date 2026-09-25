@@ -5,8 +5,10 @@
 //!
 //! Generic over the store type S (like Directory and TagList). Store is passed to the constructor; used to build the tag list.
 
+use frename_core::{
+    File, FileId, FileSnapshot, FolderTagStore, StoredTagStore, TagColorMapping, TagId, TagList,
+};
 use iced::widget::text_editor;
-use frename_core::{File, FileId, FileSnapshot, FolderTagStore, StoredTagStore, TagColorMapping, TagId, TagList};
 
 /// File workspace: current file and stored tags with checked state (source of truth for UI).
 /// Generic over the store type S; store is set only in the constructor.
@@ -90,7 +92,8 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     /// Update the comment (does not write to disk). Positions the cursor at the end.
     pub fn set_comment(&mut self, comment: String) {
         self.comment_content = text_editor::Content::with_text(&comment);
-        self.comment_content.perform(text_editor::Action::Move(text_editor::Motion::DocumentEnd));
+        self.comment_content
+            .perform(text_editor::Action::Move(text_editor::Motion::DocumentEnd));
         self.store_comment(comment);
     }
 
@@ -147,10 +150,7 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     }
 
     /// Save a snapshot-only tag to the store (add to DB). Delegates to TagList.
-    pub fn save_tag(
-        &mut self,
-        id: TagId,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn save_tag(&mut self, id: TagId) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.tag_list.save_tag(id)
     }
 
@@ -183,10 +183,7 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     }
 
     /// Star a stored tag (pin to section 2). Delegates to TagList.
-    pub fn star_tag(
-        &mut self,
-        id: TagId,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn star_tag(&mut self, id: TagId) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.tag_list.star_tag(id)
     }
 

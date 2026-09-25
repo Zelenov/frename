@@ -193,7 +193,10 @@ impl FolderTagStore {
         let contents = match std::fs::read_to_string(&path) {
             Ok(contents) => contents,
             Err(e) if e.kind() == io::ErrorKind::NotFound => {
-                log::info!("No tag file at {}; writing the built-in tags", path.display());
+                log::info!(
+                    "No tag file at {}; writing the built-in tags",
+                    path.display()
+                );
                 let entries = Self::default_entries();
                 self.write_entries(&entries)?;
                 return Ok(entries);
@@ -220,7 +223,9 @@ impl FolderTagStore {
         let Some(folder) = self.folder.as_ref() else {
             return Ok(());
         };
-        let _lock = TAG_FILE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _lock = TAG_FILE_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let files = read_file(folder).map(|f| f.files).unwrap_or_default();
         write_file(folder, entries, &files)
     }
@@ -235,12 +240,15 @@ impl FolderTagStore {
     /// lines in `upsert` by name, keeping the tags. A folder without a tag file gets one with
     /// the built-in tags. Failures are logged; the list is only a cache.
     pub fn update_file_cache(folder: &Path, remove: &[String], upsert: Vec<CachedFile>) {
-        let _lock = TAG_FILE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _lock = TAG_FILE_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let (tags, mut files) = match read_file(folder) {
             Some(file) => (file.tags, file.files),
             None => (Self::default_entries(), Vec::new()),
         };
-        let replaced: std::collections::HashSet<&str> = upsert.iter().map(|f| f.name.as_str()).collect();
+        let replaced: std::collections::HashSet<&str> =
+            upsert.iter().map(|f| f.name.as_str()).collect();
         files.retain(|f| !remove.contains(&f.name) && !replaced.contains(f.name.as_str()));
         files.extend(upsert);
         files.sort_by(|a, b| a.name.cmp(&b.name));
@@ -302,10 +310,16 @@ fn write_file(
 /// Renders the file by hand rather than through a TOML serializer, for a layout that reads
 /// and diffs well: one tag per line, so reordering a tag is a one-line edit, and one block per
 /// video with its comment as a multi-line string, the way a person would write it.
-fn render(tags: &[TagEntry], files: &[CachedFile]) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+fn render(
+    tags: &[TagEntry],
+    files: &[CachedFile],
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let mut out = format!("version = {FORMAT_VERSION}\n\ntags = [\n");
     for tag in tags {
-        let mut fields = vec![format!("id = {}", basic_string(&tag.id.to_string())), format!("name = {}", basic_string(&tag.name))];
+        let mut fields = vec![
+            format!("id = {}", basic_string(&tag.id.to_string())),
+            format!("name = {}", basic_string(&tag.name)),
+        ];
         if let Some(color) = tag.color {
             fields.push(format!("color = {color}"));
         }
@@ -518,7 +532,10 @@ mod tests {
         assert_eq!(tags.len(), DEFAULT_TAGS.len());
         assert_eq!(tags[0].value(), "pick");
         assert!(tags[0].starred());
-        assert!(folder.0.join(TAG_FILE_NAME).is_file(), "file is written out");
+        assert!(
+            folder.0.join(TAG_FILE_NAME).is_file(),
+            "file is written out"
+        );
     }
 
     #[test]
@@ -563,7 +580,10 @@ tags = [{ id = "00000000-0000-0000-0000-0000000000ff", name = "guangzhou" }]
             .expect("save");
         assert_eq!(names(&store), vec!["nairobi"]);
         assert_eq!(
-            store.get_tag_color_mapping().expect("colors").color_index_for("nairobi"),
+            store
+                .get_tag_color_mapping()
+                .expect("colors")
+                .color_index_for("nairobi"),
             7
         );
     }
@@ -626,7 +646,10 @@ tags = [{ id = "00000000-0000-0000-0000-0000000000ff", name = "guangzhou" }]
         let folder = TempFolder::new("layout");
         let _ = folder.store().get_stored_tags().expect("read tags");
         let contents = folder.tag_file();
-        let tag_lines = contents.lines().filter(|l| l.trim_start().starts_with("{ id = ")).count();
+        let tag_lines = contents
+            .lines()
+            .filter(|l| l.trim_start().starts_with("{ id = "))
+            .count();
         assert_eq!(tag_lines, DEFAULT_TAGS.len());
         assert!(contents.starts_with("version = 3\n"));
     }
@@ -637,7 +660,11 @@ tags = [{ id = "00000000-0000-0000-0000-0000000000ff", name = "guangzhou" }]
         folder.write_tag_file("tags = [ not toml");
         let store = folder.store();
         assert!(store.get_stored_tags().is_err());
-        assert_eq!(folder.tag_file(), "tags = [ not toml", "user's file is untouched");
+        assert_eq!(
+            folder.tag_file(),
+            "tags = [ not toml",
+            "user's file is untouched"
+        );
     }
 
     #[test]
@@ -660,9 +687,15 @@ tags = [{ id = "00000000-0000-0000-0000-0000000000ff", name = "guangzhou" }]
 
     #[test]
     fn the_tag_file_and_its_scratch_file_are_not_listed_as_footage() {
-        assert!(FolderTagStore::is_tag_file(Path::new(r"C:\shoots\kenya\.frename")));
-        assert!(FolderTagStore::is_tag_file(Path::new(r"C:\shoots\kenya\.frename.tmp")));
-        assert!(!FolderTagStore::is_tag_file(Path::new(r"C:\shoots\kenya\clip.mp4")));
+        assert!(FolderTagStore::is_tag_file(Path::new(
+            r"C:\shoots\kenya\.frename"
+        )));
+        assert!(FolderTagStore::is_tag_file(Path::new(
+            r"C:\shoots\kenya\.frename.tmp"
+        )));
+        assert!(!FolderTagStore::is_tag_file(Path::new(
+            r"C:\shoots\kenya\clip.mp4"
+        )));
     }
 
     #[test]
@@ -679,12 +712,20 @@ tags = [{ id = "00000000-0000-0000-0000-0000000000ff", name = "guangzhou" }]
             end: None,
         };
         FolderTagStore::update_file_cache(&folder.0, &[], vec![entry.clone()]);
-        assert_eq!(FolderTagStore::read_file_cache(&folder.0), vec![entry.clone()]);
+        assert_eq!(
+            FolderTagStore::read_file_cache(&folder.0),
+            vec![entry.clone()]
+        );
 
         // A tag change keeps the file list, and the file list keeps the tags.
         let before = names(&store);
-        store.remove_stored_tag_by_id(store.get_stored_tags().expect("tags")[0].id()).expect("remove");
-        assert_eq!(FolderTagStore::read_file_cache(&folder.0), vec![entry.clone()]);
+        store
+            .remove_stored_tag_by_id(store.get_stored_tags().expect("tags")[0].id())
+            .expect("remove");
+        assert_eq!(
+            FolderTagStore::read_file_cache(&folder.0),
+            vec![entry.clone()]
+        );
         assert_eq!(names(&store).len(), before.len() - 1);
 
         let text = folder.tag_file();
@@ -702,7 +743,8 @@ tags = [{ id = "00000000-0000-0000-0000-0000000000ff", name = "guangzhou" }]
     fn a_multi_line_comment_is_written_as_its_lines_and_reads_back_exactly() {
         let folder = TempFolder::new("multiline");
         let _ = names(&folder.store());
-        let comment = "00-00-01-140: АФРИКАНСКИЙ размер\n\nQuote \" and \"\"\" and back\\slash\n\tindented";
+        let comment =
+            "00-00-01-140: АФРИКАНСКИЙ размер\n\nQuote \" and \"\"\" and back\\slash\n\tindented";
         let entry = CachedFile {
             name: "Ad.MP4".into(),
             size: 1,
@@ -714,7 +756,10 @@ tags = [{ id = "00000000-0000-0000-0000-0000000000ff", name = "guangzhou" }]
         FolderTagStore::update_file_cache(&folder.0, &[], vec![entry.clone()]);
 
         let text = folder.tag_file();
-        assert!(text.contains("comment = \"\"\"\n00-00-01-140: АФРИКАНСКИЙ размер\n\nQuote"), "{text}");
+        assert!(
+            text.contains("comment = \"\"\"\n00-00-01-140: АФРИКАНСКИЙ размер\n\nQuote"),
+            "{text}"
+        );
         assert_eq!(FolderTagStore::read_file_cache(&folder.0), vec![entry]);
     }
 

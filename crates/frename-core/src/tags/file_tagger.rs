@@ -10,8 +10,8 @@ use std::sync::OnceLock;
 use super::file_snapshot::FileSnapshot;
 use super::file_tagger_backend::FileTaggerBackend;
 use super::folder_info::FolderInfo;
-use super::in_memory_file_tagger::InMemoryFileTagger;
 use super::folder_tag_store::FolderTagStore;
+use super::in_memory_file_tagger::InMemoryFileTagger;
 use super::tag_list::TagList;
 use crate::metadata::{MetadataMove, MoveOutcome};
 
@@ -24,7 +24,9 @@ pub fn install_file_tagger(backend: Box<dyn FileTaggerBackend>) {
 }
 
 fn backend() -> &'static dyn FileTaggerBackend {
-    BACKEND.get_or_init(|| Box::new(InMemoryFileTagger::default())).as_ref()
+    BACKEND
+        .get_or_init(|| Box::new(InMemoryFileTagger::default()))
+        .as_ref()
 }
 
 /// Thin facade over the installed `FileTaggerBackend`.
@@ -50,8 +52,12 @@ impl FileTagger {
         if commented == tagged {
             return MoveOutcome::NothingToMove;
         }
-        let mut tags: Vec<String> =
-            snapshot.tags().iter().filter(|t| !t.eq_ignore_ascii_case(tag)).cloned().collect();
+        let mut tags: Vec<String> = snapshot
+            .tags()
+            .iter()
+            .filter(|t| !t.eq_ignore_ascii_case(tag))
+            .cloned()
+            .collect();
         if commented {
             tags.push(tag.to_string());
         }
@@ -105,7 +111,10 @@ impl FileTagger {
     /// Load the comment a folder scan deferred; see [`FileSnapshot::comment_loading`].
     pub fn load_comment(path: &Path, snapshot: &FileSnapshot) -> FileSnapshot {
         let items = [(path.to_path_buf(), snapshot.clone())];
-        backend().load_comments(&items).pop().unwrap_or_else(|| snapshot.clone())
+        backend()
+            .load_comments(&items)
+            .pop()
+            .unwrap_or_else(|| snapshot.clone())
     }
 
     /// [`Self::load_comment`] for many files at once. Returns the snapshots in the same order.
@@ -165,15 +174,28 @@ mod tests {
         std::fs::create_dir_all(&folder).expect("temp dir");
         let mut store = FolderTagStore::for_folder(&folder);
         // Orders after the built-in tags', Zeta first.
-        store.save_tag(StoredTag::with_all(uuid::Uuid::new_v4(), "Zeta", 1_000_000, false), 0).expect("save");
-        store.save_tag(StoredTag::with_all(uuid::Uuid::new_v4(), "Alpha", 2_000_000, false), 1).expect("save");
+        store
+            .save_tag(
+                StoredTag::with_all(uuid::Uuid::new_v4(), "Zeta", 1_000_000, false),
+                0,
+            )
+            .expect("save");
+        store
+            .save_tag(
+                StoredTag::with_all(uuid::Uuid::new_v4(), "Alpha", 2_000_000, false),
+                1,
+            )
+            .expect("save");
 
         let path = folder.join("Alpha.Zeta.clip.mp4");
         let MoveOutcome::Moved(sorted) = FileTagger::sort_tags_by_folder_order(&path) else {
             panic!("the tags must be reordered");
         };
         assert_eq!(sorted, folder.join("Zeta.Alpha.clip.mp4"));
-        assert_eq!(FileTagger::sort_tags_by_folder_order(&sorted), MoveOutcome::NothingToMove);
+        assert_eq!(
+            FileTagger::sort_tags_by_folder_order(&sorted),
+            MoveOutcome::NothingToMove
+        );
         let _ = std::fs::remove_dir_all(&folder);
     }
 
@@ -188,13 +210,20 @@ mod tests {
         let MoveOutcome::Moved(tagged) = FileTagger::sync_commented_tag(&path, "Commented") else {
             panic!("the tag must be added");
         };
-        assert!(tagged.ends_with("Food.Commented.clip.mp4"), "added last: {tagged:?}");
-        assert_eq!(FileTagger::sync_commented_tag(&tagged, "commented"), MoveOutcome::NothingToMove);
+        assert!(
+            tagged.ends_with("Food.Commented.clip.mp4"),
+            "added last: {tagged:?}"
+        );
+        assert_eq!(
+            FileTagger::sync_commented_tag(&tagged, "commented"),
+            MoveOutcome::NothingToMove
+        );
 
         let mut cleared = FileTagger::parse(&tagged, &FolderInfo::default());
         cleared.set_comment(String::new());
         let tagged = FileTagger::save(&cleared, &tagged);
-        let MoveOutcome::Moved(untagged) = FileTagger::sync_commented_tag(&tagged, "Commented") else {
+        let MoveOutcome::Moved(untagged) = FileTagger::sync_commented_tag(&tagged, "Commented")
+        else {
             panic!("the tag must be removed");
         };
         assert!(untagged.ends_with("Food.clip.mp4"), "removed: {untagged:?}");
