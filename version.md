@@ -1,3 +1,16 @@
+# 0.66
+## Added
+- Batch mode (☑ in the controls bar): check files in the list (All / Invert) and run an action on all of them, with progress, Cancel and a per-file result — a green or red check box.
+- Batch actions: move comments between the video and text files, move in/out points between the file name and the video, tag commented videos, fix tags by priority (tag panel order), and reset cache and reload.
+- After switching comment or in/out storage, Settings offer the matching batch action for files already stored the other way.
+- A check box turns the "Commented" tag off.
+
+## Changed
+- The "Commented" tag is checked when a video gets its first comment and unchecked when the comment is cleared; otherwise it is yours to change, and it is no longer forced back on save. A new one goes last.
+- Settings no longer convert the whole folder; batch actions do that.
+- Starred tags are filtered by the tag search too.
+- The progress bar and subtitle highlight no longer freeze after seeking.
+
 # 0.65
 ## Added
 - While comments are stored inside the video, every video with a comment gets a "Commented" tag in its name, removed again with the comment. The tag's wording is a setting.

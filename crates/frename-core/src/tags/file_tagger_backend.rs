@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use super::file_snapshot::FileSnapshot;
 use super::folder_info::FolderInfo;
 use super::production_file_tagger::is_screenshot_sidecar;
-use crate::metadata::{FileConversion, MetadataStorage};
+use crate::metadata::MetadataMove;
 
 /// The interface that both InMemoryFileTagger and ProductionFileTagger implement.
 pub trait FileTaggerBackend: Send + Sync {
@@ -43,16 +43,29 @@ pub trait FileTaggerBackend: Send + Sync {
             .collect()
     }
 
-    /// What converting the file's comment and in/out points to `storage` would move.
-    /// Backends that never touch the disk have nothing to convert.
-    fn metadata_conversion(&self, _path: &Path, _storage: MetadataStorage) -> FileConversion {
-        FileConversion::default()
+    /// Whether the file keeps anything `what` would move outside its destination.
+    /// Backends that never touch the disk have nothing to move.
+    fn metadata_move_needed(&self, _path: &Path, _what: MetadataMove) -> bool {
+        false
     }
 
-    /// Move the file's comment and in/out points into `storage`, reading both of their homes.
+    /// Move the file's comment or in/out points as `what` says, reading both of their homes.
     /// Returns the file's path afterwards, which changes when in/out points move in or out
     /// of the name.
-    fn convert_metadata(&self, path: &Path, _storage: MetadataStorage) -> PathBuf {
+    fn move_metadata(&self, path: &Path, _what: MetadataMove) -> PathBuf {
+        path.to_path_buf()
+    }
+
+    /// Read the file's comment and in/out points again and replace the folder file list's line
+    /// for it. Returns whether the line was missing or stale. Backends that never touch the
+    /// disk keep no file list.
+    fn reload_metadata(&self, _path: &Path) -> bool {
+        false
+    }
+
+    /// Where the file at `path` is on disk. A backend that renames files only in memory
+    /// keeps the files where they were; reading one (e.g. to play it) must use this path.
+    fn disk_path(&self, path: &Path) -> PathBuf {
         path.to_path_buf()
     }
 

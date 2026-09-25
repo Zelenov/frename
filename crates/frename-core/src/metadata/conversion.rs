@@ -1,116 +1,66 @@
-//! Moving comments and in/out points between their two homes, a whole folder at a time.
+//! Moving a file's comment or in/out points from one of their homes to the other.
 //!
 //! Normal parsing reads only the chosen storage, so after switching a setting the files
-//! still stored the old way look empty. A conversion reads both homes of each file, writes
-//! the chosen one and removes the old copy. It goes through the installed file tagger, so
-//! a build that must not touch the disk plans and converts nothing.
+//! still stored the old way look empty. A move reads both homes of the file, writes the
+//! destination and removes the old copy, and leaves everything else where it is. It goes
+//! through the installed file tagger, so a build that must not touch the disk moves nothing.
 
 use std::path::{Path, PathBuf};
 
 use super::{xmp, CommentStorage, InOutStorage, MetadataStorage, Segment};
-use crate::tags::{FileSnapshot, FileTagger};
+use crate::tags::FileSnapshot;
 
-/// What one file keeps outside the chosen storage, i.e. what converting it would move.
+/// What a move takes to where. The other kind of metadata stays in its current home.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MetadataMove {
+    /// Move the comment into this home.
+    Comments(CommentStorage),
+    /// Move the in/out points into this home.
+    InOut(InOutStorage),
+}
+
+impl MetadataMove {
+    /// `storage` with the moved kind set to its destination.
+    fn applied_to(self, storage: MetadataStorage) -> MetadataStorage {
+        match self {
+            Self::Comments(comment) => MetadataStorage { comment, ..storage },
+            Self::InOut(in_out) => MetadataStorage { in_out, ..storage },
+        }
+    }
+}
+
+/// What moving one file's metadata did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MoveOutcome {
+    /// Everything moved; the file's path afterwards.
+    Moved(PathBuf),
+    /// The file already keeps it in the destination, or has none.
+    NothingToMove,
+    /// Something is still outside the destination, e.g. because the format cannot hold XMP
+    /// or the file could not be written; the details are in the log. The file's path
+    /// afterwards, since part of the move may have renamed it.
+    Failed(PathBuf),
+}
+
+/// What one file keeps outside a storage, i.e. what moving it there would move.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct FileConversion {
+pub(crate) struct FileConversion {
     pub comment: bool,
     pub in_out: bool,
-    /// The commented tag must be added to or removed from the name.
-    pub commented_tag: bool,
 }
 
 impl FileConversion {
     /// Whether converting the file would change anything.
     pub fn is_needed(self) -> bool {
-        self.comment || self.in_out || self.commented_tag
+        self.comment || self.in_out
     }
-}
-
-/// A folder conversion before it runs: which files it touches and what moves.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ConversionPlan {
-    /// The storage the files would be converted to.
-    pub storage: MetadataStorage,
-    /// Files that need converting.
-    pub files: Vec<PathBuf>,
-    /// Comments to move.
-    pub comments: usize,
-    /// In/out points to move. Each one renames its file.
-    pub in_outs: usize,
-    /// Files whose commented tag must be added or removed. Each one renames its file.
-    pub commented_tags: usize,
-    /// The commented tag the plan was made for (`None`: off).
-    pub commented_tag: Option<String>,
-}
-
-impl ConversionPlan {
-    /// Whether the folder already uses the storage throughout.
-    pub fn is_empty(&self) -> bool {
-        self.files.is_empty()
-    }
-}
-
-/// What a folder conversion did.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ConversionReport {
-    /// Files now fully in the chosen storage.
-    pub converted: usize,
-    /// Files renamed on the way, old path to new path.
-    pub renamed: Vec<(PathBuf, PathBuf)>,
-    /// Files that still keep something outside the chosen storage, e.g. because the format
-    /// cannot hold XMP or the file could not be written; the details are in the log.
-    pub not_converted: Vec<PathBuf>,
-}
-
-impl ConversionReport {
-    /// Add the outcome of another batch of the same conversion.
-    pub fn merge(&mut self, other: ConversionReport) {
-        self.converted += other.converted;
-        self.renamed.extend(other.renamed);
-        self.not_converted.extend(other.not_converted);
-    }
-}
-
-/// Look at `paths` and list what converting them to `storage` would move.
-pub fn plan_conversion(paths: &[PathBuf], storage: MetadataStorage) -> ConversionPlan {
-    let mut plan = ConversionPlan { storage, commented_tag: super::commented_tag(), ..ConversionPlan::default() };
-    for path in paths {
-        let needed = FileTagger::metadata_conversion(path, storage);
-        if needed.is_needed() {
-            plan.files.push(path.clone());
-            plan.comments += usize::from(needed.comment);
-            plan.in_outs += usize::from(needed.in_out);
-            plan.commented_tags += usize::from(needed.commented_tag);
-        }
-    }
-    plan
-}
-
-/// Convert the files of `plan` to its storage.
-pub fn convert(plan: &ConversionPlan) -> ConversionReport {
-    let mut report = ConversionReport::default();
-    for path in &plan.files {
-        let new_path = FileTagger::convert_metadata(path, plan.storage);
-        if FileTagger::metadata_conversion(&new_path, plan.storage).is_needed() {
-            report.not_converted.push(new_path.clone());
-        } else {
-            report.converted += 1;
-        }
-        if new_path != *path {
-            report.renamed.push((path.clone(), new_path));
-        }
-    }
-    report
 }
 
 /// Where a file's comment and in/out points are on disk right now.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Inspection {
     has_text_file: bool,
-    /// The comment the file shows, from either home: the text file wins, as in parsing.
-    commented: bool,
     name_has_in_out: bool,
-    name_tags: Vec<String>,
     /// `None` when the file cannot hold XMP (or is a cloud placeholder).
     xmp: Option<xmp::XmpFields>,
 }
@@ -120,26 +70,43 @@ impl Inspection {
     pub(crate) fn of(path: &Path) -> Self {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         let from_name = FileSnapshot::parse(name);
-        let has_text_file = crate::comment::comment_path(path).is_file();
-        let xmp = xmp::probe(path);
-        let commented = if has_text_file {
-            !crate::comment::load_comment(path).is_empty()
-        } else {
-            xmp.as_ref().is_some_and(|x| !x.comment.is_empty())
-        };
         Self {
-            has_text_file,
-            commented,
+            has_text_file: crate::comment::comment_path(path).is_file(),
             name_has_in_out: from_name.segment_start().is_some() || from_name.segment_end().is_some(),
-            name_tags: from_name.tags().to_vec(),
-            xmp,
+            xmp: xmp::probe(path),
+        }
+    }
+
+    /// The storage the file uses now: a text file or in/out in the name win over XMP, as in
+    /// parsing, and a file that cannot hold XMP keeps both outside it.
+    fn current_storage(&self) -> MetadataStorage {
+        let can_hold_xmp = self.xmp.is_some();
+        MetadataStorage {
+            comment: if self.has_text_file || !can_hold_xmp { CommentStorage::TextFile } else { CommentStorage::InVideo },
+            in_out: if self.name_has_in_out || !can_hold_xmp { InOutStorage::FileName } else { InOutStorage::InVideo },
+        }
+    }
+
+    /// The storage the file has after `what`: its destination for the moved kind, the
+    /// current home for the other.
+    pub(crate) fn storage_after(&self, what: MetadataMove) -> MetadataStorage {
+        what.applied_to(self.current_storage())
+    }
+
+    /// What moving `what` would move. The file's tags stay as they are: a move does not add
+    /// or remove a comment, so the commented tag has no reason to change.
+    pub(crate) fn moved_by(&self, what: MetadataMove) -> FileConversion {
+        let needed = self.needed(self.storage_after(what));
+        match what {
+            MetadataMove::Comments(_) => FileConversion { in_out: false, ..needed },
+            MetadataMove::InOut(_) => FileConversion { comment: false, ..needed },
         }
     }
 
     /// What converting the file to `storage` would move. A text file or in/out in the name
     /// wins over XMP, as in parsing, so XMP is only moved out when the other home is empty;
     /// otherwise the XMP copy is left alone rather than lost.
-    pub(crate) fn needed(&self, storage: MetadataStorage, commented_tag: Option<&str>) -> FileConversion {
+    fn needed(&self, storage: MetadataStorage) -> FileConversion {
         let can_hold_xmp = self.xmp.is_some();
         let xmp = self.xmp.clone().unwrap_or_default();
         FileConversion {
@@ -151,16 +118,11 @@ impl Inspection {
                 InOutStorage::InVideo => self.name_has_in_out && can_hold_xmp,
                 InOutStorage::FileName => !self.name_has_in_out && !xmp.segment.is_empty(),
             },
-            // As in saving (`with_commented_tag`): only in XMP storage, and only where the
-            // comment can actually live in the file.
-            commented_tag: storage.comment == CommentStorage::InVideo
-                && can_hold_xmp
-                && commented_tag.is_some_and(|tag| self.name_tags.iter().any(|t| t == tag) != self.commented),
         }
     }
 }
 
-/// After a conversion to text file or file name saved the file at `path`, remove the XMP
+/// After a move to text file or file name saved the file at `path`, remove the XMP
 /// copies that were moved out, so Premiere does not keep showing stale values. Only removes
 /// what now exists in the new home.
 pub(crate) fn clear_moved_xmp(path: &Path, moved: FileConversion, storage: MetadataStorage) {
@@ -170,7 +132,6 @@ pub(crate) fn clear_moved_xmp(path: &Path, moved: FileConversion, storage: Metad
     let clear_in_out = moved.in_out
         && storage.in_out == InOutStorage::FileName
         && Inspection::of(path).name_has_in_out;
-    // The commented tag needs no clearing here: the save put the name in line already.
     if !clear_comment && !clear_in_out {
         return;
     }

@@ -84,3 +84,9 @@ ALTER TABLE app_settings ADD COLUMN in_out_storage TEXT NOT NULL DEFAULT 'file_n
 pub const M6_COMMENTED_TAG: &str = "
 ALTER TABLE app_settings ADD COLUMN commented_tag TEXT NOT NULL DEFAULT 'Commented';
 ";
+
+/// Migration 7: whether commented videos get the commented tag at all. On by default, as it
+/// was; turning it off keeps the tag name for when it is turned back on.
+pub const M7_COMMENTED_TAG_ENABLED: &str = "
+ALTER TABLE app_settings ADD COLUMN commented_tag_enabled INTEGER NOT NULL DEFAULT 1;
+";

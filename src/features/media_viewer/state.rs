@@ -37,14 +37,14 @@ impl MediaViewerState {
                 self.active = ActiveMedia::Video;
                 self.image.unload();
                 self.video
-                    .load_video(file.file_path().to_path_buf())
+                    .load_video(frename_core::FileTagger::disk_path(file.file_path()))
                     .map(Message::Video)
             }
             FileKind::Image => {
                 self.active = ActiveMedia::Image;
                 // video is already idle — caller ensured this if needed
                 self.image
-                    .load_image(file.file_path().to_path_buf())
+                    .load_image(frename_core::FileTagger::disk_path(file.file_path()))
                     .map(Message::Image)
             }
             FileKind::Other => {

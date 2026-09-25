@@ -156,13 +156,9 @@ impl<S: AppStateStore + Clone> Directory<S> {
         }
     }
 
-    /// Paths of every file in the folder, ignoring the filters.
-    pub fn all_file_paths(&self) -> Vec<PathBuf> {
-        self.order
-            .iter()
-            .filter_map(|id| self.files_by_id.get(id))
-            .map(|file| file.file_path().to_path_buf())
-            .collect()
+    /// Every file in the folder in list order, ignoring the filters.
+    pub fn all_files(&self) -> impl Iterator<Item = &File> {
+        self.order.iter().filter_map(|id| self.files_by_id.get(id))
     }
 
     /// Whether any filter that depends on a file's content (tags, subtitles, comment) is on.

@@ -191,6 +191,44 @@ pub fn icon_button_style(
     }
 }
 
+/// Entry of a vertical list of choices (batch actions): the selected one has the accent
+/// background, a disabled one muted text.
+pub fn list_item_button_style(
+    selected: bool,
+    enabled: bool,
+) -> impl Fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style + Clone {
+    move |_theme: &iced::Theme, status: iced::widget::button::Status| {
+        let bg = match status {
+            _ if selected => ACCENT_SELECTED,
+            iced::widget::button::Status::Hovered if enabled => TRACK,
+            _ => Color::TRANSPARENT,
+        };
+        iced::widget::button::Style {
+            background: Some(Background::Color(bg)),
+            text_color: if enabled { TEXT } else { TEXT_MUTED },
+            border: iced::Border { radius: 3.0.into(), ..iced::Border::default() },
+            shadow: iced::Shadow::default(),
+            snap: true,
+        }
+    }
+}
+
+/// Check box tinted with a job outcome (green for done, red for failed): the theme's check box
+/// with `color` in place of the accent.
+pub fn outcome_checkbox_style(
+    color: Color,
+) -> impl Fn(&iced::Theme, iced::widget::checkbox::Status) -> iced::widget::checkbox::Style {
+    move |theme: &iced::Theme, status: iced::widget::checkbox::Status| {
+        let style = iced::widget::checkbox::primary(theme, status);
+        iced::widget::checkbox::Style {
+            background: Background::Color(color),
+            icon_color: Color::WHITE,
+            border: iced::Border { color, ..style.border },
+            ..style
+        }
+    }
+}
+
 /// Dark scrollable style: dark track and scroller to match panels.
 pub fn dark_scrollable_style(
     _theme: &iced::Theme,

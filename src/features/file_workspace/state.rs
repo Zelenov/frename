@@ -91,7 +91,7 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     pub fn set_comment(&mut self, comment: String) {
         self.comment_content = text_editor::Content::with_text(&comment);
         self.comment_content.perform(text_editor::Action::Move(text_editor::Motion::DocumentEnd));
-        self.tag_list.set_comment(comment);
+        self.store_comment(comment);
     }
 
     /// Apply a text_editor action to the comment content and sync the string to tag_list.
@@ -100,7 +100,22 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         let text = self.comment_content.text();
         // text() appends a trailing newline; strip it for storage.
         let trimmed = text.trim_end_matches('\n').to_string();
-        self.tag_list.set_comment(trimmed);
+        self.store_comment(trimmed);
+    }
+
+    /// Put the comment in the tag list. When it goes from empty to non-empty the commented tag
+    /// is checked, and when it is cleared the tag is unchecked; any other edit leaves the tag to
+    /// the user. See [`frename_core::active_commented_tag`].
+    fn store_comment(&mut self, comment: String) {
+        let was_empty = self.tag_list.comment().trim().is_empty();
+        let is_empty = comment.trim().is_empty();
+        self.tag_list.set_comment(comment);
+        if was_empty == is_empty {
+            return;
+        }
+        if let Some(tag) = frename_core::active_commented_tag() {
+            self.tag_list.set_checked_by_name(&tag, !is_empty);
+        }
     }
 
     /// Screenshot markers for the current file.

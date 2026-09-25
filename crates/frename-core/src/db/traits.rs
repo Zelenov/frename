@@ -47,9 +47,11 @@ pub struct AppSettings {
     pub comment_storage: CommentStorage,
     /// Where in/out points are saved. Defaults to the file name.
     pub in_out_storage: InOutStorage,
-    /// Tag added to commented videos while comments are stored inside them; empty turns it off.
-    /// Defaults to [`crate::DEFAULT_COMMENTED_TAG`].
+    /// Tag checked on videos that get a comment while comments are stored inside them; empty
+    /// turns it off. Defaults to [`crate::DEFAULT_COMMENTED_TAG`].
     pub commented_tag: String,
+    /// Whether commented videos get [`Self::commented_tag`] at all. Defaults to true.
+    pub commented_tag_enabled: bool,
 }
 
 impl Default for AppSettings {
@@ -60,6 +62,19 @@ impl Default for AppSettings {
             comment_storage: CommentStorage::default(),
             in_out_storage: InOutStorage::default(),
             commented_tag: crate::DEFAULT_COMMENTED_TAG.to_string(),
+            commented_tag_enabled: true,
+        }
+    }
+}
+
+impl AppSettings {
+    /// The commented tag as core should use it (see [`crate::set_commented_tag`]): empty while
+    /// turned off.
+    pub fn effective_commented_tag(&self) -> &str {
+        if self.commented_tag_enabled {
+            &self.commented_tag
+        } else {
+            ""
         }
     }
 }

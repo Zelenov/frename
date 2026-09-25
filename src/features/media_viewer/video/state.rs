@@ -23,6 +23,11 @@ pub struct VideoPlayerState {
     controls: VideoControlsState,
     /// Start playback as soon as a video is opened; otherwise it opens paused.
     autoplay: bool,
+    /// Whether playback is paused, as last requested. Kept here because
+    /// `Video::paused` reads the pipeline's current state, which a flushing seek drops
+    /// to `Paused` until preroll completes: sampled then, it switched the playback tick
+    /// off for good and froze the progress bar and the subtitle highlight.
+    paused: bool,
     /// Path of the video being loaded or shown; lets a late subtitle load for a
     /// previous file be recognized and dropped.
     current_path: Option<PathBuf>,
@@ -55,6 +60,7 @@ impl Default for VideoPlayerState {
             load_failed: false,
             controls: VideoControlsState::default(),
             autoplay,
+            paused: !autoplay,
             current_path: None,
             subtitles: None,
             show_cue_list: false,
@@ -77,6 +83,7 @@ impl VideoPlayerState {
         self.position = Duration::ZERO;
         self.followed_cue = None;
         let autoplay = self.autoplay;
+        self.paused = !autoplay;
 
         let subtitles_task = Self::load_subtitles(path.clone());
         let video_task = Task::future(async move {
@@ -146,8 +153,7 @@ impl VideoPlayerState {
                 let ready =
                     Task::done(Message::Controls(video_controls::Message::VideoReady { duration_secs }));
                 // Controls assume playback on ready; a video opened paused has to say otherwise.
-                let paused = self.current_video.as_ref().is_some_and(Video::paused);
-                if !paused {
+                if !self.paused {
                     return ready;
                 }
                 ready.chain(Task::done(Message::Controls(video_controls::Message::SetPlaying(false))))
@@ -159,6 +165,8 @@ impl VideoPlayerState {
                 self.follow_cue(false)
             }
             Message::EndOfStream => {
+                // The pipeline stays in Playing at the end; the next play restarts the stream.
+                self.paused = true;
                 Task::done(Message::Controls(video_controls::Message::SetPlaying(false)))
             }
             Message::TogglePause => {
@@ -167,8 +175,8 @@ impl VideoPlayerState {
                     self.position = position;
                 }
                 if let Some(video) = &mut self.current_video {
-                    let paused = video.paused();
-                    video.set_paused(!paused);
+                    self.paused = !self.paused;
+                    video.set_paused(self.paused);
                 }
                 Task::none()
             }
@@ -330,13 +338,13 @@ impl VideoPlayerState {
 
     /// Subscriptions active while a video is loaded.
     pub fn subscription(&self) -> Subscription<Message> {
-        let Some(video) = self.current_video.as_ref() else {
+        if self.current_video.is_none() {
             return Subscription::none();
-        };
+        }
         // The tick exists only to advance the progress bar, so it is pointless while paused:
         // it used to force a full view rebuild 4x/second for as long as a video stayed open.
         // Iced re-evaluates subscriptions after every update, so pausing stops it immediately.
-        let frame_tick = if video.paused() {
+        let frame_tick = if self.paused {
             Subscription::none()
         } else {
             time::every(Duration::from_millis(250)).map(|_| Message::NewFrame)

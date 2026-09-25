@@ -84,13 +84,16 @@ fn filter_dropdown(filters: ListFilters) -> Element<'static, folder::Message> {
         .into()
 }
 
-/// Render the folder controls: Previous File, Next File, Scroll-to-Selected, Open and Settings buttons.
-/// Buttons are enabled only when applicable.
+/// Render the folder controls: Previous File, Next File, Scroll-to-Selected, Open, Settings and
+/// Batch mode buttons. Buttons are enabled only when applicable. `batch_mode` highlights the
+/// batch button; `batch_running` locks it while a job runs.
 pub fn view(
     has_previous: bool,
     has_next: bool,
     has_selected: bool,
     filters: ListFilters,
+    batch_mode: bool,
+    batch_running: bool,
 ) -> Element<'static, folder::Message> {
     let prev_btn: Element<'_, folder::Message> = tooltip(
         button(
@@ -172,12 +175,30 @@ pub fn view(
     )
         .into();
 
+    let batch_hint = if batch_mode { "Back to the open file" } else { "Batch actions on checked files" };
+    let batch_btn: Element<'_, folder::Message> = tooltip(
+        button(
+            container(text("☑").size(16))
+                .center_x(iced::Length::Fill)
+                .center_y(iced::Length::Fill),
+        )
+            .on_press_maybe((!batch_running).then_some(folder::Message::SetBatchMode(!batch_mode)))
+            .width(CONTROLS_HEIGHT)
+            .height(iced::Length::Fill)
+            .padding(0)
+            .style(theme::list_item_button_style(batch_mode, !batch_running)),
+        text(batch_hint),
+        iced::widget::tooltip::Position::Top,
+    )
+        .into();
+
     let controls = row![
         prev_btn,
         next_btn,
         scroll_btn,
         open_btn,
         settings_btn,
+        batch_btn,
         container(iced::widget::Space::new()).width(iced::Length::Fill),
         filter_dropdown(filters),
     ]
