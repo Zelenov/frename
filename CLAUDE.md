@@ -21,6 +21,9 @@ cargo test --workspace --locked
 cargo build --release --locked
 ```
 
+The Rust toolchain is pinned in `rust-toolchain.toml` so a new stable release cannot turn CI red
+overnight. Updating it is its own PR (new lints get fixed there).
+
 Linux needs GStreamer development packages:
 
 ```sh

@@ -304,12 +304,12 @@ where
                     }
                 }
             }
-            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
-                if state.is_dragging {
-                    state.is_dragging = false;
-                    if let Some(on_release) = &self.on_release {
-                        shell.publish(on_release.clone());
-                    }
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
+                if state.is_dragging =>
+            {
+                state.is_dragging = false;
+                if let Some(on_release) = &self.on_release {
+                    shell.publish(on_release.clone());
                 }
             }
             _ => {}
