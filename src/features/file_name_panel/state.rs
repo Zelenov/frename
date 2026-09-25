@@ -148,7 +148,7 @@ impl FileNamePanelState {
         if cols_per_row == 0 {
             return None;
         }
-        let rows = (tag_count + cols_per_row - 1) / cols_per_row;
+        let rows = tag_count.div_ceil(cols_per_row);
         let content_height = (rows as f32) * row_total;
         // Outside panel => None so caller keeps drop target at drag start.
         if cursor_x < content_x

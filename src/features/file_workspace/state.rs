@@ -49,7 +49,7 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
                 let already_loaded = self
                     .file
                     .as_ref()
-                    .map_or(false, |current| current.file_path() == f.file_path());
+                    .is_some_and(|current| current.file_path() == f.file_path());
                 if already_loaded {
                     return;
                 }

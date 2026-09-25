@@ -69,9 +69,7 @@ impl StoredTagStore for FakeAppStorage {
     fn get_tag_color_mapping(
         &self,
     ) -> Result<TagColorMapping, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(TagColorMapping::from_entries(
-            self.tag_colors.clone().into_iter(),
-        ))
+        Ok(TagColorMapping::from_entries(self.tag_colors.clone()))
     }
 
     fn save_tag(

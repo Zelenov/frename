@@ -116,7 +116,7 @@ where
         .map(|chunk| {
             let mut cells: Vec<Element<'_, Message>> = chunk
                 .iter()
-                .filter_map(|tag| {
+                .map(|tag| {
                     let id = tag.id();
                     let is_checked = tag.is_checked();
                     let is_selected = selected_id == Some(id);
@@ -207,7 +207,7 @@ where
                         theme::tag_row_background_style(theme, is_selected)
                     });
 
-                    Some(cell.into())
+                    cell.into()
                 })
                 .collect();
 

@@ -1,3 +1,4 @@
+#![allow(clippy::module_inception)]
 /// Unit tests for the undo system (derived from UNDO_TESTS.md).
 ///
 /// These tests cover History management and ReorderTagCommand.

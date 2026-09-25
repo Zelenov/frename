@@ -57,7 +57,7 @@ where
             Message::ClearSegmentEnd,
         ));
     }
-    bottom_items.push(file_name_line::view(name_ext).into());
+    bottom_items.push(file_name_line::view(name_ext));
 
     let bottom_row = row(bottom_items)
         .spacing(6)

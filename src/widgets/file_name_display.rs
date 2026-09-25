@@ -48,7 +48,7 @@ pub fn view<'a, Message: 'a>(
     let mut parts: Vec<Element<'a, Message>> = Vec::new();
     for (i, tag_name) in tags.iter().enumerate() {
         if i > 0 {
-            parts.push(dot_text().into());
+            parts.push(dot_text());
         }
         let color_index = color_mapping.color_index_for(tag_name);
         let tag_color = tag_palette.color(color_index);
@@ -56,7 +56,7 @@ pub fn view<'a, Message: 'a>(
     }
     // Timecode badges between tags and file name.
     for secs in seg_start.into_iter().chain(seg_end) {
-        parts.push(dot_text().into());
+        parts.push(dot_text());
         parts.push(
             text(fmt_timecode(secs))
                 .size(12)
@@ -66,7 +66,7 @@ pub fn view<'a, Message: 'a>(
     }
     if !name_ext.is_empty() {
         if !tags.is_empty() || seg_start.is_some() || seg_end.is_some() {
-            parts.push(dot_text().into());
+            parts.push(dot_text());
         }
         parts.push(text(name_ext).size(14).color(theme::TEXT).into());
     }

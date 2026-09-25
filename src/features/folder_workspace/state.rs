@@ -550,7 +550,7 @@ impl FolderWorkspace {
         let same_file = self
             .file_workspace
             .file()
-            .map_or(false, |f| f.file_path() == file.file_path());
+            .is_some_and(|f| f.file_path() == file.file_path());
         if !same_file {
             self.media_fullscreen = false;
         }
@@ -1099,7 +1099,7 @@ impl FolderWorkspace {
                     .file_workspace
                     .tag_list()
                     .get_tag(id)
-                    .map_or(false, |t| t.is_checked());
+                    .is_some_and(|t| t.is_checked());
                 self.file_workspace.toggle_tag_by_id(id);
                 self.tag_panel.set_selected(Some(id));
                 self.history.push(Box::new(ToggleTagCommand {
@@ -1147,7 +1147,7 @@ impl FolderWorkspace {
                         .file_workspace
                         .tag_list()
                         .get_tag(id)
-                        .map_or(false, |t| t.is_checked());
+                        .is_some_and(|t| t.is_checked());
                     self.file_workspace.toggle_tag_by_id(id);
                     self.history.push(Box::new(ToggleTagCommand {
                         tag_id: id,
@@ -1234,7 +1234,7 @@ impl FolderWorkspace {
                     .file_workspace
                     .tag_list()
                     .get_tag(id)
-                    .map_or(false, |t| t.is_starred());
+                    .is_some_and(|t| t.is_starred());
                 let result = if was_starred {
                     self.file_workspace.unstar_tag(id)
                 } else {
@@ -1260,7 +1260,7 @@ impl FolderWorkspace {
                     let checked_idx = display_ids
                         .iter()
                         .take(display_idx)
-                        .filter(|&&id| tag_list.get_tag(id).map_or(false, |t| t.is_checked()))
+                        .filter(|&&id| tag_list.get_tag(id).is_some_and(|t| t.is_checked()))
                         .count();
                     let from_index = self.file_workspace.tag_list().checked_index_of(did);
                     self.file_workspace.reorder_tag_to_index(did, checked_idx);
@@ -1284,7 +1284,7 @@ impl FolderWorkspace {
                 .file_workspace
                 .tag_list()
                 .get_tag(id)
-                .map_or(false, |t| t.is_checked());
+                .is_some_and(|t| t.is_checked());
             if was_checked {
                 self.file_workspace.toggle_tag_by_id(id);
                 self.history.push(Box::new(ToggleTagCommand {

@@ -461,7 +461,7 @@ fn scan_files(directory: &Path) -> Result<Vec<File>, std::io::Error> {
             &folder_info,
         ));
     }
-    files.sort_by(|a, b| a.modified_at().cmp(&b.modified_at()));
+    files.sort_by_key(|a| a.modified_at());
     Ok(files)
 }
 

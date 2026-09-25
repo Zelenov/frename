@@ -52,6 +52,7 @@ pub struct AppDatabase {
 
 impl AppDatabase {
     /// Creates the database using the default path (next to the executable, or temp dir if unavailable).
+    #[allow(clippy::new_without_default)] // opens the database file; not a cheap default
     pub fn new() -> Self {
         let path = std::env::current_exe()
             .ok()

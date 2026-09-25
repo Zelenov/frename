@@ -15,6 +15,7 @@ impl TagId {
     }
 
     /// Create a new TagId (random UUID). Used for snapshot-only tags.
+    #[allow(clippy::new_without_default)] // a random id is not a meaningful default
     pub fn new() -> Self {
         TagId(Uuid::new_v4())
     }

@@ -133,7 +133,7 @@ impl<S> TagList<S> {
         let q = self.filter_query.trim().to_lowercase();
         filtered.sort_by_key(|id| {
             let tag = self.tags_by_id.get(id);
-            let section: u8 = if tag.map_or(true, |t| !t.is_stored()) {
+            let section: u8 = if tag.is_none_or(|t| !t.is_stored()) {
                 0
             } else {
                 1
@@ -154,7 +154,7 @@ impl<S> TagList<S> {
         self.selected_tag_ids
             .iter()
             .map(|(id, _, _)| *id)
-            .filter(|id| self.tags_by_id.get(id).map_or(false, |t| t.is_checked()))
+            .filter(|id| self.tags_by_id.get(id).is_some_and(|t| t.is_checked()))
             .collect()
     }
 }
@@ -385,7 +385,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             .filter_map(|(id, _, _)| self.tags_by_id.get(id))
             .filter(|t| t.is_starred() && self.tag_matches_filter(t))
             .collect();
-        tags.sort_by(|a, b| a.tag().to_lowercase().cmp(&b.tag().to_lowercase()));
+        tags.sort_by_key(|a| a.tag().to_lowercase());
         tags
     }
 
@@ -608,6 +608,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
 
     /// Restore a tag that was previously deleted. Inserts back into the store (if stored) and
     /// both ordered collections using the original sort_order.
+    #[allow(clippy::too_many_arguments)]
     pub fn restore_deleted_tag(
         &mut self,
         tag_id: TagId,
@@ -705,7 +706,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         &mut self,
         id: TagId,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if self.tags_by_id.get(&id).map_or(false, |t| t.is_stored()) {
+        if self.tags_by_id.get(&id).is_some_and(|t| t.is_stored()) {
             self.store.remove_stored_tag_by_id(id.0)?;
         }
         if let Some(t) = self.tags_by_id.get_mut(&id) {
@@ -719,7 +720,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         &mut self,
         id: TagId,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if self.tags_by_id.get(&id).map_or(false, |t| t.is_stored()) {
+        if self.tags_by_id.get(&id).is_some_and(|t| t.is_stored()) {
             self.store.remove_stored_tag_by_id(id.0)?;
         }
         self.tags_by_id.remove(&id);
@@ -758,7 +759,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             .display_tag_ids
             .iter()
             .map(|(id, _, _)| *id)
-            .filter(|id| self.tags_by_id.get(id).map_or(false, |t| t.is_checked()))
+            .filter(|id| self.tags_by_id.get(id).is_some_and(|t| t.is_checked()))
             .collect();
         let in_selected = self.checked_ids_in_selected_order();
         in_display == in_selected

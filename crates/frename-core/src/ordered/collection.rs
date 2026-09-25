@@ -71,7 +71,7 @@ where
             None => (None, self.iter().next().map(|k| k.0.clone())),
             Some(b) => {
                 if self.by_id.contains_key(b) {
-                    (self.left_neighbor_of(b).map(|k| k.clone()), Some(b.clone()))
+                    (self.left_neighbor_of(b).cloned(), Some(b.clone()))
                 } else {
                     (None, None)
                 }
@@ -276,11 +276,11 @@ where
     fn order_between(&mut self, prev: Option<&K>, next: Option<&K>) -> (OrderKey, bool) {
         // Use 0 for "no previous" to avoid i64 overflow in midpoint (next.checked_sub(i64::MIN) overflows).
         let prev_order = match prev {
-            Some(id) => self.order_of.get(&id).copied().unwrap_or(0),
+            Some(id) => self.order_of.get(id).copied().unwrap_or(0),
             None => 0,
         };
         let next_order = match next {
-            Some(id) => self.order_of.get(&id).copied().unwrap_or(OrderKey::MAX),
+            Some(id) => self.order_of.get(id).copied().unwrap_or(OrderKey::MAX),
             None => OrderKey::MAX,
         };
 

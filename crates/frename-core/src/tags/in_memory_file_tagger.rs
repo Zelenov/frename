@@ -62,11 +62,11 @@ mod tests {
     #[test]
     fn renamed_files_are_still_found_on_disk() {
         let tagger = InMemoryFileTagger::default();
-        let original = Path::new(r"C:\shoots\clip.mp4");
+        let original = Path::new("shoots/clip.mp4");
         let mut snapshot = FileSnapshot::parse("clip.mp4");
         snapshot.set_tags(["Goat"]);
         let renamed = tagger.save(&snapshot, original);
-        assert_eq!(renamed, Path::new(r"C:\shoots\Goat.clip.mp4"));
+        assert_eq!(renamed, Path::new("shoots/Goat.clip.mp4"));
         snapshot.set_tags(["Goat", "Commented"]);
         let renamed = tagger.save(&snapshot, &renamed);
         assert_eq!(tagger.disk_path(&renamed), original);

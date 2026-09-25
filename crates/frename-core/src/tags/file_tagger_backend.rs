@@ -92,9 +92,9 @@ mod tests {
     #[test]
     fn default_backend_hides_sidecar_files() {
         let backend = InMemoryFileTagger::default();
-        assert!(backend.is_sidecar_file(Path::new(r"C:\shoots\.frename")));
-        assert!(backend.is_sidecar_file(Path::new(r"C:\shoots\clip.mp4.comment.txt")));
-        assert!(backend.is_sidecar_file(Path::new(r"C:\shoots\clip.mp4.snap.00-00-10-936.jpg")));
-        assert!(!backend.is_sidecar_file(Path::new(r"C:\shoots\clip.mp4")));
+        assert!(backend.is_sidecar_file(Path::new("shoots/.frename")));
+        assert!(backend.is_sidecar_file(Path::new("shoots/clip.mp4.comment.txt")));
+        assert!(backend.is_sidecar_file(Path::new("shoots/clip.mp4.snap.00-00-10-936.jpg")));
+        assert!(!backend.is_sidecar_file(Path::new("shoots/clip.mp4")));
     }
 }

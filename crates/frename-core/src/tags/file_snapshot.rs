@@ -18,7 +18,7 @@ fn segment_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"^(in|out)_(\d{2})_(\d{2})_(\d{2})$").unwrap())
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct FileSnapshot {
     tags: Vec<String>,
     name_without_extension: String,
@@ -222,21 +222,5 @@ impl FileSnapshot {
         snap.set_segment_start(segment_start);
         snap.set_segment_end(segment_end);
         snap
-    }
-}
-
-impl Default for FileSnapshot {
-    fn default() -> Self {
-        Self {
-            tags: Vec::new(),
-            name_without_extension: String::new(),
-            extension: String::new(),
-            initial_file_name: String::new(),
-            segment_start: None,
-            segment_end: None,
-            comment: String::new(),
-            screenshots: Vec::new(),
-            comment_loading: false,
-        }
     }
 }

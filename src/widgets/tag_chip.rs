@@ -59,6 +59,7 @@ pub fn view_display_only<'a, Message: 'a>(
 /// * `trailing` – optional content to the right of the label (e.g. delete/save icon in tag list); use with `trailing_visible_on_selection_only`
 /// * `trailing_visible_on_selection_only` – when true, trailing is visible only when `is_selected`; space is always reserved (visibility, not collapse)
 /// * `is_selected` – when true, trailing (if selection-only) is visible and the chip is drawn with the tag selection outline (bright blue border)
+#[allow(clippy::too_many_arguments)]
 pub fn view_with_leading<Message: Clone + 'static>(
     tag_name: impl Into<String>,
     tag_color: iced::Color,
@@ -207,6 +208,6 @@ pub fn view_with_leading<Message: Clone + 'static>(
             };
             col.into()
         }
-        None => chip.into(),
+        None => chip,
     }
 }

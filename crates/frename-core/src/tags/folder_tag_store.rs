@@ -688,13 +688,13 @@ tags = [{ id = "00000000-0000-0000-0000-0000000000ff", name = "guangzhou" }]
     #[test]
     fn the_tag_file_and_its_scratch_file_are_not_listed_as_footage() {
         assert!(FolderTagStore::is_tag_file(Path::new(
-            r"C:\shoots\kenya\.frename"
+            "shoots/kenya/.frename"
         )));
         assert!(FolderTagStore::is_tag_file(Path::new(
-            r"C:\shoots\kenya\.frename.tmp"
+            "shoots/kenya/.frename.tmp"
         )));
         assert!(!FolderTagStore::is_tag_file(Path::new(
-            r"C:\shoots\kenya\clip.mp4"
+            "shoots/kenya/clip.mp4"
         )));
     }
 
