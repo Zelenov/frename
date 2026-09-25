@@ -55,7 +55,7 @@ works on, authored by `Zelenov`, starting with `🤖 agent: heartbeat`, and upda
 heartbeat. Heartbeat comments by any other author are ignored.
 
 - **First thing in a session**, before any build: find the newest heartbeat on open issues labelled
-  `in-progress`. If it was updated less than 90 minutes ago, another session is alive: stop
+  `in-progress` and on issues closed in the last 90 minutes. If it was updated less than 90 minutes ago, another session is alive: stop
   without changing anything.
 - Update the heartbeat at each step below and right before every wait that may take long (a review
   round, a CI wait, a release build).
@@ -74,7 +74,8 @@ heartbeat. Heartbeat comments by any other author are ignored.
 
 A version is **published** when release `vX.Y` exists (not draft) and has the
 `frename-windows-x64-vX.Y.0.zip` asset. If the first heading of `version.md` on `main` is not
-published, the last release failed:
+published and no release workflow run on `main` is queued or in progress (a running one is not a
+failure: wait for it or stop), the last release failed:
 - an open `release-failed` issue exists → resume it from item 3 of step 7 "Release failed", or skip
   it while it has `needs-owner` or `hold`;
 - none exists → start step 7 "Release failed" from item 1.
@@ -182,8 +183,8 @@ cargo build --release --locked
 
 Right before merging:
 1. Merge `main` into the branch if it is behind.
-2. Set the version. Let `M` be the first heading of `version.md` on `main` (e.g. `0.67`; it always
-   has a published release, see step 1). The new version is `M` with the second number plus one,
+2. Set the version. Let `M` be the first heading of `version.md` on `main` (e.g. `0.67`; it must be
+   published, see the merge conditions). The new version is `M` with the second number plus one,
    compared as numbers (`0.99` → `0.100`). Replace this PR's `# NEXT` heading with it. Commit, push,
    wait for CI.
 3. Check the review is current: `git diff origin/main...<approved sha>` and
@@ -194,13 +195,15 @@ Merge (squash, with `expectedHeadSha` = the checked head) only when all hold:
 - neither the PR nor its linked issue has `hold`, `blocked`, `rejected`, `awaiting-owner` or
   `needs-owner`, and the issue is open;
 - every reviewer of the last round approved, and the review is current (above);
-- if the PR changes `version.md`: its first line is `# X.Y`, a version newer than `M`, and `# NEXT`
-  appears nowhere in the file. Otherwise `version.md` is identical to `main` (design docs, release
+- if the PR changes `version.md`: `M` is published, no `release-failed` issue is open, its first
+  line is `# X.Y`, a version newer than `M`, and `# NEXT` appears nowhere in the file. Otherwise `version.md` is identical to `main` (design docs, release
   fixes and internal changes do not bump the version);
 - every CI check is green on the head commit;
 - no merge conflict.
 
-The `version.md` change on `main` triggers `.github/workflows/release.yml`. Watch it to completion.
+The `version.md` change on `main` triggers `.github/workflows/release.yml`. Keep the heartbeat
+comment updated (on the just-closed issue: the lock check also counts heartbeats on issues closed
+less than 90 minutes ago) and watch the run to completion.
 
 **Release failed:**
 1. Re-run the failed jobs of the same run once (`actions_run_trigger`, rerun failed jobs; a new
@@ -211,11 +214,13 @@ The `version.md` change on `main` triggers `.github/workflows/release.yml`. Watc
    itself (no approval needed) but only for fixing that release.
 3. If the fix needs a guarded file (e.g. `release.yml`), label the issue `needs-owner` and stop
    release work: guarded files change only on the owner's word.
-4. Otherwise fix in a PR (`Refs #N`) that does not change `version.md`, merge it, then get the
-   release published: if the release object for `vX.Y` exists without its asset, delete that
-   release (not the version) first, then run the release workflow on `main` (`workflow_dispatch`).
-   Close the issue only once the version is published. Never bump the version to retrigger.
-5. While a `release-failed` issue is open, merge nothing that changes `version.md`; other work can
+4. If the release object `vX.Y` already exists without its asset, the agent cannot repair it (the
+   MCP tools cannot delete releases or tags): label the issue `needs-owner` and comment asking the
+   owner to delete that release and its tag.
+5. Otherwise fix in a PR (`Refs #N`) that does not change `version.md`, merge it, then run the
+   release workflow on `main` (`workflow_dispatch`). Close the issue only once the version is
+   published. Never bump the version to retrigger.
+6. While a `release-failed` issue is open, merge nothing that changes `version.md`; other work can
    continue up to that point.
 
 After an implementation PR (not a design-doc PR): comment on the issue what shipped, which version,
