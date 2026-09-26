@@ -19,10 +19,12 @@ import. The file's **comment** stays free text for the whole file; markers are n
 1. **Mark while watching.** Playing a clip, the editor presses `F2` at a moment. A colored tick
    appears on the progress bar at that time. Playback does not stop and keyboard focus does not
    move, so tagging and marking can be mixed.
-   **Mark and describe from the keyboard:** `F2` on a marker that is already under the playhead
-   (nearest within 0.5 s — e.g. right after adding it, or after `Shift+F1`/`Shift+F3`) opens that
-   marker's row with the name field focused, opening the list if it was closed. So `F2 F2`, type,
-   `Enter` names a moment without the mouse.
+   **Mark and describe from the keyboard:** `F2` opens a marker's row with the name field focused
+   (opening the list if it was closed) instead of adding one when either
+   - the last marker action was adding a marker with `F2`/`◆+`, and nothing happened since (no
+     seek, no other marker action, no file change) — however far playback has moved on; or
+   - a marker is under the playhead (nearest within 0.5 s, e.g. after `Shift+F1`/`Shift+F3`).
+   So `F2`, then `F2` whenever the editor decides the moment deserves a name, type, `Enter`.
 2. **Describe a marker.** Besides `F2 F2`, the editor can click a marker's row (or its `✎`) in the
    list: the row opens for editing, with a name field (focused) and a
    multi-line comment editor. `Enter` in the name field, `Esc` in either field, or a click on the
@@ -73,12 +75,13 @@ Windowed, marker list open (the list shares the right-hand overlay with the subt
 - **Progress bar.** Marker ticks in the marker's color replace the teal screenshot ticks; a ranged
   marker also draws a thin band in its color above the in/out highlight.
 - **Controls bar.** `◆+` adds a marker (tooltip `Add marker (F2, again to name it)`); `◆` shows or
-  hides the marker list (tooltip `Markers (Shift+F1 / Shift+F3 to jump)`), next to `CC`. `◆` is shown whenever a video is open, in fullscreen too.
+  hides the marker list (tooltip `Markers (Shift+F1 / Shift+F3 to jump, Shift+drag to snap)`), next to `CC`. `◆` is shown whenever a video is open, in fullscreen too.
 - **Side list.** One overlay on the right, as the subtitle list is today. When the video has both
   subtitles and markers (or the marker list was opened), the top of the overlay has two tabs,
   `Subtitles` and `Markers`; with only one of them there are no tabs. `CC` opens the subtitle tab,
-  `◆` the marker tab; pressing the button of the open tab closes the overlay. The last tab is kept
-  across files. Fullscreen shows the subtitle overlay when subtitles exist, as today; the marker
+  `◆` the marker tab; pressing the button of the open tab closes the overlay. Whether the overlay
+  is open, and which tab, is remembered across files, as `CC` is today; it never opens by itself
+  because a file has markers. Fullscreen shows the subtitle overlay when subtitles exist, as today; the marker
   tab only when the editor opens it with `◆` or `F2 F2`. `◆` on the open marker tab goes back to the
   subtitle tab when there are subtitles and hides the overlay when there are none, so marked clips
   are not watched with part of the picture covered and subtitles are never lost.
@@ -119,7 +122,9 @@ ignores `SetSegmentStart` while `inline_rename` is open:
 - `SetSegmentStart`/`SetSegmentEnd` (`[`, `]`) and `TagPanel(ToggleSelectedTag)` (`Shift+Space`)
   are ignored, so typing `[b-roll]` does not set in/out points;
 - `EscapePressed` closes the row first (before leaving fullscreen or clearing the search);
-- `Undo`, `Redo`, `CopyTags` and `Shift+F2` are ignored (the fields have no undo of their own; an
+- `F2` closes the open row (its text kept) and adds a new marker at the playhead without opening
+  it, so the next moment can be caught while typing;
+- `Undo`, `Redo`, `CopyTags`, `PasteTags` and `Shift+F2` are ignored (the fields have no undo of their own; an
   app undo would remove the very marker being edited);
 - if the open row's marker disappears anyway, the row closes.
 `Enter` in the name field also closes the row. `F2` sits between the seek keys, and `F1`/`F3` with
@@ -154,60 +159,70 @@ An unknown color value read from a file is kept as it is and drawn gray until th
 color.
 
 **Writing is an in-place edit, never a rebuild**, so nothing frename does not understand is lost.
-Every `Marker` read from the file keeps its **as-read values** (id, track, start, duration, name,
-comment, color) next to its current ones; a new marker has none. A save computes the changes
-*as read → now* and applies only those to the XMP that is in the file at write time:
-- a marker is found in the file by id (GUID; for a marker without one, by its as-read position
-  among the `Comment` tracks — not the index in `Tracks` — plus start and name); if it is no
-  longer there, its change is dropped and logged;
+Markers are matched by **GUID at write time**, against the XMP that is in the file then; nothing
+about the file is remembered inside a marker. Besides the list, frename keeps, per file (keyed by
+`FileId`, in `FolderWorkspace`, never in snapshots or undo commands), the **known set**: every
+GUID it has read from or written to that file this session. A write:
+- for each marker in frename's list: if its GUID is in the file, the fields that differ from the
+  file are rewritten on that marker only, in the track's own rate (`round(ms × rate / 1000)`,
+  computed in `u128`, so `f254016000000` cannot overflow); fields frename does not know (`type`,
+  `speaker`, other `cuePointParams`, …) are never touched; if its GUID is not in the file, it is
+  appended to the first `Comment` track, or to a new `Comment` track (`trackName` `Comment`,
+  `frameRate` `f1000`) when there is none. A GUID already in the file is never appended again, so
+  a marker cannot be duplicated, whatever undo, redo or re-save does;
+- a marker in the file whose GUID is in the known set but not in frename's list was deleted by the
+  user: it is removed. A track left empty by that is removed, and so is `xmpDM:Tracks` when it is
+  left empty (as `set_in_out_range` does);
+- a marker in the file whose GUID frename never knew (e.g. Premiere added it while the file was
+  open) is kept;
+- markers without a GUID (other tools; Premiere always writes one) are shown **read-only**: listed,
+  ticked and jumpable, but not editable or deletable, and never touched;
 - marker edits are applied before the in/out change in the same write, since `set_in_out_range`
   moves the InOut track to the end of `Tracks`;
-- an unchanged marker is not touched, so a Premiere-written marker keeps its exact frame times and
-  every field frename does not know (`type`, `speaker`, other `cuePointParams`, …);
-- a changed field is rewritten on that marker only, in the track's own rate
-  (`round(ms × rate / 1000)`, computed in `u128`, so `f254016000000` cannot overflow);
-- a marker the user deleted (it was read, and is gone now) is removed from its track; a track left
-  empty by that is removed, and so is `xmpDM:Tracks` when it is left empty (as `set_in_out_range`
-  does);
-- markers in the file that frename never read (e.g. Premiere added one while the file was open)
-  are never deleted;
-- a new marker is appended to the first `Comment` track, or to a new `Comment` track
-  (`trackName` `Comment`, `frameRate` `f1000`) when there is none;
 - `InOut` tracks (frename's in/out) and every other track type are left alone;
-- nothing is written when the markers did not change, and file times are kept, as `xmp::write`
-  does today.
+- nothing is written when nothing differs, and file times are kept, as `xmp::write` does today.
+- after a successful write, the known set gains the GUIDs just written.
 
 Markers are always stored in the video: there is no file-name or text-file home, so the Settings
 choices for comments and in/out do not apply to them.
 
+The save reports what happened to the markers: `FileTaggerBackend::save` / `SaveAndReparse` (and
+`InMemoryFileTagger`) return the new path plus a `MarkersSaved` outcome — `Untouched` (snapshot had
+`None`), `Written(guids)` or `Failed(reason)` — instead of swallowing the error as `save_to_xmp`
+does for the comment today. `apply_file_updated` uses it for the known set and for failures.
+
 ### In memory
 
-`FileSnapshot` gets `markers: Option<Vec<Marker>>`. `None` means "not read": saving leaves the
-file's markers as they are. This is the same guard `comment_loading` gives the comment today, so a
-folder scan, a batch rename or a tag-only save can never wipe markers it did not read. The folder
-scan and the `.frename` file list do not read or cache markers, so snapshots in the `Directory`
-always have `None`.
+`FileSnapshot` gets `markers: Option<Vec<Marker>>`, current values only. `None` means "not read":
+saving leaves the file's markers as they are. This is the same guard `comment_loading` gives the
+comment today, so a folder scan, a batch rename or a tag-only save can never wipe markers it did
+not read. The folder scan and the `.frename` file list do not read or cache markers, so snapshots
+in the `Directory` have `None`.
 
-- **Opening a file** (it becomes the open file in `FileWorkspace`): if the unsaved-markers memory
-  (see "XMP write fails") holds markers for it, those are used; otherwise its markers are read from
-  the file (one XMP read of one file). This also happens when an undo of a navigation reopens a
-  file, so the undo history never needs to hold markers: snapshots it stores carry `None`.
+- **Opening a file** with a different `FileId` from the open one: if the unsaved-markers memory
+  (see "XMP write fails") holds markers for that `FileId`, those are used; otherwise its markers
+  are read from the file (one XMP read of one file) and their GUIDs join its known set.
+- **Re-opening the same file** (`FileOpened` with the open file's `FileId`: after an inline
+  rename, an undo or redo refresh, a re-click): markers are **not** read from disk — the save of the
+  current state may still be waiting for the video to unload. They come from the snapshot being
+  opened (undo/redo) or stay as they are in `TagList`.
 - **While open**, `TagList` owns the markers, as it owns in/out and the comment: `TagList::new`
   takes them from the snapshot and `TagList::file_snapshot()` puts them back. Marker undo commands
   act on `ctx.tag_list`, like `SetSegmentStartCommand`. The command for *add* captures the marker
-  as it is at undo time, so a redo brings back the name typed after adding it.
-- **After a successful write** the as-read values of every marker become the values just written
-  (the save returns them). When the file stays open (inline rename, and other same-file saves,
-  which keep `TagList` because `FileWorkspace::set_file` returns early for the loaded file), the
-  workspace passes them back to `TagList`. Without this a marker added and then saved would be
-  appended again on the next save.
+  as it is at undo time, so a redo brings back the name typed after adding it. Since undo/redo
+  snapshots hold current values only and writes match by GUID, restoring any of them can neither
+  duplicate a marker nor hide one from the next write.
 
 Every place that builds a new snapshot from the open file's state must carry the markers over,
 or the user's unsaved edits are silently dropped: `TagList::file_snapshot()`, `submit_rename`
 (`src/features/folder_workspace/state.rs`, which copies the comment and screenshots) and the
-paste-tags path (`paste_tags`, which calls `FileSnapshot::new`); the implementation lists them all with a grep for
-`FileSnapshot::parse`/`FileSnapshot::new` in `src/`, and a test renames an open file with edited
-markers and checks they are written.
+paste-tags path (`paste_tags`, which calls `FileSnapshot::new`); the implementation lists them all
+with a grep for `FileSnapshot::parse`/`FileSnapshot::new` in `src/`.
+
+**Saving the open file** happens on every path that leaves it: moving to another file (today),
+opening another folder, starting a batch (today), and closing the window. If closing or changing
+folders does not save the open file today, the Markers PR adds that, since the last clip of the
+day is the one most likely to be checked in Premiere.
 
 ### Screenshots
 
@@ -218,8 +233,7 @@ untouched and are no longer shown as ticks.
 
 ## Batch actions
 
-One new batch action, **Markers ⇄ comment**, with a direction switch like **Move comments**:
-
+One new batch action, **Markers ⇄ comment**, with a direction switch like **Move comments**.
 One line format serves both directions:
 
 ```
@@ -229,41 +243,45 @@ One line format serves both directions:
 `<time>` is `m:ss` below an hour and `h:mm:ss` from an hour, with `.mmm` added when the
 milliseconds are not zero. The range dash may be `–` or `-`.
 
-- **Comment → markers.** Each comment line that starts with a time (or a range) becomes a marker
-  and is removed from the comment. The rest of the line, after a leading separator (`—`, `–`, `-`,
-  `:`) and spaces, is split on the first ` — ` or ` -- ` (`--` is easy to type on a Windows
-  keyboard): the part before is the **name**, the part after the **comment**. A plain ` - ` does
-  not split, since names often contain it; the README says so. Also accepted: `mm:ss` and the old screenshot form `HH-MM-SS-mmm`. Lines without a
-  time stay in the comment. When the clip length is known, a line whose time is past the end stays
-  in the comment and the file's result says so; when it is unknown, every time is accepted. If a
-  marker with the same name already exists within 0.5 s, no duplicate is added (the line is still
-  removed).
-- **Markers → comment.** Each marker becomes a line in the format above, appended to the comment
-  in time order, and the markers are removed from the video. The marker comment's line breaks
-  become spaces. The result text says how many markers were moved.
+- **Comment → markers** (a move). Each comment line that starts with a time (or a range)
+  **followed by a separator** (`—`, `–`, `-`, `:`) becomes a marker and is removed from the
+  comment; a line like `12:30 call the client back` has no separator and stays. The rest of the
+  line is split on the first ` — ` or ` -- ` (`--` is easy to type on a Windows keyboard): the part
+  before is the **name**, the part after the **comment**. A plain ` - ` does not split, since names
+  often contain it; the README says so. Also accepted: `mm:ss` and the old screenshot form
+  `HH-MM-SS-mmm:`. Lines without a time stay. When the clip length is known, a line whose time is
+  past the end stays and the file's result says so; when it is unknown, every time is accepted. If
+  a marker with the same name already exists within 0.5 s, no duplicate is added (the line is still
+  removed). Each file's result says how many lines became markers.
+- **Markers → comment** (a copy). Each marker becomes a line in the format above, appended to the
+  comment in time order, unless that exact line is already in the comment. The markers stay in the
+  video, untouched. The marker comment's line breaks become spaces. Each file's result says how
+  many lines were added.
 
-Both are moves, like the existing move actions, so re-running one does nothing, and running one
-after the other brings back each marker's start, duration, name and one-line comment. Lost on the
-way: color, line breaks inside a marker comment, the marker id, and anything Premiere-specific;
-a name that itself contains ` — ` comes back split. Files that cannot hold XMP get a red result
-(`this format cannot hold markers`) and are not changed. The comment is written through the normal
-save path, so it follows the Settings comment storage and the "Commented" tag rule.
+Re-running either direction does nothing new. Comment → markers after Markers → comment removes the
+copied lines and adds no duplicate markers. Files that cannot hold XMP get a red result
+(`this format cannot hold markers`) for Comment → markers and are not changed. The comment is
+written through the normal save path, so it follows the Settings comment storage and the
+"Commented" tag rule. A batch job clears the unsaved-markers memory of every file it touches.
 
 ## Edge cases
 
-- **Video that cannot hold XMP** (the toolkit has no smart handler for it, e.g. some `.MTS`), or
-  a **read-only file** (checked when the file opens: read-only attribute or a read-only folder):
-  `◆+` is disabled with the tooltip `This file cannot hold markers` (or `This file is read-only`).
-  `F2` on such a file opens the marker list, which shows that same sentence instead of rows, so a
-  key press never silently does nothing. The README lists which video formats hold markers.
+- **Video that cannot hold XMP** (the toolkit has no smart handler for it, e.g. some `.MTS`):
+  `◆+` is disabled with the tooltip `This file cannot hold markers`; `F2` opens the marker list,
+  which shows that sentence, so a key press never silently does nothing. The README lists which
+  video formats hold markers.
+- **Read-only file** (checked when the file opens: read-only attribute or a read-only folder): the
+  list shows the file's markers read-only (jump works), with `This file is read-only` above them;
+  `◆+`, `F2`-add, edit and delete are disabled.
 - **XMP write fails anyway** (file in use, disk full): the unsaved markers are kept in memory for
-  that file until frename closes, the failure is logged, and the file's row in the list gets a red
-  `✕` with the tooltip `Markers not saved: the file is read-only or in use`. Opening the file again
-  shows the kept markers, with that sentence above the list, and the next save of the file tries
-  again. Nothing is written to a fallback home.
-- **Premiere or a batch job changed the markers** while frename had the file open: the save applies
-  only the user's *as read → now* changes, so markers added or edited elsewhere survive. The same
-  field changed in both wins for frename (last writer).
+  that `FileId` until frename closes (moving with the file if the rename still happened), the
+  failure is logged, and the file's row in the list gets a red `✕` with the tooltip
+  `Markers not saved: the file is read-only or in use`. Opening the file again shows the kept
+  markers, with that sentence above the list, and the next save of the file tries again. Nothing is
+  written to a fallback home.
+- **Premiere or a batch job changed the markers** while frename had the file open: markers added
+  elsewhere survive (unknown GUIDs are kept). A marker changed both in Premiere and in frename ends
+  with frename's values for the fields frename shows (last writer).
 - **Markers past the end**, negative or garbage times in a foreign file: shown clamped to the clip
   on the bar, kept unchanged in the file.
 - **Many markers** (hundreds, e.g. from a speech-to-text tool): the list is a fixed-row-height
@@ -313,10 +331,15 @@ Core unit tests (no network, fixtures in `crates/frename-core/tests/fixtures/`):
 - a marker added to the file after frename read it survives frename's save; a marker edited in
   the file after the read keeps the fields frename did not change;
 - renaming an open file keeps its edited markers (the snapshot rebuild carries them);
-- `TagList::new(snapshot).file_snapshot()` keeps the markers and their as-read values;
+- `TagList::new(snapshot).file_snapshot()` keeps the markers;
 - add → save with the file still open → edit the name → save again gives exactly one marker, with
   the new name; add → leave → undo the navigation → leave again gives no duplicate;
-- a GUID-less marker edited in the same write as an in/out change is still found and edited;
+- add M → paste tags → undo → redo → save gives one M; add M → toggle a tag → undo → undo (removes
+  M) → redo → save leaves M in the file;
+- inline rename → delete a marker → undo refresh: the deleted marker does not come back from disk;
+- a marker whose GUID the known set lacks survives a save; GUID-less markers are never changed;
+- a marker edit and an in/out change in the same write both land;
+- the open file is saved (markers included) on window close and on opening another folder;
 - rate conversion at `f254016000000` for a 10-hour clip does not overflow;
 - undo/redo of add, delete, color, duration;
 - the timecode parser (every accepted form, ranges, name/comment split, lines without a time,
@@ -338,8 +361,9 @@ name, comment, duration and color; a Premiere-written marker survives a frename 
    two overlays at once would cover most of a windowed video.
 3. **Does a marker's text go to name or comment in the batch conversion?** *Recommended:* name —
    Premiere's marker panel lists names; the comment is for longer notes.
-4. **Markers → comment: move or copy?** *Recommended:* move, mirroring the existing move actions,
-   so the pair is reversible and re-runs do not duplicate lines.
+4. **Markers → comment: move or copy?** *Recommended:* copy — an export that never destroys colors
+   or Premiere data, with no undo for batch jobs; re-runs add no duplicate lines. Comment → markers
+   stays a move so the timecoded lines do not remain twice.
 5. **F12 file name.** *Recommended:* keep `{file}.snap.HH-MM-SS-mmm.jpg` so nothing about it changes
    except that frename forgets it.
 6. **Unverified colors.** The color values come from third-party writers and a 2018–2020 sample.
