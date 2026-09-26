@@ -184,6 +184,13 @@ impl Anthropic {
             Ok(response) => response,
             // Nothing reached Anthropic yet: safe to try again.
             Err(e) if e.is_connect() => return Attempt::Retry(format!("connection failed: {e}")),
+            // The request could not even be built (e.g. a pasted key with a control character):
+            // trying again cannot help, and it is not the network.
+            Err(e) if e.is_builder() => {
+                return Attempt::Done(Err(AiError::Rejected(format!(
+                    "The request could not be made; check the API key ({e})"
+                ))))
+            }
             Err(e) if e.is_timeout() => return Attempt::Done(Err(AiError::Timeout)),
             Err(e) => return Attempt::Retry(format!("connection failed: {e}")),
         };

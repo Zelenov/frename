@@ -94,7 +94,8 @@ fn action_options<'a>(
             .collect()
     });
     let (panel, label, ready) = state.actions().panel(state.action(), &checked);
-    let can_run = ready && !state.is_running();
+    // Clip lengths still being read hold their files open, which a rename would fail on.
+    let can_run = ready && !state.is_running() && !state.actions().is_reading_files();
     let run = button(text(label).size(13))
         .on_press_maybe(can_run.then_some(Message::Run))
         .padding([6, 14]);

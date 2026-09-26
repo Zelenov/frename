@@ -200,6 +200,11 @@ impl Actions {
         }
     }
 
+    /// Whether a background read keeps files open, so no job may start yet.
+    pub fn is_reading_files(&self) -> bool {
+        self.describe_ai.is_probing()
+    }
+
     /// What `action` shows next to the run button (why it cannot run), if anything.
     pub fn footer(&self, action: Action) -> Option<Element<'_, ActionMessage>> {
         match action {

@@ -90,6 +90,11 @@ impl Options {
         })
     }
 
+    /// Whether clip lengths are being read (they keep the clips open: no job may rename them).
+    pub fn is_probing(&self) -> bool {
+        !self.probing.is_empty()
+    }
+
     /// Whether the key's state still has to be read; marks it as asked for.
     pub(in crate::features::batch) fn request_key_state(&mut self) -> bool {
         let needed = self.key.is_none() && !self.key_requested;
@@ -477,10 +482,20 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool) -> ItemResult {
         response.usage.input_tokens,
         response.usage.output_tokens
     );
+    // A save that failed (a read-only share) only logs: check the description is there, so a
+    // paid answer that was lost is reported, not counted as done.
+    let (new_path, saved) = super::reparsed(new_path);
+    if block::ai_block(saved.comment()) != Some(new_block.as_str()) {
+        return ItemResult {
+            usage,
+            update: Some((new_path, saved)),
+            ..ItemResult::failed("The description could not be saved")
+        };
+    }
     // A cancel that came while the answer was on its way still leaves this video done.
     ItemResult {
         usage,
-        ..ItemResult::new(ItemStatus::Done, Some(super::reparsed(new_path)))
+        ..ItemResult::new(ItemStatus::Done, Some((new_path, saved)))
     }
 }
 

@@ -132,13 +132,11 @@ impl SettingsState {
                 self.key.replacing = false;
                 self.key.state = Some(state);
             }
+            // A failed save or removal leaves the store as it was: a read asked for before it
+            // still tells the truth, so it does not become stale.
             KeyMessage::State {
-                request,
-                result: Err(error),
-            } => {
-                self.key.answered = request;
-                self.key.error = Some(error);
-            }
+                result: Err(error), ..
+            } => self.key.error = Some(error),
         }
     }
 
@@ -297,6 +295,22 @@ mod tests {
             state.key().state,
             Some(KeyState::Saved),
             "a read that answers late does not undo the save"
+        );
+
+        let read = state.begin_key_request();
+        let failed_save = state.begin_key_request();
+        state.apply(Message::Key(KeyMessage::State {
+            request: failed_save,
+            result: Err("locked".to_string()),
+        }));
+        state.apply(Message::Key(KeyMessage::State {
+            request: read,
+            result: Ok(KeyState::Missing),
+        }));
+        assert_eq!(
+            state.key().state,
+            Some(KeyState::Missing),
+            "a read answered after a failed save still counts"
         );
         assert!(!format!("{:?}", state.settings()).contains("sk-ant"));
     }

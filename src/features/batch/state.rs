@@ -204,10 +204,9 @@ impl BatchState {
     /// when there is nothing to run: no files, an action that is not available, or a job
     /// already running.
     pub fn start(&mut self, files: Vec<FileId>) -> bool {
-        let Some(operation) = self
-            .operation()
-            .filter(|_| !files.is_empty() && !self.is_running())
-        else {
+        let Some(operation) = self.operation().filter(|_| {
+            !files.is_empty() && !self.is_running() && !self.actions.is_reading_files()
+        }) else {
             return false;
         };
         let statuses = files.iter().map(|id| (*id, ItemStatus::Pending)).collect();
