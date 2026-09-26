@@ -194,7 +194,7 @@ fn only_from_main_window(
 
 /// Settings window size (logical px). The window is not resizable, so this must fit every
 /// section: a setting below the bottom edge is simply not seen.
-const SETTINGS_WINDOW_SIZE: iced::Size = iced::Size::new(560.0, 560.0);
+const SETTINGS_WINDOW_SIZE: iced::Size = iced::Size::new(560.0, 660.0);
 
 /// Application state: top-level features only. No knowledge of child UI or structure.
 pub struct FrenameApp {
@@ -231,6 +231,7 @@ impl FrenameApp {
         frename_core::set_comment_storage(settings.settings().comment_storage);
         frename_core::set_in_out_storage(settings.settings().in_out_storage);
         frename_core::set_commented_tag(settings.settings().effective_commented_tag());
+        frename_core::set_space_after_tags(settings.settings().space_after_tags);
         Self {
             drag_drop_state: drag_drop::DragDropState::default(),
             folder_workspace: folder_workspace::FolderWorkspace::new(),
@@ -321,6 +322,10 @@ impl FrenameApp {
                         ))
                     }
                     settings::Message::SetMonochromeTags(_) => Task::none(),
+                    settings::Message::SetSpaceAfterTags(space) => {
+                        frename_core::set_space_after_tags(space);
+                        Task::none()
+                    }
                 }
             }
             Message::FolderWorkspace(folder_workspace::Message::Folder(

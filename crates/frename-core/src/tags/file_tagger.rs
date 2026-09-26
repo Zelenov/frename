@@ -82,6 +82,20 @@ impl FileTagger {
         Self::renamed(Self::save(&snapshot, path), path)
     }
 
+    /// Rename the file at `path` to the tag spacing chosen now (see
+    /// [`crate::set_space_after_tags`]). Returns the outcome like a move.
+    pub fn respace_tags(path: &Path) -> MoveOutcome {
+        let snapshot = Self::parse(path, &FolderInfo::default());
+        let current = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        if snapshot.file_name() == current {
+            return MoveOutcome::NothingToMove;
+        }
+        Self::renamed(Self::save(&snapshot, path), path)
+    }
+
     /// Read the comment and in/out points of the file at `path` from the file again, replacing
     /// what the folder's file list cached for it. Returns whether the cached values were missing
     /// or stale.

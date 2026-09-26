@@ -11,6 +11,7 @@ mod move_comments;
 mod move_in_out;
 mod reload_files;
 mod tag_commented;
+mod tag_spacing;
 
 use std::path::{Path, PathBuf};
 
@@ -30,16 +31,18 @@ pub enum Action {
     MoveInOut,
     TagCommented,
     FixTags,
+    RespaceTags,
     ReloadFiles,
 }
 
 impl Action {
     /// Every action, in list order.
-    pub const ALL: [Action; 5] = [
+    pub const ALL: [Action; 6] = [
         Action::MoveComments,
         Action::MoveInOut,
         Action::TagCommented,
         Action::FixTags,
+        Action::RespaceTags,
         Action::ReloadFiles,
     ];
 
@@ -49,6 +52,7 @@ impl Action {
             Self::MoveInOut => move_in_out::LABEL,
             Self::TagCommented => tag_commented::LABEL,
             Self::FixTags => fix_tags::LABEL,
+            Self::RespaceTags => tag_spacing::LABEL,
             Self::ReloadFiles => reload_files::LABEL,
         }
     }
@@ -61,6 +65,8 @@ pub enum Operation {
     MoveInOut(InOutStorage),
     TagCommented,
     FixTags,
+    /// Rename files to the tag spacing chosen in the settings.
+    RespaceTags,
     ReloadFiles,
 }
 
@@ -72,6 +78,7 @@ impl Operation {
             Self::MoveInOut(to) => move_in_out::run(to, path),
             Self::TagCommented => tag_commented::run(path),
             Self::FixTags => fix_tags::run(path),
+            Self::RespaceTags => tag_spacing::run(path),
             Self::ReloadFiles => reload_files::run(path),
         }
     }
@@ -83,6 +90,7 @@ impl Operation {
             Self::MoveInOut(_) => Action::MoveInOut,
             Self::TagCommented => Action::TagCommented,
             Self::FixTags => Action::FixTags,
+            Self::RespaceTags => Action::RespaceTags,
             Self::ReloadFiles => Action::ReloadFiles,
         }
     }
@@ -119,7 +127,10 @@ impl Actions {
         match operation {
             Operation::MoveComments(to) => self.move_comments.prepare(to),
             Operation::MoveInOut(to) => self.move_in_out.prepare(to),
-            Operation::TagCommented | Operation::FixTags | Operation::ReloadFiles => {}
+            Operation::TagCommented
+            | Operation::FixTags
+            | Operation::RespaceTags
+            | Operation::ReloadFiles => {}
         }
     }
 
@@ -130,6 +141,7 @@ impl Actions {
             Action::MoveInOut => Some(self.move_in_out.operation()),
             Action::TagCommented => tag_commented::operation(),
             Action::FixTags => Some(Operation::FixTags),
+            Action::RespaceTags => Some(Operation::RespaceTags),
             Action::ReloadFiles => Some(Operation::ReloadFiles),
         }
     }
@@ -141,6 +153,7 @@ impl Actions {
             Action::MoveInOut => self.move_in_out.view().map(ActionMessage::MoveInOut),
             Action::TagCommented => tag_commented::view(),
             Action::FixTags => fix_tags::view(),
+            Action::RespaceTags => tag_spacing::view(),
             Action::ReloadFiles => reload_files::view(),
         }
     }

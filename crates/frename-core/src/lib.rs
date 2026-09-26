@@ -32,9 +32,10 @@ pub use metadata::{
 pub use ordered::{OrderKey, OrderableEntry, OrderedCollection, OrderedThing};
 pub use subtitles::{load_subtitles, subtitle_path, SubtitleCue, Subtitles};
 pub use tags::{
-    install_file_tagger, CachedFile, DefaultTag, FileSnapshot, FileTagger, FileTaggerBackend,
-    FolderInfo, FolderTagStore, InMemoryFileTagger, LoggingFileTagger, ProductionFileTagger,
-    SaveAndReparse, Screenshot, StoredTag, Tag, TagColorMapping, TagId, TagList, DEFAULT_TAGS,
+    install_file_tagger, set_space_after_tags, space_after_tags, CachedFile, DefaultTag,
+    FileSnapshot, FileTagger, FileTaggerBackend, FolderInfo, FolderTagStore, InMemoryFileTagger,
+    LoggingFileTagger, ProductionFileTagger, SaveAndReparse, Screenshot, StoredTag, Tag,
+    TagColorMapping, TagId, TagList, DEFAULT_TAGS,
 };
 pub use undo::{
     CreateTagCommand, DeleteTagCommand, History, NavigateFileCommand, PasteTagsCommand,

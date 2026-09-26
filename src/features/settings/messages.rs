@@ -11,6 +11,8 @@ pub enum Message {
     SetAutoplayVideo(bool),
     /// Draw every tag in one neutral color.
     SetMonochromeTags(bool),
+    /// Put a space after each tag in file names (`Food. clip.mp4`).
+    SetSpaceAfterTags(bool),
     /// Save comments inside the video file or in a text file next to it.
     SetCommentStorage(CommentStorage),
     /// Save in/out points inside the video file (as a Premiere Pro marker) or in the file name.

@@ -162,6 +162,7 @@ and Cancel. Each file then shows a green or red check box. Actions:
 - move in/out points between the file name and the video;
 - tag commented videos with "Commented" and untag the rest;
 - put the tags in every name in tag panel order;
+- add or remove the space after each tag, as set in Settings;
 - read every file again (use this if the list looks out of date).
 
 ## Settings
@@ -170,12 +171,13 @@ The ⚙ button opens Settings:
 
 - play videos automatically when opened;
 - draw all tags in one neutral color;
+- put a space after each tag in file names (`Food. Goat. clip.mp4`);
 - where comments are kept (inside the video or `.comment.txt`), and the name of the "Commented"
   tag, or none;
 - where in/out points are kept (file name or inside the video).
 
-After you change where comments or in/out points are kept, Settings offer the batch action that
-moves the existing ones.
+After you change where comments or in/out points are kept, or the tag spacing, Settings offer the
+batch action that updates the existing files.
 
 ![Monochrome tags](docs/frename-screenshot-mono.jpg)
 
