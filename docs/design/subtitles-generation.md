@@ -14,9 +14,10 @@ sonisub command line on a folder separately, with a key in an environment variab
 1. **Set the key once.** Settings → new section **Subtitles**: a *Soniox API key* field (masked,
    *Show*, **Save**; once saved `Key saved` with **Replace** / **Remove**, and a line naming where
    it is kept on this system, e.g. `Saved in Windows Credential Manager on this computer.`, and
-   `Get a key at console.soniox.com.`),
+   `Get a key at console.soniox.com.` and `The audio is sent to Soniox to transcribe it.`),
    *Languages* (the languages spoken in the footage, as hints: checkboxes English and Russian on by
-   default, plus Ukrainian, German, Spanish, French), and *Cue length*: **Short** (default: one line
+   default, plus Ukrainian, German, Spanish, French; none checked means `Detect automatically`, no
+   hints), and *Cue length*: **Short** (default: one line
    of up to 100 characters and at most 8 s per cue — sonisub's defaults, `Layout::default()`) or
    **One sentence per cue** (no length limit; `Layout::unlimited()`). See Settings layout.
 2. **Run it.** Batch mode → check clips → action **Generate subtitles**. Before *Run*, the panel
@@ -42,22 +43,25 @@ sonisub command line on a folder separately, with a key in an environment variab
    estimating or without a key (then `Set a Soniox API key in Settings` with **Open Settings**).
    With nothing to send but free rebuilds it reads `Build 2 subtitles (free)`; with nothing to do
    at all it is disabled and the panel says `Nothing to transcribe`.
-   **The editor keeps working while it runs** (see Background job): transcribing only reads the
-   videos and writes `.srt` files next to them, so the video stays open and the file list works.
+   **While it runs the app is busy, as with every batch job** (see During the run); the plan says
+   how long that may take: `About 25 min` (from the audio length and recent speed; a first run says
+   `a few minutes per hour of audio`).
 3. **Progress and cancel** like every batch action; *Cancel* stops the current file within a few
    seconds (sonisub checks the job's cancel token during extraction, upload retries and polling)
-   and sonisub deletes what it created on Soniox; that file counts as not reached, not as failed.
+   and sonisub deletes what it created on Soniox; that file counts as not reached, not as
+   failed (an error from `process` while the job's own cancel token is set is read as cancelled).
    **Fatal Soniox errors stop the job:** when an error is fatal in sonisub's sense
    (`ApiError::is_fatal`: balance or budget exhausted, 402/403), the job stops with
-   `Soniox stopped: <reason>`, instead of extracting and uploading every remaining file only to
+   `Soniox stopped: <reason>` (with **Open Settings** when the reason is the key), instead of extracting and uploading every remaining file only to
    fail it the same way.
 4. **Result.** Each transcribed video gets `clip.srt` next to it (the path frename already reads:
    same folder and stem). The counts line reads `✓ 8 subtitled – 3 unchanged ✗ 1 failed` (the
    action names its done state), and every file that was not subtitled is listed with its reason
    (`no speech`, `no audio`, `already had subtitles`, `audio format not supported`,
-   `failed: <reason>`) in the existing scrollable result list (see Batch changes). The
-   open file's subtitles appear at once, and the list's subtitles marker, the "with subtitles"
-   filter and its count are updated from `subtitle_path(..).is_file()` for each finished item. The
+   `failed: <reason>`) in the existing scrollable result list, headed `Not subtitled:` for this
+   action (see Batch changes). The list's subtitles marker, the "with subtitles" filter and its
+   count are updated from `subtitle_path(..).is_file()` as each item finishes; the reopened file
+   shows its new subtitles when the job ends. The
    job's summary line adds `Soniox: 41 min · about $0.07` (seconds sent, `Outcome::uploaded_s`,
    times the price used for the estimate), also written to the log.
 
@@ -69,21 +73,16 @@ seen"). Its content becomes a scrollable column; the window keeps its size. **Op
 the action opens it scrolled to the Subtitles section. (#17's design needs the same; whichever ships
 first adds it.)
 
-## Background job
+## During the run
 
-Today every batch job closes the open video, blocks opening other files, pauses comment loading
-and clears undo at the end (`run_batch` and the guards in `folder_workspace/state.rs`): right for
-actions that rewrite files, wrong for a job that only reads videos for many minutes. An operation
-therefore declares whether it **touches the videos**. Generate subtitles does not, so its job:
-- does not unload the open video, does not block navigation or comment loading, and does not
-  clear undo;
-- takes each file's **current** path from the `Directory` by `FileId` when that file's turn comes
-  (the job already advances one file per step on the UI side), so a video the editor renamed
-  meanwhile is read under its new name;
-- if the video was renamed while its own file was being transcribed, moves the new `.srt` (and a
-  `.soniox.json` marker) to the new stem when the item finishes, the same way a rename moves them;
-- a video removed meanwhile ends as `failed: file not found`.
-Undo is not affected: writing a `.srt` is not an undoable edit.
+The job runs like every batch job today: the open video is closed, other files cannot be opened
+or edited, and the folder cannot be changed until the job ends or is cancelled (`run_batch` and the
+guards in `folder_workspace/state.rs`). For a job that can take many minutes this is a real
+limitation, accepted for this version because every way around it races with the editor's own
+saves (an XMP write into the clip being read, a rename moving a `.srt` sonisub is about to write).
+So the plan shows the expected wait before *Run*, and the job panel says
+`Closing frename stops the run; finished subtitles are kept.` A background mode that lets the
+editor keep working is filed as an `idea` for later.
 
 ## Batch changes
 
@@ -97,12 +96,12 @@ cannot see. This PR changes the shared code (the same changes #17's design lists
   `stop_job: Option<String>` (stops the job, the rest not reached, reason as the summary line);
   other actions leave both `None`.
 - *Cancel* also sets the running job's cancel token.
-- Each action gives the run button its own label and enabled state and names its done state in the
-  counts line; the others keep `Run on N files` and `changed`.
-- `Operation` gains `touches_videos() -> bool` (true for the existing actions), which the job uses
-  as described under Background job.
+- Each action gives the run button its own label and enabled state, names its done state in the
+  counts line and its result list's heading; the others keep `Run on N files`, `changed` and
+  `Failed (see the log for why):`.
 - The plan: when the checked set, the Replace checkbox or the key changes, the action starts a
-  `Task` that works out shared subtitle names (passed to the job as a skip set, so `run` returns
+  `Task` that works out shared subtitle names (passed to the job as a skip set keyed by `FileId`,
+  so `run` returns
   them as skipped even with Replace on), runs `batch::plan` and the price lookup (10 s timeout) on
   a blocking thread; each request carries a generation number, and an answer for an older one is
   dropped. The panel shows `Estimating…` until the current one arrives.
@@ -137,15 +136,16 @@ cannot see. This PR changes the shared code (the same changes #17's design lists
   and a `cancel` argument to `audio::extract` (native decoding and the ffmpeg path). Either the
   token or the global flag stops the work; the CLI keeps the global flag. These are public
   signature changes, listed in the sonisub PR and its version notes.
-- **No console window for ffmpeg:** on Windows, `with_ffmpeg` sets `CREATE_NO_WINDOW`
-  (`CommandExt::creation_flags`), so a GUI app using the `Auto` backend does not flash a console.
+- **No console windows:** on Windows every `Command::new` in `audio.rs` (`ffmpeg` in `with_ffmpeg`,
+  `ffprobe` in `probe_duration`) sets `CREATE_NO_WINDOW` (`CommandExt::creation_flags`), so a GUI app
+  using the `Auto` backend does not flash a console per file.
 - **A `cli` feature** (default on) for `clap` and `ctrlc`: `audio::Backend` derives
   `clap::ValueEnum` only under it, and the binary gets `[[bin]] required-features = ["cli"]`, so
   frename, with `default-features = false`, builds neither, and the crate builds without the
   feature.
 - **Cleanup warnings:** `RemoteGuard` reports a failed delete on Soniox with `eprintln!`, which a
-  GUI release build throws away; it logs through the `log` crate instead (the CLI prints `log`
-  output as today).
+  GUI release build throws away; it logs through the `log` crate instead, and the CLI installs a
+  small stderr logger for `warn` and above so its users still see the "run `sonisub purge`" hint.
 - The rest of the API above is public already. sonisub's own tests and release are unaffected.
 - **Build cost in frename:** sonisub brings `reqwest` 0.13 with rustls, whose crypto is
   `aws-lc-rs` / `aws-lc-sys` (a C build; frename has no HTTP stack yet), `symphonia` and `flacenc`.
@@ -178,9 +178,9 @@ it, the other reuses it.)
 
 ## Edge cases
 
-- **The open video:** stays open and playing (see Background job); sonisub only reads the file.
-- **A `.srt` appears for the open file:** the player loads subtitles when a video opens; after the
-  job, the open file's subtitles are reloaded so they show at once.
+- **The open video:** closed for the job and reopened after it, as for every batch job.
+- **App closed during the run:** the job stops like any batch job; finished `.srt` files are kept,
+  and sonisub deletes the current file's upload on Soniox.
 - **Files without audio:** skipped, named in the skipped lines, unchanged. (The file list holds only
   videos, so nothing else can be checked; the job still ignores any path that is not a video.)
 - **Two videos with the same stem** (`clip.MP4`, `clip.MOV`): both map to `clip.srt`; the plan skips
@@ -211,9 +211,8 @@ it, the other reuses it.)
   skip / cached / cached silent / no audio / shared names / unreadable without ffmpeg; the price
   lookup falls back on error and timeout; outcome → result mapping with
   reasons; a fatal error stops the job; a cancelled file is not reached, not failed; a second job
-  after a cancelled one runs; the subtitles marker and count update after the job; the open video
-  stays loaded and navigation works during the job; a video renamed during its turn gets its `.srt`
-  under the new name; renaming a video
+  after a cancelled one runs (and a cancelled item is not reached, not failed); the subtitles marker
+  and count update per item; no languages checked sends no hints; renaming a video
   renames its `.soniox.json` marker; keyring round trip on Windows CI, and "unavailable" (not a mock)
   on Linux CI.
 - Live test only when `SONIOX_API_KEY` is set (skipped otherwise): one short clip from
