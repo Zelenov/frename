@@ -1,7 +1,10 @@
 //! UI for the settings window.
 
-use frename_core::{CommentStorage, InOutStorage};
-use iced::widget::{button, checkbox, column, container, radio, row, text, text_input};
+use frename_core::ai::{AiModel, SummaryLanguage};
+use frename_core::{AppSettings, CommentStorage, InOutStorage};
+use iced::widget::{
+    button, checkbox, column, container, pick_list, radio, row, scrollable, text, text_input,
+};
 use iced::{Element, Length};
 
 use crate::theme;
@@ -121,12 +124,80 @@ pub fn view(state: &SettingsState) -> Element<'_, Message> {
     .spacing(8);
     let in_out = section("In/out points", in_out_options.into());
 
-    container(column![video, tags, comments, in_out].spacing(20))
-        .padding(20)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(theme::main_container_style)
-        .into()
+    let ai = section("AI summaries", ai_options(settings));
+
+    // Scrolls when the sections do not fit the window.
+    let content = column![video, tags, comments, in_out, ai]
+        .spacing(20)
+        .padding(20);
+    container(
+        scrollable(content)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(theme::dark_scrollable_style),
+    )
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .style(theme::main_container_style)
+    .into()
+}
+
+/// The model, the language and the key the "Summarize subtitles with AI" batch action uses.
+fn ai_options(settings: &AppSettings) -> Element<'_, Message> {
+    const LABEL_WIDTH: f32 = 130.0;
+    let label = |label: &'static str| text(label).size(13).width(Length::Fixed(LABEL_WIDTH));
+    let model = row![
+        label("Model"),
+        pick_list(
+            &AiModel::ALL[..],
+            Some(settings.ai_model),
+            Message::SetAiModel
+        )
+        .text_size(13)
+        .padding([3, 8]),
+    ]
+    .spacing(8)
+    .align_y(iced::Alignment::Center);
+    let language = row![
+        label("Summary language"),
+        pick_list(
+            &SummaryLanguage::ALL[..],
+            Some(settings.summary_language),
+            Message::SetSummaryLanguage,
+        )
+        .text_size(13)
+        .padding([3, 8]),
+    ]
+    .spacing(8)
+    .align_y(iced::Alignment::Center);
+    let key = row![
+        label("Anthropic API key"),
+        text_input("sk-ant-…", &settings.anthropic_api_key)
+            .secure(true)
+            .on_input(Message::SetAnthropicApiKey)
+            .size(13)
+            .padding([3, 6])
+            .width(Length::Fixed(260.0)),
+    ]
+    .spacing(8)
+    .align_y(iced::Alignment::Center);
+    let key_hint = if settings.anthropic_api_key.is_empty() {
+        "Get a key at console.anthropic.com → API Keys. It is kept only on this computer, in \
+         frename's settings."
+    } else {
+        "Key saved on this computer only, in frename's settings. Clear the field to remove it."
+    };
+    column![
+        model,
+        language,
+        key,
+        text(key_hint)
+            .size(12)
+            .color(theme::TEXT_MUTED)
+            .width(Length::Fill),
+    ]
+    .spacing(8)
+    .into()
 }
 
 /// The tag for videos with a comment, shown while comments are inside the video: a comment inside the

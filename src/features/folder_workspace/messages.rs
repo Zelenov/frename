@@ -85,6 +85,8 @@ pub enum Message {
     SetSegmentEnd,
     /// User interacted with the multiline comment editor.
     CommentAction(text_editor::Action),
+    /// Remove the AI summary from the open file's comment; the editor's text stays.
+    RemoveAiBlock,
     /// Screenshot captured at position (ms) with JPEG bytes.
     ScreenshotTaken(u64, Vec<u8>),
     /// Open a native file picker dialog so the user can choose a file to open.

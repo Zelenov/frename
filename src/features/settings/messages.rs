@@ -1,5 +1,6 @@
 //! Messages from the settings window.
 
+use frename_core::ai::{AiModel, SummaryLanguage};
 use frename_core::{CommentStorage, InOutStorage};
 
 use crate::features::batch::Operation;
@@ -21,6 +22,12 @@ pub enum Message {
     SetCommentedTag(String),
     /// Whether videos that get a comment get the tag at all.
     SetCommentedTagEnabled(bool),
+    /// The model that writes AI summaries.
+    SetAiModel(AiModel),
+    /// The language AI summaries are written in.
+    SetSummaryLanguage(SummaryLanguage),
+    /// The Anthropic API key, as typed or pasted.
+    SetAnthropicApiKey(String),
     /// After a storage change: open batch mode in the main window, set up to move the files'
     /// comments or in/out points to the new storage. Handled by the app.
     OpenBatchAction(Operation),

@@ -5,10 +5,13 @@
 
 use iced::keyboard::key::Named;
 use iced::widget::text_editor::Binding;
-use iced::widget::{column, container, text_editor as text_editor_widget};
+use iced::widget::{
+    button, column, container, row, scrollable, text, text_editor as text_editor_widget, Space,
+};
 use iced::{Element, Length};
 
 use crate::tag_colors::TagPalette;
+use crate::theme;
 use crate::widgets::starred_tags_panel;
 
 use crate::features::{file_name_panel, sync_panel, tag_grid, tag_panel};
@@ -22,6 +25,32 @@ const PANEL_PADDING_X: f32 = 8.0;
 /// Bottom inset so the comment box keeps the same margin as the sides instead of sitting
 /// flush against the window edge. The top stays at 0 to line up with the other columns.
 const PANEL_PADDING_BOTTOM: f32 = 8.0;
+
+/// Most height the AI summary takes under the comment box before it scrolls, so the tag grid
+/// keeps its room.
+const AI_BLOCK_MAX_HEIGHT: f32 = 90.0;
+
+/// The comment's AI summary, read-only under the editable box: typing can never break it or
+/// mix with it. It is saved with the comment.
+fn ai_block(block: &str) -> Element<'_, Message> {
+    let header = row![
+        text("AI summary").size(11).color(theme::TEXT_MUTED),
+        Space::new().width(Length::Fill),
+        button(text("Remove").size(11))
+            .on_press(Message::RemoveAiBlock)
+            .padding([1, 8])
+            .style(theme::icon_button_style(true)),
+    ]
+    .align_y(iced::Alignment::Center);
+    let body = scrollable(text(block).size(12).color(theme::TEXT_SOFT))
+        .width(Length::Fill)
+        .style(theme::dark_scrollable_style);
+    container(column![header, container(body).max_height(AI_BLOCK_MAX_HEIGHT)].spacing(2))
+        .padding([4, 6])
+        .width(Length::Fill)
+        .style(theme::elevated_container_style)
+        .into()
+}
 
 /// Render the file workspace: search bar, tag list, file name panel (feature, wrap=true) below.
 pub fn view<'a, S>(
@@ -106,6 +135,9 @@ where
     }
     content_items.push(middle.into());
     content_items.push(comment_input.into());
+    if let Some(block) = file_workspace.ai_block() {
+        content_items.push(ai_block(block));
+    }
 
     let content = column(content_items)
         .spacing(4)

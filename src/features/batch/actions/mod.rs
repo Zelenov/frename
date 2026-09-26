@@ -6,6 +6,7 @@
 //! Adding an action: a module with `LABEL`, `view` and `run` (plus `Options` with `Message`
 //! and `update` when it has settings), then one line in each match below.
 
+pub mod ai_summary;
 mod fix_tags;
 mod move_comments;
 mod move_in_out;
@@ -14,6 +15,7 @@ mod tag_commented;
 mod tag_spacing;
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 
 use frename_core::{
     CommentStorage, FileSnapshot, FileTagger, FolderInfo, InOutStorage, MoveOutcome,
@@ -33,17 +35,19 @@ pub enum Action {
     FixTags,
     RespaceTags,
     ReloadFiles,
+    AiSummary,
 }
 
 impl Action {
     /// Every action, in list order.
-    pub const ALL: [Action; 6] = [
+    pub const ALL: [Action; 7] = [
         Action::MoveComments,
         Action::MoveInOut,
         Action::TagCommented,
         Action::FixTags,
         Action::RespaceTags,
         Action::ReloadFiles,
+        Action::AiSummary,
     ];
 
     pub fn label(self) -> &'static str {
@@ -54,6 +58,7 @@ impl Action {
             Self::FixTags => fix_tags::LABEL,
             Self::RespaceTags => tag_spacing::LABEL,
             Self::ReloadFiles => reload_files::LABEL,
+            Self::AiSummary => ai_summary::LABEL,
         }
     }
 }
@@ -68,12 +73,15 @@ pub enum Operation {
     /// Rename files to the tag spacing chosen in the settings.
     RespaceTags,
     ReloadFiles,
+    AiSummary(ai_summary::Job),
 }
 
 impl Operation {
-    /// Do it to the file at `path`. Blocking: runs on a worker thread.
-    pub fn run(self, path: &Path) -> ItemResult {
+    /// Do it to the file at `path`. Blocking: runs on a worker thread. `cancel` is set when
+    /// the job is cancelled; long operations check it.
+    pub fn run(self, path: &Path, cancel: &AtomicBool) -> ItemResult {
         match self {
+            Self::AiSummary(job) => ai_summary::run(job, path, cancel),
             Self::MoveComments(to) => move_comments::run(to, path),
             Self::MoveInOut(to) => move_in_out::run(to, path),
             Self::TagCommented => tag_commented::run(path),
@@ -92,6 +100,7 @@ impl Operation {
             Self::FixTags => Action::FixTags,
             Self::RespaceTags => Action::RespaceTags,
             Self::ReloadFiles => Action::ReloadFiles,
+            Self::AiSummary(_) => Action::AiSummary,
         }
     }
 }
@@ -101,6 +110,7 @@ impl Operation {
 pub enum ActionMessage {
     MoveComments(move_comments::Message),
     MoveInOut(move_in_out::Message),
+    AiSummary(ai_summary::Message),
     /// Open the settings window, where an action's global settings live (e.g. the commented
     /// tag). Handled by the app, which owns the windows.
     OpenSettings,
@@ -111,6 +121,7 @@ pub enum ActionMessage {
 pub struct Actions {
     move_comments: move_comments::Options,
     move_in_out: move_in_out::Options,
+    ai_summary: ai_summary::Options,
 }
 
 impl Actions {
@@ -118,8 +129,19 @@ impl Actions {
         match message {
             ActionMessage::MoveComments(message) => self.move_comments.update(message),
             ActionMessage::MoveInOut(message) => self.move_in_out.update(message),
+            ActionMessage::AiSummary(message) => self.ai_summary.update(message),
             ActionMessage::OpenSettings => {}
         }
+    }
+
+    /// The checked files changed: what an action worked out for the old ones is stale.
+    pub fn checks_changed(&mut self) {
+        self.ai_summary.checks_changed();
+    }
+
+    /// The AI summary's options, for starting its cost estimate.
+    pub fn ai_summary(&self) -> &ai_summary::Options {
+        &self.ai_summary
     }
 
     /// Set the options of `operation`'s action to do what it does.
@@ -130,7 +152,8 @@ impl Actions {
             Operation::TagCommented
             | Operation::FixTags
             | Operation::RespaceTags
-            | Operation::ReloadFiles => {}
+            | Operation::ReloadFiles
+            | Operation::AiSummary(_) => {}
         }
     }
 
@@ -143,6 +166,7 @@ impl Actions {
             Action::FixTags => Some(Operation::FixTags),
             Action::RespaceTags => Some(Operation::RespaceTags),
             Action::ReloadFiles => Some(Operation::ReloadFiles),
+            Action::AiSummary => self.ai_summary.operation(),
         }
     }
 
@@ -155,6 +179,7 @@ impl Actions {
             Action::FixTags => fix_tags::view(),
             Action::RespaceTags => tag_spacing::view(),
             Action::ReloadFiles => reload_files::view(),
+            Action::AiSummary => self.ai_summary.view(),
         }
     }
 }
@@ -173,18 +198,11 @@ fn panel<'a, M: 'a>(title: &'a str, hint: String, options: Element<'a, M>) -> El
 /// The job's record of a file an action changed, failed on or left alone.
 fn item_result(outcome: MoveOutcome) -> ItemResult {
     match outcome {
-        MoveOutcome::NothingToMove => ItemResult {
-            status: ItemStatus::Skipped,
-            update: None,
-        },
-        MoveOutcome::Moved(new_path) => ItemResult {
-            status: ItemStatus::Done,
-            update: Some(reparsed(new_path)),
-        },
-        MoveOutcome::Failed(new_path) => ItemResult {
-            status: ItemStatus::Failed,
-            update: Some(reparsed(new_path)),
-        },
+        MoveOutcome::NothingToMove => ItemResult::new(ItemStatus::Skipped, None),
+        MoveOutcome::Moved(new_path) => ItemResult::new(ItemStatus::Done, Some(reparsed(new_path))),
+        MoveOutcome::Failed(new_path) => {
+            ItemResult::new(ItemStatus::Failed, Some(reparsed(new_path)))
+        }
     }
 }
 

@@ -139,11 +139,12 @@ impl<S: AppStateStore + Clone> Directory<S> {
         self.commented_only = commented_only;
     }
 
-    /// Number of files with a comment (ignores the filters).
+    /// Number of files with a comment of the editor's (ignores the filters); an AI block alone
+    /// does not count.
     pub fn commented_count(&self) -> usize {
         self.files_by_id
             .values()
-            .filter(|f| !f.comment().is_empty())
+            .filter(|f| crate::ai::has_editor_comment(f.comment()))
             .count()
     }
 
@@ -236,7 +237,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
         if self.subtitled_only && !file.has_subtitles() {
             return false;
         }
-        if self.commented_only && file.comment().is_empty() {
+        if self.commented_only && !crate::ai::has_editor_comment(file.comment()) {
             return false;
         }
         self.matches_name_filter(file)
@@ -650,6 +651,20 @@ mod tests {
     fn comment_filter_lists_only_commented_files() {
         let mut dir = directory_with(&["a.mp4", "b.mp4", "c.mp4"]);
         comment_file_at(&mut dir, 1, "goat");
+        dir.set_commented_only(true);
+        assert_eq!(listed_names(&dir), vec!["b.mp4"]);
+        assert_eq!(dir.commented_count(), 1);
+    }
+
+    #[test]
+    fn an_ai_summary_alone_does_not_make_a_file_commented() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4"]);
+        comment_file_at(&mut dir, 0, "AI: Beets.\n— Claude Opus 5, 2026-09-26 —");
+        comment_file_at(
+            &mut dir,
+            1,
+            "Mine\n\nAI: Beets.\n— Claude Opus 5, 2026-09-26 —",
+        );
         dir.set_commented_only(true);
         assert_eq!(listed_names(&dir), vec!["b.mp4"]);
         assert_eq!(dir.commented_count(), 1);

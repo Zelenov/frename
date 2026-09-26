@@ -11,4 +11,6 @@ pub enum Message {
     SyncPanel(sync_panel::Message),
     /// User interacted with the multiline comment editor.
     CommentAction(text_editor::Action),
+    /// Remove the AI summary from the open file's comment.
+    RemoveAiBlock,
 }
