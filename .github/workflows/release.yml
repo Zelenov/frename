@@ -165,8 +165,62 @@ jobs:
             dist/${{ env.WINDOWS_EXE_NAME }}
             dist/${{ env.GSTREAMER_GUIDE_NAME }}
 
+  build-linux:
+    needs: prepare
+    if: needs.prepare.outputs.should_build == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GStreamer and packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-libav patchelf file imagemagick
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Build AppImage
+        run: |
+          version="${{ needs.prepare.outputs.version }}.0"
+          packaging/linux/build-appimage.sh "$version" target/release/frename dist
+          mv "dist/frename-$version-x86_64.AppImage" "dist/frename-linux-x86_64-v$version.AppImage"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frename-linux-x86_64-v${{ needs.prepare.outputs.version }}.0
+          path: dist/frename-linux-x86_64-v${{ needs.prepare.outputs.version }}.0.AppImage
+
+  # A Linux build that does not play video on a machine without GStreamer is never published.
+  test-linux:
+    needs: [prepare, build-linux]
+    if: needs.prepare.outputs.should_build == 'true'
+    runs-on: ubuntu-24.04
+    container: ubuntu:24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frename-linux-x86_64-v${{ needs.prepare.outputs.version }}.0
+          path: dist
+
+      - name: Self-test on a clean system
+        run: packaging/linux/test-appimage.sh dist/frename-linux-x86_64-v${{ needs.prepare.outputs.version }}.0.AppImage
+
   release:
-    needs: [prepare, build-windows]
+    needs: [prepare, build-windows, build-linux, test-linux]
     if: needs.prepare.outputs.should_build == 'true'
     runs-on: ubuntu-22.04
     permissions:
@@ -203,5 +257,6 @@ jobs:
           draft: ${{ needs.prepare.outputs.draft }}
           files: |
             artifacts/frename-windows-x64-v${{ needs.prepare.outputs.version }}.0.zip
+            artifacts/frename-linux-x86_64-v${{ needs.prepare.outputs.version }}.0.AppImage
         env:
           GITHUB_TOKEN: ${{ github.token }}

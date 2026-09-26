@@ -20,8 +20,8 @@ mod widgets;
 
 use app::FrenameApp;
 use frename_core::{
-    install_file_tagger, AppDatabase, AppStateStore, InMemoryFileTagger, Initializable,
-    LoggingAppStateStore, ProductionFileTagger,
+    app_data_dir, install_file_tagger, AppDatabase, AppStateStore, InMemoryFileTagger,
+    Initializable, LoggingAppStateStore, ProductionFileTagger,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -40,12 +40,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         install_file_tagger(Box::new(ProductionFileTagger));
     }
-    // Initialize file + console logging (log file next to the executable)
-    let log_path = std::env::current_exe()?
-        .parent()
-        .expect("executable must have a parent directory")
-        .join("frename_debug.log");
-    let log_file = File::create(log_path)?;
+    // File + console logging. The data folder holds the log and the database; inside an
+    // AppImage it is not the executable's folder, and may not exist yet.
+    let data_dir = app_data_dir();
+    std::fs::create_dir_all(&data_dir)?;
+    let log_file = File::create(data_dir.join("frename_debug.log"))?;
 
     // Log only this app's crates. Dependencies are far noisier than they look: cosmic_text emits a
     // `relayout` record per text layout and naga one per shader-validation step, which measured at

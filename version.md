@@ -1,3 +1,7 @@
+# NEXT
+## Added
+- A Linux version: one AppImage file from the release page, with video playback built in.
+
 # 0.66
 ## Added
 - Batch mode (☑ in the controls bar): check files in the list (All / Invert) and run an action on all of them, with progress, Cancel and a per-file result — a green or red check box.

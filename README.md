@@ -116,8 +116,13 @@ The progress bar is more than a scrubber — it shows everything you've noted ab
 
 ## Requirements
 
-- Windows 10/11 (64-bit)
-- GStreamer runtime (for video playback) — see [GSTREAMER_SETUP.md](GSTREAMER_SETUP.md)
+**Windows 10/11 (64-bit):** download the Windows zip from the latest release. It needs the
+GStreamer runtime for video playback — see [GSTREAMER_SETUP.md](GSTREAMER_SETUP.md).
+
+**Linux (64-bit, Ubuntu 24.04 or another distribution from 2024 on):** download the `.AppImage`
+from the latest release, make it executable (`chmod +x frename-*.AppImage`) and run it. Video
+playback is built in; nothing else to install. If it does not start, run it with
+`--appimage-extract-and-run`. Settings are kept in `~/.local/share/frename`.
 
 ---
 

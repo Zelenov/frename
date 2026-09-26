@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=frename
+Comment=Tag your footage before you edit it
+Exec=frename
+Icon=frename
+Categories=AudioVideo;Video;
+Terminal=false
