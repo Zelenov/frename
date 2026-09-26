@@ -17,6 +17,7 @@ Open a folder of videos. Watch each clip. Tag what you see. When you move to the
 **File name format:** `tag1.tag2.name.in_HH_MM_SS.out_HH_MM_SS.mp4`
 
 Tags become part of the file name, so your file manager, editing app and sync tools all see them.
+Nothing is locked inside frename.
 The in/out part is there only when you mark a segment and keep in/out points in the file name (the default).
 
 ---
@@ -25,10 +26,10 @@ The in/out part is there only when you mark a segment and keep in/out points in 
 
 ![Annotated app window](docs/frename-screenshot.jpg)
 
-- left: the file list of the current folder
-- center: the video player with its progress bar
-- right: tag search, starred tags, the tag grid and the comment box
-- bottom: the new file name — drag the tag chips to reorder them
+- left: the video player with its progress bar
+- middle: the file list of the current folder
+- right: tag search, starred tags and the tag grid; under them the new file name (drag the tag
+  chips to reorder them) and the comment box
 
 ---
 
@@ -39,7 +40,7 @@ The in/out part is there only when you mark a segment and keep in/out points in 
 3. Tag what you see: click a tag, or move with the arrow keys and press `Shift+Space`.
 4. Press `[` and `]` to mark the usable segment of the clip (in and out points).
 5. Press `F12` to save a screenshot of an interesting moment.
-6. Type a note in the comment box if needed.
+6. Type a note in the comment box if needed. Press `F12` first to start the note with the current time.
 7. Press `PageDown` to go to the next clip. The clip you leave is renamed.
 8. Most clips share most tags with their neighbors: press `Ctrl+C` on one clip and `Ctrl+V` on the next, then adjust.
 
@@ -64,8 +65,8 @@ Next time you start frename, it reopens the last folder and clip.
 | Any letter | Type into the tag search |
 | `Enter` | Add the typed tag to the folder's tags |
 | `Delete` | Delete the selected tag from the folder's tags |
-| `Escape` | Clear the search |
-| `Ctrl+C` | Copy the file's tags |
+| `Escape` | Clear the tag and file searches |
+| `Ctrl+C` | Copy the file's tags (and its new name to the clipboard) |
 | `Ctrl+V` | Replace the file's tags with the copied ones |
 | `Ctrl+Z` | Undo |
 | `Ctrl+Y` or `Ctrl+Shift+Z` | Redo |
@@ -88,7 +89,8 @@ Next time you start frename, it reopens the last folder and clip.
 ## Tags
 
 Each folder has its own tags, kept in a `.frename` file inside the folder. The file travels with the
-footage, and you can edit it by hand: one tag per line, in the order the tag panel shows them.
+footage. Its lines are the tags in the order the tag panel shows them; you can reorder, rename or
+delete lines by hand, but add new tags in the app.
 A folder without one starts with a set for travel and documentary work: `pick`, `skip`, `review`,
 `wide`, `close`, `drone`, `golden-hour`, `people`, `wildlife`, and more.
 
@@ -98,11 +100,12 @@ A folder without one starts with a set for travel and documentary work: `pick`, 
 - **Unsaved tags:** a tag that is already in a file's name but not in the folder's tags shows as
   unsaved (○). Press `Enter` or click ○ to add it.
 - **Order:** the order of tags in the tag panel is the order they get in file names. Drag chips in
-  the file name to change it, or drop a chip on 🗑 to untag it. The lock buttons between the grid
-  and the file name keep the two orders in step.
+  the file name to change it, or drop a chip on 🗑 to untag it. When the file's order differs from
+  the panel's, the ↑ button makes the file's order the panel order and ↓ puts the file's chips in
+  panel order. When they match, 🔒 keeps them locked together.
 
 Undo (`Ctrl+Z`) covers tagging, adding, deleting, starring and reordering tags, pasting, in/out
-points and renames.
+points and the rename when you leave a clip. A rename by hand (double-click) cannot be undone.
 
 ---
 
@@ -120,6 +123,9 @@ The progress bar shows what you have noted about a clip:
   shows it in the Description column and finds it by search. Settings can keep it in a
   `.comment.txt` next to the video instead. The file list shows the first line of each comment.
   While comments are inside the video, a clip with a comment gets a "Commented" tag.
+
+Some formats, such as mkv, cannot hold comments or in/out points inside them; for those, frename
+keeps them in `.comment.txt` and the file name whatever Settings say.
 
 Screenshots, `.comment.txt` files and subtitles are renamed together with their video.
 
@@ -146,7 +152,7 @@ and Cancel. Each file then shows a green or red check box. Actions:
 - move in/out points between the file name and the video;
 - tag commented videos with "Commented" (or untag the rest);
 - put the tags in every name in tag panel order;
-- reset the cache and read every file again.
+- read every file again (use this if the list looks out of date).
 
 ## Settings
 
