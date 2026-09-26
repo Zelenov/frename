@@ -45,11 +45,12 @@ batch-API pricing, caching across runs (stages 2–3).
    with an **Open Settings** button (the existing `ActionMessage::OpenSettings`), which opens
    Settings scrolled to the AI section.
 3. **Progress and cancel** work like every batch action: per-file green/red result. *Cancel*
-   changes the panel to `Stopping after the current video…` and takes effect within a second
-   between frame samples, between requests and during retry waits; a request already sent
-   finishes (at most 60 s).
+   changes the panel to `Stopping…` (as for every action) and takes effect within a second
+   between frame samples, between requests and during retry waits: a video stopped there ends
+   as not reached; a request already sent finishes and its video is written (at most its
+   timeout, see Request).
    Failed files are listed with their reason (see Batch changes): `No API key`,
-   `Anthropic rejected the key`, `Network error`, `No answer within 60 s`,
+   `Anthropic rejected the key`, `Network error`, `No answer in time`,
    `Video could not be read`. Clips skipped as announced (already described, over 30 min) count
    as unchanged, never as failed.
    A rejected key (401/403) stops the job: `Stopped: Anthropic rejected the key. Check it in Settings.`
@@ -68,7 +69,7 @@ batch-API pricing, caching across runs (stages 2–3).
 
 ## Settings layout
 
-The Settings window is a fixed 560×560 with four sections already (`SETTINGS_WINDOW_SIZE` in
+The Settings window is a fixed 560×660 with four sections already (`SETTINGS_WINDOW_SIZE` in
 `src/app/state.rs`); a fifth does not fit. Its content becomes a scrollable column (the window
 keeps its size). The AI section:
 
@@ -84,7 +85,8 @@ The key is written to the credential store only on **Save**, through a `Task` (n
 keystroke, never from `view`). Settings state keeps `has_key: Option<bool>`, read through a
 `Task` the first time the AI section or the Describe action is shown (not at start-up: a locked
 Linux keyring would prompt every launch) and after Save, and passes it to the batch panel; `view` never touches the
-store.
+store. While the state is still being read, the run button is disabled as while `Estimating…`,
+and no "set a key" message shows.
 
 ## The AI block
 
@@ -135,22 +137,29 @@ asks "does this file have a comment?" uses a non-allocating `has_editor_comment(
 - the rule that checks the tag when a comment goes from empty to non-empty (file workspace);
 - `FileTagger::sync_commented_tag` (the **Tag commented videos** batch action; its hint says
   "each checked video with a comment of yours");
-- the **Commented** filter and its count in the file list (`Directory`).
+- the **Commented** filter and its count in the file list (`Directory`);
+- the Settings hint under "Tag videos with a comment", which says AI descriptions do not count.
 The comment's first line under the file name in the list still shows whatever comes first (the
 AI summary when there is no editor text). The README says so.
 
 ## Frames
 
 - In the app (`src/`, where GStreamer lives). The clip is opened paused
-  (`uridecodebin ! videoscale ! videoconvert ! videoflip video-direction=auto ! appsink`, scaling
-  first so 4K frames are not converted and rotated at full size; no audio
-  branch; `videoflip` applies the orientation tag, so a phone portrait clip stored as 1920×1080
-  with a rotation tag comes out upright) and, for each sample time, the pipeline **seeks** there
+  (`uridecodebin ! videoscale ! videoconvert ! appsink`, scaling
+  first so 4K frames are not converted at full size; other streams go to a `fakesink`) and, for each sample time, the pipeline **seeks** there
   (`FLUSH | KEY_UNIT | SNAP_NEAREST`) and pulls one frame; the frame's real timestamp is what the
   model is told. When a snapped timestamp repeats the previous one (keyframes further apart than
   the interval, e.g. screen recordings or a 10 s GOP), that sample is re-sought with `ACCURATE`,
   so a sparse-keyframe clip still gets its frames and no duplicate is billed. That decodes about one GOP per sample instead of the
   whole clip (a 20-min 4K clip would otherwise decode ~36 000 frames to keep 60).
+- **Orientation** is applied in Rust, not with `videoflip`: that element (gst-plugins-good
+  `videofilter`) is not in the vendored Windows GStreamer bundle, so a pipeline using it could
+  fail on Windows while CI stays green. The sampler reads the `image-orientation` tag from the
+  sticky tag event on the appsink's pad (`rotate-90`, `flip-rotate-270`, …) and turns or mirrors
+  the already scaled 512-px frame with `image::imageops`; a phone portrait clip stored as
+  1920×1080 with a rotation tag comes out upright. The mapping from tag to transform is a pure
+  function, unit-tested on both systems. The pipeline then uses only elements of the vendored
+  bundle (`uridecodebin`, `videoconvertscale`, `appsink`, `fakesink`).
 - Size: the long side scaled to 512 px, aspect ratio kept (a portrait phone clip gives 288×512,
   not a letterboxed 162×288 picture in a 512×288 frame); JPEG via the `image` crate (already a
   dependency).
@@ -159,14 +168,16 @@ AI summary when there is no editor text). The README says so.
   A clip shorter than 2 s gets one frame at its middle.
 - Each frame is preceded by a text block `t=0:12` so the model can place segments; segment times
   are therefore accurate to the sampling interval (research §2).
-- Tokens per frame (research §2): about w·h/750 on Haiku 4.5 (512×288 → 197); the estimate says
-  "about". 60 frames ≈ 12 k tokens. Haiku 4.5 has a 200K context and takes up to 100 images per
+- Tokens per frame (research, "Claude image cost", from Anthropic's vision docs): ⌈w/28⌉ × ⌈h/28⌉
+  (512×288 → 209); the estimate says "about". 60 frames ≈ 12.5 k tokens. Haiku 4.5 has a 200K context and takes up to 100 images per
   request, so 60 fits.
 - A test checks extraction time on the test clips (well under a second per frame), and a test
   clip with a rotation tag checks that frames come out upright (portrait size). That clip is made
   once with `ffmpeg -display_rotation 90` from an existing test clip (command in
-  `tests/media/README.md`), committed, and added to `tests/self-test-clips.txt`, so it is also
-  decoded on both CI systems.
+  `tests/self-test-clips.txt`), committed in `tests/folder`, and added to that list, so the
+  Linux self-test decodes it too. The sampler tests on real clips run on Linux only, like the
+  self-test: the Windows CI job has a build-only GStreamer without decoders. Windows is covered
+  by the orientation unit test and by the pipeline using only elements its bundle has.
 
 ## Request
 
@@ -203,10 +214,14 @@ SDK. `base64 = "0.22"`.
   are slept in 250 ms steps that check the cancel token. 400 fails the file at once; 401/403 stop
   the job.
 - **Out of credit:** a 402, or a 400 whose error is about the credit balance, stops the job like
-  401: `Stopped: the Anthropic account has no credit left.` Any other 400 fails the file with the
-  API's own error message as the reason.
-- **Timeout:** 60 s per request. A timeout fails the file (`No answer within 60 s`) instead of
-  retrying: the server may have processed and billed the request already.
+  401: `Stopped: the Anthropic account has no credit left.` A 400 about a usage or spend limit
+  stops it too, with the API's message (`Stopped: <message>`), so 2000 remaining clips do not
+  each fail with the same message. Any other 400 fails the file with the API's own error message
+  as the reason.
+- **Timeout:** 60 s for the answer plus 1 s per 50 KB of request (about 60 s more for 60 frames),
+  so a slow uplink does not time out while still uploading. A timeout fails the file
+  (`No answer in time`) instead of retrying: the server may have processed and billed the
+  request already.
 
 ## Batch changes
 
@@ -245,7 +260,7 @@ Stage 1 changes the shared code, for every action:
   the "skipped" line.
 - **Actual:** the sum of `usage.input_tokens` and `usage.output_tokens` over the job, times the
   same table (flow 6).
-- Example: 1000 one-minute clips ≈ 1000 × (30 × 197 + 600 + ~300) ≈ 6.8 M input + 0.6 M output ≈
+- Example: 1000 one-minute clips ≈ 1000 × (30 × 209 + 600 + ~300) ≈ 7.2 M input + 0.6 M output ≈
   **$10 with Haiku 4.5**.
 
 ## Key storage
@@ -286,6 +301,8 @@ save.
 - **Open file in the batch:** handled as every batch action handles it (saved first, closed while
   the job runs).
 - **Key revoked mid-job (401):** the job stops; remaining files stay pending.
+- **Rate limit waits** (429) are logged; the job panel shows only the file in work. Showing the
+  wait in the panel is left for stage 3, where long unattended runs are designed.
 - **Premiere:** the AI block is part of the comment; with comments in the video it lands in the
   Description column like the rest.
 
