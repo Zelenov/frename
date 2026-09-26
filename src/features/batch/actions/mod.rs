@@ -185,6 +185,7 @@ impl ActionMessage {
                         | describe_ai::Message::KeyState(_)
                         | describe_ai::Message::SetLanguage(_)
                         | describe_ai::Message::SetModel(_)
+                        | describe_ai::Message::SetMoments(_)
                 )
             ),
         }

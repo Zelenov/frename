@@ -59,6 +59,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 12,
         sql: schema::M12_SUBTITLE_SETTINGS,
     },
+    Migration {
+        version: 13,
+        sql: schema::M13_AI_MOMENTS,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
@@ -142,6 +146,6 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 12);
+        assert_eq!(current_version(&conn).expect("version"), 13);
     }
 }

@@ -3,7 +3,10 @@
 use uuid::Uuid;
 
 use crate::ai::SummaryLanguage;
-use crate::{CommentStorage, CueLength, FolderAndFile, InOutStorage, StoredTag, TagColorMapping};
+use crate::{
+    AiMomentStorage, CommentStorage, CueLength, FolderAndFile, InOutStorage, StoredTag,
+    TagColorMapping,
+};
 
 /// Saved window position and size (logical pixels).
 #[derive(Debug, Clone, Copy)]
@@ -60,6 +63,8 @@ pub struct AppSettings {
     /// The id of the model AI descriptions are written with (see
     /// [`clipscribe::Model::from_id`]). Defaults to the cheapest.
     pub ai_model: String,
+    /// Where AI descriptions put a clip's moments. Defaults to the comment.
+    pub ai_moments: AiMomentStorage,
     /// Languages spoken in the footage, as hints for generating subtitles (codes such as
     /// "en"). Empty: detect automatically. Defaults to
     /// [`crate::DEFAULT_SUBTITLE_LANGUAGES`].
@@ -80,6 +85,7 @@ impl Default for AppSettings {
             space_after_tags: false,
             summary_language: SummaryLanguage::default(),
             ai_model: clipscribe::MODELS[0].id.to_string(),
+            ai_moments: AiMomentStorage::default(),
             subtitle_languages: crate::DEFAULT_SUBTITLE_LANGUAGES
                 .iter()
                 .map(|code| code.to_string())

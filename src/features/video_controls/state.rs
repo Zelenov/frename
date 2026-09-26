@@ -80,7 +80,6 @@ impl VideoControlsState {
                 });
             }
             Message::TakeScreenshot
-            | Message::AddMarker
             | Message::MarkerKeyPressed
             | Message::MarkerKeyReleased
             | Message::SetMarkerSpan(..)

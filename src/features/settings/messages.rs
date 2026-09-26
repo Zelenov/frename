@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use clipscribe::Model;
 use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::ai::SummaryLanguage;
-use frename_core::{CommentStorage, CueLength, InOutStorage};
+use frename_core::{AiMomentStorage, CommentStorage, CueLength, InOutStorage};
 
 use crate::features::batch::Operation;
 use crate::features::updates;
@@ -41,6 +41,8 @@ pub enum Message {
     SetSummaryLanguage(SummaryLanguage),
     /// The model AI descriptions are written with.
     SetAiModel(Model),
+    /// Where AI descriptions put a clip's moments.
+    SetAiMoments(AiMomentStorage),
     /// Check or uncheck a language spoken in the footage (a code such as "en"), for subtitles.
     SetSubtitleLanguage(String, bool),
     /// The languages Soniox recognises, (code, name), or why they could not be listed. Asked

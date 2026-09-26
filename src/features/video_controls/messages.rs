@@ -25,11 +25,10 @@ pub enum Message {
     SetVolume(f32),
     /// Save the current frame as a JPEG next to the video (F12 or button).
     TakeScreenshot,
-    /// Add a marker at the playhead, or name the one just added (the `📍` button).
-    AddMarker,
-    /// `F2` went down: add a marker at the playhead that grows into a range while it is held.
+    /// `F2` or the `📍` button went down: add a marker at the playhead (or name the one just
+    /// added), which grows into a range while it is held.
     MarkerKeyPressed,
-    /// `F2` came up: a held marker ends here.
+    /// `F2` or the `📍` button came up: a held marker ends here.
     MarkerKeyReleased,
     /// A range's ends were dragged on the bar (or it was made a point): GUID, start, end (s).
     SetMarkerSpan(String, f32, f32),

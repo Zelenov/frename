@@ -1,8 +1,8 @@
 //! Custom rectangular progress bar widget with click-to-seek and drag support. Clip markers
 //! are pins in their colors: a needle through the bar with a round head above it, or, for the
-//! marker the playhead is on, with its name label as the head. A ranged marker also draws a
-//! band under the bar; overlapping bands go into lanes. With Shift held, a seek snaps to the
-//! nearest marker.
+//! marker the playhead is on, with its name label as the head. A ranged marker is a band just
+//! above the bar instead, with no pin: it does not cut through the bar. Overlapping bands go
+//! into lanes, stacked upwards. With Shift held, a seek snaps to the nearest marker.
 //!
 //! Ranges are edited on the bar: the active range shows handles at both ends that drag its
 //! ends, `Alt`+click on a band turns it back into a point, a click on a band plays it, and
@@ -18,16 +18,19 @@ use crate::theme;
 
 const BAR_HEIGHT: f32 = 8.0;
 const HIT_HEIGHT: f32 = 24.0;
-/// Top of the bar within the widget; the widget grows downwards when bands need more lanes.
+/// Top of the bar within the widget with at most one lane of bands; the widget grows upwards
+/// when bands need more lanes.
 const BAR_TOP: f32 = (HIT_HEIGHT - BAR_HEIGHT) / 2.0;
+/// Room above the highest lane of bands.
+const LANES_TOP: f32 = 0.0;
 const BORDER_RADIUS: f32 = 4.0;
 /// How far (px) a pin's needle reaches below the bar.
 const TICK_OVERHANG: f32 = 3.0;
 /// Diameter of a pin's round head, at the top of the widget.
 const PIN_HEAD: f32 = 7.0;
 const NEEDLE_WIDTH: f32 = 2.0;
-/// Height of the band a ranged marker draws under the bar.
-const BAND_HEIGHT: f32 = 3.0;
+/// Height of the band a ranged marker draws above the bar: something to click.
+const BAND_HEIGHT: f32 = 4.0;
 /// From one lane of bands to the next.
 const LANE_PITCH: f32 = BAND_HEIGHT + 1.0;
 /// Overlapping ranges stack into at most this many lanes; the rest share the last one.
@@ -35,7 +38,7 @@ pub const MAX_LANES: usize = 3;
 /// Width of the handles at the ends of the active range.
 const HANDLE_WIDTH: f32 = 6.0;
 /// How far a handle reaches above and below its band, so it reads as something to grab.
-const HANDLE_OVERHANG: f32 = 3.0;
+const HANDLE_OVERHANG: f32 = 2.0;
 /// How far (px) around a band or a handle a press still hits it.
 const HIT_SLACK: f32 = 3.0;
 /// A Shift seek snaps to a marker this close to the cursor (px).
@@ -239,6 +242,11 @@ impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
         height_for_lanes(self.lane_count)
     }
 
+    /// Top of the bar within the widget: lower when there are lanes of bands above it.
+    fn bar_top(&self) -> f32 {
+        bar_top_for_lanes(self.lane_count)
+    }
+
     /// Convert cursor position to a value in min..=max, not snapped.
     fn raw_value(&self, bounds: Rectangle, cursor: mouse::Cursor) -> Option<f32> {
         let x = cursor.position()?.x;
@@ -309,9 +317,9 @@ impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
         bounds.x + ((value - self.min) / span).clamp(0.0, 1.0) * bounds.width
     }
 
-    /// Top of the band in `lane`.
-    fn band_y(bounds: Rectangle, lane: usize) -> f32 {
-        bounds.y + BAR_TOP + BAR_HEIGHT + 1.0 + lane as f32 * LANE_PITCH
+    /// Top of the band in `lane`: lane 0 just above the bar, the next ones above it.
+    fn band_y(&self, bounds: Rectangle, lane: usize) -> f32 {
+        bounds.y + self.bar_top() - 1.0 - BAND_HEIGHT - lane as f32 * LANE_PITCH
     }
 
     /// The active editable range whose handle is under the cursor: its GUID, the end that
@@ -324,7 +332,7 @@ impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
             .filter(|(m, _)| m.active && m.is_range())
             .find_map(|(m, &lane)| {
                 let guid = m.guid.clone()?;
-                let y = Self::band_y(bounds, lane);
+                let y = self.band_y(bounds, lane);
                 if at.y < y - HIT_SLACK || at.y > y + BAND_HEIGHT + HIT_SLACK {
                     return None;
                 }
@@ -348,7 +356,7 @@ impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
             .rev()
             .filter(|(m, _)| m.is_range())
             .find(|(m, &lane)| {
-                let y = Self::band_y(bounds, lane);
+                let y = self.band_y(bounds, lane);
                 let (x0, x1) = (self.x_of(bounds, m.start), self.x_of(bounds, m.end));
                 (y - HIT_SLACK..=y + BAND_HEIGHT + HIT_SLACK).contains(&at.y)
                     && (x0 - HIT_SLACK..=x1 + HIT_SLACK).contains(&at.x)
@@ -372,9 +380,14 @@ fn snap_to_marker(value: f32, markers: &[BarMarker], px_per_unit: f32) -> f32 {
     snap_to(value, markers.iter().map(|m| m.start), px_per_unit)
 }
 
-/// The widget's height: the bar, and a lane of bands under it for each lane beyond one.
+/// Top of the bar within the widget, below `lanes` lanes of bands.
+fn bar_top_for_lanes(lanes: usize) -> f32 {
+    (LANES_TOP + lanes as f32 * LANE_PITCH + 1.0).max(BAR_TOP)
+}
+
+/// The widget's height: the bands above the bar, the bar, and the room below it.
 fn height_for_lanes(lanes: usize) -> f32 {
-    HIT_HEIGHT + lanes.saturating_sub(1) as f32 * LANE_PITCH
+    HIT_HEIGHT - BAR_TOP + bar_top_for_lanes(lanes)
 }
 
 /// How tall the bar is with these markers: it grows when overlapping ranges need lanes.
@@ -461,7 +474,7 @@ where
     ) {
         let state = tree.state.downcast_ref::<State>();
         let bounds = layout.bounds();
-        let bar_y = bounds.y + BAR_TOP;
+        let bar_y = bounds.y + self.bar_top();
 
         // Track background
         renderer.fill_quad(
@@ -606,7 +619,7 @@ where
                 let (start, end) = span_of(marker);
                 let x0 = to_x(start);
                 if end > start {
-                    let band_y = Self::band_y(bounds, lane);
+                    let band_y = self.band_y(bounds, lane);
                     let x1 = to_x(end);
                     let color = if marker.active {
                         marker.color
@@ -644,6 +657,8 @@ where
                             );
                         }
                     }
+                    // A range is its band: no pin through the bar.
+                    continue;
                 }
                 let needle_top = if marker.active {
                     bounds.y + LABEL_DIP
@@ -684,7 +699,7 @@ where
                     quad(
                         Rectangle {
                             x: x0,
-                            y: Self::band_y(bounds, 0),
+                            y: self.band_y(bounds, 0),
                             width: (x1 - x0).max(2.0),
                             height: BAND_HEIGHT,
                         },
@@ -881,13 +896,15 @@ where
     Renderer: advanced::Renderer,
 {
     fn layout(&mut self, renderer: &Renderer, bounds: Size) -> layout::Node {
+        let right = self.right_edge.unwrap_or(bounds.width).min(bounds.width);
+        // Never wider than the player: a long name is cut to fit (see the label's view).
+        let max = Size::new((right - 2.0 * LABEL_MARGIN).max(0.0), bounds.height);
         let node = self.content.as_widget_mut().layout(
             self.tree,
             renderer,
-            &layout::Limits::new(Size::ZERO, bounds),
+            &layout::Limits::new(Size::ZERO, max),
         );
         let size = node.size();
-        let right = self.right_edge.unwrap_or(bounds.width).min(bounds.width);
         let x = (self.anchor.x - size.width / 2.0)
             .min(right - LABEL_MARGIN - size.width)
             .max(LABEL_MARGIN);

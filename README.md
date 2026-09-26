@@ -138,8 +138,8 @@ The progress bar shows what you have noted about a clip:
   the file gets a red ✕ in the list, and frename tries again when you next leave it.
   While the playhead is on a marker, its name becomes the pin's head; click it to rename the
   marker.
-- **Ranges:** hold `F2` while the clip plays to mark a stretch (`0:41–0:47 — Lion`); a band under
-  the bar shows it, and overlapping bands stack. Drag the handles at the ends of the current
+- **Ranges:** hold `F2` (or 📍) while the clip plays to mark a stretch (`0:41–0:47 — Lion`); a
+  band just above the bar shows it, and overlapping bands stack. Drag the handles at the ends of the current
   range to change it (`Shift` snaps), drag them together or `Alt`+click the band to make it a
   single moment again, and click a band to play just that stretch.
 - **Frames:** `F12` or 📷 saves the current frame as a JPEG next to the video
@@ -152,8 +152,8 @@ The progress bar shows what you have noted about a clip:
   `.comment.txt` next to the video instead. The file list shows the first line of each comment.
   While comments are inside the video, frename tags a clip you commented "Commented" (Settings can
   rename or turn off this tag); an AI description alone does not count. Drag the bar above the
-  comment box to make it taller or shorter; **Expand** in its corner gives the comment the whole
-  panel, and **Collapse** brings the tags back.
+  comment box to make it taller or shorter; ⛶ in its corner gives the comment the whole panel,
+  and ⊡ brings the tags back.
 
 Some formats, such as mkv, cannot hold comments, in/out points or markers inside them; for those,
 frename keeps comments and in/out points in `.comment.txt` and the file name whatever Settings say,
@@ -214,6 +214,10 @@ The description is part of the comment, in the comment box with your text: edit 
 there like any other text. It starts at a line beginning with `AI: ` and runs to the end of the
 comment; a new run replaces only that part and never touches the text above it. Premiere Pro and
 `.comment.txt` get the whole comment.
+
+Settings can put the segments into the video instead, as white markers Premiere Pro shows on the
+clip; the comment then keeps only the summary. A new run replaces the white markers and leaves
+markers of other colors alone, so recolor one to keep it.
 
 ### Generate subtitles
 

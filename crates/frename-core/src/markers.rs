@@ -313,6 +313,31 @@ fn ai_segments(comment: &str) -> Vec<MarkerLine> {
         .unwrap_or_default()
 }
 
+/// `existing` with its AI markers (those in [`AI_MARKER_COLOR`]) replaced by one per segment,
+/// as a new AI run writes them. Markers of any other color stay: the editor's, or AI ones the
+/// editor recolored. Also returns the GUIDs of the AI markers it dropped, which a write of
+/// the list deletes from the file.
+pub fn replace_ai_markers(
+    existing: &[Marker],
+    segments: &[MarkerLine],
+) -> (Vec<Marker>, std::collections::HashSet<String>) {
+    let (old_ai, mut kept): (Vec<&Marker>, Vec<&Marker>) = existing
+        .iter()
+        .partition(|m| m.color == AI_MARKER_COLOR && m.is_editable());
+    let dropped = old_ai.iter().filter_map(|m| m.guid.clone()).collect();
+    let mut markers: Vec<Marker> = kept.drain(..).cloned().collect();
+    markers.extend(segments.iter().map(|segment| {
+        let mut marker = Marker::new(segment.start_ms);
+        marker.duration_ms = segment.duration_ms;
+        marker.name = segment.name.clone();
+        marker.comment = segment.comment.clone();
+        marker.color = AI_MARKER_COLOR;
+        marker
+    }));
+    sort_markers(&mut markers);
+    (markers, dropped)
+}
+
 /// What "comment → markers" does to one file: the markers to add and the comment left over.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommentToMarkers {
@@ -738,6 +763,26 @@ mod tests {
             result,
             format!("Mine\n0:00–0:14 — Street at night\n\n{block}")
         );
+    }
+
+    #[test]
+    fn a_new_ai_run_replaces_only_the_ai_colored_markers() {
+        let mut old_ai = marker(0, 3_000, "Old moment", "");
+        old_ai.color = AI_MARKER_COLOR;
+        let mut recolored = marker(5_000, 2_000, "Kept by the editor", "");
+        recolored.color = MarkerColor::Red;
+        let mine = marker(1_000, 0, "Mine", "");
+        let segments = [line(0, 4_000, "New moment", "")];
+        let (markers, dropped) = replace_ai_markers(&[old_ai.clone(), recolored, mine], &segments);
+        assert_eq!(
+            spans(&markers),
+            [
+                (0, 4_000, "New moment", AI_MARKER_COLOR),
+                (1_000, 0, "Mine", MarkerColor::Green),
+                (5_000, 2_000, "Kept by the editor", MarkerColor::Red),
+            ]
+        );
+        assert_eq!(dropped, [old_ai.guid.unwrap()].into_iter().collect());
     }
 
     #[test]

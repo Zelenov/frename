@@ -37,7 +37,12 @@ impl FolderWorkspace {
         }
         match msg {
             M::Add => self.add_marker_key(position_ms, false),
-            M::KeyDown => self.add_marker_key(position_ms, true),
+            M::KeyDown => {
+                // A press whose release never came (the 📍 button let go outside it) ends
+                // there first.
+                self.end_held_marker(position_ms);
+                self.add_marker_key(position_ms, true)
+            }
             M::KeyUp => {
                 self.end_held_marker(position_ms);
                 Task::none()

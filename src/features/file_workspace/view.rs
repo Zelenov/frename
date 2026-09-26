@@ -6,7 +6,8 @@
 use iced::keyboard::key::Named;
 use iced::widget::text_editor::Binding;
 use iced::widget::{
-    button, column, container, scrollable, stack, text, text_editor as text_editor_widget,
+    button, column, container, responsive, scrollable, stack, text,
+    text_editor as text_editor_widget, tooltip,
 };
 use iced::{Element, Length};
 
@@ -81,39 +82,54 @@ where
 
     let expanded = file_workspace.comment_expanded();
     // The editor grows with its text inside a scrollable, which shows the scroll bar the
-    // editor itself does not draw (unbounded, it also leaves the wheel to the scrollable).
-    let comment_editor = text_editor_widget(&file_workspace.comment_content)
-        .on_action(Message::CommentAction)
-        .placeholder("Comment...")
-        .height(Length::Shrink)
-        // Fills the box, so a click anywhere in it lands in the editor.
-        .min_height(if expanded {
-            0.0
+    // editor itself does not draw (unbounded, it also leaves the wheel to the scrollable). It
+    // is at least as tall as the box, expanded or not, so a click anywhere in it lands in the
+    // editor.
+    let comment_scroll = responsive(move |size| {
+        let comment_editor = text_editor_widget(&file_workspace.comment_content)
+            .on_action(Message::CommentAction)
+            .placeholder("Comment...")
+            .height(Length::Shrink)
+            .min_height(size.height)
+            // Room on the right for the expand button over the box's corner.
+            .padding(iced::Padding {
+                top: 4.0,
+                right: 26.0,
+                bottom: 4.0,
+                left: 6.0,
+            })
+            // Explicitly capture Enter so the event is not treated as Ignored by Iced,
+            // which prevents Windows from playing the system beep for unhandled WM_CHAR(0x0D).
+            .key_binding(|kp| {
+                if matches!(kp.key, iced::keyboard::Key::Named(Named::Enter)) {
+                    Some(Binding::Enter)
+                } else {
+                    Binding::from_key_press(kp)
+                }
+            });
+        scrollable(comment_editor)
+            .id(iced::widget::Id::new(COMMENT_SCROLLABLE_ID))
+            .width(Length::Fill)
+            .height(Length::Fill)
+            // The bar beside the text, not over it.
+            .spacing(2)
+            .style(theme::dark_scrollable_style)
+            .into()
+    });
+    // Expand / collapse sits over the box's top right corner, clear of the scroll bar.
+    let toggle = tooltip(
+        button(text(if expanded { "⊡" } else { "⛶" }).size(13))
+            .on_press(Message::CommentLayout(CommentLayout::ToggleExpanded))
+            .padding([0, 4])
+            .style(theme::icon_button_style(true)),
+        text(if expanded {
+            "Back to the tags"
         } else {
-            file_workspace.comment_height()
+            "Expand the comment"
         })
-        .padding([4, 6])
-        // Explicitly capture Enter so the event is not treated as Ignored by Iced,
-        // which prevents Windows from playing the system beep for unhandled WM_CHAR(0x0D).
-        .key_binding(|kp| {
-            if matches!(kp.key, iced::keyboard::Key::Named(Named::Enter)) {
-                Some(Binding::Enter)
-            } else {
-                Binding::from_key_press(kp)
-            }
-        });
-    let comment_scroll = scrollable(comment_editor)
-        .id(iced::widget::Id::new(COMMENT_SCROLLABLE_ID))
-        .width(Length::Fill)
-        .height(Length::Fill)
-        // The bar beside the text, not over it.
-        .spacing(2)
-        .style(theme::dark_scrollable_style);
-    // Expand / Collapse sits over the box's top right corner, clear of the scroll bar.
-    let toggle = button(text(if expanded { "Collapse" } else { "Expand" }).size(11))
-        .on_press(Message::CommentLayout(CommentLayout::ToggleExpanded))
-        .padding([1, 6])
-        .style(theme::icon_button_style(true));
+        .size(12),
+        tooltip::Position::Left,
+    );
     let comment_box = container(stack![
         comment_scroll,
         container(toggle)

@@ -258,9 +258,6 @@ impl VideoPlayerState {
                     video_controls::Message::SetSegmentStart => self.capture_segment_start(),
                     video_controls::Message::SetSegmentEnd => self.capture_segment_end(),
                     video_controls::Message::TakeScreenshot => self.capture_screenshot(),
-                    video_controls::Message::AddMarker => {
-                        Task::done(Message::Markers(markers::Message::Add))
-                    }
                     video_controls::Message::MarkerKeyPressed => {
                         Task::done(Message::Markers(markers::Message::KeyDown))
                     }
