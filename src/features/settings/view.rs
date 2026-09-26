@@ -1,24 +1,15 @@
 //! UI for the settings window.
 
-use frename_core::ai::key::KeyState;
-use frename_core::ai::SummaryLanguage;
 use frename_core::{CommentStorage, InOutStorage};
-use iced::widget::{
-    button, checkbox, column, container, pick_list, radio, row, scrollable, text, text_input,
-};
+use iced::widget::{button, checkbox, column, container, radio, row, scrollable, text, text_input};
 use iced::{Element, Length};
 
 use crate::theme;
 
-use super::state::{KeySection, OldSettingsImport};
-use super::{KeyMessage, Message, SettingsState};
-
+use super::state::OldSettingsImport;
+use super::{Message, SettingsState};
 use crate::features::batch::Operation;
 use crate::features::updates;
-
-/// The settings' scrollable content, which "Describe with AI" opens scrolled to its end, where
-/// the AI section is.
-pub const SETTINGS_SCROLLABLE_ID: &str = "settings-content";
 
 /// Render the settings window: one titled section per area, one control per setting.
 /// `batch_running` holds back **Update and restart** while a batch job writes files.
@@ -145,139 +136,12 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
             old_settings_import(state.old_settings_import()),
         ));
     }
-    // Last, so "Describe with AI" can open the window scrolled to its end, at this section.
-    sections = sections.push(section(
-        "AI",
-        ai_options(state.key(), settings.summary_language),
-    ));
 
     // The window is not resizable: whatever does not fit scrolls.
-    container(
-        scrollable(container(sections).padding(20))
-            .id(iced::widget::Id::new(SETTINGS_SCROLLABLE_ID))
-            .style(theme::dark_scrollable_style),
-    )
-    .width(Length::Fill)
-    .height(Length::Fill)
-    .style(theme::main_container_style)
-    .into()
-}
-
-/// The AI section: the Anthropic API key and the language of descriptions.
-fn ai_options(key: &KeySection, language: SummaryLanguage) -> Element<'_, Message> {
-    let muted = |line: &'static str| text(line).size(12).color(theme::TEXT_MUTED);
-    let store = if cfg!(windows) {
-        "Windows Credential Manager"
-    } else if cfg!(target_os = "macos") {
-        "the macOS Keychain"
-    } else {
-        "the system keyring"
-    };
-    let key_row: Element<'_, Message> = match key.state {
-        Some(KeyState::Unavailable) => text("The system keyring could not be opened")
-            .size(13)
-            .color(theme::ERROR)
-            .into(),
-        // The question and its buttons on lines of their own, so they fit the window.
-        Some(KeyState::Saved) if key.confirm_remove => column![
-            text("Remove the saved key? You will need to paste it again.").size(12),
-            row![
-                small_button("Remove", Message::Key(KeyMessage::Remove)),
-                small_button("Keep", Message::Key(KeyMessage::CancelRemove)),
-            ]
-            .spacing(8),
-        ]
-        .spacing(6)
-        .into(),
-        Some(KeyState::Saved) if !key.replacing => row![
-            text("Key saved").size(13),
-            small_button("Replace", Message::Key(KeyMessage::Replace)),
-            small_button("Remove", Message::Key(KeyMessage::AskRemove)),
-        ]
-        .spacing(8)
-        .align_y(iced::Alignment::Center)
-        .into(),
-        _ => {
-            let can_save = !key.input.trim().is_empty();
-            let save = can_save.then_some(Message::Key(KeyMessage::Save));
-            let cancel = key
-                .replacing
-                .then(|| small_button("Cancel", Message::Key(KeyMessage::CancelReplace)));
-            // The buttons go under the field, so the row fits the window with Cancel too.
-            column![
-                text_input("sk-ant-…", &key.input)
-                    .secure(!key.shown)
-                    .on_input(|input| Message::Key(KeyMessage::Input(input)))
-                    .on_submit_maybe(save.clone())
-                    .size(13)
-                    .padding([3, 6])
-                    .width(Length::Fixed(260.0)),
-                row![
-                    small_button(
-                        if key.shown { "Hide" } else { "Show" },
-                        Message::Key(KeyMessage::ToggleShow)
-                    ),
-                    button(text("Save").size(12))
-                        .on_press_maybe(save)
-                        .padding([3, 10]),
-                ]
-                .extend(cancel)
-                .spacing(8),
-            ]
-            .spacing(6)
-            .into()
-        }
-    };
-    let mut options = column![row![text("Anthropic API key").size(13), key_row]
-        .spacing(12)
-        .align_y(iced::Alignment::Center)]
-    .spacing(6);
-    options = match key.state {
-        Some(KeyState::Unavailable) => options.push(muted(
-            "It may be locked, or there is none (such as GNOME Keyring or KWallet). Settings checks again each time it opens.",
-        )),
-        Some(KeyState::Saved) if !key.replacing => options.push(
-            text(format!("Saved in {store} on this computer."))
-                .size(12)
-                .color(theme::TEXT_MUTED),
-        ),
-        _ => options
-            .push(
-                text(format!("Save keeps it in {store} on this computer."))
-                    .size(12)
-                    .color(theme::TEXT_MUTED),
-            )
-            .push(muted("Get a key at console.anthropic.com → API keys.")),
-    };
-    if let Some(error) = &key.error {
-        options = options.push(text(error.as_str()).size(12).color(theme::ERROR));
-    }
-    options
-        .push(
-            row![
-                text("Description language").size(13),
-                pick_list(
-                    SummaryLanguage::ALL,
-                    Some(language),
-                    Message::SetSummaryLanguage
-                )
-                .text_size(13)
-                .padding([3, 8]),
-            ]
-            .spacing(12)
-            .align_y(iced::Alignment::Center),
-        )
-        .push(muted(
-            "Used by Describe with AI in batch mode. The model is Claude Haiku 4.5.",
-        ))
-        .into()
-}
-
-fn small_button(label: &str, message: Message) -> Element<'_, Message> {
-    button(text(label).size(12))
-        .on_press(message)
-        .padding([3, 10])
-        .style(theme::icon_button_style(true))
+    container(scrollable(container(sections).padding(20)).style(theme::dark_scrollable_style))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(theme::main_container_style)
         .into()
 }
 
@@ -316,7 +180,7 @@ fn commented_tag(enabled: bool, tag: &str) -> Element<'_, Message> {
     }
     let hint = match frename_core::clean_commented_tag(tag).filter(|_| enabled) {
         Some(tag) => format!(
-            "Checked when you write a comment on a video, e.g. {tag}.IMG_0424.MOV, and unchecked when you clear it (AI descriptions do not count). Otherwise it is yours to change."
+            "Checked when a video gets a comment, e.g. {tag}.IMG_0424.MOV, and unchecked when the comment is cleared.              Otherwise it is yours to change."
         ),
         None => "Videos with a comment get no tag.".to_string(),
     };

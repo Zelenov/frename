@@ -270,17 +270,9 @@ impl FrenameApp {
         match message {
             // Only the main window's events get through the subscription filter.
             Message::WindowReady => {
-                let language = Task::done(describe_ai_message(
-                    batch::describe_ai::Message::SetLanguage(
-                        self.settings.settings().summary_language,
-                    ),
+                let load = Task::done(Message::FolderWorkspace(
+                    folder_workspace::Message::LoadLastSession,
                 ));
-                let load = Task::batch([
-                    language,
-                    Task::done(Message::FolderWorkspace(
-                        folder_workspace::Message::LoadLastSession,
-                    )),
-                ]);
                 if self.demo.is_none() {
                     // The daily background update check, when it is due.
                     let check = Task::done(Message::Settings(settings::Message::Updates(
@@ -357,43 +349,6 @@ impl FrenameApp {
                         frename_core::set_space_after_tags(space);
                         Task::none()
                     }
-                    settings::Message::SetSummaryLanguage(language) => Task::done(
-                        describe_ai_message(batch::describe_ai::Message::SetLanguage(language)),
-                    ),
-                    settings::Message::Key(settings::KeyMessage::Save) => {
-                        match self.settings.typed_key() {
-                            Some(key) => key_task(self.settings.begin_key_request(), move || {
-                                frename_core::ai::key::save_key(&key).map_err(|e| {
-                                    log::warn!("ai: saving the key failed: {e}");
-                                    "The key could not be saved. The system keyring may be \
-                                         locked."
-                                        .to_string()
-                                })
-                            }),
-                            None => Task::none(),
-                        }
-                    }
-                    settings::Message::Key(settings::KeyMessage::Remove) => {
-                        key_task(self.settings.begin_key_request(), || {
-                            frename_core::ai::key::delete_key().map_err(|e| {
-                                log::warn!("ai: removing the key failed: {e}");
-                                "The key could not be removed. The system keyring may be \
-                                     locked."
-                                    .to_string()
-                            })
-                        })
-                    }
-                    // The batch panel shows whether a key is saved too.
-                    // Passed on as the settings took it (a stale answer changed nothing).
-                    settings::Message::Key(settings::KeyMessage::State { .. }) => {
-                        match self.settings.key().state {
-                            Some(state) => Task::done(describe_ai_message(
-                                batch::describe_ai::Message::KeyState(state),
-                            )),
-                            None => Task::none(),
-                        }
-                    }
-                    settings::Message::Key(_) => Task::none(),
                     settings::Message::SetMonochromeTags(_)
                     | settings::Message::Updates(_)
                     | settings::Message::ImportOldSettings
@@ -401,15 +356,6 @@ impl FrenameApp {
                 };
                 Task::batch([task, effect])
             }
-            Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
-                batch::ActionMessage::OpenAiSettings,
-            ))) => self.open_settings_window_then(iced::widget::operation::snap_to_end(
-                iced::widget::Id::new(settings::view::SETTINGS_SCROLLABLE_ID),
-            )),
-            // One reader of the key's state: the settings, which pass it on to the batch panel.
-            Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
-                batch::ActionMessage::ReadKeyState,
-            ))) => key_task(self.settings.begin_key_request(), || Ok(())),
             Message::FolderWorkspace(folder_workspace::Message::Folder(
                 folder::Message::OpenSettings,
             ))
@@ -536,18 +482,9 @@ impl FrenameApp {
 
     /// Open the settings window, or focus it when it is already open.
     fn open_settings_window(&mut self) -> Task<Message> {
-        self.open_settings_window_then(Task::none())
-    }
-
-    /// Open the settings window (or bring it to the front), then run `after` in it once its
-    /// content exists.
-    fn open_settings_window_then(&mut self, after: Task<Message>) -> Task<Message> {
         if let Some(id) = self.settings_window {
-            return Task::batch([window::gain_focus(id), after]);
+            return window::gain_focus(id);
         }
-        // Whether a key is saved is read each time the window opens, not at start-up: reading
-        // may unlock a keyring, and a keyring locked before may be open now.
-        let read_key = key_task(self.settings.begin_key_request(), || Ok(()));
         let (id, open) = window::open(window::Settings {
             size: SETTINGS_WINDOW_SIZE,
             position: window::Position::Centered,
@@ -556,12 +493,7 @@ impl FrenameApp {
             ..window::Settings::default()
         });
         self.settings_window = Some(id);
-        // `then` takes a closure that could run again; the window opens once.
-        let mut after = Some(after);
-        Task::batch([
-            open.then(move |_| after.take().unwrap_or_else(Task::none)),
-            read_key,
-        ])
+        open.discard()
     }
 
     /// Feature subscriptions (file drop, window opened, global keyboard to search bar).
@@ -628,32 +560,6 @@ impl FrenameApp {
             |f| f.file_path().display().to_string(),
         )
     }
-}
-
-/// A message for the "Describe with AI" batch action, from the settings.
-fn describe_ai_message(message: batch::describe_ai::Message) -> Message {
-    Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
-        batch::ActionMessage::DescribeAi(message),
-    )))
-}
-
-/// Run `change` on the credential store on a worker thread (it may wait on a keyring), then
-/// read back whether a key is saved.
-fn key_task(
-    request: u64,
-    change: impl FnOnce() -> Result<(), String> + Send + 'static,
-) -> Task<Message> {
-    Task::future(async move {
-        let result = tokio::task::spawn_blocking(move || {
-            change().map(|()| frename_core::ai::key::key_state())
-        })
-        .await
-        .unwrap_or_else(|e| Err(e.to_string()));
-        Message::Settings(settings::Message::Key(settings::KeyMessage::State {
-            request,
-            result,
-        }))
-    })
 }
 
 #[cfg(test)]
