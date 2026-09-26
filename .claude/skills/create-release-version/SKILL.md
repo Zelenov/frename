@@ -10,7 +10,7 @@ description: Create or update a release version entry in version.md. Use when dr
 Every version entry in **version.md** must include **at least one** of `## Added` or `## Changed`.
 
 ```markdown
-# X.Y.Z
+# X.Y
 ## Added
 - short description
 
@@ -18,7 +18,8 @@ Every version entry in **version.md** must include **at least one** of `## Added
 - short description
 ```
 
-- **`# X.Y.Z`** — Version as H1. Must be the very first line of the block.
+- **`# X.Y`** — Version as H1 (two parts, e.g. `0.67`; release tags are `vX.Y`). Must be the very first line of the block.
+- **`# NEXT`** — Unreleased notes on a feature branch. The agent pipeline replaces it with the real version right before merging (`nightly` step 7); `main` never carries `# NEXT`.
 - **`## Added`** — New features. Omit if nothing added.
 - **`## Changed`** — Behavior/UI changes. Omit if nothing changed.
 
@@ -34,7 +35,7 @@ Every version entry in **version.md** must include **at least one** of `## Added
 ## Example: initial release
 
 ```markdown
-# 0.1.0
+# 0.1
 ## Added
 - Initial release. Tag-based file reviewer: play clips, assign tags, rename files.
 ```

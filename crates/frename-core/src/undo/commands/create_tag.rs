@@ -1,7 +1,7 @@
+use super::super::traits::Undoable;
+use super::super::{UndoContext, UndoError};
 use crate::db::{AppStateStore, StoredTagStore};
 use crate::TagId;
-use super::super::{UndoContext, UndoError};
-use super::super::traits::Undoable;
 
 /// Records a tag creation (CreateTag message — new tag added and saved to store).
 /// Undo removes the tag; redo re-creates with the same UUID and original color.
@@ -23,7 +23,10 @@ where
     }
 
     fn redo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
-        if !ctx.tag_list.create_tag_with_id(self.tag_id, self.tag_name.clone()) {
+        if !ctx
+            .tag_list
+            .create_tag_with_id(self.tag_id, self.tag_name.clone())
+        {
             return Err(UndoError::TagNotFound(self.tag_id));
         }
         ctx.tag_list

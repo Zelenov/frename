@@ -63,9 +63,21 @@ impl std::fmt::Display for FilterItem {
 impl ListFilters {
     fn items(self) -> [FilterItem; 3] {
         [
-            FilterItem { kind: FilterKind::Untagged, active: self.untagged_only, count: self.untagged_count },
-            FilterItem { kind: FilterKind::Subtitles, active: self.subtitled_only, count: self.subtitled_count },
-            FilterItem { kind: FilterKind::Comments, active: self.commented_only, count: self.commented_count },
+            FilterItem {
+                kind: FilterKind::Untagged,
+                active: self.untagged_only,
+                count: self.untagged_count,
+            },
+            FilterItem {
+                kind: FilterKind::Subtitles,
+                active: self.subtitled_only,
+                count: self.subtitled_count,
+            },
+            FilterItem {
+                kind: FilterKind::Comments,
+                active: self.commented_only,
+                count: self.commented_count,
+            },
         ]
     }
 }
@@ -75,13 +87,19 @@ impl ListFilters {
 fn filter_dropdown(filters: ListFilters) -> Element<'static, folder::Message> {
     let items = filters.items();
     let active = items.iter().filter(|item| item.active).count();
-    let placeholder = if active == 0 { "Filter".to_string() } else { format!("Filter ({active})") };
+    let placeholder = if active == 0 {
+        "Filter".to_string()
+    } else {
+        format!("Filter ({active})")
+    };
     // No tooltip: it would draw over the open list.
-    pick_list(items.to_vec(), None::<FilterItem>, |item| item.kind.set(!item.active))
-        .placeholder(placeholder)
-        .text_size(12)
-        .padding([2, 8])
-        .into()
+    pick_list(items.to_vec(), None::<FilterItem>, |item| {
+        item.kind.set(!item.active)
+    })
+    .placeholder(placeholder)
+    .text_size(12)
+    .padding([2, 8])
+    .into()
 }
 
 /// Render the folder controls: Previous File, Next File, Scroll-to-Selected, Open, Settings and
@@ -101,15 +119,15 @@ pub fn view(
                 .center_x(iced::Length::Fill)
                 .center_y(iced::Length::Fill),
         )
-            .on_press(folder::Message::PreviousFile)
-            .width(CONTROLS_HEIGHT)
-            .height(iced::Length::Fill)
-            .padding(0)
-            .style(theme::icon_button_style(has_previous)),
+        .on_press(folder::Message::PreviousFile)
+        .width(CONTROLS_HEIGHT)
+        .height(iced::Length::Fill)
+        .padding(0)
+        .style(theme::icon_button_style(has_previous)),
         text("Page Up"),
         iced::widget::tooltip::Position::Top,
     )
-        .into();
+    .into();
 
     let next_btn: Element<'_, folder::Message> = tooltip(
         button(
@@ -117,15 +135,15 @@ pub fn view(
                 .center_x(iced::Length::Fill)
                 .center_y(iced::Length::Fill),
         )
-            .on_press(folder::Message::NextFile)
-            .width(CONTROLS_HEIGHT)
-            .height(iced::Length::Fill)
-            .padding(0)
-            .style(theme::icon_button_style(has_next)),
+        .on_press(folder::Message::NextFile)
+        .width(CONTROLS_HEIGHT)
+        .height(iced::Length::Fill)
+        .padding(0)
+        .style(theme::icon_button_style(has_next)),
         text("Page Down"),
         iced::widget::tooltip::Position::Top,
     )
-        .into();
+    .into();
 
     let scroll_btn: Element<'_, folder::Message> = tooltip(
         button(
@@ -133,15 +151,15 @@ pub fn view(
                 .center_x(iced::Length::Fill)
                 .center_y(iced::Length::Fill),
         )
-            .on_press(folder::Message::ScrollToSelected)
-            .width(CONTROLS_HEIGHT)
-            .height(iced::Length::Fill)
-            .padding(0)
-            .style(theme::icon_button_style(has_selected)),
+        .on_press(folder::Message::ScrollToSelected)
+        .width(CONTROLS_HEIGHT)
+        .height(iced::Length::Fill)
+        .padding(0)
+        .style(theme::icon_button_style(has_selected)),
         text("Scroll to file"),
         iced::widget::tooltip::Position::Top,
     )
-        .into();
+    .into();
 
     let open_btn: Element<'_, folder::Message> = tooltip(
         button(
@@ -149,15 +167,15 @@ pub fn view(
                 .center_x(iced::Length::Fill)
                 .center_y(iced::Length::Fill),
         )
-            .on_press(folder::Message::OpenFolder)
-            .width(CONTROLS_HEIGHT)
-            .height(iced::Length::Fill)
-            .padding(0)
-            .style(theme::icon_button_style(true)),
+        .on_press(folder::Message::OpenFolder)
+        .width(CONTROLS_HEIGHT)
+        .height(iced::Length::Fill)
+        .padding(0)
+        .style(theme::icon_button_style(true)),
         text("Open file"),
         iced::widget::tooltip::Position::Top,
     )
-        .into();
+    .into();
 
     let settings_btn: Element<'_, folder::Message> = tooltip(
         button(
@@ -165,32 +183,36 @@ pub fn view(
                 .center_x(iced::Length::Fill)
                 .center_y(iced::Length::Fill),
         )
-            .on_press(folder::Message::OpenSettings)
-            .width(CONTROLS_HEIGHT)
-            .height(iced::Length::Fill)
-            .padding(0)
-            .style(theme::icon_button_style(true)),
+        .on_press(folder::Message::OpenSettings)
+        .width(CONTROLS_HEIGHT)
+        .height(iced::Length::Fill)
+        .padding(0)
+        .style(theme::icon_button_style(true)),
         text("Settings"),
         iced::widget::tooltip::Position::Top,
     )
-        .into();
+    .into();
 
-    let batch_hint = if batch_mode { "Back to the open file" } else { "Batch actions on checked files" };
+    let batch_hint = if batch_mode {
+        "Back to the open file"
+    } else {
+        "Batch actions on checked files"
+    };
     let batch_btn: Element<'_, folder::Message> = tooltip(
         button(
             container(text("☑").size(16))
                 .center_x(iced::Length::Fill)
                 .center_y(iced::Length::Fill),
         )
-            .on_press_maybe((!batch_running).then_some(folder::Message::SetBatchMode(!batch_mode)))
-            .width(CONTROLS_HEIGHT)
-            .height(iced::Length::Fill)
-            .padding(0)
-            .style(theme::list_item_button_style(batch_mode, !batch_running)),
+        .on_press_maybe((!batch_running).then_some(folder::Message::SetBatchMode(!batch_mode)))
+        .width(CONTROLS_HEIGHT)
+        .height(iced::Length::Fill)
+        .padding(0)
+        .style(theme::list_item_button_style(batch_mode, !batch_running)),
         text(batch_hint),
         iced::widget::tooltip::Position::Top,
     )
-        .into();
+    .into();
 
     let controls = row![
         prev_btn,
@@ -202,9 +224,9 @@ pub fn view(
         container(iced::widget::Space::new()).width(iced::Length::Fill),
         filter_dropdown(filters),
     ]
-        .spacing(8)
-        .height(iced::Length::Fill)
-        .align_y(iced::Alignment::Center);
+    .spacing(8)
+    .height(iced::Length::Fill)
+    .align_y(iced::Alignment::Center);
 
     container(controls)
         .padding([0, 8])

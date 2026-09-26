@@ -164,7 +164,11 @@ impl File {
 
     /// Media type of this file based on its extension.
     pub fn kind(&self) -> FileKind {
-        let ext = self.file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let ext = self
+            .file_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
         FileKind::from_extension(ext)
     }
 

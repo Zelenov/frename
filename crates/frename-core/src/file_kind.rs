@@ -16,8 +16,8 @@ impl FileKind {
     /// Comparison is case-insensitive.
     pub fn from_extension(ext: &str) -> Self {
         match ext.to_ascii_lowercase().as_str() {
-            "mp4" | "mkv" | "avi" | "mov" | "wmv" | "m4v" | "flv"
-            | "webm" | "ts" | "m2ts" | "mpg" | "mpeg" | "3gp" => Self::Video,
+            "mp4" | "mkv" | "avi" | "mov" | "wmv" | "m4v" | "flv" | "webm" | "ts" | "m2ts"
+            | "mpg" | "mpeg" | "3gp" => Self::Video,
             "jpg" | "jpeg" | "heic" | "heif" | "png" | "webp" | "bmp" => Self::Image,
             _ => Self::Other,
         }

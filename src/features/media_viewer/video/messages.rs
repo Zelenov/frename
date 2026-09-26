@@ -49,7 +49,10 @@ pub enum Message {
     /// Screenshot captured at position (ms) with JPEG bytes. Bubbles up to FolderWorkspace.
     ScreenshotTaken(u64, Vec<u8>),
     /// Subtitle file next to `video_path` was read; `None` when there is none.
-    SubtitlesLoaded { video_path: PathBuf, subtitles: Option<Arc<Subtitles>> },
+    SubtitlesLoaded {
+        video_path: PathBuf,
+        subtitles: Option<Arc<Subtitles>>,
+    },
     /// User picked a cue in the subtitle list: seek to its start.
     SeekToCue(usize),
     /// Show or hide the subtitle list over the picture in windowed mode.

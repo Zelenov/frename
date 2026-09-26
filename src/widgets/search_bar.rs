@@ -32,26 +32,30 @@ pub fn view<'a, Message: Clone + 'a>(
 
     let search_icon = text("🔍").size(12).color(theme::TEXT_MUTED);
     // Compute submit message before moving on_input into the widget.
-    let submit_msg = create_msg.clone().unwrap_or_else(|| on_input(value.to_string()));
+    let submit_msg = create_msg
+        .clone()
+        .unwrap_or_else(|| on_input(value.to_string()));
     let mut input = text_input("", value)
         .id(iced::widget::Id::from(input_id))
         .on_input(on_input)
         .padding([8, 8])
         .size(14)
-        .style(|_theme: &iced::Theme, _status: iced::widget::text_input::Status| {
-            iced::widget::text_input::Style {
-                background: iced::Background::Color(theme::BG_ELEVATED),
-                border: iced::Border {
-                    radius: 0.0.into(),
-                    width: 0.0,
-                    color: theme::BG_ELEVATED,
-                },
-                icon: theme::TEXT_MUTED,
-                placeholder: theme::TEXT_MUTED,
-                value: theme::TEXT,
-                selection: theme::ACCENT,
-            }
-        });
+        .style(
+            |_theme: &iced::Theme, _status: iced::widget::text_input::Status| {
+                iced::widget::text_input::Style {
+                    background: iced::Background::Color(theme::BG_ELEVATED),
+                    border: iced::Border {
+                        radius: 0.0.into(),
+                        width: 0.0,
+                        color: theme::BG_ELEVATED,
+                    },
+                    icon: theme::TEXT_MUTED,
+                    placeholder: theme::TEXT_MUTED,
+                    value: theme::TEXT,
+                    selection: theme::ACCENT,
+                }
+            },
+        );
     // Always set on_submit so text_input captures Enter (prevents Windows Default Beep).
     input = input.on_submit(submit_msg);
 
@@ -93,9 +97,7 @@ pub fn view<'a, Message: Clone + 'a>(
     if let Some(clear) = clear_icon {
         row_elems.push(clear);
     }
-    let inner = row(row_elems)
-        .spacing(6)
-        .align_y(iced::Alignment::Center);
+    let inner = row(row_elems).spacing(6).align_y(iced::Alignment::Center);
 
     container(inner)
         .padding([6, 8])

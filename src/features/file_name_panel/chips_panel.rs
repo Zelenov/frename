@@ -24,7 +24,9 @@ where
 {
     let snapshot = tag_list.file_snapshot();
     let tag_count = snapshot.tags().len();
-    let dragging_index = state.dragging_tag_id().and_then(|id| tag_list.checked_index_of(id));
+    let dragging_index = state
+        .dragging_tag_id()
+        .and_then(|id| tag_list.checked_index_of(id));
     let drop_target_index = state.drop_target_index();
     let display_order: Vec<usize> = match (dragging_index, drop_target_index) {
         (Some(drag_i), Some(drop_i)) => {
@@ -87,11 +89,8 @@ where
     let content_bounds = container(content_bounds)
         .width(Length::Fill)
         .height(Length::Fixed(TAG_CHIP_CELL_HEIGHT));
-    let chips_cell = container(
-        stack![content_bounds, tag_row]
-            .width(Length::Fill),
-    )
-    .width(Length::Fill);
+    let chips_cell =
+        container(stack![content_bounds, tag_row].width(Length::Fill)).width(Length::Fill);
 
     chips_cell.into()
 }

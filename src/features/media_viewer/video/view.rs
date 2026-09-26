@@ -1,13 +1,15 @@
 //! View for the video player sub-feature.
 
-use iced::widget::{button, column, container, mouse_area, row, scrollable, stack, text, tooltip, Column};
+use frename_core::Subtitles;
+use iced::widget::{
+    button, column, container, mouse_area, row, scrollable, stack, text, tooltip, Column,
+};
 use iced::{Alignment, Element, Length};
 use iced_video_player::VideoPlayer;
-use frename_core::Subtitles;
 
+use super::{Message, VideoPlayerState};
 use crate::features::video_controls;
 use crate::theme;
-use super::{Message, VideoPlayerState};
 
 const CONTROLS_HEIGHT: f32 = 32.0;
 /// Fixed so the video does not jump as cues of one or two lines come and go.
@@ -63,17 +65,23 @@ pub fn view<'a>(
         let (video_area, subtitle_strip): (Element<'_, Message>, Option<Element<'_, Message>>) =
             match subtitles {
                 Some(subs) if is_fullscreen => (
-                    stack![video_area, subtitle_overlay(subs, active_cue, list_cue, true)]
-                        .width(Length::Fill)
-                        .height(Length::Fill)
-                        .into(),
+                    stack![
+                        video_area,
+                        subtitle_overlay(subs, active_cue, list_cue, true)
+                    ]
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .into(),
                     None,
                 ),
                 Some(subs) if state.show_cue_list() => (
-                    stack![video_area, subtitle_overlay(subs, active_cue, list_cue, false)]
-                        .width(Length::Fill)
-                        .height(Length::Fill)
-                        .into(),
+                    stack![
+                        video_area,
+                        subtitle_overlay(subs, active_cue, list_cue, false)
+                    ]
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .into(),
                     Some(subtitle_strip(subs, active_cue)),
                 ),
                 Some(subs) => (video_area.into(), Some(subtitle_strip(subs, active_cue))),
@@ -81,12 +89,17 @@ pub fn view<'a>(
             };
 
         // Windowed mode only: fullscreen always shows the list.
-        let cue_list_btn: Option<Element<'_, Message>> = (subtitles.is_some() && !is_fullscreen)
-            .then(|| cue_list_button(state.show_cue_list()));
+        let cue_list_btn: Option<Element<'_, Message>> =
+            (subtitles.is_some() && !is_fullscreen).then(|| cue_list_button(state.show_cue_list()));
 
-        let controls_inner =
-            video_controls::view::view(state.controls(), position_secs, segment_start, segment_end, screenshot_positions_secs)
-                .map(Message::Controls);
+        let controls_inner = video_controls::view::view(
+            state.controls(),
+            position_secs,
+            segment_start,
+            segment_end,
+            screenshot_positions_secs,
+        )
+        .map(Message::Controls);
 
         let fullscreen_icon = if is_fullscreen { "⊡" } else { "⛶" };
         let fullscreen_btn: Element<'_, Message> = tooltip(
@@ -169,16 +182,24 @@ fn subtitle_strip<'a>(subtitles: &'a Subtitles, active_cue: Option<usize>) -> El
 fn cue_list_button<'a>(shown: bool) -> Element<'a, Message> {
     tooltip(
         button(
-            container(text("CC").size(11).color(if shown { theme::ACCENT } else { theme::TEXT }))
-                .center_x(Length::Fill)
-                .center_y(Length::Fill),
+            container(
+                text("CC")
+                    .size(11)
+                    .color(if shown { theme::ACCENT } else { theme::TEXT }),
+            )
+            .center_x(Length::Fill)
+            .center_y(Length::Fill),
         )
         .on_press(Message::ToggleCueList)
         .width(CONTROLS_HEIGHT)
         .height(CONTROLS_HEIGHT)
         .padding(0)
         .style(theme::icon_button_style(true)),
-        text(if shown { "Hide subtitle list" } else { "Show subtitle list" }),
+        text(if shown {
+            "Hide subtitle list"
+        } else {
+            "Show subtitle list"
+        }),
         tooltip::Position::Top,
     )
     .into()
@@ -194,7 +215,11 @@ fn subtitle_overlay<'a>(
     list_cue: Option<usize>,
     with_caption: bool,
 ) -> Element<'a, Message> {
-    let current = if with_caption { cue_text(subtitles, active_cue) } else { "" };
+    let current = if with_caption {
+        cue_text(subtitles, active_cue)
+    } else {
+        ""
+    };
     let caption: Element<'a, Message> = if current.is_empty() {
         iced::widget::Space::new().into()
     } else {
@@ -219,10 +244,16 @@ fn subtitle_overlay<'a>(
         let is_active = list_cue == Some(index);
         button(
             column![
-                text(format_cue_time(cue.start)).size(11).color(theme::TEXT_MUTED),
+                text(format_cue_time(cue.start))
+                    .size(11)
+                    .color(theme::TEXT_MUTED),
                 text(cue.text.as_str())
                     .size(CUE_LIST_TEXT_SIZE)
-                    .color(if is_active { theme::TEXT } else { theme::TEXT_SOFT }),
+                    .color(if is_active {
+                        theme::TEXT
+                    } else {
+                        theme::TEXT_SOFT
+                    }),
             ]
             .spacing(2),
         )
@@ -235,10 +266,14 @@ fn subtitle_overlay<'a>(
         .into()
     });
     let list = container(
-        scrollable(Column::with_children(rows).spacing(CUE_ROW_SPACING).padding([0, 12]))
-            .id(iced::widget::Id::new(CUE_LIST_SCROLLABLE_ID))
-            .height(Length::Fill)
-            .style(theme::dark_scrollable_style),
+        scrollable(
+            Column::with_children(rows)
+                .spacing(CUE_ROW_SPACING)
+                .padding([0, 12]),
+        )
+        .id(iced::widget::Id::new(CUE_LIST_SCROLLABLE_ID))
+        .height(Length::Fill)
+        .style(theme::dark_scrollable_style),
     )
     .width(Length::Fill)
     .max_width(CUE_LIST_WIDTH)
@@ -246,7 +281,9 @@ fn subtitle_overlay<'a>(
     .style(theme::subtitle_list_style);
     // Shares the width with the caption area so a narrow windowed pane is not covered
     // whole; on a wide screen the list stops at its max width and stays flush right.
-    let list = container(list).align_right(Length::FillPortion(2)).height(Length::Fill);
+    let list = container(list)
+        .align_right(Length::FillPortion(2))
+        .height(Length::Fill);
 
     row![caption_area, list]
         .width(Length::Fill)

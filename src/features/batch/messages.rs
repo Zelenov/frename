@@ -15,7 +15,10 @@ pub enum Message {
     Action(ActionMessage),
     /// Enter batch mode with every listed file checked and the action set up to do `Operation`
     /// (from the settings window, after a storage change).
-    Prepare { operation: Operation, files: Vec<FileId> },
+    Prepare {
+        operation: Operation,
+        files: Vec<FileId>,
+    },
     /// Check or uncheck one file.
     Toggle(FileId),
     /// Check these files (the listed ones), keeping the other checks.

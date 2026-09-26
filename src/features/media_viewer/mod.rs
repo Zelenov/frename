@@ -4,10 +4,10 @@
 //! Routing between video and image is hidden inside this module.
 
 pub mod image;
-pub mod video;
-pub mod view;
 mod messages;
 mod state;
+pub mod video;
+pub mod view;
 
 pub use messages::Message;
 pub use state::MediaViewerState;

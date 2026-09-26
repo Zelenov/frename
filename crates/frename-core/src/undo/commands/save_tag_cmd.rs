@@ -1,7 +1,7 @@
+use super::super::traits::Undoable;
+use super::super::{UndoContext, UndoError};
 use crate::db::{AppStateStore, StoredTagStore};
 use crate::TagId;
-use super::super::{UndoContext, UndoError};
-use super::super::traits::Undoable;
 
 /// Records saving a snapshot-only tag to the store (SaveTag message).
 /// Undo marks the tag as unsaved again; redo re-saves it.

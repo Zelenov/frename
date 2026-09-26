@@ -7,4 +7,4 @@ mod collection;
 mod thing;
 
 pub use collection::OrderedCollection;
-pub use thing::{OrderableEntry, OrderKey, OrderedThing};
+pub use thing::{OrderKey, OrderableEntry, OrderedThing};

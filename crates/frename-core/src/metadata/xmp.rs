@@ -38,11 +38,15 @@ impl std::fmt::Display for XmpWriteError {
 }
 
 impl From<XmpError> for XmpWriteError {
-    fn from(e: XmpError) -> Self { Self::Toolkit(e) }
+    fn from(e: XmpError) -> Self {
+        Self::Toolkit(e)
+    }
 }
 
 impl From<std::io::Error> for XmpWriteError {
-    fn from(e: std::io::Error) -> Self { Self::Io(e) }
+    fn from(e: std::io::Error) -> Self {
+        Self::Io(e)
+    }
 }
 
 /// What frename keeps in a file's XMP.
@@ -98,7 +102,11 @@ fn fields_of(meta: &XmpMeta) -> XmpFields {
 ///
 /// Returns whether the file now holds the segment. It does not when a marker cannot express
 /// it: an in point at or past the clip end with no out, or one whose clip length is unknown.
-pub(super) fn write(path: &Path, comment: Option<&str>, segment: Option<Segment>) -> Result<bool, XmpWriteError> {
+pub(super) fn write(
+    path: &Path,
+    comment: Option<&str>,
+    segment: Option<Segment>,
+) -> Result<bool, XmpWriteError> {
     let mut file = open(path, OpenFileOptions::default().for_update())?;
     let mut meta = match file.xmp() {
         Some(meta) => meta,
@@ -208,14 +216,23 @@ impl RangeMs {
         let end = (Some(end) != clip_duration_ms).then_some(end);
         let start = (self.start != 0 || end.is_none()).then_some(self.start);
         let seconds = |ms: u64| ms as f32 / 1000.0;
-        Segment { start: start.map(seconds), end: end.map(seconds) }
+        Segment {
+            start: start.map(seconds),
+            end: end.map(seconds),
+        }
     }
 }
 
 /// Clip length from `xmpDM:duration`, which the toolkit fills from the container's own header.
 fn clip_duration_ms(meta: &XmpMeta) -> Option<u64> {
-    let value: f64 = meta.struct_field(XMP_DM, "duration", XMP_DM, "value")?.value.parse().ok()?;
-    let scale = meta.struct_field(XMP_DM, "duration", XMP_DM, "scale")?.value;
+    let value: f64 = meta
+        .struct_field(XMP_DM, "duration", XMP_DM, "value")?
+        .value
+        .parse()
+        .ok()?;
+    let scale = meta
+        .struct_field(XMP_DM, "duration", XMP_DM, "scale")?
+        .value;
     let scale = match scale.split_once('/') {
         Some((numerator, denominator)) => {
             numerator.trim().parse::<f64>().ok()? / denominator.trim().parse::<f64>().ok()?
@@ -250,9 +267,15 @@ fn in_out_range(meta: &XmpMeta) -> Option<RangeMs> {
     }
     let marker = format!("{track}/xmpDM:markers[1]");
     let field = |name: &str| -> Option<u64> {
-        meta.struct_field(XMP_DM, &marker, XMP_DM, name)?.value.parse().ok()
+        meta.struct_field(XMP_DM, &marker, XMP_DM, name)?
+            .value
+            .parse()
+            .ok()
     };
-    Some(RangeMs { start: field("startTime")?, duration: field("duration")? })
+    Some(RangeMs {
+        start: field("startTime")?,
+        duration: field("duration")?,
+    })
 }
 
 /// Replace every InOut track with one holding `range`, or with none when `range` is `None`.
@@ -270,18 +293,48 @@ fn set_in_out_range(meta: &mut XmpMeta, range: Option<RangeMs>) -> Result<(), Xm
     let new_struct = || XmpValue::new(String::new()).set_is_struct(true);
     let text = |value: &str| XmpValue::new(value.to_string());
 
-    meta.append_array_item(XMP_DM, &XmpValue::new(TRACKS.to_string()).set_is_array(true), &new_struct())?;
+    meta.append_array_item(
+        XMP_DM,
+        &XmpValue::new(TRACKS.to_string()).set_is_array(true),
+        &new_struct(),
+    )?;
     let track = track_path(meta.array_len(XMP_DM, TRACKS));
-    meta.set_struct_field(XMP_DM, &track, XMP_DM, "trackName", &text(IN_OUT_TRACK_TYPE))?;
-    meta.set_struct_field(XMP_DM, &track, XMP_DM, "trackType", &text(IN_OUT_TRACK_TYPE))?;
+    meta.set_struct_field(
+        XMP_DM,
+        &track,
+        XMP_DM,
+        "trackName",
+        &text(IN_OUT_TRACK_TYPE),
+    )?;
+    meta.set_struct_field(
+        XMP_DM,
+        &track,
+        XMP_DM,
+        "trackType",
+        &text(IN_OUT_TRACK_TYPE),
+    )?;
     meta.set_struct_field(XMP_DM, &track, XMP_DM, "frameRate", &text(MILLISECOND_RATE))?;
 
-    let markers = XmpValue::new(format!("{track}/xmpDM:markers")).set_is_array(true).set_is_ordered(true);
+    let markers = XmpValue::new(format!("{track}/xmpDM:markers"))
+        .set_is_array(true)
+        .set_is_ordered(true);
     meta.append_array_item(XMP_DM, &markers, &new_struct())?;
     let marker = format!("{track}/xmpDM:markers[1]");
     meta.set_struct_field(XMP_DM, &marker, XMP_DM, "name", &text(IN_OUT_MARKER_NAME))?;
-    meta.set_struct_field(XMP_DM, &marker, XMP_DM, "startTime", &text(&range.start.to_string()))?;
-    meta.set_struct_field(XMP_DM, &marker, XMP_DM, "duration", &text(&range.duration.to_string()))?;
+    meta.set_struct_field(
+        XMP_DM,
+        &marker,
+        XMP_DM,
+        "startTime",
+        &text(&range.start.to_string()),
+    )?;
+    meta.set_struct_field(
+        XMP_DM,
+        &marker,
+        XMP_DM,
+        "duration",
+        &text(&range.duration.to_string()),
+    )?;
     Ok(())
 }
 
@@ -293,8 +346,9 @@ fn is_cloud_placeholder(path: &Path) -> bool {
     const FILE_ATTRIBUTE_OFFLINE: u32 = 0x0000_1000;
     const FILE_ATTRIBUTE_RECALL_ON_OPEN: u32 = 0x0004_0000;
     const FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS: u32 = 0x0040_0000;
-    const PLACEHOLDER: u32 =
-        FILE_ATTRIBUTE_OFFLINE | FILE_ATTRIBUTE_RECALL_ON_OPEN | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS;
+    const PLACEHOLDER: u32 = FILE_ATTRIBUTE_OFFLINE
+        | FILE_ATTRIBUTE_RECALL_ON_OPEN
+        | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS;
     std::fs::metadata(path).is_ok_and(|m| m.file_attributes() & PLACEHOLDER != 0)
 }
 
@@ -314,7 +368,10 @@ struct FileTimes {
 impl FileTimes {
     fn read(path: &Path) -> std::io::Result<Self> {
         let metadata = std::fs::metadata(path)?;
-        Ok(Self { modified: metadata.modified()?, created: metadata.created().ok() })
+        Ok(Self {
+            modified: metadata.modified()?,
+            created: metadata.created().ok(),
+        })
     }
 
     fn restore(&self, path: &Path) -> std::io::Result<()> {
@@ -324,7 +381,10 @@ impl FileTimes {
             Some(created) => std::os::windows::fs::FileTimesExt::set_created(times, created),
             None => times,
         };
-        std::fs::OpenOptions::new().write(true).open(path)?.set_times(times)
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(path)?
+            .set_times(times)
     }
 }
 
@@ -360,17 +420,35 @@ mod tests {
         write(&file, None, Some(segment(Some(0.05), Some(0.15)))).expect("write");
         let meta = read_meta(&file);
         assert_eq!(in_out_tracks(&meta), vec![1]);
-        assert_eq!(in_out_range(&meta), Some(RangeMs { start: 50, duration: 100 }));
+        assert_eq!(
+            in_out_range(&meta),
+            Some(RangeMs {
+                start: 50,
+                duration: 100
+            })
+        );
     }
 
     #[test]
     fn missing_out_runs_to_the_end_of_the_clip_and_missing_in_starts_at_zero() {
         let file = copy_of_clip("open-ended");
         write(&file, None, Some(segment(Some(0.05), None))).expect("write");
-        assert_eq!(in_out_range(&read_meta(&file)), Some(RangeMs { start: 50, duration: 150 }));
+        assert_eq!(
+            in_out_range(&read_meta(&file)),
+            Some(RangeMs {
+                start: 50,
+                duration: 150
+            })
+        );
 
         write(&file, None, Some(segment(None, Some(0.1)))).expect("write");
-        assert_eq!(in_out_range(&read_meta(&file)), Some(RangeMs { start: 0, duration: 100 }));
+        assert_eq!(
+            in_out_range(&read_meta(&file)),
+            Some(RangeMs {
+                start: 0,
+                duration: 100
+            })
+        );
     }
 
     #[test]
@@ -380,7 +458,13 @@ mod tests {
         write(&file, Some("note"), Some(segment(Some(0.1), Some(0.15)))).expect("write");
         let meta = read_meta(&file);
         assert_eq!(in_out_tracks(&meta).len(), 1);
-        assert_eq!(in_out_range(&meta), Some(RangeMs { start: 100, duration: 50 }));
+        assert_eq!(
+            in_out_range(&meta),
+            Some(RangeMs {
+                start: 100,
+                duration: 50
+            })
+        );
 
         write(&file, Some("note"), Some(segment(None, None))).expect("write");
         let meta = read_meta(&file);
@@ -393,10 +477,20 @@ mod tests {
         let file = copy_of_clip("other-tracks");
         let mut meta = XmpMeta::new().expect("meta");
         let tracks = XmpValue::new(TRACKS.to_string()).set_is_array(true);
-        meta.append_array_item(XMP_DM, &tracks, &XmpValue::new(String::new()).set_is_struct(true))
-            .expect("append");
-        meta.set_struct_field(XMP_DM, &track_path(1), XMP_DM, "trackType", &XmpValue::new("Comment".to_string()))
-            .expect("field");
+        meta.append_array_item(
+            XMP_DM,
+            &tracks,
+            &XmpValue::new(String::new()).set_is_struct(true),
+        )
+        .expect("append");
+        meta.set_struct_field(
+            XMP_DM,
+            &track_path(1),
+            XMP_DM,
+            "trackType",
+            &XmpValue::new("Comment".to_string()),
+        )
+        .expect("field");
         let mut xmp_file = open(&file, OpenFileOptions::default().for_update()).expect("open");
         xmp_file.put_xmp(&meta).expect("put");
         xmp_file.try_close().expect("close");
@@ -406,7 +500,8 @@ mod tests {
         let meta = read_meta(&file);
         assert_eq!(meta.array_len(XMP_DM, TRACKS), 1);
         assert_eq!(
-            meta.struct_field(XMP_DM, &track_path(1), XMP_DM, "trackType").map(|v| v.value),
+            meta.struct_field(XMP_DM, &track_path(1), XMP_DM, "trackType")
+                .map(|v| v.value),
             Some("Comment".to_string())
         );
     }
@@ -421,9 +516,19 @@ mod tests {
     #[test]
     fn the_fast_reader_sees_what_the_toolkit_wrote() {
         let file = copy_of_clip("fast-read");
-        assert!(super::super::bmff::find_xmp_packet(&file).expect("a MOV").is_none(), "no XMP yet");
+        assert!(
+            super::super::bmff::find_xmp_packet(&file)
+                .expect("a MOV")
+                .is_none(),
+            "no XMP yet"
+        );
 
-        write(&file, Some("Козёл 🐐"), Some(segment(Some(0.05), Some(0.15)))).expect("write");
+        write(
+            &file,
+            Some("Козёл 🐐"),
+            Some(segment(Some(0.05), Some(0.15))),
+        )
+        .expect("write");
         let fast = probe(&file).expect("fields");
         assert_eq!(fast, probe_with_toolkit(&file).expect("fields"));
         assert_eq!(fast.comment, "Козёл 🐐");
@@ -442,14 +547,21 @@ mod tests {
     #[test]
     #[ignore]
     fn fast_reader_matches_the_toolkit_on_a_real_folder() {
-        let Ok(dir) = std::env::var("FRENAME_XMP_DIR") else { return };
+        let Ok(dir) = std::env::var("FRENAME_XMP_DIR") else {
+            return;
+        };
         let mut compared = 0;
         for entry in std::fs::read_dir(dir).expect("folder").flatten() {
             let path = entry.path();
             if super::super::bmff::find_xmp_packet(&path).is_none() {
                 continue;
             }
-            assert_eq!(probe(&path), probe_with_toolkit(&path), "{}", path.display());
+            assert_eq!(
+                probe(&path),
+                probe_with_toolkit(&path),
+                "{}",
+                path.display()
+            );
             compared += 1;
         }
         println!("compared {compared} files");

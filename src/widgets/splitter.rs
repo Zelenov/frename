@@ -178,7 +178,6 @@ where
             mouse::Interaction::default()
         }
     }
-
 }
 
 impl<'a, Message, Theme, Renderer> From<Splitter<'a, Message>>

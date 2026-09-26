@@ -68,7 +68,10 @@ impl<S: AppStateStore + Clone> Directory<S> {
                 log::error!("Directory scan task failed: {e}");
                 std::io::Error::other(e)
             })?
-            .map_err(|e| { log::error!("Failed to scan directory: {e}"); e })?;
+            .map_err(|e| {
+                log::error!("Failed to scan directory: {e}");
+                e
+            })?;
         store.set_last_folder_and_file(&FolderAndFile::new(directory, None::<PathBuf>));
         log::info!("Directory scan complete: {} files found", files.len());
         Ok(Self::with_files(directory, files, store))
@@ -79,13 +82,19 @@ impl<S: AppStateStore + Clone> Directory<S> {
     // -----------------------------------------------------------------------
 
     /// True when the directory holds no files at all (regardless of the untagged filter).
-    pub fn is_empty(&self) -> bool { self.order.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.order.is_empty()
+    }
 
     /// Folder this directory was scanned from. Used to scope the folder's tag store.
-    pub fn path(&self) -> &Path { &self.path }
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
 
     /// Whether the "untagged only" filter is active.
-    pub fn untagged_only(&self) -> bool { self.untagged_only }
+    pub fn untagged_only(&self) -> bool {
+        self.untagged_only
+    }
 
     /// Turn the "untagged only" filter on or off. Selection is kept: the selected file stays
     /// listed even once it has tags, so the row under the cursor never disappears under the user.
@@ -102,7 +111,9 @@ impl<S: AppStateStore + Clone> Directory<S> {
     }
 
     /// Whether the "with subtitles only" filter is active.
-    pub fn subtitled_only(&self) -> bool { self.subtitled_only }
+    pub fn subtitled_only(&self) -> bool {
+        self.subtitled_only
+    }
 
     /// Turn the "with subtitles only" filter on or off. The selected file stays listed.
     pub fn set_subtitled_only(&mut self, subtitled_only: bool) {
@@ -111,11 +122,16 @@ impl<S: AppStateStore + Clone> Directory<S> {
 
     /// Number of files with a subtitle file (ignores the filters).
     pub fn subtitled_count(&self) -> usize {
-        self.files_by_id.values().filter(|f| f.has_subtitles()).count()
+        self.files_by_id
+            .values()
+            .filter(|f| f.has_subtitles())
+            .count()
     }
 
     /// Whether the "with comments only" filter is active.
-    pub fn commented_only(&self) -> bool { self.commented_only }
+    pub fn commented_only(&self) -> bool {
+        self.commented_only
+    }
 
     /// Turn the "with comments only" filter on or off. The selected file stays listed, even
     /// once its comment is cleared.
@@ -125,7 +141,10 @@ impl<S: AppStateStore + Clone> Directory<S> {
 
     /// Number of files with a comment (ignores the filters).
     pub fn commented_count(&self) -> usize {
-        self.files_by_id.values().filter(|f| !f.comment().is_empty()).count()
+        self.files_by_id
+            .values()
+            .filter(|f| !f.comment().is_empty())
+            .count()
     }
 
     /// Files whose comment is still loading (see [`FileSnapshot::comment_loading`]), in list
@@ -135,18 +154,32 @@ impl<S: AppStateStore + Clone> Directory<S> {
             .iter()
             .filter_map(|id| self.files_by_id.get(id))
             .filter(|file| file.snapshot().comment_loading())
-            .map(|file| (file.id(), file.file_path().to_path_buf(), file.snapshot().clone()))
+            .map(|file| {
+                (
+                    file.id(),
+                    file.file_path().to_path_buf(),
+                    file.snapshot().clone(),
+                )
+            })
             .collect()
     }
 
     /// Number of files whose comment is still loading.
     pub fn loading_comment_count(&self) -> usize {
-        self.files_by_id.values().filter(|f| f.snapshot().comment_loading()).count()
+        self.files_by_id
+            .values()
+            .filter(|f| f.snapshot().comment_loading())
+            .count()
     }
 
     /// Take the snapshot loaded from `path` for a file whose comment was loading. Ignored when
     /// the file has since moved or has its comment already (it was opened, or saved).
-    pub fn apply_loaded_comment(&mut self, id: FileId, path: &Path, snapshot: &FileSnapshot) -> bool {
+    pub fn apply_loaded_comment(
+        &mut self,
+        id: FileId,
+        path: &Path,
+        snapshot: &FileSnapshot,
+    ) -> bool {
         match self.files_by_id.get_mut(&id) {
             Some(file) if file.file_path() == path && file.snapshot().comment_loading() => {
                 file.set_file_snapshot(snapshot);
@@ -168,7 +201,9 @@ impl<S: AppStateStore + Clone> Directory<S> {
     }
 
     /// Name filter as the user typed it. Empty means every file passes.
-    pub fn name_filter(&self) -> &str { &self.name_filter }
+    pub fn name_filter(&self) -> &str {
+        &self.name_filter
+    }
 
     /// Set the name filter. Matching is case-insensitive on the file name as it is on disk,
     /// so the tags in the name are searchable too.
@@ -252,14 +287,22 @@ impl<S: AppStateStore + Clone> Directory<S> {
 
     /// Open a file by path. Returns the file if it is in this directory and was opened.
     pub fn open_path(&mut self, path: &Path) -> Option<File> {
-        let id = self.files_by_id.values().find(|f| f.file_path() == path)?.id();
-        if self.selected_id == Some(id) { return None; }
+        let id = self
+            .files_by_id
+            .values()
+            .find(|f| f.file_path() == path)?
+            .id();
+        if self.selected_id == Some(id) {
+            return None;
+        }
         self.select_by_id(id)
     }
 
     /// Select by stable ID. O(1) existence check. Returns the selected file if found.
     pub(crate) fn select_by_id(&mut self, id: FileId) -> Option<File> {
-        if !self.files_by_id.contains_key(&id) { return None; }
+        if !self.files_by_id.contains_key(&id) {
+            return None;
+        }
         self.selected_id = Some(id);
         self.persist_session();
         self.files_by_id.get(&id).cloned()
@@ -273,13 +316,17 @@ impl<S: AppStateStore + Clone> Directory<S> {
 
     pub fn select_previous(&mut self) -> Option<File> {
         let current = self.selected_index().unwrap_or(0);
-        if current == 0 { return None; }
+        if current == 0 {
+            return None;
+        }
         self.select_index(current - 1)
     }
 
     pub fn select_next(&mut self) -> Option<File> {
         let current = self.selected_index().unwrap_or(0);
-        if current + 1 >= self.listed_count() { return None; }
+        if current + 1 >= self.listed_count() {
+            return None;
+        }
         self.select_index(current + 1)
     }
 
@@ -298,12 +345,15 @@ impl<S: AppStateStore + Clone> Directory<S> {
                 if old_path != new_path {
                     log::info!(
                         "Directory: renamed {} → {} ({} tag(s))",
-                        old_path.display(), new_path.display(), snapshot.tags().len()
+                        old_path.display(),
+                        new_path.display(),
+                        snapshot.tags().len()
                     );
                 } else {
                     log::info!(
                         "Directory: updated {} ({} tag(s))",
-                        new_path.display(), snapshot.tags().len()
+                        new_path.display(),
+                        snapshot.tags().len()
                     );
                 }
                 true
@@ -379,23 +429,39 @@ fn scan_files(directory: &Path) -> Result<Vec<File>, std::io::Error> {
 
     let mut files = Vec::with_capacity(entries.len());
     for entry in &entries {
-        let Ok(file_type) = entry.file_type() else { continue };
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
         let path = entry.path();
         // file_type does not follow symlinks, so linked media needs the extra stat to be seen.
-        let is_file = if file_type.is_symlink() { path.is_file() } else { file_type.is_file() };
-        if !is_file { continue; }
-        if FileTagger::is_sidecar_file(&path) { continue; }
+        let is_file = if file_type.is_symlink() {
+            path.is_file()
+        } else {
+            file_type.is_file()
+        };
+        if !is_file {
+            continue;
+        }
+        if FileTagger::is_sidecar_file(&path) {
+            continue;
+        }
         // Only videos are listed. Checked before the file is parsed, so the subtitles,
         // transcripts and images a shoot folder is full of cost nothing.
-        if !is_listed_kind(&path) { continue; }
+        if !is_listed_kind(&path) {
+            continue;
+        }
         // An unreadable entry sorts to the front rather than failing the whole scan.
         let modified_at = entry
             .metadata()
             .and_then(|m| m.modified())
             .unwrap_or(SystemTime::UNIX_EPOCH);
-        files.push(File::from_path_with_folder_info(path, modified_at, &folder_info));
+        files.push(File::from_path_with_folder_info(
+            path,
+            modified_at,
+            &folder_info,
+        ));
     }
-    files.sort_by(|a, b| a.modified_at().cmp(&b.modified_at()));
+    files.sort_by_key(|a| a.modified_at());
     Ok(files)
 }
 
@@ -410,16 +476,26 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::SystemTime;
 
+    use super::is_listed_kind;
     use crate::db::fake_app_storage::FakeAppStorage;
     use crate::{Directory, File, FolderInfo};
-    use super::is_listed_kind;
 
     #[test]
     fn only_videos_are_listed() {
         assert!(is_listed_kind(Path::new(r"C:\shoot\clip.MP4")));
         assert!(is_listed_kind(Path::new(r"C:\shoot\clip.mov")));
-        for name in ["clip.srt", "notes.txt", "photo.jpg", "photo.HEIC", "clip.soniox.json", "noext"] {
-            assert!(!is_listed_kind(&Path::new(r"C:\shoot").join(name)), "{name} must be hidden");
+        for name in [
+            "clip.srt",
+            "notes.txt",
+            "photo.jpg",
+            "photo.HEIC",
+            "clip.soniox.json",
+            "noext",
+        ] {
+            assert!(
+                !is_listed_kind(&Path::new(r"C:\shoot").join(name)),
+                "{name} must be hidden"
+            );
         }
     }
 
@@ -554,7 +630,11 @@ mod tests {
         dir.select_index(1);
         dir.set_name_filter("c".to_string());
         assert_eq!(listed_names(&dir), vec!["b.mp4", "c.mp4"]);
-        assert_eq!(dir.selected_index(), Some(0), "cursor still points at its file");
+        assert_eq!(
+            dir.selected_index(),
+            Some(0),
+            "cursor still points at its file"
+        );
     }
 
     /// Set a comment on a file the way a save does, by its listed position.
@@ -581,7 +661,9 @@ mod tests {
         let info = FolderInfo::new(vec!["a.mp4".into(), "b.mp4".into(), "b.srt".into()]);
         let files = ["a.mp4", "b.mp4"]
             .iter()
-            .map(|name| File::from_path_with_folder_info(root.join(name), SystemTime::UNIX_EPOCH, &info))
+            .map(|name| {
+                File::from_path_with_folder_info(root.join(name), SystemTime::UNIX_EPOCH, &info)
+            })
             .collect();
         let mut dir = Directory::with_files(root, files, FakeAppStorage::new());
         dir.set_subtitled_only(true);

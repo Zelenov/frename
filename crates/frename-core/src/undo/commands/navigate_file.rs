@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
+use super::super::traits::Undoable;
+use super::super::{UndoContext, UndoError};
 use crate::db::{AppStateStore, StoredTagStore};
 use crate::{FileId, FileSnapshot};
-use super::super::{UndoContext, UndoError};
-use super::super::traits::Undoable;
 
 /// Records a file navigation (next / previous / indexed) together with its deferred save.
 /// One Ctrl+Z reverses both the rename on disk and the file selection change.
@@ -33,7 +33,8 @@ where
             std::fs::rename(&self.path_after, &self.path_before)?;
             crate::subtitles::rename_subtitle_file(&self.path_after, &self.path_before);
         }
-        ctx.directory.rename_file(self.file_id, &self.path_before, &self.snapshot_before);
+        ctx.directory
+            .rename_file(self.file_id, &self.path_before, &self.snapshot_before);
         ctx.directory
             .select_by_id(self.file_id)
             .ok_or(UndoError::FileNotFound(self.path_before.clone()))?;
@@ -48,7 +49,8 @@ where
             std::fs::rename(&self.path_before, &self.path_after)?;
             crate::subtitles::rename_subtitle_file(&self.path_before, &self.path_after);
         }
-        ctx.directory.rename_file(self.file_id, &self.path_after, &self.snapshot_after);
+        ctx.directory
+            .rename_file(self.file_id, &self.path_after, &self.snapshot_after);
         ctx.directory
             .select_by_id(self.to_file_id)
             .ok_or(UndoError::FileNotFound(self.path_after.clone()))?;

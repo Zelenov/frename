@@ -30,14 +30,24 @@ struct ScanInfo {
 impl FolderInfo {
     pub fn new(mut file_names: Vec<String>) -> Self {
         file_names.sort();
-        Self { file_names, scan: None }
+        Self {
+            file_names,
+            scan: None,
+        }
     }
 
     /// Folder info for a scan: file sizes and modification times from the listing, and the
     /// tag file's file list. Parsing with it never opens a file.
-    pub fn for_scan(file_names: Vec<String>, stats: HashMap<String, (u64, u64)>, cache: Vec<CachedFile>) -> Self {
+    pub fn for_scan(
+        file_names: Vec<String>,
+        stats: HashMap<String, (u64, u64)>,
+        cache: Vec<CachedFile>,
+    ) -> Self {
         let cache = cache.into_iter().map(|c| (c.name.clone(), c)).collect();
-        Self { scan: Some(ScanInfo { stats, cache }), ..Self::new(file_names) }
+        Self {
+            scan: Some(ScanInfo { stats, cache }),
+            ..Self::new(file_names)
+        }
     }
 
     /// Whether this is a folder scan, which leaves comments stored inside videos to load later.
@@ -59,11 +69,16 @@ impl FolderInfo {
 
     /// Whether the folder contains an entry with exactly this name.
     pub fn contains(&self, name: &str) -> bool {
-        self.file_names.binary_search_by(|n| n.as_str().cmp(name)).is_ok()
+        self.file_names
+            .binary_search_by(|n| n.as_str().cmp(name))
+            .is_ok()
     }
 
     /// Every entry name starting with `prefix`, in sorted order.
-    pub fn names_starting_with<'a>(&'a self, prefix: &'a str) -> impl Iterator<Item = &'a str> + 'a {
+    pub fn names_starting_with<'a>(
+        &'a self,
+        prefix: &'a str,
+    ) -> impl Iterator<Item = &'a str> + 'a {
         let start = self.file_names.partition_point(|n| n.as_str() < prefix);
         self.file_names[start..]
             .iter()
@@ -99,7 +114,10 @@ mod tests {
     fn names_starting_with_returns_only_the_prefix_range() {
         let i = info();
         let found: Vec<&str> = i.names_starting_with("a.mp4.snap.").collect();
-        assert_eq!(found, vec!["a.mp4.snap.00_00_10.jpg", "a.mp4.snap.00_01_00.jpg"]);
+        assert_eq!(
+            found,
+            vec!["a.mp4.snap.00_00_10.jpg", "a.mp4.snap.00_01_00.jpg"]
+        );
     }
 
     #[test]

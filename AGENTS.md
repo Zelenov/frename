@@ -49,3 +49,7 @@ When coding: one feature/module at a time; minimal additions; update `CLAUDE.md`
 Documentation: inline comments for non-obvious logic; `///` for public APIs; keep “why” in `docs/DECISIONS.md`.
 
 For more detail (dependencies, common commands, project state), see `CLAUDE.md`.
+
+**Autonomous mode** (scheduled sessions working GitHub issues): the issue and its approved design are
+the explicit request; confirmations and approach checks go through the pipeline in
+`.claude/skills/nightly/SKILL.md` and the review gate instead of waiting for a chat reply.

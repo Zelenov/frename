@@ -72,7 +72,8 @@ impl Inspection {
         let from_name = FileSnapshot::parse(name);
         Self {
             has_text_file: crate::comment::comment_path(path).is_file(),
-            name_has_in_out: from_name.segment_start().is_some() || from_name.segment_end().is_some(),
+            name_has_in_out: from_name.segment_start().is_some()
+                || from_name.segment_end().is_some(),
             xmp: xmp::probe(path),
         }
     }
@@ -82,8 +83,16 @@ impl Inspection {
     fn current_storage(&self) -> MetadataStorage {
         let can_hold_xmp = self.xmp.is_some();
         MetadataStorage {
-            comment: if self.has_text_file || !can_hold_xmp { CommentStorage::TextFile } else { CommentStorage::InVideo },
-            in_out: if self.name_has_in_out || !can_hold_xmp { InOutStorage::FileName } else { InOutStorage::InVideo },
+            comment: if self.has_text_file || !can_hold_xmp {
+                CommentStorage::TextFile
+            } else {
+                CommentStorage::InVideo
+            },
+            in_out: if self.name_has_in_out || !can_hold_xmp {
+                InOutStorage::FileName
+            } else {
+                InOutStorage::InVideo
+            },
         }
     }
 
@@ -98,8 +107,14 @@ impl Inspection {
     pub(crate) fn moved_by(&self, what: MetadataMove) -> FileConversion {
         let needed = self.needed(self.storage_after(what));
         match what {
-            MetadataMove::Comments(_) => FileConversion { in_out: false, ..needed },
-            MetadataMove::InOut(_) => FileConversion { comment: false, ..needed },
+            MetadataMove::Comments(_) => FileConversion {
+                in_out: false,
+                ..needed
+            },
+            MetadataMove::InOut(_) => FileConversion {
+                comment: false,
+                ..needed
+            },
         }
     }
 
@@ -138,6 +153,10 @@ pub(crate) fn clear_moved_xmp(path: &Path, moved: FileConversion, storage: Metad
     let comment = clear_comment.then_some("");
     let segment = clear_in_out.then_some(Segment::default());
     if let Err(e) = xmp::write(path, comment, segment) {
-        log::warn!("metadata: could not remove moved XMP from {:?}: {}", path, e);
+        log::warn!(
+            "metadata: could not remove moved XMP from {:?}: {}",
+            path,
+            e
+        );
     }
 }

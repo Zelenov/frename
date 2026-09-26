@@ -5,11 +5,11 @@ use iced::{mouse, Alignment, Border, Element, Length};
 
 use frename_core::{File, StoredTagStore, TagList};
 
+use super::{Message, TagPanelState, TAG_LIST_SCROLLABLE_ID};
 use crate::tag_colors;
 use crate::theme;
 use crate::widgets::bounds_reporter::BoundsReporter;
 use crate::widgets::tag_chip;
-use super::{Message, TagPanelState, TAG_LIST_SCROLLABLE_ID};
 
 /// Tag list row height in pixels. Must match folder_workspace::TAG_ROW_HEIGHT for scroll-into-view.
 pub const TAG_ROW_HEIGHT: f32 = 28.0;
@@ -136,11 +136,15 @@ where
                             .into()
                     } else {
                         mouse_area(
-                            container(text(label).size(13).color(iced::Color::from_rgb(0.0, 0.0, 0.0)))
-                                .width(Length::Fixed(16.0))
-                                .height(Length::Fill)
-                                .center_x(Length::Fill)
-                                .center_y(Length::Fill),
+                            container(
+                                text(label)
+                                    .size(13)
+                                    .color(iced::Color::from_rgb(0.0, 0.0, 0.0)),
+                            )
+                            .width(Length::Fixed(16.0))
+                            .height(Length::Fill)
+                            .center_x(Length::Fill)
+                            .center_y(Length::Fill),
                         )
                         .on_press(msg)
                         .into()
@@ -189,7 +193,9 @@ where
             let row_background = container(full_row)
                 .height(row_height)
                 .width(Length::Fill)
-                .style(move |theme: &iced::Theme| theme::tag_row_background_style(theme, is_selected));
+                .style(move |theme: &iced::Theme| {
+                    theme::tag_row_background_style(theme, is_selected)
+                });
             Some(row_background.into())
         })
         .collect();

@@ -143,7 +143,10 @@ impl BatchState {
     /// when there is nothing to run: no files, an action that is not available, or a job
     /// already running.
     pub fn start(&mut self, files: Vec<FileId>) -> bool {
-        let Some(operation) = self.operation().filter(|_| !files.is_empty() && !self.is_running()) else {
+        let Some(operation) = self
+            .operation()
+            .filter(|_| !files.is_empty() && !self.is_running())
+        else {
             return false;
         };
         let statuses = files.iter().map(|id| (*id, ItemStatus::Pending)).collect();
@@ -227,14 +230,20 @@ impl BatchState {
     /// Where a file stands in the current job, if it is part of one and its check has not
     /// changed since.
     pub fn status(&self, id: FileId) -> Option<ItemStatus> {
-        let job = self.job.as_ref().filter(|job| !job.dismissed.contains(&id))?;
+        let job = self
+            .job
+            .as_ref()
+            .filter(|job| !job.dismissed.contains(&id))?;
         job.statuses.get(&id).copied()
     }
 
     /// The file the job is working on.
     pub fn current(&self) -> Option<FileId> {
         let job = self.job.as_ref().filter(|job| job.running)?;
-        job.order.iter().copied().find(|id| job.statuses.get(id) == Some(&ItemStatus::Running))
+        job.order
+            .iter()
+            .copied()
+            .find(|id| job.statuses.get(id) == Some(&ItemStatus::Running))
     }
 
     /// Files of the current job that failed, in job order.
@@ -272,12 +281,23 @@ mod tests {
     use frename_core::{CommentStorage, InOutStorage};
 
     fn ids(n: usize) -> Vec<FileId> {
-        (0..n).map(|i| frename_core::File::from_path(format!("C:/none/{i}.mp4"), std::time::SystemTime::UNIX_EPOCH).id()).collect()
+        (0..n)
+            .map(|i| {
+                frename_core::File::from_path(
+                    format!("C:/none/{i}.mp4"),
+                    std::time::SystemTime::UNIX_EPOCH,
+                )
+                .id()
+            })
+            .collect()
     }
 
     fn state() -> BatchState {
         let mut state = BatchState::default();
-        state.update(Message::Prepare { operation: Operation::MoveComments(CommentStorage::InVideo), files: Vec::new() });
+        state.update(Message::Prepare {
+            operation: Operation::MoveComments(CommentStorage::InVideo),
+            files: Vec::new(),
+        });
         state.update(Message::SetActive(false));
         state
     }
@@ -305,18 +325,30 @@ mod tests {
         assert!(!batch.start(files.clone()), "one job at a time");
 
         let (first, operation) = batch.begin_next().expect("first file");
-        assert_eq!((first, operation), (files[0], Operation::MoveComments(CommentStorage::InVideo)));
+        assert_eq!(
+            (first, operation),
+            (files[0], Operation::MoveComments(CommentStorage::InVideo))
+        );
         assert_eq!(batch.current(), Some(files[0]));
         batch.finish(first, ItemStatus::Done);
 
         batch.update(Message::Toggle(files[0]));
-        assert!(!batch.is_checked(files[0]), "checks are locked while running");
+        assert!(
+            !batch.is_checked(files[0]),
+            "checks are locked while running"
+        );
 
         batch.update(Message::Cancel);
-        assert!(batch.begin_next().is_none(), "cancelled before the second file");
+        assert!(
+            batch.begin_next().is_none(),
+            "cancelled before the second file"
+        );
         assert!(!batch.is_running());
         let progress = batch.progress().expect("report");
-        assert_eq!((progress.finished, progress.done, progress.total), (1, 1, 3));
+        assert_eq!(
+            (progress.finished, progress.done, progress.total),
+            (1, 1, 3)
+        );
         assert_eq!(batch.status(files[1]), Some(ItemStatus::Pending));
 
         batch.update(Message::CloseReport);
@@ -350,7 +382,11 @@ mod tests {
         assert!(!batch.is_checked(files[0]));
         assert_eq!(batch.status(files[0]), None, "check box shown again");
         assert_eq!(batch.status(files[1]), Some(ItemStatus::Done));
-        assert_eq!(batch.progress().map(|p| p.done), Some(2), "the report still counts it");
+        assert_eq!(
+            batch.progress().map(|p| p.done),
+            Some(2),
+            "the report still counts it"
+        );
     }
 
     #[test]
@@ -377,9 +413,15 @@ mod tests {
     fn prepare_checks_the_files_and_sets_up_the_action() {
         let files = ids(2);
         let mut batch = state();
-        batch.update(Message::Prepare { operation: Operation::MoveInOut(InOutStorage::InVideo), files: files.clone() });
+        batch.update(Message::Prepare {
+            operation: Operation::MoveInOut(InOutStorage::InVideo),
+            files: files.clone(),
+        });
         assert!(batch.is_active());
-        assert_eq!(batch.operation(), Some(Operation::MoveInOut(InOutStorage::InVideo)));
+        assert_eq!(
+            batch.operation(),
+            Some(Operation::MoveInOut(InOutStorage::InVideo))
+        );
         assert_eq!(batch.checked_count(), 2);
     }
 }

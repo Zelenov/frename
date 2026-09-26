@@ -28,10 +28,7 @@ impl Subtitles {
     pub fn parse(source: &str) -> Self {
         let source = source.strip_prefix('\u{feff}').unwrap_or(source);
         let normalized = source.replace("\r\n", "\n");
-        let mut cues: Vec<SubtitleCue> = normalized
-            .split("\n\n")
-            .filter_map(parse_block)
-            .collect();
+        let mut cues: Vec<SubtitleCue> = normalized.split("\n\n").filter_map(parse_block).collect();
         cues.sort_by_key(|cue| cue.start);
         Self { cues }
     }
@@ -84,7 +81,11 @@ pub fn load_subtitles(video_path: &Path) -> Option<Subtitles> {
         log::warn!("subtitles: no valid cues in {}", path.display());
         return None;
     }
-    log::info!("subtitles: loaded {} cues from {}", subtitles.cues.len(), path.display());
+    log::info!(
+        "subtitles: loaded {} cues from {}",
+        subtitles.cues.len(),
+        path.display()
+    );
     Some(subtitles)
 }
 
@@ -105,7 +106,11 @@ pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
         return;
     }
     match std::fs::rename(&old_path, &new_path) {
-        Ok(()) => log::info!("subtitles: renamed {} → {}", old_path.display(), new_path.display()),
+        Ok(()) => log::info!(
+            "subtitles: renamed {} → {}",
+            old_path.display(),
+            new_path.display()
+        ),
         Err(e) => log::warn!(
             "subtitles: failed to rename {} → {}: {e}",
             old_path.display(),
@@ -116,7 +121,10 @@ pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
 
 /// Parse one blank-line-separated block: optional index line, timing line, text lines.
 fn parse_block(block: &str) -> Option<SubtitleCue> {
-    let mut lines = block.lines().map(str::trim_end).skip_while(|l| l.trim().is_empty());
+    let mut lines = block
+        .lines()
+        .map(str::trim_end)
+        .skip_while(|l| l.trim().is_empty());
     let mut timing = lines.next()?;
     if !timing.contains("-->") {
         // The first line was the cue number.
@@ -179,7 +187,8 @@ mod tests {
 
     #[test]
     fn skips_malformed_block_and_keeps_the_rest() {
-        let subs = Subtitles::parse("1\nnot a timing\nText\n\n2\n00:00:01,000 --> 00:00:02,000\nOk\n");
+        let subs =
+            Subtitles::parse("1\nnot a timing\nText\n\n2\n00:00:01,000 --> 00:00:02,000\nOk\n");
         assert_eq!(subs.cues().len(), 1);
         assert_eq!(subs.cues()[0].text, "Ok");
     }
@@ -220,12 +229,22 @@ mod tests {
 
         rename_subtitle_file(&old_video, &new_video);
         assert!(!subtitle_path(&old_video).exists());
-        assert_eq!(std::fs::read_to_string(subtitle_path(&new_video)).ok().as_deref(), Some("old"));
+        assert_eq!(
+            std::fs::read_to_string(subtitle_path(&new_video))
+                .ok()
+                .as_deref(),
+            Some("old")
+        );
 
         // A subtitle file already at the destination is left alone.
         std::fs::write(subtitle_path(&old_video), "other").expect("write srt");
         rename_subtitle_file(&old_video, &new_video);
-        assert_eq!(std::fs::read_to_string(subtitle_path(&new_video)).ok().as_deref(), Some("old"));
+        assert_eq!(
+            std::fs::read_to_string(subtitle_path(&new_video))
+                .ok()
+                .as_deref(),
+            Some("old")
+        );
         assert!(subtitle_path(&old_video).exists());
 
         let _ = std::fs::remove_dir_all(&dir);

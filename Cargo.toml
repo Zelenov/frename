@@ -6,6 +6,9 @@ rust-version = "1.75"
 authors = ["Your Name <your.email@example.com>"]
 description = "File renaming utility for Windows"
 
+[workspace]
+members = [".", "crates/frename-core"]
+
 [features]
 # HEIC/HEIF decoding (requires cmake; install cmake then `cargo build --features heic`)
 heic = ["dep:libheif-rs"]

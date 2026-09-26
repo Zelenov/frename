@@ -1,6 +1,6 @@
-use crate::db::{AppStateStore, StoredTagStore};
-use super::super::{UndoContext, UndoError};
 use super::super::traits::Undoable;
+use super::super::{UndoContext, UndoError};
+use crate::db::{AppStateStore, StoredTagStore};
 
 /// Records setting or clearing the segment start marker on the current file.
 pub struct SetSegmentStartCommand {

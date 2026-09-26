@@ -90,19 +90,25 @@ pub trait AppStateStore: Send + Sync {
     fn set_last_folder_and_file(&self, value: &FolderAndFile);
 
     /// Returns the saved window geometry, if any.
-    fn get_window_state(&self) -> Option<WindowGeometry> { None }
+    fn get_window_state(&self) -> Option<WindowGeometry> {
+        None
+    }
 
     /// Saves the window geometry (position + size).
     fn set_window_state(&self, _geometry: WindowGeometry) {}
 
     /// Returns the saved video settings, if any.
-    fn get_video_settings(&self) -> Option<VideoSettings> { None }
+    fn get_video_settings(&self) -> Option<VideoSettings> {
+        None
+    }
 
     /// Saves the video settings.
     fn set_video_settings(&self, _settings: VideoSettings) {}
 
     /// Returns the saved app settings, if any.
-    fn get_app_settings(&self) -> Option<AppSettings> { None }
+    fn get_app_settings(&self) -> Option<AppSettings> {
+        None
+    }
 
     /// Saves the app settings.
     fn set_app_settings(&self, _settings: AppSettings) {}
@@ -114,7 +120,9 @@ pub trait StoredTagStore: Send + Sync {
     fn get_stored_tags(&self) -> Result<Vec<StoredTag>, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Returns the tag name -> color index mapping (tag colors keyed by tag name).
-    fn get_tag_color_mapping(&self) -> Result<TagColorMapping, Box<dyn std::error::Error + Send + Sync>>;
+    fn get_tag_color_mapping(
+        &self,
+    ) -> Result<TagColorMapping, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Saves or updates a stored tag by id: insert if id not present, else update name and color.
     fn save_tag(
@@ -124,7 +132,10 @@ pub trait StoredTagStore: Send + Sync {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
     /// Removes a tag by tag id (UUID) from stored_tags and its entry from tag_color_mapping (by tag name).
-    fn remove_stored_tag_by_id(&mut self, tag_id: Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    fn remove_stored_tag_by_id(
+        &mut self,
+        tag_id: Uuid,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
     /// Updates sort_order for the given stored tags (e.g. after display collection rebalance). Ids not present in the store are ignored.
     fn update_tag_orders(

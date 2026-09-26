@@ -1,7 +1,7 @@
 //! Small timecode badge with a tooltip label and × remove button.
 
 use iced::widget::{container, mouse_area, row, text, tooltip};
-use iced::{Alignment, Background, Color, Element, mouse};
+use iced::{mouse, Alignment, Background, Color, Element};
 
 use crate::theme;
 
@@ -25,19 +25,15 @@ pub fn view<Message: Clone + 'static>(
     clear_msg: Message,
 ) -> Element<'static, Message> {
     let remove_btn = mouse_area(
-        container(text("×").size(12).color(Color::from_rgb(0.6, 0.6, 0.65)))
-            .padding([0, 2]),
+        container(text("×").size(12).color(Color::from_rgb(0.6, 0.6, 0.65))).padding([0, 2]),
     )
     .on_press(clear_msg)
     .interaction(mouse::Interaction::Pointer);
 
     let badge = container(
-        row![
-            text(time_str).size(13).color(theme::TEXT),
-            remove_btn,
-        ]
-        .spacing(4)
-        .align_y(Alignment::Center),
+        row![text(time_str).size(13).color(theme::TEXT), remove_btn,]
+            .spacing(4)
+            .align_y(Alignment::Center),
     )
     .padding([3, 6])
     .style(|_theme: &_| iced::widget::container::Style {

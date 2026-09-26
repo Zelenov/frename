@@ -6,7 +6,7 @@
 
 use iced::window;
 use simplelog::{
-    CombinedLogger, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode, WriteLogger,
+    ColorChoice, CombinedLogger, ConfigBuilder, LevelFilter, TermLogger, TerminalMode, WriteLogger,
 };
 use std::fs::File;
 
@@ -19,8 +19,8 @@ mod widgets;
 
 use app::FrenameApp;
 use frename_core::{
-    install_file_tagger, InMemoryFileTagger, ProductionFileTagger,
-    AppDatabase, AppStateStore, Initializable, LoggingAppStateStore,
+    install_file_tagger, AppDatabase, AppStateStore, InMemoryFileTagger, Initializable,
+    LoggingAppStateStore, ProductionFileTagger,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -63,13 +63,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             log_level,
             log_config.clone(),
             TerminalMode::Mixed,
-            ColorChoice::Auto
+            ColorChoice::Auto,
         ),
-        WriteLogger::new(
-            log_level,
-            log_config,
-            log_file,
-        ),
+        WriteLogger::new(log_level, log_config, log_file),
     ])?;
 
     log::info!("frename application started");
@@ -80,7 +76,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let version = gstreamer::version();
             log::info!(
                 "GStreamer initialized successfully: {}.{}.{}.{}",
-                version.0, version.1, version.2, version.3
+                version.0,
+                version.1,
+                version.2,
+                version.3
             );
         }
         Err(e) => {
@@ -89,7 +88,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err(format!(
                 "GStreamer not found or failed to initialize: {e}. \
                  Please install GStreamer. See GSTREAMER_SETUP.md for instructions."
-            ).into());
+            )
+            .into());
         }
     }
 
@@ -98,21 +98,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Restore saved window geometry (size + position + maximized), or use defaults.
     let saved = AppDatabase::new().get_window_state();
-    let window_size = saved.map(|g| iced::Size::new(g.width, g.height))
+    let window_size = saved
+        .map(|g| iced::Size::new(g.width, g.height))
         .unwrap_or(iced::Size::new(1200.0, 600.0));
-    let window_position = saved.map(|g| window::Position::Specific(iced::Point::new(g.x, g.y)))
+    let window_position = saved
+        .map(|g| window::Position::Specific(iced::Point::new(g.x, g.y)))
         .unwrap_or(window::Position::Centered);
     let start_maximized = saved.map(|g| g.is_maximized).unwrap_or(false);
 
     // Load window icon from embedded .ico bytes.
     let icon_bytes = include_bytes!("../frename-icon.ico");
-    let window_icon = image::load_from_memory(icon_bytes)
-        .ok()
-        .and_then(|img| {
-            let rgba = img.to_rgba8();
-            let (w, h) = rgba.dimensions();
-            window::icon::from_rgba(rgba.into_raw(), w, h).ok()
-        });
+    let window_icon = image::load_from_memory(icon_bytes).ok().and_then(|img| {
+        let rgba = img.to_rgba8();
+        let (w, h) = rgba.dimensions();
+        window::icon::from_rgba(rgba.into_raw(), w, h).ok()
+    });
 
     // Install AFTER gstreamer::init() so our filter is registered last.
     crash_guard::install();

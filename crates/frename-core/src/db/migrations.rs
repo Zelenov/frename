@@ -44,7 +44,9 @@ const MIGRATIONS: &[Migration] = &[
 /// Returns the current schema version, bootstrapping schema_version if needed.
 fn current_version(conn: &Connection) -> Result<u32, rusqlite::Error> {
     conn.execute_batch(schema::BOOTSTRAP)?;
-    conn.query_row("SELECT version FROM schema_version LIMIT 1", [], |row| row.get(0))
+    conn.query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
+        row.get(0)
+    })
 }
 
 /// Runs migrations with version greater than the stored version.
@@ -105,7 +107,12 @@ mod tests {
     fn migrating_keeps_the_tables_the_app_still_uses() {
         let conn = database_at_version_1();
         run(&conn).expect("migrate");
-        for table in ["folder_history", "window_state", "video_settings", "app_settings"] {
+        for table in [
+            "folder_history",
+            "window_state",
+            "video_settings",
+            "app_settings",
+        ] {
             assert!(table_exists(&conn, table), "{table} must survive");
         }
     }

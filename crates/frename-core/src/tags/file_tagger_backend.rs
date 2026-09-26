@@ -75,7 +75,9 @@ pub trait FileTaggerBackend: Send + Sync {
 
     /// Load the raw image bytes for a screenshot by position.
     #[allow(dead_code)]
-    fn load_screenshot_image(&self, _file_path: &Path, _position_ms: u64) -> Option<Vec<u8>> { None }
+    fn load_screenshot_image(&self, _file_path: &Path, _position_ms: u64) -> Option<Vec<u8>> {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -90,9 +92,9 @@ mod tests {
     #[test]
     fn default_backend_hides_sidecar_files() {
         let backend = InMemoryFileTagger::default();
-        assert!(backend.is_sidecar_file(Path::new(r"C:\shoots\.frename")));
-        assert!(backend.is_sidecar_file(Path::new(r"C:\shoots\clip.mp4.comment.txt")));
-        assert!(backend.is_sidecar_file(Path::new(r"C:\shoots\clip.mp4.snap.00-00-10-936.jpg")));
-        assert!(!backend.is_sidecar_file(Path::new(r"C:\shoots\clip.mp4")));
+        assert!(backend.is_sidecar_file(Path::new("shoots/.frename")));
+        assert!(backend.is_sidecar_file(Path::new("shoots/clip.mp4.comment.txt")));
+        assert!(backend.is_sidecar_file(Path::new("shoots/clip.mp4.snap.00-00-10-936.jpg")));
+        assert!(!backend.is_sidecar_file(Path::new("shoots/clip.mp4")));
     }
 }

@@ -109,8 +109,7 @@ impl<'a, Message> ProgressBar<'a, Message> {
     }
 }
 
-impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
-    for ProgressBar<'a, Message>
+impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer> for ProgressBar<'a, Message>
 where
     Message: Clone,
     Renderer: advanced::Renderer,
@@ -205,7 +204,12 @@ where
                 let x = to_x(pos);
                 renderer.fill_quad(
                     renderer::Quad {
-                        bounds: Rectangle { x: x - 1.0, y: bar_y, width: 2.0, height: BAR_HEIGHT },
+                        bounds: Rectangle {
+                            x: x - 1.0,
+                            y: bar_y,
+                            width: 2.0,
+                            height: BAR_HEIGHT,
+                        },
                         border: Border::default(),
                         shadow: Shadow::default(),
                         snap: true,
@@ -216,13 +220,17 @@ where
         }
         if span > 0.0 {
             // Convert seconds to an x-coordinate, clamped to the bar's pixel range.
-            let to_x = |secs: f32| {
-                bounds.x + ((secs - self.min) / span).clamp(0.0, 1.0) * bounds.width
-            };
+            let to_x =
+                |secs: f32| bounds.x + ((secs - self.min) / span).clamp(0.0, 1.0) * bounds.width;
             let draw_marker = |renderer: &mut Renderer, x: f32| {
                 renderer.fill_quad(
                     renderer::Quad {
-                        bounds: Rectangle { x: x - 1.0, y: bar_y, width: 2.0, height: BAR_HEIGHT },
+                        bounds: Rectangle {
+                            x: x - 1.0,
+                            y: bar_y,
+                            width: 2.0,
+                            height: BAR_HEIGHT,
+                        },
                         border: Border::default(),
                         shadow: Shadow::default(),
                         snap: true,
@@ -239,7 +247,12 @@ where
                     let w = (x1 - x0).max(2.0);
                     renderer.fill_quad(
                         renderer::Quad {
-                            bounds: Rectangle { x: x0, y: bar_y, width: w, height: BAR_HEIGHT },
+                            bounds: Rectangle {
+                                x: x0,
+                                y: bar_y,
+                                width: w,
+                                height: BAR_HEIGHT,
+                            },
                             border: Border::default(),
                             shadow: Shadow::default(),
                             snap: true,
@@ -291,12 +304,12 @@ where
                     }
                 }
             }
-            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
-                if state.is_dragging {
-                    state.is_dragging = false;
-                    if let Some(on_release) = &self.on_release {
-                        shell.publish(on_release.clone());
-                    }
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
+                if state.is_dragging =>
+            {
+                state.is_dragging = false;
+                if let Some(on_release) = &self.on_release {
+                    shell.publish(on_release.clone());
                 }
             }
             _ => {}

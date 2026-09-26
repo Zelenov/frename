@@ -37,10 +37,7 @@ pub enum Message {
     /// Toggle the currently selected tag (Space key).
     ToggleSelectedTag,
     /// Tag list was scrolled; report viewport for scroll-into-view (selection).
-    TagListScrolled {
-        scroll_y: f32,
-        viewport_height: f32,
-    },
+    TagListScrolled { scroll_y: f32, viewport_height: f32 },
     /// Remove the tag from the store and UI (unselect first, then delete). Only for stored tags.
     DeleteTag(TagId),
     /// Remove the currently selected tag (no-op if none selected).

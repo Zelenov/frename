@@ -1,16 +1,18 @@
 //! UI for the tag grid: scrollable grid of tag chips (same content as tag panel).
 //! Column count is dynamic: panel width / longest chip width.
 
-use iced::widget::{checkbox, column, container, mouse_area, row, scrollable, stack, text, tooltip};
+use iced::widget::{
+    checkbox, column, container, mouse_area, row, scrollable, stack, text, tooltip,
+};
 use iced::{mouse, Alignment, Border, Element, Length};
 
 use frename_core::{File, StoredTagStore, TagList};
 
+use crate::features::tag_panel::{Message, TagPanelState, TAG_LIST_SCROLLABLE_ID};
 use crate::tag_colors::TagPalette;
 use crate::theme;
 use crate::widgets::bounds_reporter::BoundsReporter;
 use crate::widgets::tag_chip;
-use crate::features::tag_panel::{Message, TagPanelState, TAG_LIST_SCROLLABLE_ID};
 
 /// Height of one grid row: chip height + margin (separator between rows/columns).
 const CHIP_HEIGHT: f32 = tag_chip::CHIP_ROW_HEIGHT;
@@ -192,11 +194,15 @@ where
                                     .into()
                             } else {
                                 let btn = mouse_area(
-                                    container(text(label).size(13).color(iced::Color::from_rgb(0.0, 0.0, 0.0)))
-                                        .width(Length::Fixed(16.0))
-                                        .height(Length::Fill)
-                                        .center_x(Length::Fill)
-                                        .center_y(Length::Fill),
+                                    container(
+                                        text(label)
+                                            .size(13)
+                                            .color(iced::Color::from_rgb(0.0, 0.0, 0.0)),
+                                    )
+                                    .width(Length::Fixed(16.0))
+                                    .height(Length::Fill)
+                                    .center_x(Length::Fill)
+                                    .center_y(Length::Fill),
                                 )
                                 .on_press(msg);
                                 if is_selected {
@@ -240,7 +246,9 @@ where
                     )
                     .width(Length::Fill)
                     .height(row_height)
-                    .style(move |theme: &iced::Theme| theme::tag_row_background_style(theme, is_selected));
+                    .style(move |theme: &iced::Theme| {
+                        theme::tag_row_background_style(theme, is_selected)
+                    });
                     Some(cell.into())
                 })
                 .collect();
@@ -255,9 +263,7 @@ where
         })
         .collect();
 
-    let tag_column = column(grid_rows)
-        .spacing(GRID_MARGIN)
-        .width(Length::Fill);
+    let tag_column = column(grid_rows).spacing(GRID_MARGIN).width(Length::Fill);
     let tag_scroll = scrollable(tag_column)
         .id(iced::widget::Id::new(TAG_LIST_SCROLLABLE_ID))
         .height(Length::Fill)

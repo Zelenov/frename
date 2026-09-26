@@ -38,18 +38,30 @@ fn dark_checkbox_style(
     };
     let (background, border_color) = match status {
         iced::widget::checkbox::Status::Hovered { .. } => (
-            if is_checked { theme::ACCENT } else { theme::SPLITTER_ACTIVE },
+            if is_checked {
+                theme::ACCENT
+            } else {
+                theme::SPLITTER_ACTIVE
+            },
             theme::TEXT_MUTED,
         ),
         _ => (
-            if is_checked { theme::ACCENT } else { theme::TRACK },
+            if is_checked {
+                theme::ACCENT
+            } else {
+                theme::TRACK
+            },
             theme::TEXT_MUTED,
         ),
     };
     iced::widget::checkbox::Style {
         background: iced::Background::Color(background),
         icon_color: theme::TEXT,
-        border: Border { radius: 2.0.into(), width: 1.0, color: border_color },
+        border: Border {
+            radius: 2.0.into(),
+            width: 1.0,
+            color: border_color,
+        },
         text_color: Some(theme::TEXT),
     }
 }
@@ -104,7 +116,7 @@ where
         .map(|chunk| {
             let mut cells: Vec<Element<'_, Message>> = chunk
                 .iter()
-                .filter_map(|tag| {
+                .map(|tag| {
                     let id = tag.id();
                     let is_checked = tag.is_checked();
                     let is_selected = selected_id == Some(id);
@@ -195,7 +207,7 @@ where
                         theme::tag_row_background_style(theme, is_selected)
                     });
 
-                    Some(cell.into())
+                    cell.into()
                 })
                 .collect();
 

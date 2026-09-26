@@ -23,7 +23,7 @@ mod imp {
         fn TerminateProcess(h_process: isize, u_exit_code: u32) -> i32;
         fn GetCurrentProcess() -> isize;
     }
- 
+
     pub fn mark_closing() {
         IS_CLOSING.store(true, Ordering::Release);
     }
@@ -31,14 +31,18 @@ mod imp {
     unsafe extern "system" fn exception_filter(_info: *mut c_void) -> i32 {
         if IS_CLOSING.load(Ordering::Acquire) {
             // Suppress the GStreamer shutdown crash — exit with code 0.
-            unsafe { TerminateProcess(GetCurrentProcess(), 0); }
+            unsafe {
+                TerminateProcess(GetCurrentProcess(), 0);
+            }
         }
         0 // EXCEPTION_CONTINUE_SEARCH — let other handlers deal with it
     }
 
     pub fn install() {
         // Install AFTER gstreamer::init() so we are the last filter set.
-        unsafe { SetUnhandledExceptionFilter(Some(exception_filter)); }
+        unsafe {
+            SetUnhandledExceptionFilter(Some(exception_filter));
+        }
     }
 }
 

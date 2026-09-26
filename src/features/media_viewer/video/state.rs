@@ -1,19 +1,19 @@
 //! State for the video player sub-feature.
 
+use gst::prelude::*;
 use gstreamer as gst;
 use gstreamer_app as gst_app;
 use gstreamer_video::VideoMeta;
-use gst::prelude::*;
-use iced::{Subscription, Task, time};
+use iced::{time, Subscription, Task};
 use iced_video_player::{Error as VideoError, Video};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::features::video_controls::{self, VideoControlsState};
 use super::view::{CUE_LIST_SCROLLABLE_ID, CUE_ROW_PITCH};
-use frename_core::{load_subtitles, AppDatabase, AppStateStore, Subtitles};
 use super::Message;
+use crate::features::video_controls::{self, VideoControlsState};
+use frename_core::{load_subtitles, AppDatabase, AppStateStore, Subtitles};
 
 /// Video player component state.
 pub struct VideoPlayerState {
@@ -127,7 +127,10 @@ impl VideoPlayerState {
                 .await
                 .unwrap_or(None)
                 .map(Arc::new);
-            Message::SubtitlesLoaded { video_path, subtitles }
+            Message::SubtitlesLoaded {
+                video_path,
+                subtitles,
+            }
         })
     }
 
@@ -150,13 +153,16 @@ impl VideoPlayerState {
                 Task::done(Message::VideoReady { duration_secs })
             }
             Message::VideoReady { duration_secs } => {
-                let ready =
-                    Task::done(Message::Controls(video_controls::Message::VideoReady { duration_secs }));
+                let ready = Task::done(Message::Controls(video_controls::Message::VideoReady {
+                    duration_secs,
+                }));
                 // Controls assume playback on ready; a video opened paused has to say otherwise.
                 if !self.paused {
                     return ready;
                 }
-                ready.chain(Task::done(Message::Controls(video_controls::Message::SetPlaying(false))))
+                ready.chain(Task::done(Message::Controls(
+                    video_controls::Message::SetPlaying(false),
+                )))
             }
             Message::NewFrame => {
                 if let Some(position) = self.current_video.as_ref().and_then(query_position) {
@@ -167,7 +173,9 @@ impl VideoPlayerState {
             Message::EndOfStream => {
                 // The pipeline stays in Playing at the end; the next play restarts the stream.
                 self.paused = true;
-                Task::done(Message::Controls(video_controls::Message::SetPlaying(false)))
+                Task::done(Message::Controls(video_controls::Message::SetPlaying(
+                    false,
+                )))
             }
             Message::TogglePause => {
                 // Pausing stops the ticks, so take the exact position playback stopped at.
@@ -180,9 +188,10 @@ impl VideoPlayerState {
                 }
                 Task::none()
             }
-            Message::Seek(position_secs) => {
-                self.seek_to(Duration::from_secs_f64(position_secs.max(0.0) as f64), false)
-            }
+            Message::Seek(position_secs) => self.seek_to(
+                Duration::from_secs_f64(position_secs.max(0.0) as f64),
+                false,
+            ),
             Message::Controls(ctrl_msg) => {
                 self.controls.update(&ctrl_msg);
                 match ctrl_msg {
@@ -217,7 +226,10 @@ impl VideoPlayerState {
             Message::CaptureSegmentEnd => self.capture_segment_end(),
             Message::SegmentStartMarked(_) | Message::SegmentEndMarked(_) => Task::none(), // bubbles up via media_viewer
             Message::ScreenshotTaken(_, _) => Task::none(),
-            Message::SubtitlesLoaded { video_path, subtitles } => {
+            Message::SubtitlesLoaded {
+                video_path,
+                subtitles,
+            } => {
                 if self.current_path.as_ref() == Some(&video_path) {
                     self.subtitles = subtitles;
                 }
@@ -254,12 +266,24 @@ impl VideoPlayerState {
         }
     }
 
-    pub fn is_loading(&self) -> bool { self.loading }
-    pub fn load_failed(&self) -> bool { self.load_failed }
-    pub fn current_video(&self) -> Option<&Video> { self.current_video.as_ref() }
-    pub fn controls(&self) -> &VideoControlsState { &self.controls }
-    pub fn subtitles(&self) -> Option<&Subtitles> { self.subtitles.as_deref() }
-    pub fn show_cue_list(&self) -> bool { self.show_cue_list }
+    pub fn is_loading(&self) -> bool {
+        self.loading
+    }
+    pub fn load_failed(&self) -> bool {
+        self.load_failed
+    }
+    pub fn current_video(&self) -> Option<&Video> {
+        self.current_video.as_ref()
+    }
+    pub fn controls(&self) -> &VideoControlsState {
+        &self.controls
+    }
+    pub fn subtitles(&self) -> Option<&Subtitles> {
+        self.subtitles.as_deref()
+    }
+    pub fn show_cue_list(&self) -> bool {
+        self.show_cue_list
+    }
 
     /// Position to draw: the drag position while the progress bar is held, otherwise the
     /// stored playback position. Everything position-dependent in the view reads this.
@@ -302,18 +326,25 @@ impl VideoPlayerState {
             x: None,
             y: Some(rows_above as f32 * CUE_ROW_PITCH),
         };
-        iced::widget::operation::scroll_to::<()>(iced::widget::Id::new(CUE_LIST_SCROLLABLE_ID), offset)
-            .discard()
+        iced::widget::operation::scroll_to::<()>(
+            iced::widget::Id::new(CUE_LIST_SCROLLABLE_ID),
+            offset,
+        )
+        .discard()
     }
 
     fn capture_segment_start(&self) -> Task<Message> {
-        let Some(video) = self.current_video.as_ref() else { return Task::none(); };
+        let Some(video) = self.current_video.as_ref() else {
+            return Task::none();
+        };
         let secs = video.position().as_secs_f32().floor();
         Task::done(Message::SegmentStartMarked(secs))
     }
 
     fn capture_segment_end(&self) -> Task<Message> {
-        let Some(video) = self.current_video.as_ref() else { return Task::none(); };
+        let Some(video) = self.current_video.as_ref() else {
+            return Task::none();
+        };
         let secs = video.position().as_secs_f32().ceil();
         Task::done(Message::SegmentEndMarked(secs))
     }
@@ -326,7 +357,10 @@ impl VideoPlayerState {
         let position_ms = video.position().as_millis() as u64;
         log::info!("capture_screenshot: position_ms={position_ms}");
         let jpeg = capture_jpeg(video);
-        log::info!("capture_screenshot: jpeg={:?}", jpeg.as_ref().map(|v| v.len()));
+        log::info!(
+            "capture_screenshot: jpeg={:?}",
+            jpeg.as_ref().map(|v| v.len())
+        );
         let jpeg = jpeg.unwrap_or_default();
         Task::done(Message::ScreenshotTaken(position_ms, jpeg))
     }
@@ -508,7 +542,9 @@ fn capture_jpeg(video: &Video) -> Option<Vec<u8>> {
         bin.by_name("iced_video")?
     } else {
         // video-sink wraps its sink pad in a GhostPad; parent of that pad is the bin.
-        video_sink.pads().into_iter()
+        video_sink
+            .pads()
+            .into_iter()
             .find_map(|p| p.dynamic_cast::<gst::GhostPad>().ok())
             .and_then(|gp| gp.parent_element())
             .and_then(|e| e.downcast::<gst::Bin>().ok())
@@ -558,7 +594,8 @@ fn nv12_to_rgb(yuv: &[u8], width: u32, height: u32, stride: u32) -> Vec<u8> {
             let u = yuv[uv_off] as f32;
             let v = yuv[uv_off + 1] as f32;
             let r = (1.164 * (y_val - 16.0) + 1.596 * (v - 128.0)).clamp(0.0, 255.0) as u8;
-            let g = (1.164 * (y_val - 16.0) - 0.813 * (v - 128.0) - 0.391 * (u - 128.0)).clamp(0.0, 255.0) as u8;
+            let g = (1.164 * (y_val - 16.0) - 0.813 * (v - 128.0) - 0.391 * (u - 128.0))
+                .clamp(0.0, 255.0) as u8;
             let b = (1.164 * (y_val - 16.0) + 2.018 * (u - 128.0)).clamp(0.0, 255.0) as u8;
             rgb.extend_from_slice(&[r, g, b]);
         }

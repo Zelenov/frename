@@ -27,3 +27,6 @@ tests/fixtures/temp/
 # Backup files
 *.bak
 *.tmp
+
+# Logs
+*.log

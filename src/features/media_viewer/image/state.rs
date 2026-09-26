@@ -53,9 +53,15 @@ impl ImageViewerState {
         *self = Self::default();
     }
 
-    pub fn current_handle(&self) -> Option<&image::Handle> { self.current_handle.as_ref() }
-    pub fn is_loading(&self) -> bool { self.loading }
-    pub fn load_failed(&self) -> bool { self.load_failed }
+    pub fn current_handle(&self) -> Option<&image::Handle> {
+        self.current_handle.as_ref()
+    }
+    pub fn is_loading(&self) -> bool {
+        self.loading
+    }
+    pub fn load_failed(&self) -> bool {
+        self.load_failed
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -74,7 +80,9 @@ fn decode_image(path: &Path) -> Result<image::Handle, String> {
         #[cfg(feature = "heic")]
         "heic" | "heif" => decode_heic(path),
         #[cfg(not(feature = "heic"))]
-        "heic" | "heif" => Err("HEIC/HEIF support is not compiled in (enable the 'heic' feature)".to_string()),
+        "heic" | "heif" => {
+            Err("HEIC/HEIF support is not compiled in (enable the 'heic' feature)".to_string())
+        }
         _ => Err(format!("Unsupported image extension: {ext}")),
     }
 }
@@ -100,7 +108,9 @@ fn decode_heic(path: &Path) -> Result<image::Handle, String> {
         .map_err(|e| e.to_string())?;
 
     let planes = decoded.planes();
-    let interleaved = planes.interleaved.ok_or("No interleaved RGBA plane in HEIC image")?;
+    let interleaved = planes
+        .interleaved
+        .ok_or("No interleaved RGBA plane in HEIC image")?;
     let width = decoded.width();
     let height = decoded.height();
     let pixels = interleaved.data.to_vec();

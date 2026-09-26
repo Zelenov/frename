@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  linux:
+    name: ci-linux
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GStreamer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-libav
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --locked
+
+  windows:
+    name: ci-windows
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Configure vendored GStreamer
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $base = Join-Path $env:GITHUB_WORKSPACE "vendor\gstreamer"
+          $gstRoot = Join-Path $base "minimal_msvc_x86_64"
+          if (!(Test-Path $gstRoot)) {
+            New-Item -ItemType Directory -Path $base -Force | Out-Null
+            Expand-Archive -Path "gstreamer-minimal-msvc-x86_64.zip" -DestinationPath $base -Force
+          }
+          Add-Content $env:GITHUB_ENV "PKG_CONFIG_PATH=$gstRoot\lib\pkgconfig"
+          Add-Content $env:GITHUB_ENV "PKG_CONFIG=$gstRoot\bin\pkg-config.exe"
+          Add-Content $env:GITHUB_ENV "GSTREAMER_1_0_ROOT_MSVC_X86_64=$gstRoot"
+          Add-Content $env:GITHUB_PATH "$gstRoot\bin"
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --locked
+
+      - name: Build release
+        run: cargo build --release --locked
+
+      - name: Upload test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: frename-windows-x64-${{ github.sha }}-needs-system-gstreamer
+          path: |
+            target/release/frename.exe
+            GSTREAMER_SETUP.md
+          retention-days: 14

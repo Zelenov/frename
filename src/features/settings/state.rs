@@ -63,14 +63,24 @@ impl SettingsState {
             Message::SetCommentedTag(tag) => {
                 self.settings.commented_tag = tag
                     .chars()
-                    .filter(|c| *c == ' ' || frename_core::clean_commented_tag(&c.to_string()).is_some())
+                    .filter(|c| {
+                        *c == ' ' || frename_core::clean_commented_tag(&c.to_string()).is_some()
+                    })
                     .collect();
             }
-            Message::SetCommentedTagEnabled(enabled) => self.settings.commented_tag_enabled = enabled,
+            Message::SetCommentedTagEnabled(enabled) => {
+                self.settings.commented_tag_enabled = enabled
+            }
             // Opened by the app, which owns the folder; the offer is taken.
-            Message::OpenBatchAction(Operation::MoveComments(_)) => self.comment_storage_changed = false,
-            Message::OpenBatchAction(Operation::MoveInOut(_)) => self.in_out_storage_changed = false,
-            Message::OpenBatchAction(Operation::TagCommented | Operation::FixTags | Operation::ReloadFiles) => {}
+            Message::OpenBatchAction(Operation::MoveComments(_)) => {
+                self.comment_storage_changed = false
+            }
+            Message::OpenBatchAction(Operation::MoveInOut(_)) => {
+                self.in_out_storage_changed = false
+            }
+            Message::OpenBatchAction(
+                Operation::TagCommented | Operation::FixTags | Operation::ReloadFiles,
+            ) => {}
         }
     }
 }
@@ -82,7 +92,11 @@ mod tests {
 
     #[test]
     fn apply_changes_only_the_named_setting() {
-        let mut state = SettingsState { settings: AppSettings::default(), comment_storage_changed: false, in_out_storage_changed: false };
+        let mut state = SettingsState {
+            settings: AppSettings::default(),
+            comment_storage_changed: false,
+            in_out_storage_changed: false,
+        };
         state.apply(Message::SetMonochromeTags(true));
         assert!(state.settings().monochrome_tags);
         assert!(state.settings().autoplay_video);
@@ -102,20 +116,33 @@ mod tests {
 
     #[test]
     fn a_storage_change_offers_moving_the_files_until_taken() {
-        let mut state = SettingsState { settings: AppSettings::default(), comment_storage_changed: false, in_out_storage_changed: false };
+        let mut state = SettingsState {
+            settings: AppSettings::default(),
+            comment_storage_changed: false,
+            in_out_storage_changed: false,
+        };
         state.apply(Message::SetCommentStorage(state.settings().comment_storage));
-        assert!(!state.comment_storage_changed(), "picking the same storage is no change");
+        assert!(
+            !state.comment_storage_changed(),
+            "picking the same storage is no change"
+        );
 
         state.apply(Message::SetCommentStorage(CommentStorage::TextFile));
         assert!(state.comment_storage_changed());
         assert!(!state.in_out_storage_changed());
-        state.apply(Message::OpenBatchAction(Operation::MoveComments(CommentStorage::TextFile)));
+        state.apply(Message::OpenBatchAction(Operation::MoveComments(
+            CommentStorage::TextFile,
+        )));
         assert!(!state.comment_storage_changed());
     }
 
     #[test]
     fn the_commented_tag_field_drops_characters_a_tag_cannot_hold() {
-        let mut state = SettingsState { settings: AppSettings::default(), comment_storage_changed: false, in_out_storage_changed: false };
+        let mut state = SettingsState {
+            settings: AppSettings::default(),
+            comment_storage_changed: false,
+            in_out_storage_changed: false,
+        };
         state.apply(Message::SetCommentedTag("Has comment.v2:".to_string()));
         assert_eq!(state.settings().commented_tag, "Has commentv2");
     }

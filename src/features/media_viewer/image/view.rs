@@ -3,8 +3,8 @@
 use iced::widget::{button, column, container, image, mouse_area, row, text, tooltip};
 use iced::{ContentFit, Element, Length};
 
-use crate::theme;
 use super::{ImageViewerState, Message};
+use crate::theme;
 
 const CONTROLS_HEIGHT: f32 = 32.0;
 
@@ -39,13 +39,10 @@ pub fn view(state: &ImageViewerState, is_fullscreen: bool) -> Element<'_, Messag
 
         // Spacer pushes the button to the right.
         let controls = container(
-            row![
-                container(text("")).width(Length::Fill),
-                fullscreen_btn,
-            ]
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .align_y(iced::Alignment::Center),
+            row![container(text("")).width(Length::Fill), fullscreen_btn,]
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .align_y(iced::Alignment::Center),
         )
         .padding([0, 8])
         .width(Length::Fill)

@@ -75,7 +75,9 @@ impl VideoControlsState {
             }
             Message::SetVolume(v) => {
                 self.volume = v.clamp(0.0, 1.0);
-                AppDatabase::new().set_video_settings(VideoSettings { volume: self.volume });
+                AppDatabase::new().set_video_settings(VideoSettings {
+                    volume: self.volume,
+                });
             }
             Message::TakeScreenshot => {
                 // Handled by video player (needs current position). No local state change.
@@ -111,14 +113,12 @@ impl VideoControlsState {
     /// Keyboard shortcuts for video controls: F1 = 10s back, F3 = 10s forward, F12 = screenshot
     pub fn subscription(&self) -> Subscription<Message> {
         event::listen_with(|event, _status, _id| match event {
-            iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) => {
-                match key.as_ref() {
-                    keyboard::Key::Named(keyboard::key::Named::F1) => Some(Message::SeekBack10),
-                    keyboard::Key::Named(keyboard::key::Named::F3) => Some(Message::SeekForward10),
-                    keyboard::Key::Named(keyboard::key::Named::F12) => Some(Message::TakeScreenshot),
-                    _ => None,
-                }
-            }
+            iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) => match key.as_ref() {
+                keyboard::Key::Named(keyboard::key::Named::F1) => Some(Message::SeekBack10),
+                keyboard::Key::Named(keyboard::key::Named::F3) => Some(Message::SeekForward10),
+                keyboard::Key::Named(keyboard::key::Named::F12) => Some(Message::TakeScreenshot),
+                _ => None,
+            },
             _ => None,
         })
     }

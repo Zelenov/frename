@@ -2,8 +2,8 @@
 
 use std::path::PathBuf;
 
-use iced::widget::text_editor;
 use frename_core::{File, FileId, FileSnapshot, FolderAndFile};
+use iced::widget::text_editor;
 
 use super::Directory;
 use crate::features::{batch, file_name_panel, folder, media_viewer, sync_panel, tag_panel};
@@ -36,10 +36,7 @@ pub enum Message {
     FileOpened(File),
     /// Snapshot to persist: created by folder workspace when switching file.
     /// Uses the stable FileId so the correct file is found even if it was renamed.
-    FileUpdated {
-        id: FileId,
-        snapshot: FileSnapshot,
-    },
+    FileUpdated { id: FileId, snapshot: FileSnapshot },
     /// User selected a file in the list (from folder view)
     Folder(folder::Message),
     /// Media viewer messages (video + image)
@@ -98,7 +95,10 @@ pub enum Message {
     /// (from the settings window after a storage change).
     PrepareBatch(batch::Operation),
     /// A file of the running batch job is done (internal).
-    BatchItemDone { id: FileId, result: batch::ItemResult },
+    BatchItemDone {
+        id: FileId,
+        result: batch::ItemResult,
+    },
     /// The batch job ended, finished or cancelled (internal): the open file comes back.
     BatchFinished,
     /// Background load of comments the folder scan deferred (internal). `generation` ties the

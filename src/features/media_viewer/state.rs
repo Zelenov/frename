@@ -126,7 +126,9 @@ impl MediaViewerState {
     pub fn subscription(&self) -> Subscription<Message> {
         match self.active {
             ActiveMedia::Video => self.video.subscription().map(Message::Video),
-            ActiveMedia::Image | ActiveMedia::Unsupported | ActiveMedia::None => Subscription::none(),
+            ActiveMedia::Image | ActiveMedia::Unsupported | ActiveMedia::None => {
+                Subscription::none()
+            }
         }
     }
 }

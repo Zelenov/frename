@@ -14,7 +14,9 @@ mod tag_commented;
 
 use std::path::{Path, PathBuf};
 
-use frename_core::{CommentStorage, FileSnapshot, FileTagger, FolderInfo, InOutStorage, MoveOutcome};
+use frename_core::{
+    CommentStorage, FileSnapshot, FileTagger, FolderInfo, InOutStorage, MoveOutcome,
+};
 use iced::widget::{column, text};
 use iced::Element;
 
@@ -33,8 +35,13 @@ pub enum Action {
 
 impl Action {
     /// Every action, in list order.
-    pub const ALL: [Action; 5] =
-        [Action::MoveComments, Action::MoveInOut, Action::TagCommented, Action::FixTags, Action::ReloadFiles];
+    pub const ALL: [Action; 5] = [
+        Action::MoveComments,
+        Action::MoveInOut,
+        Action::TagCommented,
+        Action::FixTags,
+        Action::ReloadFiles,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -141,17 +148,30 @@ impl Actions {
 
 /// An action's panel as every action shows it: title, what it does, then its options.
 fn panel<'a, M: 'a>(title: &'a str, hint: String, options: Element<'a, M>) -> Element<'a, M> {
-    column![text(title).size(15), text(hint).size(12).color(theme::TEXT_MUTED), options]
-        .spacing(12)
-        .into()
+    column![
+        text(title).size(15),
+        text(hint).size(12).color(theme::TEXT_MUTED),
+        options
+    ]
+    .spacing(12)
+    .into()
 }
 
 /// The job's record of a file an action changed, failed on or left alone.
 fn item_result(outcome: MoveOutcome) -> ItemResult {
     match outcome {
-        MoveOutcome::NothingToMove => ItemResult { status: ItemStatus::Skipped, update: None },
-        MoveOutcome::Moved(new_path) => ItemResult { status: ItemStatus::Done, update: Some(reparsed(new_path)) },
-        MoveOutcome::Failed(new_path) => ItemResult { status: ItemStatus::Failed, update: Some(reparsed(new_path)) },
+        MoveOutcome::NothingToMove => ItemResult {
+            status: ItemStatus::Skipped,
+            update: None,
+        },
+        MoveOutcome::Moved(new_path) => ItemResult {
+            status: ItemStatus::Done,
+            update: Some(reparsed(new_path)),
+        },
+        MoveOutcome::Failed(new_path) => ItemResult {
+            status: ItemStatus::Failed,
+            update: Some(reparsed(new_path)),
+        },
     }
 }
 
