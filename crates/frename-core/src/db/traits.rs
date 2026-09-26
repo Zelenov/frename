@@ -3,7 +3,10 @@
 use uuid::Uuid;
 
 use crate::ai::SummaryLanguage;
-use crate::{CommentStorage, CueLength, FolderAndFile, InOutStorage, StoredTag, TagColorMapping};
+use crate::{
+    CommentStorage, CueLength, FolderAndFile, InOutStorage, MarkerStorage, StoredTag,
+    TagColorMapping,
+};
 
 /// Saved window position and size (logical pixels).
 #[derive(Debug, Clone, Copy)]
@@ -48,6 +51,8 @@ pub struct AppSettings {
     pub comment_storage: CommentStorage,
     /// Where in/out points are saved. Defaults to the file name.
     pub in_out_storage: InOutStorage,
+    /// Where clip markers are saved. Defaults to inside the video file.
+    pub marker_storage: MarkerStorage,
     /// Tag checked on videos that get a comment while comments are stored inside them; empty
     /// turns it off. Defaults to [`crate::DEFAULT_COMMENTED_TAG`].
     pub commented_tag: String,
@@ -75,6 +80,7 @@ impl Default for AppSettings {
             monochrome_tags: false,
             comment_storage: CommentStorage::default(),
             in_out_storage: InOutStorage::default(),
+            marker_storage: MarkerStorage::default(),
             commented_tag: crate::DEFAULT_COMMENTED_TAG.to_string(),
             commented_tag_enabled: true,
             space_after_tags: false,

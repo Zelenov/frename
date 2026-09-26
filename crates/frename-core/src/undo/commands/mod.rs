@@ -13,6 +13,7 @@ pub use create_tag::CreateTagCommand;
 pub use delete_tag::DeleteTagCommand;
 pub use marker::{
     AddMarkerCommand, DeleteMarkerCommand, SetMarkerColorCommand, SetMarkerDurationCommand,
+    SetMarkerSpanCommand,
 };
 pub use navigate_file::NavigateFileCommand;
 pub use paste_tags::PasteTagsCommand;

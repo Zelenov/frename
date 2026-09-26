@@ -3,7 +3,7 @@
 use clipscribe::{Model, MODELS};
 use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::ai::SummaryLanguage;
-use frename_core::{CommentStorage, CueLength, InOutStorage};
+use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage};
 use iced::widget::{
     button, checkbox, column, container, pick_list, radio, row, scrollable, text, text_input,
 };
@@ -14,7 +14,7 @@ use crate::theme;
 use super::state::{KeySection, LanguageList, OldSettingsImport};
 use super::{KeyMessage, Message, SettingsState};
 
-use crate::features::batch::Operation;
+use crate::features::batch::{MarkersDirection, Operation};
 use crate::features::updates;
 
 /// The settings' scrollable content, which "Describe with AI" and "Generate subtitles" open
@@ -134,11 +134,56 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
     .spacing(8);
     let in_out = section("In/out points", in_out_options.into());
 
+    let selected_markers = Some(settings.marker_storage);
+    let marker_offer = |storage: MarkerStorage| {
+        (state.marker_storage_changed() && settings.marker_storage == storage).then(|| {
+            let (label, direction) = match storage {
+                MarkerStorage::InVideo => (
+                    "Move existing markers from comments into the videos…",
+                    MarkersDirection::CommentToMarkers,
+                ),
+                MarkerStorage::Comment => (
+                    "Copy existing markers from the videos into comments…",
+                    MarkersDirection::MarkersToComment,
+                ),
+            };
+            move_offer(
+                "Files keep their markers where they are until moved.",
+                label,
+                Operation::MarkersComment(direction),
+            )
+        })
+    };
+    let marker_options = column![radio(
+        "Inside the video file (XMP, Premiere Pro shows them on the clip)",
+        MarkerStorage::InVideo,
+        selected_markers,
+        Message::SetMarkerStorage,
+    )]
+    .extend(marker_offer(MarkerStorage::InVideo))
+    .push(radio(
+        "In the comment, one line each (0:41–0:47 — Lion)",
+        MarkerStorage::Comment,
+        selected_markers,
+        Message::SetMarkerStorage,
+    ))
+    .extend(marker_offer(MarkerStorage::Comment))
+    .push(
+        text(
+            "Points and ranges alike. The moments Describe with AI finds go the same way: \
+             white markers, or the lines of its description.",
+        )
+        .size(12)
+        .color(theme::TEXT_MUTED),
+    )
+    .spacing(8);
+    let markers = section("Markers and ranges", marker_options.into());
+
     let updates = section(
         "Updates",
         updates::view::view(state.updates(), batch_running).map(Message::Updates),
     );
-    let mut sections = column![video, tags, comments, in_out, updates].spacing(20);
+    let mut sections = column![video, tags, comments, markers, in_out, updates].spacing(20);
     // Only a package keeps its settings away from the exe; elsewhere they are next to it.
     if state.updates().installed() {
         sections = sections.push(section(

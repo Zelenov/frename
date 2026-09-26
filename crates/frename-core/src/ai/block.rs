@@ -75,6 +75,11 @@ pub fn ai_block(comment: &str) -> Option<&str> {
     find(comment).map(|range| &comment[range])
 }
 
+/// Byte range of the comment's AI block (see [`ai_block`]).
+pub fn ai_block_range(comment: &str) -> Option<Range<usize>> {
+    find(comment)
+}
+
 /// Whether the comment holds text of the editor's, not just an AI block. Does not allocate:
 /// the folder list asks this for every file.
 pub fn has_editor_comment(comment: &str) -> bool {
@@ -126,6 +131,29 @@ pub fn format_block(description: &Description) -> String {
     block
 }
 
+/// The block with the summary only, for when the moments go into the video as markers.
+pub fn format_summary_block(description: &Description) -> String {
+    format!("{START}{}", one_line(&description.summary))
+}
+
+/// The description's segments as markers hold them: whole milliseconds, one-line names.
+pub fn segment_lines(description: &Description) -> Vec<crate::MarkerLine> {
+    let ms = |seconds: f64| (seconds.max(0.0) * 1000.0).round() as u64;
+    description
+        .segments
+        .iter()
+        .map(|segment| {
+            let start_ms = ms(segment.start_s);
+            crate::MarkerLine {
+                start_ms,
+                duration_ms: ms(segment.end_s).saturating_sub(start_ms),
+                name: one_line(&segment.description),
+                comment: String::new(),
+            }
+        })
+        .collect()
+}
+
 /// `text` with every run of white space (line breaks included) turned into one space.
 fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
@@ -152,6 +180,23 @@ mod tests {
     #[test]
     fn format_writes_the_summary_first_and_collapses_line_breaks() {
         assert_eq!(format_block(&description()), BLOCK);
+    }
+
+    #[test]
+    fn the_segments_become_marker_lines_and_the_summary_a_block_of_its_own() {
+        assert_eq!(
+            format_summary_block(&description()),
+            "AI: A guide leads tourists."
+        );
+        assert_eq!(
+            segment_lines(&description()),
+            [crate::MarkerLine {
+                start_ms: 0,
+                duration_ms: 14_200,
+                name: "Entrance.".to_string(),
+                comment: String::new(),
+            }]
+        );
     }
 
     #[test]

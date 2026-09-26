@@ -14,7 +14,7 @@ use clipscribe::{
 };
 use frename_core::ai::block;
 use frename_core::ai::key::{self, KeyState};
-use frename_core::{File, FileId, FileKind, FileTagger, FolderInfo};
+use frename_core::{File, FileId, FileKind, FileTagger, FolderInfo, MarkerStorage};
 use iced::widget::{button, checkbox, column, row, text};
 use iced::{Element, Length};
 
@@ -439,7 +439,9 @@ pub fn probe_all(clips: Vec<(FileId, PathBuf)>) -> Vec<(FileId, Probe)> {
     })
 }
 
-/// Describe the video at `path` and write the description into its comment.
+/// Describe the video at `path` and write the description into its comment, and its moments
+/// into the video as markers while markers are kept there (Settings), where Premiere Pro shows
+/// them on the clip; with markers kept in comments, into the comment too.
 pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress) -> ItemResult {
     let is_video = path
         .extension()
@@ -515,7 +517,25 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
     };
     let usage = Some(described.usage);
     progress.set(0.98, "saving");
-    let new_block = block::format_block(&described.description);
+    let new_block = match frename_core::marker_storage() {
+        MarkerStorage::Comment => block::format_block(&described.description),
+        MarkerStorage::InVideo => {
+            // Markers first, before the comment's save may rename the file.
+            let segments = block::segment_lines(&described.description);
+            match FileTagger::save_ai_markers(path, &segments) {
+                Ok(()) => block::format_summary_block(&described.description),
+                // A format without markers, or a file in use: the moments go into the
+                // comment instead, so the paid answer is not lost.
+                Err(e) => {
+                    log::warn!(
+                        "ai: moments of {} not written as markers: {e}",
+                        path.display()
+                    );
+                    block::format_block(&described.description)
+                }
+            }
+        }
+    };
     snapshot.set_comment(block::replace_block(snapshot.comment(), &new_block));
     let new_path = FileTagger::save(&snapshot, path);
     log::info!(

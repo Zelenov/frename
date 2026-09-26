@@ -207,6 +207,7 @@ impl FolderWorkspace {
                 }
                 other => {
                     let task = self.media_viewer.update(other).map(Message::MediaViewer);
+                    self.grow_held_marker();
                     Task::batch([task, self.follow_marker_list(false)])
                 }
             },
@@ -647,9 +648,6 @@ impl FolderWorkspace {
                 | Message::SetSegmentEnd
                 | Message::FocusSearchBarAndKey(_)
                 | Message::ScreenshotTaken(..)
-                | Message::MediaViewer(media_viewer::Message::Video(
-                    media_viewer_video::Message::Markers(..)
-                ))
                 | Message::Folder(
                     folder::Message::StartRename(_)
                         | folder::Message::RenameInput(_)
@@ -657,6 +655,17 @@ impl FolderWorkspace {
                 )
         );
         if edits_open_file && self.batch.is_active() {
+            return true;
+        }
+        // The video and its marker list stay in batch mode, unlike the tags: markers are off
+        // only while a job runs (the job has closed the file then).
+        let edits_markers = matches!(
+            message,
+            Message::MediaViewer(media_viewer::Message::Video(
+                media_viewer_video::Message::Markers(..)
+            ))
+        );
+        if edits_markers && self.batch.is_running() {
             return true;
         }
         let changes_files = matches!(
@@ -971,10 +980,18 @@ impl FolderWorkspace {
         };
 
         // Markers first, while the file still has the path they were read from; they travel
-        // with it through the rename.
-        let markers_saved = match snapshot.markers() {
-            Some(markers) => self.save_markers(id, &current_path, markers),
-            None => Task::none(),
+        // with it through the rename. Kept in the comment, they go back into it as lines.
+        let mut snapshot = snapshot;
+        let markers_saved = match (snapshot.markers(), frename_core::marker_storage()) {
+            (Some(markers), frename_core::MarkerStorage::Comment) => {
+                let comment = frename_core::markers_into_comment(snapshot.comment(), markers);
+                snapshot.set_comment(comment);
+                Task::none()
+            }
+            (Some(markers), frename_core::MarkerStorage::InVideo) => {
+                self.save_markers(id, &current_path, markers)
+            }
+            (None, _) => Task::none(),
         };
         let path_before = current_path.clone();
         let (new_path, snapshot_after_save) = snapshot.save_and_reparse(&current_path);
@@ -2747,6 +2764,13 @@ mod tests {
         workspace
     }
 
+    /// Typing `text` into the open marker row's name field.
+    fn type_name(text: &str) -> crate::features::markers::Message {
+        crate::features::markers::Message::NameAction(iced::widget::text_editor::Action::Edit(
+            iced::widget::text_editor::Edit::Paste(std::sync::Arc::new(text.to_string())),
+        ))
+    }
+
     fn marker_names(workspace: &FolderWorkspace) -> Vec<(u64, String)> {
         workspace
             .file_workspace()
@@ -2767,11 +2791,13 @@ mod tests {
         assert!(workspace.markers().is_editing());
 
         // As the name field sends it: through the video, with no task run afterwards.
-        for name in ["a", "as", "asa"] {
+        for letter in ['a', 's', 'a'] {
             let _ = workspace.update(Message::MediaViewer(
                 crate::features::media_viewer::Message::Video(
-                    crate::features::media_viewer::video::Message::Markers(M::NameInput(
-                        name.to_string(),
+                    crate::features::media_viewer::video::Message::Markers(M::NameAction(
+                        iced::widget::text_editor::Action::Edit(
+                            iced::widget::text_editor::Edit::Insert(letter),
+                        ),
                     )),
                 ),
             ));
@@ -2790,7 +2816,7 @@ mod tests {
         // A second F2 right away opens the marker just added instead of adding one.
         send_marker(&mut workspace, M::Add, 1_300);
         assert!(workspace.markers().is_editing());
-        send_marker(&mut workspace, M::NameInput("Take 3".to_string()), 1_300);
+        send_marker(&mut workspace, type_name("Take 3"), 1_300);
         // Keys of the workspace are off while the row is open: undo would remove the marker.
         let _ = workspace.update(Message::Undo);
         assert_eq!(marker_names(&workspace), [(1_000, "Take 3".to_string())]);
@@ -2807,6 +2833,140 @@ mod tests {
             .map(|m| (m.start_ms, m.name.as_str()))
             .collect();
         assert_eq!(saved, [(1_000, "Take 3"), (5_000, "")]);
+    }
+
+    fn marker_spans(workspace: &FolderWorkspace) -> Vec<(u64, u64)> {
+        workspace
+            .file_workspace()
+            .markers()
+            .unwrap_or_default()
+            .iter()
+            .map(|m| (m.start_ms, m.duration_ms))
+            .collect()
+    }
+
+    #[test]
+    fn a_short_f2_press_stays_a_point_and_f2_again_names_it() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::KeyDown, 1_000);
+        send_marker(&mut workspace, M::KeyUp, 1_300);
+        assert_eq!(marker_spans(&workspace), [(1_000, 0)]);
+        send_marker(&mut workspace, M::KeyDown, 1_400);
+        send_marker(&mut workspace, M::KeyUp, 1_500);
+        assert!(workspace.markers().is_editing());
+        assert_eq!(marker_spans(&workspace), [(1_000, 0)]);
+    }
+
+    #[test]
+    fn a_held_f2_draws_a_range_that_undoes_and_redoes_whole() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::KeyDown, 41_000);
+        workspace
+            .markers
+            .backdate_recording(crate::features::markers::state_for_tests::RANGE_HOLD);
+        send_marker(&mut workspace, M::KeyUp, 47_000);
+        assert_eq!(marker_spans(&workspace), [(41_000, 6_000)]);
+        // Right after the release, F2 names the range.
+        send_marker(&mut workspace, M::KeyDown, 47_100);
+        send_marker(&mut workspace, M::KeyUp, 47_100);
+        assert!(workspace.markers().is_editing());
+        send_marker(&mut workspace, M::Close, 47_100);
+
+        let _ = workspace.update(Message::Undo);
+        assert!(marker_spans(&workspace).is_empty());
+        let _ = workspace.update(Message::Redo);
+        assert_eq!(marker_spans(&workspace), [(41_000, 6_000)]);
+    }
+
+    #[test]
+    fn a_long_press_without_the_playhead_moving_stays_a_point() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::KeyDown, 2_000);
+        workspace
+            .markers
+            .backdate_recording(crate::features::markers::state_for_tests::RANGE_HOLD);
+        send_marker(&mut workspace, M::KeyUp, 2_000);
+        assert_eq!(marker_spans(&workspace), [(2_000, 0)]);
+    }
+
+    #[test]
+    fn dragging_a_range_s_ends_swaps_them_and_together_makes_a_point() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::AddRange(47_000, 41_000), 0);
+        assert_eq!(marker_spans(&workspace), [(41_000, 6_000)]);
+        let guid = workspace.file_workspace().markers().unwrap()[0]
+            .guid
+            .clone()
+            .unwrap();
+        // The start dragged past the end: the ends swap.
+        send_marker(&mut workspace, M::SetSpan(guid.clone(), 50_000, 47_000), 0);
+        assert_eq!(marker_spans(&workspace), [(47_000, 3_000)]);
+        // Ends within 100 ms of each other: a point.
+        send_marker(&mut workspace, M::SetSpan(guid.clone(), 47_000, 47_050), 0);
+        assert_eq!(marker_spans(&workspace), [(47_000, 0)]);
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_spans(&workspace), [(47_000, 3_000)]);
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_spans(&workspace), [(41_000, 6_000)]);
+        let _ = workspace.update(Message::Undo);
+        assert!(marker_spans(&workspace).is_empty());
+    }
+
+    #[test]
+    fn a_white_ai_range_read_from_the_file_takes_a_new_color_and_keeps_it() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let mut ai = frename_core::Marker::new(3_000);
+        ai.duration_ms = 3_000;
+        ai.color = frename_core::AI_MARKER_COLOR;
+        ai.name = "Close-up of a sign".to_string();
+        let guid = ai.guid.clone().unwrap();
+        frename_core::FileTagger::save_markers(
+            &test_dir.target_file(),
+            &[ai],
+            &std::collections::HashSet::new(),
+        )
+        .expect("written");
+        let _ = workspace.update(Message::OpenFile(test_dir.file_path("file_0.mp4")));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::OpenFile(test_dir.target_file()));
+        flush_file_opened(&mut workspace);
+        assert_eq!(marker_spans(&workspace), [(3_000, 3_000)]);
+
+        send_marker(&mut workspace, M::ToggleColorPicker(guid.clone()), 0);
+        send_marker(
+            &mut workspace,
+            M::SetColor(guid.clone(), frename_core::MarkerColor::Red),
+            0,
+        );
+        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        let saved = frename_core::FileTagger::load_markers(&test_dir.target_file()).expect("saved");
+        assert_eq!(saved[0].color, frename_core::MarkerColor::Red);
+    }
+
+    #[test]
+    fn markers_can_be_edited_in_batch_mode_when_no_job_runs() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        assert!(workspace.batch.is_active());
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Video(
+                crate::features::media_viewer::video::Message::Markers(M::Add),
+            ),
+        ));
+        assert_eq!(marker_names(&workspace).len(), 1);
     }
 
     #[test]
@@ -2854,7 +3014,7 @@ mod tests {
             .clone()
             .unwrap();
         send_marker(&mut workspace, M::Open(guid), 1_000);
-        send_marker(&mut workspace, M::NameInput("after".to_string()), 1_000);
+        send_marker(&mut workspace, type_name("after"), 1_000);
         // The refresh opens the same file under its new name: nothing is read from disk again.
         flush_file_opened(&mut workspace);
         assert!(workspace
