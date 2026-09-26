@@ -9,14 +9,14 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
+use clipscribe::{
+    self as describe, AiError, AiUsage, Model, Stage, SummaryLanguage, MAX_DURATION_S,
+};
 use frename_core::ai::block;
 use frename_core::ai::key::{self, KeyState};
 use frename_core::{File, FileId, FileKind, FileTagger, FolderInfo};
 use iced::widget::{button, checkbox, column, row, text};
 use iced::{Element, Length};
-use video_describe::{
-    self as describe, AiError, AiUsage, Model, Stage, SummaryLanguage, MAX_DURATION_S,
-};
 
 use super::super::{ItemProgress, ItemResult, ItemStatus};
 use super::ActionMessage;
@@ -462,18 +462,10 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
     };
     // A debug build renames in memory only: the clip and its subtitles are read by the name on disk.
     let on_disk = FileTagger::disk_path(path);
-    let subtitles: Vec<describe::Cue> = frename_core::load_subtitles(&on_disk)
-        .map(|s| {
-            s.cues()
-                .iter()
-                .map(|cue| describe::Cue {
-                    start: cue.start,
-                    end: cue.end,
-                    text: cue.text.clone(),
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    let subtitles = describe::srt::load_for(&on_disk).unwrap_or_else(|e| {
+        log::warn!("ai: subtitles of {} not read: {e}", path.display());
+        Vec::new()
+    });
     let describe_options = describe::Options {
         api_key,
         model: options.model(),

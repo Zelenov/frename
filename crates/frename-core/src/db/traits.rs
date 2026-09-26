@@ -58,7 +58,7 @@ pub struct AppSettings {
     /// The language AI descriptions are written in. Defaults to the subtitles' language.
     pub summary_language: SummaryLanguage,
     /// The id of the model AI descriptions are written with (see
-    /// [`video_describe::Model::from_id`]). Defaults to the cheapest.
+    /// [`clipscribe::Model::from_id`]). Defaults to the cheapest.
     pub ai_model: String,
 }
 
@@ -73,7 +73,7 @@ impl Default for AppSettings {
             commented_tag_enabled: true,
             space_after_tags: false,
             summary_language: SummaryLanguage::default(),
-            ai_model: video_describe::MODELS[0].id.to_string(),
+            ai_model: clipscribe::MODELS[0].id.to_string(),
         }
     }
 }

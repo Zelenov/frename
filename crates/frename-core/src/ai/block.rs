@@ -17,7 +17,7 @@
 
 use std::ops::Range;
 
-use video_describe::{format_time, Description};
+use clipscribe::{format_time, Description};
 
 /// What starts the block's first line, before the summary.
 const START: &str = "AI: ";
@@ -134,7 +134,7 @@ fn one_line(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use video_describe::Segment;
+    use clipscribe::Segment;
 
     const BLOCK: &str = "AI: A guide leads tourists.\n0:00–0:14 Entrance.";
 

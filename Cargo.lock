@@ -712,6 +712,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "clipscribe"
+version = "0.1.0"
+source = "git+https://github.com/Zelenov/clipscribe?rev=57623d2022dc44639367722296db98f2b0382a02#57623d2022dc44639367722296db98f2b0382a02"
+dependencies = [
+ "base64 0.22.1",
+ "gstreamer",
+ "gstreamer-app",
+ "gstreamer-video",
+ "image",
+ "log",
+ "reqwest",
+ "serde_json",
+ "url",
+]
+
+[[package]]
 name = "cmake"
 version = "0.1.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1423,6 +1439,7 @@ name = "frename"
 version = "0.1.0"
 dependencies = [
  "arboard",
+ "clipscribe",
  "dirs",
  "frename-core",
  "gstreamer",
@@ -1440,7 +1457,6 @@ dependencies = [
  "ureq",
  "url",
  "velopack",
- "video-describe",
  "windows-sys 0.61.2",
  "winres",
 ]
@@ -1449,6 +1465,7 @@ dependencies = [
 name = "frename-core"
 version = "0.1.0"
 dependencies = [
+ "clipscribe",
  "indexmap",
  "keyring",
  "log",
@@ -1459,7 +1476,6 @@ dependencies = [
  "tokio",
  "toml 1.1.6+spec-1.1.0",
  "uuid",
- "video-describe",
  "xmp_toolkit",
 ]
 
@@ -5675,21 +5691,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "video-describe"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "gstreamer",
- "gstreamer-app",
- "gstreamer-video",
- "image",
- "log",
- "reqwest",
- "serde_json",
- "url",
-]
 
 [[package]]
 name = "wait-timeout"

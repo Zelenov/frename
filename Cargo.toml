@@ -7,7 +7,7 @@ authors = ["Your Name <your.email@example.com>"]
 description = "File renaming utility for Windows"
 
 [workspace]
-members = [".", "crates/frename-core", "crates/video-describe"]
+members = [".", "crates/frename-core"]
 
 [features]
 # HEIC/HEIF decoding (requires cmake; install cmake then `cargo build --features heic`)
@@ -16,8 +16,9 @@ heic = ["dep:libheif-rs"]
 [dependencies]
 # Core logic crate
 frename-core = { path = "crates/frename-core" }
-# Describing clips with Claude: frames and subtitles in, a summary and key moments out
-video-describe = { path = "crates/video-describe" }
+# Describing clips with Claude: frames and subtitles in, a summary and key moments out.
+# Pinned to a commit of Zelenov/clipscribe; the library with frames, without its command line.
+clipscribe = { git = "https://github.com/Zelenov/clipscribe", rev = "57623d2022dc44639367722296db98f2b0382a02", default-features = false, features = ["frames"] }
 
 # GUI framework - Iced for cross-platform GUI
 iced = { version = "0.14", features = ["tokio", "image"] }

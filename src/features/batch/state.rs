@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use clipscribe::AiUsage;
 use frename_core::{File, FileId, FileSnapshot};
-use video_describe::AiUsage;
 
 use super::actions::Actions;
 use super::{Action, Message, Operation};
@@ -401,7 +401,7 @@ impl BatchState {
     }
 
     /// The model the current job's AI requests go to.
-    pub fn job_ai_model(&self) -> video_describe::Model {
+    pub fn job_ai_model(&self) -> clipscribe::Model {
         self.job
             .as_ref()
             .map(|job| job.operation.ai_model())

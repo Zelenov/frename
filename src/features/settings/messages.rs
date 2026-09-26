@@ -2,10 +2,10 @@
 
 use std::path::PathBuf;
 
+use clipscribe::Model;
 use frename_core::ai::key::KeyState;
 use frename_core::ai::SummaryLanguage;
 use frename_core::{CommentStorage, InOutStorage};
-use video_describe::Model;
 
 use crate::features::batch::Operation;
 use crate::features::updates;
