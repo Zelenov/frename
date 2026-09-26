@@ -42,6 +42,36 @@ jobs:
       - name: Test
         run: cargo test --workspace --locked
 
+      - name: Build app
+        run: cargo build --locked
+
+      - name: Install virtual display
+        run: sudo apt-get install -y xvfb imagemagick mesa-vulkan-drivers
+
+      # Decodes a frame of each clip through the player's own pipeline, with no window.
+      - name: Self-test
+        run: |
+          xvfb-run -a ./target/debug/frename --self-test \
+            "tests/folder/file_example_MP4_480_1_5MG.mp4" \
+            "tests/folder/file_example_MOV_480_700kB.mov" \
+            "tests/folder/Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm"
+
+      - name: Screenshot of the main window
+        run: |
+          Xvfb :99 -screen 0 1600x900x24 &
+          sleep 2
+          (cd tests/folder && DISPLAY=:99 ../../target/debug/frename > ../../app.log 2>&1 &)
+          sleep 15
+          DISPLAY=:99 import -window root screenshot-main-window.png
+          pkill frename || true
+          tail -n 20 app.log
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-main-window-${{ github.sha }}
+          path: screenshot-main-window.png
+          retention-days: 14
+
   windows:
     name: ci-windows
     runs-on: windows-2022

@@ -13,6 +13,7 @@ use std::fs::File;
 mod app;
 mod crash_guard;
 mod features;
+mod self_test;
 mod tag_colors;
 mod theme;
 mod widgets;
@@ -93,6 +94,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    if let Some(paths) = self_test_paths(&args) {
+        std::process::exit(self_test::run(&paths));
+    }
+
     // Initialize app database (migrations) before iced; decorator logs.
     let _ = LoggingAppStateStore::new(AppDatabase::new()).initialize();
 
@@ -143,4 +148,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .run()?;
 
     std::process::exit(0);
+}
+
+/// The paths after `--self-test`, when the app was started to test its GStreamer.
+fn self_test_paths(args: &[String]) -> Option<Vec<std::path::PathBuf>> {
+    let at = args.iter().position(|a| a == "--self-test")?;
+    Some(
+        args[at + 1..]
+            .iter()
+            .take_while(|a| !a.starts_with("--"))
+            .map(Into::into)
+            .collect(),
+    )
 }

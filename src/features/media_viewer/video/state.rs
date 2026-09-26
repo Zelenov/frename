@@ -468,7 +468,7 @@ fn open_pipeline(uri: &url::Url, relabel_framerate: bool) -> Result<Video, Video
 }
 
 /// The `playbin` description, optionally rewriting the framerate on the way to the sink.
-fn description(uri: &url::Url, relabel_framerate: bool) -> String {
+pub(crate) fn description(uri: &url::Url, relabel_framerate: bool) -> String {
     // capssetter has to sit behind the NV12 filter, not in front of it: offering its own
     // framerate to a filter that then has to negotiate it upstream collapses the whole
     // graph with "internal data stream error" — including on files that were fine.
@@ -501,7 +501,9 @@ fn preroll(pipeline: &gst::Pipeline) -> Result<(), VideoError> {
 }
 
 /// Pull the two appsinks that `Video::from_gst_pipeline` expects out of the playbin.
-fn sinks(pipeline: &gst::Pipeline) -> Result<(gst_app::AppSink, gst_app::AppSink), VideoError> {
+pub(crate) fn sinks(
+    pipeline: &gst::Pipeline,
+) -> Result<(gst_app::AppSink, gst_app::AppSink), VideoError> {
     // playbin wraps the video-sink description in a bin and exposes it through a
     // GhostPad, so the appsink has to be looked up by name inside that bin.
     let video_sink: gst::Element = pipeline.property("video-sink");
