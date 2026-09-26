@@ -181,7 +181,7 @@ jobs:
         shell: pwsh
         run: |
           dotnet tool install vpk --version $env:VPK_VERSION --tool-path C:\vpk
-          C:\vpk\vpk.exe pack -u frename -v 0.0.0 -p dist\frename -e frename.exe -o releases --packTitle frename --icon frename-icon.ico
+          C:\vpk\vpk.exe pack -u frename -v 0.0.1 -p dist\frename -e frename.exe -o releases --packTitle frename --icon frename-icon.ico
           if ($LASTEXITCODE -ne 0) { throw "vpk pack failed" }
           Get-ChildItem releases | Format-Table Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
 
