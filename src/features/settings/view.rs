@@ -1,16 +1,19 @@
 //! UI for the settings window.
 
 use frename_core::{CommentStorage, InOutStorage};
-use iced::widget::{button, checkbox, column, container, radio, row, text, text_input};
+use iced::widget::{button, checkbox, column, container, radio, row, scrollable, text, text_input};
 use iced::{Element, Length};
 
 use crate::theme;
 
+use super::state::OldSettingsImport;
 use super::{Message, SettingsState};
 use crate::features::batch::Operation;
+use crate::features::updates;
 
 /// Render the settings window: one titled section per area, one control per setting.
-pub fn view(state: &SettingsState) -> Element<'_, Message> {
+/// `batch_running` holds back **Update and restart** while a batch job writes files.
+pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> {
     let settings = state.settings();
 
     let video = section(
@@ -121,12 +124,47 @@ pub fn view(state: &SettingsState) -> Element<'_, Message> {
     .spacing(8);
     let in_out = section("In/out points", in_out_options.into());
 
-    container(column![video, tags, comments, in_out].spacing(20))
-        .padding(20)
+    let updates = section(
+        "Updates",
+        updates::view::view(state.updates(), batch_running).map(Message::Updates),
+    );
+    let mut sections = column![video, tags, comments, in_out, updates].spacing(20);
+    // Only a package keeps its settings away from the exe; elsewhere they are next to it.
+    if state.updates().installed() {
+        sections = sections.push(section(
+            "Settings from an older frename",
+            old_settings_import(state.old_settings_import()),
+        ));
+    }
+
+    // The window is not resizable: whatever does not fit scrolls.
+    container(scrollable(container(sections).padding(20)).style(theme::dark_scrollable_style))
         .width(Length::Fill)
         .height(Length::Fill)
         .style(theme::main_container_style)
         .into()
+}
+
+/// The way back when the first-start search missed the zip version's folder.
+fn old_settings_import(import: &OldSettingsImport) -> Element<'_, Message> {
+    let note = match import {
+        OldSettingsImport::None => String::new(),
+        OldSettingsImport::Scheduled(_) => {
+            "Settings will be imported when frename restarts".to_string()
+        }
+        OldSettingsImport::NotFound(folder) => {
+            format!("No frename.exe with a frename.db in {}", folder.display())
+        }
+        OldSettingsImport::Failed(reason) => format!("Could not import: {reason}"),
+    };
+    row![
+        button(text("Import from an old frename folder…").size(13))
+            .on_press(Message::ImportOldSettings),
+        text(note).size(13).color(theme::TEXT_MUTED),
+    ]
+    .spacing(10)
+    .align_y(iced::Alignment::Center)
+    .into()
 }
 
 /// The tag for videos with a comment, shown while comments are inside the video: a comment inside the

@@ -398,3 +398,28 @@ explicitly.
 4. **Start-up check default.** *Recommended:* on, at most once a day, never downloads by itself.
 5. **Keep `GSTREAMER_SETUP.md`?** *Recommended:* keep it only for building from source; the release
    no longer ships it.
+
+## Implementation notes
+
+Where the implementation (PR #22) differs from the text above, and why:
+
+- **Open questions** were answered with the recommendations: automatic search plus the Settings
+  import button, the gear dot, data removed on uninstall, one PR and one release for everything.
+- **GStreamer package.** From 1.28 the official Windows package is one Inno Setup `.exe` with
+  runtime and development files; there are no MSIs. `packaging/windows/install-gstreamer.ps1`
+  runs it with `/portable=1 /CURRENTUSER /TYPE=devel`, which writes no environment variables and
+  no registry keys, pinned to 1.28.7 by SHA-256. The smoke test's "older system GStreamer" is the
+  1.26.10 MSI, installed with `ADDLOCAL=ALL` as users did.
+- **`capssetter`** moved from `debugutilsbad` to the `debug` plugin (plugins-good) in 1.28; the
+  self-test's element check found it missing. The allowlist has `debug`.
+- **Test clips** are 320x240, not "a few KB": hardware decoders (D3D11/D3D12 on a machine with a
+  GPU) refuse 160x90 AV1, HEVC and VP9 frames, which made the self-test fail on a desktop while
+  it would have passed on a GPU-less runner.
+- **Import dialog.** `rfd` shows a plain `MessageBoxW` unless the exe has a Common Controls v6
+  manifest, so custom button labels are not available: the dialog is Yes (import) / No (start
+  fresh) / Cancel (ask again), with the meaning in its text. Because a normal start creates the
+  database, "ask again" is a marker file in the data folder.
+- **Update check state** is its own table (`update_check`, migration 9), not columns of
+  `app_settings`: it is written by the check, not by the Settings controls.
+- **Measured size** (1.28.7): the bundle is 73.6 MB in 275 files (26 plugins, 40 DLLs);
+  `frename-win-Setup.exe` 38.6 MB, the portable zip and the full `.nupkg` 31.4 MB.

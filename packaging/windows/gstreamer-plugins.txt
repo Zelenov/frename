@@ -1,0 +1,42 @@
+# GStreamer plugins bundled with frename on Windows, one per line: `name` is
+# lib\gstreamer-1.0\gst<name>.dll of the official MSVC x86_64 package. The DLLs they need are
+# found by packaging/windows/bundle.ps1, not listed here. No GPL parts (no x264/x265, no ugly).
+# A new format frename should play needs its plugin here and a clip in tests/media.
+
+# Core and base: playbin, file source, type finding, appsink, conversion, volume
+coreelements
+playback
+typefindfunctions
+app
+videoconvertscale
+audioconvert
+audioresample
+volume
+pbtypes
+
+# Sound out (autoaudiosink picks one)
+autodetect
+wasapi2
+wasapi
+directsound
+
+# Containers and parsers: MP4/MOV, MKV/WebM, AVI
+isomp4
+matroska
+avi
+audioparsers
+videoparsersbad
+
+# capssetter, for clips without a fixed frame rate (the player's retry pipeline); in
+# debugutilsbad before GStreamer 1.28
+debug
+
+# Decoders: FFmpeg (H.264, HEVC, VP8, VP9, MPEG-4, AAC, ...), hardware D3D11, AV1, Opus,
+# Vorbis, MP3, JPEG
+libav
+d3d11
+dav1d
+opus
+vorbis
+mpg123
+jpeg

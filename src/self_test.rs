@@ -13,11 +13,31 @@ use crate::features::media_viewer::video::check_decodes;
 /// How long an opened clip may take to deliver its first frame.
 const FRAME_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// Elements the Windows bundle must have: a plugin that fails to load is dropped silently, and
+/// these cover the containers and codecs frename is expected to play.
+#[cfg(windows)]
+const REQUIRED_ELEMENTS: [&str; 10] = [
+    "playbin",
+    "qtdemux",
+    "matroskademux",
+    "avidemux",
+    "capssetter",
+    "avdec_h264",
+    "avdec_h265",
+    "avdec_aac",
+    "dav1ddec",
+    "opusdec",
+];
+
 /// Run the self-test on `paths` (videos, or folders whose videos are all tested) and return the
 /// process exit code: 0 when every video decoded a frame, 1 otherwise, including when there are
 /// no videos at all. The report goes to the log, which prints on the terminal (CI reads it there)
 /// and to the log file (a release build on Windows has no console).
 pub fn run(paths: &[PathBuf]) -> i32 {
+    #[cfg(windows)]
+    let missing_elements = missing_elements();
+    #[cfg(not(windows))]
+    let missing_elements = 0;
     let mut videos = Vec::new();
     for path in paths {
         if path.is_dir() {
@@ -51,7 +71,24 @@ pub fn run(paths: &[PathBuf]) -> i32 {
         videos.len() - failed,
         videos.len()
     );
-    i32::from(failed > 0)
+    i32::from(failed > 0 || missing_elements > 0)
+}
+
+/// Log each required element GStreamer does not have, and return how many there are.
+#[cfg(windows)]
+fn missing_elements() -> usize {
+    if let Err(e) = gstreamer::init() {
+        log::error!("self-test: GStreamer does not start: {e}");
+        return REQUIRED_ELEMENTS.len();
+    }
+    let missing: Vec<&str> = REQUIRED_ELEMENTS
+        .into_iter()
+        .filter(|name| gstreamer::ElementFactory::find(name).is_none())
+        .collect();
+    for name in &missing {
+        log::error!("self-test: MISSING element {name}");
+    }
+    missing.len()
 }
 
 /// The videos in `folder`, sorted so the report reads the same on every run.
@@ -126,11 +163,8 @@ mod tests {
         assert_eq!(run(&[repo().join("tests/folder/no such clip.mp4")]), 1);
     }
 
-    /// Linux only, like the decoding tests below: the Windows CI job builds against the vendored
-    /// build-only GStreamer, which has no H.264 or Matroska decoders
-    /// (`docs/research/windows-installer.md`); Windows decoding is tested once the app bundles
-    /// its own GStreamer (#10).
-    #[cfg(target_os = "linux")]
+    /// Linux and Windows, like the decoding tests below: both CI jobs have a full GStreamer.
+    #[cfg(any(target_os = "linux", windows))]
     #[test]
     fn the_ci_clips_decode_a_frame() {
         let clips = ci_clips();
@@ -138,7 +172,15 @@ mod tests {
         assert_eq!(run(&clips), 0);
     }
 
-    #[cfg(target_os = "linux")]
+    /// The clips the Windows installer test plays: one per container and codec the bundle
+    /// carries plugins for (`tests/media/README.md`).
+    #[cfg(windows)]
+    #[test]
+    fn the_windows_media_fixtures_decode_a_frame() {
+        assert_eq!(run(&[repo().join("tests/media")]), 0);
+    }
+
+    #[cfg(any(target_os = "linux", windows))]
     #[test]
     fn a_folder_of_good_clips_passes() {
         let folder = temp_folder("folder");
@@ -148,7 +190,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&folder);
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     #[test]
     fn a_file_that_is_not_a_video_fails() {
         let folder = temp_folder("garbage");

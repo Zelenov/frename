@@ -15,6 +15,7 @@ jobs:
     outputs:
       tag: ${{ steps.vars.outputs.tag }}
       version: ${{ steps.vars.outputs.version }}
+      package_version: ${{ steps.vars.outputs.package_version }}
       name: ${{ steps.vars.outputs.name }}
       draft: ${{ steps.vars.outputs.draft }}
       should_build: ${{ steps.vars.outputs.should_build }}
@@ -50,6 +51,12 @@ jobs:
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # Velopack needs 3-part versions: 0.68 -> 0.68.0; 0.68.1 stays.
+          case "$VERSION" in
+            *.*.*) PACKAGE_VERSION="$VERSION" ;;
+            *) PACKAGE_VERSION="$VERSION.0" ;;
+          esac
+          echo "package_version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "draft=$DRAFT" >> "$GITHUB_OUTPUT"
           echo "should_build=$SHOULD_BUILD" >> "$GITHUB_OUTPUT"
@@ -71,6 +78,12 @@ jobs:
     runs-on: windows-2022
     permissions:
       contents: read
+    env:
+      # The GStreamer bundled with frename, and Velopack's packer (matches the crate): as ci.yml.
+      GST_VERSION: 1.28.7
+      GST_SHA256: 032fc6062b8539838fc8da22589cb9b24c5d820baa7f8cc160af9ea08395badf
+      VPK_VERSION: 1.2.158
+      PACKAGE_VERSION: ${{ needs.prepare.outputs.package_version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -82,88 +95,78 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
 
-      - name: Restore vendored GStreamer directory
-        shell: powershell
-        run: |
-          $ErrorActionPreference = "Stop"
-          $gstRoot = Join-Path $env:GITHUB_WORKSPACE "vendor\gstreamer\minimal_msvc_x86_64"
-          if (Test-Path $gstRoot) {
-            Write-Host "Vendored GStreamer already present: $gstRoot"
-            exit 0
-          }
+      - uses: actions/cache@v4
+        with:
+          path: C:\gst-download
+          key: gstreamer-msvc-x86_64-${{ env.GST_VERSION }}
 
-          $zipPath = Join-Path $env:GITHUB_WORKSPACE "gstreamer-minimal-msvc-x86_64.zip"
-          if (!(Test-Path $zipPath)) {
-            Write-Error "Vendored GStreamer not found at '$gstRoot' and archive missing at '$zipPath'. Commit either the folder or the zip archive."
-          }
-
-          $targetBase = Join-Path $env:GITHUB_WORKSPACE "vendor\gstreamer"
-          New-Item -ItemType Directory -Path $targetBase -Force | Out-Null
-          Expand-Archive -Path $zipPath -DestinationPath $targetBase -Force
-
-          if (!(Test-Path $gstRoot)) {
-            Write-Error "Archive extracted, but '$gstRoot' still does not exist."
-          }
-          Write-Host "Restored vendored GStreamer from archive."
-
-      - name: Configure local vendored GStreamer
-        shell: powershell
-        run: |
-          $ErrorActionPreference = "Stop"
-          $gstRoot = Join-Path $env:GITHUB_WORKSPACE "vendor\gstreamer\minimal_msvc_x86_64"
-          $pkgConfigPath = Join-Path $gstRoot "lib\pkgconfig"
-          $pkgConfigExe = Join-Path $gstRoot "bin\pkg-config.exe"
-
-          if (!(Test-Path $gstRoot)) { Write-Error "Vendored GStreamer root not found: $gstRoot" }
-          if (!(Test-Path $pkgConfigPath)) { Write-Error "pkgconfig directory not found: $pkgConfigPath" }
-          if (!(Test-Path $pkgConfigExe)) { Write-Error "pkg-config.exe not found: $pkgConfigExe" }
-          if (!(Test-Path (Join-Path $pkgConfigPath "glib-2.0.pc"))) { Write-Error "glib-2.0.pc not found in: $pkgConfigPath" }
-
-          Add-Content $env:GITHUB_ENV "PKG_CONFIG_PATH=$pkgConfigPath"
-          Add-Content $env:GITHUB_ENV "PKG_CONFIG=$pkgConfigExe"
-          Add-Content $env:GITHUB_ENV "GSTREAMER_1_0_ROOT_MSVC_X86_64=$gstRoot"
-          Add-Content $env:GITHUB_ENV "PATH=$gstRoot\bin;$env:PATH"
-          Write-Host "Detected pkg-config path: $pkgConfigPath"
-          Write-Host "Detected GStreamer root: $gstRoot"
-
-      - name: Print lib\pkgconfig contents
-        shell: powershell
-        run: |
-          $ErrorActionPreference = "Stop"
-          $pkgConfigPath = Join-Path $env:GITHUB_WORKSPACE "vendor\gstreamer\minimal_msvc_x86_64\lib\pkgconfig"
-          if (!(Test-Path (Join-Path $pkgConfigPath "glib-2.0.pc"))) { Write-Error "glib-2.0.pc not found for listing in $pkgConfigPath" }
-          Write-Host "Listing files in $pkgConfigPath"
-          Get-ChildItem -Path $pkgConfigPath -File | Sort-Object Name | ForEach-Object {
-            Write-Host $_.Name
-          }
+      - name: Install GStreamer
+        shell: pwsh
+        run: packaging/windows/install-gstreamer.ps1 -Version $env:GST_VERSION -Sha256 $env:GST_SHA256 -Dir C:\gstreamer -Download C:\gst-download
 
       - name: Build release binary
-        shell: powershell
+        shell: pwsh
         env:
-          APP_VERSION: ${{ needs.prepare.outputs.version }}.0
+          APP_VERSION: ${{ needs.prepare.outputs.package_version }}
         run: |
           Write-Host "Building with APP_VERSION=$env:APP_VERSION"
           cargo build --release --locked
 
-      - name: Package frename.exe
-        shell: powershell
+      - name: Bundle GStreamer
+        shell: pwsh
+        run: packaging/windows/bundle.ps1 -GstRoot C:\gstreamer -Exe target\release\frename.exe -Out dist\frename
+
+      - name: Install vpk
+        shell: pwsh
+        run: dotnet tool install vpk --version $env:VPK_VERSION --tool-path C:\vpk
+
+      # The previous release's package, so vpk builds a delta update from it. The first release
+      # with Velopack has no previous package; the delta is all that is lost.
+      - name: Download the previous release
+        continue-on-error: true
+        shell: pwsh
+        run: C:\vpk\vpk.exe download github --repoUrl https://github.com/${{ github.repository }} -o releases
+
+      - name: Pack with Velopack
+        shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $exeName = "frename-windows-x64-v${{ needs.prepare.outputs.version }}.0.exe"
-          $gstGuideName = "GSTREAMER_SETUP.md"
-          New-Item -ItemType Directory -Path "dist" -Force | Out-Null
-          Copy-Item "target\release\frename.exe" "dist\$exeName" -Force
-          Copy-Item "GSTREAMER_SETUP.md" "dist\$gstGuideName" -Force
-          Add-Content $env:GITHUB_ENV "WINDOWS_EXE_NAME=$exeName"
-          Add-Content $env:GITHUB_ENV "GSTREAMER_GUIDE_NAME=$gstGuideName"
-          Write-Host "Prepared executable artifact: $exeName"
+          C:\vpk\vpk.exe pack -u frename -v $env:PACKAGE_VERSION -p dist\frename -e frename.exe -o releases --packTitle frename --icon frename-icon.ico
+          if ($LASTEXITCODE -ne 0) { throw "vpk pack failed" }
+          # The portable zip keeps the name every release had (the pipeline checks for it).
+          Move-Item releases\frename-win-Portable.zip "releases\frename-windows-x64-v$env:PACKAGE_VERSION.zip"
+          Get-ChildItem releases | Format-Table Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
 
+      # What the updater reads, the installer and the portable zip; not the previous release's
+      # package, nor the legacy RELEASES file (only for Squirrel migrations).
       - uses: actions/upload-artifact@v4
         with:
-          name: frename-windows-x64-v${{ needs.prepare.outputs.version }}.0
+          name: frename-windows-x64-v${{ needs.prepare.outputs.package_version }}
           path: |
-            dist/${{ env.WINDOWS_EXE_NAME }}
-            dist/${{ env.GSTREAMER_GUIDE_NAME }}
+            releases/frename-windows-x64-v${{ needs.prepare.outputs.package_version }}.zip
+            releases/frename-win-Setup.exe
+            releases/frename-${{ needs.prepare.outputs.package_version }}-*.nupkg
+            releases/releases.win.json
+            releases/assets.win.json
+
+  # A Windows build that does not install and play video on a clean machine is never published.
+  test-windows:
+    needs: [prepare, build-windows]
+    if: needs.prepare.outputs.should_build == 'true'
+    runs-on: windows-2022
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frename-windows-x64-v${{ needs.prepare.outputs.package_version }}
+          path: packages
+
+      - name: Install and self-test on a clean system
+        shell: pwsh
+        run: packaging/windows/test-package.ps1 -Setup packages\frename-win-Setup.exe -Portable packages\frename-windows-x64-v${{ needs.prepare.outputs.package_version }}.zip
 
   build-linux:
     needs: prepare
@@ -194,13 +197,13 @@ jobs:
 
       - name: Build AppImage
         run: |
-          version="${{ needs.prepare.outputs.version }}.0"
+          version="${{ needs.prepare.outputs.package_version }}"
           packaging/linux/build-appimage.sh "$version" target/release/frename "dist/frename-linux-x86_64-v$version.AppImage"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: frename-linux-x86_64-v${{ needs.prepare.outputs.version }}.0
-          path: dist/frename-linux-x86_64-v${{ needs.prepare.outputs.version }}.0.AppImage
+          name: frename-linux-x86_64-v${{ needs.prepare.outputs.package_version }}
+          path: dist/frename-linux-x86_64-v${{ needs.prepare.outputs.package_version }}.AppImage
 
   # A Linux build that does not play video on a machine without GStreamer is never published.
   test-linux:
@@ -215,14 +218,14 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: frename-linux-x86_64-v${{ needs.prepare.outputs.version }}.0
+          name: frename-linux-x86_64-v${{ needs.prepare.outputs.package_version }}
           path: dist
 
       - name: Self-test on a clean system
-        run: packaging/linux/test-appimage.sh dist/frename-linux-x86_64-v${{ needs.prepare.outputs.version }}.0.AppImage
+        run: packaging/linux/test-appimage.sh dist/frename-linux-x86_64-v${{ needs.prepare.outputs.package_version }}.AppImage
 
   release:
-    needs: [prepare, build-windows, build-linux, test-linux]
+    needs: [prepare, build-windows, test-windows, build-linux, test-linux]
     if: needs.prepare.outputs.should_build == 'true'
     runs-on: ubuntu-22.04
     permissions:
@@ -244,11 +247,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Package release zip
-        run: |
-          cd artifacts
-          zip -j "frename-windows-x64-v${{ needs.prepare.outputs.version }}.0.zip" *.exe *.md
-
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
@@ -258,7 +256,11 @@ jobs:
           body_path: artifacts/release-notes.md
           draft: ${{ needs.prepare.outputs.draft }}
           files: |
-            artifacts/frename-windows-x64-v${{ needs.prepare.outputs.version }}.0.zip
-            artifacts/frename-linux-x86_64-v${{ needs.prepare.outputs.version }}.0.AppImage
+            artifacts/frename-windows-x64-v${{ needs.prepare.outputs.package_version }}.zip
+            artifacts/frename-win-Setup.exe
+            artifacts/frename-${{ needs.prepare.outputs.package_version }}-*.nupkg
+            artifacts/releases.win.json
+            artifacts/assets.win.json
+            artifacts/frename-linux-x86_64-v${{ needs.prepare.outputs.package_version }}.AppImage
         env:
           GITHUB_TOKEN: ${{ github.token }}

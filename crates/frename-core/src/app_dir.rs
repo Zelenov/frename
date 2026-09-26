@@ -2,27 +2,50 @@
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+
+/// The data folder of an installed or portable package, set once by the app at start-up.
+static PACKAGE_DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 /// The folder for frename's own files: next to the executable, except when frename runs from an
 /// AppImage, whose folder is a read-only mount; then `$XDG_DATA_HOME/frename`, by default
-/// `~/.local/share/frename`. An absolute `FRENAME_DATA_DIR` overrides both (demo mode uses it to
-/// keep the user's database untouched). The folder may not exist yet.
+/// `~/.local/share/frename`. An installed or portable Windows package keeps them in the folder
+/// set with [`set_app_data_dir`], because the executable's folder is replaced on every update.
+/// An absolute `FRENAME_DATA_DIR` overrides all of these (demo mode uses it to keep the user's
+/// database untouched). The folder may not exist yet.
 pub fn app_data_dir() -> PathBuf {
-    data_dir_for(std::env::current_exe().ok().as_deref(), |name| {
-        std::env::var_os(name)
-    })
+    data_dir_for(
+        std::env::current_exe().ok().as_deref(),
+        PACKAGE_DATA_DIR.get().map(PathBuf::as_path),
+        |name| std::env::var_os(name),
+    )
+}
+
+/// Set the data folder of the package frename runs from. Called once by `main`, before anything
+/// reads [`app_data_dir`]; a second call is ignored. Tests do not call it.
+pub fn set_app_data_dir(dir: PathBuf) {
+    if PACKAGE_DATA_DIR.set(dir).is_err() {
+        log::warn!("set_app_data_dir called twice; keeping the first folder");
+    }
 }
 
 /// Environment variable that sets [`app_data_dir`] outright.
 pub const DATA_DIR_VAR: &str = "FRENAME_DATA_DIR";
 
-/// [`app_data_dir`] for a given executable path and environment.
-fn data_dir_for(exe: Option<&Path>, var: impl Fn(&str) -> Option<OsString>) -> PathBuf {
+/// [`app_data_dir`] for a given executable path, package data folder and environment.
+fn data_dir_for(
+    exe: Option<&Path>,
+    package: Option<&Path>,
+    var: impl Fn(&str) -> Option<OsString>,
+) -> PathBuf {
     if let Some(dir) = var(DATA_DIR_VAR)
         .map(PathBuf::from)
         .filter(|path| path.is_absolute())
     {
         return dir;
+    }
+    if let Some(dir) = package {
+        return dir.to_path_buf();
     }
     if runs_from_appimage(exe, &var) {
         let absolute = |name: &str| {
@@ -92,7 +115,7 @@ mod tests {
     #[test]
     fn next_to_the_executable_normally() {
         assert_eq!(
-            data_dir_for(Some(&exe()), env(vec![home()])),
+            data_dir_for(Some(&exe()), None, env(vec![home()])),
             PathBuf::from(abs("/opt/frename"))
         );
     }
@@ -102,6 +125,7 @@ mod tests {
         assert_eq!(
             data_dir_for(
                 Some(&mounted_exe()),
+                None,
                 env(vec![
                     appimage(),
                     appdir(),
@@ -115,6 +139,7 @@ mod tests {
             assert_eq!(
                 data_dir_for(
                     Some(&mounted_exe()),
+                    None,
                     env(vec![
                         appimage(),
                         appdir(),
@@ -131,7 +156,7 @@ mod tests {
     #[test]
     fn an_appimage_without_a_home_uses_the_temp_folder_not_the_read_only_mount() {
         assert_eq!(
-            data_dir_for(Some(&mounted_exe()), env(vec![appimage(), appdir()])),
+            data_dir_for(Some(&mounted_exe()), None, env(vec![appimage(), appdir()])),
             std::env::temp_dir()
         );
     }
@@ -139,7 +164,7 @@ mod tests {
     #[test]
     fn appimage_variables_inherited_from_another_appimage_are_ignored() {
         assert_eq!(
-            data_dir_for(Some(&exe()), env(vec![appimage(), appdir(), home()])),
+            data_dir_for(Some(&exe()), None, env(vec![appimage(), appdir(), home()])),
             PathBuf::from(abs("/opt/frename"))
         );
     }
@@ -150,6 +175,7 @@ mod tests {
         assert_eq!(
             data_dir_for(
                 Some(&exe()),
+                None,
                 env(vec![appimage(), ("APPDIR", String::new()), home()])
             ),
             PathBuf::from(abs("/opt/frename"))
@@ -160,12 +186,13 @@ mod tests {
     fn an_absolute_frename_data_dir_wins_even_inside_an_appimage() {
         let data = ("FRENAME_DATA_DIR", abs("/tmp/demo/data"));
         assert_eq!(
-            data_dir_for(Some(&exe()), env(vec![data.clone(), home()])),
+            data_dir_for(Some(&exe()), None, env(vec![data.clone(), home()])),
             PathBuf::from(abs("/tmp/demo/data"))
         );
         assert_eq!(
             data_dir_for(
                 Some(&mounted_exe()),
+                None,
                 env(vec![data, appimage(), appdir(), home()])
             ),
             PathBuf::from(abs("/tmp/demo/data"))
@@ -178,6 +205,7 @@ mod tests {
             assert_eq!(
                 data_dir_for(
                     Some(&exe()),
+                    None,
                     env(vec![("FRENAME_DATA_DIR", value.to_string()), home()])
                 ),
                 PathBuf::from(abs("/opt/frename")),
@@ -187,7 +215,24 @@ mod tests {
     }
 
     #[test]
+    fn a_package_keeps_its_data_in_its_own_folder_unless_frename_data_dir_is_set() {
+        let package = PathBuf::from(abs("/Users/ed/AppData/Local/frename"));
+        assert_eq!(
+            data_dir_for(Some(&exe()), Some(&package), env(vec![home()])),
+            package
+        );
+        assert_eq!(
+            data_dir_for(
+                Some(&exe()),
+                Some(&package),
+                env(vec![("FRENAME_DATA_DIR", abs("/tmp/demo/data"))])
+            ),
+            PathBuf::from(abs("/tmp/demo/data"))
+        );
+    }
+
+    #[test]
     fn the_temp_folder_when_the_executable_is_unknown() {
-        assert_eq!(data_dir_for(None, env(vec![])), std::env::temp_dir());
+        assert_eq!(data_dir_for(None, None, env(vec![])), std::env::temp_dir());
     }
 }
