@@ -5,15 +5,25 @@ use std::path::{Path, PathBuf};
 
 /// The folder for frename's own files: next to the executable, except when frename runs from an
 /// AppImage, whose folder is a read-only mount; then `$XDG_DATA_HOME/frename`, by default
-/// `~/.local/share/frename`. The folder may not exist yet.
+/// `~/.local/share/frename`. An absolute `FRENAME_DATA_DIR` overrides both (demo mode uses it to
+/// keep the user's database untouched). The folder may not exist yet.
 pub fn app_data_dir() -> PathBuf {
     data_dir_for(std::env::current_exe().ok().as_deref(), |name| {
         std::env::var_os(name)
     })
 }
 
+/// Environment variable that sets [`app_data_dir`] outright.
+pub const DATA_DIR_VAR: &str = "FRENAME_DATA_DIR";
+
 /// [`app_data_dir`] for a given executable path and environment.
 fn data_dir_for(exe: Option<&Path>, var: impl Fn(&str) -> Option<OsString>) -> PathBuf {
+    if let Some(dir) = var(DATA_DIR_VAR)
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+    {
+        return dir;
+    }
     if runs_from_appimage(exe, &var) {
         let absolute = |name: &str| {
             var(name)
@@ -144,6 +154,36 @@ mod tests {
             ),
             PathBuf::from(abs("/opt/frename"))
         );
+    }
+
+    #[test]
+    fn an_absolute_frename_data_dir_wins_even_inside_an_appimage() {
+        let data = ("FRENAME_DATA_DIR", abs("/tmp/demo/data"));
+        assert_eq!(
+            data_dir_for(Some(&exe()), env(vec![data.clone(), home()])),
+            PathBuf::from(abs("/tmp/demo/data"))
+        );
+        assert_eq!(
+            data_dir_for(
+                Some(&mounted_exe()),
+                env(vec![data, appimage(), appdir(), home()])
+            ),
+            PathBuf::from(abs("/tmp/demo/data"))
+        );
+    }
+
+    #[test]
+    fn a_relative_or_empty_frename_data_dir_is_ignored() {
+        for value in ["", "data"] {
+            assert_eq!(
+                data_dir_for(
+                    Some(&exe()),
+                    env(vec![("FRENAME_DATA_DIR", value.to_string()), home()])
+                ),
+                PathBuf::from(abs("/opt/frename")),
+                "{value:?}"
+            );
+        }
     }
 
     #[test]

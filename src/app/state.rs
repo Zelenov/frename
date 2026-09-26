@@ -217,6 +217,8 @@ pub struct FrenameApp {
     is_maximized: bool,
     /// Last known monitor size (logical px); 0×0 if not yet fetched.
     monitor_size: (f32, f32),
+    /// The demo being run (`--demo`), if any.
+    demo: Option<crate::demo::DemoRun>,
 }
 
 impl FrenameApp {
@@ -245,7 +247,14 @@ impl FrenameApp {
             monitor_size: saved
                 .map(|g| (g.monitor_width, g.monitor_height))
                 .unwrap_or((0.0, 0.0)),
+            demo: None,
         }
+    }
+
+    /// Run `demo` instead of a normal session.
+    pub fn with_demo(mut self, demo: Option<crate::demo::DemoRun>) -> Self {
+        self.demo = demo;
+        self
     }
 }
 
@@ -253,9 +262,19 @@ impl FrenameApp {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             // Only the main window's events get through the subscription filter.
-            Message::WindowReady => Task::done(Message::FolderWorkspace(
-                folder_workspace::Message::LoadLastSession,
-            )),
+            Message::WindowReady => {
+                let load = Task::done(Message::FolderWorkspace(
+                    folder_workspace::Message::LoadLastSession,
+                ));
+                if self.demo.is_none() {
+                    return load;
+                }
+                Task::batch([load, crate::demo::DemoRun::start().map(Message::Demo)])
+            }
+            Message::Demo(msg) => match &self.demo {
+                Some(demo) => demo.update(msg).map(Message::Demo),
+                None => Task::none(),
+            },
             Message::WindowClosed(id) => {
                 if id == self.main_window {
                     return iced::exit();
@@ -368,10 +387,31 @@ impl FrenameApp {
                     folder_workspace::Message::MediaViewer(media_viewer::Message::Unloaded)
                 );
                 let batch_finished = matches!(&msg, folder_workspace::Message::BatchFinished);
+                let video_ready = matches!(
+                    &msg,
+                    folder_workspace::Message::MediaViewer(media_viewer::Message::Video(
+                        media_viewer_video::Message::VideoReady { .. }
+                    ))
+                );
                 let task = self
                     .folder_workspace
                     .update(msg)
                     .map(Message::FolderWorkspace);
+                let main_window = self.main_window;
+                let demo_steps = match self.demo.as_mut() {
+                    Some(demo) if video_ready => demo.video_ready(main_window),
+                    _ => None,
+                };
+                if let Some((steps, capture)) = demo_steps {
+                    let steps = steps
+                        .into_iter()
+                        .map(|step| Task::done(Message::FolderWorkspace(step)));
+                    return Task::batch(
+                        std::iter::once(task)
+                            .chain(steps)
+                            .chain([capture.map(Message::Demo)]),
+                    );
+                }
                 // Closing waits for a batch job to stop; the file it reopens is unloaded then.
                 if batch_finished && self.pending_close.is_some() {
                     return Task::batch([task, self.close_pending()]);

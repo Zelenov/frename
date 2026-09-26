@@ -1,0 +1,69 @@
+# README screenshots: the main window, and batch mode (--batch). Rendered by render.sh here (CI: .github/workflows/screenshots.yml).
+source = "../../tests/folder"
+open = "pick.wide.night.city.in_00_00_03.out_00_00_21.MVI_0410.mp4"
+seek = 10.0
+window = [1920, 1009]
+panels = [875, 370]
+snap_image = "Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm.snap.00-00-10-936.jpg"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.landscape.golden-hour.MVI_0401.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "skip.handheld.MVI_0402.mov"
+
+[[files]]
+from = "Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm"
+name = "b-roll.city.timelapse.MVI_0403.webm"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.drone.landscape.in_00_00_02.out_00_00_14.MVI_0404.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "review.people.close.MVI_0405.mov"
+
+[[files]]
+from = "Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm"
+name = "wide.city.night.MVI_0406.webm"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.gimbal.wildlife.MVI_0407.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "interview.medium.tripod.MVI_0408.mov"
+
+[[files]]
+from = "Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm"
+name = "MVI_0409.webm"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.in_00_00_03.out_00_00_21.MVI_0410.mp4"
+comment = "00-00-06-120: City lights over Europe, keep this one"
+subtitles = """1
+00:00:08,000 --> 00:00:13,000
+Europe lights up after dark
+"""
+snaps = ["00-00-06-120", "00-00-17-480"]
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "b-roll.close.action.MVI_0411.mov"
+
+[[files]]
+from = "Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm"
+name = "review.sunset.drone.MVI_0412.webm"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "wide.overcast.landscape.MVI_0413.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "MVI_0414.mov"

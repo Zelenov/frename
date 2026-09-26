@@ -16,7 +16,7 @@ pub struct ProductionFileTagger;
 // Sidecar path helpers (private)
 // ---------------------------------------------------------------------------
 
-fn screenshot_path(file_path: &Path, position_ms: u64) -> PathBuf {
+pub(crate) fn screenshot_path(file_path: &Path, position_ms: u64) -> PathBuf {
     let file_name = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let time_str = Screenshot::new(position_ms).format_time();
     let sidecar_name = format!("{}.snap.{}.jpg", file_name, time_str);

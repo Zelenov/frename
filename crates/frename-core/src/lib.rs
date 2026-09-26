@@ -3,6 +3,7 @@
 mod app_dir;
 pub(crate) mod comment;
 mod db;
+pub mod demo;
 mod directory;
 mod file;
 mod file_kind;
@@ -14,7 +15,7 @@ mod tags;
 pub(crate) mod transliteration;
 pub mod undo;
 
-pub use app_dir::app_data_dir;
+pub use app_dir::{app_data_dir, DATA_DIR_VAR};
 pub use db::{
     AppDatabase, AppSettings, AppStateStore, Initializable, LoggingAppStateStore, StoredTagStore,
     VideoSettings, WindowGeometry,

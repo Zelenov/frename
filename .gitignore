@@ -30,3 +30,6 @@ tests/fixtures/temp/
 
 # Logs
 *.log
+
+# Demo screenshots, made by docs/screenshots/render.sh
+docs/screenshots/*.png

@@ -9,6 +9,7 @@ mod folder_info;
 mod folder_tag_store;
 mod in_memory_file_tagger;
 mod production_file_tagger;
+pub(crate) use production_file_tagger::screenshot_path;
 mod screenshot;
 mod stored_tag;
 mod tag;

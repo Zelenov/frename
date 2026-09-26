@@ -12,6 +12,7 @@ use std::fs::File;
 
 mod app;
 mod crash_guard;
+mod demo;
 mod features;
 mod self_test;
 mod tag_colors;
@@ -35,7 +36,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Debug mode: debug build (or --debug flag) without --production override.
     let is_debug_mode = !production_flag && (cfg!(debug_assertions) || debug_flag);
 
-    if is_debug_mode {
+    // Demo mode works in a throwaway folder: the staged clips, and the database and log, so the
+    // user's own are never touched. Set before anything reads the data folder, while the process
+    // is still single-threaded.
+    let demo = match demo::demo_args(&args) {
+        None => None,
+        Some(Err(e)) => return Err(e.into()),
+        Some(Ok(demo_args)) => {
+            let work = demo::WorkDir::new();
+            std::env::set_var(frename_core::DATA_DIR_VAR, work.path().join("data"));
+            Some((demo_args, work))
+        }
+    };
+
+    // A demo shows the app as it really is (comments, screenshots) on its throwaway copies.
+    if is_debug_mode && demo.is_none() {
         install_file_tagger(Box::new(InMemoryFileTagger::default()));
     } else {
         install_file_tagger(Box::new(ProductionFileTagger));
@@ -100,6 +115,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize app database (migrations) before iced; decorator logs.
     let _ = LoggingAppStateStore::new(AppDatabase::new()).initialize();
 
+    // The work folder goes when `demo_work` is dropped: on an early error return, or below.
+    let (demo, demo_work) = match demo {
+        Some((demo_args, work)) => (Some(demo::prepare(&demo_args, work.path())?), Some(work)),
+        None => (None, None),
+    };
+
     // Restore saved window geometry (size + position + maximized), or use defaults.
     let saved = AppDatabase::new().get_window_state();
     let window_size = saved
@@ -135,7 +156,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     iced::daemon(
         move || {
             let (id, open) = window::open(main_window.clone());
-            (FrenameApp::new(id, window_icon.clone()), open.discard())
+            let app = FrenameApp::new(id, window_icon.clone()).with_demo(demo.clone());
+            (app, open.discard())
         },
         FrenameApp::update,
         FrenameApp::view,
@@ -146,6 +168,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .subscription(FrenameApp::subscription)
     .run()?;
 
+    // Only after the app is gone: it still saves the open file's folder while closing.
+    drop(demo_work);
     std::process::exit(0);
 }
 

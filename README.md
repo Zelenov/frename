@@ -153,6 +153,8 @@ are shown over the picture with the list beside them.
 
 ## Batch mode
 
+![Batch mode](docs/frename-screenshot-batch.jpg)
+
 Click ☑ to check files in the list (All / Invert) and run one action on all of them, with progress
 and Cancel. Each file then shows a green or red check box. Actions:
 

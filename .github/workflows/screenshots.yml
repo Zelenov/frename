@@ -1,0 +1,151 @@
+name: Screenshots
+
+# Regenerates the README screenshots (docs/frename-screenshot*.jpg) from the app itself: demo mode
+# plus the annotated templates in docs/screenshots/. On main, a change opens or updates a PR from
+# the bot/screenshots branch; on a pull request the images are only uploaded, for the reviewers.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "crates/**"
+      - "docs/screenshots/**"
+      - "tests/folder/**"
+      - "Cargo.lock"
+      - ".github/workflows/screenshots.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "crates/**"
+      - "docs/screenshots/**"
+      - "tests/folder/**"
+      - "Cargo.lock"
+      - ".github/workflows/screenshots.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  BRANCH: bot/screenshots
+
+jobs:
+  screenshots:
+    name: screenshots
+    runs-on: ubuntu-24.04
+    # Builds and runs the PR's code: read-only. Publishing is the next job's.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GStreamer and rendering tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-libav xvfb imagemagick mesa-vulkan-drivers librsvg2-bin fonts-open-sans
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build app
+        run: cargo build --locked
+
+      - name: Render
+        run: |
+          Xvfb :99 -screen 0 1920x1080x24 &
+          sleep 2
+          DISPLAY=:99 docs/screenshots/render.sh target/debug/frename
+
+      # Renders come out identical from run to run on the same runner image; a driver or font
+      # update may still move a few pixels. Keep an image in which at most 40 pixels changed, so
+      # such noise makes no PR while even a one-letter change in a label does.
+      - name: Keep images that did not really change
+        run: |
+          for image in docs/frename-screenshot.jpg docs/frename-screenshot-batch.jpg; do
+            git cat-file -e "HEAD:$image" 2>/dev/null || continue
+            git show "HEAD:$image" > /tmp/old.jpg
+            if [ "$(identify -format '%wx%h' "$image")" != "$(identify -format '%wx%h' /tmp/old.jpg)" ]; then
+              echo "$image: new size"; continue
+            fi
+            changed=$(compare -metric AE -fuzz 4% "$image" /tmp/old.jpg null: 2>&1 || true)
+            echo "$image: $changed pixels changed"
+            if ! awk -v c="$changed" 'BEGIN { exit !(c ~ /^[0-9.e+]+$/) }'; then
+              echo "::error::cannot compare $image: $changed"; exit 1
+            fi
+            if awk -v c="$changed" 'BEGIN { exit !(c <= 40) }'; then
+              git checkout -- "$image"
+            fi
+          done
+
+      - name: Note which images changed
+        id: changed
+        run: |
+          if [ -n "$(git status --porcelain -- docs/frename-screenshot*.jpg)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ github.sha }}
+          path: docs/frename-screenshot*.jpg
+          retention-days: 14
+
+    outputs:
+      changed: ${{ steps.changed.outputs.changed }}
+
+  publish:
+    name: publish screenshots
+    needs: screenshots
+    # Only main's screenshots go to main: a manual run on another branch just uploads them.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Main's images are current again (e.g. a UI change was reverted): an open screenshots PR
+      # would now bring back wrong images.
+      - name: Close an outdated screenshots PR
+        if: needs.screenshots.outputs.changed != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for pr in $(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number'); do
+            gh pr close "$pr" --delete-branch --comment "The screenshots on main are current again."
+          done
+
+      - uses: actions/download-artifact@v4
+        if: needs.screenshots.outputs.changed == 'true'
+        with:
+          name: screenshots-${{ github.sha }}
+          path: docs
+
+      # Needs Settings → Actions → General → "Allow GitHub Actions to create and approve pull
+      # requests". A PR opened with GITHUB_TOKEN does not start CI by itself, so CI is started on
+      # the branch explicitly: its checks land on the PR's head commit.
+      - name: Open or update the screenshots PR
+        if: needs.screenshots.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add docs/frename-screenshot*.jpg
+          git commit -m "Update the README screenshots" -m "Rendered from ${GITHUB_SHA} by .github/workflows/screenshots.yml."
+          git push --force origin "$BRANCH"
+          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --head "$BRANCH" --base main --title "Update the README screenshots" \
+              --body "Regenerated by the Screenshots workflow from ${GITHUB_SHA}. Look at the images before merging. Refs #14" \
+              || { echo "::error::Cannot open the PR: turn on Settings → Actions → General → Allow GitHub Actions to create and approve pull requests"; exit 1; }
+          fi
+          gh workflow run ci.yml --ref "$BRANCH"
