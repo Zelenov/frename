@@ -1,10 +1,25 @@
 //! State for the settings feature.
 
+use std::path::PathBuf;
+
 use frename_core::ai::key::KeyState;
-use frename_core::{AppDatabase, AppSettings, AppStateStore};
+use frename_core::{old_settings, AppDatabase, AppSettings, AppStateStore};
+use iced::Task;
 
 use super::{KeyMessage, Message};
 use crate::features::batch::Operation;
+use crate::features::updates;
+
+/// Where the import of an old frename's settings stands.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OldSettingsImport {
+    None,
+    /// Scheduled for the next start, from this folder.
+    Scheduled(PathBuf),
+    /// The picked folder has no old frename in it.
+    NotFound(PathBuf),
+    Failed(String),
+}
 
 /// Current app settings, loaded from the app database and saved back on every change.
 pub struct SettingsState {
@@ -15,6 +30,8 @@ pub struct SettingsState {
     in_out_storage_changed: bool,
     /// The tag spacing changed since the window last offered renaming the files to it.
     tag_spacing_changed: bool,
+    updates: updates::UpdatesState,
+    import: OldSettingsImport,
     /// The API key section; never persisted here (the key lives in the credential store).
     key: KeySection,
 }
@@ -40,11 +57,15 @@ pub struct KeySection {
 
 impl Default for SettingsState {
     fn default() -> Self {
+        let import = old_settings::scheduled_import(&frename_core::app_data_dir())
+            .map_or(OldSettingsImport::None, OldSettingsImport::Scheduled);
         Self {
             settings: AppDatabase::new().get_app_settings().unwrap_or_default(),
             comment_storage_changed: false,
             in_out_storage_changed: false,
             tag_spacing_changed: false,
+            updates: updates::UpdatesState::default(),
+            import,
             key: KeySection::default(),
         }
     }
@@ -52,12 +73,42 @@ impl Default for SettingsState {
 
 impl SettingsState {
     /// Apply a change and persist the result.
-    pub fn update(&mut self, message: Message) {
-        let persists = !matches!(message, Message::Key(_));
-        self.apply(message);
-        if persists {
-            AppDatabase::new().set_app_settings(self.settings.clone());
+    pub fn update(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::Updates(msg) => self.updates.update(msg).map(Message::Updates),
+            Message::ImportOldSettings => Task::perform(
+                rfd::AsyncFileDialog::new()
+                    .set_title("Folder of the old frename (with frename.exe and frename.db)")
+                    .pick_folder(),
+                |folder| Message::OldSettingsFolderPicked(folder.map(|f| f.path().to_path_buf())),
+            ),
+            Message::OldSettingsFolderPicked(folder) => {
+                if let Some(folder) = folder {
+                    self.import = schedule_import(folder);
+                }
+                Task::none()
+            }
+            // The key lives in the credential store, never in the saved settings.
+            Message::Key(message) => {
+                self.apply_key(message);
+                Task::none()
+            }
+            message => {
+                self.apply(message);
+                AppDatabase::new().set_app_settings(self.settings.clone());
+                Task::none()
+            }
         }
+    }
+
+    /// The Updates section.
+    pub fn updates(&self) -> &updates::UpdatesState {
+        &self.updates
+    }
+
+    /// Where the import of an old frename's settings stands.
+    pub fn old_settings_import(&self) -> &OldSettingsImport {
+        &self.import
     }
 
     /// The API key section.
@@ -184,7 +235,22 @@ impl SettingsState {
                 | Operation::ReloadFiles
                 | Operation::DescribeAi(_),
             ) => {}
+            // Handled by `update`.
+            Message::Updates(_)
+            | Message::ImportOldSettings
+            | Message::OldSettingsFolderPicked(_) => {}
         }
+    }
+}
+
+/// Schedule importing the settings in `folder` at the next start: the database is open now.
+fn schedule_import(folder: PathBuf) -> OldSettingsImport {
+    if !old_settings::is_old_frename_folder(&folder) {
+        return OldSettingsImport::NotFound(folder);
+    }
+    match old_settings::schedule_import(&frename_core::app_data_dir(), &folder) {
+        Ok(()) => OldSettingsImport::Scheduled(folder),
+        Err(e) => OldSettingsImport::Failed(e.to_string()),
     }
 }
 
@@ -200,6 +266,8 @@ mod tests {
             comment_storage_changed: false,
             in_out_storage_changed: false,
             tag_spacing_changed: false,
+            updates: updates::UpdatesState::default(),
+            import: OldSettingsImport::None,
             key: KeySection::default(),
         };
         state.apply(Message::SetMonochromeTags(true));
@@ -226,6 +294,8 @@ mod tests {
             comment_storage_changed: false,
             in_out_storage_changed: false,
             tag_spacing_changed: false,
+            updates: updates::UpdatesState::default(),
+            import: OldSettingsImport::None,
             key: KeySection::default(),
         };
         state.apply(Message::SetCommentStorage(state.settings().comment_storage));
@@ -255,6 +325,8 @@ mod tests {
             comment_storage_changed: false,
             in_out_storage_changed: false,
             tag_spacing_changed: false,
+            updates: updates::UpdatesState::default(),
+            import: OldSettingsImport::None,
             key: KeySection::default(),
         };
         state.apply(Message::SetCommentedTag("Has comment.v2:".to_string()));
@@ -268,6 +340,8 @@ mod tests {
             comment_storage_changed: false,
             in_out_storage_changed: false,
             tag_spacing_changed: false,
+            updates: updates::UpdatesState::default(),
+            import: OldSettingsImport::None,
             key: KeySection::default(),
         };
         state.apply(Message::Key(KeyMessage::Input(" sk-ant-123 ".to_string())));

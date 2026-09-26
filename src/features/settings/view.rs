@@ -10,17 +10,19 @@ use iced::{Element, Length};
 
 use crate::theme;
 
-use super::state::KeySection;
+use super::state::{KeySection, OldSettingsImport};
 use super::{KeyMessage, Message, SettingsState};
 
 use crate::features::batch::Operation;
+use crate::features::updates;
 
 /// The settings' scrollable content, which "Describe with AI" opens scrolled to its end, where
 /// the AI section is.
 pub const SETTINGS_SCROLLABLE_ID: &str = "settings-content";
 
 /// Render the settings window: one titled section per area, one control per setting.
-pub fn view(state: &SettingsState) -> Element<'_, Message> {
+/// `batch_running` holds back **Update and restart** while a batch job writes files.
+pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> {
     let settings = state.settings();
 
     let video = section(
@@ -131,19 +133,34 @@ pub fn view(state: &SettingsState) -> Element<'_, Message> {
     .spacing(8);
     let in_out = section("In/out points", in_out_options.into());
 
-    let ai = section("AI", ai_options(state.key(), settings.summary_language));
+    let updates = section(
+        "Updates",
+        updates::view::view(state.updates(), batch_running).map(Message::Updates),
+    );
+    let mut sections = column![video, tags, comments, in_out, updates].spacing(20);
+    // Only a package keeps its settings away from the exe; elsewhere they are next to it.
+    if state.updates().installed() {
+        sections = sections.push(section(
+            "Settings from an older frename",
+            old_settings_import(state.old_settings_import()),
+        ));
+    }
+    // Last, so "Describe with AI" can open the window scrolled to its end, at this section.
+    sections = sections.push(section(
+        "AI",
+        ai_options(state.key(), settings.summary_language),
+    ));
 
-    // Five sections do not fit the window: the content scrolls, the window keeps its size.
-    let content =
-        scrollable(container(column![video, tags, comments, in_out, ai].spacing(20)).padding(20))
+    // The window is not resizable: whatever does not fit scrolls.
+    container(
+        scrollable(container(sections).padding(20))
             .id(iced::widget::Id::new(SETTINGS_SCROLLABLE_ID))
-            .style(theme::dark_scrollable_style)
-            .height(Length::Fill);
-    container(content)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(theme::main_container_style)
-        .into()
+            .style(theme::dark_scrollable_style),
+    )
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .style(theme::main_container_style)
+    .into()
 }
 
 /// The AI section: the Anthropic API key and the language of descriptions.
@@ -262,6 +279,28 @@ fn small_button(label: &str, message: Message) -> Element<'_, Message> {
         .padding([3, 10])
         .style(theme::icon_button_style(true))
         .into()
+}
+
+/// The way back when the first-start search missed the zip version's folder.
+fn old_settings_import(import: &OldSettingsImport) -> Element<'_, Message> {
+    let note = match import {
+        OldSettingsImport::None => String::new(),
+        OldSettingsImport::Scheduled(_) => {
+            "Settings will be imported when frename restarts".to_string()
+        }
+        OldSettingsImport::NotFound(folder) => {
+            format!("No frename.exe with a frename.db in {}", folder.display())
+        }
+        OldSettingsImport::Failed(reason) => format!("Could not import: {reason}"),
+    };
+    row![
+        button(text("Import from an old frename folder…").size(13))
+            .on_press(Message::ImportOldSettings),
+        text(note).size(13).color(theme::TEXT_MUTED),
+    ]
+    .spacing(10)
+    .align_y(iced::Alignment::Center)
+    .into()
 }
 
 /// The tag for videos with a comment, shown while comments are inside the video: a comment inside the

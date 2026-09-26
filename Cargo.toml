@@ -50,6 +50,15 @@ arboard = "3"
 # Native file/folder picker dialogs
 rfd = "0.17"
 
+# Installer, portable package and self-update (Windows); versions match `vpk` in the workflows
+velopack = "1.2.158"
+# Comparing the running version with the newest release
+semver = "1"
+# Telling network errors from GitHub errors in Velopack's update check (Velopack's own ureq)
+ureq = { version = "3", default-features = false }
+# Downloads, Desktop and Documents, where an old zip version is looked for
+dirs = "6"
+
 [profile.dev.package."*"]
 # Dependencies are rebuilt rarely but run on every frame (text layout, image decode, SQLite,
 # shader compilation), so optimise them even in debug builds. Own crates stay at opt-level 0
@@ -61,6 +70,14 @@ opt-level = 3
 # Faster release builds in CI while keeping good optimization quality.
 lto = "thin"
 codegen-units = 8
+
+# Whether another frename from the same install is running before an update
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_Threading",
+] }
 
 # Windows subsystem - use "windows" for GUI app (no console), "console" for CLI
 [target.'cfg(windows)'.build-dependencies]

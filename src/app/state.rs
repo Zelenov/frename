@@ -11,7 +11,7 @@ use iced::{event, keyboard, window, Element, Subscription, Task};
 
 use crate::features::{
     batch, drag_drop, folder, folder_workspace, media_viewer,
-    media_viewer::video as media_viewer_video, settings, tag_panel,
+    media_viewer::video as media_viewer_video, settings, tag_panel, updates,
 };
 use crate::tag_colors::TagPalette;
 use frename_core::{AppDatabase, AppStateStore, WindowGeometry};
@@ -192,9 +192,12 @@ fn only_from_main_window(
     (window_id == main_window).then_some(message)
 }
 
-/// Settings window size (logical px). The window is not resizable, so this must fit every
-/// section: a setting below the bottom edge is simply not seen.
-const SETTINGS_WINDOW_SIZE: iced::Size = iced::Size::new(560.0, 660.0);
+/// Settings window size (logical px). The window is not resizable and its content scrolls; the
+/// height stays within what a 1080p screen at 150% scaling leaves (about 655).
+const SETTINGS_WINDOW_SIZE: iced::Size = iced::Size::new(560.0, 640.0);
+
+/// How often a running frename looks whether the daily update check is due.
+const UPDATE_TICK: std::time::Duration = std::time::Duration::from_secs(60 * 60);
 
 /// Application state: top-level features only. No knowledge of child UI or structure.
 pub struct FrenameApp {
@@ -219,6 +222,8 @@ pub struct FrenameApp {
     monitor_size: (f32, f32),
     /// The demo being run (`--demo`), if any.
     demo: Option<crate::demo::DemoRun>,
+    /// A downloaded update to apply once the main window has closed.
+    pending_update: Option<updates::Release>,
 }
 
 impl FrenameApp {
@@ -249,6 +254,7 @@ impl FrenameApp {
                 .map(|g| (g.monitor_width, g.monitor_height))
                 .unwrap_or((0.0, 0.0)),
             demo: None,
+            pending_update: None,
         }
     }
 
@@ -276,7 +282,11 @@ impl FrenameApp {
                     )),
                 ]);
                 if self.demo.is_none() {
-                    return load;
+                    // The daily background update check, when it is due.
+                    let check = Task::done(Message::Settings(settings::Message::Updates(
+                        updates::Message::Tick,
+                    )));
+                    return Task::batch([load, check]);
                 }
                 Task::batch([load, crate::demo::DemoRun::start().map(Message::Demo)])
             }
@@ -286,6 +296,12 @@ impl FrenameApp {
             },
             Message::WindowClosed(id) => {
                 if id == self.main_window {
+                    // The open file is saved by now; Velopack waits for this process to end.
+                    if let Some(release) = self.pending_update.take() {
+                        if let Err(e) = updates::apply_on_exit(&release) {
+                            log::error!("could not start the update: {e}");
+                        }
+                    }
                     return iced::exit();
                 }
                 if self.settings_window == Some(id) {
@@ -294,12 +310,20 @@ impl FrenameApp {
                 Task::none()
             }
             Message::OpenSettings => self.open_settings_window(),
+            // Downloaded: close the app the way the user would (the open file is saved), then
+            // apply the update once the main window is gone.
+            Message::Settings(settings::Message::Updates(updates::Message::ApplyAndRestart(
+                release,
+            ))) => {
+                self.pending_update = Some(release);
+                Task::done(Message::CloseRequested(self.main_window))
+            }
             Message::Settings(msg) => {
-                self.settings.update(msg.clone());
+                let task = self.settings.update(msg.clone()).map(Message::Settings);
                 // Tag colors are read from the settings at view time; autoplay lives in the player;
                 // comment and in/out storage live in core, which saves them. Moving what the
                 // files already have is a batch action in the main window.
-                match msg {
+                let effect = match msg {
                     settings::Message::SetCommentStorage(storage) => {
                         frename_core::set_comment_storage(storage);
                         Task::none()
@@ -329,7 +353,6 @@ impl FrenameApp {
                             )),
                         ))
                     }
-                    settings::Message::SetMonochromeTags(_) => Task::none(),
                     settings::Message::SetSpaceAfterTags(space) => {
                         frename_core::set_space_after_tags(space);
                         Task::none()
@@ -371,7 +394,12 @@ impl FrenameApp {
                         }
                     }
                     settings::Message::Key(_) => Task::none(),
-                }
+                    settings::Message::SetMonochromeTags(_)
+                    | settings::Message::Updates(_)
+                    | settings::Message::ImportOldSettings
+                    | settings::Message::OldSettingsFolderPicked(_) => Task::none(),
+                };
+                Task::batch([task, effect])
             }
             Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
                 batch::ActionMessage::OpenAiSettings,
@@ -497,10 +525,12 @@ impl FrenameApp {
 
     pub fn view(&self, window_id: window::Id) -> Element<'_, Message> {
         if self.settings_window == Some(window_id) {
-            return settings::view::view(&self.settings).map(Message::Settings);
+            return settings::view::view(&self.settings, self.folder_workspace.is_batch_running())
+                .map(Message::Settings);
         }
         let tag_palette = TagPalette::from_monochrome(self.settings.settings().monochrome_tags);
-        folder_workspace::view::view(&self.folder_workspace, tag_palette)
+        let update_available = self.settings.updates().available_version();
+        folder_workspace::view::view(&self.folder_workspace, tag_palette, update_available)
             .map(Message::FolderWorkspace)
     }
 
@@ -560,6 +590,8 @@ impl FrenameApp {
             .with(self.main_window)
             .filter_map(only_from_main_window),
             window::close_events().map(Message::WindowClosed),
+            iced::time::every(UPDATE_TICK)
+                .map(|_| Message::Settings(settings::Message::Updates(updates::Message::Tick))),
         ])
     }
 

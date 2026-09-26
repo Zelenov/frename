@@ -1,10 +1,13 @@
 //! Messages from the settings window.
 
+use std::path::PathBuf;
+
 use frename_core::ai::key::KeyState;
 use frename_core::ai::SummaryLanguage;
 use frename_core::{CommentStorage, InOutStorage};
 
 use crate::features::batch::Operation;
+use crate::features::updates;
 
 /// User changes in the settings window. Each setting is saved immediately; the API key only on
 /// Save.
@@ -27,6 +30,12 @@ pub enum Message {
     /// After a storage change: open batch mode in the main window, set up to move the files'
     /// comments or in/out points to the new storage. Handled by the app.
     OpenBatchAction(Operation),
+    /// The Updates section.
+    Updates(updates::Message),
+    /// **Import from an old frename folder…**: pick the folder of a zip version.
+    ImportOldSettings,
+    /// The folder picked for the import, or `None` when the picker was closed.
+    OldSettingsFolderPicked(Option<PathBuf>),
     /// The language AI descriptions are written in.
     SetSummaryLanguage(SummaryLanguage),
     /// The API key section; never saved with the settings (the key lives in the credential

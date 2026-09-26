@@ -45,7 +45,11 @@ const MIGRATIONS: &[Migration] = &[
     },
     Migration {
         version: 9,
-        sql: schema::M9_SUMMARY_LANGUAGE,
+        sql: schema::M9_UPDATE_CHECK,
+    },
+    Migration {
+        version: 10,
+        sql: schema::M10_SUMMARY_LANGUAGE,
     },
 ];
 
@@ -130,6 +134,6 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 9);
+        assert_eq!(current_version(&conn).expect("version"), 10);
     }
 }

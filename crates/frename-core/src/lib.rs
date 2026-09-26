@@ -10,16 +10,17 @@ mod file;
 mod file_kind;
 mod folder_file;
 mod metadata;
+pub mod old_settings;
 mod ordered;
 mod subtitles;
 mod tags;
 pub(crate) mod transliteration;
 pub mod undo;
 
-pub use app_dir::{app_data_dir, DATA_DIR_VAR};
+pub use app_dir::{app_data_dir, set_app_data_dir, DATA_DIR_VAR};
 pub use db::{
     AppDatabase, AppSettings, AppStateStore, Initializable, LoggingAppStateStore, StoredTagStore,
-    VideoSettings, WindowGeometry,
+    UpdateCheckState, VideoSettings, WindowGeometry,
 };
 pub use directory::Directory;
 pub use file::{File, FileId};

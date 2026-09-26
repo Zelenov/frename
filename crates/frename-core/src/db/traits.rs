@@ -86,6 +86,27 @@ impl AppSettings {
     }
 }
 
+/// The update check's saved state (Settings -> Updates).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateCheckState {
+    /// Check for updates in the background when frename starts. Defaults to true.
+    pub check_on_start: bool,
+    /// When the last successful check ran, in seconds since the Unix epoch; 0 for never.
+    pub last_check: u64,
+    /// The newest version the last check found (`0.68.0`); empty when none was found.
+    pub newest_version: String,
+}
+
+impl Default for UpdateCheckState {
+    fn default() -> Self {
+        Self {
+            check_on_start: true,
+            last_check: 0,
+            newest_version: String::new(),
+        }
+    }
+}
+
 /// Interface for storing and restoring app state (last folder and file, window geometry).
 /// Implemented by the application database and by the test fake (e.g. `FakeAppStorage`).
 /// Pass by value (e.g. `Box<dyn AppStateStore>`); no singleton, connection is opened per use.
@@ -119,6 +140,14 @@ pub trait AppStateStore: Send + Sync {
 
     /// Saves the app settings.
     fn set_app_settings(&self, _settings: AppSettings) {}
+
+    /// Returns the saved update check state, if any.
+    fn get_update_check(&self) -> Option<UpdateCheckState> {
+        None
+    }
+
+    /// Saves the update check state.
+    fn set_update_check(&self, _state: UpdateCheckState) {}
 }
 
 /// Interface for stored tags and tag color mapping. Tags are keyed by tag id (UUID); tag colors are keyed by tag name.
