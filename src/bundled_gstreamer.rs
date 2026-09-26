@@ -4,6 +4,9 @@
 //! plugin environment variables would still be read, so they are replaced before `gst::init`.
 //! A developer build has no bundled plugins and uses the system GStreamer, as before.
 
+// Everything but the Windows caller is also built elsewhere, so its tests run on every OS.
+#![cfg_attr(not(windows), allow(dead_code))]
+
 use std::path::{Path, PathBuf};
 
 /// A plugin every bundle has; its presence marks the exe's folder as a bundle.

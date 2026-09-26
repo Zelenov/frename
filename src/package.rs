@@ -21,7 +21,9 @@ pub struct Package {
 }
 
 impl Package {
-    /// The package frename runs from, if any.
+    /// The package frename runs from, if any. Only Windows has Velopack packages; the Linux
+    /// AppImage is built without Velopack.
+    #[cfg(windows)]
     pub fn locate() -> Option<Self> {
         let locator = velopack::locator::auto_locate_app_manifest(
             velopack::locator::LocationContext::FromCurrentExe,
@@ -32,6 +34,11 @@ impl Package {
             portable: locator.get_is_portable(),
             version: locator.get_manifest_version_full_string(),
         })
+    }
+
+    #[cfg(not(windows))]
+    pub fn locate() -> Option<Self> {
+        None
     }
 
     /// The folder for frename's own files: the package root.
