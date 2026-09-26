@@ -7,6 +7,8 @@ This file adds what an agent needs to build, test and ship without a human in th
 
 - `src/` — the app (iced 0.14, GStreamer video via `iced_video_player`), feature folders under `src/features/`.
 - `crates/frename-core/` — pure logic, no iced: tags, files, XMP metadata, undo, SQLite.
+- Describing clips with Claude (frames, prompt, models, cost, client) is the `clipscribe` crate,
+  its own repo `Zelenov/clipscribe`, pinned by commit in `Cargo.toml` and `frename-core`.
 - `.claude/skills/` — project skills (app-guide, core-dev, ui-dev, ui-core, undo-dev, image-preview, …).
 - `docs/design/` — design documents for features that needed one.
 - `version.md` — release notes; its first line `# X.Y` is the version. A change to it on `main`

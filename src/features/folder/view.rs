@@ -219,12 +219,15 @@ pub fn view<'a>(
         None::<fn(String) -> Message>,
         Some(filter_dropdown(dir)),
     );
-    let mut content = column![search].spacing(4);
+    // The batch header joins the search bar's column rather than the outer one, so the list
+    // keeps its place in the widget tree and with it its scroll position when batch mode
+    // turns on or off.
+    let mut top = column![search].spacing(4);
     if let Some(batch) = batch {
-        content = content.push(batch_header(dir, batch, locked));
+        top = top.push(batch_header(dir, batch, locked));
     }
 
-    container(content.push(body))
+    container(column![top, body].spacing(4))
         .width(Length::Fill)
         .height(Length::Fill)
         .style(theme::panel_container_style)

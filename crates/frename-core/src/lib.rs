@@ -1,5 +1,6 @@
 //! Core logic for frename - file renaming utility.
 
+pub mod ai;
 mod app_dir;
 pub(crate) mod comment;
 mod db;

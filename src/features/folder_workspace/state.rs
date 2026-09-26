@@ -269,7 +269,20 @@ impl FolderWorkspace {
                 media_viewer::Message::Video(media_viewer_video::Message::CaptureSegmentEnd),
             )),
             Message::CommentAction(action) => {
+                let typed = matches!(action, iced::widget::text_editor::Action::Edit(_));
                 self.file_workspace.apply_comment_action(action);
+                // The box grows with its text inside a scrollable: typing on the last line
+                // keeps that line in view.
+                if typed && self.file_workspace.comment_cursor_on_last_line() {
+                    iced::widget::operation::snap_to_end(iced::widget::Id::new(
+                        crate::features::file_workspace::view::COMMENT_SCROLLABLE_ID,
+                    ))
+                } else {
+                    Task::none()
+                }
+            }
+            Message::CommentLayout(layout) => {
+                self.file_workspace.update_comment_layout(layout);
                 Task::none()
             }
             // Save the frame next to the video, like VLC's snapshot, and forget it.
@@ -679,14 +692,78 @@ impl FolderWorkspace {
         if let batch::Message::Run = msg {
             return self.start_batch();
         }
+        if let batch::Message::Retry = msg {
+            if !self.batch.prepare_retry() {
+                return Task::none();
+            }
+            return self.start_batch();
+        }
         if let batch::Message::OpenLog = msg {
-            open_in_default_app(&frename_core::log_path());
+            open_in_default_app(frename_core::log_path());
+            return Task::none();
+        }
+        if let batch::Message::OpenBilling = msg {
+            open_in_default_app(ANTHROPIC_BILLING_URL);
             return Task::none();
         }
         // Batch mode does not edit the open file, so its rename editor goes.
         self.inline_rename = None;
         self.batch.update(msg);
-        Task::none()
+        self.describe_ai_reads()
+    }
+
+    /// What "Describe with AI" shows before it runs needs reading from disk: the length of
+    /// each checked video and whether an API key is saved. Read in the background while its
+    /// panel is shown.
+    fn describe_ai_reads(&mut self) -> Task<Message> {
+        let Some(dir) = self.directory.as_ref() else {
+            return Task::none();
+        };
+        let batch = &mut self.batch;
+        let checked: Vec<&frename_core::File> = dir
+            .all_files()
+            .filter(|f| batch.is_checked(f.id()))
+            .collect();
+        let (missing, read_key) = batch.describe_ai_reads(checked.into_iter());
+        let wrap = |msg: batch::describe_ai::Message| {
+            Message::Batch(batch::Message::Action(batch::ActionMessage::DescribeAi(
+                msg,
+            )))
+        };
+        // The app reads it (the settings show it too) and passes the answer back.
+        let key = if read_key {
+            Task::done(Message::Batch(batch::Message::Action(
+                batch::ActionMessage::ReadKeyState,
+            )))
+        } else {
+            Task::none()
+        };
+        if missing.is_empty() {
+            return key;
+        }
+        let probes = Task::future(async move {
+            let ids: Vec<FileId> = missing.iter().map(|(id, _)| *id).collect();
+            let results =
+                tokio::task::spawn_blocking(move || batch::describe_ai::probe_all(missing))
+                    .await
+                    .unwrap_or_else(|e| {
+                        log::error!("reading clip lengths failed: {e}");
+                        // Unreadable rather than estimating forever.
+                        ids.into_iter()
+                            .map(|id| {
+                                (
+                                    id,
+                                    batch::describe_ai::Probe {
+                                        duration_s: None,
+                                        subtitle_bytes: 0,
+                                    },
+                                )
+                            })
+                            .collect()
+                    });
+            wrap(batch::describe_ai::Message::Probed(results))
+        });
+        Task::batch([key, probes])
     }
 
     /// Start the selected batch action on the checked files, in folder order. A playing video
@@ -695,11 +772,14 @@ impl FolderWorkspace {
         let Some(dir) = self.directory.as_ref() else {
             return Task::none();
         };
-        let files: Vec<FileId> = dir
+        let checked: Vec<&frename_core::File> = dir
             .all_files()
-            .map(|f| f.id())
-            .filter(|id| self.batch.is_checked(*id))
+            .filter(|f| self.batch.is_checked(f.id()))
             .collect();
+        let files = self
+            .batch
+            .actions()
+            .job_files(self.batch.action(), &checked);
         if !self.batch.start(files) {
             return Task::none();
         }
@@ -728,9 +808,10 @@ impl FolderWorkspace {
     /// left or was cancelled. One file per step: progress names the file in work, and a
     /// cancel stops after it, so no file is left half done.
     fn next_batch_item(&mut self) -> Task<Message> {
-        let Some((id, operation)) = self.batch.begin_next() else {
+        let Some((id, operation, cancel)) = self.batch.begin_next() else {
             return Task::done(Message::BatchFinished);
         };
+        let progress = self.batch.item_progress().unwrap_or_default();
         let Some(path) = self
             .directory
             .as_ref()
@@ -742,12 +823,13 @@ impl FolderWorkspace {
             return self.next_batch_item();
         };
         Task::future(async move {
-            let result = tokio::task::spawn_blocking(move || operation.run(&path))
-                .await
-                .unwrap_or_else(|e| {
-                    log::error!("batch operation task failed: {e}");
-                    ItemResult::new(ItemStatus::Failed, None)
-                });
+            let result =
+                tokio::task::spawn_blocking(move || operation.run(&path, &cancel, &progress))
+                    .await
+                    .unwrap_or_else(|e| {
+                        log::error!("batch operation task failed: {e}");
+                        ItemResult::new(ItemStatus::Failed, None)
+                    });
             Message::BatchItemDone {
                 id,
                 result: Box::new(result),
@@ -905,7 +987,20 @@ impl FolderWorkspace {
             }
             folder::Message::SubmitRename => self.submit_rename(),
             folder::Message::SetBatchMode(on) => {
-                Task::done(Message::Batch(batch::Message::SetActive(on)))
+                // The open file starts checked: it is usually the one to act on.
+                let open = self
+                    .directory
+                    .as_ref()
+                    .and_then(|d| d.selected_file())
+                    .map(|f| f.id());
+                let activated = self.handle_batch(batch::Message::SetActive(on));
+                match open {
+                    Some(id) if on => Task::batch([
+                        activated,
+                        self.handle_batch(batch::Message::CheckAll(vec![id])),
+                    ]),
+                    _ => activated,
+                }
             }
             folder::Message::ToggleChecked(id) => {
                 Task::done(Message::Batch(batch::Message::Toggle(id)))
@@ -1695,8 +1790,16 @@ impl FolderWorkspace {
         } else {
             Subscription::none()
         };
+        // A running AI job tells how far its file is from another thread: redraw to show it.
+        let job_progress =
+            if self.batch.is_running() && self.batch.action() == batch::Action::DescribeAi {
+                iced::time::every(std::time::Duration::from_millis(200)).map(|_| Message::Noop)
+            } else {
+                Subscription::none()
+            };
         Subscription::batch([
             self.media_viewer.subscription().map(Message::MediaViewer),
+            job_progress,
             self.file_name_panel
                 .subscription()
                 .map(Message::FileNamePanel),
@@ -1839,14 +1942,19 @@ fn check_new_file_name(
     Ok(())
 }
 
-/// Open `path` with the app the system uses for its type (a text editor for the log).
-fn open_in_default_app(path: &std::path::Path) {
+/// Where an Anthropic account buys credit.
+const ANTHROPIC_BILLING_URL: &str = "https://console.anthropic.com/settings/billing";
+
+/// Open `target` with the app the system uses for it (a text editor for the log, the browser
+/// for a web address).
+fn open_in_default_app(target: impl AsRef<std::ffi::OsStr>) {
+    let target = target.as_ref();
     #[cfg(windows)]
-    let result = std::process::Command::new("explorer").arg(path).spawn();
+    let result = std::process::Command::new("explorer").arg(target).spawn();
     #[cfg(not(windows))]
-    let result = std::process::Command::new("xdg-open").arg(path).spawn();
+    let result = std::process::Command::new("xdg-open").arg(target).spawn();
     if let Err(e) = result {
-        log::warn!("could not open {path:?}: {e}");
+        log::warn!("could not open {target:?}: {e}");
     }
 }
 
@@ -2180,6 +2288,30 @@ mod tests {
         let _ = workspace.update(Message::Batch(batch::Message::SetActive(true)));
         let _ = workspace.update(Message::Batch(batch::Message::CheckAll(ids)));
         workspace
+    }
+
+    /// Turning batch mode on checks the open file, and only it.
+    #[test]
+    fn batch_mode_starts_with_the_open_file_checked() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let dir = workspace.directory().expect("dir");
+        let open = dir.selected_file().expect("open file").id();
+        let other = dir
+            .files_in_order()
+            .map(|f| f.id())
+            .find(|id| *id != open)
+            .expect("second file");
+
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        assert!(workspace.batch.is_active());
+        assert!(workspace.batch.is_checked(open));
+        assert!(!workspace.batch.is_checked(other));
     }
 
     /// A job waits for the playing video to unload, runs file by file with the folder locked,

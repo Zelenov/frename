@@ -144,8 +144,10 @@ The progress bar shows what you have noted about a clip:
 - **Comments:** free text per clip. By default it is saved inside the video, where Premiere Pro
   shows it in the Description column and finds it by search. Settings can keep it in a
   `.comment.txt` next to the video instead. The file list shows the first line of each comment.
-  While comments are inside the video, frename tags a commented clip "Commented" (Settings can
-  rename or turn off this tag).
+  While comments are inside the video, frename tags a clip you commented "Commented" (Settings can
+  rename or turn off this tag); an AI description alone does not count. Drag the bar above the
+  comment box to make it taller or shorter; **Expand** in its corner gives the comment the whole
+  panel, and **Collapse** brings the tags back.
 
 Some formats, such as mkv, cannot hold comments, in/out points or markers inside them; for those,
 frename keeps comments and in/out points in `.comment.txt` and the file name whatever Settings say,
@@ -185,7 +187,23 @@ and Cancel. Each file then shows a green or red check box. Actions:
 - tag commented videos with "Commented" and untag the rest;
 - put the tags in every name in tag panel order;
 - add or remove the space after each tag, as set in Settings;
-- read every file again (use this if the list looks out of date).
+- read every file again (use this if the list looks out of date);
+- describe each video with AI (see below).
+
+### Describe with AI
+
+**Describe with AI** writes what happens in each checked video, and when: a one-line summary and
+time-ranged segments, even for clips with no speech. frename sends frames (one every 2 s, at most
+60 per clip) and the video's `.srt`, if there is one, to Claude (Haiku 4.5 unless you pick Sonnet
+or Opus in Settings), and puts the answer at the end of the comment, below your own text, which is
+never changed. Before you run it, the panel shows how many videos will be sent, the price (with
+Haiku, about $10 per 1000 one-minute clips) and how long it takes. Videos already described are skipped unless you tick Redo, and so are clips over 30 min.
+Cancel keeps what is done. You need your own Anthropic API key: set it in Settings.
+
+The description is part of the comment, in the comment box with your text: edit it or delete it
+there like any other text. It starts at a line beginning with `AI: ` and runs to the end of the
+comment; a new run replaces only that part and never touches the text above it. Premiere Pro and
+`.comment.txt` get the whole comment.
 
 ## Settings
 
@@ -199,7 +217,10 @@ The ⚙ button opens Settings:
 - where in/out points are kept (file name or inside the video);
 - updates: **Check for updates**, then **Update and restart** when a newer version is out.
   frename also checks once a day by itself (you can turn that off) and puts a dot on ⚙ when
-  an update is ready; nothing is downloaded until you click.
+  an update is ready; nothing is downloaded until you click;
+- your Anthropic API key for Describe with AI, kept in the system's password store (Windows
+  Credential Manager, macOS Keychain, or a keyring such as GNOME Keyring on Linux), the model
+  (Claude Haiku 4.5, Sonnet 5 or Opus 5, with their prices) and the language of the descriptions.
 
 After you change where comments or in/out points are kept, or the tag spacing, Settings offer the
 batch action that updates the existing files.

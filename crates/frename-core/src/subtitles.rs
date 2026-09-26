@@ -1,20 +1,18 @@
-//! Read-only SubRip (`.srt`) subtitles.
+//! Read-only SubRip (`.srt`) subtitles, for the player's subtitle list.
 //!
 //! A video's subtitles live next to it under the same stem: `/dir/clip.mp4` →
 //! `/dir/clip.srt`. This follows how transcription tools write them, unlike the
-//! `{filename}.comment.txt` sidecars frename creates itself.
+//! `{filename}.comment.txt` sidecars frename creates itself. Parsing and the file name are
+//! clipscribe's (`clipscribe::srt`), which describes clips from the same files.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
-/// One subtitle cue: the text shown between `start` and `end`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SubtitleCue {
-    pub start: Duration,
-    pub end: Duration,
-    /// Cue text; multi-line cues keep their line breaks.
-    pub text: String,
-}
+pub use clipscribe::srt::subtitle_path;
+
+/// One subtitle cue: the text shown between `start` and `end`; multi-line cues keep their
+/// line breaks.
+pub type SubtitleCue = clipscribe::Cue;
 
 /// All cues of one subtitle file, ordered by start time.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -26,11 +24,9 @@ impl Subtitles {
     /// Parse SRT text. Malformed blocks are skipped rather than failing the whole file,
     /// so a hand-edited file with one broken cue still shows everything else.
     pub fn parse(source: &str) -> Self {
-        let source = source.strip_prefix('\u{feff}').unwrap_or(source);
-        let normalized = source.replace("\r\n", "\n");
-        let mut cues: Vec<SubtitleCue> = normalized.split("\n\n").filter_map(parse_block).collect();
-        cues.sort_by_key(|cue| cue.start);
-        Self { cues }
+        Self {
+            cues: clipscribe::srt::parse(source),
+        }
     }
 
     pub fn cues(&self) -> &[SubtitleCue] {
@@ -57,11 +53,6 @@ impl Subtitles {
             .partition_point(|cue| cue.start <= position)
             .checked_sub(1)
     }
-}
-
-/// Path of the subtitle file for a video: same directory and stem, `.srt` extension.
-pub fn subtitle_path(video_path: &Path) -> PathBuf {
-    video_path.with_extension("srt")
 }
 
 /// Load the subtitles next to `video_path`. `None` when there is no file, it cannot be
@@ -119,48 +110,10 @@ pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
     }
 }
 
-/// Parse one blank-line-separated block: optional index line, timing line, text lines.
-fn parse_block(block: &str) -> Option<SubtitleCue> {
-    let mut lines = block
-        .lines()
-        .map(str::trim_end)
-        .skip_while(|l| l.trim().is_empty());
-    let mut timing = lines.next()?;
-    if !timing.contains("-->") {
-        // The first line was the cue number.
-        timing = lines.next()?;
-    }
-    let (start, end) = timing.split_once("-->")?;
-    let start = parse_timestamp(start)?;
-    // Some files append positioning after the end time: `00:00:02,000 X1:...`.
-    let end = parse_timestamp(end.split_whitespace().next()?)?;
-    let text = lines.collect::<Vec<_>>().join("\n").trim().to_string();
-    if text.is_empty() || end <= start {
-        return None;
-    }
-    Some(SubtitleCue { start, end, text })
-}
-
-/// Parse `HH:MM:SS,mmm` (a `.` separator is accepted too).
-fn parse_timestamp(value: &str) -> Option<Duration> {
-    let value = value.trim();
-    let (clock, millis) = value.split_once([',', '.']).unwrap_or((value, "0"));
-    let mut parts = clock.split(':').map(|p| p.trim().parse::<u64>().ok());
-    let hours = parts.next()??;
-    let minutes = parts.next()??;
-    let seconds = parts.next()??;
-    if parts.next().is_some() {
-        return None;
-    }
-    let millis: u64 = millis.trim().parse().ok()?;
-    Some(Duration::from_millis(
-        ((hours * 60 + minutes) * 60 + seconds) * 1000 + millis,
-    ))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     const SAMPLE: &str = "1\r\n00:00:08,850 --> 00:00:11,730\r\nFirst line\r\nsecond line\r\n\r\n\
                           2\r\n00:00:12,810 --> 00:00:17,310\r\nSecond cue\r\n";

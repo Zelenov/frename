@@ -26,7 +26,8 @@ pub struct Directory<S> {
     untagged_only: bool,
     /// When true, only files with a subtitle file are listed.
     subtitled_only: bool,
-    /// When true, only files with a comment are listed.
+    /// When true, only files with a comment of the editor's are listed (an AI description alone
+    /// does not count).
     commented_only: bool,
     /// When true, only files with clip markers are listed.
     marked_only: bool,
@@ -146,7 +147,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
     pub fn commented_count(&self) -> usize {
         self.files_by_id
             .values()
-            .filter(|f| !f.comment().is_empty())
+            .filter(|f| crate::ai::has_editor_comment(f.comment()))
             .count()
     }
 
@@ -258,7 +259,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
         if self.subtitled_only && !file.has_subtitles() {
             return false;
         }
-        if self.commented_only && file.comment().is_empty() {
+        if self.commented_only && !crate::ai::has_editor_comment(file.comment()) {
             return false;
         }
         if self.marked_only && file.snapshot().marker_count() == 0 {
@@ -700,6 +701,17 @@ mod tests {
         assert_eq!(snapshot.marker_count(), 3);
         snapshot.set_markers(Some(Vec::new()));
         assert_eq!(snapshot.marker_count(), 0);
+    }
+
+    #[test]
+    fn a_comment_that_is_only_an_ai_description_is_not_commented() {
+        let block = "AI: A walk.\n— Claude Haiku 4.5, 2026-09-26 —";
+        let mut dir = directory_with(&["a.mp4", "b.mp4", "c.mp4"]);
+        comment_file_at(&mut dir, 0, block);
+        comment_file_at(&mut dir, 1, &format!("Mine\n\n{block}"));
+        dir.set_commented_only(true);
+        assert_eq!(listed_names(&dir), vec!["b.mp4"]);
+        assert_eq!(dir.commented_count(), 1);
     }
 
     #[test]

@@ -47,6 +47,14 @@ const MIGRATIONS: &[Migration] = &[
         version: 9,
         sql: schema::M9_UPDATE_CHECK,
     },
+    Migration {
+        version: 10,
+        sql: schema::M10_SUMMARY_LANGUAGE,
+    },
+    Migration {
+        version: 11,
+        sql: schema::M11_AI_MODEL,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
@@ -130,6 +138,6 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 9);
+        assert_eq!(current_version(&conn).expect("version"), 11);
     }
 }

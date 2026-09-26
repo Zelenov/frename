@@ -5,16 +5,23 @@
 
 use iced::keyboard::key::Named;
 use iced::widget::text_editor::Binding;
-use iced::widget::{column, container, text_editor as text_editor_widget};
+use iced::widget::{
+    button, column, container, scrollable, stack, text, text_editor as text_editor_widget,
+};
 use iced::{Element, Length};
 
 use crate::tag_colors::TagPalette;
+use crate::theme;
+use crate::widgets::height_handle::HeightHandle;
 use crate::widgets::starred_tags_panel;
 
 use crate::features::{file_name_panel, sync_panel, tag_grid, tag_panel};
 use crate::widgets;
 
-use super::{FileWorkspace, Message};
+use super::{CommentLayout, FileWorkspace, Message};
+
+/// The scrollable around the comment box, snapped to its end while typing on the last line.
+pub const COMMENT_SCROLLABLE_ID: &str = "comment-scrollable";
 
 /// Horizontal padding for the file workspace panel (same inset from splitter and window edge).
 const PANEL_PADDING_X: f32 = 8.0;
@@ -72,10 +79,19 @@ where
         .width(Length::Fill)
         .height(Length::Fill);
 
-    let comment_input = text_editor_widget(&file_workspace.comment_content)
+    let expanded = file_workspace.comment_expanded();
+    // The editor grows with its text inside a scrollable, which shows the scroll bar the
+    // editor itself does not draw (unbounded, it also leaves the wheel to the scrollable).
+    let comment_editor = text_editor_widget(&file_workspace.comment_content)
         .on_action(Message::CommentAction)
         .placeholder("Comment...")
-        .height(80)
+        .height(Length::Shrink)
+        // Fills the box, so a click anywhere in it lands in the editor.
+        .min_height(if expanded {
+            0.0
+        } else {
+            file_workspace.comment_height()
+        })
         .padding([4, 6])
         // Explicitly capture Enter so the event is not treated as Ignored by Iced,
         // which prevents Windows from playing the system beep for unhandled WM_CHAR(0x0D).
@@ -86,6 +102,49 @@ where
                 Binding::from_key_press(kp)
             }
         });
+    let comment_scroll = scrollable(comment_editor)
+        .id(iced::widget::Id::new(COMMENT_SCROLLABLE_ID))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        // The bar beside the text, not over it.
+        .spacing(2)
+        .style(theme::dark_scrollable_style);
+    // Expand / Collapse sits over the box's top right corner, clear of the scroll bar.
+    let toggle = button(text(if expanded { "Collapse" } else { "Expand" }).size(11))
+        .on_press(Message::CommentLayout(CommentLayout::ToggleExpanded))
+        .padding([1, 6])
+        .style(theme::icon_button_style(true));
+    let comment_box = container(stack![
+        comment_scroll,
+        container(toggle)
+            .align_right(Length::Fill)
+            .padding(iced::Padding {
+                top: 2.0,
+                right: 14.0,
+                bottom: 0.0,
+                left: 0.0,
+            }),
+    ])
+    .width(Length::Fill)
+    .height(if expanded {
+        Length::Fill
+    } else {
+        Length::Fixed(file_workspace.comment_height())
+    });
+
+    // Expanded, the comment box is the whole panel.
+    if expanded {
+        return container(comment_box)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(iced::Padding {
+                top: 0.0,
+                right: PANEL_PADDING_X,
+                bottom: PANEL_PADDING_BOTTOM,
+                left: PANEL_PADDING_X,
+            })
+            .into();
+    }
 
     // Starred panel: shown between search bar and tag grid; unaffected by search filter.
     // Reuses the tag grid's panel_bounds for width (same container column).
@@ -105,7 +164,10 @@ where
         content_items.push(sp.map(Message::TagPanel));
     }
     content_items.push(middle.into());
-    content_items.push(comment_input.into());
+    // Dragging the handle up makes the comment box taller.
+    content_items
+        .push(HeightHandle::new(|grow| Message::CommentLayout(CommentLayout::Grow(grow))).into());
+    content_items.push(comment_box.into());
 
     let content = column(content_items)
         .spacing(4)
