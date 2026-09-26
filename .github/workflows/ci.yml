@@ -12,6 +12,10 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # The GStreamer bundled with frename on Windows, and Velopack's packer (matches the crate).
+  GST_VERSION: 1.28.7
+  GST_SHA256: 032fc6062b8539838fc8da22589cb9b24c5d820baa7f8cc160af9ea08395badf
+  VPK_VERSION: 1.2.158
 
 jobs:
   linux:
@@ -150,20 +154,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Configure vendored GStreamer
-        shell: powershell
-        run: |
-          $ErrorActionPreference = "Stop"
-          $base = Join-Path $env:GITHUB_WORKSPACE "vendor\gstreamer"
-          $gstRoot = Join-Path $base "minimal_msvc_x86_64"
-          if (!(Test-Path $gstRoot)) {
-            New-Item -ItemType Directory -Path $base -Force | Out-Null
-            Expand-Archive -Path "gstreamer-minimal-msvc-x86_64.zip" -DestinationPath $base -Force
-          }
-          Add-Content $env:GITHUB_ENV "PKG_CONFIG_PATH=$gstRoot\lib\pkgconfig"
-          Add-Content $env:GITHUB_ENV "PKG_CONFIG=$gstRoot\bin\pkg-config.exe"
-          Add-Content $env:GITHUB_ENV "GSTREAMER_1_0_ROOT_MSVC_X86_64=$gstRoot"
-          Add-Content $env:GITHUB_PATH "$gstRoot\bin"
+      # The official package, pinned; the installer (~500 MB) is cached, not the install.
+      - uses: actions/cache@v4
+        with:
+          path: C:\gst-download
+          key: gstreamer-msvc-x86_64-${{ env.GST_VERSION }}
+
+      - name: Install GStreamer
+        shell: pwsh
+        run: packaging/windows/install-gstreamer.ps1 -Version $env:GST_VERSION -Sha256 $env:GST_SHA256 -Dir C:\gstreamer -Download C:\gst-download
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -174,11 +173,40 @@ jobs:
       - name: Build release
         run: cargo build --release --locked
 
-      - name: Upload test build
-        uses: actions/upload-artifact@v4
+      - name: Bundle GStreamer
+        shell: pwsh
+        run: packaging/windows/bundle.ps1 -GstRoot C:\gstreamer -Exe target\release\frename.exe -Out dist\frename
+
+      - name: Pack with Velopack
+        shell: pwsh
+        run: |
+          dotnet tool install vpk --version $env:VPK_VERSION --tool-path C:\vpk
+          C:\vpk\vpk.exe pack -u frename -v 0.0.1 -p dist\frename -e frename.exe -o releases --packTitle frename --icon frename-icon.ico
+          if ($LASTEXITCODE -ne 0) { throw "vpk pack failed" }
+          Get-ChildItem releases | Format-Table Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: frename-windows-x64-${{ github.sha }}-needs-system-gstreamer
+          name: frename-windows-packages-${{ github.sha }}
           path: |
-            target/release/frename.exe
-            GSTREAMER_SETUP.md
+            releases/frename-win-Setup.exe
+            releases/frename-win-Portable.zip
           retention-days: 14
+
+  # Installs the packages on a fresh runner, which has no GStreamer: the build runner has one on
+  # PATH, which would hide a DLL missing from the bundle.
+  windows-install:
+    name: ci-windows-install
+    needs: windows
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frename-windows-packages-${{ github.sha }}
+          path: packages
+
+      - name: Install and self-test on a clean system
+        shell: pwsh
+        run: packaging/windows/test-package.ps1 -Setup packages\frename-win-Setup.exe -Portable packages\frename-win-Portable.zip

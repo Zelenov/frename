@@ -95,3 +95,15 @@ ALTER TABLE app_settings ADD COLUMN commented_tag_enabled INTEGER NOT NULL DEFAU
 pub const M8_SPACE_AFTER_TAGS: &str = "
 ALTER TABLE app_settings ADD COLUMN space_after_tags INTEGER NOT NULL DEFAULT 0;
 ";
+
+/// Migration 9: the update check (Settings -> Updates): whether frename checks when it starts,
+/// when it last checked (Unix seconds), and the newest version it found, so the "update
+/// available" notice survives restarts.
+pub const M9_UPDATE_CHECK: &str = "
+CREATE TABLE IF NOT EXISTS update_check (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    check_on_start INTEGER NOT NULL DEFAULT 1,
+    last_check INTEGER NOT NULL DEFAULT 0,
+    newest_version TEXT NOT NULL DEFAULT ''
+);
+";

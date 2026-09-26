@@ -16,5 +16,6 @@ mod traits;
 pub use app_database::AppDatabase;
 pub use logging::LoggingAppStateStore;
 pub use traits::{
-    AppSettings, AppStateStore, Initializable, StoredTagStore, VideoSettings, WindowGeometry,
+    AppSettings, AppStateStore, Initializable, StoredTagStore, UpdateCheckState, VideoSettings,
+    WindowGeometry,
 };

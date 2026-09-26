@@ -174,7 +174,10 @@ The ⚙ button opens Settings:
 - put a space after each tag in file names (`Food. Goat. clip.mp4`);
 - where comments are kept (inside the video or `.comment.txt`), and the name of the "Commented"
   tag, or none;
-- where in/out points are kept (file name or inside the video).
+- where in/out points are kept (file name or inside the video);
+- updates: **Check for updates**, then **Update and restart** when a newer version is out.
+  frename also checks once a day by itself (you can turn that off) and puts a dot on ⚙ when
+  an update is ready; nothing is downloaded until you click.
 
 After you change where comments or in/out points are kept, or the tag spacing, Settings offer the
 batch action that updates the existing files.
@@ -185,8 +188,21 @@ batch action that updates the existing files.
 
 ## Requirements
 
-**Windows 10/11 (64-bit):** download the Windows zip from the [latest release](https://github.com/Zelenov/frename/releases/latest). It needs the
-GStreamer runtime for video playback — see [GSTREAMER_SETUP.md](GSTREAMER_SETUP.md).
+**Windows 10/11 (64-bit):** download `frename-win-Setup.exe` from the
+[latest release](https://github.com/Zelenov/frename/releases/latest) and run it. It installs
+without questions and starts frename; video playback is built in, nothing else to install.
+Windows may warn about an unknown publisher once: click **More info → Run anyway**. Your settings
+and the last opened folder are kept in `%LocalAppData%\frename` (uninstalling removes them; your
+tags and comments stay with your files).
+
+Prefer no installer? The Windows zip is a portable frename: right-click it → **Properties** →
+**Unblock**, unzip it anywhere and run `frename.exe`. It keeps its settings in its own folder and
+updates itself too.
+
+**Coming from the zip of version 0.66 or older?** On its first start the new frename finds the old
+folder in Downloads, Desktop or Documents and offers to import your settings and recent folders.
+If it was somewhere else, use **Settings → Import from an old frename folder…**. Then you can
+delete the old folder, and uninstall GStreamer if you installed it only for frename.
 
 **Linux (64-bit; Ubuntu 24.04, Linux Mint 22, Fedora 40, Debian 13 or newer):** download the
 `.AppImage` from the [latest release](https://github.com/Zelenov/frename/releases/latest), make it executable (`chmod +x frename-*.AppImage`) and run
@@ -203,4 +219,4 @@ cargo build
 cargo run
 ```
 
-Requires Rust stable and GStreamer development libraries. See [GSTREAMER_SETUP.md](GSTREAMER_SETUP.md) for the GStreamer setup on Windows.
+Requires Rust and the GStreamer development files: see [GSTREAMER_SETUP.md](GSTREAMER_SETUP.md).

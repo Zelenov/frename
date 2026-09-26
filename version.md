@@ -1,3 +1,13 @@
+# 0.69
+## Added
+- A Windows installer: download `frename-win-Setup.exe` from the release page and run it. It installs without questions, and video plays with nothing else to install.
+- Updates: Settings → Updates checks for a new version and installs it with **Update and restart**. frename also checks once a day by itself and puts a dot on ⚙ when an update is ready.
+- On first start, the installed frename finds the folder of an older zip version and offers to import your settings and recent folders; Settings → **Import from an old frename folder…** does it for a folder kept elsewhere.
+
+## Changed
+- The Windows zip is now a portable frename with video playback built in: unzip and run, no GStreamer to install. It keeps its settings in its own folder and updates itself too.
+- The installed frename keeps its settings in `%LocalAppData%\frename`.
+
 # 0.68
 ## Added
 - A setting puts a space after each tag in file names (`Food. Goat. clip.mp4`); names are read the same either way.
