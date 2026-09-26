@@ -38,17 +38,19 @@ app can update itself.
    while that version is newer than the running one, the Settings gear in the folder controls has a
    small accent dot and the tooltip `Update available: 0.68`. Nothing is downloaded or applied
    without the button.
-6. **Settings from the zip version.** On the first start with no `frename.db` in the data folder,
-   before the main window opens, a native dialog (`rfd`, already a dependency) asks
-   `Import settings from an older frename?` — `Choose its folder…` / `Start fresh`. The chosen
-   folder's `frename.db` is copied (not moved) into the data folder; a folder without one says so
-   and asks again. `Start fresh` is remembered by creating the new database. Settings also get a
-   permanent **Import settings from an older frename…** button, which copies the same way and
-   asks to restart frename. This is the issue's "migrating an existing database found next to the
-   exe": the old exe's folder is exactly what the user picks.
 5. **Not installed** (`cargo run`, or a plain `frename.exe` copied out of a package): the Updates
    section says `Updates work in the installed version` and the button is disabled
    (`UpdateManager::new` returns `NotInstalled` then — research doc).
+6. **Settings from the zip version.** On the first interactive start with no `frename.db` in the
+   data folder, frename **looks** for an old one, the issue's "database found next to the exe":
+   a `frename.db` next to a `frename.exe` in the user's Downloads, Desktop and Documents folders
+   and their subfolders up to two levels deep (the places a downloaded zip gets unpacked), newest
+   first. Only when one is found, a native dialog (`rfd`, already a dependency) asks, before the
+   main window opens:
+   `Import settings and recent folders from C:\Users\…\Downloads\frename?` — **Import** /
+   **Start fresh**. Nothing found → no dialog, the app just starts: a clean install asks nothing.
+   Either answer creates the new database, so the question never comes back. `--self-test` and any
+   other non-interactive start never look and never ask.
 
 ## UI sketch
 
@@ -70,7 +72,10 @@ Updates
 ```
 
 While downloading: `Downloading 0.68… 42%`, both buttons disabled. Errors: `no connection`
-for network failures; `GitHub did not respond, try later` for server errors and rate limits. While a batch job runs,
+for network failures; `GitHub did not respond, try later` for server errors and rate limits.
+A failed download shows `Could not update: no connection` (or the reason) and enables both
+buttons again. Versions are shown as `version.md` writes them: a trailing `.0` of Velopack's
+3-part version is dropped everywhere in the UI (`0.67`, not `0.67.0`). While a batch job runs,
 **Update and restart** is disabled with the tooltip `Wait for the batch to finish`.
 
 The settings window is not resizable and every section must fit (`SETTINGS_WINDOW_SIZE` in
@@ -125,7 +130,8 @@ The portable zip has the same layout with a `.portable` marker file in its root
 
 1. `velopack::VelopackApp::build().run()` — must be first; it handles install/update hooks and
    exits for them (research doc; `velopack` `app.rs`).
-2. Work out the data folder (below) with Velopack's locator, and the import dialog (flow 6).
+2. Work out the data folder (below) with Velopack's locator. Unless `--self-test`: if it has no
+   `frename.db`, run the old-database search and dialog (flow 6).
 3. `configure_bundled_gstreamer(exe_dir, data_dir)` — Windows only, before any thread and before `gst::init`, as in
    the research doc: when `lib\gstreamer-1.0\gstcoreelements.dll` exists next to the exe, remove
    `GST_PLUGIN_PATH`, `GST_PLUGIN_PATH_1_0`, `GST_PLUGIN_SYSTEM_PATH`, `GST_PLUGIN_SCANNER`,
@@ -151,12 +157,18 @@ updates go "one level up (`..\`) outside of the `current` dir").
 
 `main` finds it with Velopack's locator and hands it to `frename-core` through a setter
 (`set_app_data_dir`), like the storage settings: `frename-core` does not depend on `velopack`.
-`AppDatabase::new` and the log use it.
+`AppDatabase::new` and the log use it. The choice of folder is a pure function (tested); the
+process-wide setter is called once in `main` and not by tests (tests use `AppDatabase::with_path`
+or the pure function, so parallel test threads do not race).
 
 **Migration.** `frename.db` holds the folder history (recent folders and the last file in each),
 window size, volume, and Settings (comment and in/out storage, the "Commented" tag, autoplay,
-monochrome tags). The installed app cannot know where the old zip was, so the first start asks
-(flow 6). A zip user who unzips the new portable zip over their old frename folder needs nothing:
+monochrome tags). The installed app cannot know where the old zip was, so the first start searches
+for it (flow 6). The import is done in `frename-core` at start-up only, before any connection to
+the new database exists, with SQLite's `VACUUM INTO` from the old database (opened read-only):
+the old app keeps its database in WAL mode (`open_tuned` in `app_database.rs`), so copying the
+`frename.db` file alone could miss recent changes still in `frename.db-wal`, and `VACUUM INTO`
+reads them. The old files are left untouched. A zip user who unzips the new portable zip over their old frename folder needs nothing:
 the old `frename.db` is already in the portable root, the data folder; unzipped anywhere else, the
 same first-start dialog appears. The README tells zip users to extract into their existing
 frename folder.
@@ -170,9 +182,10 @@ In a new `src/features/updates/` feature (messages / state / view, Elm pattern),
 Settings window:
 - `UpdateManager::new(GithubSource::new("https://github.com/Zelenov/frename", None, false), …)`
   — `prerelease = false`; draft releases (branch builds) are invisible to it (research doc).
-- `check_for_updates`, `download_updates` (its progress arrives on a `Sender<i16>`, mapped to a
-  message) run in
-  `Task::perform` over `spawn_blocking`; they are blocking calls.
+- `check_for_updates` runs in `Task::perform` over `spawn_blocking` (a blocking call).
+  `download_updates` reports progress on a `std::sync::mpsc::Sender<i16>`; it runs in
+  `spawn_blocking` inside a `Task::run` stream that forwards each value as a message, so the
+  percentage reaches the UI (`Task::perform` yields only one message).
 - Apply: the app saves the open file through the existing unload → `apply_file_updated` path,
   then calls `wait_exit_then_apply_updates` and closes the window. Velopack applies the update
   after frename exits and starts the new version.
@@ -224,7 +237,11 @@ has the build GStreamer on `PATH`, which would hide a DLL missing from the bundl
 and:
 1. fails if a system GStreamer is on the runner (`GSTREAMER_1_0_ROOT_MSVC_X86_64`, or
    `gst-launch-1.0` on `PATH`), so the test proves the clean-machine case;
-2. runs `Setup.exe --silent`, then the self-test of the installed app;
+2. runs `Setup.exe --silent` with `Start-Process -Wait` (it is a GUI exe too), checks that every
+   CRT DLL `dumpbin /dependents` lists for `frename.exe` is present in `current\` (the runner has
+   the VC++ runtime in `System32`, which would hide a missing app-local one), then runs the
+   installed app's self-test as `current\frename.exe` directly, not through the root stub, whose
+   exit-code behaviour is not documented;
 3. installs an **older** official GStreamer runtime system-wide (`msiexec /i … /qn`), put it on
    `PATH`, set `GST_PLUGIN_PATH` to its plugins, and run the self-test again: it must still pass,
    which proves a system GStreamer does not interfere;
@@ -273,6 +290,8 @@ The legacy `RELEASES` file is not uploaded (only for Squirrel migrations — `ch
   does not update — Velopack would kill it with its unsaved edits.
 - **A plugin missing at runtime** (allowlist too small for some format): the file fails to play as
   today; the self-test fixture list is the guard, and a new format means a new fixture.
+- **GStreamer installed by hand for older versions**: no longer needed; the README says it can be
+  uninstalled, and one left installed does not interfere (smoke test step 3).
 - **Existing zip users who run the new portable zip over their old folder**: their `frename.db` is
   already in the portable root, which is the data folder.
 - **SmartScreen / antivirus**: unsigned; documented in the README, for `Setup.exe` and for the
@@ -292,7 +311,7 @@ The legacy `RELEASES` file is not uploaded (only for Squirrel migrations — `ch
 Two PRs, each through the review gate:
 1. **Self-contained app** — data folder, `configure_bundled_gstreamer`, `--self-test` and fixtures,
    GStreamer from the official MSIs in CI, bundling, `vpk pack`, Setup + portable zip on releases,
-   smoke test in `ci-windows`, the vendored zip removed, README and `GSTREAMER_SETUP.md` (becomes
+   smoke test in the new `ci-windows-install` job, the vendored zip removed, README and `GSTREAMER_SETUP.md` (becomes
    "building from source" only), `version.md`. Body `Refs #10`.
 2. **Updates** — Settings section, start-up check, gear dot, update and restart. Body `Closes #10`.
 
@@ -307,8 +326,11 @@ explicitly.
 - `configure_bundled_gstreamer`'s pure part, on every OS: with a temp folder containing a fake
   `lib/gstreamer-1.0/gstcoreelements.dll` it returns the variables to set and remove, with the
   registry in the data folder; without it, nothing.
-- Import: copying a chosen folder's `frename.db`; a folder without one is refused.
-- `--self-test` in `ci-windows` (installed, portable, and with an older system GStreamer on
+- Import: `VACUUM INTO` from an old database with un-checkpointed WAL content keeps that content;
+  the old files are unchanged; the search finds `frename.db` next to `frename.exe` up to two
+  levels deep in given folders and ignores a `frename.db` without an exe next to it;
+  `--self-test` with an empty data folder neither searches nor asks.
+- `--self-test` in `ci-windows-install` (installed, portable, and with an older system GStreamer on
   `PATH`); a fixture that fails to decode makes the job red (checked once by hand in the PR by
   pointing it at a corrupt file).
 - Updates feature: state machine tests with a fake update source (no network): up to date, update
@@ -319,9 +341,10 @@ explicitly.
 
 ## Open questions (with recommended answers)
 
-1. **Settings of users coming from the zip version.** *Recommended:* the first-start import dialog
-   plus the Settings button (flow 6). Rejected: starting fresh, which loses folder history and
-   storage settings.
+1. **Settings of users coming from the zip version.** *Recommended:* the automatic search with a
+   dialog only when an old database is found (flow 6). If the search misses (the zip was somewhere
+   else), those settings start fresh; a manual "Import from a folder…" button in Settings would
+   cover that but is more than the issue asks, so it is left out unless the owner wants it.
 2. **Data folder for the installed app: removed on uninstall** (Velopack root) or kept
    (`%AppData%\frename`, roaming)? *Recommended:* the Velopack root, as the issue says
    `%LocalAppData%`; nothing irreplaceable lives in it.
