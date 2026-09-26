@@ -119,6 +119,9 @@ pub enum ActionMessage {
     OpenSettings,
     /// Open the settings window at its AI section (the API key, the summary language).
     OpenAiSettings,
+    /// Have the settings read whether an API key is saved; the answer comes back as
+    /// `DescribeAi(KeyState)`. Handled by the app.
+    ReadKeyState,
 }
 
 impl ActionMessage {
@@ -126,7 +129,11 @@ impl ActionMessage {
     pub fn applies_while_running(&self) -> bool {
         matches!(
             self,
-            Self::DescribeAi(describe_ai::Message::Probed(_) | describe_ai::Message::KeyState(_))
+            Self::DescribeAi(
+                describe_ai::Message::Probed(_)
+                    | describe_ai::Message::KeyState(_)
+                    | describe_ai::Message::SetLanguage(_)
+            )
         )
     }
 }
@@ -145,12 +152,13 @@ impl Actions {
             ActionMessage::MoveComments(message) => self.move_comments.update(message),
             ActionMessage::MoveInOut(message) => self.move_in_out.update(message),
             ActionMessage::DescribeAi(message) => self.describe_ai.update(message),
-            ActionMessage::OpenSettings | ActionMessage::OpenAiSettings => {}
+            ActionMessage::OpenSettings
+            | ActionMessage::OpenAiSettings
+            | ActionMessage::ReadKeyState => {}
         }
     }
 
-    /// The options of "Describe with AI", which the workspace feeds with background reads.
-    pub fn describe_ai_mut(&mut self) -> &mut describe_ai::Options {
+    pub(super) fn describe_ai_mut(&mut self) -> &mut describe_ai::Options {
         &mut self.describe_ai
     }
 
@@ -197,6 +205,14 @@ impl Actions {
                 format!("Run on {}", files(checked.len())),
                 !checked.is_empty() && self.operation(action).is_some(),
             ),
+        }
+    }
+
+    /// What `action` shows next to the run button (why it cannot run), if anything.
+    pub fn footer(&self, action: Action) -> Option<Element<'_, ActionMessage>> {
+        match action {
+            Action::DescribeAi => self.describe_ai.footer(),
+            _ => None,
         }
     }
 

@@ -181,13 +181,14 @@ pub fn frame_tokens(width: u32, height: u32) -> u64 {
 }
 
 /// Estimated tokens of describing one clip, before its frames are known: 16:9 frames, the
-/// subtitles' text, the instructions, and a typical answer.
-pub fn estimate_usage(duration_s: f64, subtitle_chars: usize) -> AiUsage {
+/// subtitles (`subtitle_bytes`, the `.srt` file's size, an upper bound on its text), the
+/// instructions, and a typical answer.
+pub fn estimate_usage(duration_s: f64, subtitle_bytes: usize) -> AiUsage {
     let (w, h) = frame_size(1920, 1080);
     let frames = sample_times(duration_s).len() as u64;
     AiUsage {
         input_tokens: frames * frame_tokens(w, h)
-            + (subtitle_chars as f64 / CHARS_PER_TOKEN) as u64
+            + (subtitle_bytes as f64 / CHARS_PER_TOKEN) as u64
             + INSTRUCTION_TOKENS,
         output_tokens: ANSWER_TOKENS,
     }
@@ -282,7 +283,7 @@ pub fn parse_answer(response: &AiResponse, duration_s: f64) -> Result<Descriptio
     match response.stop_reason.as_str() {
         "end_turn" => {}
         "max_tokens" => return Err("The answer was too long".to_string()),
-        "refusal" => return Err("The model declined to describe it".to_string()),
+        "refusal" => return Err("Claude declined to describe it".to_string()),
         other => return Err(format!("The model stopped early ({other})")),
     }
     let summary = response.json["summary"].as_str().unwrap_or_default().trim();

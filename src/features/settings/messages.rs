@@ -37,9 +37,15 @@ pub enum Message {
     SaveKey,
     /// Show the key field again to type a new key over the saved one.
     ReplaceKey,
+    /// Keep the saved key after all.
+    CancelReplaceKey,
     /// Remove the saved key from the credential store. Handled by the app.
     RemoveKey,
     /// Whether a key is saved: read in the background, or after Save / Remove. `Err` says why a
-    /// save or removal failed.
-    KeyState(Result<KeyState, String>),
+    /// save or removal failed. `request` numbers the read, so an answer that took longer than a
+    /// later one cannot override it.
+    KeyState {
+        request: u64,
+        result: Result<KeyState, String>,
+    },
 }

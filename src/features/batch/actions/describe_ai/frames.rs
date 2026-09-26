@@ -92,7 +92,8 @@ impl Clip {
         let video_in = scale
             .static_pad("sink")
             .ok_or("videoscale has no sink pad")?;
-        let bin = pipeline.clone();
+        // Weak: the pipeline owns the decoder that owns this closure.
+        let bin = pipeline.downgrade();
         decode.connect_pad_added(move |_, pad| {
             let is_video = pad
                 .current_caps()
@@ -106,6 +107,9 @@ impl Clip {
                 .property("sync", false)
                 .build()
             else {
+                return;
+            };
+            let Some(bin) = bin.upgrade() else {
                 return;
             };
             if bin.add(&drop).is_ok() {
@@ -216,10 +220,20 @@ impl Clip {
                 return Ok(None);
             }
             let fast = gst::SeekFlags::KEY_UNIT | gst::SeekFlags::SNAP_NEAREST;
-            let (mut pts, mut image) = self.frame_at(time_s, fast)?;
+            let (mut pts, mut image) = match self.frame_at(time_s, fast) {
+                Ok(frame) => frame,
+                // Past the end of the picture (the sound runs longer): the frames so far are
+                // the whole picture.
+                Err(_) if !frames.is_empty() => break,
+                Err(e) => return Err(e),
+            };
             let last = frames.last().map(|f| f.time_s);
             if needs_exact(pts, time_s, last, interval) {
-                (pts, image) = self.frame_at(time_s, gst::SeekFlags::ACCURATE)?;
+                (pts, image) = match self.frame_at(time_s, gst::SeekFlags::ACCURATE) {
+                    Ok(frame) => frame,
+                    Err(_) if !frames.is_empty() => break,
+                    Err(e) => return Err(e),
+                };
                 if last.is_some_and(|last| pts <= last + 1e-3) {
                     continue;
                 }
@@ -301,8 +315,8 @@ fn to_jpeg(image: image::RgbImage) -> Result<Vec<u8>, String> {
 pub struct Probe {
     /// Length in seconds; `None` when the clip could not be read in time.
     pub duration_s: Option<f64>,
-    /// Size of its `.srt` file, standing in for the subtitle text's length.
-    pub subtitle_chars: usize,
+    /// Size of its `.srt` file in bytes: an upper bound on the subtitle text's length.
+    pub subtitle_bytes: usize,
 }
 
 /// Read what the estimate needs about the clip at `path`, giving up after [`OPEN_TIMEOUT`].
@@ -311,12 +325,12 @@ pub fn probe(path: &Path) -> Probe {
         .map_err(|e| log::info!("ai: cannot read {}: {e}", path.display()))
         .ok()
         .and_then(|clip| clip.duration_s());
-    let subtitle_chars = std::fs::metadata(frename_core::subtitle_path(path))
+    let subtitle_bytes = std::fs::metadata(frename_core::subtitle_path(path))
         .map(|m| m.len() as usize)
         .unwrap_or(0);
     Probe {
         duration_s,
-        subtitle_chars,
+        subtitle_bytes,
     }
 }
 
@@ -417,6 +431,57 @@ mod tests {
             .sample(duration, &AtomicBool::new(true))
             .expect("ok")
             .is_none());
+    }
+
+    /// A clip whose sound runs longer than its picture gives the frames of the picture.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_picture_shorter_than_the_sound_gives_its_frames() {
+        let dir = std::env::temp_dir().join(format!("frename-frames-av-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("dir");
+        let clip_path = dir.join("short-picture.mkv");
+        let made = std::process::Command::new("gst-launch-1.0")
+            .args([
+                "-q",
+                "videotestsrc",
+                "num-buffers=40",
+                "!",
+                "video/x-raw,framerate=10/1,width=64,height=48",
+                "!",
+                "jpegenc",
+                "!",
+                "matroskamux",
+                "name=mux",
+                "!",
+                "filesink",
+            ])
+            .arg(format!("location={}", clip_path.display()))
+            .args([
+                "audiotestsrc",
+                "num-buffers=430",
+                "!",
+                "audio/x-raw,rate=44100",
+                "!",
+                "mux.",
+            ])
+            .status();
+        if !made.is_ok_and(|s| s.success()) {
+            eprintln!("gst-launch-1.0 could not make the test clip: skipped");
+            return;
+        }
+        let clip = Clip::open(&clip_path, Duration::from_secs(20)).expect("opens");
+        let duration = clip.duration_s().expect("duration");
+        let frames = clip
+            .sample(duration, &AtomicBool::new(false))
+            .expect("the picture's frames")
+            .expect("not cancelled");
+        assert!(!frames.is_empty());
+        assert!(
+            frames.iter().all(|f| f.time_s <= 4.5),
+            "{:?}",
+            frames.iter().map(|f| f.time_s).collect::<Vec<_>>()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

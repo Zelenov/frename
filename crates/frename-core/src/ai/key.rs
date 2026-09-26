@@ -93,8 +93,9 @@ mod tests {
         let user = format!("{USER}-test-{}", std::process::id());
         match key_state_of(&user) {
             KeyState::Unavailable => {
-                #[cfg(windows)]
-                panic!("Windows always has its Credential Manager");
+                if cfg!(windows) {
+                    panic!("Windows always has its Credential Manager");
+                }
                 assert!(save_key_of(&user, "test-key").is_err() || read_key_of(&user).is_none());
             }
             state => {

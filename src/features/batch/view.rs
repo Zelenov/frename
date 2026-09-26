@@ -99,15 +99,26 @@ fn action_options<'a>(
         .on_press_maybe(can_run.then_some(Message::Run))
         .padding([6, 14]);
 
-    column![
+    // The options scroll; the run button, and why it may be off, stay in view below them, even
+    // in a small window or under a job's report.
+    let options = scrollable(
         state
             .actions()
             .view(state.action(), &checked)
             .map(Message::Action),
-        run
-    ]
-    .spacing(12)
-    .into()
+    )
+    .height(Length::Fill)
+    .style(theme::dark_scrollable_style);
+    column![options]
+        .extend(
+            state
+                .actions()
+                .footer(state.action())
+                .map(|footer| footer.map(Message::Action)),
+        )
+        .push(run)
+        .spacing(12)
+        .into()
 }
 
 /// The job panel shared by every action: progress, the file in work, the outcome counts, and

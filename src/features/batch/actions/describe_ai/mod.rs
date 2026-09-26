@@ -39,8 +39,10 @@ pub enum Message {
     SetRedo(bool),
     /// Clip lengths read in the background.
     Probed(Vec<(FileId, Probe)>),
-    /// Whether an API key is saved, read in the background or after a change in the settings.
+    /// Whether an API key is saved, from the settings (which read it).
     KeyState(KeyState),
+    /// The language descriptions are written in, from the settings.
+    SetLanguage(SummaryLanguage),
 }
 
 /// What the job does to each file: the options it started with.
@@ -53,6 +55,7 @@ pub struct Run {
 #[derive(Debug, Clone, Default)]
 pub struct Options {
     redo: bool,
+    language: SummaryLanguage,
     /// What is known about each checked video, kept while the folder is open.
     probes: HashMap<FileId, Probe>,
     /// Videos whose length is being read.
@@ -74,18 +77,19 @@ impl Options {
                 }
             }
             Message::KeyState(state) => self.key = Some(state),
+            Message::SetLanguage(language) => self.language = language,
         }
     }
 
     pub fn operation(&self) -> super::Operation {
         super::Operation::DescribeAi(Run {
-            language: frename_core::ai::summary_language(),
+            language: self.language,
             redo: self.redo,
         })
     }
 
     /// Whether the key's state still has to be read; marks it as asked for.
-    pub fn request_key_state(&mut self) -> bool {
+    pub(in crate::features::batch) fn request_key_state(&mut self) -> bool {
         let needed = self.key.is_none() && !self.key_requested;
         self.key_requested = true;
         needed
@@ -99,7 +103,7 @@ impl Options {
 
     /// Checked videos whose length is not known or being read yet; they are marked as being
     /// read.
-    pub fn missing_probes<'a>(
+    pub(in crate::features::batch) fn missing_probes<'a>(
         &mut self,
         checked: impl Iterator<Item = &'a File>,
     ) -> Vec<(FileId, PathBuf)> {
@@ -165,7 +169,7 @@ impl Options {
                 Some(d) => {
                     plan.videos += 1;
                     plan.seconds += d;
-                    plan.usage += describe::estimate_usage(d, probe.subtitle_chars);
+                    plan.usage += describe::estimate_usage(d, probe.subtitle_bytes);
                     plan.run_seconds += SECONDS_PER_REQUEST
                         + SECONDS_PER_FRAME * describe::sample_times(d).len() as f64;
                     if !file.has_subtitles() {
@@ -225,53 +229,54 @@ impl Options {
         lines = lines
             .push(
                 row![
-                    text(language_line(frename_core::ai::summary_language()))
+                    text(language_line(self.language))
                         .size(12)
+                        .color(theme::TEXT_MUTED)
                         .width(Length::Fill),
                     link_button("Change", ActionMessage::OpenAiSettings),
                 ]
                 .spacing(8)
                 .align_y(iced::Alignment::Center),
             )
-            .push(muted(
-                "Frames and subtitles of these videos are sent to Anthropic.".to_string(),
-            ))
             .push(
                 checkbox(self.redo)
                     .label("Redo videos that already have an AI description")
                     .text_size(13)
                     .on_toggle(|redo| ActionMessage::DescribeAi(Message::SetRedo(redo))),
             );
-        match self.key {
-            Some(KeyState::Missing) => {
-                lines = lines.push(
-                    row![
-                        text("Set an Anthropic API key in Settings")
-                            .size(13)
-                            .color(theme::ERROR)
-                            .width(Length::Fill),
-                        link_button("Open Settings", ActionMessage::OpenAiSettings),
-                    ]
-                    .spacing(8)
-                    .align_y(iced::Alignment::Center),
-                )
-            }
-            Some(KeyState::Unavailable) => {
-                lines = lines.push(
-                    text("Cannot store an API key on this system")
-                        .size(13)
-                        .color(theme::ERROR),
-                )
-            }
-            Some(KeyState::Saved) | None => {}
-        }
         super::panel(
             LABEL,
             "Describes what happens in each checked video, and when: a summary and time-ranged \
-             segments go into the AI description of its comment. Your own comment text is kept."
+             segments go into the AI description of its comment; your own text is kept. Frames \
+             and subtitles are sent to Anthropic."
                 .to_string(),
             lines.into(),
         )
+    }
+
+    /// Why the key keeps the run button off, shown next to it so it is never scrolled away.
+    pub fn footer(&self) -> Option<Element<'_, ActionMessage>> {
+        match self.key {
+            Some(KeyState::Missing) => Some(
+                row![
+                    text("Set an Anthropic API key in Settings")
+                        .size(13)
+                        .color(theme::ERROR)
+                        .width(Length::Fill),
+                    link_button("Open Settings", ActionMessage::OpenAiSettings),
+                ]
+                .spacing(8)
+                .align_y(iced::Alignment::Center)
+                .into(),
+            ),
+            Some(KeyState::Unavailable) => Some(
+                text("Cannot store an API key on this system: it needs a password store, such as GNOME Keyring or KWallet.")
+                    .size(13)
+                    .color(theme::ERROR)
+                    .into(),
+            ),
+            Some(KeyState::Saved) | None => None,
+        }
     }
 }
 
@@ -342,13 +347,13 @@ fn minutes(seconds: f64) -> String {
     }
 }
 
-/// "Descriptions in Russian", or in the subtitles' language.
+/// "Language: Russian", or as the subtitles.
 fn language_line(language: SummaryLanguage) -> String {
     match language {
         SummaryLanguage::SameAsSubtitles => {
-            "Descriptions in the subtitles' language (English if none)".to_string()
+            "Language: as the subtitles (English if none)".to_string()
         }
-        language => format!("Descriptions in {language}"),
+        language => format!("Language: {language}"),
     }
 }
 
@@ -391,11 +396,6 @@ pub fn probe_all(clips: Vec<(FileId, PathBuf)>) -> Vec<(FileId, Probe)> {
             .flat_map(|w| w.join().unwrap_or_default())
             .collect()
     })
-}
-
-/// Read whether a key is saved. Blocking: runs on a worker thread.
-pub fn read_key_state() -> KeyState {
-    key::key_state()
 }
 
 /// Describe the video at `path` and write the description into its comment.
@@ -511,7 +511,7 @@ mod tests {
     fn probe(duration_s: Option<f64>) -> Probe {
         Probe {
             duration_s,
-            subtitle_chars: 0,
+            subtitle_bytes: 0,
         }
     }
 

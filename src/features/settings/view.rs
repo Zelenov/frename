@@ -170,6 +170,9 @@ fn ai_options(key: &KeySection, language: SummaryLanguage) -> Element<'_, Messag
         .into(),
         _ => {
             let can_save = !key.input.trim().is_empty();
+            let cancel = key
+                .replacing
+                .then(|| small_button("Cancel", Message::CancelReplaceKey));
             row![
                 text_input("sk-ant-…", &key.input)
                     .secure(!key.shown)
@@ -186,23 +189,33 @@ fn ai_options(key: &KeySection, language: SummaryLanguage) -> Element<'_, Messag
                     .on_press_maybe(can_save.then_some(Message::SaveKey))
                     .padding([3, 10]),
             ]
+            .extend(cancel)
             .spacing(8)
             .align_y(iced::Alignment::Center)
             .into()
         }
     };
-    let where_kept = match key.state {
-        Some(KeyState::Saved) if !key.replacing => format!("Saved in {store} on this computer."),
-        _ => format!("Save keeps it in {store} on this computer."),
-    };
-    let mut options = column![
-        row![text("Anthropic API key").size(13), key_row]
-            .spacing(12)
-            .align_y(iced::Alignment::Center),
-        text(where_kept).size(12).color(theme::TEXT_MUTED),
-        muted("Get a key at console.anthropic.com → API keys."),
-    ]
+    let mut options = column![row![text("Anthropic API key").size(13), key_row]
+        .spacing(12)
+        .align_y(iced::Alignment::Center)]
     .spacing(6);
+    options = match key.state {
+        Some(KeyState::Unavailable) => options.push(muted(
+            "Needs a password store, such as GNOME Keyring or KWallet.",
+        )),
+        Some(KeyState::Saved) if !key.replacing => options.push(
+            text(format!("Saved in {store} on this computer."))
+                .size(12)
+                .color(theme::TEXT_MUTED),
+        ),
+        _ => options
+            .push(
+                text(format!("Save keeps it in {store} on this computer."))
+                    .size(12)
+                    .color(theme::TEXT_MUTED),
+            )
+            .push(muted("Get a key at console.anthropic.com → API keys.")),
+    };
     if let Some(error) = &key.error {
         options = options.push(text(error.as_str()).size(12).color(theme::ERROR));
     }

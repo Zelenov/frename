@@ -31,6 +31,9 @@ pub struct KeySection {
     pub replacing: bool,
     /// Why the last save or removal failed.
     pub error: Option<String>,
+    /// The last read of the store asked for, and the newest one answered.
+    requested: u64,
+    answered: u64,
 }
 
 impl Default for SettingsState {
@@ -54,8 +57,9 @@ impl SettingsState {
                 | Message::ToggleShowKey
                 | Message::SaveKey
                 | Message::ReplaceKey
+                | Message::CancelReplaceKey
                 | Message::RemoveKey
-                | Message::KeyState(_)
+                | Message::KeyState { .. }
         );
         self.apply(message);
         if persists {
@@ -66,6 +70,12 @@ impl SettingsState {
     /// The API key section.
     pub fn key(&self) -> &KeySection {
         &self.key
+    }
+
+    /// Number a new read (or change) of the key's store; its answer comes back with it.
+    pub fn begin_key_request(&mut self) -> u64 {
+        self.key.requested += 1;
+        self.key.requested
     }
 
     /// The key typed to be saved (trimmed); `None` when the field is empty.
@@ -137,9 +147,20 @@ impl SettingsState {
             }
             Message::ToggleShowKey => self.key.shown = !self.key.shown,
             Message::ReplaceKey => self.key.replacing = true,
+            Message::CancelReplaceKey => {
+                self.key.replacing = false;
+                self.key.input.clear();
+                self.key.error = None;
+            }
             // Done by the app on a worker thread; the answer comes back as `KeyState`.
             Message::SaveKey | Message::RemoveKey => self.key.error = None,
-            Message::KeyState(Ok(state)) => {
+            // An answer older than one already taken is stale.
+            Message::KeyState { request, .. } if request <= self.key.answered => {}
+            Message::KeyState {
+                request,
+                result: Ok(state),
+            } => {
+                self.key.answered = request;
                 if state == KeyState::Saved {
                     self.key.input.clear();
                     self.key.shown = false;
@@ -147,7 +168,13 @@ impl SettingsState {
                 self.key.replacing = false;
                 self.key.state = Some(state);
             }
-            Message::KeyState(Err(error)) => self.key.error = Some(error),
+            Message::KeyState {
+                request,
+                result: Err(error),
+            } => {
+                self.key.answered = request;
+                self.key.error = Some(error);
+            }
             Message::OpenBatchAction(
                 Operation::TagCommented
                 | Operation::FixTags
@@ -242,12 +269,30 @@ mod tests {
         };
         state.apply(Message::KeyInput(" sk-ant-123 ".to_string()));
         assert_eq!(state.typed_key().as_deref(), Some("sk-ant-123"));
-        state.apply(Message::KeyState(Err("locked".to_string())));
+        let request = state.begin_key_request();
+        state.apply(Message::KeyState {
+            request,
+            result: Err("locked".to_string()),
+        });
         assert_eq!(state.key().error.as_deref(), Some("locked"));
         assert_eq!(state.key().input, " sk-ant-123 ", "kept to try again");
-        state.apply(Message::KeyState(Ok(KeyState::Saved)));
+        let slow_read = state.begin_key_request();
+        let save = state.begin_key_request();
+        state.apply(Message::KeyState {
+            request: save,
+            result: Ok(KeyState::Saved),
+        });
         assert!(state.key().input.is_empty());
         assert_eq!(state.key().state, Some(KeyState::Saved));
+        state.apply(Message::KeyState {
+            request: slow_read,
+            result: Ok(KeyState::Missing),
+        });
+        assert_eq!(
+            state.key().state,
+            Some(KeyState::Saved),
+            "a read that answers late does not undo the save"
+        );
         assert!(!format!("{:?}", state.settings()).contains("sk-ant"));
     }
 }

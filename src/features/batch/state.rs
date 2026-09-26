@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use frename_core::ai::provider::AiUsage;
-use frename_core::{FileId, FileSnapshot};
+use frename_core::{File, FileId, FileSnapshot};
 
 use super::actions::Actions;
 use super::{Action, Message, Operation};
@@ -158,9 +158,6 @@ impl BatchState {
         }
         match message {
             Message::SetActive(active) => self.active = active,
-            Message::Action(message) if message.applies_while_running() => {
-                self.actions.update(message)
-            }
             Message::SelectAction(action) => self.action = action,
             Message::Action(message) => self.actions.update(message),
             Message::Prepare { operation, files } => {
@@ -307,9 +304,18 @@ impl BatchState {
         self.actions.describe_ai_mut().reset_files();
     }
 
-    /// The options of every action, for background reads that feed them.
-    pub fn actions_mut(&mut self) -> &mut Actions {
-        &mut self.actions
+    /// What "Describe with AI" needs read from disk while its panel is shown for `checked`: the
+    /// videos whose length is not known or asked for yet, and whether the key's state still has
+    /// to be read. Both are marked as asked for.
+    pub fn describe_ai_reads<'a>(
+        &mut self,
+        checked: impl Iterator<Item = &'a File>,
+    ) -> (Vec<(FileId, PathBuf)>, bool) {
+        if !self.active || self.action != Action::DescribeAi {
+            return (Vec::new(), false);
+        }
+        let options = self.actions.describe_ai_mut();
+        (options.missing_probes(checked), options.request_key_state())
     }
 
     /// Whether the right half shows the batch panel instead of the open file.

@@ -30,12 +30,12 @@ fn find(comment: &str) -> Option<Range<usize>> {
     let mut start = None;
     for line in comment.split_inclusive('\n') {
         let content = line.trim_end_matches(['\n', '\r']);
-        match start {
-            None if previous_blank && content.starts_with(START) => start = Some(offset),
-            Some(start) if is_end_line(content) => {
-                return Some(start..offset + content.len());
-            }
-            _ => {}
+        // A later `AI: ` paragraph moves the start: the block is the last one opened before
+        // its end line, so an editor's paragraph that happens to start with `AI: ` stays theirs.
+        if previous_blank && content.starts_with(START) {
+            start = Some(offset);
+        } else if let Some(start) = start.filter(|_| is_end_line(content)) {
+            return Some(start..offset + content.len());
         }
         previous_blank = content.trim().is_empty();
         offset += line.len();
@@ -265,6 +265,16 @@ mod tests {
     fn an_ai_line_inside_a_paragraph_does_not_start_a_block() {
         let comment = "Note\nAI: not a block\n0:00–0:01 x\n— M, 2026-01-01 —";
         assert_eq!(ai_block(comment), None);
+    }
+
+    #[test]
+    fn an_editors_paragraph_starting_with_ai_stays_theirs() {
+        let editor = "AI: check the audio later\nsecond line";
+        let described = replace_block(editor, BLOCK);
+        assert_eq!(ai_block(&described), Some(BLOCK));
+        assert_eq!(editor_comment(&described), editor);
+        assert_eq!(replace_block(&described, BLOCK), described);
+        assert!(has_editor_comment(&described));
     }
 
     #[test]

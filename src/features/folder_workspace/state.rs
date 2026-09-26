@@ -658,9 +658,6 @@ impl FolderWorkspace {
     /// each checked video and whether an API key is saved. Read in the background while its
     /// panel is shown.
     fn describe_ai_reads(&mut self) -> Task<Message> {
-        if !self.batch.is_active() || self.batch.action() != batch::Action::DescribeAi {
-            return Task::none();
-        }
         let Some(dir) = self.directory.as_ref() else {
             return Task::none();
         };
@@ -669,21 +666,17 @@ impl FolderWorkspace {
             .all_files()
             .filter(|f| batch.is_checked(f.id()))
             .collect();
-        let options = batch.actions_mut().describe_ai_mut();
-        let missing = options.missing_probes(checked.into_iter());
+        let (missing, read_key) = batch.describe_ai_reads(checked.into_iter());
         let wrap = |msg: batch::describe_ai::Message| {
             Message::Batch(batch::Message::Action(batch::ActionMessage::DescribeAi(
                 msg,
             )))
         };
-        // Asked once; a failed read below still answers.
-        let key = if options.request_key_state() {
-            Task::future(async move {
-                let state = tokio::task::spawn_blocking(batch::describe_ai::read_key_state)
-                    .await
-                    .unwrap_or(frename_core::ai::key::KeyState::Unavailable);
-                wrap(batch::describe_ai::Message::KeyState(state))
-            })
+        // The app reads it (the settings show it too) and passes the answer back.
+        let key = if read_key {
+            Task::done(Message::Batch(batch::Message::Action(
+                batch::ActionMessage::ReadKeyState,
+            )))
         } else {
             Task::none()
         };
@@ -704,7 +697,7 @@ impl FolderWorkspace {
                                     id,
                                     batch::describe_ai::Probe {
                                         duration_s: None,
-                                        subtitle_chars: 0,
+                                        subtitle_bytes: 0,
                                     },
                                 )
                             })
