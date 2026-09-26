@@ -25,11 +25,10 @@ pub fn view<'a>() -> Element<'a, ActionMessage> {
     let tag = frename_core::commented_tag();
     let hint = match &tag {
         Some(tag) => format!(
-            "Adds the “{tag}” tag to each checked video with a comment of yours (AI descriptions do \
-             not count) and removes it from \
+            "Adds the “{tag}” tag to each checked video that has a comment and removes it from \
              those without one. Files whose tag changes are renamed."
         ),
-        None => "Adds the tag for videos with a comment to each checked video with a comment of yours and removes it \
+        None => "Adds the tag for videos with a comment to each checked video that has one and removes it \
                  from those without one. The tag is turned off in the settings."
             .to_string(),
     };

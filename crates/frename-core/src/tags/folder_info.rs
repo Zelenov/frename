@@ -55,11 +55,14 @@ impl FolderInfo {
         self.scan.is_some()
     }
 
-    /// The file list line for `name`, if it still matches the file.
+    /// The file list line for `name`, if it still matches the file. A line without a marker
+    /// count is from before markers were counted and does not match.
     pub fn cached_file(&self, name: &str) -> Option<&CachedFile> {
         let scan = self.scan.as_ref()?;
         let cached = scan.cache.get(name)?;
-        (scan.stats.get(name) == Some(&(cached.size, cached.modified_ms))).then_some(cached)
+        (cached.markers.is_some()
+            && scan.stats.get(name) == Some(&(cached.size, cached.modified_ms)))
+        .then_some(cached)
     }
 
     /// All entry names, in sorted order.
@@ -100,6 +103,28 @@ mod tests {
             "a.mp4.snap.00_01_00.jpg".into(),
             "ab.mp4".into(),
         ])
+    }
+
+    #[test]
+    fn a_cached_line_without_a_marker_count_does_not_match() {
+        let line = |markers| CachedFile {
+            name: "a.mp4".into(),
+            size: 1,
+            modified_ms: 2,
+            comment: String::new(),
+            start: None,
+            end: None,
+            markers,
+        };
+        let stats = HashMap::from([("a.mp4".to_string(), (1, 2))]);
+        let scan = |markers| {
+            FolderInfo::for_scan(vec!["a.mp4".into()], stats.clone(), vec![line(markers)])
+        };
+        assert!(scan(None).cached_file("a.mp4").is_none());
+        assert_eq!(
+            scan(Some(2)).cached_file("a.mp4").and_then(|c| c.markers),
+            Some(2)
+        );
     }
 
     #[test]

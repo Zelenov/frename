@@ -5,14 +5,15 @@
 //! No UI concepts (scrollable, shape, size of children)—only data passed to feature views.
 //! Each feature view decides how it looks; the workspace view only arranges regions.
 
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use arboard;
 use frename_core::undo::History;
 use frename_core::{
     AppDatabase, AppStateStore, CreateTagCommand, DeleteTagCommand, File, FileId, FileSnapshot,
-    FolderAndFile, FolderTagStore, LoggingAppStateStore, NavigateFileCommand, PasteTagsCommand,
-    ReorderTagCommand, SaveAndReparse, SaveTagCommand, SetSegmentEndCommand,
+    FolderAndFile, FolderTagStore, LoggingAppStateStore, Marker, NavigateFileCommand,
+    PasteTagsCommand, ReorderTagCommand, SaveAndReparse, SaveTagCommand, SetSegmentEndCommand,
     SetSegmentStartCommand, StarTagCommand, ToggleTagCommand, UndoContext, UndoError,
 };
 use rfd;
@@ -26,6 +27,7 @@ use crate::features::batch::{self, BatchState, ItemResult, ItemStatus};
 use crate::features::file_name_panel::{self, FileNamePanelState};
 use crate::features::file_workspace::FileWorkspace;
 use crate::features::folder;
+use crate::features::markers::MarkersState;
 use crate::features::media_viewer::{self, video as media_viewer_video, MediaViewerState};
 use crate::features::sync_panel;
 use crate::features::tag_panel::{self, TagPanelState, TAG_LIST_SCROLLABLE_ID};
@@ -33,6 +35,8 @@ use crate::widgets::search_bar::SEARCH_BAR_INPUT_ID;
 use crate::widgets::splitter::HIT_WIDTH;
 
 use super::Message;
+
+mod marker_actions;
 
 const DEFAULT_LEFT_WIDTH: f32 = 460.0;
 const DEFAULT_FOLDER_WIDTH: f32 = 200.0;
@@ -84,6 +88,16 @@ pub struct FolderWorkspace {
     history: WorkspaceHistory,
     /// Whether the media viewer is currently shown fullscreen (F5).
     media_fullscreen: bool,
+    /// The marker list's own state: the row being edited and what `F2` did last.
+    markers: MarkersState,
+    /// Every marker GUID read from or written to a file this session. A save deletes a file
+    /// marker whose GUID is here but no longer in the list: the user deleted it. Other markers
+    /// frename never saw (added by Premiere while the file was open) are kept. GUIDs are unique
+    /// across files, so one set serves them all.
+    known_marker_guids: HashSet<String>,
+    /// Markers whose write into their file failed (the file read-only or open in Premiere),
+    /// kept until the file is saved again. By `FileId`, which the next folder scan renews.
+    unsaved_markers: HashMap<FileId, Vec<Marker>>,
 }
 
 impl FolderWorkspace {
@@ -121,6 +135,9 @@ impl FolderWorkspace {
             copied_tags: None,
             history: WorkspaceHistory::new(HISTORY_DEPTH),
             media_fullscreen: false,
+            markers: MarkersState::default(),
+            known_marker_guids: HashSet::new(),
+            unsaved_markers: HashMap::new(),
         }
     }
 
@@ -129,6 +146,19 @@ impl FolderWorkspace {
             return Task::none();
         }
         match message {
+            // While a marker row is open, keys belong to its fields: `[b-roll]` is typed, not in
+            // and out, and undo would remove the very marker being edited.
+            Message::SetSegmentStart
+            | Message::SetSegmentEnd
+            | Message::TagPanel(tag_panel::Message::ToggleSelectedTag)
+            | Message::Undo
+            | Message::Redo
+            | Message::CopyTags
+            | Message::PasteTags
+                if self.markers.is_editing() =>
+            {
+                Task::none()
+            }
             Message::OpenFile(path) => self.open_file(path),
             Message::LoadLastSession => self.load_last_session(),
             Message::ScanFolder(pair) => self.scan_folder(pair),
@@ -168,7 +198,17 @@ impl FolderWorkspace {
                 media_viewer::Message::ScreenshotTaken(position_ms, jpeg) => {
                     Task::done(Message::ScreenshotTaken(position_ms, jpeg))
                 }
-                other => self.media_viewer.update(other).map(Message::MediaViewer),
+                // Straight to the markers in this update, not re-sent with `Task::done`: a
+                // view built in between would hand the name field its old text, and fast
+                // typing lost letters.
+                media_viewer::Message::Video(media_viewer_video::Message::Markers(msg)) => {
+                    let position_ms = self.media_viewer.video_position_ms().unwrap_or(0);
+                    self.handle_marker(msg, position_ms)
+                }
+                other => {
+                    let task = self.media_viewer.update(other).map(Message::MediaViewer);
+                    Task::batch([task, self.follow_marker_list(false)])
+                }
             },
             Message::TagPanel(msg) => self.handle_tag_panel(msg),
             Message::FileNamePanel(msg) => self.handle_file_name_panel(msg),
@@ -228,44 +268,24 @@ impl FolderWorkspace {
             Message::SetSegmentEnd => Task::done(Message::MediaViewer(
                 media_viewer::Message::Video(media_viewer_video::Message::CaptureSegmentEnd),
             )),
-            Message::AiBlock(message) => {
-                self.file_workspace.update_ai_block(message);
-                Task::none()
-            }
             Message::CommentAction(action) => {
                 self.file_workspace.apply_comment_action(action);
                 Task::none()
             }
+            // Save the frame next to the video, like VLC's snapshot, and forget it.
             Message::ScreenshotTaken(position_ms, jpeg) => {
                 let Some(file) = self.file_workspace.file() else {
                     return Task::none();
                 };
-                // Deduplicate: skip if any existing screenshot is within 100 ms.
-                let too_close = self
-                    .file_workspace
-                    .screenshots()
-                    .iter()
-                    .any(|s| s.position_ms.abs_diff(position_ms) < 100);
-                if too_close {
-                    return Task::none();
-                }
                 let file_path = file.file_path().to_path_buf();
-                self.file_workspace
-                    .add_screenshot(frename_core::Screenshot::new(position_ms));
-                // Append timestamp to comment.
-                let time_str = frename_core::Screenshot::new(position_ms).format_time();
-                // Into the editor's text; the AI description stays below it.
-                let current = self.file_workspace.editor_comment();
-                let new_comment = if current.is_empty() {
-                    format!("{}: ", time_str)
-                } else {
-                    format!("{}\n{}: ", current, time_str)
-                };
-                self.file_workspace.set_comment(new_comment);
                 frename_core::FileTagger::save_screenshot(&file_path, position_ms, &jpeg);
-                Task::none()
+                Self::notice("Frame saved")
             }
             Message::EscapePressed => {
+                if self.markers.is_editing() {
+                    self.markers.close();
+                    return Task::none();
+                }
                 if self.inline_rename.take().is_some() {
                     return Task::none();
                 }
@@ -393,6 +413,9 @@ impl FolderWorkspace {
 
     fn scan_folder(&mut self, pair: FolderAndFile) -> Task<Message> {
         self.inline_rename = None;
+        self.markers.reset();
+        // File ids are renewed by the scan, so markers kept for them cannot be matched again.
+        self.unsaved_markers.clear();
         // Batches for the folder being left must not land in the next one.
         self.comment_load_generation += 1;
         let folder = pair.folder().to_path_buf();
@@ -429,6 +452,7 @@ impl FolderWorkspace {
             directory.set_untagged_only(previous.untagged_only());
             directory.set_subtitled_only(previous.subtitled_only());
             directory.set_commented_only(previous.commented_only());
+            directory.set_marked_only(previous.marked_only());
         }
         self.directory = Some(directory); // replace previous directory only on success
         self.batch.reset_files();
@@ -550,17 +574,22 @@ impl FolderWorkspace {
         {
             self.inline_rename = None;
         }
-        // Detect same-file "refresh" (e.g. undo of a tag toggle on the current file).
-        // In that case, skip media reload and fullscreen reset — only persist state.
+        // Detect same-file "refresh" (e.g. undo of a tag toggle on the current file, or an
+        // in-place rename, whose path changed). In that case, skip media reload and fullscreen
+        // reset — only persist state.
         let same_file = self
             .file_workspace
             .file()
-            .is_some_and(|f| f.file_path() == file.file_path());
+            .is_some_and(|f| f.id() == file.id());
         if !same_file {
             self.media_fullscreen = false;
+            self.markers.reset();
         }
         let snapshot = self.file_workspace.get_snapshot();
         self.file_workspace.set_file(Some(file.clone()));
+        if !same_file {
+            self.markers_loaded(file.id());
+        }
         log::info!("Opening file: {}", file.file_path().display());
         let Some((id, snap)) = snapshot else {
             self.pending_file_updated = None;
@@ -595,7 +624,6 @@ impl FolderWorkspace {
                 | Message::FileNamePanel(_)
                 | Message::SyncPanel(_)
                 | Message::CommentAction(_)
-                | Message::AiBlock(_)
                 | Message::RemoveTag
                 | Message::SaveSelectedTag
                 | Message::CopyTags
@@ -606,6 +634,9 @@ impl FolderWorkspace {
                 | Message::SetSegmentEnd
                 | Message::FocusSearchBarAndKey(_)
                 | Message::ScreenshotTaken(..)
+                | Message::MediaViewer(media_viewer::Message::Video(
+                    media_viewer_video::Message::Markers(..)
+                ))
                 | Message::Folder(
                     folder::Message::StartRename(_)
                         | folder::Message::RenameInput(_)
@@ -648,64 +679,14 @@ impl FolderWorkspace {
         if let batch::Message::Run = msg {
             return self.start_batch();
         }
+        if let batch::Message::OpenLog = msg {
+            open_in_default_app(&frename_core::log_path());
+            return Task::none();
+        }
         // Batch mode does not edit the open file, so its rename editor goes.
         self.inline_rename = None;
         self.batch.update(msg);
-        self.describe_ai_reads()
-    }
-
-    /// What "Describe with AI" shows before it runs needs reading from disk: the length of
-    /// each checked video and whether an API key is saved. Read in the background while its
-    /// panel is shown.
-    fn describe_ai_reads(&mut self) -> Task<Message> {
-        let Some(dir) = self.directory.as_ref() else {
-            return Task::none();
-        };
-        let batch = &mut self.batch;
-        let checked: Vec<&frename_core::File> = dir
-            .all_files()
-            .filter(|f| batch.is_checked(f.id()))
-            .collect();
-        let (missing, read_key) = batch.describe_ai_reads(checked.into_iter());
-        let wrap = |msg: batch::describe_ai::Message| {
-            Message::Batch(batch::Message::Action(batch::ActionMessage::DescribeAi(
-                msg,
-            )))
-        };
-        // The app reads it (the settings show it too) and passes the answer back.
-        let key = if read_key {
-            Task::done(Message::Batch(batch::Message::Action(
-                batch::ActionMessage::ReadKeyState,
-            )))
-        } else {
-            Task::none()
-        };
-        if missing.is_empty() {
-            return key;
-        }
-        let probes = Task::future(async move {
-            let ids: Vec<FileId> = missing.iter().map(|(id, _)| *id).collect();
-            let results =
-                tokio::task::spawn_blocking(move || batch::describe_ai::probe_all(missing))
-                    .await
-                    .unwrap_or_else(|e| {
-                        log::error!("reading clip lengths failed: {e}");
-                        // Unreadable rather than estimating forever.
-                        ids.into_iter()
-                            .map(|id| {
-                                (
-                                    id,
-                                    batch::describe_ai::Probe {
-                                        duration_s: None,
-                                        subtitle_bytes: 0,
-                                    },
-                                )
-                            })
-                            .collect()
-                    });
-            wrap(batch::describe_ai::Message::Probed(results))
-        });
-        Task::batch([key, probes])
+        Task::none()
     }
 
     /// Start the selected batch action on the checked files, in folder order. A playing video
@@ -714,14 +695,11 @@ impl FolderWorkspace {
         let Some(dir) = self.directory.as_ref() else {
             return Task::none();
         };
-        let checked: Vec<&frename_core::File> = dir
+        let files: Vec<FileId> = dir
             .all_files()
-            .filter(|f| self.batch.is_checked(f.id()))
+            .map(|f| f.id())
+            .filter(|id| self.batch.is_checked(*id))
             .collect();
-        let files = self
-            .batch
-            .actions()
-            .job_files(self.batch.action(), &checked);
         if !self.batch.start(files) {
             return Task::none();
         }
@@ -750,7 +728,7 @@ impl FolderWorkspace {
     /// left or was cancelled. One file per step: progress names the file in work, and a
     /// cancel stops after it, so no file is left half done.
     fn next_batch_item(&mut self) -> Task<Message> {
-        let Some((id, operation, cancel)) = self.batch.begin_next() else {
+        let Some((id, operation)) = self.batch.begin_next() else {
             return Task::done(Message::BatchFinished);
         };
         let Some(path) = self
@@ -764,7 +742,7 @@ impl FolderWorkspace {
             return self.next_batch_item();
         };
         Task::future(async move {
-            let result = tokio::task::spawn_blocking(move || operation.run(&path, &cancel))
+            let result = tokio::task::spawn_blocking(move || operation.run(&path))
                 .await
                 .unwrap_or_else(|e| {
                     log::error!("batch operation task failed: {e}");
@@ -846,6 +824,12 @@ impl FolderWorkspace {
             return Task::none();
         };
 
+        // Markers first, while the file still has the path they were read from; they travel
+        // with it through the rename.
+        let markers_saved = match snapshot.markers() {
+            Some(markers) => self.save_markers(id, &current_path, markers),
+            None => Task::none(),
+        };
         let path_before = current_path.clone();
         let (new_path, snapshot_after_save) = snapshot.save_and_reparse(&current_path);
 
@@ -873,9 +857,12 @@ impl FolderWorkspace {
             .as_ref()
             .is_some_and(|d| d.has_content_filter())
         {
-            return Task::done(Message::ScrollFolderListToSelected);
+            return Task::batch([
+                markers_saved,
+                Task::done(Message::ScrollFolderListToSelected),
+            ]);
         }
-        Task::none()
+        markers_saved
     }
 
     fn handle_folder_message(&mut self, msg: folder::Message) -> Task<Message> {
@@ -901,6 +888,9 @@ impl FolderWorkspace {
             }
             folder::Message::SetCommentedOnly(commented_only) => {
                 self.set_list_filter(|dir| dir.set_commented_only(commented_only))
+            }
+            folder::Message::SetMarkedOnly(marked_only) => {
+                self.set_list_filter(|dir| dir.set_marked_only(marked_only))
             }
             folder::Message::SetNameFilter(query) => self.set_file_name_filter(query),
             // Intercepted by the app, which owns the windows; no-op here.
@@ -1012,9 +1002,9 @@ impl FolderWorkspace {
             return Task::none();
         }
 
+        // The markers stay in the tag list: `reinitialize_tags_from_snapshot` keeps them.
         let mut snapshot = FileSnapshot::parse(typed);
         snapshot.set_comment(current.comment().to_string());
-        snapshot.set_screenshots(current.screenshots().to_vec());
         // With in/out stored inside the video the name never shows them, so a typed name without them
         // does not mean "remove them".
         let name_has_in_out =
@@ -1793,6 +1783,16 @@ impl FolderWorkspace {
         self.pending_file_updated.is_some()
     }
 
+    /// State of the marker list (open row, color picker).
+    pub fn markers(&self) -> &MarkersState {
+        &self.markers
+    }
+
+    /// Markers whose write failed, by file; the folder list marks those files.
+    pub fn unsaved_markers(&self) -> &HashMap<FileId, Vec<Marker>> {
+        &self.unsaved_markers
+    }
+
     pub fn tag_panel(&self) -> &TagPanelState {
         &self.tag_panel
     }
@@ -1837,6 +1837,17 @@ fn check_new_file_name(
         return Err("A file with this name exists");
     }
     Ok(())
+}
+
+/// Open `path` with the app the system uses for its type (a text editor for the log).
+fn open_in_default_app(path: &std::path::Path) {
+    #[cfg(windows)]
+    let result = std::process::Command::new("explorer").arg(path).spawn();
+    #[cfg(not(windows))]
+    let result = std::process::Command::new("xdg-open").arg(path).spawn();
+    if let Err(e) = result {
+        log::warn!("could not open {path:?}: {e}");
+    }
 }
 
 #[cfg(test)]
@@ -2510,5 +2521,149 @@ mod tests {
             Ok(()),
             "case-only rename"
         );
+    }
+
+    // --- Markers ---
+
+    /// A marker key or list message with the playhead at `position_ms`.
+    fn send_marker(
+        workspace: &mut FolderWorkspace,
+        msg: crate::features::markers::Message,
+        position_ms: u64,
+    ) {
+        let _ = workspace.handle_marker(msg, position_ms);
+    }
+
+    /// A workspace on a folder whose files are real (tiny) videos, so they can hold markers.
+    fn marker_workspace(test_dir: &TestDirectory, files: usize) -> FolderWorkspace {
+        let clip = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("crates/frename-core/tests/fixtures/tiny.mov");
+        for i in 0..files {
+            std::fs::copy(&clip, test_dir.file_path(&format!("file_{i}.mp4"))).expect("clip");
+        }
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        assert_eq!(workspace.file_workspace().markers(), Some(&[][..]));
+        workspace
+    }
+
+    fn marker_names(workspace: &FolderWorkspace) -> Vec<(u64, String)> {
+        workspace
+            .file_workspace()
+            .markers()
+            .unwrap_or_default()
+            .iter()
+            .map(|m| (m.start_ms, m.name.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn a_name_typed_in_the_marker_list_is_in_the_state_before_the_next_view() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        send_marker(&mut workspace, M::Add, 1_000);
+        assert!(workspace.markers().is_editing());
+
+        // As the name field sends it: through the video, with no task run afterwards.
+        for name in ["a", "as", "asa"] {
+            let _ = workspace.update(Message::MediaViewer(
+                crate::features::media_viewer::Message::Video(
+                    crate::features::media_viewer::video::Message::Markers(M::NameInput(
+                        name.to_string(),
+                    )),
+                ),
+            ));
+        }
+        assert_eq!(marker_names(&workspace), [(1_000, "asa".to_string())]);
+    }
+
+    #[test]
+    fn f2_marks_f2_again_names_and_leaving_the_file_saves_the_markers() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+
+        send_marker(&mut workspace, M::Add, 1_000);
+        assert_eq!(marker_names(&workspace), [(1_000, String::new())]);
+        // A second F2 right away opens the marker just added instead of adding one.
+        send_marker(&mut workspace, M::Add, 1_300);
+        assert!(workspace.markers().is_editing());
+        send_marker(&mut workspace, M::NameInput("Take 3".to_string()), 1_300);
+        // Keys of the workspace are off while the row is open: undo would remove the marker.
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_names(&workspace), [(1_000, "Take 3".to_string())]);
+        // F2 with the row open closes it and adds the next moment without opening it.
+        send_marker(&mut workspace, M::Add, 5_000);
+        assert!(!workspace.markers().is_editing());
+        assert_eq!(marker_names(&workspace).len(), 2);
+
+        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        let saved = frename_core::FileTagger::load_markers(&test_dir.target_file()).expect("saved");
+        let saved: Vec<_> = saved
+            .iter()
+            .map(|m| (m.start_ms, m.name.as_str()))
+            .collect();
+        assert_eq!(saved, [(1_000, "Take 3"), (5_000, "")]);
+    }
+
+    #[test]
+    fn escape_closes_an_open_marker_row_first() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = workspace.file_workspace().markers().unwrap()[0]
+            .guid
+            .clone()
+            .unwrap();
+        send_marker(&mut workspace, M::Open(guid), 1_000);
+        assert!(workspace.markers().is_editing());
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(!workspace.markers().is_editing());
+    }
+
+    #[test]
+    fn shift_f2_deletes_the_marker_under_the_playhead_and_undo_brings_it_back() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        send_marker(&mut workspace, M::DeleteAtPlayhead, 3_000);
+        assert_eq!(marker_names(&workspace).len(), 1, "too far away");
+        send_marker(&mut workspace, M::DeleteAtPlayhead, 1_400);
+        assert!(marker_names(&workspace).is_empty());
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_names(&workspace), [(1_000, String::new())]);
+    }
+
+    #[test]
+    fn a_renamed_open_file_keeps_the_markers_edited_after_the_rename() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let (id, mut snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        snapshot.set_tags(["Goat"]);
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+
+        let guid = workspace.file_workspace().markers().unwrap()[0]
+            .guid
+            .clone()
+            .unwrap();
+        send_marker(&mut workspace, M::Open(guid), 1_000);
+        send_marker(&mut workspace, M::NameInput("after".to_string()), 1_000);
+        // The refresh opens the same file under its new name: nothing is read from disk again.
+        flush_file_opened(&mut workspace);
+        assert!(workspace
+            .current_file()
+            .is_some_and(|f| f.file_path().ends_with("Goat.file_0.mp4")));
+        assert_eq!(marker_names(&workspace), [(1_000, "after".to_string())]);
     }
 }

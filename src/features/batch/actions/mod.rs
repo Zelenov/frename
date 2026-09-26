@@ -4,13 +4,10 @@
 //! that runs an action over them are shared (see [`super::state`]).
 //!
 //! Adding an action: a module with `LABEL`, `view` and `run` (plus `Options` with `Message`
-//! and `update` when it has settings), then one line in each match below. An action that needs
-//! more than "Run on N files" can also give the run button its own label and readiness
-//! ([`Actions::panel`]), a line pinned next to it ([`Actions::footer`]), and the files its job
-//! runs over ([`Actions::job_files`]), as "Describe with AI" does.
+//! and `update` when it has settings), then one line in each match below.
 
-pub mod describe_ai;
 mod fix_tags;
+mod markers_comment;
 mod move_comments;
 mod move_in_out;
 mod reload_files;
@@ -18,12 +15,9 @@ mod tag_commented;
 mod tag_spacing;
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
 
-use frename_core::ai::describe::MODEL;
-use frename_core::ai::provider::AiUsage;
 use frename_core::{
-    CommentStorage, File, FileId, FileSnapshot, FileTagger, FolderInfo, InOutStorage, MoveOutcome,
+    CommentStorage, File, FileSnapshot, FileTagger, FolderInfo, InOutStorage, MoveOutcome,
 };
 use iced::widget::{column, text};
 use iced::Element;
@@ -36,11 +30,11 @@ use crate::theme;
 pub enum Action {
     MoveComments,
     MoveInOut,
+    MarkersComment,
     TagCommented,
     FixTags,
     RespaceTags,
     ReloadFiles,
-    DescribeAi,
 }
 
 impl Action {
@@ -48,22 +42,22 @@ impl Action {
     pub const ALL: [Action; 7] = [
         Action::MoveComments,
         Action::MoveInOut,
+        Action::MarkersComment,
         Action::TagCommented,
         Action::FixTags,
         Action::RespaceTags,
         Action::ReloadFiles,
-        Action::DescribeAi,
     ];
 
     pub fn label(self) -> &'static str {
         match self {
             Self::MoveComments => move_comments::LABEL,
             Self::MoveInOut => move_in_out::LABEL,
+            Self::MarkersComment => markers_comment::LABEL,
             Self::TagCommented => tag_commented::LABEL,
             Self::FixTags => fix_tags::LABEL,
             Self::RespaceTags => tag_spacing::LABEL,
             Self::ReloadFiles => reload_files::LABEL,
-            Self::DescribeAi => describe_ai::LABEL,
         }
     }
 }
@@ -73,27 +67,25 @@ impl Action {
 pub enum Operation {
     MoveComments(CommentStorage),
     MoveInOut(InOutStorage),
+    MarkersComment(markers_comment::Direction),
     TagCommented,
     FixTags,
     /// Rename files to the tag spacing chosen in the settings.
     RespaceTags,
     ReloadFiles,
-    /// Describe each video with AI.
-    DescribeAi(describe_ai::Run),
 }
 
 impl Operation {
-    /// Do it to the file at `path`. Blocking: runs on a worker thread. Long operations check
-    /// `cancel` and stop early, leaving the file not reached.
-    pub fn run(&self, path: &Path, cancel: &AtomicBool) -> ItemResult {
+    /// Do it to the file at `path`. Blocking: runs on a worker thread.
+    pub fn run(&self, path: &Path) -> ItemResult {
         match self {
             Self::MoveComments(to) => move_comments::run(*to, path),
             Self::MoveInOut(to) => move_in_out::run(*to, path),
+            Self::MarkersComment(direction) => markers_comment::run(*direction, path),
             Self::TagCommented => tag_commented::run(path),
             Self::FixTags => fix_tags::run(path),
             Self::RespaceTags => tag_spacing::run(path),
             Self::ReloadFiles => reload_files::run(path),
-            Self::DescribeAi(options) => describe_ai::run(*options, path, cancel),
         }
     }
 
@@ -102,11 +94,11 @@ impl Operation {
         match self {
             Self::MoveComments(_) => Action::MoveComments,
             Self::MoveInOut(_) => Action::MoveInOut,
+            Self::MarkersComment(_) => Action::MarkersComment,
             Self::TagCommented => Action::TagCommented,
             Self::FixTags => Action::FixTags,
             Self::RespaceTags => Action::RespaceTags,
             Self::ReloadFiles => Action::ReloadFiles,
-            Self::DescribeAi(_) => Action::DescribeAi,
         }
     }
 }
@@ -116,29 +108,10 @@ impl Operation {
 pub enum ActionMessage {
     MoveComments(move_comments::Message),
     MoveInOut(move_in_out::Message),
-    DescribeAi(describe_ai::Message),
+    MarkersComment(markers_comment::Message),
     /// Open the settings window, where an action's global settings live (e.g. the commented
     /// tag). Handled by the app, which owns the windows.
     OpenSettings,
-    /// Open the settings window at its AI section (the API key, the summary language).
-    OpenAiSettings,
-    /// Have the settings read whether an API key is saved; the answer comes back as
-    /// `DescribeAi(KeyState)`. Handled by the app.
-    ReadKeyState,
-}
-
-impl ActionMessage {
-    /// Whether it may change the options while a job runs: results of background reads.
-    pub fn applies_while_running(&self) -> bool {
-        matches!(
-            self,
-            Self::DescribeAi(
-                describe_ai::Message::Probed(_)
-                    | describe_ai::Message::KeyState(_)
-                    | describe_ai::Message::SetLanguage(_)
-            )
-        )
-    }
 }
 
 /// The options of every action, kept while the user switches between them.
@@ -146,7 +119,7 @@ impl ActionMessage {
 pub struct Actions {
     move_comments: move_comments::Options,
     move_in_out: move_in_out::Options,
-    describe_ai: describe_ai::Options,
+    markers_comment: markers_comment::Options,
 }
 
 impl Actions {
@@ -154,15 +127,9 @@ impl Actions {
         match message {
             ActionMessage::MoveComments(message) => self.move_comments.update(message),
             ActionMessage::MoveInOut(message) => self.move_in_out.update(message),
-            ActionMessage::DescribeAi(message) => self.describe_ai.update(message),
-            ActionMessage::OpenSettings
-            | ActionMessage::OpenAiSettings
-            | ActionMessage::ReadKeyState => {}
+            ActionMessage::MarkersComment(message) => self.markers_comment.update(message),
+            ActionMessage::OpenSettings => {}
         }
-    }
-
-    pub(super) fn describe_ai_mut(&mut self) -> &mut describe_ai::Options {
-        &mut self.describe_ai
     }
 
     /// Set the options of `operation`'s action to do what it does.
@@ -170,11 +137,11 @@ impl Actions {
         match operation {
             Operation::MoveComments(to) => self.move_comments.prepare(to),
             Operation::MoveInOut(to) => self.move_in_out.prepare(to),
-            Operation::TagCommented
+            Operation::MarkersComment(_)
+            | Operation::TagCommented
             | Operation::FixTags
             | Operation::RespaceTags
-            | Operation::ReloadFiles
-            | Operation::DescribeAi(_) => {}
+            | Operation::ReloadFiles => {}
         }
     }
 
@@ -183,33 +150,11 @@ impl Actions {
         match action {
             Action::MoveComments => Some(self.move_comments.operation()),
             Action::MoveInOut => Some(self.move_in_out.operation()),
+            Action::MarkersComment => Some(self.markers_comment.operation()),
             Action::TagCommented => tag_commented::operation(),
             Action::FixTags => Some(Operation::FixTags),
             Action::RespaceTags => Some(Operation::RespaceTags),
             Action::ReloadFiles => Some(Operation::ReloadFiles),
-            Action::DescribeAi => Some(self.describe_ai.operation()),
-        }
-    }
-
-    /// The files a job of `action` runs over: the checked ones, or for "Describe with AI" only
-    /// the videos it will send.
-    pub fn job_files(&self, action: Action, checked: &[&File]) -> Vec<FileId> {
-        match action {
-            Action::DescribeAi => self.describe_ai.files_to_send(checked),
-            _ => checked.iter().map(|f| f.id()).collect(),
-        }
-    }
-
-    /// Whether a background read keeps files open, so no job may start yet.
-    pub fn is_reading_files(&self) -> bool {
-        self.describe_ai.is_probing()
-    }
-
-    /// What `action` shows next to the run button (why it cannot run), if anything.
-    pub fn footer(&self, action: Action) -> Option<Element<'_, ActionMessage>> {
-        match action {
-            Action::DescribeAi => self.describe_ai.footer(),
-            _ => None,
         }
     }
 
@@ -221,9 +166,12 @@ impl Actions {
         checked: &[&File],
     ) -> (Element<'_, ActionMessage>, String, bool) {
         let view = match action {
-            Action::DescribeAi => return self.describe_ai.panel(checked),
             Action::MoveComments => self.move_comments.view().map(ActionMessage::MoveComments),
             Action::MoveInOut => self.move_in_out.view().map(ActionMessage::MoveInOut),
+            Action::MarkersComment => self
+                .markers_comment
+                .view()
+                .map(ActionMessage::MarkersComment),
             Action::TagCommented => tag_commented::view(),
             Action::FixTags => fix_tags::view(),
             Action::RespaceTags => tag_spacing::view(),
@@ -249,15 +197,6 @@ fn panel<'a, M: 'a>(title: &'a str, hint: String, options: Element<'a, M>) -> El
 /// "5 files" / "1 file".
 pub fn files(n: usize) -> String {
     format!("{n} {}", if n == 1 { "file" } else { "files" })
-}
-
-/// What a job's AI requests cost: `$0.31 (Claude Haiku 4.5)`.
-pub fn spend_line(usage: AiUsage) -> String {
-    format!(
-        "{} ({})",
-        describe_ai::dollars(MODEL.cost_usd(usage)),
-        MODEL.label
-    )
 }
 
 /// The job's record of a file an action changed, failed on or left alone.

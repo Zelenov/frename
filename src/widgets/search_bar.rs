@@ -26,6 +26,19 @@ pub fn view<'a, Message: Clone + 'a>(
     on_clear: impl Fn() -> Message + 'a,
     on_create: Option<impl Fn(String) -> Message + 'a>,
 ) -> Element<'a, Message> {
+    view_with_trailing(input_id, value, on_input, on_clear, on_create, None)
+}
+
+/// [`view`] with `trailing` at the right end, after the clear button (e.g. a filter
+/// dropdown that narrows the same list the text does).
+pub fn view_with_trailing<'a, Message: Clone + 'a>(
+    input_id: &'static str,
+    value: &'a str,
+    on_input: impl Fn(String) -> Message + 'a,
+    on_clear: impl Fn() -> Message + 'a,
+    on_create: Option<impl Fn(String) -> Message + 'a>,
+    trailing: Option<Element<'a, Message>>,
+) -> Element<'a, Message> {
     // Evaluate the closure now (at render time) so we have a cloneable Message for both
     // on_submit and the "○" button press.
     let create_msg: Option<Message> = on_create.map(|f| f(value.to_string()));
@@ -96,6 +109,9 @@ pub fn view<'a, Message: Clone + 'a>(
     }
     if let Some(clear) = clear_icon {
         row_elems.push(clear);
+    }
+    if let Some(trailing) = trailing {
+        row_elems.push(trailing);
     }
     let inner = row(row_elems).spacing(6).align_y(iced::Alignment::Center);
 

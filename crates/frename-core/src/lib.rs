@@ -1,6 +1,5 @@
 //! Core logic for frename - file renaming utility.
 
-pub mod ai;
 mod app_dir;
 pub(crate) mod comment;
 mod db;
@@ -9,6 +8,7 @@ mod directory;
 mod file;
 mod file_kind;
 mod folder_file;
+mod markers;
 mod metadata;
 pub mod old_settings;
 mod ordered;
@@ -17,7 +17,7 @@ mod tags;
 pub(crate) mod transliteration;
 pub mod undo;
 
-pub use app_dir::{app_data_dir, set_app_data_dir, DATA_DIR_VAR};
+pub use app_dir::{app_data_dir, log_path, set_app_data_dir, DATA_DIR_VAR};
 pub use db::{
     AppDatabase, AppSettings, AppStateStore, Initializable, LoggingAppStateStore, StoredTagStore,
     UpdateCheckState, VideoSettings, WindowGeometry,
@@ -26,10 +26,15 @@ pub use directory::Directory;
 pub use file::{File, FileId};
 pub use file_kind::FileKind;
 pub use folder_file::FolderAndFile;
+pub use markers::{
+    comment_to_markers, format_marker_line, format_marker_time, markers_to_comment,
+    parse_marker_line, sort_markers, CommentToMarkers, Marker, MarkerColor, MarkerLine,
+    MARKER_SNAP_MS,
+};
 pub use metadata::{
     active_commented_tag, cache::modified_ms, clean_commented_tag, commented_tag, metadata_storage,
     set_comment_storage, set_commented_tag, set_in_out_storage, CommentStorage, InOutStorage,
-    MetadataMove, MetadataStorage, MoveOutcome, DEFAULT_COMMENTED_TAG,
+    MarkersError, MetadataMove, MetadataStorage, MoveOutcome, DEFAULT_COMMENTED_TAG,
 };
 pub use ordered::{OrderKey, OrderableEntry, OrderedCollection, OrderedThing};
 pub use subtitles::{load_subtitles, subtitle_path, SubtitleCue, Subtitles};
@@ -40,7 +45,8 @@ pub use tags::{
     TagColorMapping, TagId, TagList, DEFAULT_TAGS,
 };
 pub use undo::{
-    CreateTagCommand, DeleteTagCommand, History, NavigateFileCommand, PasteTagsCommand,
-    ReorderTagCommand, SaveTagCommand, SetSegmentEndCommand, SetSegmentStartCommand,
+    AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,
+    NavigateFileCommand, PasteTagsCommand, ReorderTagCommand, SaveTagCommand,
+    SetMarkerColorCommand, SetMarkerDurationCommand, SetSegmentEndCommand, SetSegmentStartCommand,
     StarTagCommand, ToggleTagCommand, UndoContext, UndoError,
 };

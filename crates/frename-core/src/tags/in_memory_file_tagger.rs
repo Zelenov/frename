@@ -1,18 +1,22 @@
 //! In-memory FileTagger: no disk access. Used in debug/test mode.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use super::file_snapshot::FileSnapshot;
 use super::file_tagger_backend::FileTaggerBackend;
 use super::FolderInfo;
+use crate::markers::Marker;
+use crate::metadata::MarkersError;
 
 #[derive(Default)]
 pub struct InMemoryFileTagger {
     storage: Mutex<HashMap<PathBuf, FileSnapshot>>,
     /// Where each file "renamed" in memory still is on disk, by its in-memory path.
     disk_paths: Mutex<HashMap<PathBuf, PathBuf>>,
+    /// Markers "written" to each file, by where it is on disk.
+    markers: Mutex<HashMap<PathBuf, Vec<Marker>>>,
 }
 
 impl FileTaggerBackend for InMemoryFileTagger {
@@ -41,6 +45,25 @@ impl FileTaggerBackend for InMemoryFileTagger {
             .expect("lock")
             .insert(new_path.clone(), on_disk);
         new_path
+    }
+
+    fn load_markers(&self, path: &Path) -> Option<Vec<Marker>> {
+        let on_disk = self.disk_path(path);
+        let saved = self.markers.lock().expect("lock").get(&on_disk).cloned();
+        saved.or_else(|| crate::metadata::load_markers(&on_disk))
+    }
+
+    fn save_markers(
+        &self,
+        path: &Path,
+        markers: &[Marker],
+        _known: &HashSet<String>,
+    ) -> Result<(), MarkersError> {
+        self.markers
+            .lock()
+            .expect("lock")
+            .insert(self.disk_path(path), markers.to_vec());
+        Ok(())
     }
 
     fn disk_path(&self, path: &Path) -> PathBuf {

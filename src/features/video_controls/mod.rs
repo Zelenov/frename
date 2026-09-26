@@ -6,4 +6,5 @@ mod state;
 pub mod view;
 
 pub use messages::Message;
+pub use progress_bar::BarMarker;
 pub use state::VideoControlsState;

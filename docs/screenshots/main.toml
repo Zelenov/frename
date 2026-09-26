@@ -5,7 +5,6 @@ seek = 10.0
 window = [1440, 720]
 panels = [640, 360]
 subtitle_list = true
-snap_image = "Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm.snap.00-00-10-936.jpg"
 
 [[files]]
 from = "file_example_MP4_480_1_5MG.mp4"
@@ -46,7 +45,7 @@ name = "MVI_0409.webm"
 [[files]]
 from = "file_example_MP4_480_1_5MG.mp4"
 name = "pick.wide.night.city.in_00_00_03.out_00_00_21.MVI_0410.mp4"
-comment = "00-00-06-120: City lights over Europe, keep this one"
+comment = "City lights over Europe, keep this one"
 subtitles = """1
 00:00:01,000 --> 00:00:04,000
 Night falls over the Atlantic
@@ -71,7 +70,7 @@ The night moves east
 00:00:24,000 --> 00:00:28,000
 Dawn over Asia
 """
-snaps = ["00-00-06-120", "00-00-17-480"]
+markers = ["0:06.120 — City lights", "0:14–0:18 — Africa stays dark"]
 
 [[files]]
 from = "file_example_MOV_480_700kB.mov"

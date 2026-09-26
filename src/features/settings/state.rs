@@ -2,11 +2,10 @@
 
 use std::path::PathBuf;
 
-use frename_core::ai::key::KeyState;
 use frename_core::{old_settings, AppDatabase, AppSettings, AppStateStore};
 use iced::Task;
 
-use super::{KeyMessage, Message};
+use super::Message;
 use crate::features::batch::Operation;
 use crate::features::updates;
 
@@ -32,27 +31,6 @@ pub struct SettingsState {
     tag_spacing_changed: bool,
     updates: updates::UpdatesState,
     import: OldSettingsImport,
-    /// The API key section; never persisted here (the key lives in the credential store).
-    key: KeySection,
-}
-
-/// The API key field and what is known about the saved key.
-#[derive(Debug, Clone, Default)]
-pub struct KeySection {
-    /// What is typed; cleared once saved.
-    pub input: String,
-    pub shown: bool,
-    /// `None` until read: reading may unlock a keyring, so not at start-up.
-    pub state: Option<KeyState>,
-    /// Typing a new key over a saved one.
-    pub replacing: bool,
-    /// Whether "Remove the saved key?" is being asked.
-    pub confirm_remove: bool,
-    /// Why the last save or removal failed.
-    pub error: Option<String>,
-    /// The last read of the store asked for, and the newest one answered.
-    requested: u64,
-    answered: u64,
 }
 
 impl Default for SettingsState {
@@ -66,7 +44,6 @@ impl Default for SettingsState {
             tag_spacing_changed: false,
             updates: updates::UpdatesState::default(),
             import,
-            key: KeySection::default(),
         }
     }
 }
@@ -88,11 +65,6 @@ impl SettingsState {
                 }
                 Task::none()
             }
-            // The key lives in the credential store, never in the saved settings.
-            Message::Key(message) => {
-                self.apply_key(message);
-                Task::none()
-            }
             message => {
                 self.apply(message);
                 AppDatabase::new().set_app_settings(self.settings.clone());
@@ -109,22 +81,6 @@ impl SettingsState {
     /// Where the import of an old frename's settings stands.
     pub fn old_settings_import(&self) -> &OldSettingsImport {
         &self.import
-    }
-
-    /// The API key section.
-    pub fn key(&self) -> &KeySection {
-        &self.key
-    }
-
-    /// Number a new read (or change) of the key's store; its answer comes back with it.
-    pub fn begin_key_request(&mut self) -> u64 {
-        self.key.requested += 1;
-        self.key.requested
-    }
-
-    /// The key typed to be saved (trimmed); `None` when the field is empty.
-    pub fn typed_key(&self) -> Option<String> {
-        Some(self.key.input.trim().to_string()).filter(|k| !k.is_empty())
     }
 
     /// Current settings.
@@ -146,49 +102,6 @@ impl SettingsState {
     /// Whether to offer renaming the files to the tag spacing just chosen.
     pub fn tag_spacing_changed(&self) -> bool {
         self.tag_spacing_changed
-    }
-
-    fn apply_key(&mut self, message: KeyMessage) {
-        match message {
-            KeyMessage::Input(input) => {
-                self.key.input = input;
-                self.key.error = None;
-            }
-            KeyMessage::ToggleShow => self.key.shown = !self.key.shown,
-            KeyMessage::Replace => self.key.replacing = true,
-            KeyMessage::CancelReplace => {
-                self.key.replacing = false;
-                self.key.input.clear();
-                self.key.error = None;
-            }
-            // Done by the app on a worker thread; the answer comes back as `KeyState`.
-            KeyMessage::Save => self.key.error = None,
-            KeyMessage::AskRemove => self.key.confirm_remove = true,
-            KeyMessage::CancelRemove => self.key.confirm_remove = false,
-            KeyMessage::Remove => {
-                self.key.confirm_remove = false;
-                self.key.error = None;
-            }
-            // An answer older than one already taken is stale.
-            KeyMessage::State { request, .. } if request <= self.key.answered => {}
-            KeyMessage::State {
-                request,
-                result: Ok(state),
-            } => {
-                self.key.answered = request;
-                if state == KeyState::Saved {
-                    self.key.input.clear();
-                    self.key.shown = false;
-                }
-                self.key.replacing = false;
-                self.key.state = Some(state);
-            }
-            // A failed save or removal leaves the store as it was: a read asked for before it
-            // still tells the truth, so it does not become stale.
-            KeyMessage::State {
-                result: Err(error), ..
-            } => self.key.error = Some(error),
-        }
     }
 
     fn apply(&mut self, message: Message) {
@@ -227,13 +140,11 @@ impl SettingsState {
                 self.in_out_storage_changed = false
             }
             Message::OpenBatchAction(Operation::RespaceTags) => self.tag_spacing_changed = false,
-            Message::SetSummaryLanguage(language) => self.settings.summary_language = language,
-            Message::Key(message) => self.apply_key(message),
             Message::OpenBatchAction(
-                Operation::TagCommented
+                Operation::MarkersComment(_)
+                | Operation::TagCommented
                 | Operation::FixTags
-                | Operation::ReloadFiles
-                | Operation::DescribeAi(_),
+                | Operation::ReloadFiles,
             ) => {}
             // Handled by `update`.
             Message::Updates(_)
@@ -268,7 +179,6 @@ mod tests {
             tag_spacing_changed: false,
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
-            key: KeySection::default(),
         };
         state.apply(Message::SetMonochromeTags(true));
         assert!(state.settings().monochrome_tags);
@@ -296,7 +206,6 @@ mod tests {
             tag_spacing_changed: false,
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
-            key: KeySection::default(),
         };
         state.apply(Message::SetCommentStorage(state.settings().comment_storage));
         assert!(
@@ -327,65 +236,8 @@ mod tests {
             tag_spacing_changed: false,
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
-            key: KeySection::default(),
         };
         state.apply(Message::SetCommentedTag("Has comment.v2:".to_string()));
         assert_eq!(state.settings().commented_tag, "Has commentv2");
-    }
-
-    #[test]
-    fn a_saved_key_clears_the_field_and_is_never_persisted() {
-        let mut state = SettingsState {
-            settings: AppSettings::default(),
-            comment_storage_changed: false,
-            in_out_storage_changed: false,
-            tag_spacing_changed: false,
-            updates: updates::UpdatesState::default(),
-            import: OldSettingsImport::None,
-            key: KeySection::default(),
-        };
-        state.apply(Message::Key(KeyMessage::Input(" sk-ant-123 ".to_string())));
-        assert_eq!(state.typed_key().as_deref(), Some("sk-ant-123"));
-        let request = state.begin_key_request();
-        state.apply(Message::Key(KeyMessage::State {
-            request,
-            result: Err("locked".to_string()),
-        }));
-        assert_eq!(state.key().error.as_deref(), Some("locked"));
-        assert_eq!(state.key().input, " sk-ant-123 ", "kept to try again");
-        let slow_read = state.begin_key_request();
-        let save = state.begin_key_request();
-        state.apply(Message::Key(KeyMessage::State {
-            request: save,
-            result: Ok(KeyState::Saved),
-        }));
-        assert!(state.key().input.is_empty());
-        assert_eq!(state.key().state, Some(KeyState::Saved));
-        state.apply(Message::Key(KeyMessage::State {
-            request: slow_read,
-            result: Ok(KeyState::Missing),
-        }));
-        assert_eq!(
-            state.key().state,
-            Some(KeyState::Saved),
-            "a read that answers late does not undo the save"
-        );
-
-        let read = state.begin_key_request();
-        let failed_save = state.begin_key_request();
-        state.apply(Message::Key(KeyMessage::State {
-            request: failed_save,
-            result: Err("locked".to_string()),
-        }));
-        state.apply(Message::Key(KeyMessage::State {
-            request: read,
-            result: Ok(KeyState::Missing),
-        }));
-        assert_eq!(
-            state.key().state,
-            Some(KeyState::Missing),
-            "a read answered after a failed save still counts"
-        );
-        assert!(!format!("{:?}", state.settings()).contains("sk-ant"));
     }
 }

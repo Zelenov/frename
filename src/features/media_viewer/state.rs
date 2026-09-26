@@ -61,6 +61,16 @@ impl MediaViewerState {
         matches!(self.active, ActiveMedia::Video | ActiveMedia::Image)
     }
 
+    /// The playhead of the open video in milliseconds; `None` when no video is shown.
+    pub fn video_position_ms(&self) -> Option<u64> {
+        matches!(self.active, ActiveMedia::Video).then(|| self.video.position_ms())
+    }
+
+    /// Whether the marker list is open over the video.
+    pub fn marker_list_shown(&self) -> bool {
+        matches!(self.active, ActiveMedia::Video) && self.video.show_marker_list()
+    }
+
     /// Returns `true` when a GStreamer video is active and must be unloaded before the
     /// previous file can be renamed. Images hold no file handle so no unload is needed.
     pub fn needs_unload_before_rename(&self) -> bool {

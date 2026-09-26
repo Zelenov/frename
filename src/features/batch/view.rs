@@ -10,7 +10,7 @@ use iced::{Element, Length};
 use crate::features::folder_workspace::Directory;
 use crate::theme;
 
-use super::actions::{files, spend_line};
+use super::actions::files;
 use super::state::Progress;
 use super::{Action, BatchState, Message};
 
@@ -94,27 +94,17 @@ fn action_options<'a>(
             .collect()
     });
     let (panel, label, ready) = state.actions().panel(state.action(), &checked);
-    // Clip lengths still being read hold their files open, which a rename would fail on.
-    let can_run = ready && !state.is_running() && !state.actions().is_reading_files();
+    let can_run = ready && !state.is_running();
     let run = button(text(label).size(13))
         .on_press_maybe(can_run.then_some(Message::Run))
         .padding([6, 14]);
 
-    // The options scroll; the run button, and why it may be off, stay in view below them, even
-    // in a small window or under a job's report.
+    // The options scroll; the run button stays in view below them, even in a small window or
+    // under a job's report.
     let options = scrollable(panel.map(Message::Action))
         .height(Length::Fill)
         .style(theme::dark_scrollable_style);
-    column![options]
-        .extend(
-            state
-                .actions()
-                .footer(state.action())
-                .map(|footer| footer.map(Message::Action)),
-        )
-        .push(run)
-        .spacing(12)
-        .into()
+    column![options, run].spacing(12).into()
 }
 
 /// The job panel shared by every action: progress, the file in work, the outcome counts, and
@@ -149,11 +139,18 @@ fn job_panel<'a>(
         panel = panel
             .push(
                 row![
-                    text(format!("{} / {}", progress.finished, progress.total)).size(13),
-                    text(current)
-                        .size(12)
-                        .color(theme::TEXT_MUTED)
+                    text(format!("{} / {}", progress.finished, progress.total))
+                        .size(13)
                         .wrapping(iced::widget::text::Wrapping::None),
+                    // A long name is cut at the panel's edge instead of running past it.
+                    container(
+                        text(current)
+                            .size(12)
+                            .color(theme::TEXT_MUTED)
+                            .wrapping(iced::widget::text::Wrapping::None),
+                    )
+                    .width(Length::Fill)
+                    .clip(true),
                 ]
                 .spacing(10),
             )
@@ -169,9 +166,7 @@ fn job_panel<'a>(
                 .align_y(iced::Alignment::Center),
             );
     } else {
-        let mut summary = if let Some(stopped) = state.stopped() {
-            stopped.to_string()
-        } else if progress.finished < progress.total {
+        let summary = if progress.finished < progress.total {
             format!(
                 "Stopped after {} of {}.",
                 progress.finished,
@@ -180,14 +175,6 @@ fn job_panel<'a>(
         } else {
             format!("Finished {}.", files(progress.total))
         };
-        if let Some(usage) = progress.usage {
-            let at_least = if progress.usage_unknown {
-                "at least "
-            } else {
-                ""
-            };
-            summary.push_str(&format!("   AI: {at_least}{}", spend_line(usage)));
-        }
         panel = panel.push(text(summary).size(13)).push(
             row![
                 counts,
@@ -201,7 +188,7 @@ fn job_panel<'a>(
             let heading = if failed.iter().all(|(_, reason)| reason.is_some()) {
                 "Failed:"
             } else {
-                "Failed (see the log for why):"
+                "Failed (the log says why):"
             };
             let names = column(failed.into_iter().map(|(id, reason)| {
                 let line = match reason {
@@ -211,7 +198,16 @@ fn job_panel<'a>(
                 text(line).size(12).color(theme::ERROR).into()
             }));
             panel = panel
-                .push(text(heading).size(12).color(theme::TEXT_MUTED))
+                .push(
+                    row![
+                        text(heading).size(12).color(theme::TEXT_MUTED),
+                        Space::new().width(Length::Fill),
+                        button(text("Open log").size(12))
+                            .on_press(Message::OpenLog)
+                            .padding([2, 8]),
+                    ]
+                    .align_y(iced::Alignment::Center),
+                )
                 .push(
                     container(
                         scrollable(names)

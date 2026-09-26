@@ -7,6 +7,7 @@ pub mod file_workspace;
 pub mod folder;
 pub mod folder_controls;
 pub mod folder_workspace;
+pub mod markers;
 pub mod media_viewer;
 pub mod settings;
 pub mod sync_panel;
