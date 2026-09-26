@@ -145,7 +145,9 @@ The progress bar shows what you have noted about a clip:
   shows it in the Description column and finds it by search. Settings can keep it in a
   `.comment.txt` next to the video instead. The file list shows the first line of each comment.
   While comments are inside the video, frename tags a clip you commented "Commented" (Settings can
-  rename or turn off this tag); an AI description alone does not count.
+  rename or turn off this tag); an AI description alone does not count. Drag the bar above the
+  comment box to make it taller or shorter; **Expand** in its corner gives the comment the whole
+  panel, and **Collapse** brings the tags back.
 
 Some formats, such as mkv, cannot hold comments, in/out points or markers inside them; for those,
 frename keeps comments and in/out points in `.comment.txt` and the file name whatever Settings say,
