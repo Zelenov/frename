@@ -15,6 +15,7 @@
 - In fullscreen the CC button is shown too and opens or closes the subtitle list; before, fullscreen always showed the list.
 - A video whose content is not a video (all zeros, as a download that did not finish leaves it) is reported as damaged in the log, not as a format that cannot hold markers.
 - Long button labels and file names in the batch panel no longer run past its edge.
+- When the video panel is narrow, the progress bar gets a row of its own above the buttons, so it stays long enough to seek.
 
 # 0.69
 ## Added
