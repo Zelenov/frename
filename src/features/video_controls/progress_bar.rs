@@ -1,10 +1,11 @@
-//! Custom rectangular progress bar widget with click-to-seek and drag support
+//! Custom rectangular progress bar widget with click-to-seek and drag support. Clip markers
+//! are drawn on it in their colors; with Shift held, a seek snaps to the nearest marker.
 
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer;
 use iced::advanced::widget::{self, Widget};
 use iced::advanced::{self, Clipboard, Shell};
-use iced::mouse;
+use iced::{keyboard, mouse};
 use iced::{Border, Color, Element, Event, Length, Rectangle, Shadow, Size};
 
 use crate::theme;
@@ -12,11 +13,28 @@ use crate::theme;
 const BAR_HEIGHT: f32 = 8.0;
 const HIT_HEIGHT: f32 = 24.0;
 const BORDER_RADIUS: f32 = 4.0;
+/// How far (px) a marker ticks out above and below the bar.
+const TICK_OVERHANG: f32 = 3.0;
+/// Height of the band a ranged marker draws above the bar.
+const BAND_HEIGHT: f32 = 3.0;
+/// A Shift seek snaps to a marker this close to the cursor (px).
+const SNAP_DISTANCE: f32 = 8.0;
+
+/// A clip marker as the bar draws it, in the bar's unit.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BarMarker {
+    pub start: f32,
+    /// Equal to `start` for a point marker.
+    pub end: f32,
+    pub color: Color,
+}
 
 /// Internal widget state for tracking drag
 #[derive(Default)]
 struct State {
     is_dragging: bool,
+    /// Whether Shift is held: seeks snap to markers.
+    shift: bool,
 }
 
 /// A rectangular progress bar that supports click and drag to seek.
@@ -38,8 +56,8 @@ pub struct ProgressBar<'a, Message> {
     segment_end: Option<f32>,
     /// Fill color for the progress portion (defaults to theme::ACCENT).
     fill_color: Option<Color>,
-    /// Marker positions (in the same unit as min/max) to draw as ticks above the bar.
-    markers: Vec<f32>,
+    /// Clip markers to draw as colored ticks (ranged ones with a band) and snap to.
+    markers: Vec<BarMarker>,
 }
 
 impl<'a, Message> ProgressBar<'a, Message> {
@@ -84,9 +102,9 @@ impl<'a, Message> ProgressBar<'a, Message> {
         self
     }
 
-    /// Set screenshot marker positions (in the same unit as the range).
-    pub fn markers(mut self, positions: impl IntoIterator<Item = f32>) -> Self {
-        self.markers = positions.into_iter().collect();
+    /// Set the clip markers (in the same unit as the range).
+    pub fn markers(mut self, markers: impl IntoIterator<Item = BarMarker>) -> Self {
+        self.markers = markers.into_iter().collect();
         self
     }
 
@@ -100,13 +118,45 @@ impl<'a, Message> ProgressBar<'a, Message> {
         }
     }
 
-    /// Convert cursor position to a value in min..=max
-    fn value_from_cursor(&self, bounds: Rectangle, cursor: mouse::Cursor) -> Option<f32> {
-        cursor.position().map(|pos| {
-            let fraction = ((pos.x - bounds.x) / bounds.width).clamp(0.0, 1.0);
-            self.min + fraction * (self.max - self.min)
-        })
+    /// Convert cursor position to a value in min..=max; with `snap`, the start of the nearest
+    /// marker within [`SNAP_DISTANCE`] instead, when there is one.
+    fn value_from_cursor(
+        &self,
+        bounds: Rectangle,
+        cursor: mouse::Cursor,
+        snap: bool,
+    ) -> Option<f32> {
+        let x = cursor.position()?.x;
+        let fraction = ((x - bounds.x) / bounds.width).clamp(0.0, 1.0);
+        let value = self.min + fraction * (self.max - self.min);
+        if !snap {
+            return Some(value);
+        }
+        Some(snap_to_marker(
+            value,
+            &self.markers,
+            self.px_per_unit(bounds.width),
+        ))
     }
+
+    fn px_per_unit(&self, width: f32) -> f32 {
+        let span = self.max - self.min;
+        if span > 0.0 {
+            width / span
+        } else {
+            0.0
+        }
+    }
+}
+
+/// `value`, or the start of the nearest marker at most [`SNAP_DISTANCE`] px away.
+fn snap_to_marker(value: f32, markers: &[BarMarker], px_per_unit: f32) -> f32 {
+    markers
+        .iter()
+        .map(|m| (m.start, ((m.start - value) * px_per_unit).abs()))
+        .filter(|(_, distance)| *distance <= SNAP_DISTANCE)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map_or(value, |(start, _)| start)
 }
 
 impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer> for ProgressBar<'a, Message>
@@ -189,7 +239,7 @@ where
             );
         }
 
-        // Segment highlight + screenshot markers.
+        // Segment highlight, then the clip markers over it.
         // Positions are clamped to [min, max] so we never draw outside the bar.
         // Rules:
         //   only start OR only end  → single vertical marker line
@@ -197,27 +247,6 @@ where
         //   start >= end            → two separate marker lines, no fill
         let span = self.max - self.min;
 
-        // Screenshot markers: small vertical tick spanning the bar height.
-        if span > 0.0 && !self.markers.is_empty() {
-            let to_x = |v: f32| bounds.x + ((v - self.min) / span).clamp(0.0, 1.0) * bounds.width;
-            for &pos in &self.markers {
-                let x = to_x(pos);
-                renderer.fill_quad(
-                    renderer::Quad {
-                        bounds: Rectangle {
-                            x: x - 1.0,
-                            y: bar_y,
-                            width: 2.0,
-                            height: BAR_HEIGHT,
-                        },
-                        border: Border::default(),
-                        shadow: Shadow::default(),
-                        snap: true,
-                    },
-                    theme::SCREENSHOT_MARKER,
-                );
-            }
-        }
         if span > 0.0 {
             // Convert seconds to an x-coordinate, clamped to the bar's pixel range.
             let to_x =
@@ -272,6 +301,44 @@ where
                 (None, None) => {}
             }
         }
+
+        // Clip markers: a tick in the marker's color, and a band above the bar for a range.
+        if span > 0.0 {
+            let to_x = |v: f32| bounds.x + ((v - self.min) / span).clamp(0.0, 1.0) * bounds.width;
+            for marker in &self.markers {
+                let x0 = to_x(marker.start);
+                if marker.end > marker.start {
+                    renderer.fill_quad(
+                        renderer::Quad {
+                            bounds: Rectangle {
+                                x: x0,
+                                y: bar_y - TICK_OVERHANG - BAND_HEIGHT,
+                                width: (to_x(marker.end) - x0).max(2.0),
+                                height: BAND_HEIGHT,
+                            },
+                            border: Border::default(),
+                            shadow: Shadow::default(),
+                            snap: true,
+                        },
+                        marker.color,
+                    );
+                }
+                renderer.fill_quad(
+                    renderer::Quad {
+                        bounds: Rectangle {
+                            x: x0 - 1.0,
+                            y: bar_y - TICK_OVERHANG,
+                            width: 2.0,
+                            height: BAR_HEIGHT + 2.0 * TICK_OVERHANG,
+                        },
+                        border: Border::default(),
+                        shadow: Shadow::default(),
+                        snap: true,
+                    },
+                    marker.color,
+                );
+            }
+        }
     }
 
     fn update(
@@ -289,17 +356,20 @@ where
         let bounds = layout.bounds();
 
         match event {
+            Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
+                state.shift = modifiers.shift();
+            }
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 if cursor.is_over(bounds) {
                     state.is_dragging = true;
-                    if let Some(value) = self.value_from_cursor(bounds, cursor) {
+                    if let Some(value) = self.value_from_cursor(bounds, cursor, state.shift) {
                         shell.publish((self.on_seek)(value));
                     }
                 }
             }
             Event::Mouse(mouse::Event::CursorMoved { .. }) => {
                 if state.is_dragging {
-                    if let Some(value) = self.value_from_cursor(bounds, cursor) {
+                    if let Some(value) = self.value_from_cursor(bounds, cursor, state.shift) {
                         shell.publish((self.on_seek)(value));
                     }
                 }
@@ -343,5 +413,28 @@ where
 {
     fn from(bar: ProgressBar<'a, Message>) -> Self {
         Self::new(bar)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn at(start: f32) -> BarMarker {
+        BarMarker {
+            start,
+            end: start,
+            color: Color::WHITE,
+        }
+    }
+
+    #[test]
+    fn a_shift_seek_snaps_to_the_nearest_marker_within_reach() {
+        let markers = [at(10.0), at(12.0)];
+        // 10 px per second: 8 px is 0.8 s.
+        assert_eq!(snap_to_marker(10.5, &markers, 10.0), 10.0);
+        assert_eq!(snap_to_marker(11.6, &markers, 10.0), 12.0);
+        assert_eq!(snap_to_marker(20.0, &markers, 10.0), 20.0);
+        assert_eq!(snap_to_marker(5.0, &[], 10.0), 5.0);
     }
 }

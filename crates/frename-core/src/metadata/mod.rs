@@ -9,13 +9,16 @@
 mod bmff;
 pub(crate) mod cache;
 mod conversion;
+mod markers_xmp;
 mod xmp;
 
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::RwLock;
 
+use crate::markers::Marker;
 use crate::tags::FileSnapshot;
 
 pub(crate) use conversion::{clear_moved_xmp, Inspection};
@@ -221,6 +224,55 @@ pub(crate) fn load(
         snapshot.set_segment_start(fields.segment.start);
         snapshot.set_segment_end(fields.segment.end);
     }
+}
+
+/// Why a file's clip markers were not saved.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MarkersError {
+    /// The format cannot hold XMP (the toolkit has no handler that writes into it).
+    CannotHoldMarkers,
+    /// The write failed: the file is read-only, open in another app (Premiere holds clips it
+    /// imported), or the disk is full. The text says what the system reported.
+    WriteFailed(String),
+}
+
+impl std::fmt::Display for MarkersError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::CannotHoldMarkers => write!(f, "this format cannot hold markers"),
+            Self::WriteFailed(reason) => write!(f, "{reason}"),
+        }
+    }
+}
+
+/// The clip markers kept in the file's XMP. `None` when the file cannot hold them.
+pub(crate) fn load_markers(path: &Path) -> Option<Vec<Marker>> {
+    let mut markers = xmp::read_markers(path)?;
+    crate::markers::sort_markers(&mut markers);
+    Some(markers)
+}
+
+/// Length of the clip in milliseconds, when the file's header tells it.
+pub(crate) fn clip_length_ms(path: &Path) -> Option<u64> {
+    xmp::clip_length_ms(path)
+}
+
+/// Write `markers` into the file's XMP. Markers are always stored in the video, whatever the
+/// comment and in/out storage. `known` holds every GUID frename read from or wrote to the file:
+/// a file marker with one of them that is missing from `markers` was deleted by the user,
+/// while other markers not in `markers` (added by Premiere meanwhile) are kept.
+pub(crate) fn save_markers(
+    path: &Path,
+    markers: &[Marker],
+    known: &HashSet<String>,
+) -> Result<(), MarkersError> {
+    xmp::write_markers(path, markers, known).map_err(|e| match e {
+        xmp::XmpWriteError::Unsupported => MarkersError::CannotHoldMarkers,
+        other => {
+            log::warn!("metadata: markers not saved into {path:?}: {other}");
+            MarkersError::WriteFailed(other.to_string())
+        }
+    })
 }
 
 /// Where [`load`] gets a file's XMP from.
@@ -524,6 +576,96 @@ mod tests {
         std::fs::write(&file, b"not really a zip").expect("write");
         let saved = save_to_xmp(&file, &snapshot("fallback", Some(1.0), None), XMP_BOTH);
         assert_eq!(saved, SavedToXmp::default());
+    }
+
+    fn marker(start_ms: u64, name: &str) -> Marker {
+        let mut marker = Marker::new(start_ms);
+        marker.name = name.to_string();
+        marker
+    }
+
+    #[test]
+    fn markers_round_trip_through_the_video_with_every_field_and_color() {
+        let file = copy_of_clip("markers-round-trip");
+        let modified_before = std::fs::metadata(&file)
+            .and_then(|m| m.modified())
+            .expect("mtime");
+        assert_eq!(load_markers(&file), Some(Vec::new()));
+        let mut markers: Vec<Marker> = crate::MarkerColor::ALL
+            .into_iter()
+            .enumerate()
+            .map(|(i, color)| {
+                let mut m = marker(i as u64 * 10, &format!("Козёл {i} 🐐"));
+                m.color = color;
+                m
+            })
+            .collect();
+        markers[0].comment = "line one\nстрока два 🎬".to_string();
+        markers[1].duration_ms = 150;
+        save_markers(&file, &markers, &HashSet::new()).expect("save");
+        assert_eq!(load_markers(&file), Some(markers));
+        let modified_after = std::fs::metadata(&file)
+            .and_then(|m| m.modified())
+            .expect("mtime");
+        assert_eq!(modified_after, modified_before);
+    }
+
+    #[test]
+    fn saving_the_same_markers_leaves_the_file_untouched() {
+        let file = copy_of_clip("markers-unchanged");
+        let markers = vec![marker(50, "a")];
+        save_markers(&file, &markers, &HashSet::new()).expect("save");
+        let bytes_before = std::fs::read(&file).expect("read");
+        save_markers(&file, &markers, &HashSet::new()).expect("save");
+        assert_eq!(std::fs::read(&file).expect("read"), bytes_before);
+    }
+
+    #[test]
+    fn markers_and_in_out_and_comment_live_side_by_side() {
+        let file = copy_of_clip("markers-and-in-out");
+        save_to_xmp(&file, &snapshot("note", Some(0.05), Some(0.15)), XMP_BOTH);
+        let markers = vec![marker(20, "moment")];
+        save_markers(&file, &markers, &HashSet::new()).expect("save");
+        save_to_xmp(&file, &snapshot("note 2", Some(0.1), Some(0.15)), XMP_BOTH);
+        let back = loaded(&file, false, XMP_BOTH);
+        assert_eq!(back.comment(), "note 2");
+        assert_eq!(
+            (back.segment_start(), back.segment_end()),
+            (Some(0.1), Some(0.15))
+        );
+        assert_eq!(load_markers(&file), Some(markers));
+    }
+
+    #[test]
+    fn a_marker_added_elsewhere_survives_and_a_deleted_one_goes() {
+        let file = copy_of_clip("markers-elsewhere");
+        let mine = marker(10, "mine");
+        let gone = marker(20, "gone");
+        save_markers(&file, &[mine.clone(), gone.clone()], &HashSet::new()).expect("save");
+        let known: HashSet<String> = [&mine, &gone]
+            .iter()
+            .filter_map(|m| m.guid.clone())
+            .collect();
+        // Premiere adds a marker while frename has the file open.
+        let premiere = marker(30, "premiere");
+        let mut in_file = load_markers(&file).expect("markers");
+        in_file.push(premiere.clone());
+        save_markers(&file, &in_file, &HashSet::new()).expect("premiere");
+
+        save_markers(&file, std::slice::from_ref(&mine), &known).expect("save");
+        assert_eq!(load_markers(&file), Some(vec![mine, premiere]));
+    }
+
+    #[test]
+    fn a_file_that_cannot_hold_xmp_has_no_markers() {
+        let dir = copy_of_clip("markers-unsupported");
+        let file = dir.with_file_name("notes.zip");
+        std::fs::write(&file, b"not really a zip").expect("write");
+        assert_eq!(load_markers(&file), None);
+        assert_eq!(
+            save_markers(&file, &[marker(1, "x")], &HashSet::new()),
+            Err(MarkersError::CannotHoldMarkers)
+        );
     }
 
     #[test]

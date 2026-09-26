@@ -8,7 +8,7 @@ use regex::Regex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
-use super::screenshot::Screenshot;
+use crate::markers::Marker;
 
 // ---------------------------------------------------------------------------
 // Shared regex for segment markers
@@ -47,8 +47,10 @@ pub struct FileSnapshot {
     segment_end: Option<f32>,
     /// Comment text for this file (loaded from sidecar `.comment.txt`). Empty = no comment.
     comment: String,
-    /// Screenshot markers for this file (positions loaded from sidecar `.snap.*.jpg` files).
-    screenshots: Vec<Screenshot>,
+    /// Clip markers kept in the video's XMP. `None` when they were not read (a folder scan and
+    /// a reparse after a save do not read them) or the file cannot hold them: saving such a
+    /// snapshot leaves the file's markers as they are.
+    markers: Option<Vec<Marker>>,
     /// The comment and in/out points are stored inside the video and are still loading: a
     /// folder scan defers that. Until they are loaded the snapshot does not know them, so
     /// saving it leaves them as they are in the file.
@@ -70,7 +72,7 @@ impl FileSnapshot {
             segment_start: None,
             segment_end: None,
             comment: String::new(),
-            screenshots: Vec::new(),
+            markers: None,
             comment_loading: false,
         }
     }
@@ -116,11 +118,12 @@ impl FileSnapshot {
         self.comment = comment;
     }
 
-    pub fn screenshots(&self) -> &[Screenshot] {
-        &self.screenshots
+    /// The clip markers, when they were read; see the field.
+    pub fn markers(&self) -> Option<&[Marker]> {
+        self.markers.as_deref()
     }
-    pub fn set_screenshots(&mut self, screenshots: Vec<Screenshot>) {
-        self.screenshots = screenshots;
+    pub fn set_markers(&mut self, markers: Option<Vec<Marker>>) {
+        self.markers = markers;
     }
     /// Whether the comment and in/out points are still loading.
     pub fn comment_loading(&self) -> bool {
@@ -128,12 +131,6 @@ impl FileSnapshot {
     }
     pub fn set_comment_loading(&mut self, pending: bool) {
         self.comment_loading = pending;
-    }
-    pub fn add_screenshot(&mut self, screenshot: Screenshot) {
-        if !self.screenshots.contains(&screenshot) {
-            self.screenshots.push(screenshot);
-            self.screenshots.sort();
-        }
     }
 
     // ------------------------------------------------------------------

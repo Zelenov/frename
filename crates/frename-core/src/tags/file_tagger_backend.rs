@@ -1,11 +1,13 @@
 //! FileTaggerBackend trait: the interface for parsing and saving file snapshots.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use super::file_snapshot::FileSnapshot;
 use super::folder_info::FolderInfo;
 use super::production_file_tagger::is_screenshot_sidecar;
-use crate::metadata::MetadataMove;
+use crate::markers::Marker;
+use crate::metadata::{MarkersError, MetadataMove};
 
 /// The interface that both InMemoryFileTagger and ProductionFileTagger implement.
 pub trait FileTaggerBackend: Send + Sync {
@@ -67,6 +69,23 @@ pub trait FileTaggerBackend: Send + Sync {
     /// keeps the files where they were; reading one (e.g. to play it) must use this path.
     fn disk_path(&self, path: &Path) -> PathBuf {
         path.to_path_buf()
+    }
+
+    /// The clip markers in the file's XMP; `None` when it cannot hold them. Reading never
+    /// changes a file, so every backend reads them from where the file is on disk.
+    fn load_markers(&self, path: &Path) -> Option<Vec<Marker>> {
+        crate::metadata::load_markers(&self.disk_path(path))
+    }
+
+    /// Write the clip markers into the file's XMP (see [`crate::FileTagger::save_markers`]).
+    /// Backends that never touch the disk keep nothing.
+    fn save_markers(
+        &self,
+        _path: &Path,
+        _markers: &[Marker],
+        _known: &HashSet<String>,
+    ) -> Result<(), MarkersError> {
+        Ok(())
     }
 
     /// Save a screenshot image for the given file and position.

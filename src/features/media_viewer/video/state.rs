@@ -12,8 +12,23 @@ use std::time::Duration;
 
 use super::view::{CUE_LIST_SCROLLABLE_ID, CUE_ROW_PITCH};
 use super::Message;
+use crate::features::markers;
 use crate::features::video_controls::{self, VideoControlsState};
 use frename_core::{load_subtitles, AppDatabase, AppStateStore, Subtitles};
+
+/// How long a note in the controls bar stays.
+const NOTICE_DURATION: Duration = Duration::from_secs(2);
+
+/// What the list over the right of the picture shows. One list at a time, so a windowed
+/// video is not covered twice. Kept across files, like volume.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Overlay {
+    /// No list; fullscreen still shows the subtitle list when there are subtitles.
+    #[default]
+    Closed,
+    Subtitles,
+    Markers,
+}
 
 /// Video player component state.
 pub struct VideoPlayerState {
@@ -33,9 +48,12 @@ pub struct VideoPlayerState {
     current_path: Option<PathBuf>,
     /// Subtitles found next to the current video, if any.
     subtitles: Option<Arc<Subtitles>>,
-    /// Windowed mode shows the subtitle list over the picture (fullscreen always does).
-    /// Kept across files, like volume.
-    show_cue_list: bool,
+    /// The list shown over the picture; see [`Overlay`].
+    overlay: Overlay,
+    /// Note shown in the controls bar and its number, so an older timer does not hide a newer
+    /// note.
+    notice: Option<(String, u64)>,
+    notice_count: u64,
     /// Playback position the whole view agrees on: progress bar, caption and list.
     ///
     /// Stored rather than queried at view time: the pipeline query fails while a seek is
@@ -63,7 +81,9 @@ impl Default for VideoPlayerState {
             paused: !autoplay,
             current_path: None,
             subtitles: None,
-            show_cue_list: false,
+            overlay: Overlay::Closed,
+            notice: None,
+            notice_count: 0,
             position: Duration::ZERO,
             followed_cue: None,
         }
@@ -213,6 +233,18 @@ impl VideoPlayerState {
                     video_controls::Message::SetSegmentStart => self.capture_segment_start(),
                     video_controls::Message::SetSegmentEnd => self.capture_segment_end(),
                     video_controls::Message::TakeScreenshot => self.capture_screenshot(),
+                    video_controls::Message::AddMarker => {
+                        Task::done(Message::Markers(markers::Message::Add))
+                    }
+                    video_controls::Message::DeleteMarker => {
+                        Task::done(Message::Markers(markers::Message::DeleteAtPlayhead))
+                    }
+                    video_controls::Message::PreviousMarker => {
+                        Task::done(Message::Markers(markers::Message::Previous))
+                    }
+                    video_controls::Message::NextMarker => {
+                        Task::done(Message::Markers(markers::Message::Next))
+                    }
                     video_controls::Message::SetVolume(v) => {
                         if let Some(video) = &mut self.current_video {
                             video.set_volume(v as f64);
@@ -236,9 +268,47 @@ impl VideoPlayerState {
                 Task::none()
             }
             Message::ToggleCueList => {
-                self.show_cue_list = !self.show_cue_list;
+                self.overlay = if self.overlay == Overlay::Subtitles {
+                    Overlay::Closed
+                } else {
+                    Overlay::Subtitles
+                };
                 // The list is built afresh at the top; bring the current cue into view.
                 self.follow_cue(true)
+            }
+            Message::ToggleMarkerList => {
+                self.overlay = if self.overlay == Overlay::Markers {
+                    Overlay::Closed
+                } else {
+                    Overlay::Markers
+                };
+                Task::none()
+            }
+            Message::ShowMarkerList => {
+                self.overlay = Overlay::Markers;
+                Task::none()
+            }
+            Message::ShowOverlay(overlay) => {
+                self.overlay = overlay;
+                self.follow_cue(true)
+            }
+            // Bubbles up via media_viewer, which adds the playhead.
+            Message::Markers(_) => Task::none(),
+            Message::SeekExact(ms) => self.seek_to(Duration::from_millis(ms), true),
+            Message::ShowNotice(text) => {
+                self.notice_count += 1;
+                let number = self.notice_count;
+                self.notice = Some((text, number));
+                Task::future(async move {
+                    tokio::time::sleep(NOTICE_DURATION).await;
+                    Message::ClearNotice(number)
+                })
+            }
+            Message::ClearNotice(number) => {
+                if self.notice.as_ref().is_some_and(|(_, n)| *n == number) {
+                    self.notice = None;
+                }
+                Task::none()
             }
             Message::SeekToCue(index) => {
                 let Some(cue) = self.subtitles.as_ref().and_then(|s| s.cues().get(index)) else {
@@ -281,8 +351,24 @@ impl VideoPlayerState {
     pub fn subtitles(&self) -> Option<&Subtitles> {
         self.subtitles.as_deref()
     }
+    /// Whether the subtitle list is open (windowed mode; fullscreen shows it anyway).
     pub fn show_cue_list(&self) -> bool {
-        self.show_cue_list
+        self.overlay == Overlay::Subtitles
+    }
+
+    /// Whether the marker list is open.
+    pub fn show_marker_list(&self) -> bool {
+        self.overlay == Overlay::Markers
+    }
+
+    /// The note to show in the controls bar, if any.
+    pub fn notice(&self) -> Option<&str> {
+        self.notice.as_ref().map(|(text, _)| text.as_str())
+    }
+
+    /// The playhead in milliseconds, as the view shows it.
+    pub fn position_ms(&self) -> u64 {
+        u64::try_from(self.display_position().as_millis()).unwrap_or(u64::MAX)
     }
 
     /// Position to draw: the drag position while the progress bar is held, otherwise the

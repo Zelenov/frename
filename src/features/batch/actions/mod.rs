@@ -7,6 +7,7 @@
 //! and `update` when it has settings), then one line in each match below.
 
 mod fix_tags;
+mod markers_comment;
 mod move_comments;
 mod move_in_out;
 mod reload_files;
@@ -29,6 +30,7 @@ use crate::theme;
 pub enum Action {
     MoveComments,
     MoveInOut,
+    MarkersComment,
     TagCommented,
     FixTags,
     RespaceTags,
@@ -37,9 +39,10 @@ pub enum Action {
 
 impl Action {
     /// Every action, in list order.
-    pub const ALL: [Action; 6] = [
+    pub const ALL: [Action; 7] = [
         Action::MoveComments,
         Action::MoveInOut,
+        Action::MarkersComment,
         Action::TagCommented,
         Action::FixTags,
         Action::RespaceTags,
@@ -50,6 +53,7 @@ impl Action {
         match self {
             Self::MoveComments => move_comments::LABEL,
             Self::MoveInOut => move_in_out::LABEL,
+            Self::MarkersComment => markers_comment::LABEL,
             Self::TagCommented => tag_commented::LABEL,
             Self::FixTags => fix_tags::LABEL,
             Self::RespaceTags => tag_spacing::LABEL,
@@ -63,6 +67,7 @@ impl Action {
 pub enum Operation {
     MoveComments(CommentStorage),
     MoveInOut(InOutStorage),
+    MarkersComment(markers_comment::Direction),
     TagCommented,
     FixTags,
     /// Rename files to the tag spacing chosen in the settings.
@@ -76,6 +81,7 @@ impl Operation {
         match self {
             Self::MoveComments(to) => move_comments::run(to, path),
             Self::MoveInOut(to) => move_in_out::run(to, path),
+            Self::MarkersComment(direction) => markers_comment::run(direction, path),
             Self::TagCommented => tag_commented::run(path),
             Self::FixTags => fix_tags::run(path),
             Self::RespaceTags => tag_spacing::run(path),
@@ -88,6 +94,7 @@ impl Operation {
         match self {
             Self::MoveComments(_) => Action::MoveComments,
             Self::MoveInOut(_) => Action::MoveInOut,
+            Self::MarkersComment(_) => Action::MarkersComment,
             Self::TagCommented => Action::TagCommented,
             Self::FixTags => Action::FixTags,
             Self::RespaceTags => Action::RespaceTags,
@@ -101,6 +108,7 @@ impl Operation {
 pub enum ActionMessage {
     MoveComments(move_comments::Message),
     MoveInOut(move_in_out::Message),
+    MarkersComment(markers_comment::Message),
     /// Open the settings window, where an action's global settings live (e.g. the commented
     /// tag). Handled by the app, which owns the windows.
     OpenSettings,
@@ -111,6 +119,7 @@ pub enum ActionMessage {
 pub struct Actions {
     move_comments: move_comments::Options,
     move_in_out: move_in_out::Options,
+    markers_comment: markers_comment::Options,
 }
 
 impl Actions {
@@ -118,6 +127,7 @@ impl Actions {
         match message {
             ActionMessage::MoveComments(message) => self.move_comments.update(message),
             ActionMessage::MoveInOut(message) => self.move_in_out.update(message),
+            ActionMessage::MarkersComment(message) => self.markers_comment.update(message),
             ActionMessage::OpenSettings => {}
         }
     }
@@ -127,7 +137,8 @@ impl Actions {
         match operation {
             Operation::MoveComments(to) => self.move_comments.prepare(to),
             Operation::MoveInOut(to) => self.move_in_out.prepare(to),
-            Operation::TagCommented
+            Operation::MarkersComment(_)
+            | Operation::TagCommented
             | Operation::FixTags
             | Operation::RespaceTags
             | Operation::ReloadFiles => {}
@@ -139,6 +150,7 @@ impl Actions {
         match action {
             Action::MoveComments => Some(self.move_comments.operation()),
             Action::MoveInOut => Some(self.move_in_out.operation()),
+            Action::MarkersComment => Some(self.markers_comment.operation()),
             Action::TagCommented => tag_commented::operation(),
             Action::FixTags => Some(Operation::FixTags),
             Action::RespaceTags => Some(Operation::RespaceTags),
@@ -151,6 +163,10 @@ impl Actions {
         match action {
             Action::MoveComments => self.move_comments.view().map(ActionMessage::MoveComments),
             Action::MoveInOut => self.move_in_out.view().map(ActionMessage::MoveInOut),
+            Action::MarkersComment => self
+                .markers_comment
+                .view()
+                .map(ActionMessage::MarkersComment),
             Action::TagCommented => tag_commented::view(),
             Action::FixTags => fix_tags::view(),
             Action::RespaceTags => tag_spacing::view(),

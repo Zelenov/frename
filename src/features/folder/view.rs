@@ -25,7 +25,8 @@ const CHECK_SIZE: f32 = 16.0;
 /// Render the folder panel: a scrollable list of file names (tag chips + name.extension, no wrap).
 /// Selection comes from the directory; view emits SelectFile/Previous/Next.
 /// `batch` is the batch state while batch mode is on: rows get a check box, or the file's
-/// outcome while a job has it.
+/// outcome while a job has it. Files in `markers_not_saved` get a red ✕.
+#[allow(clippy::too_many_arguments)]
 pub fn view<'a>(
     directory: Option<&'a crate::features::folder_workspace::Directory>,
     loading: bool,
@@ -34,6 +35,10 @@ pub fn view<'a>(
     rename: Option<&'a InlineRename>,
     spinner_frame: usize,
     batch: Option<&'a BatchState>,
+    markers_not_saved: &'a std::collections::HashMap<
+        frename_core::FileId,
+        Vec<frename_core::Marker>,
+    >,
 ) -> Element<'a, Message> {
     let placeholder_icon = |icon: &'static str| {
         container(text(icon).size(48).color(theme::TEXT_MUTED))
@@ -73,15 +78,32 @@ pub fn view<'a>(
 
             // On the name line, next to the tags: centred on the whole row it would float
             // between the name and the comment line.
-            let subtitles_icon: Element<'_, Message> = if file_info.has_subtitles() {
-                container(text("SRT").size(9).color(theme::ACCENT))
-                    .center_x(Length::Fixed(SUBTITLES_MARKER_WIDTH))
+            let subtitles_icon: Element<'_, Message> =
+                if markers_not_saved.contains_key(&file_info.id()) {
+                    tooltip(
+                        container(text("✕").size(12).color(theme::ERROR))
+                            .center_x(Length::Fixed(SUBTITLES_MARKER_WIDTH)),
+                        container(
+                            text(
+                                "Markers not saved: the file is read-only or in use \
+                             (close it in Premiere, then open the file and leave it again)",
+                            )
+                            .size(12),
+                        )
+                        .padding([4, 8])
+                        .style(theme::elevated_container_bordered_style),
+                        tooltip::Position::Bottom,
+                    )
                     .into()
-            } else {
-                container(iced::widget::Space::new())
-                    .width(Length::Fixed(SUBTITLES_MARKER_WIDTH))
-                    .into()
-            };
+                } else if file_info.has_subtitles() {
+                    container(text("SRT").size(9).color(theme::ACCENT))
+                        .center_x(Length::Fixed(SUBTITLES_MARKER_WIDTH))
+                        .into()
+                } else {
+                    container(iced::widget::Space::new())
+                        .width(Length::Fixed(SUBTITLES_MARKER_WIDTH))
+                        .into()
+                };
 
             // In batch mode the check box leads the name line, level with the tags whether or
             // not a comment line follows.

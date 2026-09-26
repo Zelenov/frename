@@ -17,12 +17,10 @@ use super::{FolderWorkspace, Message};
 pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Message> {
     let seg_start = state.file_workspace().segment_start_secs();
     let seg_end = state.file_workspace().segment_end_secs();
-    let screenshot_secs: Vec<f32> = state
-        .file_workspace()
-        .screenshots()
-        .iter()
-        .map(|s| s.position_secs())
-        .collect();
+    let markers = media_viewer::video::view::MarkersView {
+        markers: state.file_workspace().markers(),
+        state: state.markers(),
+    };
 
     if state.directory().is_none() && !state.media_fullscreen() {
         let icon = if state.is_loading() { "⏳" } else { "📂" };
@@ -49,14 +47,8 @@ pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Mes
     let video = container(if state.media_fullscreen() {
         iced::widget::Space::new().into()
     } else {
-        media_viewer::view::view(
-            state.media_viewer(),
-            false,
-            seg_start,
-            seg_end,
-            screenshot_secs.clone(),
-        )
-        .map(Message::MediaViewer)
+        media_viewer::view::view(state.media_viewer(), false, seg_start, seg_end, markers)
+            .map(Message::MediaViewer)
     })
     .width(Length::Fixed(state.left_width()))
     .height(Length::Fill);
@@ -90,6 +82,7 @@ pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Mes
             state.inline_rename(),
             state.spinner_frame(),
             state.batch().is_active().then_some(state.batch()),
+            state.unsaved_markers(),
         ))
         .height(Length::Fill),
         folder_controls::view::view(
@@ -157,14 +150,8 @@ pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Mes
     // The overlay is the fullscreen media view when active, or an invisible space.
     let overlay: Element<'_, Message> = if state.media_fullscreen() {
         container(
-            media_viewer::view::view(
-                state.media_viewer(),
-                true,
-                seg_start,
-                seg_end,
-                screenshot_secs,
-            )
-            .map(Message::MediaViewer),
+            media_viewer::view::view(state.media_viewer(), true, seg_start, seg_end, markers)
+                .map(Message::MediaViewer),
         )
         .width(Length::Fill)
         .height(Length::Fill)

@@ -7,7 +7,7 @@ description = "Core logic for frename file renaming utility"
 [dependencies]
 log = "0.4"
 rusqlite = { version = "0.40", features = ["bundled"] }
-tokio = { version = "1", features = ["fs", "time"] }
+tokio = { version = "1", features = ["fs", "rt", "time"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 indexmap = "2"
 regex = "1"

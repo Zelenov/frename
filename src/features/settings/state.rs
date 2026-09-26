@@ -92,7 +92,10 @@ impl SettingsState {
             }
             Message::OpenBatchAction(Operation::RespaceTags) => self.tag_spacing_changed = false,
             Message::OpenBatchAction(
-                Operation::TagCommented | Operation::FixTags | Operation::ReloadFiles,
+                Operation::MarkersComment(_)
+                | Operation::TagCommented
+                | Operation::FixTags
+                | Operation::ReloadFiles,
             ) => {}
         }
     }

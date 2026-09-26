@@ -106,14 +106,17 @@ impl DemoRun {
     }
 }
 
-/// What to do once the video is ready: pause at the scenario's time, open the subtitle list when
-/// the scenario asks for it, and turn on batch mode with every file checked when asked to.
+/// What to do once the video is ready: pause at the scenario's time, open the subtitle or marker
+/// list when the scenario asks for it, and turn on batch mode with every file checked when asked to.
 fn steps(scenario: &DemoScenario, batch: bool) -> Vec<folder_workspace::Message> {
     let video =
         |message| folder_workspace::Message::MediaViewer(media_viewer::Message::Video(message));
     let mut steps = vec![video(video::Message::Seek(scenario.seek))];
     if scenario.subtitle_list {
         steps.push(video(video::Message::ToggleCueList));
+    }
+    if scenario.marker_list {
+        steps.push(video(video::Message::ShowMarkerList));
     }
     if batch {
         steps.push(folder_workspace::Message::Folder(
@@ -354,9 +357,6 @@ mod tests {
             let scenario = DemoScenario::parse(&std::fs::read_to_string(&path).unwrap())
                 .unwrap_or_else(|e| panic!("{name}: {e}"));
             let source = path.parent().unwrap().join(&scenario.source);
-            if let Some(image) = &scenario.snap_image {
-                assert!(source.join(image).is_file(), "{name}: {image}");
-            }
             for file in &scenario.files {
                 assert!(source.join(&file.from).is_file(), "{name}: {}", file.from);
                 assert!(

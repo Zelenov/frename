@@ -35,8 +35,6 @@ pub const ERROR: Color = Color::from_rgb(0.95, 0.35, 0.35);
 
 /// Segment range highlight on the progress bar (inverted accent – warm yellow-green).
 pub const SEGMENT: Color = Color::from_rgba(1.0, 0.85, 0.2, 0.75);
-/// Screenshot marker on the progress bar (bright teal tick).
-pub const SCREENSHOT_MARKER: Color = Color::from_rgba(0.2, 1.0, 0.85, 0.90);
 
 /// Secondary text on dark translucent surfaces (subtitle list); brighter than TEXT_MUTED.
 pub const TEXT_SOFT: Color = Color::from_rgb(0.75, 0.75, 0.8);
@@ -288,5 +286,70 @@ pub fn dark_scrollable_style(
             shadow: iced::Shadow::default(),
             icon: TEXT_MUTED,
         },
+    }
+}
+
+/// How a clip marker's color is drawn: close to Premiere's marker colors, gray for a value
+/// frename does not know.
+pub fn marker_color(color: frename_core::MarkerColor) -> Color {
+    use frename_core::MarkerColor as M;
+    match color {
+        M::Green => Color::from_rgb(0.36, 0.76, 0.36),
+        M::Red => Color::from_rgb(0.86, 0.22, 0.22),
+        M::Orange => Color::from_rgb(0.93, 0.55, 0.15),
+        M::Yellow => Color::from_rgb(0.93, 0.85, 0.20),
+        M::White => Color::from_rgb(0.95, 0.95, 0.95),
+        M::Blue => Color::from_rgb(0.28, 0.48, 0.96),
+        M::Cyan => Color::from_rgb(0.15, 0.78, 0.86),
+        M::Lavender => Color::from_rgb(0.70, 0.58, 0.94),
+        M::Magenta => Color::from_rgb(0.92, 0.28, 0.78),
+        M::Other(_) => TEXT_MUTED,
+    }
+}
+
+/// A round button filled with a marker color: the color dot of a marker row and the colors of
+/// its picker. `selected` rings it in white.
+pub fn marker_dot_style(
+    color: Color,
+    selected: bool,
+) -> impl Fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style + Clone {
+    move |_theme: &iced::Theme, status: iced::widget::button::Status| {
+        let ring = match status {
+            _ if selected => TEXT,
+            iced::widget::button::Status::Hovered => TEXT_SOFT,
+            _ => Color::TRANSPARENT,
+        };
+        iced::widget::button::Style {
+            background: Some(Background::Color(color)),
+            text_color: TEXT,
+            border: iced::Border {
+                radius: 999.0.into(),
+                width: 2.0,
+                color: ring,
+            },
+            shadow: iced::Shadow::default(),
+            snap: true,
+        }
+    }
+}
+
+/// Tab of the side list over the video (Subtitles / Markers): the open one underlined in the
+/// accent color.
+pub fn overlay_tab_style(
+    active: bool,
+) -> impl Fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style + Clone {
+    move |_theme: &iced::Theme, status: iced::widget::button::Status| {
+        let bg = match (active, status) {
+            (true, _) => ACCENT_SELECTED,
+            (false, iced::widget::button::Status::Hovered) => Color::from_rgba(1.0, 1.0, 1.0, 0.08),
+            _ => Color::TRANSPARENT,
+        };
+        iced::widget::button::Style {
+            background: Some(Background::Color(bg)),
+            text_color: if active { TEXT } else { TEXT_SOFT },
+            border: iced::border::rounded(4),
+            shadow: iced::Shadow::default(),
+            snap: true,
+        }
     }
 }

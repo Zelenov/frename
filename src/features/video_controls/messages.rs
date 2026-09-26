@@ -23,6 +23,14 @@ pub enum Message {
     SetSegmentEnd,
     /// Set volume (0.0 = silent, 1.0 = full)
     SetVolume(f32),
-    /// Capture current video position as a screenshot marker (F12 or button).
+    /// Save the current frame as a JPEG next to the video (F12 or button).
     TakeScreenshot,
+    /// Add a marker at the playhead, or name the one just added (F2 or `◆+`).
+    AddMarker,
+    /// Delete the marker under the playhead (Shift+F2).
+    DeleteMarker,
+    /// Jump to the previous marker (Shift+F1).
+    PreviousMarker,
+    /// Jump to the next marker (Shift+F3).
+    NextMarker,
 }

@@ -1,3 +1,14 @@
+# NEXT
+## Added
+- Markers: `F2` (or ◆+) marks a moment of the video, `F2` again names it. Each marker has a name, a comment of several lines, one of Premiere's colors and an optional length, and is saved inside the video, where Premiere Pro shows it on the clip after import.
+- The marker list (◆, in fullscreen too) shares the side of the picture with the subtitle list, with a tab for each: click a marker to jump to it or edit it.
+- `Shift+F1` / `Shift+F3` jump to the previous / next marker, `Shift+F2` deletes the marker under the playhead, and dragging the progress bar with `Shift` snaps to markers. Markers show as colored ticks on the progress bar.
+- Batch action "Markers ⇄ comment" turns comment lines like `03:24 — Take 3` into markers, or copies markers into the comment.
+
+## Changed
+- `F12` just saves the current frame as a JPEG next to the video, like VLC: no mark on the progress bar, no time in the comment, and the picture is no longer renamed with the video. Frames saved before stay on disk.
+- `F1`, `F3` and `F12` no longer react while `Shift` is held.
+
 # 0.68
 ## Added
 - A setting puts a space after each tag in file names (`Food. Goat. clip.mp4`); names are read the same either way.

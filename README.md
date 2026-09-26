@@ -39,10 +39,10 @@ The in/out part is there only when you mark a segment.
 2. The video starts playing.
 3. Tag what you see: click a tag, or move with the arrow keys and press `Shift+Space`.
 4. Press `[` and `]` to mark the usable segment of the clip (in and out points).
-5. Press `F12` to save a screenshot of an interesting moment. It also starts a line with that time
-   in the comment box: click the box and type your note after it.
-6. Press `Esc` to leave the comment box, then `PageDown` to go to the next clip. The clip you leave
-   is renamed.
+5. Press `F2` at an interesting moment to mark it. Press `F2` again right away to name the marker,
+   then `Enter`. Markers show up on the clip in Premiere Pro.
+6. Type a note for the whole clip in the comment box, press `Esc` to leave it, then `PageDown` to
+   go to the next clip. The clip you leave is renamed and its markers are saved.
 7. Most clips share most tags with their neighbors: press `Ctrl+C` on one clip and `Ctrl+V` on the next, then adjust.
 
 Next time you start frename, it reopens the last folder and clip.
@@ -81,16 +81,22 @@ Next time you start frename, it reopens the last folder and clip.
 | `F3` | Forward 10 seconds |
 | `[` | Set the in point |
 | `]` | Set the out point |
-| `F12` | Take a screenshot |
+| `F2` | Add a marker; `F2` again within a second and a half, or on a marker, names it |
+| `Shift+F2` | Delete the marker under the playhead |
+| `Shift+F1` / `Shift+F3` | Jump to the previous / next marker |
+| `Shift` + drag the progress bar | Snap to the nearest marker |
+| `F12` | Save the current frame as a JPEG next to the video |
 | `F5` | Fullscreen on / off (or double-click the picture) |
 | `Escape` | Leave fullscreen |
 
 While a text box (tag search, file search, comment) has the cursor, it takes the keys it needs:
 arrows, `Delete`, `Space`, `Enter`, `Ctrl+C`, and in the comment box also `PageUp` / `PageDown`.
-Press `Esc` first to give the keys back to the app. `[` and `]` always set in and out points.
+Press `Esc` first to give the keys back to the app. `[` and `]` set in and out points, except while
+you type in a marker's name or comment. The F-keys always work.
 
 Undo (`Ctrl+Z`) covers tagging, adding, deleting, starring and reordering tags, pasting, in/out
-points and the rename when you leave a clip. It does not cover comment text, a rename by hand
+points, adding, deleting, coloring and lengthening markers, and the rename when you leave a clip.
+It does not cover comment or marker text, a rename by hand
 (double-click), untagging with 🗑, the 🔓↑ / 🔓↓ buttons, or batch actions; opening a folder or running a batch
 action clears the undo history.
 
@@ -116,13 +122,21 @@ A folder without one starts with a set for travel and documentary work: `pick`, 
 
 ---
 
-## Screenshots, comments and in/out points
+## Markers, comments and in/out points
 
 The progress bar shows what you have noted about a clip:
 
-- **Screenshots:** `F12` or 📷 saves the frame as a JPEG next to the video
-  (`clip.mp4.snap.00-01-05-250.jpg`) and puts a mark on the progress bar. It also adds a line with
-  the time to the comment.
+- **Markers:** `F2` or ◆+ marks the moment under the playhead with a colored tick. ◆ opens the
+  marker list over the picture (in fullscreen too; it shares the place with the subtitle list, with a
+  tab for each). Click a marker's row to give it a name and a comment of several lines, its dot to
+  pick one of Premiere's colors, ⇥ to end it at the playhead (a ranged marker, drawn as a band), ✕
+  to delete it, and its time to jump there. Markers are saved inside the video when you leave the
+  clip, and Premiere Pro shows them on the clip with their name, comment, length and color after
+  you import it (re-import a clip it already has: Premiere reads the markers once). Markers
+  Premiere wrote are shown too and kept. If a clip is open in Premiere, its markers may not save:
+  the file gets a red ✕ in the list, and frename tries again when you next leave it.
+- **Frames:** `F12` or 📷 saves the current frame as a JPEG next to the video
+  (`clip.mp4.snap.00-01-05-250.jpg`) and shows `Frame saved`.
 - **In and out points:** `[` and `]` mark the usable segment, highlighted on the progress bar.
   They are saved in the file name (`in_00_01_05`, `out_00_02_10`, whole seconds) or, if you choose
   in Settings, inside the video as a marker that Premiere Pro turns into a subclip.
@@ -132,10 +146,11 @@ The progress bar shows what you have noted about a clip:
   While comments are inside the video, frename tags a commented clip "Commented" (Settings can
   rename or turn off this tag).
 
-Some formats, such as mkv, cannot hold comments or in/out points inside them; for those, frename
-keeps them in `.comment.txt` and the file name whatever Settings say.
+Some formats, such as mkv, cannot hold comments, in/out points or markers inside them; for those,
+frename keeps comments and in/out points in `.comment.txt` and the file name whatever Settings say,
+and ◆+ is off. mp4 and mov hold everything.
 
-Screenshots, `.comment.txt` files and subtitles are renamed together with their video.
+`.comment.txt` files and subtitles are renamed together with their video.
 
 ---
 
@@ -160,6 +175,9 @@ and Cancel. Each file then shows a green or red check box. Actions:
 
 - move comments between the video and `.comment.txt` files;
 - move in/out points between the file name and the video;
+- turn comment lines that start with a time (`03:24 — Take 3 — nice light`, `0:41-0:47 — Lion`)
+  into markers, or copy the markers into the comment as such lines. The marker's name and comment
+  are split at the first ` — ` or ` -- `, not at a plain ` - `;
 - tag commented videos with "Commented" and untag the rest;
 - put the tags in every name in tag panel order;
 - add or remove the space after each tag, as set in Settings;

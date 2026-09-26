@@ -10,10 +10,14 @@
 //! `xmpDM:Tracks`. Premiere Pro keeps real In/Out points in the project only, but on import
 //! it turns such a marker into a subclip next to the clip.
 
+use std::collections::HashSet;
 use std::path::Path;
 use std::time::SystemTime;
 
 use xmp_toolkit::{xmp_ns, OpenFileOptions, XmpError, XmpFile, XmpMeta, XmpValue};
+
+use super::markers_xmp::{apply_markers, markers_of};
+use crate::markers::Marker;
 
 const DESCRIPTION: &str = "description";
 const DEFAULT_LANGUAGE: &str = "x-default";
@@ -145,6 +149,61 @@ pub(super) fn write(
     Ok(segment_stored)
 }
 
+/// The clip markers in the file's XMP (see [`super::markers_xmp`]). `None` when the file cannot
+/// hold XMP or is a cloud placeholder; empty when it has no markers.
+pub(super) fn read_markers(path: &Path) -> Option<Vec<Marker>> {
+    if is_cloud_placeholder(path) {
+        return None;
+    }
+    if let Some(packet) = super::bmff::find_xmp_packet(path) {
+        let meta = packet.and_then(|packet| packet.parse::<XmpMeta>().ok());
+        return Some(meta.map(|meta| markers_of(&meta)).unwrap_or_default());
+    }
+    let mut file = open(path, OpenFileOptions::default().for_read()).ok()?;
+    let markers = file.xmp().map(|meta| markers_of(&meta)).unwrap_or_default();
+    file.close();
+    Some(markers)
+}
+
+/// Length of the clip in milliseconds, as the toolkit reads it from the container's header;
+/// `None` when it cannot tell.
+pub(super) fn clip_length_ms(path: &Path) -> Option<u64> {
+    if is_cloud_placeholder(path) {
+        return None;
+    }
+    let mut file = open(path, OpenFileOptions::default().for_read()).ok()?;
+    let length = file.xmp().and_then(|meta| clip_duration_ms(&meta));
+    file.close();
+    length
+}
+
+/// Bring the file's clip markers in line with `markers`; see [`super::markers_xmp::apply_markers`]
+/// for what `known` means. Does not touch the file when nothing differs, and keeps its times.
+pub(super) fn write_markers(
+    path: &Path,
+    markers: &[Marker],
+    known: &HashSet<String>,
+) -> Result<(), XmpWriteError> {
+    let mut file = open(path, OpenFileOptions::default().for_update())?;
+    let mut meta = match file.xmp() {
+        Some(meta) => meta,
+        None => XmpMeta::new()?,
+    };
+    if !apply_markers(&mut meta, markers, known)? {
+        file.close();
+        return Ok(());
+    }
+    if !file.can_put_xmp(&meta) {
+        file.close();
+        return Err(XmpWriteError::Unsupported);
+    }
+    let times = FileTimes::read(path)?;
+    file.put_xmp(&meta)?;
+    file.try_close()?;
+    times.restore(path)?;
+    Ok(())
+}
+
 /// Open with the format's smart handler only. Packet scanning would read a whole unknown
 /// file looking for XMP, and could not safely write into it anyway.
 fn open(path: &Path, options: OpenFileOptions) -> Result<XmpFile, XmpWriteError> {
@@ -165,8 +224,8 @@ fn description(meta: &XmpMeta) -> String {
 // ---------------------------------------------------------------------------
 
 /// XMP Dynamic Media namespace (`xmpDM`), home of clip markers and duration.
-const XMP_DM: &str = "http://ns.adobe.com/xmp/1.0/DynamicMedia/";
-const TRACKS: &str = "Tracks";
+pub(super) const XMP_DM: &str = "http://ns.adobe.com/xmp/1.0/DynamicMedia/";
+pub(super) const TRACKS: &str = "Tracks";
 /// Track type Premiere Pro turns into a subclip named `{file}.{marker name}` on import.
 const IN_OUT_TRACK_TYPE: &str = "InOut";
 const IN_OUT_MARKER_NAME: &str = "in-out";
@@ -244,7 +303,7 @@ fn clip_duration_ms(meta: &XmpMeta) -> Option<u64> {
 }
 
 /// Path of the `index`-th (1-based) item of `xmpDM:Tracks`.
-fn track_path(index: usize) -> String {
+pub(super) fn track_path(index: usize) -> String {
     format!("{TRACKS}[{index}]")
 }
 

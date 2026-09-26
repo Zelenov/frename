@@ -3,7 +3,7 @@
 use iced::widget::{button, container, row, text, tooltip, Space};
 use iced::{Element, Length};
 
-use super::progress_bar::ProgressBar;
+use super::progress_bar::{BarMarker, ProgressBar};
 use super::{Message, VideoControlsState};
 use crate::theme;
 
@@ -12,12 +12,15 @@ const CONTROLS_HEIGHT: f32 = 32.0;
 /// Render the video player controls.
 /// `position_secs` is the live playback position read from the video at view time.
 /// `segment_start` and `segment_end` are the optional segment markers (in seconds) for the current file.
+/// `markers` are the clip markers (in seconds) drawn on the bar; `can_add_markers` is false when
+/// the file cannot hold them.
 pub fn view<'a>(
     state: &'a VideoControlsState,
     position_secs: f32,
     segment_start: Option<f32>,
     segment_end: Option<f32>,
-    screenshot_positions_secs: Vec<f32>,
+    markers: Vec<BarMarker>,
+    can_add_markers: bool,
 ) -> Element<'a, Message> {
     let back10_btn: Element<'_, Message> = tooltip(
         button(
@@ -111,7 +114,7 @@ pub fn view<'a>(
     let bar = ProgressBar::new(0.0..=duration, current_pos, Message::Seek)
         .on_release(Message::SeekReleased)
         .segment_range(segment_start, segment_end)
-        .markers(screenshot_positions_secs.iter().copied());
+        .markers(markers);
 
     let volume_icon: Element<'_, Message> =
         container(text("🔊").size(13)).center_y(Length::Fill).into();
@@ -134,7 +137,27 @@ pub fn view<'a>(
         .height(iced::Length::Fill)
         .padding(0)
         .style(theme::icon_button_style(true)),
-        text("F12"),
+        text("Save this frame as a JPEG (F12)"),
+        tooltip::Position::Top,
+    )
+    .into();
+
+    let add_marker_btn: Element<'_, Message> = tooltip(
+        button(
+            container(text("◆+").size(13))
+                .center_x(iced::Length::Fill)
+                .center_y(iced::Length::Fill),
+        )
+        .on_press_maybe(can_add_markers.then_some(Message::AddMarker))
+        .width(CONTROLS_HEIGHT)
+        .height(iced::Length::Fill)
+        .padding(0)
+        .style(theme::icon_button_style(can_add_markers)),
+        text(if can_add_markers {
+            "Add marker (F2, again to name it)"
+        } else {
+            "This file cannot hold markers"
+        }),
         tooltip::Position::Top,
     )
     .into();
@@ -146,6 +169,7 @@ pub fn view<'a>(
         seg_in_btn,
         seg_out_btn,
         screenshot_btn,
+        add_marker_btn,
         bar,
         Space::new().width(8),
         volume_icon,
