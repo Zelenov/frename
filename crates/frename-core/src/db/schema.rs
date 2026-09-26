@@ -107,3 +107,8 @@ CREATE TABLE IF NOT EXISTS update_check (
     newest_version TEXT NOT NULL DEFAULT ''
 );
 ";
+
+/// Migration 10: the language of AI descriptions (`SummaryLanguage::as_str`).
+pub const M10_SUMMARY_LANGUAGE: &str = "
+ALTER TABLE app_settings ADD COLUMN summary_language TEXT NOT NULL DEFAULT 'subtitles';
+";
