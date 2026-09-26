@@ -63,7 +63,7 @@ Otherwise summarizing 1000 clips would rename all of them.
    disabled until an estimate is shown and there is a key; changing the checks or *Redo* clears
    the estimate.
 4. The run works like every batch action (progress, Cancel, green/red per file). A failed file
-   shows its reason in the report (`Anthropic rejected the API key`, `No answer within 180 s`,
+   shows its reason in the report (`The API key was rejected`, `No answer within 180 s`,
    the API's own message for other rejected requests, …). A rejected key or an empty credit
    balance stops the job (`Stopped: …`), since every later file would fail the same way.
 
