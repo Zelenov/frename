@@ -12,6 +12,8 @@ pub struct SettingsState {
     comment_storage_changed: bool,
     /// The in/out storage changed since the window last offered moving the files' points.
     in_out_storage_changed: bool,
+    /// The tag spacing changed since the window last offered renaming the files to it.
+    tag_spacing_changed: bool,
 }
 
 impl Default for SettingsState {
@@ -20,6 +22,7 @@ impl Default for SettingsState {
             settings: AppDatabase::new().get_app_settings().unwrap_or_default(),
             comment_storage_changed: false,
             in_out_storage_changed: false,
+            tag_spacing_changed: false,
         }
     }
 }
@@ -47,10 +50,19 @@ impl SettingsState {
         self.in_out_storage_changed
     }
 
+    /// Whether to offer renaming the files to the tag spacing just chosen.
+    pub fn tag_spacing_changed(&self) -> bool {
+        self.tag_spacing_changed
+    }
+
     fn apply(&mut self, message: Message) {
         match message {
             Message::SetAutoplayVideo(autoplay) => self.settings.autoplay_video = autoplay,
             Message::SetMonochromeTags(monochrome) => self.settings.monochrome_tags = monochrome,
+            Message::SetSpaceAfterTags(space) => {
+                self.tag_spacing_changed |= self.settings.space_after_tags != space;
+                self.settings.space_after_tags = space;
+            }
             Message::SetCommentStorage(storage) => {
                 self.comment_storage_changed |= self.settings.comment_storage != storage;
                 self.settings.comment_storage = storage;
@@ -78,6 +90,7 @@ impl SettingsState {
             Message::OpenBatchAction(Operation::MoveInOut(_)) => {
                 self.in_out_storage_changed = false
             }
+            Message::OpenBatchAction(Operation::RespaceTags) => self.tag_spacing_changed = false,
             Message::OpenBatchAction(
                 Operation::TagCommented | Operation::FixTags | Operation::ReloadFiles,
             ) => {}
@@ -96,6 +109,7 @@ mod tests {
             settings: AppSettings::default(),
             comment_storage_changed: false,
             in_out_storage_changed: false,
+            tag_spacing_changed: false,
         };
         state.apply(Message::SetMonochromeTags(true));
         assert!(state.settings().monochrome_tags);
@@ -120,6 +134,7 @@ mod tests {
             settings: AppSettings::default(),
             comment_storage_changed: false,
             in_out_storage_changed: false,
+            tag_spacing_changed: false,
         };
         state.apply(Message::SetCommentStorage(state.settings().comment_storage));
         assert!(
@@ -134,6 +149,11 @@ mod tests {
             CommentStorage::TextFile,
         )));
         assert!(!state.comment_storage_changed());
+
+        state.apply(Message::SetSpaceAfterTags(true));
+        assert!(state.tag_spacing_changed() && state.settings().space_after_tags);
+        state.apply(Message::OpenBatchAction(Operation::RespaceTags));
+        assert!(!state.tag_spacing_changed());
     }
 
     #[test]
@@ -142,6 +162,7 @@ mod tests {
             settings: AppSettings::default(),
             comment_storage_changed: false,
             in_out_storage_changed: false,
+            tag_spacing_changed: false,
         };
         state.apply(Message::SetCommentedTag("Has comment.v2:".to_string()));
         assert_eq!(state.settings().commented_tag, "Has commentv2");

@@ -20,13 +20,28 @@ pub fn view(state: &SettingsState) -> Element<'_, Message> {
             .on_toggle(Message::SetAutoplayVideo)
             .into(),
     );
-    let tags = section(
-        "Tags",
+    let mut tag_options = column![
         checkbox(settings.monochrome_tags)
             .label("Monochrome tags")
-            .on_toggle(Message::SetMonochromeTags)
-            .into(),
-    );
+            .on_toggle(Message::SetMonochromeTags),
+        checkbox(settings.space_after_tags)
+            .label("Space after each tag in file names (Food. Goat. clip.mp4)")
+            .on_toggle(Message::SetSpaceAfterTags),
+    ]
+    .spacing(8);
+    if state.tag_spacing_changed() {
+        let label = if settings.space_after_tags {
+            "Add the space to existing file names…"
+        } else {
+            "Remove the space from existing file names…"
+        };
+        tag_options = tag_options.push(move_offer(
+            "Files keep their names until renamed or saved.",
+            label,
+            Operation::RespaceTags,
+        ));
+    }
+    let tags = section("Tags", tag_options.into());
 
     // Each option's own settings sit right under it: the tag under "inside the video", and the
     // offer to move existing files under whichever option was just chosen.

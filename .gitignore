@@ -1,5 +1,5 @@
 # Rust
-/target/
+target/
 # Keep workspace root lockfile tracked for reproducible CI builds.
 crates/*/Cargo.lock
 
