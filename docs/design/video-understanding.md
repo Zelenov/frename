@@ -25,7 +25,8 @@ batch-API pricing, caching across runs (stages 2–3).
 1. **Set the key once.** Settings → new section **AI** (last section; see Settings layout):
    an *Anthropic API key* field (masked, with *Show*) and under it
    `Saved in Windows Credential Manager on this computer.` (the macOS / Linux store's name on
-   those systems) and a **Save** button; *Summary language*: a dropdown whose first entry reads
+   those systems) and a **Save** button. Once a key is saved the field shows `Key saved` with
+   **Replace** and **Remove** buttons instead; *Summary language*: a dropdown whose first entry reads
    **Same as the subtitles (English if none)**, then English, Russian and the other languages of
    the app's users. A line of text says where to get a key. The model is Claude Haiku 4.5; a
    model or provider choice comes with stage 3.
@@ -33,10 +34,13 @@ batch-API pricing, caching across runs (stages 2–3).
    before *Run*:
    - `12 videos, 38 min · about $0.35 with Claude Haiku 4.5` — or `Estimating…` while durations
      and comments are read (see Cost); when some checked clips are skipped, a second line says
-     why: `3 already described and 1 over 30 min are skipped.`;
+     why: `3 already described and 1 over 30 min are skipped.`; when some have no `.srt`, another:
+     `4 videos have no subtitles: only the picture is described.`;
    - `Frames and subtitles of these videos are sent to Anthropic.`;
    - a checkbox **Redo videos that already have an AI description** (off by default).
-   Without a key, *Run* is disabled and the panel shows `Set an Anthropic API key in Settings`
+   The run button reads `Describe 12 videos` (the videos that will actually be sent, not the
+   checked count) and is disabled while the panel says `Estimating…`, so nothing runs without a
+   price shown. Without a key, it is also disabled and the panel shows `Set an Anthropic API key in Settings`
    with an **Open Settings** button (the existing `ActionMessage::OpenSettings`), which opens
    Settings scrolled to the AI section.
 3. **Progress and cancel** work like every batch action: per-file green/red result. *Cancel*
@@ -44,17 +48,22 @@ batch-API pricing, caching across runs (stages 2–3).
    between frame samples, between requests and during retry waits; a request already sent
    finishes (at most 60 s).
    Failed files are listed with their reason (see Batch changes): `No API key`,
-   `Anthropic rejected the key`, `Network error`, `Rate limited, try later`,
-   `Video could not be read`, `Too long (over 30 min)`.
+   `Anthropic rejected the key`, `Network error`, `No answer within 60 s`,
+   `Video could not be read`. Clips skipped as announced (already described, over 30 min) count
+   as unchanged, never as failed.
    A rejected key (401/403) stops the job: `Stopped: Anthropic rejected the key. Check it in Settings.`
 4. **Read the result.** In the comment area, the editable box holds only the editor's text; the
-   AI block is shown under it, read-only, in muted text, with a small **Remove AI description**
-   button. Typing can therefore never damage the block or mix with it. Premiere and
+   AI block is shown under it, read-only, in muted text: collapsed to its summary line by default,
+   with a **Show segments** toggle that expands it inside a scrollable area of at most 6 lines, so
+   the tag grid above keeps its room. A small **Remove AI description** button asks
+   `Remove the AI description? This cannot be undone.` first (comment edits are not in the undo
+   history). Typing can therefore never damage the block or mix with it. Premiere and
    `.comment.txt` get the whole comment (editor text, blank line, AI block); a clip with no text
    of the editor's shows the AI summary on the comment's first line (see The AI block).
 5. **Re-run** (with *Redo*): only the AI block is replaced.
 6. **Spend.** When the job ends — finished, cancelled or stopped — the job's summary line adds
-   `AI: $0.31 (Claude Haiku 4.5)`, computed from the `usage` the API returned.
+   `AI: $0.31 (Claude Haiku 4.5)`, computed from the `usage` the API returned; the same line goes
+   to the log, so the spend of earlier jobs can be looked up after their report is closed.
 
 ## Settings layout
 
@@ -100,11 +109,20 @@ AI: A guide leads two tourists through a spice market, stopping at a stall to ta
   blank line before it; the new block is appended after the editor's text, separated by one
   blank line. The editor's text is kept byte for byte.
 - Times are `m:ss` below an hour and `h:mm:ss` from an hour; ranges use `–`.
-- `frename-core` owns format, parse and replace, and `editor_comment(&str) -> &str` (the comment
-  without its AI block), all pure functions, unit-tested. #13 (summary from the SRT only) is meant
+- `frename-core` owns format, parse and replace, and `editor_comment(&str) -> String` (the comment
+  without its AI block: the text before it and any text after it, joined), all pure functions,
+  unit-tested. Text found after a block (hand edits in `.comment.txt` or Premiere) is kept and
+  moved before the block on the next save.
+- When formatting, whitespace and line breaks inside the summary and each description are
+  collapsed to single spaces, so the summary stays on one line and no model text can form an end
+  line. #13 (summary from the SRT only) is meant
   to reuse this block and the provider below; see Open questions.
-- The comment area splits the loaded comment with the same parser: the editable box edits the
-  editor's part, and every save joins it back with the unchanged block.
+- **In the open file**, `FileWorkspace` keeps the two parts apart: `comment_content` (the editable
+  box) holds only the editor's part, and the AI block is a separate field. `set_file`,
+  `set_comment`, the F12 timestamp append and `store_comment` all work on the editor's part; the
+  one function that produces the snapshot's comment joins editor part + blank line + block. So an
+  F12 timestamp on a described clip lands in the editor's text, and a comment never gets two
+  blocks.
 
 The comment is saved through the normal save path, so it follows the Settings comment storage
 (XMP or `.comment.txt`). **"Commented" means the editor's text only**, everywhere: a comment that
@@ -151,9 +169,10 @@ content blocks (text and JPEG images), the JSON schema and `max_tokens`, and the
 parsed JSON plus `usage`. The clip prompt is built above it.
 
 The Anthropic implementation: raw HTTP (`POST https://api.anthropic.com/v1/messages`, headers
-`x-api-key`, `anthropic-version: 2023-06-01`) with `reqwest` (blocking, `rustls-tls-native-roots`,
-so the OS certificate store is trusted, as corporate TLS-inspecting proxies need) on the batch
-thread; there is no official Rust SDK.
+`x-api-key`, `anthropic-version: 2023-06-01`) with `reqwest = "0.12"` (features `blocking`,
+`json`, `rustls-tls-native-roots`, `default-features = false`; the OS certificate store is
+trusted, as corporate TLS-inspecting proxies need) on the batch thread; there is no official Rust
+SDK. `base64 = "0.22"`.
 
 - `model`: `claude-haiku-4-5`; `max_tokens`: 4000. No `thinking` parameter: Haiku 4.5 does not
   think unless asked, so output tokens are only the answer. (A later model choice must handle
@@ -170,10 +189,13 @@ thread; there is no official Rust SDK.
   segments are dropped, an empty summary fails the file.
 - Response `stop_reason` other than `end_turn` (e.g. `max_tokens`, `refusal`) fails the file with
   that reason.
-- **Retries:** on 429, 500, 502, 503, 529 and network errors, up to 3 retries, waiting
-  `retry-after` seconds when the header is present, else 2, 8, 30 s; waits are slept in 250 ms
-  steps that check the cancel token. 400 fails the file at once; 401/403 stop the job.
-- **Timeout:** 60 s per request.
+- **Retries:** on 500, 502, 503, 529 and connection errors (no response), up to 3 retries after 2,
+  8, 30 s. A **429** waits `retry-after` (or 30 s) and does not use up a retry: a new key's
+  per-minute token limit is easily reached by a long job, which should slow down, not fail. Waits
+  are slept in 250 ms steps that check the cancel token. 400 fails the file at once; 401/403 stop
+  the job.
+- **Timeout:** 60 s per request. A timeout fails the file (`No answer within 60 s`) instead of
+  retrying: the server may have processed and billed the request already.
 
 ## Batch changes
 
@@ -232,7 +254,7 @@ save.
 - `src/features/settings/`: the AI section, the scrollable content, and opening at a section.
 - `src/features/file_workspace/`: the comment area split into the editable box and the read-only
   AI block.
-- New dependencies: `reqwest` (blocking, rustls-tls, json), `keyring` (features above), `base64`;
+- New dependencies: `reqwest` 0.12 and `base64` 0.22 (as above), `keyring` 3 (features above);
   `serde_json` is already used by `frename-core`.
 
 ## Edge cases
@@ -256,6 +278,10 @@ save.
   parsing (valid, invalid segments dropped, empty summary fails, `max_tokens` / `refusal`
   stop reasons); prompt and schema snapshot; cost estimate; retry policy against a mock HTTP
   server (`429` with `retry-after`, `529`, `401` stops the job).
+- AI block text: line breaks in model output are collapsed; text after a block is kept and moves
+  before it on save; `editor_comment` of before + block + after.
+- Open file: F12 on a described clip adds the timestamp to the editor's part only; one block after
+  the save.
 - The Commented rule everywhere: a comment that is only an AI block does not check the tag, is
   not counted or shown by the Commented filter, and is skipped by **Tag commented videos**;
   editor text plus an AI block counts; removing the editor's text with the AI block kept unchecks
