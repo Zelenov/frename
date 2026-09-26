@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use rusqlite::Connection;
 
+use crate::ai::SummaryLanguage;
 use crate::{CommentStorage, FolderAndFile, InOutStorage};
 
 use super::migrations;
@@ -176,7 +177,7 @@ impl AppStateStore for AppDatabase {
         let conn = lock_connection(&conn);
         conn.query_row(
             "SELECT autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled,
-                    space_after_tags
+                    space_after_tags, summary_language
              FROM app_settings WHERE id = 1",
             [],
             |row| Ok(AppSettings {
@@ -187,6 +188,7 @@ impl AppStateStore for AppDatabase {
                 commented_tag: row.get::<_, String>(4)?,
                 commented_tag_enabled: row.get::<_, i64>(5)? != 0,
                 space_after_tags: row.get::<_, i64>(6)? != 0,
+                summary_language: SummaryLanguage::from_name(&row.get::<_, String>(7)?),
             }),
         ).ok()
     }
@@ -195,8 +197,8 @@ impl AppStateStore for AppDatabase {
         if let Ok(conn) = self.conn() {
             let conn = lock_connection(&conn);
             let _ = conn.execute(
-                "INSERT INTO app_settings (id, autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled, space_after_tags)
-                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                "INSERT INTO app_settings (id, autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled, space_after_tags, summary_language)
+                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
                  ON CONFLICT(id) DO UPDATE SET
                      autoplay_video = excluded.autoplay_video,
                      monochrome_tags = excluded.monochrome_tags,
@@ -204,7 +206,8 @@ impl AppStateStore for AppDatabase {
                      in_out_storage = excluded.in_out_storage,
                      commented_tag = excluded.commented_tag,
                      commented_tag_enabled = excluded.commented_tag_enabled,
-                     space_after_tags = excluded.space_after_tags",
+                     space_after_tags = excluded.space_after_tags,
+                     summary_language = excluded.summary_language",
                 rusqlite::params![
                     settings.autoplay_video,
                     settings.monochrome_tags,
@@ -213,6 +216,7 @@ impl AppStateStore for AppDatabase {
                     settings.commented_tag,
                     settings.commented_tag_enabled,
                     settings.space_after_tags,
+                    settings.summary_language.as_str(),
                 ],
             );
         }
