@@ -118,6 +118,11 @@ pub const M11_AI_MODEL: &str = "
 ALTER TABLE app_settings ADD COLUMN ai_model TEXT NOT NULL DEFAULT 'claude-haiku-4-5';
 ";
 
+/// Migration 13: where clip markers are saved (`MarkerStorage::as_str`).
+pub const M13_MARKER_STORAGE: &str = "
+ALTER TABLE app_settings ADD COLUMN marker_storage TEXT NOT NULL DEFAULT 'xmp';
+";
+
 /// Migration 12: generating subtitles. The languages spoken in the footage, as comma-separated
 /// hints (empty: detect automatically), and how long a cue may get (`CueLength::as_str`).
 pub const M12_SUBTITLE_SETTINGS: &str = "

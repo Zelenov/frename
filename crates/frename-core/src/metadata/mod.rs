@@ -82,6 +82,35 @@ impl InOutStorage {
     }
 }
 
+/// Where clip markers (points and ranges) are saved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MarkerStorage {
+    /// Inside the video file, as XMP clip markers Premiere Pro shows on the clip.
+    #[default]
+    InVideo,
+    /// In the comment, one line per marker (`0:41–0:47 — Lion`); the AI's markers are the
+    /// lines of the comment's AI block.
+    Comment,
+}
+
+impl MarkerStorage {
+    /// Stable name for persisting the setting.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::InVideo => "xmp",
+            Self::Comment => "comment",
+        }
+    }
+
+    /// Parse a persisted name; unknown names fall back to the default.
+    pub fn from_name(name: &str) -> Self {
+        match name {
+            "comment" => Self::Comment,
+            _ => Self::InVideo,
+        }
+    }
+}
+
 /// Both storage choices, as the file tagger applies them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct MetadataStorage {
@@ -93,6 +122,25 @@ pub struct MetadataStorage {
 // deep inside the tagger, far from the settings that choose it.
 static COMMENT_TEXT_FILE: AtomicU8 = AtomicU8::new(0);
 static IN_OUT_XMP: AtomicU8 = AtomicU8::new(0);
+static MARKERS_IN_COMMENT: AtomicU8 = AtomicU8::new(0);
+
+/// Choose where markers are saved from now on. The open file's markers are written to the new
+/// storage when it is next saved; other files keep theirs where they are until moved.
+pub fn set_marker_storage(storage: MarkerStorage) {
+    MARKERS_IN_COMMENT.store(
+        u8::from(storage == MarkerStorage::Comment),
+        Ordering::Relaxed,
+    );
+}
+
+/// The storage chosen by [`set_marker_storage`].
+pub fn marker_storage() -> MarkerStorage {
+    if MARKERS_IN_COMMENT.load(Ordering::Relaxed) == 1 {
+        MarkerStorage::Comment
+    } else {
+        MarkerStorage::InVideo
+    }
+}
 
 /// Choose where comments are saved from now on. Comments already loaded keep their text and
 /// are written to the new storage when their file is next saved.

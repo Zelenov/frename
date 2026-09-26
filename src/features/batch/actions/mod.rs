@@ -13,6 +13,7 @@ pub mod describe_ai;
 mod fix_tags;
 pub mod generate_subtitles;
 mod markers_comment;
+pub use markers_comment::Direction as MarkersDirection;
 mod move_comments;
 mod move_in_out;
 mod reload_files;
@@ -230,8 +231,8 @@ impl Actions {
         match operation {
             Operation::MoveComments(to) => self.move_comments.prepare(to),
             Operation::MoveInOut(to) => self.move_in_out.prepare(to),
-            Operation::MarkersComment(_)
-            | Operation::TagCommented
+            Operation::MarkersComment(direction) => self.markers_comment.prepare(direction),
+            Operation::TagCommented
             | Operation::FixTags
             | Operation::RespaceTags
             | Operation::ReloadFiles

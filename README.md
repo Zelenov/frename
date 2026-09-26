@@ -82,9 +82,11 @@ Next time you start frename, it reopens the last folder and clip.
 | `[` | Set the in point |
 | `]` | Set the out point |
 | `F2` | Add a marker; `F2` again within a second and a half, or on a marker, names it |
+| Hold `F2` | Mark a range: from where you pressed to where you let go |
 | `Shift+F2` | Delete the marker under the playhead |
 | `Shift+F1` / `Shift+F3` | Jump to the previous / next marker |
 | `Shift` + drag the progress bar | Snap to the nearest marker |
+| `Alt` + drag the progress bar (paused) | Mark a range |
 | `F12` | Save the current frame as a JPEG next to the video |
 | `F5` | Fullscreen on / off (or double-click the picture) |
 | `Escape` | Leave fullscreen |
@@ -95,7 +97,7 @@ Press `Esc` first to give the keys back to the app. `[` and `]` set in and out p
 you type in a marker's name. The F-keys always work.
 
 Undo (`Ctrl+Z`) covers tagging, adding, deleting, starring and reordering tags, pasting, in/out
-points, adding, deleting and coloring markers, and the rename when you leave a clip.
+points, adding, deleting, coloring and resizing markers, and the rename when you leave a clip.
 It does not cover comment text or marker names, a rename by hand
 (double-click), untagging with 🗑, the 🔓↑ / 🔓↓ buttons, or batch actions; opening a folder or running a batch
 action clears the undo history.
@@ -132,10 +134,15 @@ The progress bar shows what you have noted about a clip:
   pick one of Premiere's colors, ✕ to delete it, and its time to jump there. Markers are saved inside the video when you leave the
   clip, and Premiere Pro shows them on the clip with their name, length and color after
   you import it (re-import a clip it already has: Premiere reads the markers once). Markers
-  Premiere wrote are shown too and kept (one with a length is drawn as a band). If a clip is open in Premiere, its markers may not save:
+  Premiere wrote are shown too and kept. If a clip is open in Premiere, its markers may not save:
   the file gets a red ✕ in the list, and frename tries again when you next leave it.
   While the playhead is on a marker, its name becomes the pin's head; click it to rename the
-  marker.
+  marker. Settings → Markers and ranges can keep them in the comment instead, one line each
+  (`0:41–0:47 — Lion`): in frename they still work as markers.
+- **Ranges:** hold `F2` (or 📍) while the clip plays to mark a stretch (`0:41–0:47 — Lion`); a
+  band just above the bar shows it, and overlapping bands stack. Drag the handles at the ends of the current
+  range to change it (`Shift` snaps), drag them together or `Alt`+click the band to make it a
+  single moment again, and click a band to play just that stretch.
 - **Frames:** `F12` or 📷 saves the current frame as a JPEG next to the video
   (`clip.mp4.snap.00-01-05-250.jpg`) and shows `Frame saved`.
 - **In and out points:** `[` and `]` mark the usable segment, highlighted on the progress bar.
@@ -146,8 +153,8 @@ The progress bar shows what you have noted about a clip:
   `.comment.txt` next to the video instead. The file list shows the first line of each comment.
   While comments are inside the video, frename tags a clip you commented "Commented" (Settings can
   rename or turn off this tag); an AI description alone does not count. Drag the bar above the
-  comment box to make it taller or shorter; **Expand** in its corner gives the comment the whole
-  panel, and **Collapse** brings the tags back.
+  comment box to make it taller or shorter; ⛶ in its corner gives the comment the whole panel,
+  and ⊡ brings the tags back.
 
 Some formats, such as mkv, cannot hold comments, in/out points or markers inside them; for those,
 frename keeps comments and in/out points in `.comment.txt` and the file name whatever Settings say,
@@ -185,7 +192,8 @@ and Cancel. Each file then shows a green or red check box. Actions:
 - turn comment lines that start with a time (`03:24 — Take 3 — nice light`, `0:41-0:47 — Lion`)
   into markers, or copy the markers into the comment as such lines. What follows the name after
   a second ` — ` or ` -- ` (not a plain ` - `) goes into the marker's comment, which Premiere
-  shows and frename keeps but does not show;
+  shows and frename keeps but does not show. The moments of an AI description become white
+  markers too (with their length) and stay in the description;
 - tag commented videos with "Commented" and untag the rest;
 - put the tags in every name in tag panel order;
 - add or remove the space after each tag, as set in Settings;
@@ -207,6 +215,12 @@ The description is part of the comment, in the comment box with your text: edit 
 there like any other text. It starts at a line beginning with `AI: ` and runs to the end of the
 comment; a new run replaces only that part and never touches the text above it. Premiere Pro and
 `.comment.txt` get the whole comment.
+
+While markers are kept inside the video (Settings → Markers and ranges, the default), the
+segments become white "AI" markers Premiere Pro shows on the clip, and the comment keeps only the
+summary. A new run replaces the AI markers and leaves the others alone, so give one a color to
+keep it. With markers kept in the comment, or a format that cannot hold markers, the segments
+are lines of the description.
 
 ### Generate subtitles
 

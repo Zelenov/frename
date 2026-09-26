@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use clipscribe::Model;
 use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::ai::SummaryLanguage;
-use frename_core::{CommentStorage, CueLength, InOutStorage};
+use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage};
 
 use crate::features::batch::Operation;
 use crate::features::updates;
@@ -24,6 +24,8 @@ pub enum Message {
     SetCommentStorage(CommentStorage),
     /// Save in/out points inside the video file (as a Premiere Pro marker) or in the file name.
     SetInOutStorage(InOutStorage),
+    /// Where clip markers (points and ranges) are saved.
+    SetMarkerStorage(MarkerStorage),
     /// The tag checked on videos that get a comment while comments are inside the video.
     SetCommentedTag(String),
     /// Whether videos that get a comment get the tag at all.

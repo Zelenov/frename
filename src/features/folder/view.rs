@@ -116,12 +116,22 @@ pub fn view<'a>(
             let marker_count = file_info.snapshot().marker_count();
             let marker_badge = (marker_count > 0).then(|| {
                 container(
+                    // One line: squeezed by a long name, the count used to drop below the pin.
                     text(format!("📍{marker_count}"))
                         .size(11)
-                        .color(theme::TEXT_MUTED),
+                        .color(theme::TEXT_MUTED)
+                        .wrapping(iced::widget::text::Wrapping::None),
                 )
                 .padding([0, 4])
             });
+            // The name gives way to the marker count: a long name is clipped, the count stays.
+            let name_display = match &marker_badge {
+                Some(_) => container(name_display)
+                    .width(Length::Fill)
+                    .clip(true)
+                    .into(),
+                None => name_display,
+            };
             let name_line = name_line
                 .push(subtitles_icon)
                 .push(name_display)

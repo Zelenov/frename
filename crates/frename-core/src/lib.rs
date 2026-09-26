@@ -28,14 +28,16 @@ pub use file::{File, FileId};
 pub use file_kind::FileKind;
 pub use folder_file::FolderAndFile;
 pub use markers::{
-    comment_to_markers, format_marker_line, format_marker_time, markers_to_comment,
-    parse_marker_line, sort_markers, CommentToMarkers, Marker, MarkerColor, MarkerLine,
+    comment_to_markers, format_marker_line, format_marker_time, markers_from_comment,
+    markers_into_comment, markers_to_comment, parse_ai_line, parse_marker_line, replace_ai_markers,
+    sort_markers, CommentToMarkers, Marker, MarkerColor, MarkerLine, AI_MARKER_COLOR,
     MARKER_SNAP_MS,
 };
 pub use metadata::{
-    active_commented_tag, cache::modified_ms, clean_commented_tag, commented_tag, metadata_storage,
-    set_comment_storage, set_commented_tag, set_in_out_storage, CommentStorage, InOutStorage,
-    MarkersError, MetadataMove, MetadataStorage, MoveOutcome, DEFAULT_COMMENTED_TAG,
+    active_commented_tag, cache::modified_ms, clean_commented_tag, commented_tag, marker_storage,
+    metadata_storage, set_comment_storage, set_commented_tag, set_in_out_storage,
+    set_marker_storage, CommentStorage, InOutStorage, MarkerStorage, MarkersError, MetadataMove,
+    MetadataStorage, MoveOutcome, DEFAULT_COMMENTED_TAG,
 };
 pub use ordered::{OrderKey, OrderableEntry, OrderedCollection, OrderedThing};
 pub use subtitles::{
@@ -51,6 +53,6 @@ pub use tags::{
 pub use undo::{
     AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,
     NavigateFileCommand, PasteTagsCommand, ReorderTagCommand, SaveTagCommand,
-    SetMarkerColorCommand, SetMarkerDurationCommand, SetSegmentEndCommand, SetSegmentStartCommand,
-    StarTagCommand, ToggleTagCommand, UndoContext, UndoError,
+    SetMarkerColorCommand, SetMarkerDurationCommand, SetMarkerSpanCommand, SetSegmentEndCommand,
+    SetSegmentStartCommand, StarTagCommand, ToggleTagCommand, UndoContext, UndoError,
 };

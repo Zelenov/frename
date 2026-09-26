@@ -7,4 +7,9 @@ mod state;
 pub mod view;
 
 pub use messages::Message;
-pub use state::MarkersState;
+pub use state::{MarkersState, MIN_RANGE_MS};
+
+#[cfg(test)]
+pub mod state_for_tests {
+    pub use super::state::RANGE_HOLD;
+}

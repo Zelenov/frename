@@ -236,6 +236,7 @@ impl FrenameApp {
         // Before the first folder scan, which already reads comments and in/out points.
         frename_core::set_comment_storage(settings.settings().comment_storage);
         frename_core::set_in_out_storage(settings.settings().in_out_storage);
+        frename_core::set_marker_storage(settings.settings().marker_storage);
         frename_core::set_commented_tag(settings.settings().effective_commented_tag());
         frename_core::set_space_after_tags(settings.settings().space_after_tags);
         Self {
@@ -336,6 +337,10 @@ impl FrenameApp {
                     }
                     settings::Message::SetInOutStorage(storage) => {
                         frename_core::set_in_out_storage(storage);
+                        Task::none()
+                    }
+                    settings::Message::SetMarkerStorage(storage) => {
+                        frename_core::set_marker_storage(storage);
                         Task::none()
                     }
                     settings::Message::SetCommentedTag(_)

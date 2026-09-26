@@ -1,3 +1,21 @@
+# 0.73
+## Added
+- Ranges: hold `F2` (or 📍) while a clip plays to mark a stretch, or `Alt`+drag on the paused bar. A band above the progress bar shows it; overlapping bands stack.
+- Drag the handles at the ends of the current range to change it (`Shift` snaps to other markers and to in/out); drag them together or `Alt`+click the band to make it a single moment again. Click a band to play just that stretch.
+- Settings → Markers and ranges: keep them inside the video (XMP) or in the comment, one line each; changing it offers to move the existing ones.
+- Describe with AI writes the moments it finds as white "AI" markers in the video (with markers kept in the video); a new run replaces them and leaves your own markers alone.
+- Markers ⇄ comment turns the moments of an AI description into white markers, and no longer copies them back as extra lines.
+- The color picker shows "AI" (white) apart from the other colors.
+
+## Changed
+- The progress bar always has its own row above the buttons.
+- The marker label sits over the middle of a range and is cut with "…" to fit the player.
+- Marker names wrap in the list and in the name field; a click on a row renames it (no ✎).
+- 📍 shows pressed while `F2` is held; holding `F2` no longer opens the marker's name.
+- Markers can be edited with the batch panel open when no job runs.
+- The comment box fills its space when expanded; ⛶ / ⊡ replace Expand / Collapse.
+- The file list keeps the marker count next to 📍 however long the name.
+
 # 0.72
 ## Added
 - Batch action "Generate subtitles": transcribes the checked videos with Soniox and saves a `.srt` next to each, with the audio length and cost shown before you start, and why each video got no subtitles listed afterwards. You need your own Soniox API key.

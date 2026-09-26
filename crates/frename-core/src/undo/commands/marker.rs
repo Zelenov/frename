@@ -111,3 +111,39 @@ where
         Ok(())
     }
 }
+
+/// Records moving a marker's start and end together: a drag of a range's handle, or a range
+/// turned back into a point.
+pub struct SetMarkerSpanCommand {
+    pub guid: String,
+    /// `(start_ms, duration_ms)` before the change.
+    pub old: (u64, u64),
+    /// `(start_ms, duration_ms)` after it.
+    pub new: (u64, u64),
+}
+
+impl<SD, ST> Undoable<SD, ST> for SetMarkerSpanCommand
+where
+    SD: AppStateStore + Clone,
+    ST: StoredTagStore + Clone,
+{
+    fn undo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
+        set_span(ctx, &self.guid, self.old);
+        Ok(())
+    }
+
+    fn redo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
+        set_span(ctx, &self.guid, self.new);
+        Ok(())
+    }
+}
+
+fn set_span<SD, ST>(ctx: &mut UndoContext<'_, SD, ST>, guid: &str, (start, duration): (u64, u64))
+where
+    ST: StoredTagStore + Clone,
+{
+    ctx.tag_list.update_marker(guid, |m| {
+        m.start_ms = start;
+        m.duration_ms = duration;
+    });
+}

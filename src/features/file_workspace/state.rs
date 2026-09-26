@@ -74,9 +74,21 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
                     self.file = Some(f);
                     return;
                 }
-                let snapshot = f.snapshot().clone();
+                let mut snapshot = f.snapshot().clone();
+                // Markers kept in the comment come out of it while the file is open: they are
+                // edited as markers, and saving writes them back as lines.
+                let markers = match frename_core::marker_storage() {
+                    frename_core::MarkerStorage::Comment => {
+                        let (text, markers) =
+                            frename_core::markers_from_comment(snapshot.comment());
+                        snapshot.set_comment(text);
+                        Some(markers)
+                    }
+                    frename_core::MarkerStorage::InVideo => {
+                        frename_core::FileTagger::load_markers(f.file_path())
+                    }
+                };
                 self.comment_content = text_editor::Content::with_text(snapshot.comment());
-                let markers = frename_core::FileTagger::load_markers(f.file_path());
                 self.file = Some(f);
                 self.tag_list = TagList::new(self.store.clone(), snapshot);
                 self.tag_list.set_markers(markers);

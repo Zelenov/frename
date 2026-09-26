@@ -1,6 +1,6 @@
 //! UI rendering for video controls feature
 
-use iced::widget::{button, container, row, text, tooltip, Space};
+use iced::widget::{button, container, mouse_area, row, text, tooltip, Space};
 use iced::{Element, Length};
 
 use super::progress_bar::{BarMarker, ProgressBar};
@@ -12,20 +12,14 @@ const CONTROLS_HEIGHT: f32 = 32.0;
 /// Render the video player controls.
 /// `position_secs` is the live playback position read from the video at view time.
 /// `segment_start` and `segment_end` are the optional segment markers (in seconds) for the current file.
-/// `markers` are the clip markers (in seconds) drawn on the bar; `can_add_markers` is false when
-/// the file cannot hold them. With `bar_on_own_row` the progress bar is left out (the caller puts
-/// [`progress_bar`] on a row of its own) and the buttons keep to the left, the volume to the right.
-#[allow(clippy::too_many_arguments)]
-pub fn view<'a>(
-    state: &'a VideoControlsState,
-    position_secs: f32,
-    segment_start: Option<f32>,
-    segment_end: Option<f32>,
-    markers: Vec<BarMarker>,
-    marker_label: Option<MarkerLabel<'a>>,
+/// `can_add_markers` is false when the file cannot hold markers; `marker_held` shows 📍 pressed.
+/// The progress bar is not part of it: the caller puts [`progress_bar`] on a row of its own
+/// above the buttons, which keep to the left, the volume to the right.
+pub fn view(
+    state: &VideoControlsState,
     can_add_markers: bool,
-    bar_on_own_row: bool,
-) -> Element<'a, Message> {
+    marker_held: bool,
+) -> Element<'_, Message> {
     let back10_btn: Element<'_, Message> = tooltip(
         button(
             container(text("⏪").size(16))
@@ -107,19 +101,8 @@ pub fn view<'a>(
     )
     .into();
 
-    // On a row of its own the bar is left out here and a gap pushes the volume to the right.
-    let bar: Element<'_, Message> = if bar_on_own_row {
-        Space::new().width(Length::Fill).into()
-    } else {
-        progress_bar(
-            state,
-            position_secs,
-            segment_start,
-            segment_end,
-            markers,
-            marker_label,
-        )
-    };
+    // The bar is on its own row above: a gap pushes the volume to the right.
+    let bar: Element<'_, Message> = Space::new().width(Length::Fill).into();
 
     let volume_icon: Element<'_, Message> =
         container(text("🔊").size(13)).center_y(Length::Fill).into();
@@ -148,18 +131,39 @@ pub fn view<'a>(
     .into();
 
     let add_marker_btn: Element<'_, Message> = tooltip(
-        button(
-            container(text("📍").size(14))
+        // Held like `F2`: pressed, a marker starts; released (or left), it ends there, so
+        // holding the button while the clip plays marks a range. The content takes the press,
+        // so the button's own message is only there to draw it enabled.
+        button({
+            let icon = container(text("📍").size(14))
                 .center_x(iced::Length::Fill)
-                .center_y(iced::Length::Fill),
-        )
-        .on_press_maybe(can_add_markers.then_some(Message::AddMarker))
+                .center_y(iced::Length::Fill);
+            let held: Element<'_, Message> = if can_add_markers {
+                mouse_area(icon)
+                    .on_press(Message::MarkerKeyPressed)
+                    .on_release(Message::MarkerKeyReleased)
+                    .on_exit(Message::MarkerKeyReleased)
+                    .into()
+            } else {
+                icon.into()
+            };
+            held
+        })
+        .on_press_maybe(can_add_markers.then_some(Message::MarkerKeyReleased))
         .width(CONTROLS_HEIGHT)
         .height(iced::Length::Fill)
         .padding(0)
-        .style(theme::icon_button_style(can_add_markers)),
+        // Pressed while `F2` or the button is held: a marker is being drawn.
+        .style(move |t, status| {
+            let status = if marker_held {
+                button::Status::Pressed
+            } else {
+                status
+            };
+            theme::icon_button_style(can_add_markers)(t, status)
+        }),
         text(if can_add_markers {
-            "Add marker (F2, again to name it)"
+            "Add marker (F2, hold for a range; again to name it)"
         } else {
             "This file cannot hold markers"
         }),
@@ -212,6 +216,9 @@ pub fn progress_bar<'a>(
         .on_release(Message::SeekReleased)
         .segment_range(segment_start, segment_end)
         .markers(markers)
+        .on_marker_span(Message::SetMarkerSpan)
+        .on_new_range(!state.is_playing(), Message::AddRange)
+        .on_play_range(Message::PlayRange)
         .label(marker_label.map(|label| (label.at, marker_label_button(label))))
         .label_right_edge(marker_label.and_then(|label| label.right_edge))
         .into()
@@ -220,7 +227,7 @@ pub fn progress_bar<'a>(
 /// The marker the playhead is on, as the progress bar labels it.
 #[derive(Debug, Clone, Copy)]
 pub struct MarkerLabel<'a> {
-    /// Where its tick is, in seconds.
+    /// Where the label is centred, in seconds: a point's tick, or the middle of a range.
     pub at: f32,
     pub name: &'a str,
     /// `None` for a marker frename cannot change (it has no GUID).
@@ -232,13 +239,35 @@ pub struct MarkerLabel<'a> {
     pub right_edge: Option<f32>,
 }
 
+/// Room the label's padding, border and ✎ take besides the name (px).
+const LABEL_CHROME: f32 = 48.0;
+/// A generous average width of a character of the label's 12 px text (px).
+const LABEL_CHAR_WIDTH: f32 = 6.8;
+
+/// `name`, cut with "…" so the label fits a player `width` px wide.
+fn fit_label(name: &str, width: f32) -> String {
+    let room = ((width - LABEL_CHROME) / LABEL_CHAR_WIDTH).max(1.0) as usize;
+    if name.chars().count() <= room {
+        return name.to_string();
+    }
+    let cut: String = name.chars().take(room.saturating_sub(1)).collect();
+    format!("{}…", cut.trim_end())
+}
+
 /// The label over the marker's tick: its name and ✎. A click opens the marker's row in the
 /// marker list with the name field focused.
 fn marker_label_button(label: MarkerLabel<'_>) -> Element<'_, Message> {
     let name = if label.name.trim().is_empty() {
         text("Add a name").size(12).color(theme::TEXT_MUTED)
     } else {
-        text(label.name).size(12).color(theme::TEXT)
+        let fitted = match label.right_edge {
+            Some(width) => fit_label(label.name, width),
+            None => label.name.to_string(),
+        };
+        text(fitted)
+            .size(12)
+            .color(theme::TEXT)
+            .wrapping(iced::widget::text::Wrapping::None)
     };
     let content = row![name]
         .push(
@@ -253,4 +282,18 @@ fn marker_label_button(label: MarkerLabel<'_>) -> Element<'_, Message> {
         .padding([2, 6])
         .style(theme::marker_label_style(label.color))
         .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_long_marker_name_is_cut_to_the_player() {
+        assert_eq!(fit_label("Lion", 400.0), "Lion");
+        let long = "Close-up of the blue Turkish Airlines sign hanging from the ceiling";
+        let fitted = fit_label(long, 300.0);
+        assert!(fitted.ends_with('…'), "{fitted}");
+        assert!(fitted.chars().count() as f32 * LABEL_CHAR_WIDTH + LABEL_CHROME <= 300.0);
+    }
 }

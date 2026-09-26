@@ -30,6 +30,27 @@ pub enum Overlay {
     Markers,
 }
 
+/// A range playing from its start to its end.
+#[derive(Debug, Clone, Copy)]
+struct RangePlay {
+    start: Duration,
+    end: Duration,
+    /// Playback was seen inside the range. Until then a tick may still report the position
+    /// before the seek to its start landed, which can be past its end: pausing on that, mid
+    /// seek, was lost by the pipeline, and the video played on with the bar stopped.
+    entered: bool,
+}
+
+impl RangePlay {
+    /// Whether playback at `position` has played the range to its end.
+    fn done_at(&mut self, position: Duration) -> bool {
+        if (self.start..self.end).contains(&position) {
+            self.entered = true;
+        }
+        self.entered && position >= self.end
+    }
+}
+
 /// Video player component state.
 pub struct VideoPlayerState {
     current_video: Option<Video>,
@@ -64,6 +85,9 @@ pub struct VideoPlayerState {
     /// Cue the list last scrolled to; the list follows only when this changes, so a
     /// user scrolling it by hand is not fought on every tick.
     followed_cue: Option<usize>,
+    /// A clicked range is playing: pause when playback reaches its end. Any seek or pause by
+    /// the user forgets it.
+    play_until: Option<RangePlay>,
 }
 
 impl Default for VideoPlayerState {
@@ -86,6 +110,7 @@ impl Default for VideoPlayerState {
             notice_count: 0,
             position: Duration::ZERO,
             followed_cue: None,
+            play_until: None,
         }
     }
 }
@@ -102,6 +127,7 @@ impl VideoPlayerState {
         self.subtitles = None;
         self.position = Duration::ZERO;
         self.followed_cue = None;
+        self.play_until = None;
         let autoplay = self.autoplay;
         self.paused = !autoplay;
 
@@ -188,16 +214,38 @@ impl VideoPlayerState {
                 if let Some(position) = self.current_video.as_ref().and_then(query_position) {
                     self.position = position;
                 }
-                self.follow_cue(false)
+                let follow = self.follow_cue(false);
+                let position = self.position;
+                if !self
+                    .play_until
+                    .as_mut()
+                    .is_some_and(|range| range.done_at(position))
+                {
+                    return follow;
+                }
+                // The clicked range has played: stop at its end.
+                self.play_until = None;
+                self.paused = true;
+                if let Some(video) = &mut self.current_video {
+                    video.set_paused(true);
+                }
+                Task::batch([
+                    follow,
+                    Task::done(Message::Controls(video_controls::Message::SetPlaying(
+                        false,
+                    ))),
+                ])
             }
             Message::EndOfStream => {
                 // The pipeline stays in Playing at the end; the next play restarts the stream.
+                self.play_until = None;
                 self.paused = true;
                 Task::done(Message::Controls(video_controls::Message::SetPlaying(
                     false,
                 )))
             }
             Message::TogglePause => {
+                self.play_until = None;
                 // Pausing stops the ticks, so take the exact position playback stopped at.
                 if let Some(position) = self.current_video.as_ref().and_then(query_position) {
                     self.position = position;
@@ -208,10 +256,13 @@ impl VideoPlayerState {
                 }
                 Task::none()
             }
-            Message::Seek(position_secs) => self.seek_to(
-                Duration::from_secs_f64(position_secs.max(0.0) as f64),
-                false,
-            ),
+            Message::Seek(position_secs) => {
+                self.play_until = None;
+                self.seek_to(
+                    Duration::from_secs_f64(position_secs.max(0.0) as f64),
+                    false,
+                )
+            }
             Message::Controls(ctrl_msg) => {
                 self.controls.update(&ctrl_msg);
                 match ctrl_msg {
@@ -233,9 +284,26 @@ impl VideoPlayerState {
                     video_controls::Message::SetSegmentStart => self.capture_segment_start(),
                     video_controls::Message::SetSegmentEnd => self.capture_segment_end(),
                     video_controls::Message::TakeScreenshot => self.capture_screenshot(),
-                    video_controls::Message::AddMarker => {
-                        Task::done(Message::Markers(markers::Message::Add))
+                    video_controls::Message::MarkerKeyPressed => {
+                        Task::done(Message::Markers(markers::Message::KeyDown))
                     }
+                    video_controls::Message::MarkerKeyReleased => {
+                        Task::done(Message::Markers(markers::Message::KeyUp))
+                    }
+                    video_controls::Message::SetMarkerSpan(guid, start, end) => {
+                        Task::done(Message::Markers(markers::Message::SetSpan(
+                            guid,
+                            secs_to_ms(start),
+                            secs_to_ms(end),
+                        )))
+                    }
+                    video_controls::Message::AddRange(start, end) => Task::done(Message::Markers(
+                        markers::Message::AddRange(secs_to_ms(start), secs_to_ms(end)),
+                    )),
+                    video_controls::Message::PlayRange(start, end) => self.play_range(
+                        Duration::from_millis(secs_to_ms(start)),
+                        Duration::from_millis(secs_to_ms(end)),
+                    ),
                     video_controls::Message::DeleteMarker => {
                         Task::done(Message::Markers(markers::Message::DeleteAtPlayhead))
                     }
@@ -297,7 +365,10 @@ impl VideoPlayerState {
             }
             // Bubbles up via media_viewer, which adds the playhead.
             Message::Markers(_) => Task::none(),
-            Message::SeekExact(ms) => self.seek_to(Duration::from_millis(ms), true),
+            Message::SeekExact(ms) => {
+                self.play_until = None;
+                self.seek_to(Duration::from_millis(ms), true)
+            }
             Message::ShowNotice(text) => {
                 self.notice_count += 1;
                 let number = self.notice_count;
@@ -382,6 +453,30 @@ impl VideoPlayerState {
         } else {
             self.position
         }
+    }
+
+    /// Play from `start` to `end` and pause there (a range's band was clicked).
+    fn play_range(&mut self, start: Duration, end: Duration) -> Task<Message> {
+        if self.current_video.is_none() {
+            return Task::none();
+        }
+        let seek = self.seek_to(start, true);
+        self.play_until = Some(RangePlay {
+            start,
+            end,
+            entered: false,
+        });
+        if !self.paused {
+            return seek;
+        }
+        self.paused = false;
+        if let Some(video) = &mut self.current_video {
+            video.set_paused(false);
+        }
+        Task::batch([
+            seek,
+            Task::done(Message::Controls(video_controls::Message::SetPlaying(true))),
+        ])
     }
 
     /// Seek and adopt the target as the position right away, so the view shows where
@@ -477,6 +572,11 @@ impl VideoPlayerState {
             self.controls.subscription().map(Message::Controls),
         ])
     }
+}
+
+/// Seconds on the bar as whole milliseconds.
+fn secs_to_ms(secs: f32) -> u64 {
+    (secs.max(0.0) as f64 * 1000.0).round() as u64
 }
 
 /// Where the pipeline is now; `None` when it cannot say (mid-seek, state change).
@@ -786,4 +886,23 @@ fn nv12_to_rgb(yuv: &[u8], width: u32, height: u32, stride: u32) -> Vec<u8> {
         }
     }
     rgb
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_range_stops_at_its_end_only_after_playing_inside_it() {
+        let secs = Duration::from_secs;
+        let mut range = RangePlay {
+            start: secs(10),
+            end: secs(20),
+            entered: false,
+        };
+        // A tick from before the seek landed, past the end: not the end of the range.
+        assert!(!range.done_at(secs(40)));
+        assert!(!range.done_at(secs(12)));
+        assert!(range.done_at(secs(20)));
+    }
 }
