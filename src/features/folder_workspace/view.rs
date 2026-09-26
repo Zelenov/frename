@@ -122,6 +122,7 @@ pub fn view(
             file_workspace::Message::FileNamePanel(m) => Message::FileNamePanel(m),
             file_workspace::Message::SyncPanel(m) => Message::SyncPanel(m),
             file_workspace::Message::CommentAction(a) => Message::CommentAction(a),
+            file_workspace::Message::AiBlock(m) => Message::AiBlock(m),
         })
     };
 

@@ -2,6 +2,7 @@
 
 use uuid::Uuid;
 
+use crate::ai::SummaryLanguage;
 use crate::{CommentStorage, FolderAndFile, InOutStorage, StoredTag, TagColorMapping};
 
 /// Saved window position and size (logical pixels).
@@ -54,6 +55,8 @@ pub struct AppSettings {
     pub commented_tag_enabled: bool,
     /// Whether file names put a space after each tag (`Food. clip.mp4`). Defaults to false.
     pub space_after_tags: bool,
+    /// The language AI descriptions are written in. Defaults to the subtitles' language.
+    pub summary_language: SummaryLanguage,
 }
 
 impl Default for AppSettings {
@@ -66,6 +69,7 @@ impl Default for AppSettings {
             commented_tag: crate::DEFAULT_COMMENTED_TAG.to_string(),
             commented_tag_enabled: true,
             space_after_tags: false,
+            summary_language: SummaryLanguage::default(),
         }
     }
 }
