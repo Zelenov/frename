@@ -26,21 +26,25 @@ batch-API pricing, caching across runs (stages 2–3).
    an *Anthropic API key* field (masked, with *Show*) and under it
    `Saved in Windows Credential Manager on this computer.` (the macOS / Linux store's name on
    those systems) and a **Save** button. Once a key is saved the field shows `Key saved` with
-   **Replace** and **Remove** buttons instead; *Summary language*: a dropdown whose first entry reads
+   **Replace** and **Remove** buttons instead; *Description language*: a dropdown whose first entry reads
    **Same as the subtitles (English if none)**, then English, Russian, Ukrainian, German, Spanish,
    French. A line of text says where to get a key. The model is Claude Haiku 4.5; a
    model or provider choice comes with stage 3.
 2. **Run it.** Batch mode → check clips → action **Describe with AI**. The action panel shows,
    before *Run*:
-   - `12 videos, 38 min · about $0.35 with Claude Haiku 4.5` — or `Estimating…` while durations
-     and comments are read (see Cost); when some checked clips are skipped, a second line says
-     why: `3 already described, 1 over 30 min, 200 photos and 1 unreadable are skipped.`; when some have no `.srt`, another:
-     `4 videos have no subtitles: only the picture is described.`;
+   - `12 videos, 38 min · about $0.35 with Claude Haiku 4.5` — or `Estimating… 340 / 2000`
+     while durations and comments are read (see Cost); amounts under a cent read `under $0.01`;
+   - `Takes about 25 min. The folder is locked until it ends.` — one file at a time, like every
+     batch action, so the editor knows before paying; estimated as 15 s per request plus 0.3 s
+     per frame, rounded to minutes or hours;
+   - when some checked clips are skipped, a line in list form (no plural traps):
+     `Skipped: 3 already described, 1 over 30 min, 200 photos, 1 unreadable.`; when some have no
+     `.srt`, another: `Without subtitles (only the picture is described): 4 videos.`;
    - `Descriptions in: Same as the subtitles (English if none)` with a *Change* link to Settings;
    - `Frames and subtitles of these videos are sent to Anthropic.`;
    - a checkbox **Redo videos that already have an AI description** (off by default).
    The run button reads `Describe 12 videos` (the videos that will actually be sent, not the
-   checked count) and is disabled while the panel says `Estimating…`, so nothing runs without a
+   checked count; the job runs over exactly those, so its progress reads `0 / 12`) and is disabled while the panel says `Estimating…`, so nothing runs without a
    price shown. Without a key, it is also disabled and the panel shows `Set an Anthropic API key in Settings`
    with an **Open Settings** button (the existing `ActionMessage::OpenSettings`), which opens
    Settings scrolled to the AI section.
@@ -49,7 +53,8 @@ batch-API pricing, caching across runs (stages 2–3).
    between frame samples, between requests and during retry waits: a video stopped there ends
    as not reached; a request already sent finishes and its video is written (at most its
    timeout, see Request).
-   Failed files are listed with their reason (see Batch changes): `No API key`,
+   A key removed while the job runs stops it: `Stopped: no Anthropic API key. Set one in Settings.`
+   Failed files are listed with their reason (see Batch changes):
    `Anthropic rejected the key`, `Network error`, `No answer in time`,
    `Video could not be read`. Clips skipped as announced (already described, over 30 min) count
    as unchanged, never as failed.
@@ -78,7 +83,7 @@ AI
   Anthropic API key  [••••••••••••••••••••]  [Show]  [Save]
                      Saved in Windows Credential Manager on this computer.
                      Get a key at console.anthropic.com → API keys.
-  Summary language   [Same as the subtitles (English if none) ▾]
+  Description language [Same as the subtitles (English if none) ▾]
 ```
 
 The key is written to the credential store only on **Save**, through a `Task` (never on each
@@ -115,7 +120,9 @@ AI: A guide leads two tourists through a spice market, stopping at a stall to ta
 - Times are `m:ss` below an hour and `h:mm:ss` from an hour; ranges use `–`.
 - `frename-core` owns format, parse and replace, and `editor_comment(&str) -> String` (the comment
   without its AI block: the text before it and any text after it, joined), all pure functions,
-  unit-tested. Text found after a block (hand edits in `.comment.txt` or Premiere) is kept and
+  unit-tested. Line breaks may be `\r\n` (a `.comment.txt` saved by a Windows editor): a
+  trailing `\r` is ignored when matching the `AI: ` and end lines and `\r\n\r\n` is a blank
+  line, while the editor's bytes stay as they are; CRLF cases are in the tests. Text found after a block (hand edits in `.comment.txt` or Premiere) is kept and
   moved before the block on the next save.
 - When formatting, whitespace and line breaks inside the summary and each description are
   collapsed to single spaces, so the summary stays on one line and no model text can form an end
@@ -159,7 +166,12 @@ AI summary when there is no editor text). The README says so.
   the already scaled 512-px frame with `image::imageops`; a phone portrait clip stored as
   1920×1080 with a rotation tag comes out upright. The mapping from tag to transform is a pure
   function, unit-tested on both systems. The pipeline then uses only elements of the vendored
-  bundle (`uridecodebin`, `videoconvertscale`, `appsink`, `fakesink`).
+  bundle: `uridecodebin` (playback), `videoscale` and `videoconvert` (both registered by its
+  `videoconvertscale` plugin), `capsfilter`, `appsink` and `fakesink`. The size is not computed
+  from the input: the capsfilter after `videoscale` allows 1–512 px on each side with square
+  pixels, and `videoscale` fixates the largest size in that box that keeps the display aspect
+  ratio (pixel aspect ratio applied). A frame that still comes out larger is scaled down in Rust
+  before encoding.
 - Size: the long side scaled to 512 px, aspect ratio kept (a portrait phone clip gives 288×512,
   not a letterboxed 162×288 picture in a 512×288 frame); JPEG via the `image` crate (already a
   dependency).
@@ -171,7 +183,8 @@ AI summary when there is no editor text). The README says so.
 - Tokens per frame (research, "Claude image cost", from Anthropic's vision docs): ⌈w/28⌉ × ⌈h/28⌉
   (512×288 → 209); the estimate says "about". 60 frames ≈ 12.5 k tokens. Haiku 4.5 has a 200K context and takes up to 100 images per
   request, so 60 fits.
-- A test checks extraction time on the test clips (well under a second per frame), and a test
+- A test logs extraction time on the test clips and asserts only a generous bound (under 5 s per
+  frame, so a loaded CI runner does not flake), and a test
   clip with a rotation tag checks that frames come out upright (portrait size). That clip is made
   once with `ffmpeg -display_rotation 90` from an existing test clip (command in
   `tests/self-test-clips.txt`), committed in `tests/folder`, and added to that list, so the
@@ -275,7 +288,7 @@ different features). If the store is unavailable (e.g. a Linux
 desktop without Secret Service), the field says `Cannot store the key on this system` and the
 action stays disabled. Tests: a save / read / delete round trip on the Windows CI job; on Linux
 CI (no Secret Service running) the "unavailable" state is returned, not a mock that pretends to
-save.
+save; on a Linux desktop with a keyring the test accepts either answer and writes nothing.
 
 ## Where the code lives
 
