@@ -170,7 +170,7 @@ and the `.frename` file list do not read or cache them.
 Every place that builds a new snapshot from the open file's snapshot must carry the markers over,
 or the user's unsaved edits are silently dropped. Today that is `submit_rename`
 (`src/features/folder_workspace/state.rs`, which copies the comment and screenshots) and the
-tag-reset path that calls `FileSnapshot::new`; the implementation lists them all with a grep for
+paste-tags path (`paste_tags`, which calls `FileSnapshot::new`); the implementation lists them all with a grep for
 `FileSnapshot::parse`/`FileSnapshot::new` in `src/`, and a test renames an open file with edited
 markers and checks they are written.
 
