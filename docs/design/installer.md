@@ -34,7 +34,8 @@ app can update itself.
    (the last session in `folder_history`, as every start does today).
 4. **Silent check at startup.** A checkbox in the same section, **Check for updates when frename
    starts**, on by default. At most once per 24 hours, in the background, never blocking. The newest
-   version found is stored in `app_settings` with the check time, so the notice survives restarts:
+   version found is stored in `app_settings` with the check time (the check also runs when 24 hours
+   pass while frename stays open), so the notice survives restarts:
    while that version is newer than the running one, the Settings gear in the folder controls has a
    small accent dot and the tooltip `Update available: 0.68`. Nothing is downloaded or applied
    without the button.
@@ -44,15 +45,18 @@ app can update itself.
 6. **Settings from the zip version.** On the first interactive start of an installed or portable
    package with no `frename.db` in the data folder, frename **looks** for an old one, the issue's "database found next to the exe":
    a `frename.db` next to a `frename.exe` in the user's Downloads, Desktop and Documents folders
+   (paths from `SHGetKnownFolderPath`, e.g. the `dirs` crate, so OneDrive-redirected folders count)
    and their subfolders up to two levels deep (the places a downloaded zip gets unpacked), newest
    first. Only when one is found, a native dialog (`rfd`, already a dependency) asks, before the
    main window opens:
    `Import your settings and recent folders from C:\Users\…\Downloads\frename?` — **Import** /
-   **Start fresh**. Nothing found → no dialog, the app just starts: a clean install asks nothing.
+   **Start fresh**. Closing the dialog (X or Esc) means "ask again next start". Nothing found → no dialog, the app just starts: a clean install asks nothing.
    Either answer creates the new database, so the question never comes back. `--self-test` and any
    other non-interactive start never look and never ask. Settings also get a small
-   **Import from an old frename folder…** button (folder picker, then the same import, then
-   `Restart frename to use the imported settings`) — the only way back when the search misses a
+   **Import from an old frename folder…** button (folder picker; the choice is recorded as a pending
+   import in the data folder and done at the next start, before the database opens, since
+   `VACUUM INTO` needs a target that does not exist yet; the button then says
+   `Settings will be imported when frename restarts`) — the only way back when the search misses a
    zip kept elsewhere (e.g. `D:\Tools\frename`), which would otherwise silently put a user who
    chose text-file comments back on the default, writing into their videos.
 
@@ -84,10 +88,10 @@ buttons again. Closing frename during a download cancels it; nothing is applied,
 **Update and restart** is disabled with the tooltip `Wait for the batch to finish`.
 
 The settings window is not resizable and every section must fit (`SETTINGS_WINDOW_SIZE` in
-`src/app/state.rs`, 560×560 today). It becomes 560×680 (fits a 1366×768 laptop with the taskbar).
-The PR checks the worst case in a screenshot: both "move existing…" offers shown, the update row
-with **Update and restart**, and the import button. If that does not fit in 680 px, the settings
-content becomes a scrollable column instead of growing further.
+`src/app/state.rs`, 560×560 today). Its content becomes a scrollable column and the height stays
+at most 640 logical px (a 1920×1080 screen at 150% scaling leaves about 655), so the new section
+is always reachable. When the stored newest version is newer than the running one, the section
+opens already showing `Version 0.68 is available` and **Update and restart**.
 
 ## Keyboard shortcuts
 
@@ -152,11 +156,11 @@ The portable zip has the same layout with a `.portable` marker file in its root
    `GST_REGISTRY_1_0` (registry file in the data folder). The exe's folder is first in the Windows
    DLL search order, so a system GStreamer on `PATH` is not loaded. Without the bundled plugins
    (a developer build) nothing changes and the system GStreamer is used, as today.
+   It is split into a pure function that returns the variables to remove and set (tested on every
+   OS) and a Windows-only caller that applies them.
 4. Only for an installed or portable Windows package (the locator says so), not for `--self-test`
    or an unpackaged build: if the data folder has no `frename.db`, the old-database search and
    dialog (flow 6).
-   It is split into a pure function that returns the variables to remove and set (tested on every
-   OS) and a Windows-only caller that applies them.
 5. Logging, `gst::init`, database, window — as today, with the paths below.
 
 ### Data folder
@@ -203,7 +207,8 @@ Settings window:
   `spawn_blocking` inside a `Task::run` stream that forwards each value as a message, so the
   percentage reaches the UI (`Task::perform` yields only one message).
 - Apply: the app saves the open file through the existing unload → `apply_file_updated` path,
-  then calls `wait_exit_then_apply_updates` and closes the window. Velopack applies the update
+  then calls `wait_exit_then_apply_updates` and exits the whole app (`iced::exit()`, closing the
+  Settings window too — the updater waits for the process to end). Velopack applies the update
   after frename exits and starts the new version.
 - The last check time is stored in `app_settings`, so the start-up check runs at most once a day
   (GitHub's unauthenticated API allows 60 requests per hour per IP).
@@ -256,9 +261,16 @@ has the build GStreamer on `PATH`, which would hide a DLL missing from the bundl
 and:
 1. fails if a system GStreamer is on the runner (`GSTREAMER_1_0_ROOT_MSVC_X86_64`, or
    `gst-launch-1.0` on `PATH`), so the test proves the clean-machine case;
-2. runs `Setup.exe --silent` with `Start-Process -Wait` (it is a GUI exe too), walks
+2. runs `Setup.exe --silent` waiting on the Setup process only
+   (`$p = Start-Process -PassThru …; $p.WaitForExit()`, not `-Wait`, which also waits for child
+   processes). The docs disagree on whether `--silent` stops Setup from launching the app
+   (`windows.mdx` says it does; `installer.mdx` and `setup-windows.mdx` say Setup always launches
+   it and `--silent` only hides dialogs), so the step then runs `Stop-Process -Name frename` in
+   case an instance was started. It walks
    `dumpbin /dependents` over every `.exe` and `.dll` under `current\` and fails on any import that
-   is neither in `current\` nor a Windows system DLL (KnownDLLs, `api-ms-win-*`, `ucrtbase`) — the
+   is neither in `current\` nor in `C:\Windows\System32` — except CRT names (`vcruntime*`,
+   `msvcp*`, `concrt*`, `vccorlib*`), which must be in `current\` (so `d3d11.dll`, `dxgi.dll`,
+   `winmm.dll` and other OS DLLs pass) — the
    runner has the VC++ runtime in `System32`, which would otherwise hide a missing app-local CRT
    DLL, and a plugin that fails to load is dropped silently, then runs the
    installed app's self-test as `current\frename.exe` directly, not through the root stub, whose
@@ -341,8 +353,11 @@ Two PRs, each through the review gate:
    `frename.db` "next to the executable" line is corrected, zip users are told to delete the old
    frename folder — or unzip the portable zip over it — after the first start of the new version,
    and that the GStreamer they installed can be uninstalled) and `GSTREAMER_SETUP.md` (becomes
-   "building from source" only), `version.md`. Body `Refs #10`.
+   "building from source" only). Body `Refs #10`.
 2. **Updates** — Settings section, start-up check, gear dot, update and restart. Body `Closes #10`.
+
+PR 1 does not change `version.md`: a release installed by Velopack but without the update button
+would never be offered the next one. Both PRs ship in one release, whose notes PR 2 writes.
 
 PR 1 changes `.github/workflows/*`, which are guarded files; issue #10 asks for these CI changes
 explicitly.
