@@ -2,7 +2,6 @@
 source = "../../tests/folder"
 open = "pick.wide.night.city.in_00_00_03.out_00_00_21.MVI_0410.mp4"
 seek = 10.0
-batch = false
 window = [1920, 1009]
 panels = [875, 370]
 snap_image = "Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm.snap.00-00-10-936.jpg"

@@ -24,10 +24,7 @@ pub struct DemoScenario {
     pub open: String,
     /// Where to pause the video, in seconds.
     #[serde(default)]
-    pub seek: f64,
-    /// Show batch mode with every file checked.
-    #[serde(default)]
-    pub batch: bool,
+    pub seek: f32,
     /// Window size in logical pixels: width, height.
     pub window: [u32; 2],
     /// Widths of the video panel and the file list panel.
@@ -176,7 +173,7 @@ pub fn stage(
             let position_ms = crate::Screenshot::parse_time(at).unwrap_or_default();
             std::fs::copy(
                 source.join(image),
-                crate::tags::production_file_tagger::screenshot_path(&target, position_ms),
+                crate::tags::screenshot_path(&target, position_ms),
             )?;
         }
     }
@@ -226,7 +223,6 @@ name = "pick.a.mp4"
     fn a_minimal_scenario_gets_defaults() {
         let scenario = DemoScenario::parse(MINIMAL).unwrap();
         assert_eq!(scenario.seek, 0.0);
-        assert!(!scenario.batch);
         assert_eq!(scenario.files[0].comment, None);
         assert!(scenario.files[0].snaps.is_empty());
     }

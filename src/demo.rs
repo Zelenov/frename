@@ -37,16 +37,19 @@ pub struct DemoRun {
     scenario: DemoScenario,
     out: PathBuf,
     work: PathBuf,
+    /// Show batch mode with every file checked.
+    batch: bool,
     video_ready: bool,
 }
 
 impl DemoRun {
     /// `work` is the throwaway folder; `main` removes it after the app has exited.
-    pub fn new(scenario: DemoScenario, out: PathBuf, work: PathBuf) -> Self {
+    pub fn new(scenario: DemoScenario, out: PathBuf, work: PathBuf, batch: bool) -> Self {
         Self {
             scenario,
             out,
             work,
+            batch,
             video_ready: false,
         }
     }
@@ -74,7 +77,7 @@ impl DemoRun {
         let capture = Task::future(async { tokio::time::sleep(SETTLE).await })
             .then(move |()| window::screenshot(main_window))
             .map(Message::Captured);
-        Some((steps(&self.scenario), capture))
+        Some((steps(&self.scenario, self.batch), capture))
     }
 
     /// Handle a demo message.
@@ -104,12 +107,12 @@ impl DemoRun {
 }
 
 /// What to do once the video is ready: pause at the scenario's time, and turn on batch mode with
-/// every file checked when the scenario asks for it.
-fn steps(scenario: &DemoScenario) -> Vec<folder_workspace::Message> {
+/// every file checked when asked to.
+fn steps(scenario: &DemoScenario, batch: bool) -> Vec<folder_workspace::Message> {
     let mut steps = vec![folder_workspace::Message::MediaViewer(
-        media_viewer::Message::Video(video::Message::Seek(scenario.seek as f32)),
+        media_viewer::Message::Video(video::Message::Seek(scenario.seek)),
     )];
-    if scenario.batch {
+    if batch {
         steps.push(folder_workspace::Message::Folder(
             folder::Message::SetBatchMode(true),
         ));
@@ -142,7 +145,7 @@ fn save_png(shot: &window::Screenshot, expected: (u32, u32), path: &Path) -> Res
 pub struct DemoArgs {
     pub scenario: PathBuf,
     pub out: PathBuf,
-    /// Show batch mode, whatever the scenario says: one folder, both README screenshots.
+    /// Show batch mode with every file checked: one scenario gives both README screenshots.
     pub batch: bool,
 }
 
@@ -196,14 +199,18 @@ pub fn prepare(args: &DemoArgs, work: &Path) -> Result<DemoRun, String> {
     let scenario_path = &args.scenario;
     let text = std::fs::read_to_string(scenario_path)
         .map_err(|e| format!("cannot read {}: {e}", scenario_path.display()))?;
-    let mut scenario = DemoScenario::parse(&text).map_err(|e| e.to_string())?;
-    scenario.batch |= args.batch;
+    let scenario = DemoScenario::parse(&text).map_err(|e| e.to_string())?;
     let scenario_dir = scenario_path.parent().unwrap_or(Path::new("."));
     let folder = work.join("folder");
     let file = frename_core::demo::stage(&scenario, scenario_dir, &folder)
         .map_err(|e| format!("cannot stage the demo folder: {e}"))?;
     frename_core::demo::seed(&frename_core::AppDatabase::new(), &scenario, &folder, &file);
-    Ok(DemoRun::new(scenario, args.out.clone(), work.to_path_buf()))
+    Ok(DemoRun::new(
+        scenario,
+        args.out.clone(),
+        work.to_path_buf(),
+        args.batch,
+    ))
 }
 
 #[cfg(test)]
@@ -253,24 +260,24 @@ mod tests {
         ));
     }
 
-    fn scenario(batch: bool) -> DemoScenario {
-        DemoScenario::parse(&format!(
-            "source = \".\"\nopen = \"a.mp4\"\nseek = 2.5\nbatch = {batch}\nwindow = [4, 2]\n\
-             panels = [1, 1]\n[[files]]\nfrom = \"a.mp4\"\nname = \"a.mp4\"\n"
-        ))
+    fn scenario() -> DemoScenario {
+        DemoScenario::parse(
+            "source = \".\"\nopen = \"a.mp4\"\nseek = 2.5\nwindow = [4, 2]\n\
+             panels = [1, 1]\n[[files]]\nfrom = \"a.mp4\"\nname = \"a.mp4\"\n",
+        )
         .unwrap()
     }
 
     #[test]
     fn the_video_is_paused_at_the_scenario_time_and_batch_mode_only_when_asked() {
-        let plain = steps(&scenario(false));
+        let plain = steps(&scenario(), false);
         assert!(matches!(
             plain.as_slice(),
             [folder_workspace::Message::MediaViewer(media_viewer::Message::Video(
                 video::Message::Seek(s)
             ))] if *s == 2.5
         ));
-        let batch = steps(&scenario(true));
+        let batch = steps(&scenario(), true);
         assert_eq!(batch.len(), 3);
         assert!(matches!(
             batch[1],
@@ -284,7 +291,7 @@ mod tests {
 
     #[test]
     fn only_the_first_ready_video_sets_up_the_scenario() {
-        let mut run = DemoRun::new(scenario(false), "o.png".into(), "w".into());
+        let mut run = DemoRun::new(scenario(), "o.png".into(), "w".into(), false);
         let window = window::Id::unique();
         assert!(run.video_ready(window).is_some());
         assert!(run.video_ready(window).is_none());
@@ -309,29 +316,30 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let decodable = std::fs::read_to_string(root.join("tests/self-test-clips.txt")).unwrap();
         let known: Vec<&str> = frename_core::DEFAULT_TAGS.iter().map(|t| t.name).collect();
-        for name in ["main"] {
-            let path = root.join("docs/screenshots").join(format!("{name}.toml"));
+        let screenshots = root.join("docs/screenshots");
+        for entry in std::fs::read_dir(&screenshots).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|e| e != "toml") {
+                continue;
+            }
+            let name = path.file_name().unwrap().to_string_lossy().to_string();
             let scenario = DemoScenario::parse(&std::fs::read_to_string(&path).unwrap())
-                .unwrap_or_else(|e| panic!("{name}.toml: {e}"));
+                .unwrap_or_else(|e| panic!("{name}: {e}"));
             let source = path.parent().unwrap().join(&scenario.source);
             if let Some(image) = &scenario.snap_image {
-                assert!(source.join(image).is_file(), "{name}.toml: {image}");
+                assert!(source.join(image).is_file(), "{name}: {image}");
             }
             for file in &scenario.files {
-                assert!(
-                    source.join(&file.from).is_file(),
-                    "{name}.toml: {}",
-                    file.from
-                );
+                assert!(source.join(&file.from).is_file(), "{name}: {}", file.from);
                 assert!(
                     decodable
                         .lines()
                         .any(|l| l.ends_with(&format!("/{}", file.from))),
-                    "{name}.toml: {} is not in tests/self-test-clips.txt",
+                    "{name}: {} is not in tests/self-test-clips.txt",
                     file.from
                 );
                 for tag in frename_core::FileSnapshot::parse(&file.name).tags() {
-                    assert!(known.contains(&tag.as_str()), "{name}.toml: tag {tag}");
+                    assert!(known.contains(&tag.as_str()), "{name}: tag {tag}");
                 }
             }
         }

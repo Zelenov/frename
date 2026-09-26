@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- README screenshot template: the demo screenshot batch.png (main.toml --batch) with labels and arrows.
+<!-- README screenshot template: the demo screenshot batch.png (main.toml in batch mode) with labels and arrows.
      The window is placed at 100,204 at its real size (1920x1009, see main.toml); labels and arrow
      ends are in canvas pixels. Rendered by docs/screenshots/render.sh. -->
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
