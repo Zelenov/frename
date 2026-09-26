@@ -1,21 +1,18 @@
 //! Keeping the tag file's file list (see [`FolderTagStore`]) in line with the videos' XMP,
-//! so a folder scan can take comments and in/out points from it instead of opening every file.
+//! so a folder scan can take comments, in/out points and marker counts from it instead of
+//! opening every file. Clip markers always live in the video, so the list is kept whatever the
+//! comment and in/out storage.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::{xmp, CommentStorage, InOutStorage, MetadataStorage, XmpSource};
+use super::{xmp, MetadataStorage, XmpSource};
 use crate::tags::{CachedFile, FileSnapshot, FolderTagStore};
 
 /// A modification time as the file list stores it: milliseconds since the Unix epoch.
 pub fn modified_ms(time: SystemTime) -> u64 {
     time.duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_millis() as u64)
-}
-
-/// Whether anything is kept in XMP, i.e. whether the file list is used at all.
-fn uses_xmp(storage: MetadataStorage) -> bool {
-    storage.comment == CommentStorage::InVideo || storage.in_out == InOutStorage::InVideo
 }
 
 /// The file list line for the file at `path`: its size and time now, and the XMP it holds.
@@ -31,6 +28,7 @@ fn line_for(path: &Path) -> Option<(CachedFile, xmp::XmpFields)> {
         comment: fields.comment.clone(),
         start: fields.segment.start,
         end: fields.segment.end,
+        markers: Some(fields.markers),
     };
     Some((line, fields))
 }
@@ -38,10 +36,7 @@ fn line_for(path: &Path) -> Option<(CachedFile, xmp::XmpFields)> {
 /// After a save turned `old` into `new`: re-read `new`'s XMP and put its line in the file
 /// list, dropping `old`'s line when the file was renamed. The save may have changed the XMP
 /// (and with it the file's size) or the name, and either would make the old line miss.
-pub(crate) fn refresh_after_save(old: &Path, new: &Path, storage: MetadataStorage) {
-    if !uses_xmp(storage) {
-        return;
-    }
+pub(crate) fn refresh_after_save(old: &Path, new: &Path) {
     let Some(folder) = new.parent() else { return };
     let old_name = old.file_name().and_then(|n| n.to_str()).map(str::to_string);
     let remove: Vec<String> = old_name.filter(|_| old != new).into_iter().collect();

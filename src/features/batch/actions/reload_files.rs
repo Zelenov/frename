@@ -30,8 +30,5 @@ pub fn run(path: &Path) -> ItemResult {
     } else {
         ItemStatus::Skipped
     };
-    ItemResult {
-        status,
-        update: Some(super::reparsed(path.to_path_buf())),
-    }
+    ItemResult::new(status, Some(super::reparsed(path.to_path_buf())))
 }

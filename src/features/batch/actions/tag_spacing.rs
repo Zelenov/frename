@@ -6,7 +6,7 @@ use std::path::Path;
 
 use frename_core::FileTagger;
 use iced::widget::{button, row, text};
-use iced::Element;
+use iced::{Element, Length};
 
 use super::super::ItemResult;
 use super::ActionMessage;
@@ -28,12 +28,17 @@ pub fn view<'a>() -> Element<'a, ActionMessage> {
             "Spacing: no space after tags",
         )
     };
+    // The status wraps when the panel is narrow; the button keeps its label on one line.
     let settings = row![
-        text(status).size(13),
-        button(text("Spacing settings…").size(12))
-            .on_press(ActionMessage::OpenSettings)
-            .padding([3, 10])
-            .style(theme::icon_button_style(true)),
+        text(status).size(13).width(Length::Fill),
+        button(
+            text("Spacing settings…")
+                .size(12)
+                .wrapping(iced::widget::text::Wrapping::None),
+        )
+        .on_press(ActionMessage::OpenSettings)
+        .padding([3, 10])
+        .style(theme::icon_button_style(true)),
     ]
     .spacing(12)
     .align_y(iced::Alignment::Center);

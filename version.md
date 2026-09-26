@@ -1,3 +1,43 @@
+# 0.72
+## Added
+- Batch action "Generate subtitles": transcribes the checked videos with Soniox and saves a `.srt` next to each, with the audio length and cost shown before you start, and why each video got no subtitles listed afterwards. You need your own Soniox API key.
+- Settings → Subtitles: the Soniox API key (kept in the system's password store), the languages spoken in the footage (any language Soniox supports), and short or sentence-long subtitles.
+
+## Changed
+- A saved `.soniox.json` transcript is renamed together with its video.
+
+# 0.71
+## Added
+- Batch action "Describe with AI": Claude watches each checked video (a frame every 2 s, and its subtitles) and writes a one-line summary and time-ranged segments into its comment, after your own text. The panel shows the price and time before it runs; you need your own Anthropic API key.
+- Settings → AI: the Anthropic API key (kept in the system's password store), the model (Claude Haiku 4.5, Sonnet 5 or Opus 5, with prices) and the language of descriptions.
+- A new run replaces only the AI part of a comment, from its last `AI: ` line to the end; everything above it is kept as it is.
+- The batch report offers Add credit when the Anthropic account has no credit left, and Retry for the files that failed or were not reached.
+- The comment box scrolls, can be made taller or shorter with the bar above it, and Expand gives it the whole panel.
+
+## Changed
+- Batch mode starts with the open file checked.
+- The batch progress bar moves while a file is in work (frames read, waiting for Claude) instead of only when it finishes.
+- Turning batch mode on or off keeps the file list's scroll position.
+
+# 0.70
+## Added
+- Markers: `F2` (or 📍) marks a moment of the video, `F2` again names it. Each marker has a name and one of Premiere's colors, and is saved inside the video, where Premiere Pro shows it on the clip after import.
+- The marker list (◆, in fullscreen too) shares the side of the picture with the subtitle list, with a tab for each (CC Subtitles, ◆ Markers): click a marker to jump to it or edit it. An empty list has an Add button.
+- `Shift+F1` / `Shift+F3` jump to the previous / next marker, `Shift+F2` deletes the marker under the playhead, and dragging the progress bar with `Shift` snaps to markers. Markers show as pins in their colors on the progress bar.
+- While the playhead is on a marker, its name becomes the head of its pin above the progress bar, the way a subtitle line shows. Click it to rename the marker.
+- The batch report has an Open log button next to the failed files: the log says why each one failed.
+- The file list shows 📍 and the number of markers of each file, and the Filter dropdown can show only files with markers.
+- Batch action "Markers ⇄ comment" turns comment lines like `03:24 — Take 3` into markers, or copies markers into the comment.
+
+## Changed
+- `F12` just saves the current frame as a JPEG next to the video, like VLC: no mark on the progress bar, no time in the comment, and the picture is no longer renamed with the video. Frames saved before stay on disk.
+- `F1`, `F3` and `F12` no longer react while `Shift` is held.
+- The Filter dropdown moved from the bottom bar into the file search bar.
+- In fullscreen the CC button is shown too and opens or closes the subtitle list; before, fullscreen always showed the list.
+- A video whose content is not a video (all zeros, as a download that did not finish leaves it) is reported as damaged in the log, not as a format that cannot hold markers.
+- Long button labels and file names in the batch panel no longer run past its edge.
+- When the video panel is narrow, the progress bar gets a row of its own above the buttons, so it stays long enough to seek.
+
 # 0.69
 ## Added
 - A Windows installer: download `frename-win-Setup.exe` from the release page and run it. It installs without questions, and video plays with nothing else to install.

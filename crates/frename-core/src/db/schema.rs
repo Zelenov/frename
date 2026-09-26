@@ -107,3 +107,20 @@ CREATE TABLE IF NOT EXISTS update_check (
     newest_version TEXT NOT NULL DEFAULT ''
 );
 ";
+
+/// Migration 10: the language of AI descriptions (`SummaryLanguage::as_str`).
+pub const M10_SUMMARY_LANGUAGE: &str = "
+ALTER TABLE app_settings ADD COLUMN summary_language TEXT NOT NULL DEFAULT 'subtitles';
+";
+
+/// Migration 11: the model AI descriptions are written with (`Model::id`).
+pub const M11_AI_MODEL: &str = "
+ALTER TABLE app_settings ADD COLUMN ai_model TEXT NOT NULL DEFAULT 'claude-haiku-4-5';
+";
+
+/// Migration 12: generating subtitles. The languages spoken in the footage, as comma-separated
+/// hints (empty: detect automatically), and how long a cue may get (`CueLength::as_str`).
+pub const M12_SUBTITLE_SETTINGS: &str = "
+ALTER TABLE app_settings ADD COLUMN subtitle_languages TEXT NOT NULL DEFAULT 'en,ru';
+ALTER TABLE app_settings ADD COLUMN subtitle_cue_length TEXT NOT NULL DEFAULT 'short';
+";

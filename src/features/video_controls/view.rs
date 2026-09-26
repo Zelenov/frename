@@ -3,7 +3,7 @@
 use iced::widget::{button, container, row, text, tooltip, Space};
 use iced::{Element, Length};
 
-use super::progress_bar::ProgressBar;
+use super::progress_bar::{BarMarker, ProgressBar};
 use super::{Message, VideoControlsState};
 use crate::theme;
 
@@ -12,12 +12,19 @@ const CONTROLS_HEIGHT: f32 = 32.0;
 /// Render the video player controls.
 /// `position_secs` is the live playback position read from the video at view time.
 /// `segment_start` and `segment_end` are the optional segment markers (in seconds) for the current file.
+/// `markers` are the clip markers (in seconds) drawn on the bar; `can_add_markers` is false when
+/// the file cannot hold them. With `bar_on_own_row` the progress bar is left out (the caller puts
+/// [`progress_bar`] on a row of its own) and the buttons keep to the left, the volume to the right.
+#[allow(clippy::too_many_arguments)]
 pub fn view<'a>(
     state: &'a VideoControlsState,
     position_secs: f32,
     segment_start: Option<f32>,
     segment_end: Option<f32>,
-    screenshot_positions_secs: Vec<f32>,
+    markers: Vec<BarMarker>,
+    marker_label: Option<MarkerLabel<'a>>,
+    can_add_markers: bool,
+    bar_on_own_row: bool,
 ) -> Element<'a, Message> {
     let back10_btn: Element<'_, Message> = tooltip(
         button(
@@ -100,18 +107,19 @@ pub fn view<'a>(
     )
     .into();
 
-    let duration = state.duration_secs();
-    // While seeking, show the drag position; otherwise use live video position
-    let current_pos = if state.is_seeking() {
-        state.seek_position_secs()
+    // On a row of its own the bar is left out here and a gap pushes the volume to the right.
+    let bar: Element<'_, Message> = if bar_on_own_row {
+        Space::new().width(Length::Fill).into()
     } else {
-        position_secs
+        progress_bar(
+            state,
+            position_secs,
+            segment_start,
+            segment_end,
+            markers,
+            marker_label,
+        )
     };
-
-    let bar = ProgressBar::new(0.0..=duration, current_pos, Message::Seek)
-        .on_release(Message::SeekReleased)
-        .segment_range(segment_start, segment_end)
-        .markers(screenshot_positions_secs.iter().copied());
 
     let volume_icon: Element<'_, Message> =
         container(text("🔊").size(13)).center_y(Length::Fill).into();
@@ -134,7 +142,27 @@ pub fn view<'a>(
         .height(iced::Length::Fill)
         .padding(0)
         .style(theme::icon_button_style(true)),
-        text("F12"),
+        text("Save this frame as a JPEG (F12)"),
+        tooltip::Position::Top,
+    )
+    .into();
+
+    let add_marker_btn: Element<'_, Message> = tooltip(
+        button(
+            container(text("📍").size(14))
+                .center_x(iced::Length::Fill)
+                .center_y(iced::Length::Fill),
+        )
+        .on_press_maybe(can_add_markers.then_some(Message::AddMarker))
+        .width(CONTROLS_HEIGHT)
+        .height(iced::Length::Fill)
+        .padding(0)
+        .style(theme::icon_button_style(can_add_markers)),
+        text(if can_add_markers {
+            "Add marker (F2, again to name it)"
+        } else {
+            "This file cannot hold markers"
+        }),
         tooltip::Position::Top,
     )
     .into();
@@ -146,6 +174,7 @@ pub fn view<'a>(
         seg_in_btn,
         seg_out_btn,
         screenshot_btn,
+        add_marker_btn,
         bar,
         Space::new().width(8),
         volume_icon,
@@ -160,5 +189,68 @@ pub fn view<'a>(
         .width(iced::Length::Fill)
         .height(CONTROLS_HEIGHT)
         .style(theme::panel_container_style)
+        .into()
+}
+
+/// The seek bar with the in/out range, the clip markers as pins and the label of the marker the
+/// playhead is on, filling the width it is given.
+pub fn progress_bar<'a>(
+    state: &'a VideoControlsState,
+    position_secs: f32,
+    segment_start: Option<f32>,
+    segment_end: Option<f32>,
+    markers: Vec<BarMarker>,
+    marker_label: Option<MarkerLabel<'a>>,
+) -> Element<'a, Message> {
+    // While seeking, show the drag position; otherwise use live video position
+    let current_pos = if state.is_seeking() {
+        state.seek_position_secs()
+    } else {
+        position_secs
+    };
+    ProgressBar::new(0.0..=state.duration_secs(), current_pos, Message::Seek)
+        .on_release(Message::SeekReleased)
+        .segment_range(segment_start, segment_end)
+        .markers(markers)
+        .label(marker_label.map(|label| (label.at, marker_label_button(label))))
+        .label_right_edge(marker_label.and_then(|label| label.right_edge))
+        .into()
+}
+
+/// The marker the playhead is on, as the progress bar labels it.
+#[derive(Debug, Clone, Copy)]
+pub struct MarkerLabel<'a> {
+    /// Where its tick is, in seconds.
+    pub at: f32,
+    pub name: &'a str,
+    /// `None` for a marker frename cannot change (it has no GUID).
+    pub guid: Option<&'a str>,
+    /// Its pin's color: the label is the pin's head, outlined in it.
+    pub color: iced::Color,
+    /// The player's right edge (window x) the label stays left of; `None` in fullscreen,
+    /// where the player is the whole window.
+    pub right_edge: Option<f32>,
+}
+
+/// The label over the marker's tick: its name and ✎. A click opens the marker's row in the
+/// marker list with the name field focused.
+fn marker_label_button(label: MarkerLabel<'_>) -> Element<'_, Message> {
+    let name = if label.name.trim().is_empty() {
+        text("Add a name").size(12).color(theme::TEXT_MUTED)
+    } else {
+        text(label.name).size(12).color(theme::TEXT)
+    };
+    let content = row![name]
+        .push(
+            label
+                .guid
+                .map(|_| text("✎").size(11).color(theme::TEXT_MUTED)),
+        )
+        .spacing(6)
+        .align_y(iced::Alignment::Center);
+    button(content)
+        .on_press_maybe(label.guid.map(|guid| Message::EditMarker(guid.to_string())))
+        .padding([2, 6])
+        .style(theme::marker_label_style(label.color))
         .into()
 }

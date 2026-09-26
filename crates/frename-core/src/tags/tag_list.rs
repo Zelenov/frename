@@ -24,6 +24,7 @@ use super::{
     tag::{Tag, TagId},
     FileSnapshot, StoredTag,
 };
+use crate::markers::{sort_markers, Marker};
 use crate::ordered::OrderedCollection;
 use crate::{db::StoredTagStore, OrderedThing};
 
@@ -60,8 +61,9 @@ pub struct TagList<S> {
     segment_end: Option<f32>,
     /// Comment text for this file (from snapshot at construction).
     comment: String,
-    /// Screenshot markers for this file (from snapshot at construction).
-    screenshots: Vec<crate::Screenshot>,
+    /// Clip markers of the open file, in time order; `None` when not read or the file cannot
+    /// hold them (see [`FileSnapshot::markers`]).
+    markers: Option<Vec<Marker>>,
     /// Whether the checked-tag order in selected matches the order in display (cached, updated on every mutation).
     is_selected_match_display_order: bool,
     /// When true, reordering chips in the file name panel immediately syncs the new order to display/DB.
@@ -168,7 +170,11 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let segment_start = file_snapshot.segment_start();
         let segment_end = file_snapshot.segment_end();
         let comment = file_snapshot.comment().to_string();
-        let screenshots = file_snapshot.screenshots().to_vec();
+        let markers = file_snapshot.markers().map(|markers| {
+            let mut markers = markers.to_vec();
+            sort_markers(&mut markers);
+            markers
+        });
         let stored_tags = store.get_stored_tags().unwrap_or_default();
         let color_mapping = store.get_tag_color_mapping().unwrap_or_default();
         let snapshot_tags = file_snapshot.tags();
@@ -282,7 +288,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             segment_start,
             segment_end,
             comment,
-            screenshots,
+            markers,
             is_selected_match_display_order: false,
             sync_locked: true,
         };
@@ -489,7 +495,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         snap.set_segment_start(self.segment_start); // Option<f32>
         snap.set_segment_end(self.segment_end); // Option<f32>
         snap.set_comment(self.comment.clone());
-        snap.set_screenshots(self.screenshots.clone());
+        snap.set_markers(self.markers.clone());
         snap
     }
 
@@ -503,17 +509,60 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         self.comment = comment;
     }
 
-    /// Screenshot markers for the current file.
-    pub fn screenshots(&self) -> &[crate::Screenshot] {
-        &self.screenshots
+    /// Clip markers of the open file, in time order; `None` when the file cannot hold them.
+    pub fn markers(&self) -> Option<&[Marker]> {
+        self.markers.as_deref()
     }
 
-    /// Add a screenshot marker (deduplicates and keeps sorted).
-    pub fn add_screenshot(&mut self, screenshot: crate::Screenshot) {
-        if !self.screenshots.contains(&screenshot) {
-            self.screenshots.push(screenshot);
-            self.screenshots.sort();
+    /// Replace the clip markers (e.g. with the ones just read from the file).
+    pub fn set_markers(&mut self, markers: Option<Vec<Marker>>) {
+        self.markers = markers.map(|mut markers| {
+            sort_markers(&mut markers);
+            markers
+        });
+    }
+
+    /// The marker with this GUID.
+    pub fn marker(&self, guid: &str) -> Option<&Marker> {
+        self.markers.as_ref()?.iter().find(|m| m.has_guid(guid))
+    }
+
+    /// Add a marker in time order. Does nothing when the file cannot hold markers or one with
+    /// the same GUID is there already.
+    pub fn add_marker(&mut self, marker: Marker) {
+        let Some(markers) = self.markers.as_mut() else {
+            return;
+        };
+        if marker
+            .guid
+            .as_deref()
+            .is_some_and(|g| markers.iter().any(|m| m.has_guid(g)))
+        {
+            return;
         }
+        markers.push(marker);
+        sort_markers(markers);
+    }
+
+    /// Remove the marker with this GUID; returns it.
+    pub fn remove_marker(&mut self, guid: &str) -> Option<Marker> {
+        let markers = self.markers.as_mut()?;
+        let index = markers.iter().position(|m| m.has_guid(guid))?;
+        Some(markers.remove(index))
+    }
+
+    /// Change the marker with this GUID, keeping the list in time order. Returns whether it
+    /// was found.
+    pub fn update_marker(&mut self, guid: &str, change: impl FnOnce(&mut Marker)) -> bool {
+        let Some(markers) = self.markers.as_mut() else {
+            return false;
+        };
+        let Some(marker) = markers.iter_mut().find(|m| m.has_guid(guid)) else {
+            return false;
+        };
+        change(marker);
+        sort_markers(markers);
+        true
     }
 
     /// Segment start in seconds, if set.
@@ -586,8 +635,13 @@ impl<S: StoredTagStore + Clone> TagList<S> {
 
     /// Reinitialize the tag list from a snapshot, preserving the current store.
     /// Used by PasteTagsCommand to undo/redo paste operations.
+    ///
+    /// The markers stay as they are: they are not tags, and a paste (or its undo) must not bring
+    /// back the markers the file had when it happened.
     pub fn reinitialize_from_snapshot(&mut self, snapshot: FileSnapshot) {
+        let markers = self.markers.take();
         *self = TagList::new(self.store.clone(), snapshot);
+        self.markers = markers;
     }
 
     /// Capture all data needed to undo a delete for the tag with the given id.

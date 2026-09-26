@@ -43,8 +43,8 @@ pub struct File {
     modified_at: SystemTime,
     /// Tags, name without extension, extension, and comment. File name is built from this snapshot.
     file_snapshot: FileSnapshot,
-    /// A `.srt` with the same stem sits next to the file. Checked once when the file is
-    /// listed; renames carry the `.srt` along, so it stays true.
+    /// A `.srt` with the same stem sits next to the file. Checked when the file is listed;
+    /// renames carry the `.srt` along, so it stays true. Set again when frename writes one.
     has_subtitles: bool,
 }
 
@@ -160,6 +160,11 @@ impl File {
     /// Whether a `.srt` subtitle file sits next to this file.
     pub fn has_subtitles(&self) -> bool {
         self.has_subtitles
+    }
+
+    /// Record whether a `.srt` sits next to this file (e.g. after subtitles were generated).
+    pub(crate) fn set_has_subtitles(&mut self, has_subtitles: bool) {
+        self.has_subtitles = has_subtitles;
     }
 
     /// Media type of this file based on its extension.

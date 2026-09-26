@@ -106,6 +106,9 @@ Views emit `Element<'_, feature::Message>`; folder_workspace maps them up via `.
 
 **Video must unload before the file rename** because GStreamer holds a file handle on Windows.
 
+In a debug build `save_and_reparse` renames in memory only; code that then opens the file on disk
+needs `FileTagger::disk_path` (see core-dev, "Disk paths in a debug build").
+
 ---
 
 ## Selection after tag operations

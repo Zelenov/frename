@@ -11,7 +11,7 @@ use std::time::Duration;
 use frename_core::demo::DemoScenario;
 use iced::{window, Task};
 
-use crate::features::{folder, folder_workspace, media_viewer, media_viewer::video};
+use crate::features::{batch, folder, folder_workspace, media_viewer, media_viewer::video};
 
 /// Time from the video being ready to the screenshot: covers the seek, the subtitles, and the
 /// comments that load in the background. A fixed wait, not a signal: the open file's comment is
@@ -39,17 +39,20 @@ pub struct DemoRun {
     work: PathBuf,
     /// Show batch mode with every file checked.
     batch: bool,
+    /// Show the AI description: its segments, or in batch mode the "Describe with AI" action.
+    ai: bool,
     video_ready: bool,
 }
 
 impl DemoRun {
     /// `work` is the throwaway folder; `main` removes it after the app has exited.
-    pub fn new(scenario: DemoScenario, out: PathBuf, work: PathBuf, batch: bool) -> Self {
+    pub fn new(scenario: DemoScenario, out: PathBuf, work: PathBuf, batch: bool, ai: bool) -> Self {
         Self {
             scenario,
             out,
             work,
             batch,
+            ai,
             video_ready: false,
         }
     }
@@ -77,7 +80,7 @@ impl DemoRun {
         let capture = Task::future(async { tokio::time::sleep(SETTLE).await })
             .then(move |()| window::screenshot(main_window))
             .map(Message::Captured);
-        Some((steps(&self.scenario, self.batch), capture))
+        Some((steps(&self.scenario, self.batch, self.ai), capture))
     }
 
     /// Handle a demo message.
@@ -106,14 +109,19 @@ impl DemoRun {
     }
 }
 
-/// What to do once the video is ready: pause at the scenario's time, open the subtitle list when
-/// the scenario asks for it, and turn on batch mode with every file checked when asked to.
-fn steps(scenario: &DemoScenario, batch: bool) -> Vec<folder_workspace::Message> {
+/// What to do once the video is ready: pause at the scenario's time, open the subtitle or marker
+/// list when the scenario asks for it, and turn on batch mode with every file checked when asked to.
+/// With `ai` in batch mode, select "Describe with AI" (the open file's AI description is in its
+/// comment box already).
+fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace::Message> {
     let video =
         |message| folder_workspace::Message::MediaViewer(media_viewer::Message::Video(message));
     let mut steps = vec![video(video::Message::Seek(scenario.seek))];
     if scenario.subtitle_list {
         steps.push(video(video::Message::ToggleCueList));
+    }
+    if scenario.marker_list {
+        steps.push(video(video::Message::ShowMarkerList));
     }
     if batch {
         steps.push(folder_workspace::Message::Folder(
@@ -122,6 +130,11 @@ fn steps(scenario: &DemoScenario, batch: bool) -> Vec<folder_workspace::Message>
         steps.push(folder_workspace::Message::Folder(
             folder::Message::ToggleAllChecked,
         ));
+        if ai {
+            steps.push(folder_workspace::Message::Batch(
+                batch::Message::SelectAction(batch::Action::DescribeAi),
+            ));
+        }
     }
     steps
 }
@@ -143,7 +156,7 @@ fn save_png(shot: &window::Screenshot, expected: (u32, u32), path: &Path) -> Res
         .map_err(|e| format!("cannot save {}: {e}", path.display()))
 }
 
-/// What `--demo <scenario> --out <png> [--batch] [--mono]` asks for.
+/// What `--demo <scenario> --out <png> [--batch] [--mono] [--ai]` asks for.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DemoArgs {
     pub scenario: PathBuf,
@@ -152,6 +165,8 @@ pub struct DemoArgs {
     pub batch: bool,
     /// Turn on the monochrome tags setting.
     pub mono: bool,
+    /// Show the AI description (see [`DemoRun`]).
+    pub ai: bool,
 }
 
 /// The demo the command line asks for; `None` for a normal start.
@@ -173,6 +188,7 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
             out,
             batch: args.iter().any(|a| a == "--batch"),
             mono: args.iter().any(|a| a == "--mono"),
+            ai: args.iter().any(|a| a == "--ai"),
         })
     }))
 }
@@ -222,6 +238,7 @@ pub fn prepare(args: &DemoArgs, work: &Path) -> Result<DemoRun, String> {
         args.out.clone(),
         work.to_path_buf(),
         args.batch,
+        args.ai,
     ))
 }
 
@@ -246,7 +263,8 @@ mod tests {
                 scenario: "a.toml".into(),
                 out: "a.png".into(),
                 batch: false,
-                mono: false
+                mono: false,
+                ai: false
             }))
         );
         assert_eq!(
@@ -257,7 +275,8 @@ mod tests {
                 scenario: "a.toml".into(),
                 out: "a.png".into(),
                 batch: true,
-                mono: true
+                mono: true,
+                ai: false
             }))
         );
     }
@@ -284,14 +303,14 @@ mod tests {
 
     #[test]
     fn the_video_is_paused_at_the_scenario_time_and_batch_mode_only_when_asked() {
-        let plain = steps(&scenario(), false);
+        let plain = steps(&scenario(), false, false);
         assert!(matches!(
             plain.as_slice(),
             [folder_workspace::Message::MediaViewer(media_viewer::Message::Video(
                 video::Message::Seek(s)
             ))] if *s == 2.5
         ));
-        let batch = steps(&scenario(), true);
+        let batch = steps(&scenario(), true, false);
         assert_eq!(batch.len(), 3);
         assert!(matches!(
             batch[1],
@@ -307,7 +326,7 @@ mod tests {
     fn the_subtitle_list_opens_only_when_the_scenario_asks() {
         let mut with_list = scenario();
         with_list.subtitle_list = true;
-        let steps = steps(&with_list, false);
+        let steps = steps(&with_list, false, false);
         assert_eq!(steps.len(), 2);
         assert!(matches!(
             steps[1],
@@ -318,8 +337,24 @@ mod tests {
     }
 
     #[test]
+    fn ai_selects_describe_with_ai_in_batch_mode() {
+        assert_eq!(
+            steps(&scenario(), false, true).len(),
+            1,
+            "the open file's description is in its comment box already"
+        );
+        let batch_mode = steps(&scenario(), true, true);
+        assert!(matches!(
+            batch_mode.last(),
+            Some(folder_workspace::Message::Batch(
+                batch::Message::SelectAction(batch::Action::DescribeAi)
+            ))
+        ));
+    }
+
+    #[test]
     fn only_the_first_ready_video_sets_up_the_scenario() {
-        let mut run = DemoRun::new(scenario(), "o.png".into(), "w".into(), false);
+        let mut run = DemoRun::new(scenario(), "o.png".into(), "w".into(), false, false);
         let window = window::Id::unique();
         assert!(run.video_ready(window).is_some());
         assert!(run.video_ready(window).is_none());
@@ -354,9 +389,6 @@ mod tests {
             let scenario = DemoScenario::parse(&std::fs::read_to_string(&path).unwrap())
                 .unwrap_or_else(|e| panic!("{name}: {e}"));
             let source = path.parent().unwrap().join(&scenario.source);
-            if let Some(image) = &scenario.snap_image {
-                assert!(source.join(image).is_file(), "{name}: {image}");
-            }
             for file in &scenario.files {
                 assert!(source.join(&file.from).is_file(), "{name}: {}", file.from);
                 assert!(

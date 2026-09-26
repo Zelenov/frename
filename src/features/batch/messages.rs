@@ -33,4 +33,11 @@ pub enum Message {
     Cancel,
     /// Dismiss the report of a finished job, with the outcomes shown in the list.
     CloseReport,
+    /// Run the finished job's action again on its files that failed or were not reached.
+    /// Started by the workspace, which owns the files.
+    Retry,
+    /// Open the log, which says why each failed file failed. Handled by the workspace.
+    OpenLog,
+    /// Open the Anthropic billing page to add credit. Handled by the workspace.
+    OpenBilling,
 }

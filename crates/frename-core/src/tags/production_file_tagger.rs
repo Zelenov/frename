@@ -1,13 +1,15 @@
 //! Production FileTagger: renames files on disk.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use super::file_snapshot::FileSnapshot;
 use super::file_tagger_backend::FileTaggerBackend;
 use super::screenshot::Screenshot;
 use super::FolderInfo;
+use crate::markers::Marker;
 use crate::metadata::{
-    self, CommentStorage, InOutStorage, MetadataMove, MetadataStorage, XmpSource,
+    self, CommentStorage, InOutStorage, MarkersError, MetadataMove, MetadataStorage, XmpSource,
 };
 
 pub struct ProductionFileTagger;
@@ -34,23 +36,6 @@ pub(super) fn is_screenshot_sidecar(name: &str) -> bool {
         }
     }
     false
-}
-
-fn load_screenshot_positions(file_path: &Path, folder_info: &FolderInfo) -> Vec<Screenshot> {
-    let Some(file_name) = file_path.file_name().and_then(|n| n.to_str()) else {
-        return Vec::new();
-    };
-    let prefix = format!("{}.snap.", file_name);
-    let mut screenshots: Vec<Screenshot> = folder_info
-        .names_starting_with(&prefix)
-        .filter_map(|name| {
-            let rest = name.strip_prefix(prefix.as_str())?;
-            let time_str = rest.strip_suffix(".jpg")?;
-            Screenshot::parse_time(time_str).map(Screenshot::new)
-        })
-        .collect();
-    screenshots.sort();
-    screenshots
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +81,6 @@ impl ProductionFileTagger {
             (true, None) => XmpSource::Deferred,
         };
         metadata::load(path, has_text_file, &mut snapshot, storage, source);
-        snapshot.set_screenshots(load_screenshot_positions(path, effective_info));
         snapshot
     }
 
@@ -121,28 +105,6 @@ impl ProductionFileTagger {
         if new_path != path {
             crate::comment::rename_comment_file(path, &new_path);
             crate::subtitles::rename_subtitle_file(path, &new_path);
-            log::info!(
-                "Renaming {} screenshot(s) for {:?} → {:?}",
-                snapshot.screenshots().len(),
-                path,
-                new_path
-            );
-            for s in snapshot.screenshots() {
-                let old_shot = screenshot_path(path, s.position_ms);
-                let new_shot = screenshot_path(&new_path, s.position_ms);
-                log::info!(
-                    "  screenshot: {:?} exists={} → {:?}",
-                    old_shot,
-                    old_shot.exists(),
-                    new_shot
-                );
-                if old_shot.exists() {
-                    match std::fs::rename(&old_shot, &new_shot) {
-                        Ok(()) => log::info!("  screenshot renamed ok"),
-                        Err(e) => log::error!("  screenshot rename failed: {}", e),
-                    }
-                }
-            }
             if let Err(e) = std::fs::rename(path, &new_path) {
                 log::error!(
                     "ProductionFileTagger: rename {:?} → {:?} failed: {}",
@@ -158,7 +120,7 @@ impl ProductionFileTagger {
         if !(snapshot.comment_loading() && storage.comment == CommentStorage::InVideo) {
             metadata::save_comment_text_file(&new_path, snapshot.comment(), saved.comment);
         }
-        metadata::cache::refresh_after_save(path, &new_path, storage);
+        metadata::cache::refresh_after_save(path, &new_path);
         new_path
     }
 }
@@ -208,6 +170,15 @@ impl FileTaggerBackend for ProductionFileTagger {
 
     fn reload_metadata(&self, path: &Path) -> bool {
         metadata::cache::reload_line(path)
+    }
+
+    fn save_markers(
+        &self,
+        path: &Path,
+        markers: &[Marker],
+        known: &HashSet<String>,
+    ) -> Result<(), MarkersError> {
+        metadata::save_markers(path, markers, known)
     }
 
     fn save_screenshot(&self, file_path: &Path, position_ms: u64, image_data: &[u8]) {

@@ -1,20 +1,18 @@
-//! Read-only SubRip (`.srt`) subtitles.
+//! Read-only SubRip (`.srt`) subtitles, for the player's subtitle list.
 //!
 //! A video's subtitles live next to it under the same stem: `/dir/clip.mp4` →
 //! `/dir/clip.srt`. This follows how transcription tools write them, unlike the
-//! `{filename}.comment.txt` sidecars frename creates itself.
+//! `{filename}.comment.txt` sidecars frename creates itself. Parsing and the file name are
+//! clipscribe's (`clipscribe::srt`), which describes clips from the same files.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-/// One subtitle cue: the text shown between `start` and `end`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SubtitleCue {
-    pub start: Duration,
-    pub end: Duration,
-    /// Cue text; multi-line cues keep their line breaks.
-    pub text: String,
-}
+pub use clipscribe::srt::subtitle_path;
+
+/// One subtitle cue: the text shown between `start` and `end`; multi-line cues keep their
+/// line breaks.
+pub type SubtitleCue = clipscribe::Cue;
 
 /// All cues of one subtitle file, ordered by start time.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -26,11 +24,9 @@ impl Subtitles {
     /// Parse SRT text. Malformed blocks are skipped rather than failing the whole file,
     /// so a hand-edited file with one broken cue still shows everything else.
     pub fn parse(source: &str) -> Self {
-        let source = source.strip_prefix('\u{feff}').unwrap_or(source);
-        let normalized = source.replace("\r\n", "\n");
-        let mut cues: Vec<SubtitleCue> = normalized.split("\n\n").filter_map(parse_block).collect();
-        cues.sort_by_key(|cue| cue.start);
-        Self { cues }
+        Self {
+            cues: clipscribe::srt::parse(source),
+        }
     }
 
     pub fn cues(&self) -> &[SubtitleCue] {
@@ -59,9 +55,42 @@ impl Subtitles {
     }
 }
 
-/// Path of the subtitle file for a video: same directory and stem, `.srt` extension.
-pub fn subtitle_path(video_path: &Path) -> PathBuf {
-    video_path.with_extension("srt")
+/// How long a generated subtitle cue may get.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CueLength {
+    /// One line of up to 100 characters and at most 8 s per cue.
+    #[default]
+    Short,
+    /// One sentence per cue, however long.
+    Sentence,
+}
+
+impl CueLength {
+    /// Stable name for persisting the setting.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Short => "short",
+            Self::Sentence => "sentence",
+        }
+    }
+
+    /// Parse a persisted name; unknown names fall back to the default.
+    pub fn from_name(name: &str) -> Self {
+        match name {
+            "sentence" => Self::Sentence,
+            _ => Self::Short,
+        }
+    }
+}
+
+/// Language hints checked until the user changes them.
+pub const DEFAULT_SUBTITLE_LANGUAGES: [&str; 2] = ["en", "ru"];
+
+/// Path of the transcript saved next to a video when its subtitles were generated
+/// (`clip.mp4` → `clip.soniox.json`). An empty one marks a video already found to have no
+/// speech, so it is not paid for twice.
+pub fn transcript_path(video_path: &Path) -> PathBuf {
+    video_path.with_extension("soniox.json")
 }
 
 /// Load the subtitles next to `video_path`. `None` when there is no file, it cannot be
@@ -89,11 +118,20 @@ pub fn load_subtitles(video_path: &Path) -> Option<Subtitles> {
     Some(subtitles)
 }
 
-/// Move the subtitle file along when its video is renamed, so the pair keeps matching.
-/// Does nothing when there is no subtitle file; never overwrites an existing one.
+/// Move the subtitle file and the saved transcript along when their video is renamed, so they
+/// keep matching. Does nothing for a file that is not there; never overwrites an existing one.
 pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
-    let old_path = subtitle_path(old_video_path);
-    let new_path = subtitle_path(new_video_path);
+    rename_companion(
+        &subtitle_path(old_video_path),
+        &subtitle_path(new_video_path),
+    );
+    rename_companion(
+        &transcript_path(old_video_path),
+        &transcript_path(new_video_path),
+    );
+}
+
+fn rename_companion(old_path: &Path, new_path: &Path) {
     if old_path == new_path || !old_path.is_file() {
         return;
     }
@@ -105,7 +143,7 @@ pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
         );
         return;
     }
-    match std::fs::rename(&old_path, &new_path) {
+    match std::fs::rename(old_path, new_path) {
         Ok(()) => log::info!(
             "subtitles: renamed {} → {}",
             old_path.display(),
@@ -119,48 +157,10 @@ pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
     }
 }
 
-/// Parse one blank-line-separated block: optional index line, timing line, text lines.
-fn parse_block(block: &str) -> Option<SubtitleCue> {
-    let mut lines = block
-        .lines()
-        .map(str::trim_end)
-        .skip_while(|l| l.trim().is_empty());
-    let mut timing = lines.next()?;
-    if !timing.contains("-->") {
-        // The first line was the cue number.
-        timing = lines.next()?;
-    }
-    let (start, end) = timing.split_once("-->")?;
-    let start = parse_timestamp(start)?;
-    // Some files append positioning after the end time: `00:00:02,000 X1:...`.
-    let end = parse_timestamp(end.split_whitespace().next()?)?;
-    let text = lines.collect::<Vec<_>>().join("\n").trim().to_string();
-    if text.is_empty() || end <= start {
-        return None;
-    }
-    Some(SubtitleCue { start, end, text })
-}
-
-/// Parse `HH:MM:SS,mmm` (a `.` separator is accepted too).
-fn parse_timestamp(value: &str) -> Option<Duration> {
-    let value = value.trim();
-    let (clock, millis) = value.split_once([',', '.']).unwrap_or((value, "0"));
-    let mut parts = clock.split(':').map(|p| p.trim().parse::<u64>().ok());
-    let hours = parts.next()??;
-    let minutes = parts.next()??;
-    let seconds = parts.next()??;
-    if parts.next().is_some() {
-        return None;
-    }
-    let millis: u64 = millis.trim().parse().ok()?;
-    Some(Duration::from_millis(
-        ((hours * 60 + minutes) * 60 + seconds) * 1000 + millis,
-    ))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     const SAMPLE: &str = "1\r\n00:00:08,850 --> 00:00:11,730\r\nFirst line\r\nsecond line\r\n\r\n\
                           2\r\n00:00:12,810 --> 00:00:17,310\r\nSecond cue\r\n";
@@ -246,6 +246,25 @@ mod tests {
             Some("old")
         );
         assert!(subtitle_path(&old_video).exists());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rename_moves_the_saved_transcript_with_the_video() {
+        let dir = std::env::temp_dir().join(format!("frename-marker-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let old_video = dir.join("clip.MP4");
+        let new_video = dir.join("tag.clip.MP4");
+        std::fs::write(transcript_path(&old_video), "{}").expect("write marker");
+
+        rename_subtitle_file(&old_video, &new_video);
+        assert!(!transcript_path(&old_video).exists());
+        assert_eq!(
+            transcript_path(&new_video),
+            dir.join("tag.clip.soniox.json")
+        );
+        assert!(transcript_path(&new_video).is_file());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

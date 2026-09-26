@@ -10,10 +10,12 @@ mod tests {
 
     use crate::db::fake_app_storage::FakeAppStorage;
     use crate::undo::{
-        CreateTagCommand, DeleteTagCommand, History, NavigateFileCommand, PasteTagsCommand,
-        ReorderTagCommand, SaveTagCommand, StarTagCommand, ToggleTagCommand, UndoContext,
+        AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,
+        NavigateFileCommand, PasteTagsCommand, ReorderTagCommand, SaveTagCommand,
+        SetMarkerColorCommand, SetMarkerDurationCommand, StarTagCommand, ToggleTagCommand,
+        UndoContext,
     };
-    use crate::{Directory, File, FileId, FileSnapshot, StoredTag, TagList};
+    use crate::{Directory, File, FileId, FileSnapshot, Marker, MarkerColor, StoredTag, TagList};
     use uuid::Uuid;
 
     // --- helpers ---
@@ -943,5 +945,134 @@ mod tests {
         assert!(result.is_err());
         // Stack unchanged after error
         assert!(history.can_redo());
+    }
+
+    // --- Markers ---
+
+    fn marker_list() -> TagList<FakeAppStorage> {
+        let mut snapshot = snapshot_with_tags(&[]);
+        snapshot.set_markers(Some(Vec::new()));
+        TagList::new(FakeAppStorage::new(), snapshot)
+    }
+
+    fn run(
+        history: &mut History<FakeAppStorage, FakeAppStorage>,
+        tag_list: &mut TagList<FakeAppStorage>,
+        undo: bool,
+    ) {
+        let mut dir = empty_directory();
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list,
+        };
+        if undo {
+            history.undo(&mut ctx).unwrap();
+        } else {
+            history.redo(&mut ctx).unwrap();
+        }
+    }
+
+    #[test]
+    fn undoing_an_added_marker_removes_it_and_redo_brings_back_its_name() {
+        let mut tag_list = marker_list();
+        let mut history = History::new(50);
+        let marker = Marker::new(1_000);
+        let guid = marker.guid.clone().unwrap();
+        tag_list.add_marker(marker.clone());
+        history.push(Box::new(AddMarkerCommand { marker }));
+        tag_list.update_marker(&guid, |m| m.name = "Typed after adding".to_string());
+
+        run(&mut history, &mut tag_list, true);
+        assert_eq!(tag_list.markers().unwrap().len(), 0);
+        run(&mut history, &mut tag_list, false);
+        assert_eq!(tag_list.marker(&guid).unwrap().name, "Typed after adding");
+        // Redo again after another undo cannot duplicate it.
+        run(&mut history, &mut tag_list, true);
+        run(&mut history, &mut tag_list, false);
+        assert_eq!(tag_list.markers().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn undoing_a_delete_restores_the_marker() {
+        let mut tag_list = marker_list();
+        let mut history = History::new(50);
+        let mut marker = Marker::new(2_000);
+        marker.name = "Keep".to_string();
+        let guid = marker.guid.clone().unwrap();
+        tag_list.add_marker(marker);
+        let removed = tag_list.remove_marker(&guid).unwrap();
+        history.push(Box::new(DeleteMarkerCommand { marker: removed }));
+
+        run(&mut history, &mut tag_list, true);
+        assert_eq!(tag_list.marker(&guid).unwrap().name, "Keep");
+        run(&mut history, &mut tag_list, false);
+        assert!(tag_list.marker(&guid).is_none());
+    }
+
+    #[test]
+    fn color_and_duration_changes_undo_and_redo() {
+        let mut tag_list = marker_list();
+        let mut history = History::new(50);
+        let marker = Marker::new(0);
+        let guid = marker.guid.clone().unwrap();
+        tag_list.add_marker(marker);
+        tag_list.update_marker(&guid, |m| m.color = MarkerColor::Red);
+        history.push(Box::new(SetMarkerColorCommand {
+            guid: guid.clone(),
+            old: MarkerColor::Green,
+            new: MarkerColor::Red,
+        }));
+        tag_list.update_marker(&guid, |m| m.duration_ms = 1_500);
+        history.push(Box::new(SetMarkerDurationCommand {
+            guid: guid.clone(),
+            old_ms: 0,
+            new_ms: 1_500,
+        }));
+
+        run(&mut history, &mut tag_list, true);
+        assert_eq!(tag_list.marker(&guid).unwrap().duration_ms, 0);
+        run(&mut history, &mut tag_list, true);
+        assert_eq!(tag_list.marker(&guid).unwrap().color, MarkerColor::Green);
+        run(&mut history, &mut tag_list, false);
+        run(&mut history, &mut tag_list, false);
+        let back = tag_list.marker(&guid).unwrap();
+        assert_eq!((back.color, back.duration_ms), (MarkerColor::Red, 1_500));
+    }
+
+    #[test]
+    fn undoing_a_paste_keeps_the_markers_added_after_it() {
+        let mut tag_list = marker_list();
+        let mut history = History::new(50);
+        let before = tag_list.file_snapshot();
+        let after = snapshot_with_tags(&["Pasted"]);
+        tag_list.reinitialize_from_snapshot(after.clone());
+        history.push(Box::new(PasteTagsCommand {
+            snapshot_before: before,
+            snapshot_after: after,
+        }));
+        let marker = Marker::new(500);
+        tag_list.add_marker(marker.clone());
+
+        run(&mut history, &mut tag_list, true);
+        run(&mut history, &mut tag_list, false);
+        assert_eq!(tag_list.markers().unwrap(), [marker]);
+    }
+
+    #[test]
+    fn the_snapshot_of_a_tag_list_keeps_its_markers() {
+        let mut snapshot = snapshot_with_tags(&["A"]);
+        let markers = vec![Marker::new(3_000), Marker::new(1_000)];
+        snapshot.set_markers(Some(markers.clone()));
+        let tag_list = TagList::new(FakeAppStorage::new(), snapshot);
+        let back = tag_list.file_snapshot();
+        let mut sorted = markers;
+        crate::sort_markers(&mut sorted);
+        assert_eq!(back.markers(), Some(sorted.as_slice()));
+        assert_eq!(
+            TagList::new(FakeAppStorage::new(), snapshot_with_tags(&[]))
+                .file_snapshot()
+                .markers(),
+            None
+        );
     }
 }

@@ -15,7 +15,7 @@ pub fn view<'a>(
     is_fullscreen: bool,
     segment_start: Option<f32>,
     segment_end: Option<f32>,
-    screenshot_positions_secs: Vec<f32>,
+    markers: video::view::MarkersView<'a>,
 ) -> Element<'a, Message> {
     match &state.active {
         ActiveMedia::Video => video::view::view(
@@ -23,7 +23,7 @@ pub fn view<'a>(
             is_fullscreen,
             segment_start,
             segment_end,
-            screenshot_positions_secs,
+            markers,
         )
         .map(Message::Video),
         ActiveMedia::Image => image::view::view(&state.image, is_fullscreen).map(Message::Image),

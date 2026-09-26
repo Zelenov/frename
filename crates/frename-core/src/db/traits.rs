@@ -2,7 +2,8 @@
 
 use uuid::Uuid;
 
-use crate::{CommentStorage, FolderAndFile, InOutStorage, StoredTag, TagColorMapping};
+use crate::ai::SummaryLanguage;
+use crate::{CommentStorage, CueLength, FolderAndFile, InOutStorage, StoredTag, TagColorMapping};
 
 /// Saved window position and size (logical pixels).
 #[derive(Debug, Clone, Copy)]
@@ -54,6 +55,17 @@ pub struct AppSettings {
     pub commented_tag_enabled: bool,
     /// Whether file names put a space after each tag (`Food. clip.mp4`). Defaults to false.
     pub space_after_tags: bool,
+    /// The language AI descriptions are written in. Defaults to the subtitles' language.
+    pub summary_language: SummaryLanguage,
+    /// The id of the model AI descriptions are written with (see
+    /// [`clipscribe::Model::from_id`]). Defaults to the cheapest.
+    pub ai_model: String,
+    /// Languages spoken in the footage, as hints for generating subtitles (codes such as
+    /// "en"). Empty: detect automatically. Defaults to
+    /// [`crate::DEFAULT_SUBTITLE_LANGUAGES`].
+    pub subtitle_languages: Vec<String>,
+    /// How long generated subtitle cues may get. Defaults to short.
+    pub subtitle_cue_length: CueLength,
 }
 
 impl Default for AppSettings {
@@ -66,6 +78,13 @@ impl Default for AppSettings {
             commented_tag: crate::DEFAULT_COMMENTED_TAG.to_string(),
             commented_tag_enabled: true,
             space_after_tags: false,
+            summary_language: SummaryLanguage::default(),
+            ai_model: clipscribe::MODELS[0].id.to_string(),
+            subtitle_languages: crate::DEFAULT_SUBTITLE_LANGUAGES
+                .iter()
+                .map(|code| code.to_string())
+                .collect(),
+            subtitle_cue_length: CueLength::default(),
         }
     }
 }

@@ -21,6 +21,8 @@ pub enum Message {
     SetSubtitledOnly(bool),
     /// Show only files with a comment (true) or every file (false).
     SetCommentedOnly(bool),
+    /// Show only files with clip markers (true) or every file (false).
+    SetMarkedOnly(bool),
     /// Narrow the list to files whose name contains this text (empty = no filter).
     SetNameFilter(String),
     /// Open the settings window (from the controls bar). Handled by the app.

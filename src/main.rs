@@ -80,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bundled_gstreamer = bundled_gstreamer::configure_bundled_gstreamer(&data_dir);
     #[cfg(not(windows))]
     let bundled_gstreamer = false;
-    let log_file = File::create(data_dir.join("frename_debug.log"))?;
+    let log_file = File::create(frename_core::log_path())?;
 
     // Log only this app's crates. Dependencies are far noisier than they look: cosmic_text emits a
     // `relayout` record per text layout and naga one per shader-validation step, which measured at

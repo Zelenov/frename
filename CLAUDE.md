@@ -7,10 +7,25 @@ This file adds what an agent needs to build, test and ship without a human in th
 
 - `src/` — the app (iced 0.14, GStreamer video via `iced_video_player`), feature folders under `src/features/`.
 - `crates/frename-core/` — pure logic, no iced: tags, files, XMP metadata, undo, SQLite.
+- Describing clips with Claude (frames, prompt, models, cost, client) is the `clipscribe` crate,
+  its own repo `Zelenov/clipscribe`, pinned by commit in `Cargo.toml` and `frename-core`.
 - `.claude/skills/` — project skills (app-guide, core-dev, ui-dev, ui-core, undo-dev, image-preview, …).
 - `docs/design/` — design documents for features that needed one.
 - `version.md` — release notes; its first line `# X.Y` is the version. A change to it on `main`
-  publishes a release (`.github/workflows/release.yml`).
+  publishes a release (`.github/workflows/release.yml`). To pause a release PR, convert it to a
+  draft (`gh pr ready <n> --undo`); `gh pr ready <n>` takes it back.
+
+## Our own crates
+
+`clipscribe` (describing clips with Claude) is a separate repo under `Zelenov`, pinned by commit
+(`rev`) in `Cargo.toml` and `crates/frename-core/Cargo.toml`; `sonisub` (subtitles with Soniox)
+comes in the same way with its batch action (#56).
+
+- Never copy their code into frename, not even a small helper: call the crate. If frename needs
+  something a crate lacks, change the crate and move the pin.
+- A new pin is its own commit (`Cargo.toml` + `Cargo.lock`), after the crate's CI is green on that
+  commit.
+- Their releases (tags, crates.io, binaries) are the owner's.
 
 ## Commands
 
@@ -23,6 +38,10 @@ cargo build --release --locked
 
 The Rust toolchain is pinned in `rust-toolchain.toml` so a new stable release cannot turn CI red
 overnight. Updating it is its own PR (new lints get fixed there).
+
+On the owner's Windows machine three `self_test` tests (`a_folder_of_good_clips_passes`,
+`the_ci_clips_decode_a_frame`, `the_windows_media_fixtures_decode_a_frame`) fail with the local
+GStreamer and pass in CI. They fail the same way without your change; CI decides.
 
 Linux needs GStreamer development packages:
 

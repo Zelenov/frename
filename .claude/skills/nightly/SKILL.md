@@ -152,6 +152,13 @@ discusses the implementation afterwards.
 - After the first commit, push and open a **draft** PR labelled `agent`, body `Closes #N`. Push after
   every later commit and every fix round. Never force-push.
 - Follow `AGENTS.md`, the Iced Elm skill, and the matching project skills.
+- Shared ground first. Before adding a batch action, a key for a paid service, settings columns or
+  a migration, list the open PRs touching the same places
+  (`gh pr list --state open`, then `gh pr diff <n> --name-only`: `src/features/batch/`,
+  `frename_core::ai::key`, `src/features/settings/`, `db/migrations.rs`). Build on what `main`
+  has; when an open PR already reworks the same shared code (job results, cancel, progress, key
+  storage), follow its shape or ask the owner, never start a third version. Migration numbers:
+  core-dev, "Migrations: numbers collide across branches".
 - Every behaviour change in `frename-core` gets unit tests; bug fixes get a test that failed before.
 - UI changes: see "Looking at the UI" in `CLAUDE.md`, and "Screenshots in the PR" below.
 - User-facing change → update `README.md` (per `readme` skill) and add release notes to

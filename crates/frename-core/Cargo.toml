@@ -7,7 +7,7 @@ description = "Core logic for frename file renaming utility"
 [dependencies]
 log = "0.4"
 rusqlite = { version = "0.40", features = ["bundled"] }
-tokio = { version = "1", features = ["fs", "time"] }
+tokio = { version = "1", features = ["fs", "rt", "time"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 indexmap = "2"
 regex = "1"
@@ -15,3 +15,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 xmp_toolkit = "1.12"
 toml = "1"
+# AI descriptions (issue #17): the models, languages and descriptions (without GStreamer), and
+# the API key in the OS credential store.
+clipscribe = { git = "https://github.com/Zelenov/clipscribe", rev = "57623d2022dc44639367722296db98f2b0382a02", default-features = false }
+keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service", "crypto-rust", "vendored"] }

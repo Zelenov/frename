@@ -79,7 +79,12 @@ impl VideoControlsState {
                     volume: self.volume,
                 });
             }
-            Message::TakeScreenshot => {
+            Message::TakeScreenshot
+            | Message::AddMarker
+            | Message::DeleteMarker
+            | Message::PreviousMarker
+            | Message::NextMarker
+            | Message::EditMarker(_) => {
                 // Handled by video player (needs current position). No local state change.
             }
         }
@@ -110,16 +115,67 @@ impl VideoControlsState {
         self.volume
     }
 
-    /// Keyboard shortcuts for video controls: F1 = 10s back, F3 = 10s forward, F12 = screenshot
+    /// Keyboard shortcuts for video controls: F1 = 10s back, F3 = 10s forward, F12 = save the
+    /// frame, F2 = add a marker; with Shift, F1 / F3 = previous / next marker, F2 = delete the
+    /// marker under the playhead. They work while a text field has focus, like the F-keys did.
     pub fn subscription(&self) -> Subscription<Message> {
         event::listen_with(|event, _status, _id| match event {
-            iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) => match key.as_ref() {
-                keyboard::Key::Named(keyboard::key::Named::F1) => Some(Message::SeekBack10),
-                keyboard::Key::Named(keyboard::key::Named::F3) => Some(Message::SeekForward10),
-                keyboard::Key::Named(keyboard::key::Named::F12) => Some(Message::TakeScreenshot),
-                _ => None,
-            },
+            iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. }) => {
+                shortcut(&key, modifiers)
+            }
             _ => None,
         })
+    }
+}
+
+/// The controls message of a key press, if it is one of the video shortcuts.
+fn shortcut(key: &keyboard::Key, modifiers: keyboard::Modifiers) -> Option<Message> {
+    use keyboard::key::Named;
+    let keyboard::Key::Named(named) = key else {
+        return None;
+    };
+    if modifiers.command() || modifiers.alt() {
+        return None;
+    }
+    match (named, modifiers.shift()) {
+        (Named::F1, false) => Some(Message::SeekBack10),
+        (Named::F3, false) => Some(Message::SeekForward10),
+        (Named::F12, false) => Some(Message::TakeScreenshot),
+        (Named::F2, false) => Some(Message::AddMarker),
+        (Named::F1, true) => Some(Message::PreviousMarker),
+        (Named::F3, true) => Some(Message::NextMarker),
+        (Named::F2, true) => Some(Message::DeleteMarker),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use keyboard::key::Named;
+
+    fn key(named: Named, modifiers: keyboard::Modifiers) -> Option<Message> {
+        shortcut(&keyboard::Key::Named(named), modifiers)
+    }
+
+    #[test]
+    fn shift_turns_the_seek_keys_into_marker_jumps() {
+        let none = keyboard::Modifiers::empty();
+        let shift = keyboard::Modifiers::SHIFT;
+        assert!(matches!(key(Named::F1, none), Some(Message::SeekBack10)));
+        assert!(matches!(
+            key(Named::F1, shift),
+            Some(Message::PreviousMarker)
+        ));
+        assert!(matches!(key(Named::F3, none), Some(Message::SeekForward10)));
+        assert!(matches!(key(Named::F3, shift), Some(Message::NextMarker)));
+        assert!(matches!(key(Named::F2, none), Some(Message::AddMarker)));
+        assert!(matches!(key(Named::F2, shift), Some(Message::DeleteMarker)));
+        assert!(matches!(
+            key(Named::F12, none),
+            Some(Message::TakeScreenshot)
+        ));
+        assert!(key(Named::F12, shift).is_none());
+        assert!(key(Named::F2, keyboard::Modifiers::CTRL).is_none());
     }
 }

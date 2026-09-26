@@ -21,25 +21,28 @@
 //! Second line of the comment"""
 //! in = 1.0
 //! out = 2.5
+//! markers = 3
 //!
 //! [[files]]
 //! name = "IMG_0425.MOV"
 //! size = 8812342
 //! modified_ms = 1753632300000
+//! markers = 0
 //! ```
 //!
 //! Array order is the tag order — there are no sort keys in the file, so reordering tags means
 //! moving lines. One tag per line keeps that edit, and its diff, to a single line.
 //!
-//! The `[[files]]` blocks list the folder's videos with the comment and in/out points stored
-//! inside each video. Comments are multi-line, so they are written as `"""` strings: the text
+//! The `[[files]]` blocks list the folder's videos with the comment, in/out points and number
+//! of clip markers stored inside each video. Comments are multi-line, so they are written as `"""` strings: the text
 //! between the quotes is the comment, line breaks and all.
 //!
 //! Opening a video costs about 20 ms on a synced drive, so a folder scan cannot open every one
 //! for its comment; it reads this list instead. The video stays the truth: a line counts only while
 //! `name`, `size` and `modified_ms` still match the file, and anything else is read again. A
 //! comment or in/out edited here is shown by frename and written into the video when that file
-//! is next saved. `comment`, `in` and `out` are omitted when empty; `in`/`out` are seconds.
+//! is next saved. `comment`, `in` and `out` are omitted when empty; `in`/`out` are seconds. A
+//! line without `markers` was written before markers were counted and is read again.
 //!
 //! Earlier versions wrote JSON; such a file no longer parses and is left untouched.
 //!
@@ -104,6 +107,10 @@ pub struct CachedFile {
     /// Out point in seconds.
     #[serde(default, rename = "out", skip_serializing_if = "Option::is_none")]
     pub end: Option<f32>,
+    /// How many clip markers the file holds. `None` in a line written before markers were
+    /// counted: such a line no longer matches, so the file is read again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub markers: Option<usize>,
 }
 
 /// One tag line in the file. Position in `tags` is the tag's order.
@@ -344,6 +351,9 @@ fn render(
         }
         if let Some(end) = file.end {
             out.push_str(&format!("out = {end:?}\n"));
+        }
+        if let Some(markers) = file.markers {
+            out.push_str(&format!("markers = {markers}\n"));
         }
     }
     Ok(out)
@@ -710,6 +720,7 @@ tags = [{ id = "00000000-0000-0000-0000-0000000000ff", name = "guangzhou" }]
             comment: "Goat".into(),
             start: Some(1.0),
             end: None,
+            markers: Some(2),
         };
         FolderTagStore::update_file_cache(&folder.0, &[], vec![entry.clone()]);
         assert_eq!(
@@ -730,7 +741,7 @@ tags = [{ id = "00000000-0000-0000-0000-0000000000ff", name = "guangzhou" }]
 
         let text = folder.tag_file();
         assert!(
-            text.contains("[[files]]\nname = \"IMG_1.MOV\"\nsize = 10\nmodified_ms = 20\ncomment = \"Goat\"\nin = 1.0\n"),
+            text.contains("[[files]]\nname = \"IMG_1.MOV\"\nsize = 10\nmodified_ms = 20\ncomment = \"Goat\"\nin = 1.0\nmarkers = 2\n"),
             "{text}"
         );
 
@@ -752,6 +763,7 @@ tags = [{ id = "00000000-0000-0000-0000-0000000000ff", name = "guangzhou" }]
             comment: comment.into(),
             start: None,
             end: Some(2.5),
+            markers: None,
         };
         FolderTagStore::update_file_cache(&folder.0, &[], vec![entry.clone()]);
 

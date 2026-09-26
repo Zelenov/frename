@@ -14,6 +14,7 @@ use crate::features::{
     media_viewer::video as media_viewer_video, settings, tag_panel, updates,
 };
 use crate::tag_colors::TagPalette;
+use frename_core::ai::key::{self as api_key, ApiKey};
 use frename_core::{AppDatabase, AppStateStore, WindowGeometry};
 
 use super::Message;
@@ -270,9 +271,22 @@ impl FrenameApp {
         match message {
             // Only the main window's events get through the subscription filter.
             Message::WindowReady => {
-                let load = Task::done(Message::FolderWorkspace(
-                    folder_workspace::Message::LoadLastSession,
+                let language = Task::done(describe_ai_message(
+                    batch::describe_ai::Message::SetLanguage(
+                        self.settings.settings().summary_language,
+                    ),
                 ));
+                let model = Task::done(describe_ai_message(batch::describe_ai::Message::SetModel(
+                    clipscribe::Model::from_id(&self.settings.settings().ai_model),
+                )));
+                let load = Task::batch([
+                    language,
+                    model,
+                    self.subtitle_config(),
+                    Task::done(Message::FolderWorkspace(
+                        folder_workspace::Message::LoadLastSession,
+                    )),
+                ]);
                 if self.demo.is_none() {
                     // The daily background update check, when it is due.
                     let check = Task::done(Message::Settings(settings::Message::Updates(
@@ -349,13 +363,114 @@ impl FrenameApp {
                         frename_core::set_space_after_tags(space);
                         Task::none()
                     }
+                    settings::Message::SetSummaryLanguage(language) => Task::done(
+                        describe_ai_message(batch::describe_ai::Message::SetLanguage(language)),
+                    ),
+                    settings::Message::SetAiModel(model) => Task::done(describe_ai_message(
+                        batch::describe_ai::Message::SetModel(model),
+                    )),
+                    settings::Message::Key(which, settings::KeyMessage::Save) => {
+                        match self.settings.typed_key(which) {
+                            Some(key) => {
+                                let saved = key_task(
+                                    which,
+                                    self.settings.begin_key_request(which),
+                                    move || {
+                                        api_key::save_key(which, &key).map_err(|e| {
+                                            log::warn!("{which:?}: saving the key failed: {e}");
+                                            "The key could not be saved. The system keyring may \
+                                             be locked."
+                                                .to_string()
+                                        })
+                                    },
+                                );
+                                // A saved Soniox key gets its price looked up again, even when
+                                // it is the same key.
+                                match which {
+                                    ApiKey::Soniox => Task::batch([
+                                        saved,
+                                        Task::done(subtitles_message(
+                                            batch::generate_subtitles::Message::KeySaved,
+                                        )),
+                                    ]),
+                                    ApiKey::Anthropic => saved,
+                                }
+                            }
+                            None => Task::none(),
+                        }
+                    }
+                    settings::Message::Key(which, settings::KeyMessage::Remove) => {
+                        key_task(which, self.settings.begin_key_request(which), move || {
+                            api_key::delete_key(which).map_err(|e| {
+                                log::warn!("{which:?}: removing the key failed: {e}");
+                                "The key could not be removed. The system keyring may be locked."
+                                    .to_string()
+                            })
+                        })
+                    }
+                    // The batch panel shows whether a key is saved too.
+                    // Passed on as the settings took it (a stale answer changed nothing).
+                    settings::Message::Key(which, settings::KeyMessage::State { .. }) => {
+                        match (which, self.settings.key(which).state) {
+                            (ApiKey::Anthropic, Some(state)) => Task::done(describe_ai_message(
+                                batch::describe_ai::Message::KeyState(state),
+                            )),
+                            (ApiKey::Soniox, Some(state)) => {
+                                let passed = Task::done(subtitles_message(
+                                    batch::generate_subtitles::Message::KeyState(state),
+                                ));
+                                // With a key known, the window lists all of Soniox's languages.
+                                let window_open = self.settings_window.is_some();
+                                let list = if state == api_key::KeyState::Saved
+                                    && window_open
+                                    && self.settings.begin_subtitle_languages()
+                                {
+                                    subtitle_languages_task()
+                                } else {
+                                    Task::none()
+                                };
+                                Task::batch([passed, list])
+                            }
+                            (_, None) => Task::none(),
+                        }
+                    }
+                    settings::Message::Key(..) => Task::none(),
+                    settings::Message::SetSubtitleLanguage(..)
+                    | settings::Message::SetSubtitleCueLength(_) => self.subtitle_config(),
                     settings::Message::SetMonochromeTags(_)
                     | settings::Message::Updates(_)
                     | settings::Message::ImportOldSettings
-                    | settings::Message::OldSettingsFolderPicked(_) => Task::none(),
+                    | settings::Message::OldSettingsFolderPicked(_)
+                    | settings::Message::SubtitleLanguagesListed(_) => Task::none(),
                 };
                 Task::batch([task, effect])
             }
+            Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
+                batch::ActionMessage::OpenAiSettings,
+            ))) => self.open_settings_window_then(iced::widget::operation::snap_to_end(
+                iced::widget::Id::new(settings::view::SETTINGS_SCROLLABLE_ID),
+            )),
+            // The subtitle action's settings are the last section too.
+            Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
+                batch::ActionMessage::OpenSubtitleSettings,
+            ))) => self.open_settings_window_then(iced::widget::operation::snap_to_end(
+                iced::widget::Id::new(settings::view::SETTINGS_SCROLLABLE_ID),
+            )),
+            // One reader of a key's state: the settings, which pass it on to the batch panel.
+            Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
+                batch::ActionMessage::ReadKeyState,
+            ))) => key_task(
+                ApiKey::Anthropic,
+                self.settings.begin_key_request(ApiKey::Anthropic),
+                || Ok(()),
+            ),
+            Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
+                batch::ActionMessage::ReadSonioxKeyState,
+            ))) => key_task(
+                ApiKey::Soniox,
+                self.settings.begin_key_request(ApiKey::Soniox),
+                || Ok(()),
+            ),
             Message::FolderWorkspace(folder_workspace::Message::Folder(
                 folder::Message::OpenSettings,
             ))
@@ -480,11 +595,34 @@ impl FrenameApp {
             .map(Message::FolderWorkspace)
     }
 
+    /// Tell the subtitle action the settings it uses: the languages and the cue length.
+    fn subtitle_config(&self) -> Task<Message> {
+        let settings = self.settings.settings();
+        Task::done(subtitles_message(
+            batch::generate_subtitles::Message::SetConfig(batch::generate_subtitles::Config {
+                languages: settings.subtitle_languages.clone(),
+                cue_length: settings.subtitle_cue_length,
+            }),
+        ))
+    }
+
     /// Open the settings window, or focus it when it is already open.
     fn open_settings_window(&mut self) -> Task<Message> {
+        self.open_settings_window_then(Task::none())
+    }
+
+    /// Open the settings window (or bring it to the front), then run `after` in it once its
+    /// content exists.
+    fn open_settings_window_then(&mut self, after: Task<Message>) -> Task<Message> {
         if let Some(id) = self.settings_window {
-            return window::gain_focus(id);
+            return Task::batch([window::gain_focus(id), after]);
         }
+        // Whether a key is saved is read each time the window opens, not at start-up: reading
+        // may unlock a keyring, and a keyring locked before may be open now.
+        let read_key = Task::batch(
+            [ApiKey::Anthropic, ApiKey::Soniox]
+                .map(|which| key_task(which, self.settings.begin_key_request(which), || Ok(()))),
+        );
         let (id, open) = window::open(window::Settings {
             size: SETTINGS_WINDOW_SIZE,
             position: window::Position::Centered,
@@ -493,7 +631,12 @@ impl FrenameApp {
             ..window::Settings::default()
         });
         self.settings_window = Some(id);
-        open.discard()
+        // `then` takes a closure that could run again; the window opens once.
+        let mut after = Some(after);
+        Task::batch([
+            open.then(move |_| after.take().unwrap_or_else(Task::none)),
+            read_key,
+        ])
     }
 
     /// Feature subscriptions (file drop, window opened, global keyboard to search bar).
@@ -560,6 +703,49 @@ impl FrenameApp {
             |f| f.file_path().display().to_string(),
         )
     }
+}
+
+/// A message for the "Describe with AI" batch action, from the settings.
+fn describe_ai_message(message: batch::describe_ai::Message) -> Message {
+    Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
+        batch::ActionMessage::DescribeAi(message),
+    )))
+}
+
+/// A message for the "Generate subtitles" batch action, from the settings.
+fn subtitles_message(message: batch::generate_subtitles::Message) -> Message {
+    Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
+        batch::ActionMessage::GenerateSubtitles(message),
+    )))
+}
+
+/// Ask Soniox for the languages it recognises, on a worker thread.
+fn subtitle_languages_task() -> Task<Message> {
+    Task::future(async {
+        let result = tokio::task::spawn_blocking(batch::generate_subtitles::supported_languages)
+            .await
+            .unwrap_or_else(|e| Err(e.to_string()));
+        Message::Settings(settings::Message::SubtitleLanguagesListed(result))
+    })
+}
+
+/// Run `change` on the credential store on a worker thread (it may wait on a keyring), then
+/// read back whether the `which` key is saved.
+fn key_task(
+    which: ApiKey,
+    request: u64,
+    change: impl FnOnce() -> Result<(), String> + Send + 'static,
+) -> Task<Message> {
+    Task::future(async move {
+        let result =
+            tokio::task::spawn_blocking(move || change().map(|()| api_key::key_state(which)))
+                .await
+                .unwrap_or_else(|e| Err(e.to_string()));
+        Message::Settings(settings::Message::Key(
+            which,
+            settings::KeyMessage::State { request, result },
+        ))
+    })
 }
 
 #[cfg(test)]

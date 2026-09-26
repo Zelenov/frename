@@ -11,4 +11,15 @@ pub enum Message {
     SyncPanel(sync_panel::Message),
     /// User interacted with the multiline comment editor.
     CommentAction(text_editor::Action),
+    /// Resize the comment box, or let it take the whole panel.
+    CommentLayout(CommentLayout),
+}
+
+/// How much room the comment box takes.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CommentLayout {
+    /// Make the box this many pixels taller (shorter when negative), from the handle above it.
+    Grow(f32),
+    /// Let the box take the whole panel instead of the tags, or give the tags back.
+    ToggleExpanded,
 }

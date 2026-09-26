@@ -1,15 +1,25 @@
 //! UI for the settings window.
 
-use frename_core::{CommentStorage, InOutStorage};
-use iced::widget::{button, checkbox, column, container, radio, row, scrollable, text, text_input};
+use clipscribe::{Model, MODELS};
+use frename_core::ai::key::{ApiKey, KeyState};
+use frename_core::ai::SummaryLanguage;
+use frename_core::{CommentStorage, CueLength, InOutStorage};
+use iced::widget::{
+    button, checkbox, column, container, pick_list, radio, row, scrollable, text, text_input,
+};
 use iced::{Element, Length};
 
 use crate::theme;
 
-use super::state::OldSettingsImport;
-use super::{Message, SettingsState};
+use super::state::{KeySection, LanguageList, OldSettingsImport};
+use super::{KeyMessage, Message, SettingsState};
+
 use crate::features::batch::Operation;
 use crate::features::updates;
+
+/// The settings' scrollable content, which "Describe with AI" and "Generate subtitles" open
+/// scrolled to its end, where their sections are.
+pub const SETTINGS_SCROLLABLE_ID: &str = "settings-content";
 
 /// Render the settings window: one titled section per area, one control per setting.
 /// `batch_running` holds back **Update and restart** while a batch job writes files.
@@ -136,12 +146,268 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
             old_settings_import(state.old_settings_import()),
         ));
     }
+    // Last, so "Describe with AI" and "Generate subtitles" can open the window scrolled to its
+    // end, at these sections.
+    sections = sections
+        .push(section(
+            "AI",
+            ai_options(
+                state.key(ApiKey::Anthropic),
+                settings.summary_language,
+                Model::from_id(&settings.ai_model),
+            ),
+        ))
+        .push(section(
+            "Subtitles",
+            subtitle_options(
+                state.key(ApiKey::Soniox),
+                state.subtitle_languages(),
+                &settings.subtitle_languages,
+                settings.subtitle_cue_length,
+            ),
+        ));
 
     // The window is not resizable: whatever does not fit scrolls.
-    container(scrollable(container(sections).padding(20)).style(theme::dark_scrollable_style))
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(theme::main_container_style)
+    container(
+        scrollable(container(sections).padding(20))
+            .id(iced::widget::Id::new(SETTINGS_SCROLLABLE_ID))
+            .style(theme::dark_scrollable_style),
+    )
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .style(theme::main_container_style)
+    .into()
+}
+
+/// The AI section: the Anthropic API key, and the model and language of descriptions.
+fn ai_options(key: &KeySection, language: SummaryLanguage, model: Model) -> Element<'_, Message> {
+    let muted = |line: &'static str| text(line).size(12).color(theme::TEXT_MUTED);
+    key_block(
+        ApiKey::Anthropic,
+        key,
+        "Anthropic API key",
+        "sk-ant-…",
+        "Get a key at console.anthropic.com → API keys.",
+    )
+    .push(
+        row![
+            text("Model").size(13),
+            pick_list(MODELS, Some(model), Message::SetAiModel)
+                .text_size(13)
+                .padding([3, 8]),
+        ]
+        .spacing(12)
+        .align_y(iced::Alignment::Center),
+    )
+    .push(
+        row![
+            text("Description language").size(13),
+            pick_list(
+                SummaryLanguage::ALL,
+                Some(language),
+                Message::SetSummaryLanguage
+            )
+            .text_size(13)
+            .padding([3, 8]),
+        ]
+        .spacing(12)
+        .align_y(iced::Alignment::Center),
+    )
+    .push(muted(
+        "Used by Describe with AI in batch mode. Haiku is the cheapest and fine for most \
+         clips; Sonnet and Opus notice more and cost more.",
+    ))
+    .into()
+}
+
+/// The Subtitles section: the Soniox API key, the languages spoken in the footage, and how
+/// long a cue may get.
+fn subtitle_options<'a>(
+    key: &'a KeySection,
+    list: &'a LanguageList,
+    languages: &'a [String],
+    cue_length: CueLength,
+) -> Element<'a, Message> {
+    let muted = |line: &'static str| text(line).size(12).color(theme::TEXT_MUTED);
+    let checked = |code: &str| languages.iter().any(|l| l == code);
+    // Soniox's own list; until it comes (or without a key) the checked codes stay uncheckable.
+    let offered: Vec<(String, String)> = match list {
+        LanguageList::Listed(all) => all.clone(),
+        _ => languages.iter().map(|c| (c.clone(), c.clone())).collect(),
+    };
+    let language_rows: Vec<Element<'a, Message>> = offered
+        .chunks(4)
+        .map(|chunk| {
+            row(chunk.iter().map(|(code, name)| {
+                let code = code.clone();
+                checkbox(checked(&code))
+                    .label(name.clone())
+                    .text_size(13)
+                    .on_toggle(move |on| Message::SetSubtitleLanguage(code.clone(), on))
+                    .width(Length::Fixed(118.0))
+                    .into()
+            }))
+            .spacing(8)
+            .into()
+        })
+        .collect();
+    let status = match list {
+        LanguageList::NotAsked if key.state == Some(KeyState::Missing) => {
+            Some("Save the key to choose from all the languages Soniox knows.".to_string())
+        }
+        LanguageList::NotAsked | LanguageList::Listed(_) => None,
+        LanguageList::Loading => Some("Getting the languages from Soniox…".to_string()),
+        LanguageList::Failed(why) => Some(why.clone()),
+    };
+    let hint = if languages.is_empty() {
+        "None checked: detected automatically."
+    } else {
+        "The languages spoken in the footage, as hints."
+    };
+    let selected = Some(cue_length);
+    key_block(
+        ApiKey::Soniox,
+        key,
+        "Soniox API key",
+        "Paste the key",
+        "Get a key at console.soniox.com. The audio is sent to Soniox to transcribe it.",
+    )
+    .push(text("Languages").size(13))
+    .extend(language_rows)
+    .extend(status.map(|s| text(s).size(12).color(theme::TEXT_MUTED).into()))
+    .push(muted(hint))
+    .push(
+        row![
+            text("Cue length").size(13),
+            radio(
+                "Short (one line, up to 8 s)",
+                CueLength::Short,
+                selected,
+                Message::SetSubtitleCueLength,
+            )
+            .text_size(13),
+            radio(
+                "One sentence",
+                CueLength::Sentence,
+                selected,
+                Message::SetSubtitleCueLength,
+            )
+            .text_size(13),
+        ]
+        .spacing(12)
+        .align_y(iced::Alignment::Center),
+    )
+    .push(muted(
+        "Used by Generate subtitles in batch mode. The cue length applies to new subtitles.",
+    ))
+    .into()
+}
+
+/// An API key's field (or "Key saved" with Replace / Remove), where it is kept, and where to
+/// get one.
+fn key_block<'a>(
+    which: ApiKey,
+    key: &'a KeySection,
+    label: &'static str,
+    placeholder: &'static str,
+    get_one: &'static str,
+) -> iced::widget::Column<'a, Message> {
+    let muted = |line: &'static str| text(line).size(12).color(theme::TEXT_MUTED);
+    let message = move |m: KeyMessage| Message::Key(which, m);
+    let store = if cfg!(windows) {
+        "Windows Credential Manager"
+    } else if cfg!(target_os = "macos") {
+        "the macOS Keychain"
+    } else {
+        "the system keyring"
+    };
+    let key_row: Element<'_, Message> = match key.state {
+        Some(KeyState::Unavailable) => text("The system keyring could not be opened")
+            .size(13)
+            .color(theme::ERROR)
+            .into(),
+        // The question and its buttons on lines of their own, so they fit the window.
+        Some(KeyState::Saved) if key.confirm_remove => column![
+            text("Remove the saved key? You will need to paste it again.").size(12),
+            row![
+                small_button("Remove", message(KeyMessage::Remove)),
+                small_button("Keep", message(KeyMessage::CancelRemove)),
+            ]
+            .spacing(8),
+        ]
+        .spacing(6)
+        .into(),
+        Some(KeyState::Saved) if !key.replacing => row![
+            text("Key saved").size(13),
+            small_button("Replace", message(KeyMessage::Replace)),
+            small_button("Remove", message(KeyMessage::AskRemove)),
+        ]
+        .spacing(8)
+        .align_y(iced::Alignment::Center)
+        .into(),
+        _ => {
+            let can_save = !key.input.trim().is_empty();
+            let save = can_save.then_some(message(KeyMessage::Save));
+            let cancel = key
+                .replacing
+                .then(|| small_button("Cancel", message(KeyMessage::CancelReplace)));
+            // The buttons go under the field, so the row fits the window with Cancel too.
+            column![
+                text_input(placeholder, &key.input)
+                    .secure(!key.shown)
+                    .on_input(move |input| message(KeyMessage::Input(input)))
+                    .on_submit_maybe(save.clone())
+                    .size(13)
+                    .padding([3, 6])
+                    .width(Length::Fixed(260.0)),
+                row![
+                    small_button(
+                        if key.shown { "Hide" } else { "Show" },
+                        message(KeyMessage::ToggleShow)
+                    ),
+                    button(text("Save").size(12))
+                        .on_press_maybe(save)
+                        .padding([3, 10]),
+                ]
+                .extend(cancel)
+                .spacing(8),
+            ]
+            .spacing(6)
+            .into()
+        }
+    };
+    let mut options = column![row![text(label).size(13), key_row]
+        .spacing(12)
+        .align_y(iced::Alignment::Center)]
+    .spacing(6);
+    options = match key.state {
+        Some(KeyState::Unavailable) => options.push(muted(
+            "It may be locked, or there is none (such as GNOME Keyring or KWallet). Settings checks again each time it opens.",
+        )),
+        Some(KeyState::Saved) if !key.replacing => options.push(
+            text(format!("Saved in {store} on this computer."))
+                .size(12)
+                .color(theme::TEXT_MUTED),
+        ),
+        _ => options
+            .push(
+                text(format!("Save keeps it in {store} on this computer."))
+                    .size(12)
+                    .color(theme::TEXT_MUTED),
+            )
+            .push(muted(get_one)),
+    };
+    if let Some(error) = &key.error {
+        options = options.push(text(error.as_str()).size(12).color(theme::ERROR));
+    }
+    options
+}
+
+fn small_button(label: &str, message: Message) -> Element<'_, Message> {
+    button(text(label).size(12))
+        .on_press(message)
+        .padding([3, 10])
+        .style(theme::icon_button_style(true))
         .into()
 }
 
@@ -180,7 +446,7 @@ fn commented_tag(enabled: bool, tag: &str) -> Element<'_, Message> {
     }
     let hint = match frename_core::clean_commented_tag(tag).filter(|_| enabled) {
         Some(tag) => format!(
-            "Checked when a video gets a comment, e.g. {tag}.IMG_0424.MOV, and unchecked when the comment is cleared.              Otherwise it is yours to change."
+            "Checked when you write a comment on a video, e.g. {tag}.IMG_0424.MOV, and unchecked when you clear it (AI descriptions do not count). Otherwise it is yours to change."
         ),
         None => "Videos with a comment get no tag.".to_string(),
     };

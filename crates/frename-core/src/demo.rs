@@ -1,7 +1,7 @@
 //! Demo scenarios: a folder of clips set up in a known state, so the app can take the README
 //! screenshots itself (`frename --demo <scenario.toml> --out <png>`).
 //!
-//! A scenario names clips from a source folder and the name, comment, subtitles and screenshot
+//! A scenario names clips from a source folder and the name, comment, subtitles and clip
 //! markers each copy gets. [`stage`] builds that folder somewhere disposable; [`seed`] points the
 //! app's stored state (window, panels, settings, last session) at it, so the app opens it the
 //! normal way.
@@ -29,12 +29,12 @@ pub struct DemoScenario {
     pub window: [u32; 2],
     /// Widths of the video panel and the file list panel.
     pub panels: [f32; 2],
-    /// A picture in `source` copied for every screenshot marker.
-    #[serde(default)]
-    pub snap_image: Option<String>,
     /// Open the subtitle list over the picture (the CC button).
     #[serde(default)]
     pub subtitle_list: bool,
+    /// Open the marker list over the picture (the ◆ button).
+    #[serde(default)]
+    pub marker_list: bool,
     /// The staged files, oldest first: the file list shows them in this order.
     pub files: Vec<DemoFile>,
 }
@@ -53,9 +53,10 @@ pub struct DemoFile {
     /// Subtitles, saved as the `.srt` next to the copy.
     #[serde(default)]
     pub subtitles: Option<String>,
-    /// Screenshot marker times, `HH-MM-SS-mmm` (as in a screenshot's file name).
+    /// Clip markers written into the copy's XMP, one line each as a comment holds them:
+    /// `0:06.120 — City lights`, `0:41-0:47 — Lion — roars twice`.
     #[serde(default)]
-    pub snaps: Vec<String>,
+    pub markers: Vec<String>,
 }
 
 /// Why a scenario cannot be used.
@@ -94,25 +95,14 @@ impl DemoScenario {
                 }
             }
             if let Some(bad) = file
-                .snaps
+                .markers
                 .iter()
-                .find(|at| crate::Screenshot::parse_time(at).is_none())
+                .find(|line| crate::parse_marker_line(line).is_none())
             {
                 return Err(DemoError(format!(
-                    "{:?}: screenshot time {bad:?} is not HH-MM-SS-mmm",
+                    "{:?}: marker {bad:?} is not `<time> — <name>`",
                     file.name
                 )));
-            }
-            if !file.snaps.is_empty() && self.snap_image.is_none() {
-                return Err(DemoError(format!(
-                    "{:?} has screenshot markers but the scenario has no snap_image",
-                    file.name
-                )));
-            }
-        }
-        if let Some(image) = &self.snap_image {
-            if !plain(image) {
-                return Err(DemoError(format!("not a plain file name: {image:?}")));
             }
         }
         if !names.clone().any(|n| n == self.open) {
@@ -142,7 +132,7 @@ impl DemoScenario {
 }
 
 /// Copy the scenario's files from `scenario_dir`/`source` into `into` (created if missing) and
-/// write their comments, subtitles and screenshot markers. Returns the path of the file to open.
+/// write their comments, subtitles and clip markers. Returns the path of the file to open.
 /// The source folder is only read.
 pub fn stage(
     scenario: &DemoScenario,
@@ -170,14 +160,22 @@ pub fn stage(
         if let Some(subtitles) = &file.subtitles {
             std::fs::write(crate::subtitle_path(&target), subtitles)?;
         }
-        for at in &file.snaps {
-            // Both checked by `DemoScenario::check`.
-            let image = scenario.snap_image.as_deref().unwrap_or_default();
-            let position_ms = crate::Screenshot::parse_time(at).unwrap_or_default();
-            std::fs::copy(
-                source.join(image),
-                crate::tags::screenshot_path(&target, position_ms),
-            )?;
+        if !file.markers.is_empty() {
+            // Each line was checked by `DemoScenario::check`.
+            let markers: Vec<crate::Marker> = file
+                .markers
+                .iter()
+                .filter_map(|line| crate::parse_marker_line(line))
+                .map(|line| {
+                    let mut marker = crate::Marker::new(line.start_ms);
+                    marker.duration_ms = line.duration_ms;
+                    marker.name = line.name;
+                    marker.comment = line.comment;
+                    marker
+                })
+                .collect();
+            crate::metadata::save_markers(&target, &markers, &Default::default())
+                .map_err(|e| std::io::Error::other(format!("{}: {e}", file.name)))?;
         }
     }
     Ok(into.join(&scenario.open))
@@ -235,7 +233,7 @@ name = "pick.a.mp4"
         let scenario = DemoScenario::parse(MINIMAL).unwrap();
         assert_eq!(scenario.seek, 0.0);
         assert_eq!(scenario.files[0].comment, None);
-        assert!(scenario.files[0].snaps.is_empty());
+        assert!(scenario.files[0].markers.is_empty());
     }
 
     #[test]
@@ -259,23 +257,11 @@ name = "pick.a.mp4"
     }
 
     #[test]
-    fn markers_need_a_snap_image() {
-        let text = format!("{MINIMAL}snaps = [\"00-00-01-000\"]\n");
-        assert!(DemoScenario::parse(&text).is_err());
-        let text = MINIMAL.replace("[[files]]", "snap_image = \"s.jpg\"\n[[files]]")
-            + "snaps = [\"00-00-01-000\"]\n";
-        assert!(DemoScenario::parse(&text).is_ok());
-    }
-
-    #[test]
-    fn marker_times_must_be_screenshot_times() {
-        let with_snaps = |snaps: &str| {
-            MINIMAL.replace("[[files]]", "snap_image = \"s.jpg\"\n[[files]]")
-                + &format!("snaps = [{snaps}]\n")
-        };
-        assert!(DemoScenario::parse(&with_snaps("\"00-00-06-120\"")).is_ok());
-        for bad in ["\"00:00:06\"", "\"../x\"", "\"6\""] {
-            assert!(DemoScenario::parse(&with_snaps(bad)).is_err(), "{bad}");
+    fn markers_must_be_marker_lines() {
+        let with_markers = |markers: &str| format!("{MINIMAL}markers = [{markers}]\n");
+        assert!(DemoScenario::parse(&with_markers("\"0:06.120 — City\"")).is_ok());
+        for bad in ["\"0:06\"", "\"City\"", "\"6 — x\""] {
+            assert!(DemoScenario::parse(&with_markers(bad)).is_err(), "{bad}");
         }
     }
 
@@ -308,47 +294,51 @@ name = "pick.a.mp4"
         let clips = root.join("clips");
         std::fs::create_dir_all(&clips).unwrap();
         std::fs::write(clips.join("a.mp4"), b"video a").unwrap();
-        std::fs::write(clips.join("b.mp4"), b"video b").unwrap();
-        std::fs::write(clips.join("s.jpg"), b"jpeg").unwrap();
+        let tiny = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
+        std::fs::copy(&tiny, clips.join("b.mov")).unwrap();
         let text = r#"
 source = "clips"
-open = "wide.b.in_00_00_03.mp4"
+open = "wide.b.in_00_00_03.mov"
 window = [1920, 1009]
 panels = [800, 400]
-snap_image = "s.jpg"
 [[files]]
 from = "a.mp4"
 name = "pick.a.mp4"
 [[files]]
-from = "b.mp4"
-name = "wide.b.in_00_00_03.mp4"
-comment = "00-00-01-000: nice"
+from = "b.mov"
+name = "wide.b.in_00_00_03.mov"
+comment = "nice"
 subtitles = "1\n00:00:00,000 --> 00:00:02,000\nHello\n"
-snaps = ["00-00-01-000"]
+markers = ["0:00.100 — Start — first frames"]
 "#;
         let scenario = DemoScenario::parse(text).unwrap();
         let into = root.join("staged");
 
         let open = stage(&scenario, &root, &into).unwrap();
 
-        assert_eq!(open, into.join("wide.b.in_00_00_03.mp4"));
-        assert_eq!(std::fs::read(&open).unwrap(), b"video b");
-        assert_eq!(crate::comment::load_comment(&open), "00-00-01-000: nice");
+        assert_eq!(open, into.join("wide.b.in_00_00_03.mov"));
+        assert_eq!(crate::comment::load_comment(&open), "nice");
         assert!(std::fs::read_to_string(into.join("wide.b.in_00_00_03.srt"))
             .unwrap()
             .contains("Hello"));
+        let markers = crate::metadata::load_markers(&open).unwrap();
+        assert_eq!(markers.len(), 1);
         assert_eq!(
-            std::fs::read(into.join("wide.b.in_00_00_03.mp4.snap.00-00-01-000.jpg")).unwrap(),
-            b"jpeg"
+            (markers[0].start_ms, markers[0].name.as_str()),
+            (100, "Start")
         );
         let modified = |name: &str| into.join(name).metadata().unwrap().modified().unwrap();
-        assert!(modified("pick.a.mp4") < modified("wide.b.in_00_00_03.mp4"));
+        assert!(modified("pick.a.mp4") < modified("wide.b.in_00_00_03.mov"));
         let mut left: Vec<_> = std::fs::read_dir(&clips)
             .unwrap()
             .map(|e| e.unwrap().file_name())
             .collect();
         left.sort();
-        assert_eq!(left, ["a.mp4", "b.mp4", "s.jpg"]);
+        assert_eq!(left, ["a.mp4", "b.mov"]);
+        assert_eq!(
+            std::fs::read(clips.join("b.mov")).unwrap(),
+            std::fs::read(&tiny).unwrap()
+        );
         std::fs::remove_dir_all(&root).unwrap();
     }
 
