@@ -157,7 +157,7 @@ discusses the implementation afterwards.
   (`gh pr list --state open`, then `gh pr diff <n> --name-only`: `src/features/batch/`,
   `frename_core::ai::key`, `src/features/settings/`, `db/migrations.rs`). Build on what `main`
   has; when an open PR already reworks the same shared code (job results, cancel, progress, key
-  storage), follow its shape or ask the owner, never start a third version. Migration numbers:
+  storage), follow its shape (building on that PR's branch if needed), never start a third version. Migration numbers:
   core-dev, "Migrations: numbers collide across branches".
 - Every behaviour change in `frename-core` gets unit tests; bug fixes get a test that failed before.
 - UI changes: see "Looking at the UI" in `CLAUDE.md`, and "Screenshots in the PR" below.
