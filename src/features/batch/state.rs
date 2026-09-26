@@ -196,7 +196,7 @@ impl BatchState {
                 }
             }
             Message::CloseReport => self.job = None,
-            Message::Run => {}
+            Message::Run | Message::OpenLog => {}
         }
     }
 

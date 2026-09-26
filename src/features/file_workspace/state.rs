@@ -51,6 +51,11 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     }
 
     /// Set the file to work on. When changing file, syncs workspace tags to the current file first, then loads the new one.
+    ///
+    /// The same file again (same [`FileId`], e.g. after an in-place rename or an undo refresh)
+    /// only takes its new path: the tag list keeps the edits not saved yet, markers included,
+    /// which must not be read from the file again while a save of them may still be waiting.
+    /// Another file gets its clip markers read from the file.
     pub fn set_file(&mut self, file: Option<File>) {
         match file {
             None => {
@@ -62,8 +67,9 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
                 let already_loaded = self
                     .file
                     .as_ref()
-                    .is_some_and(|current| current.file_path() == f.file_path());
+                    .is_some_and(|current| current.id() == f.id());
                 if already_loaded {
+                    self.file = Some(f);
                     return;
                 }
                 let snapshot = f.snapshot().clone();
@@ -72,8 +78,10 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
                     text_editor::Content::with_text(&block::editor_comment(comment));
                 self.ai_block = block::ai_block(comment).unwrap_or_default().to_string();
                 self.confirm_remove_ai = false;
+                let markers = frename_core::FileTagger::load_markers(f.file_path());
                 self.file = Some(f);
                 self.tag_list = TagList::new(self.store.clone(), snapshot);
+                self.tag_list.set_markers(markers);
             }
         }
     }
@@ -112,15 +120,6 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     /// The comment's AI description; empty when it has none.
     pub fn ai_block(&self) -> &str {
         &self.ai_block
-    }
-
-    /// Update the editor's text of the comment (does not write to disk); the AI description
-    /// stays. Positions the cursor at the end.
-    pub fn set_comment(&mut self, comment: String) {
-        self.comment_content = text_editor::Content::with_text(&comment);
-        self.comment_content
-            .perform(text_editor::Action::Move(text_editor::Motion::DocumentEnd));
-        self.store_comment(comment);
     }
 
     /// Whether the AI description shows its segments.
@@ -174,14 +173,9 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         }
     }
 
-    /// Screenshot markers for the current file.
-    pub fn screenshots(&self) -> &[frename_core::Screenshot] {
-        self.tag_list.screenshots()
-    }
-
-    /// Add a screenshot marker (deduplicates, keeps sorted).
-    pub fn add_screenshot(&mut self, screenshot: frename_core::Screenshot) {
-        self.tag_list.add_screenshot(screenshot);
+    /// Clip markers of the current file, in time order; `None` when it cannot hold them.
+    pub fn markers(&self) -> Option<&[frename_core::Marker]> {
+        self.tag_list.markers()
     }
 
     /// Set the tag list filter query (case-insensitive contains). Used by the search bar.
@@ -264,8 +258,9 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     /// Used by paste: constructs a new TagList with the pasted tags as the snapshot.
     /// Uses unlocked mode: display keeps DB order (new unstored tags prepended), selected reflects
     /// the pasted snapshot order.
+    /// The markers are kept: they are not tags (see [`TagList::reinitialize_from_snapshot`]).
     pub fn reinitialize_tags_from_snapshot(&mut self, snapshot: FileSnapshot) {
-        self.tag_list = TagList::new(self.store.clone(), snapshot);
+        self.tag_list.reinitialize_from_snapshot(snapshot);
     }
 
     /// Segment start in seconds for the current file, if set.
@@ -341,14 +336,6 @@ mod tests {
         workspace.apply_comment_action(Action::Move(text_editor::Motion::DocumentEnd));
         workspace.apply_comment_action(Action::Edit(Edit::Insert('!')));
         assert_eq!(saved_comment(&workspace), format!("Mine!\n\n{BLOCK}"));
-
-        // F12 appends a timestamp line through set_comment: into the editor's part only.
-        let current = workspace.editor_comment();
-        workspace.set_comment(format!("{current}\n00-00-01-000: "));
-        assert_eq!(
-            saved_comment(&workspace),
-            format!("Mine!\n00-00-01-000:\n\n{BLOCK}")
-        );
         assert_eq!(saved_comment(&workspace).matches("AI: ").count(), 1);
     }
 

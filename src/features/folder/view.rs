@@ -3,7 +3,8 @@
 //! Receives only data (directory, loading, tag color mapping) from workspace; selection from directory; no parent knows our layout or widgets.
 
 use iced::widget::{
-    button, checkbox, column, container, mouse_area, row, scrollable, text, text_input, tooltip,
+    button, checkbox, column, container, mouse_area, pick_list, row, scrollable, text, text_input,
+    tooltip,
 };
 use iced::{mouse, Element, Length};
 
@@ -25,7 +26,8 @@ const CHECK_SIZE: f32 = 16.0;
 /// Render the folder panel: a scrollable list of file names (tag chips + name.extension, no wrap).
 /// Selection comes from the directory; view emits SelectFile/Previous/Next.
 /// `batch` is the batch state while batch mode is on: rows get a check box, or the file's
-/// outcome while a job has it.
+/// outcome while a job has it. Files in `markers_not_saved` get a red ✕.
+#[allow(clippy::too_many_arguments)]
 pub fn view<'a>(
     directory: Option<&'a crate::features::folder_workspace::Directory>,
     loading: bool,
@@ -34,6 +36,10 @@ pub fn view<'a>(
     rename: Option<&'a InlineRename>,
     spinner_frame: usize,
     batch: Option<&'a BatchState>,
+    markers_not_saved: &'a std::collections::HashMap<
+        frename_core::FileId,
+        Vec<frename_core::Marker>,
+    >,
 ) -> Element<'a, Message> {
     let placeholder_icon = |icon: &'static str| {
         container(text(icon).size(48).color(theme::TEXT_MUTED))
@@ -73,15 +79,32 @@ pub fn view<'a>(
 
             // On the name line, next to the tags: centred on the whole row it would float
             // between the name and the comment line.
-            let subtitles_icon: Element<'_, Message> = if file_info.has_subtitles() {
-                container(text("SRT").size(9).color(theme::ACCENT))
-                    .center_x(Length::Fixed(SUBTITLES_MARKER_WIDTH))
+            let subtitles_icon: Element<'_, Message> =
+                if markers_not_saved.contains_key(&file_info.id()) {
+                    tooltip(
+                        container(text("✕").size(12).color(theme::ERROR))
+                            .center_x(Length::Fixed(SUBTITLES_MARKER_WIDTH)),
+                        container(
+                            text(
+                                "Markers not saved: the file is read-only or in use \
+                             (close it in Premiere, then open the file and leave it again)",
+                            )
+                            .size(12),
+                        )
+                        .padding([4, 8])
+                        .style(theme::elevated_container_bordered_style),
+                        tooltip::Position::Bottom,
+                    )
                     .into()
-            } else {
-                container(iced::widget::Space::new())
-                    .width(Length::Fixed(SUBTITLES_MARKER_WIDTH))
-                    .into()
-            };
+                } else if file_info.has_subtitles() {
+                    container(text("SRT").size(9).color(theme::ACCENT))
+                        .center_x(Length::Fixed(SUBTITLES_MARKER_WIDTH))
+                        .into()
+                } else {
+                    container(iced::widget::Space::new())
+                        .width(Length::Fixed(SUBTITLES_MARKER_WIDTH))
+                        .into()
+                };
 
             // In batch mode the check box leads the name line, level with the tags whether or
             // not a comment line follows.
@@ -90,7 +113,19 @@ pub fn view<'a>(
             if let Some(batch) = batch {
                 name_line = name_line.push(check_cell(batch, file_info.id(), locked));
             }
-            let name_line = name_line.push(subtitles_icon).push(name_display);
+            let marker_count = file_info.snapshot().marker_count();
+            let marker_badge = (marker_count > 0).then(|| {
+                container(
+                    text(format!("📍{marker_count}"))
+                        .size(11)
+                        .color(theme::TEXT_MUTED),
+                )
+                .padding([0, 4])
+            });
+            let name_line = name_line
+                .push(subtitles_icon)
+                .push(name_display)
+                .push(marker_badge);
             // Indented like the name, so the comment starts under it and not under the marker.
             let comment_line = row![
                 iced::widget::Space::new()
@@ -176,12 +211,13 @@ pub fn view<'a>(
             .into()
     };
 
-    let search = widgets::search_bar::view(
+    let search = widgets::search_bar::view_with_trailing(
         FILE_SEARCH_BAR_INPUT_ID,
         dir.name_filter(),
         Message::SetNameFilter,
         || Message::SetNameFilter(String::new()),
         None::<fn(String) -> Message>,
+        Some(filter_dropdown(dir)),
     );
     let mut content = column![search].spacing(4);
     if let Some(batch) = batch {
@@ -287,6 +323,92 @@ fn check_cell(
     container(content)
         .center_x(Length::Fixed(CHECK_WIDTH))
         .into()
+}
+
+/// Which list filter a dropdown row controls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FilterKind {
+    Untagged,
+    Subtitles,
+    Comments,
+    Markers,
+}
+
+impl FilterKind {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Untagged => "Untagged",
+            Self::Subtitles => "Subtitles",
+            Self::Comments => "Comments",
+            Self::Markers => "Markers",
+        }
+    }
+
+    fn set(self, on: bool) -> Message {
+        match self {
+            Self::Untagged => Message::SetUntaggedOnly(on),
+            Self::Subtitles => Message::SetSubtitledOnly(on),
+            Self::Comments => Message::SetCommentedOnly(on),
+            Self::Markers => Message::SetMarkedOnly(on),
+        }
+    }
+}
+
+/// One row of the filter dropdown: whether the filter is on and how many files match it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FilterItem {
+    kind: FilterKind,
+    active: bool,
+    count: usize,
+}
+
+impl std::fmt::Display for FilterItem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mark = if self.active { "✓" } else { "   " };
+        write!(f, "{mark} {}  {}", self.kind.label(), self.count)
+    }
+}
+
+/// Filter dropdown at the right end of the search bar, since it narrows the same list: one
+/// row per filter with its match count; picking a row toggles it. The button shows how many
+/// filters are on.
+fn filter_dropdown<'a>(dir: &crate::features::folder_workspace::Directory) -> Element<'a, Message> {
+    let items = [
+        FilterItem {
+            kind: FilterKind::Untagged,
+            active: dir.untagged_only(),
+            count: dir.untagged_count(),
+        },
+        FilterItem {
+            kind: FilterKind::Subtitles,
+            active: dir.subtitled_only(),
+            count: dir.subtitled_count(),
+        },
+        FilterItem {
+            kind: FilterKind::Comments,
+            active: dir.commented_only(),
+            count: dir.commented_count(),
+        },
+        FilterItem {
+            kind: FilterKind::Markers,
+            active: dir.marked_only(),
+            count: dir.marked_count(),
+        },
+    ];
+    let active = items.iter().filter(|item| item.active).count();
+    let placeholder = if active == 0 {
+        "Filter".to_string()
+    } else {
+        format!("Filter ({active})")
+    };
+    // No tooltip: it would draw over the open list.
+    pick_list(items.to_vec(), None::<FilterItem>, |item| {
+        item.kind.set(!item.active)
+    })
+    .placeholder(placeholder)
+    .text_size(12)
+    .padding([2, 8])
+    .into()
 }
 
 /// Spinner frames for rows whose comment is still loading.

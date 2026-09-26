@@ -29,6 +29,8 @@ pub struct Directory<S> {
     /// When true, only files with a comment of the editor's are listed (an AI description alone
     /// does not count).
     commented_only: bool,
+    /// When true, only files with clip markers are listed.
+    marked_only: bool,
     /// Name filter as the user typed it (for display in the search bar).
     name_filter: String,
     /// Same filter lowercased once, so matching a file never allocates.
@@ -53,6 +55,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
             untagged_only: false,
             subtitled_only: false,
             commented_only: false,
+            marked_only: false,
             name_filter: String::new(),
             name_filter_lower: String::new(),
             store,
@@ -148,6 +151,25 @@ impl<S: AppStateStore + Clone> Directory<S> {
             .count()
     }
 
+    /// Whether the "with markers only" filter is active.
+    pub fn marked_only(&self) -> bool {
+        self.marked_only
+    }
+
+    /// Turn the "with markers only" filter on or off. The selected file stays listed, even
+    /// once its last marker is deleted.
+    pub fn set_marked_only(&mut self, marked_only: bool) {
+        self.marked_only = marked_only;
+    }
+
+    /// Number of files with clip markers (ignores the filters).
+    pub fn marked_count(&self) -> usize {
+        self.files_by_id
+            .values()
+            .filter(|f| f.snapshot().marker_count() > 0)
+            .count()
+    }
+
     /// Files whose comment is still loading (see [`FileSnapshot::comment_loading`]), in list
     /// order.
     pub fn files_loading_comments(&self) -> Vec<(FileId, PathBuf, FileSnapshot)> {
@@ -195,10 +217,10 @@ impl<S: AppStateStore + Clone> Directory<S> {
         self.order.iter().filter_map(|id| self.files_by_id.get(id))
     }
 
-    /// Whether any filter that depends on a file's content (tags, subtitles, comment) is on.
-    /// Saving a file can move it in or out of the list while one is.
+    /// Whether any filter that depends on a file's content (tags, subtitles, comment, markers)
+    /// is on. Saving a file can move it in or out of the list while one is.
     pub fn has_content_filter(&self) -> bool {
-        self.untagged_only || self.subtitled_only || self.commented_only
+        self.untagged_only || self.subtitled_only || self.commented_only || self.marked_only
     }
 
     /// Name filter as the user typed it. Empty means every file passes.
@@ -238,6 +260,9 @@ impl<S: AppStateStore + Clone> Directory<S> {
             return false;
         }
         if self.commented_only && !crate::ai::has_editor_comment(file.comment()) {
+            return false;
+        }
+        if self.marked_only && file.snapshot().marker_count() == 0 {
             return false;
         }
         self.matches_name_filter(file)
@@ -479,7 +504,7 @@ mod tests {
 
     use super::is_listed_kind;
     use crate::db::fake_app_storage::FakeAppStorage;
-    use crate::{Directory, File, FolderInfo};
+    use crate::{Directory, File, FileSnapshot, FolderInfo};
 
     #[test]
     fn only_videos_are_listed() {
@@ -654,6 +679,28 @@ mod tests {
         dir.set_commented_only(true);
         assert_eq!(listed_names(&dir), vec!["b.mp4"]);
         assert_eq!(dir.commented_count(), 1);
+    }
+
+    #[test]
+    fn marker_filter_lists_only_files_with_markers() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4", "c.mp4"]);
+        let file = dir.files_in_order().nth(2).expect("file at index");
+        let (id, path) = (file.id(), file.file_path().to_path_buf());
+        let mut snapshot = file.snapshot().clone();
+        snapshot.set_marker_count(3);
+        dir.rename_file(id, &path, &snapshot);
+        dir.set_marked_only(true);
+        assert_eq!(listed_names(&dir), vec!["c.mp4"]);
+        assert_eq!(dir.marked_count(), 1);
+    }
+
+    #[test]
+    fn markers_read_from_the_file_win_over_the_parsed_count() {
+        let mut snapshot = FileSnapshot::default();
+        snapshot.set_marker_count(3);
+        assert_eq!(snapshot.marker_count(), 3);
+        snapshot.set_markers(Some(Vec::new()));
+        assert_eq!(snapshot.marker_count(), 0);
     }
 
     #[test]

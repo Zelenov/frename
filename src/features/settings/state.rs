@@ -230,7 +230,8 @@ impl SettingsState {
             Message::SetSummaryLanguage(language) => self.settings.summary_language = language,
             Message::Key(message) => self.apply_key(message),
             Message::OpenBatchAction(
-                Operation::TagCommented
+                Operation::MarkersComment(_)
+                | Operation::TagCommented
                 | Operation::FixTags
                 | Operation::ReloadFiles
                 | Operation::DescribeAi(_),

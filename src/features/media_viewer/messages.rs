@@ -21,6 +21,6 @@ pub enum Message {
     SegmentStartMarked(f32),
     /// Segment end was set from the video player. Intercepted by FolderWorkspace.
     SegmentEndMarked(f32),
-    /// Screenshot captured at position (ms) with JPEG bytes. Intercepted by FolderWorkspace.
+    /// Frame captured at position (ms) with JPEG bytes. Intercepted by FolderWorkspace.
     ScreenshotTaken(u64, Vec<u8>),
 }

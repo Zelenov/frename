@@ -149,11 +149,18 @@ fn job_panel<'a>(
         panel = panel
             .push(
                 row![
-                    text(format!("{} / {}", progress.finished, progress.total)).size(13),
-                    text(current)
-                        .size(12)
-                        .color(theme::TEXT_MUTED)
+                    text(format!("{} / {}", progress.finished, progress.total))
+                        .size(13)
                         .wrapping(iced::widget::text::Wrapping::None),
+                    // A long name is cut at the panel's edge instead of running past it.
+                    container(
+                        text(current)
+                            .size(12)
+                            .color(theme::TEXT_MUTED)
+                            .wrapping(iced::widget::text::Wrapping::None),
+                    )
+                    .width(Length::Fill)
+                    .clip(true),
                 ]
                 .spacing(10),
             )
@@ -201,7 +208,7 @@ fn job_panel<'a>(
             let heading = if failed.iter().all(|(_, reason)| reason.is_some()) {
                 "Failed:"
             } else {
-                "Failed (see the log for why):"
+                "Failed (the log says why):"
             };
             let names = column(failed.into_iter().map(|(id, reason)| {
                 let line = match reason {
@@ -211,7 +218,16 @@ fn job_panel<'a>(
                 text(line).size(12).color(theme::ERROR).into()
             }));
             panel = panel
-                .push(text(heading).size(12).color(theme::TEXT_MUTED))
+                .push(
+                    row![
+                        text(heading).size(12).color(theme::TEXT_MUTED),
+                        Space::new().width(Length::Fill),
+                        button(text("Open log").size(12))
+                            .on_press(Message::OpenLog)
+                            .padding([2, 8]),
+                    ]
+                    .align_y(iced::Alignment::Center),
+                )
                 .push(
                     container(
                         scrollable(names)

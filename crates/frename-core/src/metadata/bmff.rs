@@ -37,6 +37,25 @@ pub(super) fn find_xmp_packet(path: &Path) -> Option<Option<String>> {
     scan(path).ok().flatten()
 }
 
+/// Whether the file is named MOV/MP4 but does not start with a box one can start with: its
+/// content is not a movie (all zeros after a download that did not finish, for one). The
+/// toolkit then reports no handler, as for a format that cannot hold XMP at all.
+pub(super) fn is_damaged(path: &Path) -> bool {
+    let is_movie = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "mov" | "mp4" | "m4v"));
+    if !is_movie {
+        return false;
+    }
+    let first = File::open(path).and_then(|mut file| {
+        let len = file.metadata()?.len();
+        read_header(&mut file, 0, len)
+    });
+    // A file that cannot be opened is not damaged, just unavailable.
+    matches!(first, Ok(None)) || matches!(first, Ok(Some(b)) if !FIRST_BOXES.contains(&&b.kind))
+}
+
 fn scan(path: &Path) -> io::Result<Option<Option<String>>> {
     let mut file = File::open(path)?;
     let len = file.metadata()?.len();
@@ -149,4 +168,32 @@ fn read_bytes(file: &mut File, pos: u64, len: usize) -> io::Result<Vec<u8>> {
 
 fn invalid() -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, "malformed MOV/MP4 box")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn temp_file(name: &str, bytes: &[u8]) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("frename-bmff-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let path = dir.join(name);
+        std::fs::write(&path, bytes).expect("write");
+        path
+    }
+
+    #[test]
+    fn a_movie_of_zeros_is_damaged() {
+        assert!(is_damaged(&temp_file("zeros.mp4", &[0; 4096])));
+        assert!(is_damaged(&temp_file("empty.mov", &[])));
+    }
+
+    #[test]
+    fn a_real_movie_or_another_format_is_not_damaged() {
+        let clip = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
+        assert!(!is_damaged(&clip));
+        assert!(!is_damaged(&temp_file("zeros.txt", &[0; 4096])));
+        assert!(!is_damaged(Path::new("C:/no/such/file.mp4")));
+    }
 }

@@ -19,11 +19,11 @@
     <text x="420" y="140" text-anchor="middle">Video player</text>
     <text x="930" y="140" text-anchor="middle">Checked files</text>
     <text x="1330" y="140" text-anchor="middle">Batch actions</text>
-    <text x="1270" y="555" text-anchor="middle">Pick an action</text>
+    <text x="1270" y="586" text-anchor="middle">Pick an action</text>
     <text x="1539" y="555">Run it</text>
     <text x="980" y="1028">Batch mode on / off</text>
   </g>
-  <use xlink:href="#arrow" href="#arrow" transform="translate(1190,405) rotate(-120)"/>
+  <use xlink:href="#arrow" href="#arrow" transform="translate(1190,436) rotate(-120)"/>
   <use xlink:href="#arrow" href="#arrow" transform="translate(1465,463) rotate(-164.3) scale(1,-1)"/>
   <use xlink:href="#arrow" href="#arrow" transform="translate(980,927) rotate(-148.2) scale(1,-1)"/>
 </svg>

@@ -33,4 +33,6 @@ pub enum Message {
     Cancel,
     /// Dismiss the report of a finished job, with the outcomes shown in the list.
     CloseReport,
+    /// Open the log, which says why each failed file failed. Handled by the workspace.
+    OpenLog,
 }

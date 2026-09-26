@@ -4,6 +4,7 @@
 //! file operations. If no backend is installed the default is InMemoryFileTagger,
 //! which is always correct for tests and debug builds.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -13,7 +14,8 @@ use super::folder_info::FolderInfo;
 use super::folder_tag_store::FolderTagStore;
 use super::in_memory_file_tagger::InMemoryFileTagger;
 use super::tag_list::TagList;
-use crate::metadata::{MetadataMove, MoveOutcome};
+use crate::markers::Marker;
+use crate::metadata::{MarkersError, MetadataMove, MoveOutcome};
 
 static BACKEND: OnceLock<Box<dyn FileTaggerBackend>> = OnceLock::new();
 
@@ -97,6 +99,73 @@ impl FileTagger {
         Self::renamed(Self::save(&snapshot, path), path)
     }
 
+    /// "Comment → markers": turn the lines of the file's comment that start with a time
+    /// (`03:24 — shaky`) into clip markers and take them out of the comment (see
+    /// [`crate::comment_to_markers`]). The comment changes only after the markers were written,
+    /// so a failed write leaves the file as it was. Lines past the end of the clip stay.
+    pub fn comment_to_markers(path: &Path) -> Result<MoveOutcome, MarkersError> {
+        let mut snapshot = Self::parse(path, &FolderInfo::default());
+        let markers =
+            Self::load_markers(path).ok_or_else(|| crate::metadata::cannot_hold_markers(path))?;
+        let clip_length = crate::metadata::clip_length_ms(&Self::disk_path(path));
+        let result = crate::markers::comment_to_markers(snapshot.comment(), &markers, clip_length);
+        if result.past_end > 0 {
+            log::info!(
+                "markers: {} line(s) of {path:?} are past the end of the clip and stay",
+                result.past_end
+            );
+        }
+        if result.lines_moved == 0 {
+            return Ok(MoveOutcome::NothingToMove);
+        }
+        if !result.added.is_empty() {
+            let all: Vec<Marker> = markers.into_iter().chain(result.added).collect();
+            Self::save_markers(path, &all, &HashSet::new())?;
+        }
+        let was_commented = !snapshot.comment().trim().is_empty();
+        snapshot.set_comment(result.comment);
+        Self::follow_commented_tag(&mut snapshot, was_commented);
+        Ok(MoveOutcome::Moved(Self::save(&snapshot, path)))
+    }
+
+    /// "Markers → comment": append a line per clip marker to the file's comment, leaving out
+    /// lines it already has (see [`crate::markers_to_comment`]). The markers stay in the file.
+    pub fn markers_to_comment(path: &Path) -> Result<MoveOutcome, MarkersError> {
+        let mut snapshot = Self::parse(path, &FolderInfo::default());
+        let Some(markers) = Self::load_markers(path) else {
+            return Ok(MoveOutcome::NothingToMove);
+        };
+        let (comment, added) = crate::markers::markers_to_comment(snapshot.comment(), &markers);
+        if added == 0 {
+            return Ok(MoveOutcome::NothingToMove);
+        }
+        let was_commented = !snapshot.comment().trim().is_empty();
+        snapshot.set_comment(comment);
+        Self::follow_commented_tag(&mut snapshot, was_commented);
+        Ok(MoveOutcome::Moved(Self::save(&snapshot, path)))
+    }
+
+    /// The commented tag follows a comment that appeared or went, as it does when the comment
+    /// is typed (see [`crate::active_commented_tag`]).
+    fn follow_commented_tag(snapshot: &mut FileSnapshot, was_commented: bool) {
+        let commented = !snapshot.comment().trim().is_empty();
+        let Some(tag) =
+            crate::metadata::active_commented_tag().filter(|_| commented != was_commented)
+        else {
+            return;
+        };
+        let mut tags: Vec<String> = snapshot
+            .tags()
+            .iter()
+            .filter(|t| !t.eq_ignore_ascii_case(&tag))
+            .cloned()
+            .collect();
+        if commented {
+            tags.push(tag);
+        }
+        snapshot.set_tags(tags);
+    }
+
     /// Read the comment and in/out points of the file at `path` from the file again, replacing
     /// what the folder's file list cached for it. Returns whether the cached values were missing
     /// or stale.
@@ -148,6 +217,25 @@ impl FileTagger {
         } else {
             MoveOutcome::Moved(new_path)
         }
+    }
+
+    /// The clip markers of the file at `path`, in time order; `None` when the file cannot hold
+    /// them.
+    pub fn load_markers(path: &Path) -> Option<Vec<Marker>> {
+        backend().load_markers(path)
+    }
+
+    /// Write `markers` into the file at `path` (before it is renamed: they travel with it).
+    /// Only markers with a GUID are written; see [`crate::Marker::guid`]. `known` is every GUID
+    /// read from or written to the file before: a file marker with one of them that is not in
+    /// `markers` was deleted, while other file markers (added elsewhere meanwhile) are kept.
+    /// Nothing is written when the file already holds these markers.
+    pub fn save_markers(
+        path: &Path,
+        markers: &[Marker],
+        known: &HashSet<String>,
+    ) -> Result<(), MarkersError> {
+        backend().save_markers(path, markers, known)
     }
 
     /// Save a screenshot image for the given file and position.
@@ -242,6 +330,75 @@ mod tests {
             panic!("the tag must be removed");
         };
         assert!(untagged.ends_with("Food.clip.mp4"), "removed: {untagged:?}");
+    }
+
+    /// Both directions of "Markers ⇄ comment", run twice: the second run changes nothing.
+    #[test]
+    fn comment_lines_and_markers_convert_both_ways_and_reruns_change_nothing() {
+        let dir =
+            std::env::temp_dir().join(format!("frename-markers-batch-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let file = dir.join("clip.mov");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
+        std::fs::copy(fixture, &file).expect("copy fixture");
+        let mut snapshot = FileSnapshot::parse("clip.mov");
+        // The fixture is 0.2 s long: the second line is past its end.
+        snapshot.set_comment("Intro\n0:00.050 — Start — first frames\n9:00 — too late".into());
+        let path = FileTagger::save(&snapshot, &file);
+
+        let MoveOutcome::Moved(path) = FileTagger::comment_to_markers(&path).expect("moved") else {
+            panic!("lines must move");
+        };
+        let markers = FileTagger::load_markers(&path).expect("markers");
+        let got: Vec<_> = markers
+            .iter()
+            .map(|m| (m.start_ms, m.name.as_str(), m.comment.as_str()))
+            .collect();
+        assert_eq!(got, [(50, "Start", "first frames")]);
+        let comment = |path: &Path| {
+            FileTagger::parse(path, &FolderInfo::default())
+                .comment()
+                .to_string()
+        };
+        assert_eq!(comment(&path), "Intro\n9:00 — too late");
+        assert_eq!(
+            FileTagger::comment_to_markers(&path),
+            Ok(MoveOutcome::NothingToMove)
+        );
+
+        let MoveOutcome::Moved(path) = FileTagger::markers_to_comment(&path).expect("copied")
+        else {
+            panic!("markers must be copied");
+        };
+        assert_eq!(
+            comment(&path),
+            "Intro\n9:00 — too late\n0:00.050 — Start — first frames"
+        );
+        assert_eq!(
+            FileTagger::markers_to_comment(&path),
+            Ok(MoveOutcome::NothingToMove)
+        );
+        // Back again: the copied line goes and no duplicate marker is added.
+        FileTagger::comment_to_markers(&path).expect("moved");
+        assert_eq!(FileTagger::load_markers(&path).expect("markers").len(), 1);
+        assert_eq!(comment(&path), "Intro\n9:00 — too late");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_file_that_cannot_hold_markers_keeps_its_comment_lines() {
+        let path = Path::new(r"C:\frename-no-markers\notes.zip");
+        let mut snapshot = FileSnapshot::parse("notes.zip");
+        snapshot.set_comment("0:01 — x".into());
+        let path = FileTagger::save(&snapshot, path);
+        assert_eq!(
+            FileTagger::comment_to_markers(&path),
+            Err(MarkersError::CannotHoldMarkers)
+        );
+        assert_eq!(
+            FileTagger::parse(&path, &FolderInfo::default()).comment(),
+            "0:01 — x"
+        );
     }
 
     #[test]
