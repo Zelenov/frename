@@ -21,7 +21,7 @@ use iced::{Element, Length};
 
 pub use frames::Probe;
 
-use super::super::{ItemResult, ItemStatus};
+use super::super::{ItemProgress, ItemResult, ItemStatus};
 use super::ActionMessage;
 use crate::theme;
 
@@ -409,7 +409,7 @@ pub fn probe_all(clips: Vec<(FileId, PathBuf)>) -> Vec<(FileId, Probe)> {
 }
 
 /// Describe the video at `path` and write the description into its comment.
-pub fn run(options: Run, path: &Path, cancel: &AtomicBool) -> ItemResult {
+pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress) -> ItemResult {
     let is_video = path
         .extension()
         .and_then(|e| e.to_str())
@@ -433,7 +433,9 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool) -> ItemResult {
         log::warn!("ai: cannot read {}: {e}", path.display());
         ItemResult::failed("Video could not be read")
     };
-    let clip = match frames::Clip::open(path, frames::OPEN_TIMEOUT) {
+    // A debug build renames in memory only: the clip and its subtitles are read by the name on disk.
+    let on_disk = FileTagger::disk_path(path);
+    let clip = match frames::Clip::open(&on_disk, frames::OPEN_TIMEOUT) {
         Ok(clip) => clip,
         Err(e) => return unreadable(e),
     };
@@ -443,16 +445,30 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool) -> ItemResult {
     if duration_s > MAX_DURATION_S {
         return ItemResult::new(ItemStatus::Skipped, None);
     }
-    let frames = match clip.sample(duration_s, cancel) {
+    // Shares of the file's time, as the estimate counts it: sampling frames, then the answer.
+    let sampling_s = SECONDS_PER_FRAME * describe::frame_count(duration_s) as f64;
+    let asked_at = (sampling_s / (sampling_s + SECONDS_PER_REQUEST)) as f32;
+    let frames = match clip.sample(duration_s, cancel, |done, total| {
+        progress.set(
+            asked_at * done as f32 / total.max(1) as f32,
+            format!("frame {} of {total}", done + 1),
+        );
+    }) {
         Ok(Some(frames)) if !frames.is_empty() => frames,
         Ok(Some(_)) => return unreadable("no frames".to_string()),
         Ok(None) => return ItemResult::new(ItemStatus::Pending, None),
         Err(e) => return unreadable(e),
     };
     drop(clip);
-    let subtitles = frename_core::load_subtitles(path);
+    let subtitles = frename_core::load_subtitles(&on_disk);
     let request =
         describe::build_request(&frames, subtitles.as_ref(), duration_s, options.language);
+    progress.creep(
+        asked_at,
+        0.97,
+        std::time::Duration::from_secs_f64(SECONDS_PER_REQUEST),
+        "waiting for Claude",
+    );
     let provider = match Anthropic::new(api_key) {
         Ok(provider) => provider,
         Err(e) => return ai_failed(e),
@@ -472,6 +488,7 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool) -> ItemResult {
             }
         }
     };
+    progress.set(0.98, "saving");
     let new_block = block::format_block(&description, MODEL.label, &block::today());
     snapshot.set_comment(block::replace_block(snapshot.comment(), &new_block));
     let new_path = FileTagger::save(&snapshot, path);
@@ -507,6 +524,7 @@ fn ai_failed(error: AiError) -> ItemResult {
     ItemResult {
         // A request that timed out may have been answered and billed after all.
         usage_unknown: error == AiError::Timeout,
+        out_of_credit: error == AiError::OutOfCredit,
         stop_job: error.stops_job(),
         stop_if_repeated: offline.then(|| {
             "Stopped: no connection to Anthropic. Run it again to describe the rest.".to_string()
@@ -652,6 +670,7 @@ mod tests {
             },
             Path::new("C:/clips/photo.jpg"),
             &AtomicBool::new(false),
+            &ItemProgress::default(),
         );
         assert_eq!(result.status, ItemStatus::Skipped);
     }
@@ -674,7 +693,7 @@ mod tests {
         let clip = frames::Clip::open(&path, std::time::Duration::from_secs(20)).expect("clip");
         let duration_s = clip.duration_s().expect("duration");
         let frames = clip
-            .sample(duration_s, &AtomicBool::new(false))
+            .sample(duration_s, &AtomicBool::new(false), |_, _| {})
             .expect("frames")
             .expect("not cancelled");
         let request = describe::build_request(&frames, None, duration_s, SummaryLanguage::English);

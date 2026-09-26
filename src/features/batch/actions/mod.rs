@@ -29,7 +29,7 @@ use frename_core::{
 use iced::widget::{column, text};
 use iced::Element;
 
-use super::{ItemResult, ItemStatus};
+use super::{ItemProgress, ItemResult, ItemStatus};
 use crate::theme;
 
 /// An entry of the action list.
@@ -90,7 +90,7 @@ pub enum Operation {
 impl Operation {
     /// Do it to the file at `path`. Blocking: runs on a worker thread. Long operations check
     /// `cancel` and stop early, leaving the file not reached.
-    pub fn run(&self, path: &Path, cancel: &AtomicBool) -> ItemResult {
+    pub fn run(&self, path: &Path, cancel: &AtomicBool, progress: &ItemProgress) -> ItemResult {
         match self {
             Self::MoveComments(to) => move_comments::run(*to, path),
             Self::MoveInOut(to) => move_in_out::run(*to, path),
@@ -99,7 +99,7 @@ impl Operation {
             Self::FixTags => fix_tags::run(path),
             Self::RespaceTags => tag_spacing::run(path),
             Self::ReloadFiles => reload_files::run(path),
-            Self::DescribeAi(options) => describe_ai::run(*options, path, cancel),
+            Self::DescribeAi(options) => describe_ai::run(*options, path, cancel, progress),
         }
     }
 

@@ -3,13 +3,68 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use frename_core::ai::provider::AiUsage;
 use frename_core::{File, FileId, FileSnapshot};
 
 use super::actions::Actions;
 use super::{Action, Message, Operation};
+
+/// How far the file in work is, told by its operation from the worker thread. Only slow
+/// operations (AI descriptions) tell; the others finish before anyone could look.
+#[derive(Debug, Default)]
+pub struct ItemProgress(Mutex<ItemStep>);
+
+#[derive(Debug, Clone, Default)]
+struct ItemStep {
+    fraction: f32,
+    label: String,
+    /// A step of unknown length: when it began, the fraction it heads for and how long it
+    /// usually takes.
+    creep: Option<(Instant, f32, Duration)>,
+}
+
+impl ItemProgress {
+    /// The file is `fraction` (0..=1) done, doing `label`.
+    pub fn set(&self, fraction: f32, label: impl Into<String>) {
+        if let Ok(mut step) = self.0.lock() {
+            *step = ItemStep {
+                fraction,
+                label: label.into(),
+                creep: None,
+            };
+        }
+    }
+
+    /// The file is `fraction` done and waits for a step that usually takes `usual`: the bar
+    /// creeps toward `to` meanwhile, slowing down so it never gets there before the answer.
+    pub fn creep(&self, fraction: f32, to: f32, usual: Duration, label: impl Into<String>) {
+        if let Ok(mut step) = self.0.lock() {
+            *step = ItemStep {
+                fraction,
+                label: label.into(),
+                creep: Some((Instant::now(), to, usual)),
+            };
+        }
+    }
+
+    /// How far the file is now (0..=1), and what it is doing.
+    pub fn now(&self) -> (f32, String) {
+        let Ok(step) = self.0.lock() else {
+            return (0.0, String::new());
+        };
+        let fraction = match step.creep {
+            Some((since, to, usual)) => {
+                let t = since.elapsed().as_secs_f32() / usual.as_secs_f32().max(0.1);
+                step.fraction + (to - step.fraction) * (1.0 - (-t).exp())
+            }
+            None => step.fraction,
+        };
+        (fraction.clamp(0.0, 1.0), step.label.clone())
+    }
+}
 
 /// Where one file of a job stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,6 +100,8 @@ pub struct ItemResult {
     /// Stop the job with this summary line once [`REPEATS_THAT_STOP`] files in a row end with
     /// it (e.g. the network is gone), instead of failing every file left the same way.
     pub stop_if_repeated: Option<String>,
+    /// The AI account has no credit left: the report offers to add some.
+    pub out_of_credit: bool,
 }
 
 /// How many files in a row may fail the same way before the job stops.
@@ -60,6 +117,7 @@ impl ItemResult {
             usage_unknown: false,
             stop_job: None,
             stop_if_repeated: None,
+            out_of_credit: false,
         }
     }
 
@@ -84,6 +142,8 @@ struct Job {
     cancelled: bool,
     /// Set together with `cancelled`, for the file in work to see.
     cancel: Arc<AtomicBool>,
+    /// How far the file in work is.
+    item: Arc<ItemProgress>,
     /// Why failed files failed, when their action said.
     reasons: HashMap<FileId, String>,
     /// What the job's AI requests cost so far; `None` when it made none.
@@ -94,6 +154,8 @@ struct Job {
     stopped: Option<String>,
     /// The last files' repeated failure and how many in a row ended with it.
     repeated: Option<(String, usize)>,
+    /// A file failed because the AI account has no credit left.
+    out_of_credit: bool,
     /// False once the job has finished or stopped; the report stays until it is closed.
     running: bool,
     /// Files whose check changed after the job: the list shows their check box again, while
@@ -196,7 +258,7 @@ impl BatchState {
                 }
             }
             Message::CloseReport => self.job = None,
-            Message::Run | Message::OpenLog => {}
+            Message::Run | Message::Retry | Message::OpenLog | Message::OpenBilling => {}
         }
     }
 
@@ -217,10 +279,12 @@ impl BatchState {
             next: 0,
             cancelled: false,
             cancel: Arc::new(AtomicBool::new(false)),
+            item: Arc::default(),
             reasons: HashMap::new(),
             usage: None,
             usage_unknown: false,
             stopped: None,
+            out_of_credit: false,
             repeated: None,
             running: true,
             dismissed: HashSet::new(),
@@ -250,7 +314,21 @@ impl BatchState {
         };
         job.next += 1;
         job.statuses.insert(id, ItemStatus::Running);
+        job.item = Arc::default();
         Some((id, job.operation.clone(), job.cancel.clone()))
+    }
+
+    /// Where the file in work tells how far it is; handed to its operation.
+    pub fn item_progress(&self) -> Option<Arc<ItemProgress>> {
+        self.job.as_ref().map(|job| job.item.clone())
+    }
+
+    /// How far the file in work is (0..=1), and what it is doing, when its operation tells.
+    pub fn item_now(&self) -> (f32, String) {
+        self.job
+            .as_ref()
+            .filter(|job| job.running)
+            .map_or((0.0, String::new()), |job| job.item.now())
     }
 
     /// Record how a file of the running job went.
@@ -272,6 +350,7 @@ impl BatchState {
         if let Some(stop) = result.stop_job.clone() {
             job.stopped = Some(stop);
         }
+        job.out_of_credit |= result.out_of_credit;
         job.repeated = match (job.repeated.take(), result.stop_if_repeated.clone()) {
             (Some((last, n)), Some(stop)) if last == stop => Some((stop, n + 1)),
             (_, Some(stop)) => Some((stop, 1)),
@@ -287,6 +366,43 @@ impl BatchState {
     /// Why a file stopped the current job, if one did.
     pub fn stopped(&self) -> Option<&str> {
         self.job.as_ref().and_then(|job| job.stopped.as_deref())
+    }
+
+    /// Files of the finished job that failed or were not reached, in job order: what Retry
+    /// runs again. Empty while the job runs.
+    pub fn retryable(&self) -> Vec<FileId> {
+        self.job
+            .as_ref()
+            .filter(|job| !job.running)
+            .map_or_else(Vec::new, |job| {
+                job.order
+                    .iter()
+                    .copied()
+                    .filter(|id| {
+                        matches!(
+                            job.statuses.get(id),
+                            Some(ItemStatus::Failed | ItemStatus::Pending)
+                        )
+                    })
+                    .collect()
+            })
+    }
+
+    /// Check only the files Retry runs again, with the finished job's action selected, and
+    /// close its report. False when there is nothing to retry.
+    pub fn prepare_retry(&mut self) -> bool {
+        let files = self.retryable();
+        let Some(job) = self.job.take().filter(|_| !files.is_empty()) else {
+            return false;
+        };
+        self.action = job.operation.action();
+        self.checked = files.into_iter().collect();
+        true
+    }
+
+    /// Whether a file of the current job failed because the AI account has no credit left.
+    pub fn out_of_credit(&self) -> bool {
+        self.job.as_ref().is_some_and(|job| job.out_of_credit)
     }
 
     /// Show the check boxes of `ids` again instead of their outcome in the finished job.
@@ -615,6 +731,66 @@ mod tests {
         assert_eq!(batch.stopped(), Some("Stopped: the key was rejected."));
         assert_eq!(batch.status(files[1]), Some(ItemStatus::Pending));
         assert_eq!(batch.status(files[2]), Some(ItemStatus::Pending));
+    }
+
+    #[test]
+    fn a_file_out_of_credit_makes_the_report_offer_to_add_some() {
+        let files = ids(2);
+        let mut batch = state();
+        batch.start(files.clone());
+        let (id, _, _) = batch.begin_next().expect("first");
+        batch.finish(id, &ItemResult::failed("Network error"));
+        assert!(!batch.out_of_credit());
+        let (id, _, _) = batch.begin_next().expect("second");
+        batch.finish(
+            id,
+            &ItemResult {
+                out_of_credit: true,
+                ..ItemResult::failed("The Anthropic account has no credit left")
+            },
+        );
+        assert!(batch.out_of_credit());
+        assert!(batch.begin_next().is_none());
+        batch.update(Message::CloseReport);
+        assert!(!batch.out_of_credit(), "gone with the report");
+    }
+
+    #[test]
+    fn retry_checks_only_the_files_that_failed_or_were_not_reached() {
+        let files = ids(4);
+        let mut batch = state();
+        batch.start(files.clone());
+        let (id, _, _) = batch.begin_next().expect("first");
+        batch.finish(id, &ItemResult::new(ItemStatus::Done, None));
+        assert!(batch.retryable().is_empty(), "not while it runs");
+        let (id, _, _) = batch.begin_next().expect("second");
+        batch.finish(
+            id,
+            &ItemResult {
+                stop_job: Some("Stopped: the Anthropic account has no credit left.".to_string()),
+                ..ItemResult::failed("The Anthropic account has no credit left")
+            },
+        );
+        assert!(batch.begin_next().is_none());
+        assert_eq!(batch.retryable(), files[1..].to_vec());
+
+        assert!(batch.prepare_retry());
+        assert!(batch.progress().is_none(), "the report closes");
+        assert!(!batch.is_checked(files[0]));
+        assert!(files[1..].iter().all(|id| batch.is_checked(*id)));
+        assert!(!batch.prepare_retry(), "nothing left to retry");
+    }
+
+    #[test]
+    fn a_files_progress_creeps_toward_its_target_without_reaching_it() {
+        let item = ItemProgress::default();
+        item.set(0.25, "frame 3 of 12");
+        assert_eq!(item.now(), (0.25, "frame 3 of 12".to_string()));
+        item.creep(0.5, 0.9, Duration::from_millis(20), "waiting for Claude");
+        std::thread::sleep(Duration::from_millis(30));
+        let (fraction, label) = item.now();
+        assert!(fraction > 0.5 && fraction < 0.9, "{fraction}");
+        assert_eq!(label, "waiting for Claude");
     }
 
     #[test]

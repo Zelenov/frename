@@ -12,4 +12,4 @@ pub mod view;
 
 pub use actions::{describe_ai, Action, ActionMessage, Operation};
 pub use messages::Message;
-pub use state::{BatchState, ItemResult, ItemStatus};
+pub use state::{BatchState, ItemProgress, ItemResult, ItemStatus};

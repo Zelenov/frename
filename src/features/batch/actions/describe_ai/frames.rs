@@ -202,11 +202,12 @@ impl Clip {
     }
 
     /// The frames of the whole clip (see [`sample_times`]), as JPEG. Stops with `Ok(None)`
-    /// when `cancel` is set between two frames.
+    /// when `cancel` is set between two frames. `on_frame(done, total)` follows along.
     pub fn sample(
         &self,
         duration_s: f64,
         cancel: &AtomicBool,
+        mut on_frame: impl FnMut(usize, usize),
     ) -> Result<Option<Vec<Frame>>, String> {
         let mut frames: Vec<Frame> = Vec::new();
         let orientation = self.orientation();
@@ -215,7 +216,9 @@ impl Clip {
             [a, b, ..] => b - a,
             _ => duration_s,
         };
-        for time_s in times {
+        let total = times.len();
+        for (i, time_s) in times.into_iter().enumerate() {
+            on_frame(i, total);
             if cancel.load(Ordering::Relaxed) {
                 return Ok(None);
             }
@@ -321,6 +324,8 @@ pub struct Probe {
 
 /// Read what the estimate needs about the clip at `path`, giving up after [`OPEN_TIMEOUT`].
 pub fn probe(path: &Path) -> Probe {
+    // A debug build renames in memory only: GStreamer needs the name on disk.
+    let path = &frename_core::FileTagger::disk_path(path);
     let duration_s = Clip::open(path, OPEN_TIMEOUT)
         .map_err(|e| log::info!("ai: cannot read {}: {e}", path.display()))
         .ok()
@@ -373,7 +378,7 @@ mod tests {
             let duration = clip.duration_s().expect("duration");
             let started = std::time::Instant::now();
             let frames = clip
-                .sample(duration, &AtomicBool::new(false))
+                .sample(duration, &AtomicBool::new(false), |_, _| {})
                 .expect("frames")
                 .expect("not cancelled");
             let expected = sample_times(duration).len();
@@ -418,6 +423,7 @@ mod tests {
             .sample(
                 clip.duration_s().expect("duration"),
                 &AtomicBool::new(false),
+                |_, _| {},
             )
             .expect("frames")
             .expect("not cancelled");
@@ -431,7 +437,7 @@ mod tests {
         let clip = Clip::open(&ci_clips()[0], Duration::from_secs(20)).expect("opens");
         let duration = clip.duration_s().expect("duration");
         assert!(clip
-            .sample(duration, &AtomicBool::new(true))
+            .sample(duration, &AtomicBool::new(true), |_, _| {})
             .expect("ok")
             .is_none());
     }
@@ -475,7 +481,7 @@ mod tests {
         let clip = Clip::open(&clip_path, Duration::from_secs(20)).expect("opens");
         let duration = clip.duration_s().expect("duration");
         let frames = clip
-            .sample(duration, &AtomicBool::new(false))
+            .sample(duration, &AtomicBool::new(false), |_, _| {})
             .expect("the picture's frames")
             .expect("not cancelled");
         assert!(!frames.is_empty());

@@ -140,7 +140,14 @@ fn job_panel<'a>(
 
     let mut panel = column![].spacing(6);
     if progress.running {
-        let current = state.current().map(name).unwrap_or_default();
+        let (item_fraction, step) = state.item_now();
+        let current = match (
+            state.current().map(name).unwrap_or_default(),
+            step.is_empty(),
+        ) {
+            (name, true) => name,
+            (name, false) => format!("{name} — {step}"),
+        };
         let (label, cancel) = if progress.cancelled {
             ("Stopping…", None)
         } else {
@@ -165,7 +172,11 @@ fn job_panel<'a>(
                 .spacing(10),
             )
             .push(
-                progress_bar(0.0..=progress.total.max(1) as f32, progress.finished as f32).girth(6),
+                progress_bar(
+                    0.0..=progress.total.max(1) as f32,
+                    progress.finished as f32 + item_fraction,
+                )
+                .girth(6),
             )
             .push(
                 row![
@@ -196,12 +207,15 @@ fn job_panel<'a>(
             summary.push_str(&format!("   AI: {at_least}{}", spend_line(usage)));
         }
         panel = panel.push(text(summary).size(13)).push(
-            row![
-                counts,
-                Space::new().width(Length::Fill),
-                button(text("Close").size(13)).on_press(Message::CloseReport),
-            ]
-            .align_y(iced::Alignment::Center),
+            row![counts, Space::new().width(Length::Fill),]
+                .extend((!state.retryable().is_empty()).then(|| {
+                    button(text("Retry").size(13))
+                        .on_press(Message::Retry)
+                        .into()
+                }))
+                .push(button(text("Close").size(13)).on_press(Message::CloseReport))
+                .spacing(6)
+                .align_y(iced::Alignment::Center),
         );
         let failed = state.failed();
         if !failed.is_empty() {
@@ -222,10 +236,19 @@ fn job_panel<'a>(
                     row![
                         text(heading).size(12).color(theme::TEXT_MUTED),
                         Space::new().width(Length::Fill),
+                    ]
+                    .extend(state.out_of_credit().then(|| {
+                        button(text("Add credit").size(12))
+                            .on_press(Message::OpenBilling)
+                            .padding([2, 8])
+                            .into()
+                    }))
+                    .push(
                         button(text("Open log").size(12))
                             .on_press(Message::OpenLog)
                             .padding([2, 8]),
-                    ]
+                    )
+                    .spacing(6)
                     .align_y(iced::Alignment::Center),
                 )
                 .push(
