@@ -13,14 +13,16 @@ binary=$(realpath "$1")
 here=$(cd "$(dirname "$0")" && pwd)
 docs=$(dirname "$here")
 
+# render <template> <output> [demo flags]: both templates show the one folder of main.toml.
 render() {
-  local scenario=$1 output=$2
-  "$binary" --demo "$here/$scenario.toml" --out "$here/$scenario.png"
+  local template=$1 output=$2
+  shift 2
+  "$binary" --demo "$here/main.toml" --out "$here/$template.png" "$@"
   # librsvg only loads images next to or below the template, so the PNG stays in this folder.
-  rsvg-convert "$here/$scenario.svg" -o "$here/$scenario-annotated.png"
-  convert "$here/$scenario-annotated.png" -quality 88 "$docs/$output"
-  rm "$here/$scenario-annotated.png"
+  rsvg-convert "$here/$template.svg" -o "$here/$template-annotated.png"
+  convert "$here/$template-annotated.png" -quality 88 "$docs/$output"
+  rm "$here/$template-annotated.png"
 }
 
 render main frename-screenshot.jpg
-render batch frename-screenshot-batch.jpg
+render batch frename-screenshot-batch.jpg --batch

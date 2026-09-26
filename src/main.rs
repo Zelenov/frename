@@ -42,11 +42,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let demo = match demo::demo_args(&args) {
         None => None,
         Some(Err(e)) => return Err(e.into()),
-        Some(Ok((scenario, out))) => {
-            let work = std::env::temp_dir().join(format!("frename-demo-{}", std::process::id()));
-            let _ = std::fs::remove_dir_all(&work);
-            std::env::set_var(frename_core::DATA_DIR_VAR, work.join("data"));
-            Some((scenario, out, work))
+        Some(Ok(demo_args)) => {
+            let work = demo::WorkDir::new();
+            std::env::set_var(frename_core::DATA_DIR_VAR, work.path().join("data"));
+            Some((demo_args, work))
         }
     };
 
@@ -116,16 +115,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize app database (migrations) before iced; decorator logs.
     let _ = LoggingAppStateStore::new(AppDatabase::new()).initialize();
 
-    let demo_work = demo.as_ref().map(|(_, _, work)| work.clone());
-    let demo = match demo {
-        Some((scenario, out, work)) => match demo::prepare(&scenario, out, work.clone()) {
-            Ok(run) => Some(run),
-            Err(e) => {
-                let _ = std::fs::remove_dir_all(&work);
-                return Err(e.into());
-            }
-        },
-        None => None,
+    // The work folder goes when `demo_work` is dropped: on an early error return, or below.
+    let (demo, demo_work) = match demo {
+        Some((demo_args, work)) => (Some(demo::prepare(&demo_args, work.path())?), Some(work)),
+        None => (None, None),
     };
 
     // Restore saved window geometry (size + position + maximized), or use defaults.
@@ -176,9 +169,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .run()?;
 
     // Only after the app is gone: it still saves the open file's folder while closing.
-    if let Some(work) = demo_work {
-        let _ = std::fs::remove_dir_all(work);
-    }
+    drop(demo_work);
     std::process::exit(0);
 }
 

@@ -161,7 +161,11 @@ pub fn stage(
             .open(&target)?
             .set_modified(start + Duration::from_secs(60 * index as u64))?;
         if let Some(comment) = &file.comment {
-            crate::comment::save_comment(&target, comment);
+            // Written here, not with `save_comment`, which only logs a failed write.
+            std::fs::write(
+                crate::comment::comment_path(&target),
+                format!("\u{feff}{}", comment.trim()),
+            )?;
         }
         if let Some(subtitles) = &file.subtitles {
             std::fs::write(crate::subtitle_path(&target), subtitles)?;

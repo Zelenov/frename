@@ -14,7 +14,9 @@ use iced::{window, Task};
 use crate::features::{folder, folder_workspace, media_viewer, media_viewer::video};
 
 /// Time from the video being ready to the screenshot: covers the seek, the subtitles, and the
-/// comments that load in the background.
+/// comments that load in the background. A fixed wait, not a signal: the open file's comment is
+/// loaded before it is shown, and the seek and the list's comment batch take well under a second
+/// with the scenario's few files, so 3 s leaves a wide margin even on a slow runner.
 const SETTLE: Duration = Duration::from_secs(3);
 
 /// A demo that has not produced its screenshot by then has failed.
@@ -135,9 +137,17 @@ fn save_png(shot: &window::Screenshot, expected: (u32, u32), path: &Path) -> Res
         .map_err(|e| format!("cannot save {}: {e}", path.display()))
 }
 
-/// The scenario and output file given with `--demo <scenario> --out <png>`; `None` for a normal
-/// start.
-pub fn demo_args(args: &[String]) -> Option<Result<(PathBuf, PathBuf), String>> {
+/// What `--demo <scenario> --out <png> [--batch]` asks for.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DemoArgs {
+    pub scenario: PathBuf,
+    pub out: PathBuf,
+    /// Show batch mode, whatever the scenario says: one folder, both README screenshots.
+    pub batch: bool,
+}
+
+/// The demo the command line asks for; `None` for a normal start.
+pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
     let at = args.iter().position(|a| a == "--demo")?;
     let value = |flag: &str, index: Option<usize>| {
         index
@@ -150,22 +160,50 @@ pub fn demo_args(args: &[String]) -> Option<Result<(PathBuf, PathBuf), String>> 
     Some(value("--demo", Some(at)).and_then(|scenario| {
         let out =
             value("--out", out_at).map_err(|_| "--demo needs --out <file.png>".to_string())?;
-        Ok((scenario, out))
+        Ok(DemoArgs {
+            scenario,
+            out,
+            batch: args.iter().any(|a| a == "--batch"),
+        })
     }))
+}
+
+/// The demo's throwaway folder (`<temp>/frename-demo-<pid>`), removed when dropped.
+pub struct WorkDir(PathBuf);
+
+impl WorkDir {
+    /// A fresh, empty work folder path for this process.
+    pub fn new() -> Self {
+        let path = std::env::temp_dir().join(format!("frename-demo-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&path);
+        Self(path)
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for WorkDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 /// Stage the scenario in `work`, point the app's stored state at it, and return the run.
 /// The app database must already be set up (`FRENAME_DATA_DIR` pointing into `work`).
-pub fn prepare(scenario_path: &Path, out: PathBuf, work: PathBuf) -> Result<DemoRun, String> {
+pub fn prepare(args: &DemoArgs, work: &Path) -> Result<DemoRun, String> {
+    let scenario_path = &args.scenario;
     let text = std::fs::read_to_string(scenario_path)
         .map_err(|e| format!("cannot read {}: {e}", scenario_path.display()))?;
-    let scenario = DemoScenario::parse(&text).map_err(|e| e.to_string())?;
+    let mut scenario = DemoScenario::parse(&text).map_err(|e| e.to_string())?;
+    scenario.batch |= args.batch;
     let scenario_dir = scenario_path.parent().unwrap_or(Path::new("."));
     let folder = work.join("folder");
     let file = frename_core::demo::stage(&scenario, scenario_dir, &folder)
         .map_err(|e| format!("cannot stage the demo folder: {e}"))?;
     frename_core::demo::seed(&frename_core::AppDatabase::new(), &scenario, &folder, &file);
-    Ok(DemoRun::new(scenario, out, work))
+    Ok(DemoRun::new(scenario, args.out.clone(), work.to_path_buf()))
 }
 
 #[cfg(test)]
@@ -185,11 +223,21 @@ mod tests {
     fn demo_takes_a_scenario_and_an_output() {
         assert_eq!(
             demo_args(&args(&["frename", "--demo", "a.toml", "--out", "a.png"])),
-            Some(Ok((PathBuf::from("a.toml"), PathBuf::from("a.png"))))
+            Some(Ok(DemoArgs {
+                scenario: "a.toml".into(),
+                out: "a.png".into(),
+                batch: false
+            }))
         );
         assert_eq!(
-            demo_args(&args(&["frename", "--out", "a.png", "--demo", "a.toml"])),
-            Some(Ok((PathBuf::from("a.toml"), PathBuf::from("a.png"))))
+            demo_args(&args(&[
+                "frename", "--batch", "--out", "a.png", "--demo", "a.toml"
+            ])),
+            Some(Ok(DemoArgs {
+                scenario: "a.toml".into(),
+                out: "a.png".into(),
+                batch: true
+            }))
         );
     }
 
@@ -261,7 +309,7 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let decodable = std::fs::read_to_string(root.join("tests/self-test-clips.txt")).unwrap();
         let known: Vec<&str> = frename_core::DEFAULT_TAGS.iter().map(|t| t.name).collect();
-        for name in ["main", "batch"] {
+        for name in ["main"] {
             let path = root.join("docs/screenshots").join(format!("{name}.toml"));
             let scenario = DemoScenario::parse(&std::fs::read_to_string(&path).unwrap())
                 .unwrap_or_else(|e| panic!("{name}.toml: {e}"));
@@ -287,6 +335,15 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn the_work_folder_goes_when_dropped() {
+        let work = WorkDir::new();
+        std::fs::create_dir_all(work.path().join("data")).unwrap();
+        let path = work.path().to_path_buf();
+        drop(work);
+        assert!(!path.exists());
     }
 
     #[test]

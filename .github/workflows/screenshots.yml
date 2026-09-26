@@ -103,7 +103,8 @@ jobs:
   publish:
     name: publish screenshots
     needs: screenshots
-    if: github.event_name != 'pull_request' && needs.screenshots.outputs.changed == 'true'
+    # Only main's screenshots go to main: a manual run on another branch just uploads them.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -112,7 +113,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Main's images are current again (e.g. a UI change was reverted): an open screenshots PR
+      # would now bring back wrong images.
+      - name: Close an outdated screenshots PR
+        if: needs.screenshots.outputs.changed != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for pr in $(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number'); do
+            gh pr close "$pr" --delete-branch --comment "The screenshots on main are current again."
+          done
+
       - uses: actions/download-artifact@v4
+        if: needs.screenshots.outputs.changed == 'true'
         with:
           name: screenshots-${{ github.sha }}
           path: docs
@@ -121,6 +134,7 @@ jobs:
       # requests". A PR opened with GITHUB_TOKEN does not start CI by itself, so CI is started on
       # the branch explicitly: its checks land on the PR's head commit.
       - name: Open or update the screenshots PR
+        if: needs.screenshots.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

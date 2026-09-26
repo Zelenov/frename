@@ -1,4 +1,4 @@
-# README screenshot: the main window. Rendered by render.sh here (CI: .github/workflows/screenshots.yml).
+# README screenshots: the main window, and batch mode (--batch). Rendered by render.sh here (CI: .github/workflows/screenshots.yml).
 source = "../../tests/folder"
 open = "pick.wide.night.city.in_00_00_03.out_00_00_21.MVI_0410.mp4"
 seek = 10.0
