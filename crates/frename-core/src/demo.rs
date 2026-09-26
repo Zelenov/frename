@@ -32,6 +32,9 @@ pub struct DemoScenario {
     /// A picture in `source` copied for every screenshot marker.
     #[serde(default)]
     pub snap_image: Option<String>,
+    /// Open the subtitle list over the picture (the CC button).
+    #[serde(default)]
+    pub subtitle_list: bool,
     /// The staged files, oldest first: the file list shows them in this order.
     pub files: Vec<DemoFile>,
 }
@@ -182,8 +185,15 @@ pub fn stage(
 
 /// Store the app state the scenario shows: window at the top left with its size and panel
 /// widths, videos paused when opened, comments in `.comment.txt` (a staged comment is one), and
-/// `file` in `folder` as the last session, so the app opens it on start.
-pub fn seed(store: &dyn AppStateStore, scenario: &DemoScenario, folder: &Path, file: &Path) {
+/// `file` in `folder` as the last session, so the app opens it on start. `monochrome_tags` turns
+/// on that setting.
+pub fn seed(
+    store: &dyn AppStateStore,
+    scenario: &DemoScenario,
+    folder: &Path,
+    file: &Path,
+    monochrome_tags: bool,
+) {
     let [width, height] = scenario.window;
     store.set_window_state(WindowGeometry {
         x: 0.0,
@@ -198,6 +208,7 @@ pub fn seed(store: &dyn AppStateStore, scenario: &DemoScenario, folder: &Path, f
     });
     store.set_app_settings(AppSettings {
         autoplay_video: false,
+        monochrome_tags,
         comment_storage: CommentStorage::TextFile,
         ..AppSettings::default()
     });
@@ -373,6 +384,7 @@ snaps = ["00-00-01-000"]
             &scenario,
             Path::new("/f"),
             Path::new("/f/pick.a.mp4"),
+            true,
         );
 
         let window = store.window.lock().unwrap().unwrap();
@@ -387,6 +399,7 @@ snaps = ["00-00-01-000"]
         assert!(!window.is_maximized);
         let settings = store.settings.lock().unwrap().clone().unwrap();
         assert!(!settings.autoplay_video);
+        assert!(settings.monochrome_tags);
         assert_eq!(settings.comment_storage, CommentStorage::TextFile);
         assert_eq!(
             store.get_last_session(),

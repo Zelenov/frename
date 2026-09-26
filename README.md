@@ -177,6 +177,8 @@ The ⚙ button opens Settings:
 After you change where comments or in/out points are kept, Settings offer the batch action that
 moves the existing ones.
 
+![Monochrome tags](docs/frename-screenshot-mono.jpg)
+
 ---
 
 ## Requirements

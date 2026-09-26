@@ -1,41 +1,46 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- README screenshot template: the demo screenshot main.png (main.toml) with labels and arrows.
-     The window is placed at 100,204 at its real size (1920x1009, see main.toml); labels and arrow
-     ends are in canvas pixels. Rendered by docs/screenshots/render.sh. -->
+     The window sits at 100,204 at its real size (1440x720); everything else is in canvas pixels.
+     Arrows: see "#arrow" below. Rendered by docs/screenshots/render.sh. -->
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
-     width="2532" height="1417" viewBox="0 0 2532 1417">
+     width="2020" height="1128" viewBox="0 0 2020 1128">
   <defs>
-    <marker id="head" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5"
-            orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#B2B3B8"/>
-    </marker>
+    <!-- The arrow of the original docs/frename-screenshot.psd: one shape, tip at 0,0, pointing
+         right, fading towards the tail. Place it with translate(tip) rotate(direction), and add
+         scale(1,-1) to bend it the other way. Never scale it otherwise: every arrow is this size.
+         Its tail starts at a corner of the label; its tip stops 10-25 px short of the target. -->
+    <linearGradient id="fade" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="-122.5" y2="0">
+      <stop offset="0" stop-color="#E3E3DC"/>
+      <stop offset="0.35" stop-color="#E3E3DC"/>
+      <stop offset="1" stop-color="#E3E3DC" stop-opacity="0"/>
+    </linearGradient>
+    <path id="arrow" fill="url(#fade)"
+          d="M0,0 C-17.9,3.1 -37,10.7 -38.8,12.6 C-40.6,14.4 -33.7,2.4 -33.5,-0.3 C-33.3,-3 -88.2,-11 -122.5,0 C-138.8,5.2 -75.4,-25 -29.5,-12.8 C-27.7,-12.3 -27.2,-23.2 -28.8,-26.5 C-30.6,-30.2 1.3,-0.2 0,0 Z"/>
   </defs>
-  <rect width="2532" height="1417" fill="#282923"/>
-  <image x="100" y="204" width="1920" height="1009" xlink:href="main.png" href="main.png"/>
+  <rect width="2020" height="1128" fill="#282923"/>
+  <image x="100" y="204" width="1440" height="720" xlink:href="main.png" href="main.png"/>
   <g font-family="Segoe UI, Open Sans, sans-serif" font-size="43" fill="#B2B3B8">
-    <text x="537" y="140" text-anchor="middle">Video player</text>
-    <text x="1172" y="140" text-anchor="middle">All files</text>
-    <text x="1695" y="140" text-anchor="middle">Tags</text>
-    <text x="2090" y="140" text-anchor="start">Searchbar</text>
-    <text x="2110" y="380" text-anchor="start">Starred</text>
-    <text x="2110" y="540" text-anchor="start">All tags</text>
-    <text x="2060" y="1000" text-anchor="start">Current video tags</text>
-    <text x="1800" y="1330" text-anchor="middle">Comments</text>
-    <text x="300" y="1110" text-anchor="middle">In</text>
-    <text x="540" y="1040" text-anchor="middle">Subtitles</text>
-    <text x="760" y="1090" text-anchor="middle">Out</text>
-    <text x="500" y="1330" text-anchor="middle">Screenshots</text>
+    <text x="420" y="140" text-anchor="middle">Video player</text>
+    <text x="930" y="140" text-anchor="middle">All files</text>
+    <text x="1330" y="140" text-anchor="middle">Tags</text>
+    <text x="1589" y="140">Searchbar</text>
+    <text x="1624" y="368">Starred</text>
+    <text x="1595" y="560">All tags</text>
+    <text x="1602" y="716">Current video tags</text>
+    <text x="1390" y="1028">Comments</text>
+    <text x="252" y="1010" text-anchor="end">In</text>
+    <text x="405" y="752" text-anchor="end">Subtitles</text>
+    <text x="543" y="768">Out</text>
+    <text x="423" y="1030">Screenshots</text>
+    <text x="397" y="337" text-anchor="end">Subtitle list</text>
   </g>
-  <g fill="none" stroke="#B2B3B8" stroke-width="5" stroke-linecap="round" marker-end="url(#head)">
-    <path d="M2150,165 Q2074,166 2030,228"/>
-    <path d="M2150,345 Q2007,240 1830,262"/>
-    <path d="M2150,1020 Q2089,1091 1995,1085"/>
-    <path d="M1790,1285 Q1776,1225 1720,1200"/>
-    <path d="M330,1115 Q380,1135 386,1188"/>
-    <path d="M740,1105 Q677,1125 655,1188"/>
-    <path d="M2100,522 Q2038,467 1955,470"/>
-    <path d="M540,1055 Q540,1094 540,1132"/>
-    <path d="M520,1285 Q539,1226 598,1205"/>
-    <path d="M460,1285 Q470,1240 440,1205"/>
-  </g>
+  <use xlink:href="#arrow" href="#arrow" transform="translate(1550,228) rotate(148.4)"/>
+  <use xlink:href="#arrow" href="#arrow" transform="translate(1550,276) rotate(-164.3) scale(1,-1)"/>
+  <use xlink:href="#arrow" href="#arrow" transform="translate(1510,800) rotate(148.4)"/>
+  <use xlink:href="#arrow" href="#arrow" transform="translate(1390,927) rotate(-148.2) scale(1,-1)"/>
+  <use xlink:href="#arrow" href="#arrow" transform="translate(365,919) rotate(-30.3) scale(1,-1)"/>
+  <use xlink:href="#arrow" href="#arrow" transform="translate(420,848) rotate(90)"/>
+  <use xlink:href="#arrow" href="#arrow" transform="translate(489,893) rotate(122.8) scale(1,-1)"/>
+  <use xlink:href="#arrow" href="#arrow" transform="translate(463,919) rotate(-149.7)"/>
+  <use xlink:href="#arrow" href="#arrow" transform="translate(471,245) rotate(-15.7)"/>
 </svg>
