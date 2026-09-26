@@ -198,10 +198,9 @@ shows how many videos will be sent, the price (about $10 per 1000 one-minute cli
 it takes. Videos already described are skipped unless you tick Redo, and so are clips over 30 min.
 Cancel keeps what is done. You need your own Anthropic API key: set it in Settings.
 
-In the comment area the description shows under the comment box, collapsed to its summary;
-**Show segments** opens the rest and **Remove AI description** deletes it. Premiere Pro and
-`.comment.txt` get the whole comment. The file list shows the summary when a clip has no comment
-of yours.
+The description is part of the comment, in the comment box with your text: edit it or delete it
+there like any other text. It starts with `AI: ` and ends with a line naming the model and the
+date; a new run replaces only that part. Premiere Pro and `.comment.txt` get the whole comment.
 
 ## Settings
 

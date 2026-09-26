@@ -3,15 +3,10 @@
 //! Only this module knows the layout of the file workspace region. Folder list keeps using
 //! [crate::widgets::file_name_display] with wrap=false.
 
-use frename_core::ai::block;
 use iced::keyboard::key::Named;
 use iced::widget::text_editor::Binding;
-use iced::widget::{
-    button, column, container, row, scrollable, text, text_editor as text_editor_widget, Space,
-};
+use iced::widget::{column, container, text_editor as text_editor_widget};
 use iced::{Element, Length};
-
-use crate::theme;
 
 use crate::tag_colors::TagPalette;
 use crate::widgets::starred_tags_panel;
@@ -19,11 +14,7 @@ use crate::widgets::starred_tags_panel;
 use crate::features::{file_name_panel, sync_panel, tag_grid, tag_panel};
 use crate::widgets;
 
-use super::{AiBlockMessage, FileWorkspace, Message};
-
-/// Height of the AI description's segments before they scroll: about 6 lines, so the tag grid
-/// above keeps its room.
-const AI_SEGMENTS_HEIGHT: f32 = 6.0 * 17.0;
+use super::{FileWorkspace, Message};
 
 /// Horizontal padding for the file workspace panel (same inset from splitter and window edge).
 const PANEL_PADDING_X: f32 = 8.0;
@@ -115,9 +106,6 @@ where
     }
     content_items.push(middle.into());
     content_items.push(comment_input.into());
-    if let Some(ai) = ai_block_view(file_workspace) {
-        content_items.push(ai);
-    }
 
     let content = column(content_items)
         .spacing(4)
@@ -134,68 +122,4 @@ where
             left: PANEL_PADDING_X,
         })
         .into()
-}
-
-/// The comment's AI description, read-only under the editable box: its summary, the segments
-/// on request, and a way to remove it (asked first: comment edits are not undoable).
-fn ai_block_view<'a, S>(file_workspace: &'a FileWorkspace<S>) -> Option<Element<'a, Message>>
-where
-    S: frename_core::StoredTagStore + Clone,
-{
-    let ai = file_workspace.ai_block();
-    if ai.is_empty() {
-        return None;
-    }
-    let small = |label: &'a str, message: AiBlockMessage| -> Element<'a, Message> {
-        button(text(label).size(11))
-            .on_press(Message::AiBlock(message))
-            .padding([1, 8])
-            .style(theme::icon_button_style(true))
-            .into()
-    };
-    let summary = text(format!("AI: {}", block::block_summary(ai)))
-        .size(12)
-        .color(theme::TEXT_MUTED);
-    let actions: Element<'a, Message> = if file_workspace.confirm_remove_ai() {
-        row![
-            text("Remove the AI description? Getting it back needs a new AI run.")
-                .size(11)
-                .color(theme::TEXT_SOFT),
-            Space::new().width(Length::Fill),
-            small("Remove", AiBlockMessage::ConfirmRemove),
-            small("Keep", AiBlockMessage::CancelRemove),
-        ]
-        .spacing(6)
-        .align_y(iced::Alignment::Center)
-        .into()
-    } else {
-        let toggle = if file_workspace.show_ai_segments() {
-            "Hide segments"
-        } else {
-            "Show segments"
-        };
-        row![
-            Space::new().width(Length::Fill),
-            small(toggle, AiBlockMessage::ToggleSegments),
-            small("Remove AI description", AiBlockMessage::AskRemove),
-        ]
-        .spacing(6)
-        .into()
-    };
-    let mut content = column![summary].spacing(4);
-    if file_workspace.show_ai_segments() {
-        let lines = block::block_segments(ai)
-            .into_iter()
-            .chain(ai.lines().last())
-            .map(|line| text(line).size(12).color(theme::TEXT_MUTED).into());
-        content = content.push(
-            container(
-                scrollable(column(lines).spacing(1))
-                    .width(Length::Fill)
-                    .style(theme::dark_scrollable_style),
-            )
-            .max_height(AI_SEGMENTS_HEIGHT),
-        );
-    }
-    Some(content.push(actions).padding([2, 4]).into())
 }

@@ -11,17 +11,4 @@ pub enum Message {
     SyncPanel(sync_panel::Message),
     /// User interacted with the multiline comment editor.
     CommentAction(text_editor::Action),
-    /// The read-only AI description under the comment.
-    AiBlock(AiBlockMessage),
-}
-
-/// What can be done with the AI description of the open file's comment.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AiBlockMessage {
-    /// Show or hide its segments.
-    ToggleSegments,
-    /// Ask to remove it (comment edits are not undoable, so it asks first).
-    AskRemove,
-    ConfirmRemove,
-    CancelRemove,
 }

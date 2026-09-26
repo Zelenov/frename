@@ -11,9 +11,7 @@ use std::time::Duration;
 use frename_core::demo::DemoScenario;
 use iced::{window, Task};
 
-use crate::features::{
-    batch, file_workspace, folder, folder_workspace, media_viewer, media_viewer::video,
-};
+use crate::features::{batch, folder, folder_workspace, media_viewer, media_viewer::video};
 
 /// Time from the video being ready to the screenshot: covers the seek, the subtitles, and the
 /// comments that load in the background. A fixed wait, not a signal: the open file's comment is
@@ -113,8 +111,8 @@ impl DemoRun {
 
 /// What to do once the video is ready: pause at the scenario's time, open the subtitle or marker
 /// list when the scenario asks for it, and turn on batch mode with every file checked when asked to.
-/// With `ai`, show the open file's AI description with its segments, or in batch mode select
-/// "Describe with AI".
+/// With `ai` in batch mode, select "Describe with AI" (the open file's AI description is in its
+/// comment box already).
 fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace::Message> {
     let video =
         |message| folder_workspace::Message::MediaViewer(media_viewer::Message::Video(message));
@@ -137,10 +135,6 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
                 batch::Message::SelectAction(batch::Action::DescribeAi),
             ));
         }
-    } else if ai {
-        steps.push(folder_workspace::Message::AiBlock(
-            file_workspace::AiBlockMessage::ToggleSegments,
-        ));
     }
     steps
 }
@@ -343,14 +337,12 @@ mod tests {
     }
 
     #[test]
-    fn ai_shows_the_segments_or_selects_describe_with_ai_in_batch_mode() {
-        let open_file = steps(&scenario(), false, true);
-        assert!(matches!(
-            open_file.last(),
-            Some(folder_workspace::Message::AiBlock(
-                file_workspace::AiBlockMessage::ToggleSegments
-            ))
-        ));
+    fn ai_selects_describe_with_ai_in_batch_mode() {
+        assert_eq!(
+            steps(&scenario(), false, true).len(),
+            1,
+            "the open file's description is in its comment box already"
+        );
         let batch_mode = steps(&scenario(), true, true);
         assert!(matches!(
             batch_mode.last(),

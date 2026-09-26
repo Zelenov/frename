@@ -268,10 +268,6 @@ impl FolderWorkspace {
             Message::SetSegmentEnd => Task::done(Message::MediaViewer(
                 media_viewer::Message::Video(media_viewer_video::Message::CaptureSegmentEnd),
             )),
-            Message::AiBlock(message) => {
-                self.file_workspace.update_ai_block(message);
-                Task::none()
-            }
             Message::CommentAction(action) => {
                 self.file_workspace.apply_comment_action(action);
                 Task::none()
@@ -628,7 +624,6 @@ impl FolderWorkspace {
                 | Message::FileNamePanel(_)
                 | Message::SyncPanel(_)
                 | Message::CommentAction(_)
-                | Message::AiBlock(_)
                 | Message::RemoveTag
                 | Message::SaveSelectedTag
                 | Message::CopyTags
