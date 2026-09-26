@@ -157,6 +157,7 @@ fn sized_view<'a>(
                 end: m.end_ms() as f32 / 1000.0,
                 color: theme::marker_color(m.color),
                 active: labelled.is_some_and(|l| std::ptr::eq(l, m)),
+                guid: m.guid.clone(),
             })
             .collect();
         let marker_label = labelled.map(|m| video_controls::view::MarkerLabel {
@@ -167,6 +168,7 @@ fn sized_view<'a>(
             // Within the player, not within the bar.
             right_edge: (!is_fullscreen).then_some(markers.pane_width),
         });
+        let bar_height = video_controls::bar_height(&bar_markers);
         // A narrow player would squeeze the bar between the buttons: give it a row of its own.
         let bar_on_own_row = width < BAR_OWN_ROW_BELOW;
         let bar_row: Option<Element<'_, Message>> = bar_on_own_row.then(|| {
@@ -183,7 +185,8 @@ fn sized_view<'a>(
             )
             .padding([0, 12])
             .width(Length::Fill)
-            .center_y(BAR_ROW_HEIGHT)
+            // Taller when overlapping ranges stack their bands in lanes.
+            .center_y(BAR_ROW_HEIGHT.max(bar_height))
             .style(theme::panel_container_style)
             .into()
         });

@@ -7,6 +7,33 @@ use std::time::{Duration, Instant};
 /// `F2 F2` marks a moment and names it; later, `F2` adds again.
 pub const NAME_WINDOW: Duration = Duration::from_millis(1500);
 
+/// `F2` held longer than this makes a range instead of a point; a shorter press stays a point,
+/// so `F2 F2` still marks a moment and names it.
+pub const RANGE_HOLD: Duration = Duration::from_millis(400);
+
+/// A range shorter than this is a point: dragging a range's ends together makes it one.
+pub const MIN_RANGE_MS: u64 = 100;
+
+/// The marker `F2` added and is still held down.
+#[derive(Debug)]
+pub struct Recording {
+    pub guid: String,
+    pub start_ms: u64,
+    pressed_at: Instant,
+}
+
+impl Recording {
+    /// The marker's length with the playhead at `position_ms`: up to the playhead once `F2`
+    /// has been held for [`RANGE_HOLD`], none before, and none while the playhead is not past
+    /// the start (paused and not moved).
+    pub fn duration_at(&self, position_ms: u64) -> u64 {
+        if self.pressed_at.elapsed() < RANGE_HOLD {
+            return 0;
+        }
+        position_ms.saturating_sub(self.start_ms)
+    }
+}
+
 /// The row open for editing: its name field is shown.
 #[derive(Debug)]
 pub struct MarkerEdit {
@@ -23,6 +50,8 @@ pub struct MarkersState {
     last_added: Option<(String, Instant)>,
     /// Row the list scrolled to last when following playback.
     followed: Option<usize>,
+    /// The marker `F2` is held on; it grows with the playhead.
+    recording: Option<Recording>,
 }
 
 impl MarkersState {
@@ -74,6 +103,32 @@ impl MarkersState {
     /// Something other than `F2` happened: a second `F2` adds again.
     pub fn forget_added(&mut self) {
         self.last_added = None;
+    }
+
+    /// `F2` went down and added the marker `guid` at `start_ms`.
+    pub fn start_recording(&mut self, guid: String, start_ms: u64) {
+        self.recording = Some(Recording {
+            guid,
+            start_ms,
+            pressed_at: Instant::now(),
+        });
+    }
+
+    pub fn recording(&self) -> Option<&Recording> {
+        self.recording.as_ref()
+    }
+
+    /// `F2` came up: the held marker, if any.
+    pub fn stop_recording(&mut self) -> Option<Recording> {
+        self.recording.take()
+    }
+
+    /// Pretend `F2` went down `by` earlier (tests of a long hold).
+    #[cfg(test)]
+    pub fn backdate_recording(&mut self, by: Duration) {
+        if let Some(recording) = self.recording.as_mut() {
+            recording.pressed_at -= by;
+        }
     }
 
     /// Record the row the list follows; returns whether it changed.

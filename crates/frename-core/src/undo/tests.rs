@@ -12,8 +12,8 @@ mod tests {
     use crate::undo::{
         AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,
         NavigateFileCommand, PasteTagsCommand, ReorderTagCommand, SaveTagCommand,
-        SetMarkerColorCommand, SetMarkerDurationCommand, StarTagCommand, ToggleTagCommand,
-        UndoContext,
+        SetMarkerColorCommand, SetMarkerDurationCommand, SetMarkerSpanCommand, StarTagCommand,
+        ToggleTagCommand, UndoContext,
     };
     use crate::{Directory, File, FileId, FileSnapshot, Marker, MarkerColor, StoredTag, TagList};
     use uuid::Uuid;
@@ -1037,6 +1037,46 @@ mod tests {
         run(&mut history, &mut tag_list, false);
         let back = tag_list.marker(&guid).unwrap();
         assert_eq!((back.color, back.duration_ms), (MarkerColor::Red, 1_500));
+    }
+
+    #[test]
+    fn a_range_added_moved_and_resized_undoes_step_by_step() {
+        let mut tag_list = marker_list();
+        let mut history = History::new(50);
+        // Held F2: one step adds the marker with its length.
+        let mut marker = Marker::new(41_000);
+        marker.duration_ms = 6_000;
+        let guid = marker.guid.clone().unwrap();
+        tag_list.add_marker(marker.clone());
+        history.push(Box::new(AddMarkerCommand { marker }));
+        // A handle drag moves the start; another resizes it back to a point.
+        tag_list.update_marker(&guid, |m| (m.start_ms, m.duration_ms) = (40_000, 7_000));
+        history.push(Box::new(SetMarkerSpanCommand {
+            guid: guid.clone(),
+            old: (41_000, 6_000),
+            new: (40_000, 7_000),
+        }));
+        tag_list.update_marker(&guid, |m| m.duration_ms = 0);
+        history.push(Box::new(SetMarkerSpanCommand {
+            guid: guid.clone(),
+            old: (40_000, 7_000),
+            new: (40_000, 0),
+        }));
+        let span = |tag_list: &TagList<FakeAppStorage>| {
+            tag_list.marker(&guid).map(|m| (m.start_ms, m.duration_ms))
+        };
+
+        run(&mut history, &mut tag_list, true);
+        assert_eq!(span(&tag_list), Some((40_000, 7_000)));
+        run(&mut history, &mut tag_list, true);
+        assert_eq!(span(&tag_list), Some((41_000, 6_000)));
+        run(&mut history, &mut tag_list, true);
+        assert_eq!(span(&tag_list), None);
+        run(&mut history, &mut tag_list, false);
+        assert_eq!(span(&tag_list), Some((41_000, 6_000)));
+        run(&mut history, &mut tag_list, false);
+        run(&mut history, &mut tag_list, false);
+        assert_eq!(span(&tag_list), Some((40_000, 0)));
     }
 
     #[test]

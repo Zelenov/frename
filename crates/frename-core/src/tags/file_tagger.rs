@@ -115,12 +115,16 @@ impl FileTagger {
                 result.past_end
             );
         }
-        if result.lines_moved == 0 {
+        if result.lines_moved == 0 && result.added.is_empty() {
             return Ok(MoveOutcome::NothingToMove);
         }
         if !result.added.is_empty() {
             let all: Vec<Marker> = markers.into_iter().chain(result.added).collect();
             Self::save_markers(path, &all, &HashSet::new())?;
+        }
+        if result.lines_moved == 0 {
+            // Only AI segments became markers: the comment keeps its block as it is.
+            return Ok(MoveOutcome::Moved(path.to_path_buf()));
         }
         let was_commented = !snapshot.comment().trim().is_empty();
         snapshot.set_comment(result.comment);
@@ -382,6 +386,59 @@ mod tests {
         FileTagger::comment_to_markers(&path).expect("moved");
         assert_eq!(FileTagger::load_markers(&path).expect("markers").len(), 1);
         assert_eq!(comment(&path), "Intro\n9:00 — too late");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The segments of an AI block become White markers in the video's XMP, ranges with their
+    /// length, and the block stays in the comment; copying the markers back adds no line for
+    /// them.
+    #[test]
+    fn ai_segments_become_white_ranged_markers_in_the_xmp() {
+        let dir = std::env::temp_dir().join(format!("frename-markers-ai-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let file = dir.join("clip.mov");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
+        std::fs::copy(fixture, &file).expect("copy fixture");
+        let comment = "Mine
+
+AI: A walk.
+0:00–0:14 Street, handheld.
+0:00 Flash.";
+        let mut snapshot = FileSnapshot::parse("clip.mov");
+        snapshot.set_comment(comment.into());
+        let path = FileTagger::save(&snapshot, &file);
+
+        let MoveOutcome::Moved(path) = FileTagger::comment_to_markers(&path).expect("written")
+        else {
+            panic!("AI segments must become markers");
+        };
+        let markers = FileTagger::load_markers(&path).expect("markers");
+        let mut got: Vec<_> = markers
+            .iter()
+            .map(|m| (m.start_ms, m.duration_ms, m.name.as_str(), m.color))
+            .collect();
+        got.sort_by_key(|m| m.1);
+        assert_eq!(
+            got,
+            [
+                (0, 0, "Flash.", crate::AI_MARKER_COLOR),
+                (0, 14_000, "Street, handheld.", crate::AI_MARKER_COLOR),
+            ]
+        );
+        let read_comment = |path: &Path| {
+            FileTagger::parse(path, &FolderInfo::default())
+                .comment()
+                .to_string()
+        };
+        assert_eq!(read_comment(&path), comment);
+        assert_eq!(
+            FileTagger::comment_to_markers(&path),
+            Ok(MoveOutcome::NothingToMove)
+        );
+        assert_eq!(
+            FileTagger::markers_to_comment(&path),
+            Ok(MoveOutcome::NothingToMove)
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

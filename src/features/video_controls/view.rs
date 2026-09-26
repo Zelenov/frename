@@ -159,7 +159,7 @@ pub fn view<'a>(
         .padding(0)
         .style(theme::icon_button_style(can_add_markers)),
         text(if can_add_markers {
-            "Add marker (F2, again to name it)"
+            "Add marker (F2, hold for a range; again to name it)"
         } else {
             "This file cannot hold markers"
         }),
@@ -212,6 +212,9 @@ pub fn progress_bar<'a>(
         .on_release(Message::SeekReleased)
         .segment_range(segment_start, segment_end)
         .markers(markers)
+        .on_marker_span(Message::SetMarkerSpan)
+        .on_new_range(!state.is_playing(), Message::AddRange)
+        .on_play_range(Message::PlayRange)
         .label(marker_label.map(|label| (label.at, marker_label_button(label))))
         .label_right_edge(marker_label.and_then(|label| label.right_edge))
         .into()

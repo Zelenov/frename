@@ -28,9 +28,9 @@ pub use file::{File, FileId};
 pub use file_kind::FileKind;
 pub use folder_file::FolderAndFile;
 pub use markers::{
-    comment_to_markers, format_marker_line, format_marker_time, markers_to_comment,
+    comment_to_markers, format_marker_line, format_marker_time, markers_to_comment, parse_ai_line,
     parse_marker_line, sort_markers, CommentToMarkers, Marker, MarkerColor, MarkerLine,
-    MARKER_SNAP_MS,
+    AI_MARKER_COLOR, MARKER_SNAP_MS,
 };
 pub use metadata::{
     active_commented_tag, cache::modified_ms, clean_commented_tag, commented_tag, metadata_storage,
@@ -51,6 +51,6 @@ pub use tags::{
 pub use undo::{
     AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,
     NavigateFileCommand, PasteTagsCommand, ReorderTagCommand, SaveTagCommand,
-    SetMarkerColorCommand, SetMarkerDurationCommand, SetSegmentEndCommand, SetSegmentStartCommand,
-    StarTagCommand, ToggleTagCommand, UndoContext, UndoError,
+    SetMarkerColorCommand, SetMarkerDurationCommand, SetMarkerSpanCommand, SetSegmentEndCommand,
+    SetSegmentStartCommand, StarTagCommand, ToggleTagCommand, UndoContext, UndoError,
 };

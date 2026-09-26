@@ -81,6 +81,11 @@ impl VideoControlsState {
             }
             Message::TakeScreenshot
             | Message::AddMarker
+            | Message::MarkerKeyPressed
+            | Message::MarkerKeyReleased
+            | Message::SetMarkerSpan(..)
+            | Message::AddRange(..)
+            | Message::PlayRange(..)
             | Message::DeleteMarker
             | Message::PreviousMarker
             | Message::NextMarker
@@ -116,20 +121,32 @@ impl VideoControlsState {
     }
 
     /// Keyboard shortcuts for video controls: F1 = 10s back, F3 = 10s forward, F12 = save the
-    /// frame, F2 = add a marker; with Shift, F1 / F3 = previous / next marker, F2 = delete the
-    /// marker under the playhead. They work while a text field has focus, like the F-keys did.
+    /// frame, F2 = add a marker (held, a range); with Shift, F1 / F3 = previous / next marker,
+    /// F2 = delete the marker under the playhead. They work while a text field has focus, like
+    /// the F-keys did.
     pub fn subscription(&self) -> Subscription<Message> {
         event::listen_with(|event, _status, _id| match event {
-            iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. }) => {
-                shortcut(&key, modifiers)
-            }
+            iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                key,
+                modifiers,
+                repeat,
+                ..
+            }) => shortcut(&key, modifiers, repeat),
+            iced::Event::Keyboard(keyboard::Event::KeyReleased { key, .. }) => released(&key),
             _ => None,
         })
     }
 }
 
-/// The controls message of a key press, if it is one of the video shortcuts.
-fn shortcut(key: &keyboard::Key, modifiers: keyboard::Modifiers) -> Option<Message> {
+/// The controls message of a key release: only `F2`, which ends a held marker.
+fn released(key: &keyboard::Key) -> Option<Message> {
+    matches!(key, keyboard::Key::Named(keyboard::key::Named::F2))
+        .then_some(Message::MarkerKeyReleased)
+}
+
+/// The controls message of a key press, if it is one of the video shortcuts. The marker keys
+/// ignore auto-repeat: `F2` is held to draw a range, and a repeat would open the marker's row.
+fn shortcut(key: &keyboard::Key, modifiers: keyboard::Modifiers, repeat: bool) -> Option<Message> {
     use keyboard::key::Named;
     let keyboard::Key::Named(named) = key else {
         return None;
@@ -137,11 +154,14 @@ fn shortcut(key: &keyboard::Key, modifiers: keyboard::Modifiers) -> Option<Messa
     if modifiers.command() || modifiers.alt() {
         return None;
     }
+    if repeat && *named == Named::F2 {
+        return None;
+    }
     match (named, modifiers.shift()) {
         (Named::F1, false) => Some(Message::SeekBack10),
         (Named::F3, false) => Some(Message::SeekForward10),
         (Named::F12, false) => Some(Message::TakeScreenshot),
-        (Named::F2, false) => Some(Message::AddMarker),
+        (Named::F2, false) => Some(Message::MarkerKeyPressed),
         (Named::F1, true) => Some(Message::PreviousMarker),
         (Named::F3, true) => Some(Message::NextMarker),
         (Named::F2, true) => Some(Message::DeleteMarker),
@@ -155,7 +175,7 @@ mod tests {
     use keyboard::key::Named;
 
     fn key(named: Named, modifiers: keyboard::Modifiers) -> Option<Message> {
-        shortcut(&keyboard::Key::Named(named), modifiers)
+        shortcut(&keyboard::Key::Named(named), modifiers, false)
     }
 
     #[test]
@@ -169,7 +189,10 @@ mod tests {
         ));
         assert!(matches!(key(Named::F3, none), Some(Message::SeekForward10)));
         assert!(matches!(key(Named::F3, shift), Some(Message::NextMarker)));
-        assert!(matches!(key(Named::F2, none), Some(Message::AddMarker)));
+        assert!(matches!(
+            key(Named::F2, none),
+            Some(Message::MarkerKeyPressed)
+        ));
         assert!(matches!(key(Named::F2, shift), Some(Message::DeleteMarker)));
         assert!(matches!(
             key(Named::F12, none),
@@ -177,5 +200,20 @@ mod tests {
         ));
         assert!(key(Named::F12, shift).is_none());
         assert!(key(Named::F2, keyboard::Modifiers::CTRL).is_none());
+    }
+
+    #[test]
+    fn a_held_f2_ignores_auto_repeat_and_its_release_ends_the_range() {
+        let f2 = keyboard::Key::Named(Named::F2);
+        let none = keyboard::Modifiers::empty();
+        assert!(shortcut(&f2, none, true).is_none());
+        assert!(shortcut(&f2, keyboard::Modifiers::SHIFT, true).is_none());
+        // Seeking keeps repeating while held.
+        assert!(matches!(
+            shortcut(&keyboard::Key::Named(Named::F3), none, true),
+            Some(Message::SeekForward10)
+        ));
+        assert!(matches!(released(&f2), Some(Message::MarkerKeyReleased)));
+        assert!(released(&keyboard::Key::Named(Named::F3)).is_none());
     }
 }

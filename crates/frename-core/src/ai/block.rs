@@ -75,6 +75,11 @@ pub fn ai_block(comment: &str) -> Option<&str> {
     find(comment).map(|range| &comment[range])
 }
 
+/// Byte range of the comment's AI block (see [`ai_block`]).
+pub fn ai_block_range(comment: &str) -> Option<Range<usize>> {
+    find(comment)
+}
+
 /// Whether the comment holds text of the editor's, not just an AI block. Does not allocate:
 /// the folder list asks this for every file.
 pub fn has_editor_comment(comment: &str) -> bool {

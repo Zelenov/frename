@@ -207,6 +207,7 @@ impl FolderWorkspace {
                 }
                 other => {
                     let task = self.media_viewer.update(other).map(Message::MediaViewer);
+                    self.grow_held_marker();
                     Task::batch([task, self.follow_marker_list(false)])
                 }
             },
@@ -2807,6 +2808,91 @@ mod tests {
             .map(|m| (m.start_ms, m.name.as_str()))
             .collect();
         assert_eq!(saved, [(1_000, "Take 3"), (5_000, "")]);
+    }
+
+    fn marker_spans(workspace: &FolderWorkspace) -> Vec<(u64, u64)> {
+        workspace
+            .file_workspace()
+            .markers()
+            .unwrap_or_default()
+            .iter()
+            .map(|m| (m.start_ms, m.duration_ms))
+            .collect()
+    }
+
+    #[test]
+    fn a_short_f2_press_stays_a_point_and_f2_again_names_it() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::KeyDown, 1_000);
+        send_marker(&mut workspace, M::KeyUp, 1_300);
+        assert_eq!(marker_spans(&workspace), [(1_000, 0)]);
+        send_marker(&mut workspace, M::KeyDown, 1_400);
+        send_marker(&mut workspace, M::KeyUp, 1_500);
+        assert!(workspace.markers().is_editing());
+        assert_eq!(marker_spans(&workspace), [(1_000, 0)]);
+    }
+
+    #[test]
+    fn a_held_f2_draws_a_range_that_undoes_and_redoes_whole() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::KeyDown, 41_000);
+        workspace
+            .markers
+            .backdate_recording(crate::features::markers::state_for_tests::RANGE_HOLD);
+        send_marker(&mut workspace, M::KeyUp, 47_000);
+        assert_eq!(marker_spans(&workspace), [(41_000, 6_000)]);
+        // Right after the release, F2 names the range.
+        send_marker(&mut workspace, M::KeyDown, 47_100);
+        send_marker(&mut workspace, M::KeyUp, 47_100);
+        assert!(workspace.markers().is_editing());
+        send_marker(&mut workspace, M::Close, 47_100);
+
+        let _ = workspace.update(Message::Undo);
+        assert!(marker_spans(&workspace).is_empty());
+        let _ = workspace.update(Message::Redo);
+        assert_eq!(marker_spans(&workspace), [(41_000, 6_000)]);
+    }
+
+    #[test]
+    fn a_long_press_without_the_playhead_moving_stays_a_point() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::KeyDown, 2_000);
+        workspace
+            .markers
+            .backdate_recording(crate::features::markers::state_for_tests::RANGE_HOLD);
+        send_marker(&mut workspace, M::KeyUp, 2_000);
+        assert_eq!(marker_spans(&workspace), [(2_000, 0)]);
+    }
+
+    #[test]
+    fn dragging_a_range_s_ends_swaps_them_and_together_makes_a_point() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::AddRange(47_000, 41_000), 0);
+        assert_eq!(marker_spans(&workspace), [(41_000, 6_000)]);
+        let guid = workspace.file_workspace().markers().unwrap()[0]
+            .guid
+            .clone()
+            .unwrap();
+        // The start dragged past the end: the ends swap.
+        send_marker(&mut workspace, M::SetSpan(guid.clone(), 50_000, 47_000), 0);
+        assert_eq!(marker_spans(&workspace), [(47_000, 3_000)]);
+        // Ends within 100 ms of each other: a point.
+        send_marker(&mut workspace, M::SetSpan(guid.clone(), 47_000, 47_050), 0);
+        assert_eq!(marker_spans(&workspace), [(47_000, 0)]);
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_spans(&workspace), [(47_000, 3_000)]);
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_spans(&workspace), [(41_000, 6_000)]);
+        let _ = workspace.update(Message::Undo);
+        assert!(marker_spans(&workspace).is_empty());
     }
 
     #[test]

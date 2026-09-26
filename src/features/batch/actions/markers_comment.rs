@@ -73,7 +73,8 @@ impl Options {
             "A line like “03:24 — Take 3 — nice light” is a marker at 3:24 named “Take 3” with the \
              comment “nice light”; “0:41-0:47 — Lion” is a marker from 0:41 to 0:47. The name \
              and the comment are split at the first “ — ” or “ -- ”, not at a plain “ - ”. \
-             Running either way again adds nothing twice."
+             The moments of an AI description (“0:00–0:14 Street.”) become white markers and \
+             stay in the description. Running either way again adds nothing twice."
                 .to_string(),
             choices.into(),
         )
