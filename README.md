@@ -18,7 +18,7 @@ Open a folder of videos. Watch each clip. Tag what you see. When you move to the
 
 Tags become part of the file name, so your file manager, editing app and sync tools all see them.
 Nothing is locked inside frename.
-The in/out part is there only when you mark a segment and keep in/out points in the file name (the default).
+The in/out part is there only when you mark a segment.
 
 ---
 
@@ -40,8 +40,9 @@ The in/out part is there only when you mark a segment and keep in/out points in 
 3. Tag what you see: click a tag, or move with the arrow keys and press `Shift+Space`.
 4. Press `[` and `]` to mark the usable segment of the clip (in and out points).
 5. Press `F12` to save a screenshot of an interesting moment. It also starts a line with that time
-   in the comment box, so type your note after it. Or just type a note there.
-6. Press `PageDown` to go to the next clip. The clip you leave is renamed.
+   in the comment box: click the box and type your note after it.
+6. Press `Esc` to leave the comment box, then `PageDown` to go to the next clip. The clip you leave
+   is renamed.
 7. Most clips share most tags with their neighbors: press `Ctrl+C` on one clip and `Ctrl+V` on the next, then adjust.
 
 Next time you start frename, it reopens the last folder and clip.
@@ -84,12 +85,13 @@ Next time you start frename, it reopens the last folder and clip.
 | `F5` | Fullscreen on / off (or double-click the picture) |
 | `Escape` | Leave fullscreen |
 
-While the tag search has the cursor, `←` `→`, `Delete`, `Space` and `Ctrl+C` act on the search
-text. Press `Esc` or click a tag first.
+While a text box (tag search, file search, comment) has the cursor, it takes the keys it needs:
+arrows, `Delete`, `Space`, `Enter`, `Ctrl+C`, and in the comment box also `PageUp` / `PageDown`.
+Press `Esc` first to give the keys back to the app. `[` and `]` always set in and out points.
 
 Undo (`Ctrl+Z`) covers tagging, adding, deleting, starring and reordering tags, pasting, in/out
-points and the rename when you leave a clip. It does not cover a rename by hand (double-click),
-untagging with 🗑, the 🔓↑ / 🔓↓ buttons, or batch actions; opening a folder or running a batch
+points and the rename when you leave a clip. It does not cover comment text, a rename by hand
+(double-click), untagging with 🗑, the 🔓↑ / 🔓↓ buttons, or batch actions; opening a folder or running a batch
 action clears the undo history.
 
 ---
@@ -109,8 +111,8 @@ A folder without one starts with a set for travel and documentary work: `pick`, 
 - **Order:** the order of tags in the tag panel is the order they get in file names. Drag chips in
   the file name to change it, or drop a chip on 🗑 to untag it. When the file's order differs from
   the panel's, 🔓↑ copies the file's order to the tag panel and 🔓↓ puts the file's tags in panel
-  order. When they match, 🔒 keeps them in step: reordering one reorders the other (click it to
-  unlock).
+  order. When they match, 🔒 keeps them in step: reordering one reorders the other. Click 🔒 to unlock (it
+  shows 🔓) and again to lock.
 
 ---
 
@@ -127,9 +129,8 @@ The progress bar shows what you have noted about a clip:
 - **Comments:** free text per clip. By default it is saved inside the video, where Premiere Pro
   shows it in the Description column and finds it by search. Settings can keep it in a
   `.comment.txt` next to the video instead. The file list shows the first line of each comment.
-  While comments are inside the video, frename tags a clip "Commented" when it gets its first
-  comment and untags it when the comment is cleared (you can rename or turn off this tag in
-  Settings). For clips commented earlier, use the batch action.
+  While comments are inside the video, frename tags a commented clip "Commented" (Settings can
+  rename or turn off this tag).
 
 Some formats, such as mkv, cannot hold comments or in/out points inside them; for those, frename
 keeps them in `.comment.txt` and the file name whatever Settings say.
@@ -178,11 +179,11 @@ moves the existing ones.
 
 ## Requirements
 
-**Windows 10/11 (64-bit):** download the Windows zip from the latest release. It needs the
+**Windows 10/11 (64-bit):** download the Windows zip from the [latest release](https://github.com/Zelenov/frename/releases/latest). It needs the
 GStreamer runtime for video playback — see [GSTREAMER_SETUP.md](GSTREAMER_SETUP.md).
 
 **Linux (64-bit; Ubuntu 24.04, Linux Mint 22, Fedora 40, Debian 13 or newer):** download the
-`.AppImage` from the latest release, make it executable (`chmod +x frename-*.AppImage`) and run
+`.AppImage` from the [latest release](https://github.com/Zelenov/frename/releases/latest), make it executable (`chmod +x frename-*.AppImage`) and run
 it. Video playback is built in; nothing else to install. If it says FUSE is missing, run it with
 `--appimage-extract-and-run`. Your settings and the last opened folder are kept in
 `~/.local/share/frename`.
