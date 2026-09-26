@@ -215,11 +215,10 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
                 .into()
         }
         Some(guid) => {
-            let edit: Element<'a, Message> = if open.is_some() {
-                icon_button("✓", "Done (Enter)", Some(Message::Close))
-            } else {
-                icon_button("✎", "Rename", Some(Message::Open(guid.to_string())))
-            };
+            // A click on the row opens it for renaming: no ✎. The open row closes with ✓.
+            let edit: Option<Element<'a, Message>> = open
+                .is_some()
+                .then(|| icon_button("✓", "Done (Enter)", Some(Message::Close)));
             row![
                 dot(
                     marker.color,

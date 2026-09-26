@@ -648,9 +648,6 @@ impl FolderWorkspace {
                 | Message::SetSegmentEnd
                 | Message::FocusSearchBarAndKey(_)
                 | Message::ScreenshotTaken(..)
-                | Message::MediaViewer(media_viewer::Message::Video(
-                    media_viewer_video::Message::Markers(..)
-                ))
                 | Message::Folder(
                     folder::Message::StartRename(_)
                         | folder::Message::RenameInput(_)
@@ -658,6 +655,17 @@ impl FolderWorkspace {
                 )
         );
         if edits_open_file && self.batch.is_active() {
+            return true;
+        }
+        // The video and its marker list stay in batch mode, unlike the tags: markers are off
+        // only while a job runs (the job has closed the file then).
+        let edits_markers = matches!(
+            message,
+            Message::MediaViewer(media_viewer::Message::Video(
+                media_viewer_video::Message::Markers(..)
+            ))
+        );
+        if edits_markers && self.batch.is_running() {
             return true;
         }
         let changes_files = matches!(
@@ -2944,6 +2952,21 @@ mod tests {
         let _ = workspace.update(Message::FileUpdated { id, snapshot });
         let saved = frename_core::FileTagger::load_markers(&test_dir.target_file()).expect("saved");
         assert_eq!(saved[0].color, frename_core::MarkerColor::Red);
+    }
+
+    #[test]
+    fn markers_can_be_edited_in_batch_mode_when_no_job_runs() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        assert!(workspace.batch.is_active());
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Video(
+                crate::features::media_viewer::video::Message::Markers(M::Add),
+            ),
+        ));
+        assert_eq!(marker_names(&workspace).len(), 1);
     }
 
     #[test]
