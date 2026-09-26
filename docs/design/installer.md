@@ -255,7 +255,7 @@ a source with dropped frames) for the
 ### Installer smoke test
 
 The `ci-windows` job, after the release build, bundles GStreamer, packs with `vpk pack` as version
-`0.0.0` and uploads `Setup.exe` and the portable zip as artifacts. It cannot test them itself: it
+`0.0.1` and uploads `Setup.exe` and the portable zip as artifacts. It cannot test them itself: it
 has the build GStreamer on `PATH`, which would hide a DLL missing from the bundle. A new job,
 `ci-windows-install` (`needs: ci-windows`, a fresh `windows-2022` runner), downloads the artifacts
 and:
