@@ -7,5 +7,5 @@ mod messages;
 mod state;
 pub mod view;
 
-pub use messages::{AiBlockMessage, Message};
+pub use messages::Message;
 pub use state::FileWorkspace;

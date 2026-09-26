@@ -268,10 +268,6 @@ impl FolderWorkspace {
             Message::SetSegmentEnd => Task::done(Message::MediaViewer(
                 media_viewer::Message::Video(media_viewer_video::Message::CaptureSegmentEnd),
             )),
-            Message::AiBlock(message) => {
-                self.file_workspace.update_ai_block(message);
-                Task::none()
-            }
             Message::CommentAction(action) => {
                 self.file_workspace.apply_comment_action(action);
                 Task::none()
@@ -628,7 +624,6 @@ impl FolderWorkspace {
                 | Message::FileNamePanel(_)
                 | Message::SyncPanel(_)
                 | Message::CommentAction(_)
-                | Message::AiBlock(_)
                 | Message::RemoveTag
                 | Message::SaveSelectedTag
                 | Message::CopyTags
@@ -691,61 +686,7 @@ impl FolderWorkspace {
         // Batch mode does not edit the open file, so its rename editor goes.
         self.inline_rename = None;
         self.batch.update(msg);
-        self.describe_ai_reads()
-    }
-
-    /// What "Describe with AI" shows before it runs needs reading from disk: the length of
-    /// each checked video and whether an API key is saved. Read in the background while its
-    /// panel is shown.
-    fn describe_ai_reads(&mut self) -> Task<Message> {
-        let Some(dir) = self.directory.as_ref() else {
-            return Task::none();
-        };
-        let batch = &mut self.batch;
-        let checked: Vec<&frename_core::File> = dir
-            .all_files()
-            .filter(|f| batch.is_checked(f.id()))
-            .collect();
-        let (missing, read_key) = batch.describe_ai_reads(checked.into_iter());
-        let wrap = |msg: batch::describe_ai::Message| {
-            Message::Batch(batch::Message::Action(batch::ActionMessage::DescribeAi(
-                msg,
-            )))
-        };
-        // The app reads it (the settings show it too) and passes the answer back.
-        let key = if read_key {
-            Task::done(Message::Batch(batch::Message::Action(
-                batch::ActionMessage::ReadKeyState,
-            )))
-        } else {
-            Task::none()
-        };
-        if missing.is_empty() {
-            return key;
-        }
-        let probes = Task::future(async move {
-            let ids: Vec<FileId> = missing.iter().map(|(id, _)| *id).collect();
-            let results =
-                tokio::task::spawn_blocking(move || batch::describe_ai::probe_all(missing))
-                    .await
-                    .unwrap_or_else(|e| {
-                        log::error!("reading clip lengths failed: {e}");
-                        // Unreadable rather than estimating forever.
-                        ids.into_iter()
-                            .map(|id| {
-                                (
-                                    id,
-                                    batch::describe_ai::Probe {
-                                        duration_s: None,
-                                        subtitle_bytes: 0,
-                                    },
-                                )
-                            })
-                            .collect()
-                    });
-            wrap(batch::describe_ai::Message::Probed(results))
-        });
-        Task::batch([key, probes])
+        Task::none()
     }
 
     /// Start the selected batch action on the checked files, in folder order. A playing video
@@ -754,14 +695,11 @@ impl FolderWorkspace {
         let Some(dir) = self.directory.as_ref() else {
             return Task::none();
         };
-        let checked: Vec<&frename_core::File> = dir
+        let files: Vec<FileId> = dir
             .all_files()
-            .filter(|f| self.batch.is_checked(f.id()))
+            .map(|f| f.id())
+            .filter(|id| self.batch.is_checked(*id))
             .collect();
-        let files = self
-            .batch
-            .actions()
-            .job_files(self.batch.action(), &checked);
         if !self.batch.start(files) {
             return Task::none();
         }
@@ -790,7 +728,7 @@ impl FolderWorkspace {
     /// left or was cancelled. One file per step: progress names the file in work, and a
     /// cancel stops after it, so no file is left half done.
     fn next_batch_item(&mut self) -> Task<Message> {
-        let Some((id, operation, cancel)) = self.batch.begin_next() else {
+        let Some((id, operation)) = self.batch.begin_next() else {
             return Task::done(Message::BatchFinished);
         };
         let Some(path) = self
@@ -804,7 +742,7 @@ impl FolderWorkspace {
             return self.next_batch_item();
         };
         Task::future(async move {
-            let result = tokio::task::spawn_blocking(move || operation.run(&path, &cancel))
+            let result = tokio::task::spawn_blocking(move || operation.run(&path))
                 .await
                 .unwrap_or_else(|e| {
                     log::error!("batch operation task failed: {e}");

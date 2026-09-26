@@ -4,5 +4,5 @@ mod messages;
 mod state;
 pub mod view;
 
-pub use messages::{KeyMessage, Message};
+pub use messages::Message;
 pub use state::SettingsState;

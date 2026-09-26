@@ -45,12 +45,11 @@ impl FileTagger {
     }
 
     /// Bring the tag `tag` in line with the file's comment: added last when the file has a
-    /// comment of the editor's (an AI block alone does not count), removed when it has none. Returns the outcome like a move: `NothingToMove` when
+    /// comment, removed when it has none. Returns the outcome like a move: `NothingToMove` when
     /// the name already matches, `Failed` when the rename did not happen.
     pub fn sync_commented_tag(path: &Path, tag: &str) -> MoveOutcome {
         let mut snapshot = Self::parse(path, &FolderInfo::default());
-        // Only the editor's own text counts; an AI description alone does not.
-        let commented = crate::ai::has_editor_comment(snapshot.comment());
+        let commented = !snapshot.comment().trim().is_empty();
         let tagged = snapshot.tags().iter().any(|t| t.eq_ignore_ascii_case(tag));
         if commented == tagged {
             return MoveOutcome::NothingToMove;
@@ -398,37 +397,6 @@ mod tests {
         assert_eq!(
             FileTagger::parse(&path, &FolderInfo::default()).comment(),
             "0:01 — x"
-        );
-    }
-
-    #[test]
-    fn an_ai_description_alone_does_not_get_the_commented_tag() {
-        let block = "AI: A walk.\n— Claude Haiku 4.5, 2026-09-26 —";
-        let path = Path::new(r"C:\frename-sync-ai-test\Food.clip.mp4");
-        let mut described = FileSnapshot::parse("Food.clip.mp4");
-        described.set_comment(block.to_string());
-        let path = FileTagger::save(&described, path);
-        assert_eq!(
-            FileTagger::sync_commented_tag(&path, "Commented"),
-            MoveOutcome::NothingToMove
-        );
-
-        let mut commented = FileTagger::parse(&path, &FolderInfo::default());
-        commented.set_comment(format!("Mine\n\n{block}"));
-        let path = FileTagger::save(&commented, &path);
-        let MoveOutcome::Moved(tagged) = FileTagger::sync_commented_tag(&path, "Commented") else {
-            panic!("editor text plus a block counts");
-        };
-
-        let mut only_block = FileTagger::parse(&tagged, &FolderInfo::default());
-        only_block.set_comment(block.to_string());
-        let tagged = FileTagger::save(&only_block, &tagged);
-        assert!(
-            matches!(
-                FileTagger::sync_commented_tag(&tagged, "Commented"),
-                MoveOutcome::Moved(_)
-            ),
-            "removing the editor's text with the block kept removes the tag"
         );
     }
 }

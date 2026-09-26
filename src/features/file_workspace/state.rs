@@ -5,13 +5,10 @@
 //!
 //! Generic over the store type S (like Directory and TagList). Store is passed to the constructor; used to build the tag list.
 
-use frename_core::ai::block;
 use frename_core::{
     File, FileId, FileSnapshot, FolderTagStore, StoredTagStore, TagColorMapping, TagId, TagList,
 };
 use iced::widget::text_editor;
-
-use super::AiBlockMessage;
 
 /// File workspace: current file and stored tags with checked state (source of truth for UI).
 /// Generic over the store type S; store is set only in the constructor.
@@ -24,15 +21,8 @@ pub struct FileWorkspace<S> {
     store: S,
     /// Stored tags with checked state (synced from file on load; toggles update only this, not the file).
     tag_list: TagList<S>,
-    /// Backing state for the multiline comment editor: the editor's own text only.
+    /// Backing state for the multiline comment editor.
     pub comment_content: text_editor::Content,
-    /// The comment's AI description, kept apart from the editable text and joined back to it
-    /// for saving; empty when there is none.
-    ai_block: String,
-    /// Whether the AI description shows its segments, not only its summary.
-    show_ai_segments: bool,
-    /// Whether "Remove the AI description?" is being asked.
-    confirm_remove_ai: bool,
 }
 
 impl<S: StoredTagStore + Clone> FileWorkspace<S> {
@@ -44,9 +34,6 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
             store: store.clone(),
             tag_list: TagList::new(store, FileSnapshot::default()),
             comment_content: text_editor::Content::new(),
-            ai_block: String::new(),
-            show_ai_segments: false,
-            confirm_remove_ai: false,
         }
     }
 
@@ -73,11 +60,7 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
                     return;
                 }
                 let snapshot = f.snapshot().clone();
-                let comment = snapshot.comment();
-                self.comment_content =
-                    text_editor::Content::with_text(&block::editor_comment(comment));
-                self.ai_block = block::ai_block(comment).unwrap_or_default().to_string();
-                self.confirm_remove_ai = false;
+                self.comment_content = text_editor::Content::with_text(snapshot.comment());
                 let markers = frename_core::FileTagger::load_markers(f.file_path());
                 self.file = Some(f);
                 self.tag_list = TagList::new(self.store.clone(), snapshot);
@@ -109,44 +92,6 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.store.get_tag_color_mapping().unwrap_or_default()
     }
 
-    /// The editor's own text of the comment, without the AI description.
-    pub fn editor_comment(&self) -> String {
-        self.comment_content
-            .text()
-            .trim_end_matches('\n')
-            .to_string()
-    }
-
-    /// The comment's AI description; empty when it has none.
-    pub fn ai_block(&self) -> &str {
-        &self.ai_block
-    }
-
-    /// Whether the AI description shows its segments.
-    pub fn show_ai_segments(&self) -> bool {
-        self.show_ai_segments
-    }
-
-    /// Whether "Remove the AI description?" is being asked.
-    pub fn confirm_remove_ai(&self) -> bool {
-        self.confirm_remove_ai
-    }
-
-    /// Show or hide the AI description's segments, or remove it after asking.
-    pub fn update_ai_block(&mut self, message: AiBlockMessage) {
-        match message {
-            AiBlockMessage::ToggleSegments => self.show_ai_segments = !self.show_ai_segments,
-            AiBlockMessage::AskRemove => self.confirm_remove_ai = true,
-            AiBlockMessage::CancelRemove => self.confirm_remove_ai = false,
-            AiBlockMessage::ConfirmRemove => {
-                self.confirm_remove_ai = false;
-                self.ai_block.clear();
-                let editor = self.editor_comment();
-                self.store_comment(editor);
-            }
-        }
-    }
-
     /// Apply a text_editor action to the comment content and sync the string to tag_list.
     pub fn apply_comment_action(&mut self, action: text_editor::Action) {
         self.comment_content.perform(action);
@@ -156,15 +101,13 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.store_comment(trimmed);
     }
 
-    /// Put the comment (the editor's text `editor` joined with the AI description) in the tag
-    /// list. When the editor's text goes from empty to non-empty the commented tag is checked,
-    /// and when it is cleared the tag is unchecked; any other edit leaves the tag to the user.
-    /// An AI description alone never counts. See [`frename_core::active_commented_tag`].
-    fn store_comment(&mut self, editor: String) {
-        let was_empty = !block::has_editor_comment(self.tag_list.comment());
-        let is_empty = editor.trim().is_empty();
-        self.tag_list
-            .set_comment(block::join_comment(&editor, &self.ai_block));
+    /// Put the comment in the tag list. When it goes from empty to non-empty the commented tag
+    /// is checked, and when it is cleared the tag is unchecked; any other edit leaves the tag to
+    /// the user. See [`frename_core::active_commented_tag`].
+    fn store_comment(&mut self, comment: String) {
+        let was_empty = self.tag_list.comment().trim().is_empty();
+        let is_empty = comment.trim().is_empty();
+        self.tag_list.set_comment(comment);
         if was_empty == is_empty {
             return;
         }
@@ -297,78 +240,5 @@ impl Default for FileWorkspace<FolderTagStore> {
     /// Workspace with no folder open yet: the tag store holds nothing until a folder is loaded.
     fn default() -> Self {
         Self::new(FolderTagStore::empty())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use iced::widget::text_editor::{Action, Edit};
-    use std::time::SystemTime;
-
-    const BLOCK: &str = "AI: A walk.\n0:00–0:05 Street.\n— Claude Haiku 4.5, 2026-09-26 —";
-
-    fn open(comment: &str) -> FileWorkspace<FolderTagStore> {
-        let mut file = File::from_path("C:/clips/clip.mp4", SystemTime::UNIX_EPOCH);
-        let mut snapshot = file.snapshot().clone();
-        snapshot.set_comment(comment.to_string());
-        file.set_file_snapshot(&snapshot);
-        let mut workspace = FileWorkspace::default();
-        workspace.set_file(Some(file));
-        workspace
-    }
-
-    fn saved_comment(workspace: &FileWorkspace<FolderTagStore>) -> String {
-        let (_, snapshot) = workspace.get_snapshot().expect("open file");
-        snapshot.comment().to_string()
-    }
-
-    fn tags(workspace: &FileWorkspace<FolderTagStore>) -> Vec<String> {
-        workspace.tag_list().file_snapshot().tags().to_vec()
-    }
-
-    #[test]
-    fn the_box_holds_the_editors_text_and_saving_joins_the_block_back() {
-        let mut workspace = open(&format!("Mine\n\n{BLOCK}"));
-        assert_eq!(workspace.editor_comment(), "Mine");
-        assert_eq!(workspace.ai_block(), BLOCK);
-
-        workspace.apply_comment_action(Action::Move(text_editor::Motion::DocumentEnd));
-        workspace.apply_comment_action(Action::Edit(Edit::Insert('!')));
-        assert_eq!(saved_comment(&workspace), format!("Mine!\n\n{BLOCK}"));
-        assert_eq!(saved_comment(&workspace).matches("AI: ").count(), 1);
-    }
-
-    #[test]
-    fn remove_takes_out_only_the_block_after_asking() {
-        let mut workspace = open(&format!("Mine\n\n{BLOCK}"));
-        workspace.update_ai_block(AiBlockMessage::AskRemove);
-        assert!(workspace.confirm_remove_ai());
-        workspace.update_ai_block(AiBlockMessage::CancelRemove);
-        assert_eq!(workspace.ai_block(), BLOCK);
-
-        workspace.update_ai_block(AiBlockMessage::AskRemove);
-        workspace.update_ai_block(AiBlockMessage::ConfirmRemove);
-        assert!(workspace.ai_block().is_empty());
-        assert_eq!(saved_comment(&workspace), "Mine");
-    }
-
-    #[test]
-    fn an_ai_description_alone_does_not_check_the_commented_tag() {
-        let mut workspace = open(BLOCK);
-        assert_eq!(workspace.editor_comment(), "");
-        workspace.apply_comment_action(Action::Edit(Edit::Insert('x')));
-        assert_eq!(
-            tags(&workspace),
-            ["Commented"],
-            "the editor's first letter counts"
-        );
-        workspace.apply_comment_action(Action::SelectAll);
-        workspace.apply_comment_action(Action::Edit(Edit::Delete));
-        assert!(
-            tags(&workspace).is_empty(),
-            "clearing the editor's text unchecks it though the block stays"
-        );
-        assert_eq!(saved_comment(&workspace), BLOCK);
     }
 }

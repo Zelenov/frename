@@ -10,7 +10,7 @@ use iced::{Element, Length};
 use crate::features::folder_workspace::Directory;
 use crate::theme;
 
-use super::actions::{files, spend_line};
+use super::actions::files;
 use super::state::Progress;
 use super::{Action, BatchState, Message};
 
@@ -94,27 +94,17 @@ fn action_options<'a>(
             .collect()
     });
     let (panel, label, ready) = state.actions().panel(state.action(), &checked);
-    // Clip lengths still being read hold their files open, which a rename would fail on.
-    let can_run = ready && !state.is_running() && !state.actions().is_reading_files();
+    let can_run = ready && !state.is_running();
     let run = button(text(label).size(13))
         .on_press_maybe(can_run.then_some(Message::Run))
         .padding([6, 14]);
 
-    // The options scroll; the run button, and why it may be off, stay in view below them, even
-    // in a small window or under a job's report.
+    // The options scroll; the run button stays in view below them, even in a small window or
+    // under a job's report.
     let options = scrollable(panel.map(Message::Action))
         .height(Length::Fill)
         .style(theme::dark_scrollable_style);
-    column![options]
-        .extend(
-            state
-                .actions()
-                .footer(state.action())
-                .map(|footer| footer.map(Message::Action)),
-        )
-        .push(run)
-        .spacing(12)
-        .into()
+    column![options, run].spacing(12).into()
 }
 
 /// The job panel shared by every action: progress, the file in work, the outcome counts, and
@@ -176,9 +166,7 @@ fn job_panel<'a>(
                 .align_y(iced::Alignment::Center),
             );
     } else {
-        let mut summary = if let Some(stopped) = state.stopped() {
-            stopped.to_string()
-        } else if progress.finished < progress.total {
+        let summary = if progress.finished < progress.total {
             format!(
                 "Stopped after {} of {}.",
                 progress.finished,
@@ -187,14 +175,6 @@ fn job_panel<'a>(
         } else {
             format!("Finished {}.", files(progress.total))
         };
-        if let Some(usage) = progress.usage {
-            let at_least = if progress.usage_unknown {
-                "at least "
-            } else {
-                ""
-            };
-            summary.push_str(&format!("   AI: {at_least}{}", spend_line(usage)));
-        }
         panel = panel.push(text(summary).size(13)).push(
             row![
                 counts,
