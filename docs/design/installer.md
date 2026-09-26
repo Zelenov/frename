@@ -30,11 +30,22 @@ app can update itself.
    `Version 0.68 is available` with an **Update and restart** button /
    `Could not check for updates: <short reason>`. **Update and restart** downloads (progress in
    percent), saves the open file the same way as moving to another file, then exits and lets
-   Velopack apply the update and start the new version.
+   Velopack apply the update and start the new version, which reopens the same folder and file
+   (the last session in `folder_history`, as every start does today).
 4. **Silent check at startup.** A checkbox in the same section, **Check for updates when frename
-   starts**, on by default. At most once per 24 hours, in the background, never blocking. When a
-   newer version exists, the Settings gear in the folder controls gets a small accent dot and the
-   tooltip `Update available: 0.68`; nothing is downloaded or applied without the button.
+   starts**, on by default. At most once per 24 hours, in the background, never blocking. The newest
+   version found is stored in `app_settings` with the check time, so the notice survives restarts:
+   while that version is newer than the running one, the Settings gear in the folder controls has a
+   small accent dot and the tooltip `Update available: 0.68`. Nothing is downloaded or applied
+   without the button.
+6. **Settings from the zip version.** On the first start with no `frename.db` in the data folder,
+   before the main window opens, a native dialog (`rfd`, already a dependency) asks
+   `Import settings from an older frename?` — `Choose its folder…` / `Start fresh`. The chosen
+   folder's `frename.db` is copied (not moved) into the data folder; a folder without one says so
+   and asks again. `Start fresh` is remembered by creating the new database. Settings also get a
+   permanent **Import settings from an older frename…** button, which copies the same way and
+   asks to restart frename. This is the issue's "migrating an existing database found next to the
+   exe": the old exe's folder is exactly what the user picks.
 5. **Not installed** (`cargo run`, or a plain `frename.exe` copied out of a package): the Updates
    section says `Updates work in the installed version` and the button is disabled
    (`UpdateManager::new` returns `NotInstalled` then — research doc).
@@ -58,12 +69,14 @@ Updates
   [ Check for updates ]   Version 0.68 is available   [ Update and restart ]
 ```
 
-While downloading: `Downloading 0.68… 42%`, both buttons disabled. While a batch job runs,
+While downloading: `Downloading 0.68… 42%`, both buttons disabled. Errors: `no connection`
+for network failures; `GitHub did not respond, try later` for server errors and rate limits. While a batch job runs,
 **Update and restart** is disabled with the tooltip `Wait for the batch to finish`.
 
 The settings window is not resizable and every section must fit (`SETTINGS_WINDOW_SIZE` in
-`src/app/state.rs`); the implementation grows its height by what the section needs and checks
-the screenshot.
+`src/app/state.rs`, 560×560 today); it may grow to at most 700 px high (a 1366×768 laptop with the
+taskbar). If the section does not fit, the version goes on the button row
+(`frename 0.67 · [ Check for updates ] …`).
 
 ## Keyboard shortcuts
 
@@ -99,8 +112,10 @@ The portable zip has the same layout with a `.portable` marker file in its root
   `dumpbin /dependents` from `frename.exe` and every allowlisted plugin and copies each DLL it
   finds in GStreamer's `bin\`. No GPL parts (no x264/x265, no `ugly`).
 - **VC++ runtime** is copied app-local from the runner's Visual Studio redist folder, instead of
-  `vpk --framework vcredist143-x64`: the framework bootstrapper installs the redistributable
-  machine-wide, which asks for admin rights and breaks "no questions" on machines without it.
+  `vpk --framework vcredist143-x64`. `bootstrapping.mdx` does not say how the redistributable is
+  installed; it is a per-machine install (Microsoft's `vc_redist.x64.exe` writes to
+  `System32`), so on a machine without it the one-click install would stop at a UAC prompt.
+  App-local CRT DLLs avoid that and are a supported Microsoft deployment.
 - **Size** is measured by CI and written into the PR; the research estimate is ~65–75 MB installed
   and ~28–35 MB for `Setup.exe`.
 
@@ -110,14 +125,17 @@ The portable zip has the same layout with a `.portable` marker file in its root
 
 1. `velopack::VelopackApp::build().run()` — must be first; it handles install/update hooks and
    exits for them (research doc; `velopack` `app.rs`).
-2. `configure_bundled_gstreamer()` — Windows only, before any thread and before `gst::init`, as in
+2. Work out the data folder (below) with Velopack's locator, and the import dialog (flow 6).
+3. `configure_bundled_gstreamer(exe_dir, data_dir)` — Windows only, before any thread and before `gst::init`, as in
    the research doc: when `lib\gstreamer-1.0\gstcoreelements.dll` exists next to the exe, remove
    `GST_PLUGIN_PATH`, `GST_PLUGIN_PATH_1_0`, `GST_PLUGIN_SYSTEM_PATH`, `GST_PLUGIN_SCANNER`,
    `GST_REGISTRY`, and set `GST_PLUGIN_SYSTEM_PATH_1_0`, `GST_PLUGIN_SCANNER_1_0` and
    `GST_REGISTRY_1_0` (registry file in the data folder). The exe's folder is first in the Windows
    DLL search order, so a system GStreamer on `PATH` is not loaded. Without the bundled plugins
    (a developer build) nothing changes and the system GStreamer is used, as today.
-3. Data folder, logging, `gst::init`, database, window — as today, with the paths below.
+   It is split into a pure function that returns the variables to remove and set (tested on every
+   OS) and a Windows-only caller that applies them.
+4. Logging, `gst::init`, database, window — as today, with the paths below.
 
 ### Data folder
 
@@ -135,12 +153,13 @@ updates go "one level up (`..\`) outside of the `current` dir").
 (`set_app_data_dir`), like the storage settings: `frename-core` does not depend on `velopack`.
 `AppDatabase::new` and the log use it.
 
-**Migration.** A zip user who unzips the new portable zip over their old frename folder keeps
-everything: the old `frename.db` sits in the portable root, which is now the data folder. For the
-installed app an old `frename.db` cannot be found automatically (the old zip could be anywhere).
-What it held: window size, volume, the last folder, and Settings (comment and in/out storage, the
-"Commented" tag, autoplay, monochrome tags). Tags live in each folder's `.frename` file since
-0.62, so no tags are lost. See open question 1.
+**Migration.** `frename.db` holds the folder history (recent folders and the last file in each),
+window size, volume, and Settings (comment and in/out storage, the "Commented" tag, autoplay,
+monochrome tags). The installed app cannot know where the old zip was, so the first start asks
+(flow 6). A zip user who unzips the new portable zip over their old frename folder needs nothing:
+the old `frename.db` is already in the portable root, the data folder; unzipped anywhere else, the
+same first-start dialog appears. The README tells zip users to extract into their existing
+frename folder.
 
 Uninstalling removes `%LocalAppData%\frename\` with the database
 (`docs/integrating/uninstalling.mdx`); tags and comments live next to the footage and stay.
@@ -163,7 +182,9 @@ Settings window:
 ### Versions
 
 Velopack needs 3-part semver. `version.md`'s `# X.Y` becomes package version `X.Y.0`, which the
-release workflow already builds as `APP_VERSION` and puts in the zip name. The version shown in
+release workflow already builds as `APP_VERSION` and puts in the zip name. `release.yml` today
+appends `.0` even to a 3-part heading (`0.68.1` → `0.68.1.0`, which `vpk` rejects); PR 1 appends
+it only to a 2-part version, so `X.Y` keeps its asset name `frename-windows-x64-vX.Y.0.zip`. The version shown in
 Settings comes from Velopack's locator when packaged, else `APP_VERSION` baked in at build time
 (`option_env!`), else `dev`.
 
@@ -172,9 +193,14 @@ Settings comes from Velopack's locator when packaged, else `APP_VERSION` baked i
 ### Building (both `ci.yml` and `release.yml`)
 
 The 52 MB `gstreamer-minimal-msvc-x86_64.zip` is removed from the repository. The Windows jobs get
-GStreamer from the pinned official **runtime** and **development** MSIs (the development one has
-the `pkg-config` files the `gstreamer` crates build against), extracted with `msiexec /a`,
-checksum-checked, and cached with `actions/cache` keyed by version.
+GStreamer from the pinned official **runtime** and **development** packages (the development one
+has the `pkg-config` files the `gstreamer` crates build against), checksum-checked and cached with
+`actions/cache` keyed by version. The research doc (and GSTREAMER_SETUP.md today) names MSIs,
+extracted with `msiexec /a`. The exact file names and URLs could not be checked from the design
+session (the download site is blocked there); PR 1's first step checks them in CI and pins URL
+and SHA-256 in the workflow. If the pinned version ships only as an `.exe` installer, the build job
+installs it silently into a temp folder instead (the build runner does not need to stay clean; the
+smoke-test runner below never gets it).
 
 ### Self-test (`frename.exe --self-test <folder>`)
 
@@ -191,15 +217,27 @@ VP9/Opus `.webm`, AV1 `.mkv`, MPEG-4/MP3 `.avi`, plus the existing variable-fram
 
 ### Installer smoke test
 
-In the existing `ci-windows` job (a required check), after the release build:
-1. bundle GStreamer and pack with `vpk pack` as version `0.0.0`;
-2. fail if a system GStreamer is on the runner (`GSTREAMER_1_0_ROOT_MSVC_X86_64` or `gst-*` on
-   `PATH`), so the test proves the clean-machine case;
-3. `Setup.exe --silent`, then `%LocalAppData%\frename\current\frename.exe --self-test tests\media`;
-4. install an **older** official GStreamer runtime system-wide (`msiexec /i … /qn`), put it on
+The `ci-windows` job, after the release build, bundles GStreamer, packs with `vpk pack` as version
+`0.0.0` and uploads `Setup.exe` and the portable zip as artifacts. It cannot test them itself: it
+has the build GStreamer on `PATH`, which would hide a DLL missing from the bundle. A new job,
+`ci-windows-install` (`needs: ci-windows`, a fresh `windows-2022` runner), downloads the artifacts
+and:
+1. fails if a system GStreamer is on the runner (`GSTREAMER_1_0_ROOT_MSVC_X86_64`, or
+   `gst-launch-1.0` on `PATH`), so the test proves the clean-machine case;
+2. runs `Setup.exe --silent`, then the self-test of the installed app;
+3. installs an **older** official GStreamer runtime system-wide (`msiexec /i … /qn`), put it on
    `PATH`, set `GST_PLUGIN_PATH` to its plugins, and run the self-test again: it must still pass,
    which proves a system GStreamer does not interfere;
-5. unzip the portable zip to a temp folder and run its self-test too.
+4. unzips the portable zip to a temp folder and runs its self-test too.
+
+Release builds are GUI-subsystem exes (`windows_subsystem = "windows"`), so PowerShell does not wait
+for them: each self-test runs as `Start-Process -Wait -PassThru` and checks `.ExitCode`, then
+prints `frename_debug.log` from the data folder (`%LocalAppData%\frename\` installed, the unzip
+folder portable).
+
+`ci-windows-install` must become a required check: the owner adds it to the `main` ruleset
+(CLAUDE.md "Owner setup"; the agent cannot). Until then the nightly merge rule "every CI check is
+green on the head commit" still blocks agent merges on it.
 
 Runners have no GPU or audio device, so this covers the software decode path (research doc).
 
@@ -230,13 +268,16 @@ The legacy `RELEASES` file is not uploaded (only for Squirrel migrations — `ch
   start-up check fails silently (logged).
 - **Portable copy on a read-only drive**: the update fails; the message says
   `Could not update: the folder is read-only`.
-- **Two frename windows/processes**: the update closes the one that applies it; Velopack kills the
-  others running from `current\`.
+- **Two frename processes**: before **Update and restart**, frename checks for another `frename.exe`
+  process from the same install and, if one runs, says `Close the other frename window first` and
+  does not update — Velopack would kill it with its unsaved edits.
 - **A plugin missing at runtime** (allowlist too small for some format): the file fails to play as
   today; the self-test fixture list is the guard, and a new format means a new fixture.
 - **Existing zip users who run the new portable zip over their old folder**: their `frename.db` is
   already in the portable root, which is the data folder.
-- **SmartScreen / antivirus**: unsigned; documented in the README. Signing is out of scope.
+- **SmartScreen / antivirus**: unsigned; documented in the README, for `Setup.exe` and for the
+  portable zip (right-click the zip → Properties → **Unblock** before extracting, so its
+  `frename.exe` and `Update.exe` are not blocked). Signing is out of scope.
 
 ## Out of scope
 
@@ -260,11 +301,13 @@ explicitly.
 
 ## Test plan
 
-- Core unit tests: `set_app_data_dir` is used by `AppDatabase` and the log path; the "not packaged"
-  fallback is the exe folder.
-- `configure_bundled_gstreamer`: a unit test with a temp folder containing a fake
-  `lib\gstreamer-1.0\gstcoreelements.dll` checks the variables set and removed; without it, none
-  change.
+- Core unit tests: `set_app_data_dir` is used by `AppDatabase`; the "not packaged" fallback is the
+  exe folder. App-crate tests: the log path and the data-folder choice (installed / portable /
+  not packaged) from a locator stub.
+- `configure_bundled_gstreamer`'s pure part, on every OS: with a temp folder containing a fake
+  `lib/gstreamer-1.0/gstcoreelements.dll` it returns the variables to set and remove, with the
+  registry in the data folder; without it, nothing.
+- Import: copying a chosen folder's `frename.db`; a folder without one is refused.
 - `--self-test` in `ci-windows` (installed, portable, and with an older system GStreamer on
   `PATH`); a fixture that fails to decode makes the job red (checked once by hand in the PR by
   pointing it at a corrupt file).
@@ -276,13 +319,14 @@ explicitly.
 
 ## Open questions (with recommended answers)
 
-1. **Settings of users coming from the zip version.** The installed app cannot find the old
-   `frename.db`. *Recommended:* accept it — tags are in `.frename` files; the README install section
-   says "Settings start fresh; your tags and comments are in your folders". Alternative: a one-time
-   "Import settings from the old frename folder…" button in Settings.
+1. **Settings of users coming from the zip version.** *Recommended:* the first-start import dialog
+   plus the Settings button (flow 6). Rejected: starting fresh, which loses folder history and
+   storage settings.
 2. **Data folder for the installed app: removed on uninstall** (Velopack root) or kept
    (`%AppData%\frename`, roaming)? *Recommended:* the Velopack root, as the issue says
    `%LocalAppData%`; nothing irreplaceable lives in it.
-3. **Start-up check default.** *Recommended:* on, at most once a day, never downloads by itself.
-4. **Keep `GSTREAMER_SETUP.md`?** *Recommended:* keep it only for building from source; the release
+3. **Portable data stays in the portable folder**, not `%LocalAppData%`. *Recommended:* yes — a
+   portable build must not write outside its folder, and that is where the old zip kept its data.
+4. **Start-up check default.** *Recommended:* on, at most once a day, never downloads by itself.
+5. **Keep `GSTREAMER_SETUP.md`?** *Recommended:* keep it only for building from source; the release
    no longer ships it.
