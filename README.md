@@ -163,7 +163,18 @@ and Cancel. Each file then shows a green or red check box. Actions:
 - tag commented videos with "Commented" and untag the rest;
 - put the tags in every name in tag panel order;
 - add or remove the space after each tag, as set in Settings;
-- read every file again (use this if the list looks out of date).
+- read every file again (use this if the list looks out of date);
+- summarize subtitles with AI (below).
+
+### AI summaries from subtitles
+
+For clips with a `.srt`, **Summarize subtitles with AI** sends the subtitle text to Claude and
+writes a short summary of what is said and happens, with time ranges, into the clip's comment.
+Press **Estimate cost** first: the panel shows how many clips will be sent and about what it will
+cost. The summary is a block starting with `AI:` after your own text; it is shown under the
+comment box, read-only, with a Remove button. Your own text is never changed, and running again
+replaces only the summary. A summary alone does not count as a comment for the "Commented" tag
+and filter. You need your own Anthropic API key (Settings).
 
 ## Settings
 
@@ -174,7 +185,9 @@ The ⚙ button opens Settings:
 - put a space after each tag in file names (`Food. Goat. clip.mp4`);
 - where comments are kept (inside the video or `.comment.txt`), and the name of the "Commented"
   tag, or none;
-- where in/out points are kept (file name or inside the video).
+- where in/out points are kept (file name or inside the video);
+- AI summaries: the Claude model, the summary language (the subtitles' own language by default),
+  and your Anthropic API key, kept only on this computer.
 
 After you change where comments or in/out points are kept, or the tag spacing, Settings offer the
 batch action that updates the existing files.

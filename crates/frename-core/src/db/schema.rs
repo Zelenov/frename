@@ -95,3 +95,11 @@ ALTER TABLE app_settings ADD COLUMN commented_tag_enabled INTEGER NOT NULL DEFAU
 pub const M8_SPACE_AFTER_TAGS: &str = "
 ALTER TABLE app_settings ADD COLUMN space_after_tags INTEGER NOT NULL DEFAULT 0;
 ";
+
+/// Migration 9: the AI settings (`AiModel::as_str`, `SummaryLanguage::as_str`) and the
+/// Anthropic API key (empty: not set).
+pub const M9_AI_SETTINGS: &str = "
+ALTER TABLE app_settings ADD COLUMN ai_model TEXT NOT NULL DEFAULT 'claude-opus-5';
+ALTER TABLE app_settings ADD COLUMN summary_language TEXT NOT NULL DEFAULT 'subtitles';
+ALTER TABLE app_settings ADD COLUMN anthropic_api_key TEXT NOT NULL DEFAULT '';
+";

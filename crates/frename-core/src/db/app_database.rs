@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use rusqlite::Connection;
 
+use crate::ai::{AiModel, SummaryLanguage};
 use crate::{CommentStorage, FolderAndFile, InOutStorage};
 
 use super::migrations;
@@ -176,7 +177,7 @@ impl AppStateStore for AppDatabase {
         let conn = lock_connection(&conn);
         conn.query_row(
             "SELECT autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled,
-                    space_after_tags
+                    space_after_tags, ai_model, summary_language, anthropic_api_key
              FROM app_settings WHERE id = 1",
             [],
             |row| Ok(AppSettings {
@@ -187,6 +188,9 @@ impl AppStateStore for AppDatabase {
                 commented_tag: row.get::<_, String>(4)?,
                 commented_tag_enabled: row.get::<_, i64>(5)? != 0,
                 space_after_tags: row.get::<_, i64>(6)? != 0,
+                ai_model: AiModel::from_name(&row.get::<_, String>(7)?),
+                summary_language: SummaryLanguage::from_name(&row.get::<_, String>(8)?),
+                anthropic_api_key: row.get::<_, String>(9)?,
             }),
         ).ok()
     }
@@ -195,8 +199,8 @@ impl AppStateStore for AppDatabase {
         if let Ok(conn) = self.conn() {
             let conn = lock_connection(&conn);
             let _ = conn.execute(
-                "INSERT INTO app_settings (id, autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled, space_after_tags)
-                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                "INSERT INTO app_settings (id, autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled, space_after_tags, ai_model, summary_language, anthropic_api_key)
+                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
                  ON CONFLICT(id) DO UPDATE SET
                      autoplay_video = excluded.autoplay_video,
                      monochrome_tags = excluded.monochrome_tags,
@@ -204,7 +208,10 @@ impl AppStateStore for AppDatabase {
                      in_out_storage = excluded.in_out_storage,
                      commented_tag = excluded.commented_tag,
                      commented_tag_enabled = excluded.commented_tag_enabled,
-                     space_after_tags = excluded.space_after_tags",
+                     space_after_tags = excluded.space_after_tags,
+                     ai_model = excluded.ai_model,
+                     summary_language = excluded.summary_language,
+                     anthropic_api_key = excluded.anthropic_api_key",
                 rusqlite::params![
                     settings.autoplay_video,
                     settings.monochrome_tags,
@@ -213,6 +220,9 @@ impl AppStateStore for AppDatabase {
                     settings.commented_tag,
                     settings.commented_tag_enabled,
                     settings.space_after_tags,
+                    settings.ai_model.as_str(),
+                    settings.summary_language.as_str(),
+                    settings.anthropic_api_key,
                 ],
             );
         }
@@ -256,5 +266,27 @@ impl AppDatabase {
                 Err(e) => log::warn!("set_panel_widths failed: {e}"),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_settings_round_trip_with_the_ai_settings() {
+        let dir = std::env::temp_dir().join(format!("frename-db-ai-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let db = AppDatabase::with_path(dir.join("frename.db"));
+        db.initialize().expect("migrate");
+        let settings = AppSettings {
+            ai_model: AiModel::ClaudeHaiku45,
+            summary_language: SummaryLanguage::Russian,
+            anthropic_api_key: "sk-ant-test".to_string(),
+            ..AppSettings::default()
+        };
+        db.set_app_settings(settings.clone());
+        assert_eq!(db.get_app_settings(), Some(settings));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

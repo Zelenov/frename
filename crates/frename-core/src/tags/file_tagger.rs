@@ -43,11 +43,11 @@ impl FileTagger {
     }
 
     /// Bring the tag `tag` in line with the file's comment: added last when the file has a
-    /// comment, removed when it has none. Returns the outcome like a move: `NothingToMove` when
+    /// comment of the editor's, removed when it has none (an AI block alone does not count). Returns the outcome like a move: `NothingToMove` when
     /// the name already matches, `Failed` when the rename did not happen.
     pub fn sync_commented_tag(path: &Path, tag: &str) -> MoveOutcome {
         let mut snapshot = Self::parse(path, &FolderInfo::default());
-        let commented = !snapshot.comment().trim().is_empty();
+        let commented = crate::ai::has_editor_comment(snapshot.comment());
         let tagged = snapshot.tags().iter().any(|t| t.eq_ignore_ascii_case(tag));
         if commented == tagged {
             return MoveOutcome::NothingToMove;
@@ -241,5 +241,17 @@ mod tests {
             panic!("the tag must be removed");
         };
         assert!(untagged.ends_with("Food.clip.mp4"), "removed: {untagged:?}");
+    }
+
+    #[test]
+    fn an_ai_summary_alone_gets_no_commented_tag() {
+        let path = Path::new(r"C:\frename-sync-ai-test\clip.mp4");
+        let mut summarized = FileSnapshot::parse("clip.mp4");
+        summarized.set_comment("AI: Beets.\n— Claude Opus 5, 2026-09-26 —".to_string());
+        let path = FileTagger::save(&summarized, path);
+        assert_eq!(
+            FileTagger::sync_commented_tag(&path, "Commented"),
+            MoveOutcome::NothingToMove
+        );
     }
 }

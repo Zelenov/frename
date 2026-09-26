@@ -232,6 +232,10 @@ impl FolderWorkspace {
                 self.file_workspace.apply_comment_action(action);
                 Task::none()
             }
+            Message::RemoveAiBlock => {
+                self.file_workspace.remove_ai_block();
+                Task::none()
+            }
             Message::ScreenshotTaken(position_ms, jpeg) => {
                 let Some(file) = self.file_workspace.file() else {
                     return Task::none();
@@ -250,7 +254,7 @@ impl FolderWorkspace {
                     .add_screenshot(frename_core::Screenshot::new(position_ms));
                 // Append timestamp to comment.
                 let time_str = frename_core::Screenshot::new(position_ms).format_time();
-                let current = self.file_workspace.comment().to_string();
+                let current = self.file_workspace.comment();
                 let new_comment = if current.is_empty() {
                     format!("{}: ", time_str)
                 } else {
@@ -590,6 +594,7 @@ impl FolderWorkspace {
                 | Message::FileNamePanel(_)
                 | Message::SyncPanel(_)
                 | Message::CommentAction(_)
+                | Message::RemoveAiBlock
                 | Message::RemoveTag
                 | Message::SaveSelectedTag
                 | Message::CopyTags
@@ -642,10 +647,44 @@ impl FolderWorkspace {
         if let batch::Message::Run = msg {
             return self.start_batch();
         }
+        let estimate = matches!(
+            msg,
+            batch::Message::Action(batch::ActionMessage::AiSummary(
+                batch::ai_summary::Message::Estimate
+            ))
+        );
         // Batch mode does not edit the open file, so its rename editor goes.
         self.inline_rename = None;
         self.batch.update(msg);
+        if estimate {
+            return self.estimate_ai_summary();
+        }
         Task::none()
+    }
+
+    /// Work out the AI summary's cost for the checked files on a blocking thread.
+    fn estimate_ai_summary(&self) -> Task<Message> {
+        let Some((request, job)) = self.batch.actions().ai_summary().pending_estimate() else {
+            return Task::none();
+        };
+        let paths: Vec<PathBuf> = self.directory.as_ref().map_or_else(Vec::new, |dir| {
+            dir.all_files()
+                .filter(|f| self.batch.is_checked(f.id()))
+                .map(|f| f.file_path().to_path_buf())
+                .collect()
+        });
+        Task::future(async move {
+            let estimate =
+                tokio::task::spawn_blocking(move || batch::ai_summary::estimate(&paths, job))
+                    .await
+                    .unwrap_or_else(|e| {
+                        log::error!("ai summary estimate failed: {e}");
+                        frename_core::ai::SummaryEstimate::default()
+                    });
+            Message::Batch(batch::Message::Action(batch::ActionMessage::AiSummary(
+                batch::ai_summary::Message::Estimated(request, estimate),
+            )))
+        })
     }
 
     /// Start the selected batch action on the checked files, in folder order. A playing video
@@ -687,7 +726,7 @@ impl FolderWorkspace {
     /// left or was cancelled. One file per step: progress names the file in work, and a
     /// cancel stops after it, so no file is left half done.
     fn next_batch_item(&mut self) -> Task<Message> {
-        let Some((id, operation)) = self.batch.begin_next() else {
+        let Some((id, operation, cancel)) = self.batch.begin_next() else {
             return Task::done(Message::BatchFinished);
         };
         let Some(path) = self
@@ -696,18 +735,16 @@ impl FolderWorkspace {
             .and_then(|d| d.file_by_id(id))
             .map(|f| f.file_path().to_path_buf())
         else {
-            self.batch.finish(id, ItemStatus::Failed);
+            self.batch
+                .finish(id, &ItemResult::new(ItemStatus::Failed, None));
             return self.next_batch_item();
         };
         Task::future(async move {
-            let result = tokio::task::spawn_blocking(move || operation.run(&path))
+            let result = tokio::task::spawn_blocking(move || operation.run(&path, &cancel))
                 .await
                 .unwrap_or_else(|e| {
                     log::error!("batch operation task failed: {e}");
-                    ItemResult {
-                        status: ItemStatus::Failed,
-                        update: None,
-                    }
+                    ItemResult::new(ItemStatus::Failed, None)
                 });
             Message::BatchItemDone { id, result }
         })
@@ -720,7 +757,7 @@ impl FolderWorkspace {
         {
             dir.rename_file(id, path, snapshot);
         }
-        self.batch.finish(id, result.status);
+        self.batch.finish(id, &result);
         self.next_batch_item()
     }
 
@@ -2135,10 +2172,7 @@ mod tests {
             "navigation is locked"
         );
 
-        let skipped = || ItemResult {
-            status: ItemStatus::Skipped,
-            update: None,
-        };
+        let skipped = || ItemResult::new(ItemStatus::Skipped, None);
         let _ = workspace.update(Message::BatchItemDone {
             id: file_id_at(&workspace, 0),
             result: skipped(),
@@ -2171,10 +2205,7 @@ mod tests {
 
         let _ = workspace.update(Message::Batch(batch::Message::Cancel));
         let first = file_id_at(&workspace, 0);
-        let done = ItemResult {
-            status: ItemStatus::Done,
-            update: None,
-        };
+        let done = ItemResult::new(ItemStatus::Done, None);
         let _ = workspace.update(Message::BatchItemDone {
             id: first,
             result: done,

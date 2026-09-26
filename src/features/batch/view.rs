@@ -150,7 +150,9 @@ fn job_panel<'a>(
                 .align_y(iced::Alignment::Center),
             );
     } else {
-        let summary = if progress.finished < progress.total {
+        let summary = if let Some(reason) = state.stop_reason() {
+            format!("Stopped: {reason}.")
+        } else if progress.finished < progress.total {
             format!(
                 "Stopped after {} of {}.",
                 progress.finished,
@@ -169,17 +171,22 @@ fn job_panel<'a>(
         );
         let failed = state.failed();
         if !failed.is_empty() {
-            let names = column(
-                failed
-                    .into_iter()
-                    .map(|id| text(name(id)).size(12).color(theme::ERROR).into()),
-            );
+            // Actions that say why a file failed get the reason after its name.
+            let with_reasons = failed.iter().all(|id| state.failure_reason(*id).is_some());
+            let names = column(failed.into_iter().map(|id| {
+                let line = match state.failure_reason(id) {
+                    Some(reason) => format!("{} — {reason}", name(id)),
+                    None => name(id),
+                };
+                text(line).size(12).color(theme::ERROR).into()
+            }));
+            let heading = if with_reasons {
+                "Failed:"
+            } else {
+                "Failed (see the log for why):"
+            };
             panel = panel
-                .push(
-                    text("Failed (see the log for why):")
-                        .size(12)
-                        .color(theme::TEXT_MUTED),
-                )
+                .push(text(heading).size(12).color(theme::TEXT_MUTED))
                 .push(
                     container(
                         scrollable(names)

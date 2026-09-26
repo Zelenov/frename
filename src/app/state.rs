@@ -232,6 +232,7 @@ impl FrenameApp {
         frename_core::set_in_out_storage(settings.settings().in_out_storage);
         frename_core::set_commented_tag(settings.settings().effective_commented_tag());
         frename_core::set_space_after_tags(settings.settings().space_after_tags);
+        frename_core::ai::set_ai_settings(settings.settings().ai_settings());
         Self {
             drag_drop_state: drag_drop::DragDropState::default(),
             folder_workspace: folder_workspace::FolderWorkspace::new(),
@@ -324,6 +325,13 @@ impl FrenameApp {
                     settings::Message::SetMonochromeTags(_) => Task::none(),
                     settings::Message::SetSpaceAfterTags(space) => {
                         frename_core::set_space_after_tags(space);
+                        Task::none()
+                    }
+                    // Read by the AI batch action when it shows its panel and when it runs.
+                    settings::Message::SetAiModel(_)
+                    | settings::Message::SetSummaryLanguage(_)
+                    | settings::Message::SetAnthropicApiKey(_) => {
+                        frename_core::ai::set_ai_settings(self.settings.settings().ai_settings());
                         Task::none()
                     }
                 }

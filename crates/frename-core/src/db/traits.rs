@@ -2,6 +2,7 @@
 
 use uuid::Uuid;
 
+use crate::ai::{AiModel, AiSettings, SummaryLanguage};
 use crate::{CommentStorage, FolderAndFile, InOutStorage, StoredTag, TagColorMapping};
 
 /// Saved window position and size (logical pixels).
@@ -54,6 +55,13 @@ pub struct AppSettings {
     pub commented_tag_enabled: bool,
     /// Whether file names put a space after each tag (`Food. clip.mp4`). Defaults to false.
     pub space_after_tags: bool,
+    /// The model that writes AI summaries. Defaults to [`AiModel::default`].
+    pub ai_model: AiModel,
+    /// The language of AI summaries. Defaults to the subtitles' language.
+    pub summary_language: SummaryLanguage,
+    /// The Anthropic API key for AI summaries; empty when not set. Stored only in the local
+    /// app database.
+    pub anthropic_api_key: String,
 }
 
 impl Default for AppSettings {
@@ -66,11 +74,23 @@ impl Default for AppSettings {
             commented_tag: crate::DEFAULT_COMMENTED_TAG.to_string(),
             commented_tag_enabled: true,
             space_after_tags: false,
+            ai_model: AiModel::default(),
+            summary_language: SummaryLanguage::default(),
+            anthropic_api_key: String::new(),
         }
     }
 }
 
 impl AppSettings {
+    /// The AI settings as the batch action uses them (see [`crate::ai::set_ai_settings`]).
+    pub fn ai_settings(&self) -> AiSettings {
+        AiSettings {
+            model: self.ai_model,
+            language: self.summary_language,
+            anthropic_api_key: self.anthropic_api_key.clone(),
+        }
+    }
+
     /// The commented tag as core should use it (see [`crate::set_commented_tag`]): empty while
     /// turned off.
     pub fn effective_commented_tag(&self) -> &str {

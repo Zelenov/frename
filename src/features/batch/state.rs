@@ -2,6 +2,8 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use frename_core::{FileId, FileSnapshot};
 
@@ -18,7 +20,8 @@ pub enum ItemStatus {
     Done,
     /// Nothing to do for this file.
     Skipped,
-    /// Could not be done; the details are in the log.
+    /// Could not be done; the reason is in the report when the action gives one, and in the
+    /// log.
     Failed,
 }
 
@@ -28,6 +31,31 @@ pub struct ItemResult {
     pub status: ItemStatus,
     /// The file's path and snapshot afterwards, when the operation touched it.
     pub update: Option<(PathBuf, FileSnapshot)>,
+    /// Why the file failed, shown after its name in the report.
+    pub reason: Option<String>,
+    /// Stop the job after this file, with `reason` as the report's summary: every later file
+    /// would fail the same way (e.g. a rejected API key).
+    pub stop_job: bool,
+}
+
+impl ItemResult {
+    /// A result without a reason that lets the job go on.
+    pub fn new(status: ItemStatus, update: Option<(PathBuf, FileSnapshot)>) -> Self {
+        Self {
+            status,
+            update,
+            reason: None,
+            stop_job: false,
+        }
+    }
+
+    /// A failure, with the reason shown in the report.
+    pub fn failed(reason: impl Into<String>) -> Self {
+        Self {
+            reason: Some(reason.into()),
+            ..Self::new(ItemStatus::Failed, None)
+        }
+    }
 }
 
 /// One run of an operation over the files checked when it started.
@@ -40,6 +68,12 @@ struct Job {
     /// Index into `order` of the next file to start.
     next: usize,
     cancelled: bool,
+    /// Set with `cancelled`; the file in work sees it (e.g. while waiting to retry a request).
+    cancel: Arc<AtomicBool>,
+    /// Why failed files failed, when their action said.
+    reasons: HashMap<FileId, String>,
+    /// Why the job stopped early, when a file stopped it.
+    stop_reason: Option<String>,
     /// False once the job has finished or stopped; the report stays until it is closed.
     running: bool,
     /// Files whose check changed after the job: the list shows their check box again, while
@@ -106,22 +140,27 @@ impl BatchState {
                 self.active = true;
                 self.job = None;
                 self.checked = files.into_iter().collect();
+                self.actions.checks_changed();
             }
             Message::Toggle(id) => {
+                self.actions.checks_changed();
                 self.dismiss([id]);
                 if !self.checked.remove(&id) {
                     self.checked.insert(id);
                 }
             }
             Message::CheckAll(ids) => {
+                self.actions.checks_changed();
                 self.dismiss(ids.iter().copied());
                 self.checked.extend(ids);
             }
             Message::CheckNone => {
+                self.actions.checks_changed();
                 self.dismiss(self.checked.clone());
                 self.checked.clear();
             }
             Message::Invert(ids) => {
+                self.actions.checks_changed();
                 self.dismiss(ids.iter().copied());
                 for id in ids {
                     if !self.checked.remove(&id) {
@@ -132,6 +171,7 @@ impl BatchState {
             Message::Cancel => {
                 if let Some(job) = self.job.as_mut() {
                     job.cancelled = true;
+                    job.cancel.store(true, Ordering::Relaxed);
                 }
             }
             Message::CloseReport => self.job = None,
@@ -156,15 +196,18 @@ impl BatchState {
             statuses,
             next: 0,
             cancelled: false,
+            cancel: Arc::new(AtomicBool::new(false)),
+            reasons: HashMap::new(),
+            stop_reason: None,
             running: true,
             dismissed: HashSet::new(),
         });
         true
     }
 
-    /// Mark the next file running and return it with the operation, or end the job when it is
-    /// cancelled or has no files left (`None`).
-    pub fn begin_next(&mut self) -> Option<(FileId, Operation)> {
+    /// Mark the next file running and return it with the operation and the job's cancel flag,
+    /// or end the job when it is cancelled or has no files left (`None`).
+    pub fn begin_next(&mut self) -> Option<(FileId, Operation, Arc<AtomicBool>)> {
         let job = self.job.as_mut().filter(|job| job.running)?;
         let Some(id) = job.order.get(job.next).copied().filter(|_| !job.cancelled) else {
             job.running = false;
@@ -172,13 +215,23 @@ impl BatchState {
         };
         job.next += 1;
         job.statuses.insert(id, ItemStatus::Running);
-        Some((id, job.operation))
+        Some((id, job.operation, Arc::clone(&job.cancel)))
     }
 
-    /// Record how a file of the running job went.
-    pub fn finish(&mut self, id: FileId, status: ItemStatus) {
-        if let Some(job) = self.job.as_mut() {
-            job.statuses.insert(id, status);
+    /// Record how a file of the running job went. A result that stops the job cancels the
+    /// files after it and becomes the report's summary.
+    pub fn finish(&mut self, id: FileId, result: &ItemResult) {
+        let Some(job) = self.job.as_mut() else {
+            return;
+        };
+        job.statuses.insert(id, result.status);
+        if let Some(reason) = &result.reason {
+            job.reasons.insert(id, reason.clone());
+        }
+        if result.stop_job {
+            job.cancelled = true;
+            job.cancel.store(true, Ordering::Relaxed);
+            job.stop_reason = result.reason.clone();
         }
     }
 
@@ -257,6 +310,16 @@ impl BatchState {
         })
     }
 
+    /// Why the current job stopped early, when a file stopped it.
+    pub fn stop_reason(&self) -> Option<&str> {
+        self.job.as_ref()?.stop_reason.as_deref()
+    }
+
+    /// Why a failed file of the current job failed, when its action said.
+    pub fn failure_reason(&self, id: FileId) -> Option<&str> {
+        self.job.as_ref()?.reasons.get(&id).map(String::as_str)
+    }
+
     /// How far the current job is; `None` without one.
     pub fn progress(&self) -> Option<Progress> {
         let job = self.job.as_ref()?;
@@ -292,6 +355,10 @@ mod tests {
             .collect()
     }
 
+    fn done() -> ItemResult {
+        ItemResult::new(ItemStatus::Done, None)
+    }
+
     fn state() -> BatchState {
         let mut state = BatchState::default();
         state.update(Message::Prepare {
@@ -324,13 +391,13 @@ mod tests {
         assert!(batch.start(files.clone()));
         assert!(!batch.start(files.clone()), "one job at a time");
 
-        let (first, operation) = batch.begin_next().expect("first file");
+        let (first, operation, cancel) = batch.begin_next().expect("first file");
         assert_eq!(
             (first, operation),
             (files[0], Operation::MoveComments(CommentStorage::InVideo))
         );
         assert_eq!(batch.current(), Some(files[0]));
-        batch.finish(first, ItemStatus::Done);
+        batch.finish(first, &done());
 
         batch.update(Message::Toggle(files[0]));
         assert!(
@@ -339,6 +406,10 @@ mod tests {
         );
 
         batch.update(Message::Cancel);
+        assert!(
+            cancel.load(Ordering::Relaxed),
+            "the file in work sees the cancel"
+        );
         assert!(
             batch.begin_next().is_none(),
             "cancelled before the second file"
@@ -360,10 +431,33 @@ mod tests {
         let files = ids(1);
         let mut batch = state();
         batch.start(files.clone());
-        let (id, _) = batch.begin_next().expect("the file");
-        batch.finish(id, ItemStatus::Failed);
+        let (id, _, _) = batch.begin_next().expect("the file");
+        batch.finish(id, &ItemResult::failed("No subtitles"));
         assert!(batch.begin_next().is_none());
         assert_eq!(batch.failed(), files);
+        assert_eq!(batch.failure_reason(files[0]), Some("No subtitles"));
+        assert_eq!(batch.stop_reason(), None);
+    }
+
+    #[test]
+    fn a_file_that_stops_the_job_leaves_the_rest_not_reached() {
+        let files = ids(3);
+        let mut batch = state();
+        batch.start(files.clone());
+        let (id, _, cancel) = batch.begin_next().expect("first file");
+        batch.finish(
+            id,
+            &ItemResult {
+                stop_job: true,
+                ..ItemResult::failed("Anthropic rejected the API key")
+            },
+        );
+        assert!(cancel.load(Ordering::Relaxed));
+        assert!(batch.begin_next().is_none());
+        assert_eq!(batch.stop_reason(), Some("Anthropic rejected the API key"));
+        assert_eq!(batch.status(files[1]), Some(ItemStatus::Pending));
+        let progress = batch.progress().expect("report");
+        assert_eq!((progress.failed, progress.finished), (1, 1));
     }
 
     #[test]
@@ -373,8 +467,8 @@ mod tests {
         batch.update(Message::CheckAll(files.clone()));
         batch.start(files.clone());
         for _ in 0..2 {
-            let (id, _) = batch.begin_next().expect("a file");
-            batch.finish(id, ItemStatus::Done);
+            let (id, _, _) = batch.begin_next().expect("a file");
+            batch.finish(id, &done());
         }
         assert!(batch.begin_next().is_none());
 
@@ -393,7 +487,8 @@ mod tests {
     fn every_action_runs_and_none_runs_without_files() {
         let mut batch = state();
         assert!(!batch.start(Vec::new()), "nothing checked");
-        for action in Action::ALL {
+        // The AI summary runs only with a key and a cost estimate; see its own test.
+        for action in Action::ALL.into_iter().filter(|a| *a != Action::AiSummary) {
             batch.update(Message::SelectAction(action));
             assert_eq!(batch.operation().map(|op| op.action()), Some(action));
         }

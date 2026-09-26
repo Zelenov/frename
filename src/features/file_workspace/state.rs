@@ -5,6 +5,7 @@
 //!
 //! Generic over the store type S (like Directory and TagList). Store is passed to the constructor; used to build the tag list.
 
+use frename_core::ai;
 use frename_core::{
     File, FileId, FileSnapshot, FolderTagStore, StoredTagStore, TagColorMapping, TagId, TagList,
 };
@@ -54,7 +55,9 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
                     return;
                 }
                 let snapshot = f.snapshot().clone();
-                self.comment_content = text_editor::Content::with_text(snapshot.comment());
+                // The box holds the editor's text; the AI block is shown apart, read-only.
+                self.comment_content =
+                    text_editor::Content::with_text(&ai::editor_comment(snapshot.comment()));
                 self.file = Some(f);
                 self.tag_list = TagList::new(self.store.clone(), snapshot);
             }
@@ -84,17 +87,23 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.store.get_tag_color_mapping().unwrap_or_default()
     }
 
-    /// Comment text for the current file.
-    pub fn comment(&self) -> &str {
-        self.tag_list.comment()
+    /// The editor's part of the comment: the whole comment without its AI block.
+    pub fn comment(&self) -> String {
+        ai::editor_comment(self.tag_list.comment())
     }
 
-    /// Update the comment (does not write to disk). Positions the cursor at the end.
+    /// The comment's AI block, shown read-only under the editable box.
+    pub fn ai_block(&self) -> Option<&str> {
+        ai::ai_block(self.tag_list.comment())
+    }
+
+    /// Replace the editor's part of the comment (does not write to disk); the AI block stays.
+    /// Positions the cursor at the end.
     pub fn set_comment(&mut self, comment: String) {
         self.comment_content = text_editor::Content::with_text(&comment);
         self.comment_content
             .perform(text_editor::Action::Move(text_editor::Motion::DocumentEnd));
-        self.store_comment(comment);
+        self.store_editor_comment(&comment);
     }
 
     /// Apply a text_editor action to the comment content and sync the string to tag_list.
@@ -103,15 +112,33 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         let text = self.comment_content.text();
         // text() appends a trailing newline; strip it for storage.
         let trimmed = text.trim_end_matches('\n').to_string();
-        self.store_comment(trimmed);
+        self.store_editor_comment(&trimmed);
     }
 
-    /// Put the comment in the tag list. When it goes from empty to non-empty the commented tag
-    /// is checked, and when it is cleared the tag is unchecked; any other edit leaves the tag to
-    /// the user. See [`frename_core::active_commented_tag`].
+    /// Remove the AI block from the comment, keeping the editor's text.
+    pub fn remove_ai_block(&mut self) {
+        let editor = self.comment();
+        self.store_comment(editor);
+    }
+
+    /// Store the editor's text joined with the comment's AI block, which stays as it is.
+    fn store_editor_comment(&mut self, editor: &str) {
+        let block = self.ai_block().unwrap_or_default().to_string();
+        let comment = if block.is_empty() {
+            editor.to_string()
+        } else {
+            ai::replace_ai_block(editor, &block)
+        };
+        self.store_comment(comment);
+    }
+
+    /// Put the comment in the tag list. When the editor's text in it goes from empty to
+    /// non-empty the commented tag is checked, and when it is cleared the tag is unchecked; any
+    /// other edit leaves the tag to the user. An AI block alone is not a comment of the
+    /// editor's. See [`frename_core::active_commented_tag`].
     fn store_comment(&mut self, comment: String) {
-        let was_empty = self.tag_list.comment().trim().is_empty();
-        let is_empty = comment.trim().is_empty();
+        let was_empty = !frename_core::ai::has_editor_comment(self.tag_list.comment());
+        let is_empty = !frename_core::ai::has_editor_comment(&comment);
         self.tag_list.set_comment(comment);
         if was_empty == is_empty {
             return;
@@ -249,5 +276,63 @@ impl Default for FileWorkspace<FolderTagStore> {
     /// Workspace with no folder open yet: the tag store holds nothing until a folder is loaded.
     fn default() -> Self {
         Self::new(FolderTagStore::empty())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use iced::widget::text_editor::{Action, Edit, Motion};
+
+    const BLOCK: &str =
+        "AI: A cooking lesson.\n0:00–0:14 Chopping beets.\n— Claude Opus 5, 2026-09-26 —";
+
+    fn workspace_with_comment(comment: &str) -> FileWorkspace<FolderTagStore> {
+        let folder =
+            std::env::temp_dir().join(format!("frename-ai-block-ws-{}", std::process::id()));
+        let mut workspace = FileWorkspace::new(FolderTagStore::for_folder(&folder));
+        let mut file = File::from_path(folder.join("clip.mp4"), std::time::SystemTime::UNIX_EPOCH);
+        let mut snapshot = FileSnapshot::parse("clip.mp4");
+        snapshot.set_comment(comment.to_string());
+        file.set_file_snapshot(&snapshot);
+        workspace.set_file(Some(file));
+        workspace
+    }
+
+    #[test]
+    fn the_box_holds_the_editors_text_and_typing_keeps_the_ai_block() {
+        let mut workspace = workspace_with_comment(&format!("Mine\n\n{BLOCK}"));
+        assert_eq!(workspace.comment_content.text().trim_end(), "Mine");
+        assert_eq!(workspace.ai_block(), Some(BLOCK));
+
+        // The cursor starts at the top; typing there must not break the block.
+        workspace.apply_comment_action(Action::Edit(Edit::Insert('!')));
+        assert_eq!(workspace.tag_list().comment(), format!("!Mine\n\n{BLOCK}"));
+
+        workspace.apply_comment_action(Action::SelectAll);
+        workspace.apply_comment_action(Action::Edit(Edit::Delete));
+        assert_eq!(workspace.tag_list().comment(), BLOCK);
+
+        workspace.set_comment("0:12: ".to_string());
+        // Trailing space goes with the blank line before the block; the box keeps it.
+        assert_eq!(workspace.tag_list().comment(), format!("0:12:\n\n{BLOCK}"));
+        assert_eq!(workspace.comment(), "0:12:");
+    }
+
+    #[test]
+    fn removing_the_ai_block_keeps_the_editors_text() {
+        let mut workspace = workspace_with_comment(&format!("Mine\n\n{BLOCK}"));
+        workspace.remove_ai_block();
+        assert_eq!(workspace.tag_list().comment(), "Mine");
+        assert_eq!(workspace.ai_block(), None);
+    }
+
+    #[test]
+    fn a_first_line_of_the_editors_own_checks_the_commented_tag() {
+        let mut workspace = workspace_with_comment(BLOCK);
+        workspace.apply_comment_action(Action::Move(Motion::DocumentEnd));
+        workspace.apply_comment_action(Action::Edit(Edit::Insert('g')));
+        let tags = workspace.tag_list().file_snapshot().tags().to_vec();
+        assert_eq!(tags, [frename_core::DEFAULT_COMMENTED_TAG]);
     }
 }

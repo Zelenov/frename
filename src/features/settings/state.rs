@@ -83,6 +83,12 @@ impl SettingsState {
             Message::SetCommentedTagEnabled(enabled) => {
                 self.settings.commented_tag_enabled = enabled
             }
+            Message::SetAiModel(model) => self.settings.ai_model = model,
+            Message::SetSummaryLanguage(language) => self.settings.summary_language = language,
+            // Pasted keys often carry a line break or spaces around them.
+            Message::SetAnthropicApiKey(key) => {
+                self.settings.anthropic_api_key = key.trim().to_string()
+            }
             // Opened by the app, which owns the folder; the offer is taken.
             Message::OpenBatchAction(Operation::MoveComments(_)) => {
                 self.comment_storage_changed = false
@@ -92,7 +98,10 @@ impl SettingsState {
             }
             Message::OpenBatchAction(Operation::RespaceTags) => self.tag_spacing_changed = false,
             Message::OpenBatchAction(
-                Operation::TagCommented | Operation::FixTags | Operation::ReloadFiles,
+                Operation::TagCommented
+                | Operation::FixTags
+                | Operation::ReloadFiles
+                | Operation::AiSummary(_),
             ) => {}
         }
     }
@@ -166,5 +175,18 @@ mod tests {
         };
         state.apply(Message::SetCommentedTag("Has comment.v2:".to_string()));
         assert_eq!(state.settings().commented_tag, "Has commentv2");
+    }
+
+    #[test]
+    fn a_pasted_api_key_loses_the_space_around_it() {
+        let mut state = SettingsState {
+            settings: AppSettings::default(),
+            comment_storage_changed: false,
+            in_out_storage_changed: false,
+            tag_spacing_changed: false,
+        };
+        state.apply(Message::SetAnthropicApiKey(" sk-ant-123\n".to_string()));
+        assert_eq!(state.settings().anthropic_api_key, "sk-ant-123");
+        assert_eq!(state.settings().ai_settings().api_key(), Some("sk-ant-123"));
     }
 }
