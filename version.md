@@ -2,8 +2,8 @@
 ## Added
 - Markers: `F2` (or 📍) marks a moment of the video, `F2` again names it. Each marker has a name and one of Premiere's colors, and is saved inside the video, where Premiere Pro shows it on the clip after import.
 - The marker list (◆, in fullscreen too) shares the side of the picture with the subtitle list, with a tab for each (CC Subtitles, ◆ Markers): click a marker to jump to it or edit it. An empty list has an Add button.
-- `Shift+F1` / `Shift+F3` jump to the previous / next marker, `Shift+F2` deletes the marker under the playhead, and dragging the progress bar with `Shift` snaps to markers. Markers show as colored ticks on the progress bar.
-- While the playhead is on a marker, its name shows above its tick on the progress bar, the way a subtitle line shows. Click it to rename the marker.
+- `Shift+F1` / `Shift+F3` jump to the previous / next marker, `Shift+F2` deletes the marker under the playhead, and dragging the progress bar with `Shift` snaps to markers. Markers show as pins in their colors on the progress bar.
+- While the playhead is on a marker, its name becomes the head of its pin above the progress bar, the way a subtitle line shows. Click it to rename the marker.
 - The batch report has an Open log button next to the failed files: the log says why each one failed.
 - The file list shows 📍 and the number of markers of each file, and the Filter dropdown can show only files with markers.
 - Batch action "Markers ⇄ comment" turns comment lines like `03:24 — Take 3` into markers, or copies markers into the comment.

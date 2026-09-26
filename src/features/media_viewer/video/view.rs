@@ -33,6 +33,9 @@ pub struct MarkersView<'a> {
     /// `None` when the file cannot hold markers.
     pub markers: Option<&'a [Marker]>,
     pub state: &'a MarkersState,
+    /// Width of the video pane, which starts at the window's left edge. Windowed only:
+    /// fullscreen, the player is the whole window.
+    pub pane_width: f32,
 }
 
 /// Render the video player with controls below.
@@ -114,6 +117,10 @@ pub fn view<'a>(
             subtitles.map(|_| cue_list_button(state.show_cue_list()));
         let marker_list_btn = marker_list_button(state.show_marker_list());
 
+        // Like a subtitle line: the name of the marker the playhead is on, as its pin's head.
+        let labelled = markers
+            .markers
+            .and_then(|m| markers::view::marker_at(m, state.position_ms()));
         let bar_markers = markers
             .markers
             .unwrap_or_default()
@@ -122,17 +129,17 @@ pub fn view<'a>(
                 start: m.start_ms as f32 / 1000.0,
                 end: m.end_ms() as f32 / 1000.0,
                 color: theme::marker_color(m.color),
+                active: labelled.is_some_and(|l| std::ptr::eq(l, m)),
             })
             .collect();
-        // Like a subtitle line: the name of the marker the playhead is on, over its tick.
-        let marker_label = markers
-            .markers
-            .and_then(|m| markers::view::marker_at(m, state.position_ms()))
-            .map(|m| video_controls::view::MarkerLabel {
-                at: m.start_ms as f32 / 1000.0,
-                name: m.name.as_str(),
-                guid: m.guid.as_deref(),
-            });
+        let marker_label = labelled.map(|m| video_controls::view::MarkerLabel {
+            at: m.start_ms as f32 / 1000.0,
+            name: m.name.as_str(),
+            guid: m.guid.as_deref(),
+            color: theme::marker_color(m.color),
+            // Within the player, not within the bar.
+            right_edge: (!is_fullscreen).then_some(markers.pane_width),
+        });
         let controls_inner = video_controls::view::view(
             state.controls(),
             position_secs,

@@ -1,6 +1,6 @@
 //! The marker list: one row per marker, read-only like a subtitle cue, except the one row open
-//! for editing. Rows have a fixed height (the open one a taller fixed height), so the list is
-//! scrolled to a row by arithmetic, as the subtitle list is.
+//! for renaming. Every row has the same fixed height, open or not, so the list is scrolled to
+//! a row by arithmetic, as the subtitle list is.
 
 use frename_core::{format_marker_time, Marker, MarkerColor, MARKER_SNAP_MS};
 use iced::widget::{
@@ -14,12 +14,15 @@ use crate::theme;
 
 pub const MARKER_LIST_SCROLLABLE_ID: &str = "marker_list";
 pub const MARKER_NAME_INPUT_ID: &str = "marker_name_input";
-/// Room for the first line and the name; a longer name is clipped.
-const ROW_HEIGHT: f32 = 56.0;
-/// The open row: first line and name field.
-const OPEN_ROW_HEIGHT: f32 = 66.0;
+/// Every row, open for renaming or not: the first line and the name; a longer name is
+/// clipped. One height, so opening a row moves nothing.
+const ROW_HEIGHT: f32 = 62.0;
 const ROW_SPACING: f32 = 2.0;
-/// Distance from one closed row's top to the next.
+/// The name, shown or edited, in the same box: the field's text size, padding and height.
+const NAME_SIZE: f32 = 13.0;
+const NAME_PADDING: [f32; 2] = [3.0, 6.0];
+const NAME_HEIGHT: f32 = 23.0;
+/// Distance from one row's top to the next.
 pub const ROW_PITCH: f32 = ROW_HEIGHT + ROW_SPACING;
 const DOT_SIZE: f32 = 14.0;
 const ICON_SIZE: f32 = 22.0;
@@ -202,31 +205,31 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
         .into(),
     };
 
-    let (body, height): (Element<'a, Message>, f32) = match open {
-        Some(_) => {
-            let name = text_input("Name", &marker.name)
-                .id(iced::widget::Id::new(MARKER_NAME_INPUT_ID))
-                .on_input(Message::NameInput)
-                .on_submit(Message::Close)
-                .size(13)
-                .padding([3, 6]);
-            (column![first_line, name].spacing(4).into(), OPEN_ROW_HEIGHT)
-        }
-        None => {
-            let name = text(if marker.name.is_empty() {
+    let name: Element<'a, Message> = match open {
+        Some(_) => text_input("Name", &marker.name)
+            .id(iced::widget::Id::new(MARKER_NAME_INPUT_ID))
+            .on_input(Message::NameInput)
+            .on_submit(Message::Close)
+            .size(NAME_SIZE)
+            .padding(NAME_PADDING)
+            .into(),
+        None => container(
+            text(if marker.name.is_empty() {
                 "—"
             } else {
                 marker.name.as_str()
             })
-            .size(13)
+            .size(NAME_SIZE)
             .color(if lit { theme::TEXT } else { theme::TEXT_SOFT })
-            .wrapping(iced::widget::text::Wrapping::None);
-            (column![first_line, name].spacing(2).into(), ROW_HEIGHT)
-        }
+            .wrapping(iced::widget::text::Wrapping::None),
+        )
+        .padding(NAME_PADDING)
+        .into(),
     };
+    let body = column![first_line, container(name).height(NAME_HEIGHT)].spacing(4);
     let row_box = container(body)
         .width(Length::Fill)
-        .height(height)
+        .height(ROW_HEIGHT)
         .clip(true)
         .padding([6, 10])
         .style(move |theme| {

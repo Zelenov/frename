@@ -126,7 +126,7 @@ A folder without one starts with a set for travel and documentary work: `pick`, 
 
 The progress bar shows what you have noted about a clip:
 
-- **Markers:** `F2` or 📍 marks the moment under the playhead with a colored tick. ◆ opens the
+- **Markers:** `F2` or 📍 marks the moment under the playhead with a pin in the marker's color. ◆ opens the
   marker list over the picture (in fullscreen too; it shares the place with the subtitle list, with a
   tab for each; an empty list has an Add button). Click a marker's row to name it, its dot to
   pick one of Premiere's colors, ✕ to delete it, and its time to jump there. Markers are saved inside the video when you leave the
@@ -134,7 +134,7 @@ The progress bar shows what you have noted about a clip:
   you import it (re-import a clip it already has: Premiere reads the markers once). Markers
   Premiere wrote are shown too and kept (one with a length is drawn as a band). If a clip is open in Premiere, its markers may not save:
   the file gets a red ✕ in the list, and frename tries again when you next leave it.
-  While the playhead is on a marker, its name shows above its tick; click it to rename the
+  While the playhead is on a marker, its name becomes the pin's head; click it to rename the
   marker.
 - **Frames:** `F12` or 📷 saves the current frame as a JPEG next to the video
   (`clip.mp4.snap.00-01-05-250.jpg`) and shows `Frame saved`.

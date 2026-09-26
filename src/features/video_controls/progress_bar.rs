@@ -1,5 +1,7 @@
 //! Custom rectangular progress bar widget with click-to-seek and drag support. Clip markers
-//! are drawn on it in their colors; with Shift held, a seek snaps to the nearest marker.
+//! are pins in their colors: a needle through the bar with a round head above it, or, for the
+//! marker the playhead is on, with its name label as the head. With Shift held, a seek snaps
+//! to the nearest marker.
 
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::widget::{self, Widget};
@@ -12,14 +14,20 @@ use crate::theme;
 const BAR_HEIGHT: f32 = 8.0;
 const HIT_HEIGHT: f32 = 24.0;
 const BORDER_RADIUS: f32 = 4.0;
-/// How far (px) a marker ticks out above and below the bar.
+/// How far (px) a pin's needle reaches below the bar.
 const TICK_OVERHANG: f32 = 3.0;
-/// Height of the band a ranged marker draws above the bar.
+/// Diameter of a pin's round head, at the top of the widget.
+const PIN_HEAD: f32 = 7.0;
+const NEEDLE_WIDTH: f32 = 2.0;
+/// Height of the band a ranged marker draws under the bar.
 const BAND_HEIGHT: f32 = 3.0;
 /// A Shift seek snaps to a marker this close to the cursor (px).
 const SNAP_DISTANCE: f32 = 8.0;
-/// Gap between the label and the top of the marker's tick.
-const LABEL_GAP: f32 = 2.0;
+/// How far into the widget the label (the active pin's head) reaches: its bottom sits where
+/// a round head would be, and the needle runs from it.
+const LABEL_DIP: f32 = 2.0;
+/// Least room between the label and the edge of the window or the player.
+const LABEL_MARGIN: f32 = 4.0;
 
 /// A clip marker as the bar draws it, in the bar's unit.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -28,6 +36,8 @@ pub struct BarMarker {
     /// Equal to `start` for a point marker.
     pub end: f32,
     pub color: Color,
+    /// The playhead is on it: the label over the bar is its head, not a round one.
+    pub active: bool,
 }
 
 /// Internal widget state for tracking drag
@@ -61,6 +71,8 @@ pub struct ProgressBar<'a, Message, Theme = iced::Theme, Renderer = iced::Render
     markers: Vec<BarMarker>,
     /// Shown above the bar at a value: the name of the marker the playhead is on.
     label: Option<(f32, Element<'a, Message, Theme, Renderer>)>,
+    /// Right edge (window x) the label stays left of; `None` for the window's.
+    label_right_edge: Option<f32>,
 }
 
 impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
@@ -84,6 +96,7 @@ impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
             fill_color: None,
             markers: Vec::new(),
             label: None,
+            label_right_edge: None,
         }
     }
 
@@ -117,6 +130,13 @@ impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
     /// takes the clicks there instead of what it covers.
     pub fn label(mut self, label: Option<(f32, Element<'a, Message, Theme, Renderer>)>) -> Self {
         self.label = label;
+        self
+    }
+
+    /// Keep the label left of this window x (the player's right edge) instead of the
+    /// window's right edge. On the left it stays within the window: the player starts there.
+    pub fn label_right_edge(mut self, right_edge: Option<f32>) -> Self {
+        self.label_right_edge = right_edge;
         self
     }
 
@@ -329,41 +349,72 @@ where
             }
         }
 
-        // Clip markers: a tick in the marker's color, and a band above the bar for a range.
+        // Clip markers as pins in their colors, and a band under the bar for a range. The
+        // active pin is drawn last, over its neighbours, with its needle up to the label.
         if span > 0.0 {
             let to_x = |v: f32| bounds.x + ((v - self.min) / span).clamp(0.0, 1.0) * bounds.width;
-            for marker in &self.markers {
+            let needle_bottom = bar_y + BAR_HEIGHT + TICK_OVERHANG;
+            let quad = |bounds: Rectangle, radius: f32| renderer::Quad {
+                bounds,
+                border: Border {
+                    radius: radius.into(),
+                    ..Border::default()
+                },
+                shadow: Shadow::default(),
+                snap: true,
+            };
+            let pins = self
+                .markers
+                .iter()
+                .filter(|m| !m.active)
+                .chain(self.markers.iter().filter(|m| m.active));
+            for marker in pins {
                 let x0 = to_x(marker.start);
                 if marker.end > marker.start {
                     renderer.fill_quad(
-                        renderer::Quad {
-                            bounds: Rectangle {
+                        quad(
+                            Rectangle {
                                 x: x0,
-                                y: bar_y - TICK_OVERHANG - BAND_HEIGHT,
+                                y: bar_y + BAR_HEIGHT + 1.0,
                                 width: (to_x(marker.end) - x0).max(2.0),
                                 height: BAND_HEIGHT,
                             },
-                            border: Border::default(),
-                            shadow: Shadow::default(),
-                            snap: true,
-                        },
+                            0.0,
+                        ),
                         marker.color,
                     );
                 }
+                let needle_top = if marker.active {
+                    bounds.y + LABEL_DIP
+                } else {
+                    bounds.y + PIN_HEAD / 2.0
+                };
                 renderer.fill_quad(
-                    renderer::Quad {
-                        bounds: Rectangle {
-                            x: x0 - 1.0,
-                            y: bar_y - TICK_OVERHANG,
-                            width: 2.0,
-                            height: BAR_HEIGHT + 2.0 * TICK_OVERHANG,
+                    quad(
+                        Rectangle {
+                            x: x0 - NEEDLE_WIDTH / 2.0,
+                            y: needle_top,
+                            width: NEEDLE_WIDTH,
+                            height: needle_bottom - needle_top,
                         },
-                        border: Border::default(),
-                        shadow: Shadow::default(),
-                        snap: true,
-                    },
+                        0.0,
+                    ),
                     marker.color,
                 );
+                if !marker.active {
+                    renderer.fill_quad(
+                        quad(
+                            Rectangle {
+                                x: x0 - PIN_HEAD / 2.0,
+                                y: bounds.y,
+                                width: PIN_HEAD,
+                                height: PIN_HEAD,
+                            },
+                            PIN_HEAD / 2.0,
+                        ),
+                        marker.color,
+                    );
+                }
             }
         }
     }
@@ -423,16 +474,15 @@ where
     ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
         let span = self.max - self.min;
         let min = self.min;
+        let right_edge = self.label_right_edge;
         let (value, content) = self.label.as_mut().filter(|_| span > 0.0)?;
         let bounds = layout.bounds() + translation;
-        let bar_y = bounds.y + (bounds.height - BAR_HEIGHT) / 2.0;
         let x = bounds.x + ((*value - min) / span).clamp(0.0, 1.0) * bounds.width;
         Some(overlay::Element::new(Box::new(LabelOverlay {
             content,
             tree: tree.children.first_mut()?,
-            anchor: Point::new(x, bar_y - TICK_OVERHANG - LABEL_GAP),
-            min_x: bounds.x,
-            max_x: bounds.x + bounds.width,
+            anchor: Point::new(x, bounds.y + LABEL_DIP),
+            right_edge,
         })))
     }
 
@@ -466,14 +516,15 @@ where
     }
 }
 
-/// The label over the bar, laid out centred on `anchor` (the top of the marker's tick) and
-/// kept between `min_x` and `max_x`.
+/// The label over the bar, laid out centred on `anchor` (where the active pin's needle
+/// starts) with its bottom there. Centred as long as it fits: near the player's edge it moves
+/// in, left of `right_edge` (the window's right edge when `None`) and right of the window's
+/// left edge.
 struct LabelOverlay<'a, 'b, Message, Theme, Renderer> {
     content: &'b mut Element<'a, Message, Theme, Renderer>,
     tree: &'b mut widget::Tree,
     anchor: Point,
-    min_x: f32,
-    max_x: f32,
+    right_edge: Option<f32>,
 }
 
 impl<Message, Theme, Renderer> overlay::Overlay<Message, Theme, Renderer>
@@ -488,8 +539,10 @@ where
             &layout::Limits::new(Size::ZERO, bounds),
         );
         let size = node.size();
+        let right = self.right_edge.unwrap_or(bounds.width).min(bounds.width);
         let x = (self.anchor.x - size.width / 2.0)
-            .clamp(self.min_x, (self.max_x - size.width).max(self.min_x));
+            .min(right - LABEL_MARGIN - size.width)
+            .max(LABEL_MARGIN);
         node.move_to(Point::new(x, self.anchor.y - size.height))
     }
 
@@ -558,6 +611,7 @@ mod tests {
             start,
             end: start,
             color: Color::WHITE,
+            active: false,
         }
     }
 

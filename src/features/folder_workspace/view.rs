@@ -20,6 +20,7 @@ pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Mes
     let markers = media_viewer::video::view::MarkersView {
         markers: state.file_workspace().markers(),
         state: state.markers(),
+        pane_width: state.left_width(),
     };
 
     if state.directory().is_none() && !state.media_fullscreen() {

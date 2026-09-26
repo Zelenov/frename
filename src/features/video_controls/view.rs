@@ -116,7 +116,8 @@ pub fn view<'a>(
         .on_release(Message::SeekReleased)
         .segment_range(segment_start, segment_end)
         .markers(markers)
-        .label(marker_label.map(|label| (label.at, marker_label_button(label))));
+        .label(marker_label.map(|label| (label.at, marker_label_button(label))))
+        .label_right_edge(marker_label.and_then(|label| label.right_edge));
 
     let volume_icon: Element<'_, Message> =
         container(text("🔊").size(13)).center_y(Length::Fill).into();
@@ -197,6 +198,11 @@ pub struct MarkerLabel<'a> {
     pub name: &'a str,
     /// `None` for a marker frename cannot change (it has no GUID).
     pub guid: Option<&'a str>,
+    /// Its pin's color: the label is the pin's head, outlined in it.
+    pub color: iced::Color,
+    /// The player's right edge (window x) the label stays left of; `None` in fullscreen,
+    /// where the player is the whole window.
+    pub right_edge: Option<f32>,
 }
 
 /// The label over the marker's tick: its name and ✎. A click opens the marker's row in the
@@ -218,6 +224,6 @@ fn marker_label_button(label: MarkerLabel<'_>) -> Element<'_, Message> {
     button(content)
         .on_press_maybe(label.guid.map(|guid| Message::EditMarker(guid.to_string())))
         .padding([2, 6])
-        .style(theme::marker_label_style)
+        .style(theme::marker_label_style(label.color))
         .into()
 }
