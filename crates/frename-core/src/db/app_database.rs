@@ -9,10 +9,13 @@ use std::time::Duration;
 
 use rusqlite::Connection;
 
+use crate::ai::SummaryLanguage;
 use crate::{CommentStorage, FolderAndFile, InOutStorage};
 
 use super::migrations;
-use super::traits::{AppSettings, AppStateStore, Initializable, VideoSettings, WindowGeometry};
+use super::traits::{
+    AppSettings, AppStateStore, Initializable, UpdateCheckState, VideoSettings, WindowGeometry,
+};
 
 /// Open connections, keyed by database path.
 ///
@@ -176,7 +179,7 @@ impl AppStateStore for AppDatabase {
         let conn = lock_connection(&conn);
         conn.query_row(
             "SELECT autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled,
-                    space_after_tags
+                    space_after_tags, summary_language
              FROM app_settings WHERE id = 1",
             [],
             |row| Ok(AppSettings {
@@ -187,6 +190,7 @@ impl AppStateStore for AppDatabase {
                 commented_tag: row.get::<_, String>(4)?,
                 commented_tag_enabled: row.get::<_, i64>(5)? != 0,
                 space_after_tags: row.get::<_, i64>(6)? != 0,
+                summary_language: SummaryLanguage::from_name(&row.get::<_, String>(7)?),
             }),
         ).ok()
     }
@@ -195,8 +199,8 @@ impl AppStateStore for AppDatabase {
         if let Ok(conn) = self.conn() {
             let conn = lock_connection(&conn);
             let _ = conn.execute(
-                "INSERT INTO app_settings (id, autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled, space_after_tags)
-                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                "INSERT INTO app_settings (id, autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled, space_after_tags, summary_language)
+                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
                  ON CONFLICT(id) DO UPDATE SET
                      autoplay_video = excluded.autoplay_video,
                      monochrome_tags = excluded.monochrome_tags,
@@ -204,7 +208,8 @@ impl AppStateStore for AppDatabase {
                      in_out_storage = excluded.in_out_storage,
                      commented_tag = excluded.commented_tag,
                      commented_tag_enabled = excluded.commented_tag_enabled,
-                     space_after_tags = excluded.space_after_tags",
+                     space_after_tags = excluded.space_after_tags,
+                     summary_language = excluded.summary_language",
                 rusqlite::params![
                     settings.autoplay_video,
                     settings.monochrome_tags,
@@ -213,6 +218,43 @@ impl AppStateStore for AppDatabase {
                     settings.commented_tag,
                     settings.commented_tag_enabled,
                     settings.space_after_tags,
+                    settings.summary_language.as_str(),
+                ],
+            );
+        }
+    }
+
+    fn get_update_check(&self) -> Option<UpdateCheckState> {
+        let conn = self.conn().ok()?;
+        let conn = lock_connection(&conn);
+        conn.query_row(
+            "SELECT check_on_start, last_check, newest_version FROM update_check WHERE id = 1",
+            [],
+            |row| {
+                Ok(UpdateCheckState {
+                    check_on_start: row.get::<_, i64>(0)? != 0,
+                    last_check: u64::try_from(row.get::<_, i64>(1)?).unwrap_or(0),
+                    newest_version: row.get(2)?,
+                })
+            },
+        )
+        .ok()
+    }
+
+    fn set_update_check(&self, state: UpdateCheckState) {
+        if let Ok(conn) = self.conn() {
+            let conn = lock_connection(&conn);
+            let _ = conn.execute(
+                "INSERT INTO update_check (id, check_on_start, last_check, newest_version)
+                 VALUES (1, ?1, ?2, ?3)
+                 ON CONFLICT(id) DO UPDATE SET
+                     check_on_start = excluded.check_on_start,
+                     last_check = excluded.last_check,
+                     newest_version = excluded.newest_version",
+                rusqlite::params![
+                    state.check_on_start,
+                    i64::try_from(state.last_check).unwrap_or(i64::MAX),
+                    state.newest_version,
                 ],
             );
         }
@@ -256,5 +298,28 @@ impl AppDatabase {
                 Err(e) => log::warn!("set_panel_widths failed: {e}"),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_update_check_state_round_trips() {
+        let path =
+            std::env::temp_dir().join(format!("frename-update-check-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let db = AppDatabase::with_path(&path);
+        db.initialize().expect("migrate");
+        assert_eq!(db.get_update_check(), None, "never saved");
+
+        let state = UpdateCheckState {
+            check_on_start: false,
+            last_check: 1_790_000_000,
+            newest_version: "0.68.0".to_string(),
+        };
+        db.set_update_check(state.clone());
+        assert_eq!(db.get_update_check(), Some(state));
     }
 }

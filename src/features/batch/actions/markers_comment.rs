@@ -8,7 +8,7 @@ use frename_core::FileTagger;
 use iced::widget::{column, radio};
 use iced::Element;
 
-use super::super::{ItemResult, ItemStatus};
+use super::super::ItemResult;
 
 pub const LABEL: &str = "Markers ⇄ comment";
 
@@ -88,14 +88,11 @@ pub fn run(direction: Direction, path: &Path) -> ItemResult {
     };
     match outcome {
         Ok(outcome) => super::item_result(outcome),
-        // The format cannot hold markers, or the write failed (the file is read-only or open
-        // in Premiere): the comment is left as it was.
+        // The format cannot hold markers, the file is damaged, or the write failed (it is
+        // read-only or open in Premiere): the comment is left as it was.
         Err(error) => {
             log::warn!("{LABEL}: {path:?} not changed: {error}");
-            ItemResult {
-                status: ItemStatus::Failed,
-                update: None,
-            }
+            ItemResult::failed(error.to_string())
         }
     }
 }

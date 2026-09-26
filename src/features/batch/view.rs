@@ -1,7 +1,7 @@
 //! UI for the batch panel: the action list, the chosen action's options, and the job panel
 //! every action shares.
 
-use frename_core::FileId;
+use frename_core::{File, FileId};
 use iced::widget::{
     button, column, container, progress_bar, row, scrollable, text, tooltip, Space,
 };
@@ -10,6 +10,7 @@ use iced::{Element, Length};
 use crate::features::folder_workspace::Directory;
 use crate::theme;
 
+use super::actions::{files, spend_line};
 use super::state::Progress;
 use super::{Action, BatchState, Message};
 
@@ -26,7 +27,7 @@ pub fn view<'a>(state: &'a BatchState, directory: Option<&'a Directory>) -> Elem
     .spacing(2)
     .width(Length::Fixed(ACTION_LIST_WIDTH));
 
-    let options = container(action_options(state))
+    let options = container(action_options(state, directory))
         .padding([4, 16])
         .width(Length::Fill)
         .height(Length::Fill);
@@ -83,19 +84,37 @@ fn action_entry(action: Action, selected: Action) -> Element<'static, Message> {
 }
 
 /// The selected action's panel, and the button that runs it on the checked files.
-fn action_options(state: &BatchState) -> Element<'_, Message> {
-    let count = state.checked_count();
-    let can_run = count > 0 && state.operation().is_some() && !state.is_running();
-    let run = button(text(format!("Run on {}", files(count))).size(13))
+fn action_options<'a>(
+    state: &'a BatchState,
+    directory: Option<&'a Directory>,
+) -> Element<'a, Message> {
+    let checked: Vec<&File> = directory.map_or_else(Vec::new, |dir| {
+        dir.all_files()
+            .filter(|f| state.is_checked(f.id()))
+            .collect()
+    });
+    let (panel, label, ready) = state.actions().panel(state.action(), &checked);
+    // Clip lengths still being read hold their files open, which a rename would fail on.
+    let can_run = ready && !state.is_running() && !state.actions().is_reading_files();
+    let run = button(text(label).size(13))
         .on_press_maybe(can_run.then_some(Message::Run))
         .padding([6, 14]);
 
-    column![
-        state.actions().view(state.action()).map(Message::Action),
-        run
-    ]
-    .spacing(12)
-    .into()
+    // The options scroll; the run button, and why it may be off, stay in view below them, even
+    // in a small window or under a job's report.
+    let options = scrollable(panel.map(Message::Action))
+        .height(Length::Fill)
+        .style(theme::dark_scrollable_style);
+    column![options]
+        .extend(
+            state
+                .actions()
+                .footer(state.action())
+                .map(|footer| footer.map(Message::Action)),
+        )
+        .push(run)
+        .spacing(12)
+        .into()
 }
 
 /// The job panel shared by every action: progress, the file in work, the outcome counts, and
@@ -157,7 +176,9 @@ fn job_panel<'a>(
                 .align_y(iced::Alignment::Center),
             );
     } else {
-        let summary = if progress.finished < progress.total {
+        let mut summary = if let Some(stopped) = state.stopped() {
+            stopped.to_string()
+        } else if progress.finished < progress.total {
             format!(
                 "Stopped after {} of {}.",
                 progress.finished,
@@ -166,6 +187,14 @@ fn job_panel<'a>(
         } else {
             format!("Finished {}.", files(progress.total))
         };
+        if let Some(usage) = progress.usage {
+            let at_least = if progress.usage_unknown {
+                "at least "
+            } else {
+                ""
+            };
+            summary.push_str(&format!("   AI: {at_least}{}", spend_line(usage)));
+        }
         panel = panel.push(text(summary).size(13)).push(
             row![
                 counts,
@@ -176,17 +205,22 @@ fn job_panel<'a>(
         );
         let failed = state.failed();
         if !failed.is_empty() {
-            let names = column(
-                failed
-                    .into_iter()
-                    .map(|id| text(name(id)).size(12).color(theme::ERROR).into()),
-            );
+            let heading = if failed.iter().all(|(_, reason)| reason.is_some()) {
+                "Failed:"
+            } else {
+                "Failed (the log says why):"
+            };
+            let names = column(failed.into_iter().map(|(id, reason)| {
+                let line = match reason {
+                    Some(reason) => format!("{} — {reason}", name(id)),
+                    None => name(id),
+                };
+                text(line).size(12).color(theme::ERROR).into()
+            }));
             panel = panel
                 .push(
                     row![
-                        text("Failed (the log says why):")
-                            .size(12)
-                            .color(theme::TEXT_MUTED),
+                        text(heading).size(12).color(theme::TEXT_MUTED),
                         Space::new().width(Length::Fill),
                         button(text("Open log").size(12))
                             .on_press(Message::OpenLog)
@@ -209,9 +243,4 @@ fn job_panel<'a>(
         .width(Length::Fill)
         .style(theme::elevated_container_style)
         .into()
-}
-
-/// "5 files" / "1 file".
-fn files(n: usize) -> String {
-    format!("{n} {}", if n == 1 { "file" } else { "files" })
 }

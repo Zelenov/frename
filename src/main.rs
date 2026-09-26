@@ -11,9 +11,12 @@ use simplelog::{
 use std::fs::File;
 
 mod app;
+mod bundled_gstreamer;
 mod crash_guard;
 mod demo;
 mod features;
+mod old_settings_prompt;
+mod package;
 mod self_test;
 mod tag_colors;
 mod theme;
@@ -26,6 +29,10 @@ use frename_core::{
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // First of all: Velopack starts the exe with hook arguments on install, update and uninstall,
+    // handles them here and exits.
+    package::run_velopack_hooks();
+
     // Install the file tagger backend before any file operations.
     //   Release build (default): ProductionFileTagger — actually renames files on disk.
     //   Debug build or --debug flag: InMemoryFileTagger — no disk changes (safe for testing).
@@ -49,6 +56,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    // An installed or portable package keeps the database and the log in its root: the folder
+    // with the exe is replaced by every update. Set while the process is single-threaded.
+    let package = package::Package::locate();
+    if let Some(package) = &package {
+        frename_core::set_app_data_dir(package.data_dir());
+    }
+    package::set_current(package.clone());
+    let self_test = self_test_paths(&args);
+
     // A demo shows the app as it really is (comments, screenshots) on its throwaway copies.
     if is_debug_mode && demo.is_none() {
         install_file_tagger(Box::new(InMemoryFileTagger::default()));
@@ -59,6 +75,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // AppImage it is not the executable's folder, and may not exist yet.
     let data_dir = app_data_dir();
     std::fs::create_dir_all(&data_dir)?;
+    // Before any thread starts (the environment is not thread-safe) and before gst::init.
+    #[cfg(windows)]
+    let bundled_gstreamer = bundled_gstreamer::configure_bundled_gstreamer(&data_dir);
+    #[cfg(not(windows))]
+    let bundled_gstreamer = false;
     let log_file = File::create(frename_core::log_path())?;
 
     // Log only this app's crates. Dependencies are far noisier than they look: cosmic_text emits a
@@ -83,7 +104,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         WriteLogger::new(log_level, log_config, log_file),
     ])?;
 
-    log::info!("frename application started");
+    log::info!(
+        "frename {} started ({}), data in {}",
+        package::display_version(package.as_ref()),
+        match &package {
+            Some(p) if p.portable => "portable",
+            Some(_) => "installed",
+            None => "not packaged",
+        },
+        data_dir.display()
+    );
+    if bundled_gstreamer {
+        log::info!("using the GStreamer bundled with frename");
+    }
+
+    // Settings of an older zip version: a scheduled import, or the first-start offer. Only a
+    // package has its data away from the exe, and a self-test or demo never asks anything.
+    if package.is_some() && self_test.is_none() && demo.is_none() {
+        old_settings_prompt::run(&data_dir);
+    }
 
     // Check GStreamer availability
     match gstreamer::init() {
@@ -108,7 +147,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    if let Some(paths) = self_test_paths(&args) {
+    if let Some(paths) = self_test {
         std::process::exit(self_test::run(&paths));
     }
 

@@ -14,7 +14,12 @@ use crate::widgets::splitter::{Splitter, HIT_WIDTH};
 use super::{FolderWorkspace, Message};
 
 /// Workspace layout: one big drop panel when no folder is open; otherwise regions and splitters.
-pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Message> {
+/// `update_available` is the newer frename version found by the update check, if any.
+pub fn view(
+    state: &FolderWorkspace,
+    tag_palette: TagPalette,
+    update_available: Option<String>,
+) -> Element<'_, Message> {
     let seg_start = state.file_workspace().segment_start_secs();
     let seg_end = state.file_workspace().segment_end_secs();
     let markers = media_viewer::video::view::MarkersView {
@@ -81,6 +86,7 @@ pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Mes
             has_selected,
             state.batch().is_active(),
             state.batch().is_running(),
+            update_available,
         ),
     ]
     .height(Length::Fill)
@@ -116,6 +122,7 @@ pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Mes
             file_workspace::Message::FileNamePanel(m) => Message::FileNamePanel(m),
             file_workspace::Message::SyncPanel(m) => Message::SyncPanel(m),
             file_workspace::Message::CommentAction(a) => Message::CommentAction(a),
+            file_workspace::Message::AiBlock(m) => Message::AiBlock(m),
         })
     };
 

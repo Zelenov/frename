@@ -2,8 +2,11 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
-use frename_core::{FileId, FileSnapshot};
+use frename_core::ai::provider::AiUsage;
+use frename_core::{File, FileId, FileSnapshot};
 
 use super::actions::Actions;
 use super::{Action, Message, Operation};
@@ -18,16 +21,55 @@ pub enum ItemStatus {
     Done,
     /// Nothing to do for this file.
     Skipped,
-    /// Could not be done; the details are in the log.
+    /// Could not be done; the reason is in the failed list when the action gives one, and in
+    /// the log.
     Failed,
 }
 
 /// What an operation did to one file.
 #[derive(Debug, Clone)]
 pub struct ItemResult {
+    /// `Pending` when the file was left before it was done (a cancel reached it).
     pub status: ItemStatus,
     /// The file's path and snapshot afterwards, when the operation touched it.
     pub update: Option<(PathBuf, FileSnapshot)>,
+    /// Why the file failed, shown after its name in the failed list.
+    pub reason: Option<String>,
+    /// What the AI requests for this file cost, summed into the job's spend.
+    pub usage: Option<AiUsage>,
+    /// A request for this file may have been billed without saying what it cost (it timed
+    /// out), so the job's spend is a lower bound.
+    pub usage_unknown: bool,
+    /// Stop the job after this file, leaving the rest not reached, with this summary line.
+    pub stop_job: Option<String>,
+    /// Stop the job with this summary line once [`REPEATS_THAT_STOP`] files in a row end with
+    /// it (e.g. the network is gone), instead of failing every file left the same way.
+    pub stop_if_repeated: Option<String>,
+}
+
+/// How many files in a row may fail the same way before the job stops.
+pub const REPEATS_THAT_STOP: usize = 3;
+
+impl ItemResult {
+    pub fn new(status: ItemStatus, update: Option<(PathBuf, FileSnapshot)>) -> Self {
+        Self {
+            status,
+            update,
+            reason: None,
+            usage: None,
+            usage_unknown: false,
+            stop_job: None,
+            stop_if_repeated: None,
+        }
+    }
+
+    /// A failure with the reason the failed list shows.
+    pub fn failed(reason: impl Into<String>) -> Self {
+        Self {
+            reason: Some(reason.into()),
+            ..Self::new(ItemStatus::Failed, None)
+        }
+    }
 }
 
 /// One run of an operation over the files checked when it started.
@@ -40,6 +82,18 @@ struct Job {
     /// Index into `order` of the next file to start.
     next: usize,
     cancelled: bool,
+    /// Set together with `cancelled`, for the file in work to see.
+    cancel: Arc<AtomicBool>,
+    /// Why failed files failed, when their action said.
+    reasons: HashMap<FileId, String>,
+    /// What the job's AI requests cost so far; `None` when it made none.
+    usage: Option<AiUsage>,
+    /// Some request may have been billed without reporting its cost.
+    usage_unknown: bool,
+    /// Why a file stopped the job, if one did.
+    stopped: Option<String>,
+    /// The last files' repeated failure and how many in a row ended with it.
+    repeated: Option<(String, usize)>,
     /// False once the job has finished or stopped; the report stays until it is closed.
     running: bool,
     /// Files whose check changed after the job: the list shows their check box again, while
@@ -64,6 +118,10 @@ pub struct Progress {
     pub failed: usize,
     pub running: bool,
     pub cancelled: bool,
+    /// What the job's AI requests cost so far; `None` when it made none.
+    pub usage: Option<AiUsage>,
+    /// `usage` is a lower bound: some request did not report its cost.
+    pub usage_unknown: bool,
 }
 
 /// Batch mode state.
@@ -92,8 +150,10 @@ impl Default for BatchState {
 impl BatchState {
     /// Apply a message. `Run` is started by the workspace through [`Self::start`].
     pub fn update(&mut self, message: Message) {
-        // Nothing changes under a running job but its own cancel.
-        if self.is_running() && !matches!(message, Message::Cancel) {
+        // Nothing changes under a running job but its own cancel, and what background reads
+        // bring in (clip lengths, the key's state).
+        let background = matches!(&message, Message::Action(m) if m.applies_while_running());
+        if self.is_running() && !matches!(message, Message::Cancel) && !background {
             return;
         }
         match message {
@@ -101,8 +161,8 @@ impl BatchState {
             Message::SelectAction(action) => self.action = action,
             Message::Action(message) => self.actions.update(message),
             Message::Prepare { operation, files } => {
-                self.actions.prepare(operation);
                 self.action = operation.action();
+                self.actions.prepare(operation);
                 self.active = true;
                 self.job = None;
                 self.checked = files.into_iter().collect();
@@ -132,6 +192,7 @@ impl BatchState {
             Message::Cancel => {
                 if let Some(job) = self.job.as_mut() {
                     job.cancelled = true;
+                    job.cancel.store(true, Ordering::Relaxed);
                 }
             }
             Message::CloseReport => self.job = None,
@@ -143,10 +204,9 @@ impl BatchState {
     /// when there is nothing to run: no files, an action that is not available, or a job
     /// already running.
     pub fn start(&mut self, files: Vec<FileId>) -> bool {
-        let Some(operation) = self
-            .operation()
-            .filter(|_| !files.is_empty() && !self.is_running())
-        else {
+        let Some(operation) = self.operation().filter(|_| {
+            !files.is_empty() && !self.is_running() && !self.actions.is_reading_files()
+        }) else {
             return false;
         };
         let statuses = files.iter().map(|id| (*id, ItemStatus::Pending)).collect();
@@ -156,30 +216,77 @@ impl BatchState {
             statuses,
             next: 0,
             cancelled: false,
+            cancel: Arc::new(AtomicBool::new(false)),
+            reasons: HashMap::new(),
+            usage: None,
+            usage_unknown: false,
+            stopped: None,
+            repeated: None,
             running: true,
             dismissed: HashSet::new(),
         });
         true
     }
 
-    /// Mark the next file running and return it with the operation, or end the job when it is
-    /// cancelled or has no files left (`None`).
-    pub fn begin_next(&mut self) -> Option<(FileId, Operation)> {
+    /// Mark the next file running and return it with the operation and the cancel flag it
+    /// checks, or end the job when it is cancelled, stopped, or has no files left (`None`).
+    pub fn begin_next(&mut self) -> Option<(FileId, Operation, Arc<AtomicBool>)> {
         let job = self.job.as_mut().filter(|job| job.running)?;
-        let Some(id) = job.order.get(job.next).copied().filter(|_| !job.cancelled) else {
+        let Some(id) = job
+            .order
+            .get(job.next)
+            .copied()
+            .filter(|_| !job.cancelled && job.stopped.is_none())
+        else {
             job.running = false;
+            if let Some(usage) = job.usage {
+                log::info!(
+                    "batch: {} spent {}",
+                    job.operation.action().label(),
+                    super::actions::spend_line(usage)
+                );
+            }
             return None;
         };
         job.next += 1;
         job.statuses.insert(id, ItemStatus::Running);
-        Some((id, job.operation))
+        Some((id, job.operation.clone(), job.cancel.clone()))
     }
 
     /// Record how a file of the running job went.
-    pub fn finish(&mut self, id: FileId, status: ItemStatus) {
-        if let Some(job) = self.job.as_mut() {
-            job.statuses.insert(id, status);
+    pub fn finish(&mut self, id: FileId, result: &ItemResult) {
+        let Some(job) = self.job.as_mut() else {
+            return;
+        };
+        job.statuses.insert(id, result.status);
+        if let Some(reason) = result.reason.clone() {
+            job.reasons.insert(id, reason);
         }
+        if let Some(usage) = result.usage {
+            *job.usage.get_or_insert_with(AiUsage::default) += usage;
+        }
+        if result.usage_unknown {
+            job.usage.get_or_insert_with(AiUsage::default);
+            job.usage_unknown = true;
+        }
+        if let Some(stop) = result.stop_job.clone() {
+            job.stopped = Some(stop);
+        }
+        job.repeated = match (job.repeated.take(), result.stop_if_repeated.clone()) {
+            (Some((last, n)), Some(stop)) if last == stop => Some((stop, n + 1)),
+            (_, Some(stop)) => Some((stop, 1)),
+            (_, None) => None,
+        };
+        if let Some((stop, n)) = &job.repeated {
+            if *n >= REPEATS_THAT_STOP && job.stopped.is_none() {
+                job.stopped = Some(stop.clone());
+            }
+        }
+    }
+
+    /// Why a file stopped the current job, if one did.
+    pub fn stopped(&self) -> Option<&str> {
+        self.job.as_ref().and_then(|job| job.stopped.as_deref())
     }
 
     /// Show the check boxes of `ids` again instead of their outcome in the finished job.
@@ -193,6 +300,21 @@ impl BatchState {
     pub fn reset_files(&mut self) {
         self.checked.clear();
         self.job = None;
+        self.actions.describe_ai_mut().reset_files();
+    }
+
+    /// What "Describe with AI" needs read from disk while its panel is shown for `checked`: the
+    /// videos whose length is not known or asked for yet, and whether the key's state still has
+    /// to be read. Both are marked as asked for.
+    pub fn describe_ai_reads<'a>(
+        &mut self,
+        checked: impl Iterator<Item = &'a File>,
+    ) -> (Vec<(FileId, PathBuf)>, bool) {
+        if !self.active || self.action != Action::DescribeAi {
+            return (Vec::new(), false);
+        }
+        let options = self.actions.describe_ai_mut();
+        (options.missing_probes(checked), options.request_key_state())
     }
 
     /// Whether the right half shows the batch panel instead of the open file.
@@ -246,13 +368,15 @@ impl BatchState {
             .find(|id| job.statuses.get(id) == Some(&ItemStatus::Running))
     }
 
-    /// Files of the current job that failed, in job order.
-    pub fn failed(&self) -> Vec<FileId> {
+    /// Files of the current job that failed, in job order, with the reason when their action
+    /// gave one.
+    pub fn failed(&self) -> Vec<(FileId, Option<&str>)> {
         self.job.as_ref().map_or_else(Vec::new, |job| {
             job.order
                 .iter()
                 .copied()
                 .filter(|id| job.statuses.get(id) == Some(&ItemStatus::Failed))
+                .map(|id| (id, job.reasons.get(&id).map(String::as_str)))
                 .collect()
         })
     }
@@ -271,6 +395,8 @@ impl BatchState {
             failed,
             running: job.running,
             cancelled: job.cancelled,
+            usage: job.usage,
+            usage_unknown: job.usage_unknown,
         })
     }
 }
@@ -290,6 +416,10 @@ mod tests {
                 .id()
             })
             .collect()
+    }
+
+    fn done() -> ItemResult {
+        ItemResult::new(ItemStatus::Done, None)
     }
 
     fn state() -> BatchState {
@@ -324,13 +454,13 @@ mod tests {
         assert!(batch.start(files.clone()));
         assert!(!batch.start(files.clone()), "one job at a time");
 
-        let (first, operation) = batch.begin_next().expect("first file");
+        let (first, operation, cancel) = batch.begin_next().expect("first file");
         assert_eq!(
             (first, operation),
             (files[0], Operation::MoveComments(CommentStorage::InVideo))
         );
         assert_eq!(batch.current(), Some(files[0]));
-        batch.finish(first, ItemStatus::Done);
+        batch.finish(first, &done());
 
         batch.update(Message::Toggle(files[0]));
         assert!(
@@ -339,6 +469,10 @@ mod tests {
         );
 
         batch.update(Message::Cancel);
+        assert!(
+            cancel.load(Ordering::Relaxed),
+            "the file in work sees the cancel"
+        );
         assert!(
             batch.begin_next().is_none(),
             "cancelled before the second file"
@@ -360,10 +494,10 @@ mod tests {
         let files = ids(1);
         let mut batch = state();
         batch.start(files.clone());
-        let (id, _) = batch.begin_next().expect("the file");
-        batch.finish(id, ItemStatus::Failed);
+        let (id, _, _) = batch.begin_next().expect("the file");
+        batch.finish(id, &ItemResult::new(ItemStatus::Failed, None));
         assert!(batch.begin_next().is_none());
-        assert_eq!(batch.failed(), files);
+        assert_eq!(batch.failed(), vec![(files[0], None)]);
     }
 
     #[test]
@@ -373,8 +507,8 @@ mod tests {
         batch.update(Message::CheckAll(files.clone()));
         batch.start(files.clone());
         for _ in 0..2 {
-            let (id, _) = batch.begin_next().expect("a file");
-            batch.finish(id, ItemStatus::Done);
+            let (id, _, _) = batch.begin_next().expect("a file");
+            batch.finish(id, &done());
         }
         assert!(batch.begin_next().is_none());
 
@@ -423,5 +557,98 @@ mod tests {
             Some(Operation::MoveInOut(InOutStorage::InVideo))
         );
         assert_eq!(batch.checked_count(), 2);
+    }
+
+    #[test]
+    fn a_failed_files_reason_is_kept_and_usage_is_summed() {
+        let files = ids(3);
+        let mut batch = state();
+        batch.start(files.clone());
+        let usage = AiUsage {
+            input_tokens: 1000,
+            output_tokens: 100,
+        };
+        let (id, _, _) = batch.begin_next().expect("first");
+        batch.finish(
+            id,
+            &ItemResult {
+                usage: Some(usage),
+                ..ItemResult::failed("Network error")
+            },
+        );
+        let (id, _, _) = batch.begin_next().expect("second");
+        batch.update(Message::Cancel);
+        batch.finish(
+            id,
+            &ItemResult {
+                usage: Some(usage),
+                ..done()
+            },
+        );
+        assert!(batch.begin_next().is_none());
+        assert_eq!(batch.failed(), vec![(files[0], Some("Network error"))]);
+        let progress = batch.progress().expect("report");
+        assert_eq!(
+            progress.usage,
+            Some(AiUsage {
+                input_tokens: 2000,
+                output_tokens: 200
+            }),
+            "usage counts after a cancel too"
+        );
+    }
+
+    #[test]
+    fn a_file_can_stop_the_job_and_leave_the_rest_not_reached() {
+        let files = ids(3);
+        let mut batch = state();
+        batch.start(files.clone());
+        let (id, _, _) = batch.begin_next().expect("first");
+        batch.finish(
+            id,
+            &ItemResult {
+                stop_job: Some("Stopped: the key was rejected.".to_string()),
+                ..ItemResult::failed("Anthropic rejected the key")
+            },
+        );
+        assert!(batch.begin_next().is_none());
+        assert_eq!(batch.stopped(), Some("Stopped: the key was rejected."));
+        assert_eq!(batch.status(files[1]), Some(ItemStatus::Pending));
+        assert_eq!(batch.status(files[2]), Some(ItemStatus::Pending));
+    }
+
+    #[test]
+    fn a_file_left_by_a_cancel_stays_not_reached() {
+        let files = ids(2);
+        let mut batch = state();
+        batch.start(files.clone());
+        let (id, _, _) = batch.begin_next().expect("first");
+        batch.update(Message::Cancel);
+        batch.finish(id, &ItemResult::new(ItemStatus::Pending, None));
+        assert!(batch.begin_next().is_none());
+        assert_eq!(batch.progress().map(|p| p.finished), Some(0));
+    }
+
+    #[test]
+    fn the_same_failure_three_times_in_a_row_stops_the_job() {
+        let files = ids(6);
+        let mut batch = state();
+        batch.start(files.clone());
+        let offline = || ItemResult {
+            stop_if_repeated: Some("Stopped: no connection.".to_string()),
+            ..ItemResult::failed("Network error")
+        };
+        for result in [offline(), offline(), done(), offline(), offline()] {
+            let (id, _, _) = batch.begin_next().expect("a file");
+            batch.finish(id, &result);
+        }
+        assert!(
+            batch.stopped().is_none(),
+            "a success in between resets the count"
+        );
+        let (id, _, _) = batch.begin_next().expect("the sixth file");
+        batch.finish(id, &offline());
+        assert!(batch.begin_next().is_none());
+        assert_eq!(batch.stopped(), Some("Stopped: no connection."));
     }
 }

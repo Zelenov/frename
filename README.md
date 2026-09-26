@@ -144,8 +144,8 @@ The progress bar shows what you have noted about a clip:
 - **Comments:** free text per clip. By default it is saved inside the video, where Premiere Pro
   shows it in the Description column and finds it by search. Settings can keep it in a
   `.comment.txt` next to the video instead. The file list shows the first line of each comment.
-  While comments are inside the video, frename tags a commented clip "Commented" (Settings can
-  rename or turn off this tag).
+  While comments are inside the video, frename tags a clip you commented "Commented" (Settings can
+  rename or turn off this tag); an AI description alone does not count.
 
 Some formats, such as mkv, cannot hold comments, in/out points or markers inside them; for those,
 frename keeps comments and in/out points in `.comment.txt` and the file name whatever Settings say,
@@ -185,7 +185,23 @@ and Cancel. Each file then shows a green or red check box. Actions:
 - tag commented videos with "Commented" and untag the rest;
 - put the tags in every name in tag panel order;
 - add or remove the space after each tag, as set in Settings;
-- read every file again (use this if the list looks out of date).
+- read every file again (use this if the list looks out of date);
+- describe each video with AI (see below).
+
+### Describe with AI
+
+**Describe with AI** writes what happens in each checked video, and when: a one-line summary and
+time-ranged segments, even for clips with no speech. frename sends frames (one every 2 s, at most
+60 per clip) and the video's `.srt`, if there is one, to Claude Haiku 4.5, and puts the answer at
+the end of the comment, below your own text, which is never changed. Before you run it, the panel
+shows how many videos will be sent, the price (about $10 per 1000 one-minute clips) and how long
+it takes. Videos already described are skipped unless you tick Redo, and so are clips over 30 min.
+Cancel keeps what is done. You need your own Anthropic API key: set it in Settings.
+
+In the comment area the description shows under the comment box, collapsed to its summary;
+**Show segments** opens the rest and **Remove AI description** deletes it. Premiere Pro and
+`.comment.txt` get the whole comment. The file list shows the summary when a clip has no comment
+of yours.
 
 ## Settings
 
@@ -196,7 +212,13 @@ The ⚙ button opens Settings:
 - put a space after each tag in file names (`Food. Goat. clip.mp4`);
 - where comments are kept (inside the video or `.comment.txt`), and the name of the "Commented"
   tag, or none;
-- where in/out points are kept (file name or inside the video).
+- where in/out points are kept (file name or inside the video);
+- updates: **Check for updates**, then **Update and restart** when a newer version is out.
+  frename also checks once a day by itself (you can turn that off) and puts a dot on ⚙ when
+  an update is ready; nothing is downloaded until you click;
+- your Anthropic API key for Describe with AI, kept in the system's password store (Windows
+  Credential Manager, macOS Keychain, or a keyring such as GNOME Keyring on Linux), and the
+  language of the descriptions.
 
 After you change where comments or in/out points are kept, or the tag spacing, Settings offer the
 batch action that updates the existing files.
@@ -207,8 +229,21 @@ batch action that updates the existing files.
 
 ## Requirements
 
-**Windows 10/11 (64-bit):** download the Windows zip from the [latest release](https://github.com/Zelenov/frename/releases/latest). It needs the
-GStreamer runtime for video playback — see [GSTREAMER_SETUP.md](GSTREAMER_SETUP.md).
+**Windows 10/11 (64-bit):** download `frename-win-Setup.exe` from the
+[latest release](https://github.com/Zelenov/frename/releases/latest) and run it. It installs
+without questions and starts frename; video playback is built in, nothing else to install.
+Windows may warn about an unknown publisher once: click **More info → Run anyway**. Your settings
+and the last opened folder are kept in `%LocalAppData%\frename` (uninstalling removes them; your
+tags and comments stay with your files).
+
+Prefer no installer? The Windows zip is a portable frename: right-click it → **Properties** →
+**Unblock**, unzip it anywhere and run `frename.exe`. It keeps its settings in its own folder and
+updates itself too.
+
+**Coming from the zip of version 0.66 or older?** On its first start the new frename finds the old
+folder in Downloads, Desktop or Documents and offers to import your settings and recent folders.
+If it was somewhere else, use **Settings → Import from an old frename folder…**. Then you can
+delete the old folder, and uninstall GStreamer if you installed it only for frename.
 
 **Linux (64-bit; Ubuntu 24.04, Linux Mint 22, Fedora 40, Debian 13 or newer):** download the
 `.AppImage` from the [latest release](https://github.com/Zelenov/frename/releases/latest), make it executable (`chmod +x frename-*.AppImage`) and run
@@ -225,4 +260,4 @@ cargo build
 cargo run
 ```
 
-Requires Rust stable and GStreamer development libraries. See [GSTREAMER_SETUP.md](GSTREAMER_SETUP.md) for the GStreamer setup on Windows.
+Requires Rust and the GStreamer development files: see [GSTREAMER_SETUP.md](GSTREAMER_SETUP.md).

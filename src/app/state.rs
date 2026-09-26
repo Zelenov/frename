@@ -11,7 +11,7 @@ use iced::{event, keyboard, window, Element, Subscription, Task};
 
 use crate::features::{
     batch, drag_drop, folder, folder_workspace, media_viewer,
-    media_viewer::video as media_viewer_video, settings, tag_panel,
+    media_viewer::video as media_viewer_video, settings, tag_panel, updates,
 };
 use crate::tag_colors::TagPalette;
 use frename_core::{AppDatabase, AppStateStore, WindowGeometry};
@@ -192,9 +192,12 @@ fn only_from_main_window(
     (window_id == main_window).then_some(message)
 }
 
-/// Settings window size (logical px). The window is not resizable, so this must fit every
-/// section: a setting below the bottom edge is simply not seen.
-const SETTINGS_WINDOW_SIZE: iced::Size = iced::Size::new(560.0, 660.0);
+/// Settings window size (logical px). The window is not resizable and its content scrolls; the
+/// height stays within what a 1080p screen at 150% scaling leaves (about 655).
+const SETTINGS_WINDOW_SIZE: iced::Size = iced::Size::new(560.0, 640.0);
+
+/// How often a running frename looks whether the daily update check is due.
+const UPDATE_TICK: std::time::Duration = std::time::Duration::from_secs(60 * 60);
 
 /// Application state: top-level features only. No knowledge of child UI or structure.
 pub struct FrenameApp {
@@ -219,6 +222,8 @@ pub struct FrenameApp {
     monitor_size: (f32, f32),
     /// The demo being run (`--demo`), if any.
     demo: Option<crate::demo::DemoRun>,
+    /// A downloaded update to apply once the main window has closed.
+    pending_update: Option<updates::Release>,
 }
 
 impl FrenameApp {
@@ -249,6 +254,7 @@ impl FrenameApp {
                 .map(|g| (g.monitor_width, g.monitor_height))
                 .unwrap_or((0.0, 0.0)),
             demo: None,
+            pending_update: None,
         }
     }
 
@@ -264,11 +270,23 @@ impl FrenameApp {
         match message {
             // Only the main window's events get through the subscription filter.
             Message::WindowReady => {
-                let load = Task::done(Message::FolderWorkspace(
-                    folder_workspace::Message::LoadLastSession,
+                let language = Task::done(describe_ai_message(
+                    batch::describe_ai::Message::SetLanguage(
+                        self.settings.settings().summary_language,
+                    ),
                 ));
+                let load = Task::batch([
+                    language,
+                    Task::done(Message::FolderWorkspace(
+                        folder_workspace::Message::LoadLastSession,
+                    )),
+                ]);
                 if self.demo.is_none() {
-                    return load;
+                    // The daily background update check, when it is due.
+                    let check = Task::done(Message::Settings(settings::Message::Updates(
+                        updates::Message::Tick,
+                    )));
+                    return Task::batch([load, check]);
                 }
                 Task::batch([load, crate::demo::DemoRun::start().map(Message::Demo)])
             }
@@ -278,6 +296,12 @@ impl FrenameApp {
             },
             Message::WindowClosed(id) => {
                 if id == self.main_window {
+                    // The open file is saved by now; Velopack waits for this process to end.
+                    if let Some(release) = self.pending_update.take() {
+                        if let Err(e) = updates::apply_on_exit(&release) {
+                            log::error!("could not start the update: {e}");
+                        }
+                    }
                     return iced::exit();
                 }
                 if self.settings_window == Some(id) {
@@ -286,12 +310,20 @@ impl FrenameApp {
                 Task::none()
             }
             Message::OpenSettings => self.open_settings_window(),
+            // Downloaded: close the app the way the user would (the open file is saved), then
+            // apply the update once the main window is gone.
+            Message::Settings(settings::Message::Updates(updates::Message::ApplyAndRestart(
+                release,
+            ))) => {
+                self.pending_update = Some(release);
+                Task::done(Message::CloseRequested(self.main_window))
+            }
             Message::Settings(msg) => {
-                self.settings.update(msg.clone());
+                let task = self.settings.update(msg.clone()).map(Message::Settings);
                 // Tag colors are read from the settings at view time; autoplay lives in the player;
                 // comment and in/out storage live in core, which saves them. Moving what the
                 // files already have is a batch action in the main window.
-                match msg {
+                let effect = match msg {
                     settings::Message::SetCommentStorage(storage) => {
                         frename_core::set_comment_storage(storage);
                         Task::none()
@@ -321,13 +353,63 @@ impl FrenameApp {
                             )),
                         ))
                     }
-                    settings::Message::SetMonochromeTags(_) => Task::none(),
                     settings::Message::SetSpaceAfterTags(space) => {
                         frename_core::set_space_after_tags(space);
                         Task::none()
                     }
-                }
+                    settings::Message::SetSummaryLanguage(language) => Task::done(
+                        describe_ai_message(batch::describe_ai::Message::SetLanguage(language)),
+                    ),
+                    settings::Message::Key(settings::KeyMessage::Save) => {
+                        match self.settings.typed_key() {
+                            Some(key) => key_task(self.settings.begin_key_request(), move || {
+                                frename_core::ai::key::save_key(&key).map_err(|e| {
+                                    log::warn!("ai: saving the key failed: {e}");
+                                    "The key could not be saved. The system keyring may be \
+                                         locked."
+                                        .to_string()
+                                })
+                            }),
+                            None => Task::none(),
+                        }
+                    }
+                    settings::Message::Key(settings::KeyMessage::Remove) => {
+                        key_task(self.settings.begin_key_request(), || {
+                            frename_core::ai::key::delete_key().map_err(|e| {
+                                log::warn!("ai: removing the key failed: {e}");
+                                "The key could not be removed. The system keyring may be \
+                                     locked."
+                                    .to_string()
+                            })
+                        })
+                    }
+                    // The batch panel shows whether a key is saved too.
+                    // Passed on as the settings took it (a stale answer changed nothing).
+                    settings::Message::Key(settings::KeyMessage::State { .. }) => {
+                        match self.settings.key().state {
+                            Some(state) => Task::done(describe_ai_message(
+                                batch::describe_ai::Message::KeyState(state),
+                            )),
+                            None => Task::none(),
+                        }
+                    }
+                    settings::Message::Key(_) => Task::none(),
+                    settings::Message::SetMonochromeTags(_)
+                    | settings::Message::Updates(_)
+                    | settings::Message::ImportOldSettings
+                    | settings::Message::OldSettingsFolderPicked(_) => Task::none(),
+                };
+                Task::batch([task, effect])
             }
+            Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
+                batch::ActionMessage::OpenAiSettings,
+            ))) => self.open_settings_window_then(iced::widget::operation::snap_to_end(
+                iced::widget::Id::new(settings::view::SETTINGS_SCROLLABLE_ID),
+            )),
+            // One reader of the key's state: the settings, which pass it on to the batch panel.
+            Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
+                batch::ActionMessage::ReadKeyState,
+            ))) => key_task(self.settings.begin_key_request(), || Ok(())),
             Message::FolderWorkspace(folder_workspace::Message::Folder(
                 folder::Message::OpenSettings,
             ))
@@ -443,18 +525,29 @@ impl FrenameApp {
 
     pub fn view(&self, window_id: window::Id) -> Element<'_, Message> {
         if self.settings_window == Some(window_id) {
-            return settings::view::view(&self.settings).map(Message::Settings);
+            return settings::view::view(&self.settings, self.folder_workspace.is_batch_running())
+                .map(Message::Settings);
         }
         let tag_palette = TagPalette::from_monochrome(self.settings.settings().monochrome_tags);
-        folder_workspace::view::view(&self.folder_workspace, tag_palette)
+        let update_available = self.settings.updates().available_version();
+        folder_workspace::view::view(&self.folder_workspace, tag_palette, update_available)
             .map(Message::FolderWorkspace)
     }
 
     /// Open the settings window, or focus it when it is already open.
     fn open_settings_window(&mut self) -> Task<Message> {
+        self.open_settings_window_then(Task::none())
+    }
+
+    /// Open the settings window (or bring it to the front), then run `after` in it once its
+    /// content exists.
+    fn open_settings_window_then(&mut self, after: Task<Message>) -> Task<Message> {
         if let Some(id) = self.settings_window {
-            return window::gain_focus(id);
+            return Task::batch([window::gain_focus(id), after]);
         }
+        // Whether a key is saved is read each time the window opens, not at start-up: reading
+        // may unlock a keyring, and a keyring locked before may be open now.
+        let read_key = key_task(self.settings.begin_key_request(), || Ok(()));
         let (id, open) = window::open(window::Settings {
             size: SETTINGS_WINDOW_SIZE,
             position: window::Position::Centered,
@@ -463,7 +556,12 @@ impl FrenameApp {
             ..window::Settings::default()
         });
         self.settings_window = Some(id);
-        open.discard()
+        // `then` takes a closure that could run again; the window opens once.
+        let mut after = Some(after);
+        Task::batch([
+            open.then(move |_| after.take().unwrap_or_else(Task::none)),
+            read_key,
+        ])
     }
 
     /// Feature subscriptions (file drop, window opened, global keyboard to search bar).
@@ -492,6 +590,8 @@ impl FrenameApp {
             .with(self.main_window)
             .filter_map(only_from_main_window),
             window::close_events().map(Message::WindowClosed),
+            iced::time::every(UPDATE_TICK)
+                .map(|_| Message::Settings(settings::Message::Updates(updates::Message::Tick))),
         ])
     }
 
@@ -528,6 +628,32 @@ impl FrenameApp {
             |f| f.file_path().display().to_string(),
         )
     }
+}
+
+/// A message for the "Describe with AI" batch action, from the settings.
+fn describe_ai_message(message: batch::describe_ai::Message) -> Message {
+    Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
+        batch::ActionMessage::DescribeAi(message),
+    )))
+}
+
+/// Run `change` on the credential store on a worker thread (it may wait on a keyring), then
+/// read back whether a key is saved.
+fn key_task(
+    request: u64,
+    change: impl FnOnce() -> Result<(), String> + Send + 'static,
+) -> Task<Message> {
+    Task::future(async move {
+        let result = tokio::task::spawn_blocking(move || {
+            change().map(|()| frename_core::ai::key::key_state())
+        })
+        .await
+        .unwrap_or_else(|e| Err(e.to_string()));
+        Message::Settings(settings::Message::Key(settings::KeyMessage::State {
+            request,
+            result,
+        }))
+    })
 }
 
 #[cfg(test)]

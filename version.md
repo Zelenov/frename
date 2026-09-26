@@ -1,4 +1,4 @@
-# NEXT
+# 0.70
 ## Added
 - Markers: `F2` (or 📍) marks a moment of the video, `F2` again names it. Each marker has a name and one of Premiere's colors, and is saved inside the video, where Premiere Pro shows it on the clip after import.
 - The marker list (◆, in fullscreen too) shares the side of the picture with the subtitle list, with a tab for each (CC Subtitles, ◆ Markers): click a marker to jump to it or edit it. An empty list has an Add button.
@@ -15,6 +15,16 @@
 - In fullscreen the CC button is shown too and opens or closes the subtitle list; before, fullscreen always showed the list.
 - A video whose content is not a video (all zeros, as a download that did not finish leaves it) is reported as damaged in the log, not as a format that cannot hold markers.
 - Long button labels and file names in the batch panel no longer run past its edge.
+
+# 0.69
+## Added
+- A Windows installer: download `frename-win-Setup.exe` from the release page and run it. It installs without questions, and video plays with nothing else to install.
+- Updates: Settings → Updates checks for a new version and installs it with **Update and restart**. frename also checks once a day by itself and puts a dot on ⚙ when an update is ready.
+- On first start, the installed frename finds the folder of an older zip version and offers to import your settings and recent folders; Settings → **Import from an old frename folder…** does it for a folder kept elsewhere.
+
+## Changed
+- The Windows zip is now a portable frename with video playback built in: unzip and run, no GStreamer to install. It keeps its settings in its own folder and updates itself too.
+- The installed frename keeps its settings in `%LocalAppData%\frename`.
 
 # 0.68
 ## Added
