@@ -177,6 +177,35 @@ Only `video_player` and `file_name_panel` currently have subscriptions.
 
 ---
 
+## iced 0.14 gotchas
+
+**Widget state follows its position in the tree, not its `Id`.** A scrollable, text editor or
+text input keeps its scroll offset, cursor and focus only while it stays at the same place among
+its siblings. Adding or removing a sibling *before* it (a header shown only in batch mode) moves
+it and resets that state — the folder list jumped to the top this way. Put optional parts inside
+a container that is always there:
+
+```rust
+// Wrong: `body` moves from child 1 to child 2 when the header appears.
+let mut content = column![search];
+if let Some(batch) = batch { content = content.push(header(batch)); }
+content.push(body)
+
+// Right: the header lives inside the first child; `body` is always child 1.
+let mut top = column![search];
+if let Some(batch) = batch { top = top.push(header(batch)); }
+column![top, body]
+```
+
+**`push_maybe` is gone.** Add an optional child with
+`.extend(condition.then(|| widget.into()))`.
+
+**Progress from a worker thread** (`spawn_blocking`) does not redraw by itself: share it through an
+`Arc` the view reads (see `batch::ItemProgress`), and redraw with a subscription that exists only
+while the work runs: `iced::time::every(Duration::from_millis(200)).map(|_| Message::Noop)`.
+
+---
+
 ## Layout orchestration
 
 All views flow through `folder_workspace::view`, which arranges:
