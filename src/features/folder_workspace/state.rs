@@ -2896,6 +2896,40 @@ mod tests {
     }
 
     #[test]
+    fn a_white_ai_range_read_from_the_file_takes_a_new_color_and_keeps_it() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let mut ai = frename_core::Marker::new(3_000);
+        ai.duration_ms = 3_000;
+        ai.color = frename_core::AI_MARKER_COLOR;
+        ai.name = "Close-up of a sign".to_string();
+        let guid = ai.guid.clone().unwrap();
+        frename_core::FileTagger::save_markers(
+            &test_dir.target_file(),
+            &[ai],
+            &std::collections::HashSet::new(),
+        )
+        .expect("written");
+        let _ = workspace.update(Message::OpenFile(test_dir.file_path("file_0.mp4")));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::OpenFile(test_dir.target_file()));
+        flush_file_opened(&mut workspace);
+        assert_eq!(marker_spans(&workspace), [(3_000, 3_000)]);
+
+        send_marker(&mut workspace, M::ToggleColorPicker(guid.clone()), 0);
+        send_marker(
+            &mut workspace,
+            M::SetColor(guid.clone(), frename_core::MarkerColor::Red),
+            0,
+        );
+        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        let saved = frename_core::FileTagger::load_markers(&test_dir.target_file()).expect("saved");
+        assert_eq!(saved[0].color, frename_core::MarkerColor::Red);
+    }
+
+    #[test]
     fn escape_closes_an_open_marker_row_first() {
         use crate::features::markers::Message as M;
         let test_dir = TestDirectory::new(1);
