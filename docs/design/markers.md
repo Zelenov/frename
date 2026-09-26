@@ -328,8 +328,8 @@ Core unit tests (no network, fixtures in `crates/frename-core/tests/fixtures/`):
   not disturb the in/out marker or the comment;
 - saving a snapshot whose markers are `None` does not change the file; saving unchanged markers
   does not write;
-- a marker added to the file after frename read it survives frename's save; a marker edited in
-  the file after the read keeps the fields frename did not change;
+- a marker added to the file after frename read it survives frename's save; fields frename does
+  not know (`type`, other `cuePointParams`) survive an edit of that marker;
 - renaming an open file keeps its edited markers (the snapshot rebuild carries them);
 - `TagList::new(snapshot).file_snapshot()` keeps the markers;
 - add → save with the file still open → edit the name → save again gives exactly one marker, with
