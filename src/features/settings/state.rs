@@ -1,5 +1,6 @@
 //! State for the settings feature.
 
+use frename_core::ai::key::KeyState;
 use frename_core::{AppDatabase, AppSettings, AppStateStore};
 
 use super::Message;
@@ -14,6 +15,22 @@ pub struct SettingsState {
     in_out_storage_changed: bool,
     /// The tag spacing changed since the window last offered renaming the files to it.
     tag_spacing_changed: bool,
+    /// The API key section; never persisted here (the key lives in the credential store).
+    key: KeySection,
+}
+
+/// The API key field and what is known about the saved key.
+#[derive(Debug, Clone, Default)]
+pub struct KeySection {
+    /// What is typed; cleared once saved.
+    pub input: String,
+    pub shown: bool,
+    /// `None` until read: reading may unlock a keyring, so not at start-up.
+    pub state: Option<KeyState>,
+    /// Typing a new key over a saved one.
+    pub replacing: bool,
+    /// Why the last save or removal failed.
+    pub error: Option<String>,
 }
 
 impl Default for SettingsState {
@@ -23,6 +40,7 @@ impl Default for SettingsState {
             comment_storage_changed: false,
             in_out_storage_changed: false,
             tag_spacing_changed: false,
+            key: KeySection::default(),
         }
     }
 }
@@ -30,8 +48,29 @@ impl Default for SettingsState {
 impl SettingsState {
     /// Apply a change and persist the result.
     pub fn update(&mut self, message: Message) {
+        let persists = !matches!(
+            message,
+            Message::KeyInput(_)
+                | Message::ToggleShowKey
+                | Message::SaveKey
+                | Message::ReplaceKey
+                | Message::RemoveKey
+                | Message::KeyState(_)
+        );
         self.apply(message);
-        AppDatabase::new().set_app_settings(self.settings.clone());
+        if persists {
+            AppDatabase::new().set_app_settings(self.settings.clone());
+        }
+    }
+
+    /// The API key section.
+    pub fn key(&self) -> &KeySection {
+        &self.key
+    }
+
+    /// The key typed to be saved (trimmed); `None` when the field is empty.
+    pub fn typed_key(&self) -> Option<String> {
+        Some(self.key.input.trim().to_string()).filter(|k| !k.is_empty())
     }
 
     /// Current settings.
@@ -91,8 +130,29 @@ impl SettingsState {
                 self.in_out_storage_changed = false
             }
             Message::OpenBatchAction(Operation::RespaceTags) => self.tag_spacing_changed = false,
+            Message::SetSummaryLanguage(language) => self.settings.summary_language = language,
+            Message::KeyInput(input) => {
+                self.key.input = input;
+                self.key.error = None;
+            }
+            Message::ToggleShowKey => self.key.shown = !self.key.shown,
+            Message::ReplaceKey => self.key.replacing = true,
+            // Done by the app on a worker thread; the answer comes back as `KeyState`.
+            Message::SaveKey | Message::RemoveKey => self.key.error = None,
+            Message::KeyState(Ok(state)) => {
+                if state == KeyState::Saved {
+                    self.key.input.clear();
+                    self.key.shown = false;
+                }
+                self.key.replacing = false;
+                self.key.state = Some(state);
+            }
+            Message::KeyState(Err(error)) => self.key.error = Some(error),
             Message::OpenBatchAction(
-                Operation::TagCommented | Operation::FixTags | Operation::ReloadFiles,
+                Operation::TagCommented
+                | Operation::FixTags
+                | Operation::ReloadFiles
+                | Operation::DescribeAi(_),
             ) => {}
         }
     }
@@ -110,6 +170,7 @@ mod tests {
             comment_storage_changed: false,
             in_out_storage_changed: false,
             tag_spacing_changed: false,
+            key: KeySection::default(),
         };
         state.apply(Message::SetMonochromeTags(true));
         assert!(state.settings().monochrome_tags);
@@ -135,6 +196,7 @@ mod tests {
             comment_storage_changed: false,
             in_out_storage_changed: false,
             tag_spacing_changed: false,
+            key: KeySection::default(),
         };
         state.apply(Message::SetCommentStorage(state.settings().comment_storage));
         assert!(
@@ -163,8 +225,29 @@ mod tests {
             comment_storage_changed: false,
             in_out_storage_changed: false,
             tag_spacing_changed: false,
+            key: KeySection::default(),
         };
         state.apply(Message::SetCommentedTag("Has comment.v2:".to_string()));
         assert_eq!(state.settings().commented_tag, "Has commentv2");
+    }
+
+    #[test]
+    fn a_saved_key_clears_the_field_and_is_never_persisted() {
+        let mut state = SettingsState {
+            settings: AppSettings::default(),
+            comment_storage_changed: false,
+            in_out_storage_changed: false,
+            tag_spacing_changed: false,
+            key: KeySection::default(),
+        };
+        state.apply(Message::KeyInput(" sk-ant-123 ".to_string()));
+        assert_eq!(state.typed_key().as_deref(), Some("sk-ant-123"));
+        state.apply(Message::KeyState(Err("locked".to_string())));
+        assert_eq!(state.key().error.as_deref(), Some("locked"));
+        assert_eq!(state.key().input, " sk-ant-123 ", "kept to try again");
+        state.apply(Message::KeyState(Ok(KeyState::Saved)));
+        assert!(state.key().input.is_empty());
+        assert_eq!(state.key().state, Some(KeyState::Saved));
+        assert!(!format!("{:?}", state.settings()).contains("sk-ant"));
     }
 }

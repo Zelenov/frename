@@ -228,6 +228,10 @@ impl FolderWorkspace {
             Message::SetSegmentEnd => Task::done(Message::MediaViewer(
                 media_viewer::Message::Video(media_viewer_video::Message::CaptureSegmentEnd),
             )),
+            Message::AiBlock(message) => {
+                self.file_workspace.update_ai_block(message);
+                Task::none()
+            }
             Message::CommentAction(action) => {
                 self.file_workspace.apply_comment_action(action);
                 Task::none()
@@ -250,7 +254,8 @@ impl FolderWorkspace {
                     .add_screenshot(frename_core::Screenshot::new(position_ms));
                 // Append timestamp to comment.
                 let time_str = frename_core::Screenshot::new(position_ms).format_time();
-                let current = self.file_workspace.comment().to_string();
+                // Into the editor's text; the AI description stays below it.
+                let current = self.file_workspace.editor_comment();
                 let new_comment = if current.is_empty() {
                     format!("{}: ", time_str)
                 } else {
@@ -590,6 +595,7 @@ impl FolderWorkspace {
                 | Message::FileNamePanel(_)
                 | Message::SyncPanel(_)
                 | Message::CommentAction(_)
+                | Message::AiBlock(_)
                 | Message::RemoveTag
                 | Message::SaveSelectedTag
                 | Message::CopyTags
@@ -645,7 +651,71 @@ impl FolderWorkspace {
         // Batch mode does not edit the open file, so its rename editor goes.
         self.inline_rename = None;
         self.batch.update(msg);
-        Task::none()
+        self.describe_ai_reads()
+    }
+
+    /// What "Describe with AI" shows before it runs needs reading from disk: the length of
+    /// each checked video and whether an API key is saved. Read in the background while its
+    /// panel is shown.
+    fn describe_ai_reads(&mut self) -> Task<Message> {
+        if !self.batch.is_active() || self.batch.action() != batch::Action::DescribeAi {
+            return Task::none();
+        }
+        let Some(dir) = self.directory.as_ref() else {
+            return Task::none();
+        };
+        let batch = &mut self.batch;
+        let checked: Vec<&frename_core::File> = dir
+            .all_files()
+            .filter(|f| batch.is_checked(f.id()))
+            .collect();
+        let options = batch.actions_mut().describe_ai_mut();
+        let missing = options.missing_probes(checked.into_iter());
+        let wrap = |msg: batch::describe_ai::Message| {
+            Message::Batch(batch::Message::Action(batch::ActionMessage::DescribeAi(
+                msg,
+            )))
+        };
+        let key = if options.needs_key_state() {
+            // Asked once; a failed read below still answers.
+            options.update(batch::describe_ai::Message::KeyState(
+                frename_core::ai::key::KeyState::Missing,
+            ));
+            Task::future(async move {
+                let state = tokio::task::spawn_blocking(batch::describe_ai::read_key_state)
+                    .await
+                    .unwrap_or(frename_core::ai::key::KeyState::Unavailable);
+                wrap(batch::describe_ai::Message::KeyState(state))
+            })
+        } else {
+            Task::none()
+        };
+        if missing.is_empty() {
+            return key;
+        }
+        let probes = Task::future(async move {
+            let ids: Vec<FileId> = missing.iter().map(|(id, _)| *id).collect();
+            let results =
+                tokio::task::spawn_blocking(move || batch::describe_ai::probe_all(missing))
+                    .await
+                    .unwrap_or_else(|e| {
+                        log::error!("reading clip lengths failed: {e}");
+                        // Unreadable rather than estimating forever.
+                        ids.into_iter()
+                            .map(|id| {
+                                (
+                                    id,
+                                    batch::describe_ai::Probe {
+                                        duration_s: None,
+                                        subtitle_chars: 0,
+                                    },
+                                )
+                            })
+                            .collect()
+                    });
+            wrap(batch::describe_ai::Message::Probed(results))
+        });
+        Task::batch([key, probes])
     }
 
     /// Start the selected batch action on the checked files, in folder order. A playing video
@@ -654,11 +724,14 @@ impl FolderWorkspace {
         let Some(dir) = self.directory.as_ref() else {
             return Task::none();
         };
-        let files: Vec<FileId> = dir
+        let checked: Vec<&frename_core::File> = dir
             .all_files()
-            .map(|f| f.id())
-            .filter(|id| self.batch.is_checked(*id))
+            .filter(|f| self.batch.is_checked(f.id()))
             .collect();
+        let files = self
+            .batch
+            .actions()
+            .job_files(self.batch.action(), &checked);
         if !self.batch.start(files) {
             return Task::none();
         }
@@ -687,7 +760,7 @@ impl FolderWorkspace {
     /// left or was cancelled. One file per step: progress names the file in work, and a
     /// cancel stops after it, so no file is left half done.
     fn next_batch_item(&mut self) -> Task<Message> {
-        let Some((id, operation)) = self.batch.begin_next() else {
+        let Some((id, operation, cancel)) = self.batch.begin_next() else {
             return Task::done(Message::BatchFinished);
         };
         let Some(path) = self
@@ -696,31 +769,32 @@ impl FolderWorkspace {
             .and_then(|d| d.file_by_id(id))
             .map(|f| f.file_path().to_path_buf())
         else {
-            self.batch.finish(id, ItemStatus::Failed);
+            self.batch
+                .finish(id, &ItemResult::new(ItemStatus::Failed, None));
             return self.next_batch_item();
         };
         Task::future(async move {
-            let result = tokio::task::spawn_blocking(move || operation.run(&path))
+            let result = tokio::task::spawn_blocking(move || operation.run(&path, &cancel))
                 .await
                 .unwrap_or_else(|e| {
                     log::error!("batch operation task failed: {e}");
-                    ItemResult {
-                        status: ItemStatus::Failed,
-                        update: None,
-                    }
+                    ItemResult::new(ItemStatus::Failed, None)
                 });
-            Message::BatchItemDone { id, result }
+            Message::BatchItemDone {
+                id,
+                result: Box::new(result),
+            }
         })
     }
 
     /// Take a finished file into the list (it may have been renamed), then start the next.
-    fn batch_item_done(&mut self, id: FileId, result: ItemResult) -> Task<Message> {
+    fn batch_item_done(&mut self, id: FileId, result: Box<ItemResult>) -> Task<Message> {
         if let (Some(dir), Some((path, snapshot))) =
             (self.directory.as_mut(), result.update.as_ref())
         {
             dir.rename_file(id, path, snapshot);
         }
-        self.batch.finish(id, result.status);
+        self.batch.finish(id, &result);
         self.next_batch_item()
     }
 
@@ -2135,18 +2209,15 @@ mod tests {
             "navigation is locked"
         );
 
-        let skipped = || ItemResult {
-            status: ItemStatus::Skipped,
-            update: None,
-        };
+        let skipped = || ItemResult::new(ItemStatus::Skipped, None);
         let _ = workspace.update(Message::BatchItemDone {
             id: file_id_at(&workspace, 0),
-            result: skipped(),
+            result: Box::new(skipped()),
         });
         assert!(workspace.is_batch_running());
         let _ = workspace.update(Message::BatchItemDone {
             id: file_id_at(&workspace, 1),
-            result: skipped(),
+            result: Box::new(skipped()),
         });
         assert!(!workspace.is_batch_running(), "ended after the last file");
         assert_eq!(workspace.batch().progress().map(|p| p.skipped), Some(2));
@@ -2171,13 +2242,10 @@ mod tests {
 
         let _ = workspace.update(Message::Batch(batch::Message::Cancel));
         let first = file_id_at(&workspace, 0);
-        let done = ItemResult {
-            status: ItemStatus::Done,
-            update: None,
-        };
+        let done = ItemResult::new(ItemStatus::Done, None);
         let _ = workspace.update(Message::BatchItemDone {
             id: first,
-            result: done,
+            result: Box::new(done),
         });
         assert!(!workspace.is_batch_running());
         let progress = workspace.batch().progress().expect("report");

@@ -174,9 +174,10 @@ pub fn frame_size(width: u32, height: u32) -> (u32, u32) {
     (scale(width), scale(height))
 }
 
-/// Input tokens of one frame (about width × height / 750).
+/// Input tokens of one frame: one per 28×28 tile (Anthropic's vision docs; see
+/// `docs/research/video-understanding.md`, "Claude image cost").
 pub fn frame_tokens(width: u32, height: u32) -> u64 {
-    (width as u64 * height as u64) / 750
+    u64::from(width.div_ceil(28)) * u64::from(height.div_ceil(28))
 }
 
 /// Estimated tokens of describing one clip, before its frames are known: 16:9 frames, the
@@ -348,7 +349,7 @@ mod tests {
         assert_eq!(frame_size(1920, 1080), (512, 288));
         assert_eq!(frame_size(1080, 1920), (288, 512));
         assert_eq!(frame_size(320, 240), (320, 240));
-        assert_eq!(frame_tokens(512, 288), 196);
+        assert_eq!(frame_tokens(512, 288), 209);
     }
 
     #[test]

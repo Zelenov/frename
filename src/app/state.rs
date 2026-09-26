@@ -232,6 +232,7 @@ impl FrenameApp {
         frename_core::set_in_out_storage(settings.settings().in_out_storage);
         frename_core::set_commented_tag(settings.settings().effective_commented_tag());
         frename_core::set_space_after_tags(settings.settings().space_after_tags);
+        frename_core::ai::set_summary_language(settings.settings().summary_language);
         Self {
             drag_drop_state: drag_drop::DragDropState::default(),
             folder_workspace: folder_workspace::FolderWorkspace::new(),
@@ -326,8 +327,43 @@ impl FrenameApp {
                         frename_core::set_space_after_tags(space);
                         Task::none()
                     }
+                    settings::Message::SetSummaryLanguage(language) => {
+                        frename_core::ai::set_summary_language(language);
+                        Task::none()
+                    }
+                    settings::Message::SaveKey => match self.settings.typed_key() {
+                        Some(key) => key_task(move || {
+                            frename_core::ai::key::save_key(&key)
+                                .map_err(|e| format!("The key could not be saved: {e}"))
+                        }),
+                        None => Task::none(),
+                    },
+                    settings::Message::RemoveKey => key_task(|| {
+                        frename_core::ai::key::delete_key()
+                            .map_err(|e| format!("The key could not be removed: {e}"))
+                    }),
+                    // The batch panel shows whether a key is saved too.
+                    settings::Message::KeyState(Ok(state)) => {
+                        Task::done(Message::FolderWorkspace(folder_workspace::Message::Batch(
+                            batch::Message::Action(batch::ActionMessage::DescribeAi(
+                                batch::describe_ai::Message::KeyState(state),
+                            )),
+                        )))
+                    }
+                    settings::Message::KeyState(Err(_))
+                    | settings::Message::KeyInput(_)
+                    | settings::Message::ToggleShowKey
+                    | settings::Message::ReplaceKey => Task::none(),
                 }
             }
+            Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
+                batch::ActionMessage::OpenAiSettings,
+            ))) => Task::batch([
+                self.open_settings_window(),
+                iced::widget::operation::snap_to_end(iced::widget::Id::new(
+                    settings::view::SETTINGS_SCROLLABLE_ID,
+                )),
+            ]),
             Message::FolderWorkspace(folder_workspace::Message::Folder(
                 folder::Message::OpenSettings,
             ))
@@ -455,6 +491,13 @@ impl FrenameApp {
         if let Some(id) = self.settings_window {
             return window::gain_focus(id);
         }
+        // Whether a key is saved is read when the window first opens, not at start-up: reading
+        // may unlock a keyring.
+        let read_key = if self.settings.key().state.is_none() {
+            key_task(|| Ok(()))
+        } else {
+            Task::none()
+        };
         let (id, open) = window::open(window::Settings {
             size: SETTINGS_WINDOW_SIZE,
             position: window::Position::Centered,
@@ -463,7 +506,7 @@ impl FrenameApp {
             ..window::Settings::default()
         });
         self.settings_window = Some(id);
-        open.discard()
+        Task::batch([open.discard(), read_key])
     }
 
     /// Feature subscriptions (file drop, window opened, global keyboard to search bar).
@@ -528,6 +571,19 @@ impl FrenameApp {
             |f| f.file_path().display().to_string(),
         )
     }
+}
+
+/// Run `change` on the credential store on a worker thread (it may wait on a keyring), then
+/// read back whether a key is saved.
+fn key_task(change: impl FnOnce() -> Result<(), String> + Send + 'static) -> Task<Message> {
+    Task::future(async move {
+        let result = tokio::task::spawn_blocking(move || {
+            change().map(|()| frename_core::ai::key::key_state())
+        })
+        .await
+        .unwrap_or_else(|e| Err(e.to_string()));
+        Message::Settings(settings::Message::KeyState(result))
+    })
 }
 
 #[cfg(test)]

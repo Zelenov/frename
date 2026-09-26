@@ -1,10 +1,13 @@
 //! Messages from the settings window.
 
+use frename_core::ai::key::KeyState;
+use frename_core::ai::SummaryLanguage;
 use frename_core::{CommentStorage, InOutStorage};
 
 use crate::features::batch::Operation;
 
-/// User changes in the settings window. Each one is saved immediately.
+/// User changes in the settings window. Each setting is saved immediately; the API key only on
+/// Save.
 #[derive(Debug, Clone)]
 pub enum Message {
     /// Start playing videos as soon as they are opened.
@@ -24,4 +27,19 @@ pub enum Message {
     /// After a storage change: open batch mode in the main window, set up to move the files'
     /// comments or in/out points to the new storage. Handled by the app.
     OpenBatchAction(Operation),
+    /// The language AI descriptions are written in.
+    SetSummaryLanguage(SummaryLanguage),
+    /// Typing in the API key field.
+    KeyInput(String),
+    /// Show or hide the typed key.
+    ToggleShowKey,
+    /// Save the typed key in the credential store. Handled by the app, on a worker thread.
+    SaveKey,
+    /// Show the key field again to type a new key over the saved one.
+    ReplaceKey,
+    /// Remove the saved key from the credential store. Handled by the app.
+    RemoveKey,
+    /// Whether a key is saved: read in the background, or after Save / Remove. `Err` says why a
+    /// save or removal failed.
+    KeyState(Result<KeyState, String>),
 }

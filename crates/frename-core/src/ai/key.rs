@@ -23,13 +23,19 @@ impl std::fmt::Display for KeyError {
     }
 }
 
-fn entry() -> Result<keyring::Entry, keyring::Error> {
-    keyring::Entry::new(SERVICE, USER)
+/// The store's entry for the key. Tests use an entry of their own, so a developer's real key
+/// is never touched.
+fn entry(user: &str) -> Result<keyring::Entry, keyring::Error> {
+    keyring::Entry::new(SERVICE, user)
 }
 
 /// The saved key; `None` when there is none or the store cannot be used.
 pub fn read_key() -> Option<String> {
-    entry()
+    read_key_of(USER)
+}
+
+fn read_key_of(user: &str) -> Option<String> {
+    entry(user)
         .and_then(|e| e.get_password())
         .ok()
         .map(|k| k.trim().to_string())
@@ -38,7 +44,11 @@ pub fn read_key() -> Option<String> {
 
 /// Whether a key is saved. Blocking (may unlock a keyring): run it on a worker thread.
 pub fn key_state() -> KeyState {
-    match entry().and_then(|e| e.get_password()) {
+    key_state_of(USER)
+}
+
+fn key_state_of(user: &str) -> KeyState {
+    match entry(user).and_then(|e| e.get_password()) {
         Ok(key) if !key.trim().is_empty() => KeyState::Saved,
         Ok(_) | Err(keyring::Error::NoEntry) => KeyState::Missing,
         Err(e) => {
@@ -50,14 +60,22 @@ pub fn key_state() -> KeyState {
 
 /// Save `key`, replacing any saved one.
 pub fn save_key(key: &str) -> Result<(), KeyError> {
-    entry()
+    save_key_of(USER, key)
+}
+
+fn save_key_of(user: &str, key: &str) -> Result<(), KeyError> {
+    entry(user)
         .and_then(|e| e.set_password(key.trim()))
         .map_err(|e| KeyError(e.to_string()))
 }
 
 /// Remove the saved key; removing none is no error.
 pub fn delete_key() -> Result<(), KeyError> {
-    match entry().and_then(|e| e.delete_credential()) {
+    delete_key_of(USER)
+}
+
+fn delete_key_of(user: &str) -> Result<(), KeyError> {
+    match entry(user).and_then(|e| e.delete_credential()) {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(e) => Err(KeyError(e.to_string())),
     }
@@ -67,21 +85,27 @@ pub fn delete_key() -> Result<(), KeyError> {
 mod tests {
     use super::*;
 
-    /// On Windows the key really goes to the Credential Manager and back. Elsewhere (CI has no
-    /// Secret Service running) the store says so instead of pretending to save into a mock.
+    /// The key goes to the store and back under a test entry of its own; where no store works
+    /// (CI's Linux runner has no Secret Service), it says so instead of pretending to save
+    /// into a mock.
     #[test]
     fn the_key_round_trips_or_the_store_says_it_is_unavailable() {
-        if cfg!(windows) {
-            let before = read_key();
-            save_key("test-key").expect("save");
-            assert_eq!(read_key().as_deref(), Some("test-key"));
-            assert_eq!(key_state(), KeyState::Saved);
-            match before {
-                Some(key) => save_key(&key).expect("restore"),
-                None => delete_key().expect("delete"),
+        let user = format!("{USER}-test-{}", std::process::id());
+        match key_state_of(&user) {
+            KeyState::Unavailable => {
+                #[cfg(windows)]
+                panic!("Windows always has its Credential Manager");
+                assert!(save_key_of(&user, "test-key").is_err() || read_key_of(&user).is_none());
             }
-        } else if key_state() == KeyState::Unavailable {
-            assert!(save_key("test-key").is_err() || read_key().is_none());
+            state => {
+                assert_eq!(state, KeyState::Missing);
+                save_key_of(&user, " test-key ").expect("save");
+                assert_eq!(read_key_of(&user).as_deref(), Some("test-key"));
+                assert_eq!(key_state_of(&user), KeyState::Saved);
+                delete_key_of(&user).expect("delete");
+                assert_eq!(key_state_of(&user), KeyState::Missing);
+                delete_key_of(&user).expect("deleting none is fine");
+            }
         }
     }
 }

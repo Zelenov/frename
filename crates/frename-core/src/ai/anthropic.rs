@@ -10,8 +10,18 @@ use super::provider::{AiContent, AiError, AiProvider, AiRequest, AiResponse, AiU
 
 const API_URL: &str = "https://api.anthropic.com";
 const API_VERSION: &str = "2023-06-01";
-/// A request that has not answered by then fails the file; see [`AiError::Timeout`].
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+/// Time for the answer; a request that has not answered by then (plus its upload time, see
+/// [`timeout_for`]) fails the file. See [`AiError::Timeout`].
+const ANSWER_TIMEOUT: Duration = Duration::from_secs(60);
+/// Upload speed the timeout allows for, in bytes per second.
+const SLOW_UPLOAD_BYTES_PER_S: u64 = 50_000;
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// The whole request's timeout: the answer's time plus the upload of `body_len` bytes on a
+/// slow uplink, so a request is not given up while it is still being sent.
+fn timeout_for(body_len: usize) -> Duration {
+    ANSWER_TIMEOUT + Duration::from_secs(body_len as u64 / SLOW_UPLOAD_BYTES_PER_S)
+}
 
 /// How failed requests are retried.
 #[derive(Debug, Clone)]
@@ -59,7 +69,7 @@ impl Anthropic {
         retry: RetryPolicy,
     ) -> Result<Self, AiError> {
         let client = reqwest::blocking::Client::builder()
-            .timeout(REQUEST_TIMEOUT)
+            .connect_timeout(CONNECT_TIMEOUT)
             .build()
             .map_err(|e| AiError::Network(e.to_string()))?;
         Ok(Self {
@@ -123,7 +133,7 @@ enum Attempt {
 
 impl AiProvider for Anthropic {
     fn complete(&self, request: &AiRequest, cancel: &AtomicBool) -> Result<AiResponse, AiError> {
-        let body = Self::body(request);
+        let body = Self::body(request).to_string();
         let mut retries = self.retry.delays.iter();
         loop {
             match self.attempt(&body) {
@@ -145,13 +155,15 @@ impl AiProvider for Anthropic {
 }
 
 impl Anthropic {
-    fn attempt(&self, body: &Value) -> Attempt {
+    fn attempt(&self, body: &str) -> Attempt {
         let sent = self
             .client
             .post(format!("{}/v1/messages", self.base_url))
             .header("x-api-key", &self.key)
             .header("anthropic-version", API_VERSION)
-            .json(body)
+            .header("content-type", "application/json")
+            .timeout(timeout_for(body.len()))
+            .body(body.to_string())
             .send();
         let response = match sent {
             Ok(response) => response,
@@ -193,10 +205,20 @@ fn classify(
         400 if message.to_lowercase().contains("credit balance") => {
             Attempt::Done(Err(AiError::OutOfCredit))
         }
+        400 if is_limit(&message) => Attempt::Done(Err(AiError::LimitReached(message))),
         429 => Attempt::RateLimited(retry_after.unwrap_or(rate_limit_wait)),
         500 | 502 | 503 | 529 => Attempt::Retry(format!("HTTP {status}: {message}")),
         _ => Attempt::Done(Err(AiError::Rejected(message))),
     }
+}
+
+/// Whether a 400's message is about a usage or spend limit of the account, which every later
+/// request would hit too.
+fn is_limit(message: &str) -> bool {
+    let message = message.to_lowercase();
+    ["usage limit", "spend limit", "spending limit"]
+        .iter()
+        .any(|phrase| message.contains(phrase))
 }
 
 /// Read a Messages API answer: the JSON in its text block, why it stopped, and its usage.
@@ -368,6 +390,25 @@ mod tests {
         let credit = r#"{"error":{"message":"Your credit balance is too low to access the Anthropic API."}}"#;
         let (result, _) = complete(vec![http("400 Bad Request", "", credit)]);
         assert_eq!(result, Err(AiError::OutOfCredit));
+    }
+
+    #[test]
+    fn a_reached_spend_limit_stops_the_job_with_the_apis_message() {
+        let body = r#"{"error":{"message":"You have reached your specified workspace API usage limits."}}"#;
+        let (result, _) = complete(vec![http("400 Bad Request", "", body)]);
+        let Err(error) = result else {
+            panic!("an error");
+        };
+        assert!(matches!(error, AiError::LimitReached(_)));
+        assert!(error
+            .stops_job()
+            .is_some_and(|s| s.contains("usage limits")));
+    }
+
+    #[test]
+    fn the_timeout_grows_with_the_upload() {
+        assert_eq!(timeout_for(0), Duration::from_secs(60));
+        assert_eq!(timeout_for(3_000_000), Duration::from_secs(120));
     }
 
     #[test]

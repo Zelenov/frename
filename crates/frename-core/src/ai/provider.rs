@@ -55,6 +55,8 @@ pub enum AiError {
     KeyRejected,
     /// The account has no credit left. Stops the job.
     OutOfCredit,
+    /// A usage or spend limit of the account was reached; the API's message. Stops the job.
+    LimitReached(String),
     /// No connection, or the provider kept failing after the retries.
     Network(String),
     /// No answer within the request timeout. Not retried: the provider may have billed it.
@@ -74,7 +76,8 @@ impl AiError {
             Self::KeyRejected => "Anthropic rejected the key".to_string(),
             Self::OutOfCredit => "The Anthropic account has no credit left".to_string(),
             Self::Network(_) => "Network error".to_string(),
-            Self::Timeout => "No answer within 60 s".to_string(),
+            Self::LimitReached(message) => message.clone(),
+            Self::Timeout => "No answer in time".to_string(),
             Self::Rejected(message) => message.clone(),
             Self::BadAnswer(_) => "The answer could not be read".to_string(),
             Self::Cancelled => "Cancelled".to_string(),
@@ -90,6 +93,7 @@ impl AiError {
             Self::OutOfCredit => {
                 Some("Stopped: the Anthropic account has no credit left.".to_string())
             }
+            Self::LimitReached(message) => Some(format!("Stopped: {message}")),
             _ => None,
         }
     }

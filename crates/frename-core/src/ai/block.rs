@@ -103,14 +103,18 @@ pub fn has_editor_comment(comment: &str) -> bool {
     !before.trim().is_empty() || !after.is_empty()
 }
 
-/// The whole comment: the editor's text, a blank line, then the block. Either may be empty.
+/// The whole comment: the editor's text, a blank line, then the block. Either may be empty;
+/// without a block the editor's text is returned as it is.
 pub fn join_comment(editor: &str, block: &str) -> String {
-    let editor = editor.trim_end();
     let block = block.trim();
-    match (editor.is_empty(), block.is_empty()) {
-        (_, true) => editor.to_string(),
-        (true, false) => block.to_string(),
-        (false, false) => format!("{editor}\n\n{block}"),
+    if block.is_empty() {
+        return editor.to_string();
+    }
+    let editor = editor.trim_end();
+    if editor.is_empty() {
+        block.to_string()
+    } else {
+        format!("{editor}\n\n{block}")
     }
 }
 
@@ -259,8 +263,8 @@ mod tests {
 
     #[test]
     fn an_ai_line_inside_a_paragraph_does_not_start_a_block() {
-        let comment = format!("Note\nAI: not a block\n0:00–0:01 x\n— M, 2026-01-01 —");
-        assert_eq!(ai_block(&comment), None);
+        let comment = "Note\nAI: not a block\n0:00–0:01 x\n— M, 2026-01-01 —";
+        assert_eq!(ai_block(comment), None);
     }
 
     #[test]
