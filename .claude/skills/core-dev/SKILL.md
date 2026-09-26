@@ -181,6 +181,28 @@ Three tables (defined in `db/migrations.rs`):
 
 Colors are keyed by tag **name** (not id), so renaming a tag requires deleting the old mapping and inserting the new one — `save_tag()` handles this.
 
+### Migrations: numbers collide across branches
+
+Migrations run in version order, once each (`db/migrations.rs`). Two branches that each took
+"the next number" collide: a database already at that version never runs the second one, so its
+columns never appear and reading the settings fails. Before merging, and after every rebase,
+check `migrations.rs` on `main` and renumber yours to follow its last one (the migration
+constant's name, the list entry, and the version asserted by `running_migrations_twice_is_a_no_op`).
+
+---
+
+## Disk paths in a debug build
+
+A debug build (or `--debug`) installs `InMemoryFileTagger`: renames and comment/metadata writes
+happen in memory only, and `File::file_path()` is the name the file *would* have. Anything that
+opens the real file — GStreamer, `std::fs`, another program — must go through
+`FileTagger::disk_path(path)` first, as the media viewer and Describe with AI do; otherwise a file
+renamed during the session (tag spacing, a tag toggle) is "not found". `--production` makes a
+debug build write to disk.
+
+Requests to paid APIs (Anthropic, Soniox) from a debug build are still real and billed; only
+their results stay in memory.
+
 ---
 
 ## Tests
