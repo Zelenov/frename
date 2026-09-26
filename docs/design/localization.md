@@ -1,6 +1,9 @@
 # Localization of the UI
 
 Design for issue #18: decide whether and how to localize the UI, then do it.
+
+This doc quotes Russian examples. `AGENTS.md` allows English only in docs, so it stays unmerged
+(PR #34, issue labelled `awaiting-owner`) until the owner answers open question 9.
 Code references are to `main` at `8a0bddc` (demo mode from #14 included; line numbers in other
 files may be off by a few lines).
 
@@ -72,6 +75,11 @@ Open Sans on Linux (`docs/screenshots/render.sh:7`).
 (`crates/frename-core/src/db/traits.rs:41-68`). The settings window is fixed at 560×560 and not
 resizable (`src/app/state.rs:197`, `:456`), and its body is a plain column with no
 scrollable (`src/features/settings/view.rs:109`).
+
+**String extraction.** Tools that pull strings out of source exist for gettext (`xtr`, used by
+`cargo-i18n`'s gettext side); Fluent has no Rust extractor, and i18n-embed-fl expects the keys to be
+written by hand. With about 75 strings, moving them by hand in three PRs is less work than adopting
+gettext tooling, and the compile-time check plus the unused-key test catch what an extractor would.
 
 ## Options
 
@@ -159,6 +167,8 @@ open list:   ✓ System (English)
                Русский
 ```
 
+- Language names live in the `.ftl` files (`language-name-en`, `language-name-ru`, the same value
+  in every file so key parity holds), not as Cyrillic literals in Rust code.
 - A `pick_list`, width fixed at 220 px. `System` is translated and shows the language it resolves
   to in brackets; language names are always written in their own language, so a user stuck in a
   language they cannot read still finds theirs.
@@ -185,18 +195,22 @@ src/i18n.rs                loader, fl! wrapper, language resolution
   compile-time check and the unused-key test).
 - **Arguments** are named for what they hold (`$count`, `$tag`, `$done`), never positional.
 - **Glossary.** Every Russian string uses these terms, so three PRs written by different sessions
-  stay consistent and match the Russian Premiere Pro UI where it has a term. The owner confirms the
+  stay consistent and match the Russian Premiere Pro UI where it has a term. Many Russian-speaking
+  editors run English Premiere, so a Premiere UI name keeps its English name with the Russian one
+  in brackets. The owner confirms the
   table before PR 1 (open question 9); `i18n/ru/frename.ftl` starts with it as a comment.
 
   | English | Russian |
   |---|---|
-  | tag / tags | тег / теги |
+  | tag / tags | тег / теги (never «метка»: that is Premiere's Label) |
+  | tag checked / unchecked on a video | тег ставится / снимается |
   | in / out points | точки входа / выхода |
   | comment | комментарий |
   | subtitles | субтитры |
   | screenshot | скриншот |
   | marker (Premiere) | маркер |
-  | subclip | подклип |
+  | subclip (Premiere) | подклип (subclip) |
+  | Description column (Premiere) | колонка Description (Описание) |
   | checked (files) | отмечено |
   | batch action | пакетное действие |
   | file list / folder | список файлов / папка |
@@ -211,10 +225,10 @@ batch-run = Run on { $count ->
    *[other] { $count } files
 }
 # ru
-batch-run = Запустить для { $count ->
-    [one] { $count } файла
-    [few] { $count } файлов
-   *[many] { $count } файлов
+batch-run = Применить к { $count ->
+    [one] { $count } файлу
+    [few] { $count } файлам
+   *[many] { $count } файлам
 }
 ```
 
@@ -249,8 +263,9 @@ Not translated:
 - **The "Commented" default** (`DEFAULT_COMMENTED_TAG`). It is written into file names and matched
   when a comment is cleared; a Russian default would rename files differently depending on the UI
   language, and switching language would orphan the old tag. It stays `Commented`; users rename it
-  in Settings (open question 2). The Russian hint under that field says the name can be changed
-  (e.g. to «Прокомментировано»), so the English default does not look like a missed translation.
+  in Settings (open question 2). The Russian hint under that field says the name can be changed,
+  with no Cyrillic example (tags in file names stay Latin, as the owner's own tags are), so the
+  English default does not look like a missed translation.
 - **Key names** (`Space`, `Page Up`, `Esc`), badges `IN`/`OUT`, `CC`, `SRT`, `XMP`, product names.
 - **Log messages**, command-line errors (`--demo`, `--self-test`), `GSTREAMER_SETUP.md` text.
 - **The native file dialog and window title-bar buttons**: drawn by the OS in the OS language,
@@ -289,15 +304,18 @@ release ships a half-translated UI.
    `src/i18n.rs`, the `language` column and migration, the settings `scrollable`, OS language resolution (until PR 3
    Russian is neither taken from the OS nor listed in Settings; only a stored `ru`, which just
    the demo `--lang` writes, turns it on), Settings window strings through
-   `fl!`, the two key tests, and demo flags `--lang <code>` and `--settings` (see Test plan).
+   `fl!`, the two key tests, and demo flags `--lang <code>` and `--settings` (see Test plan). The
+   demo seeds `language = "en"` unless `--lang` is given, so README screenshots never follow the
+   renderer's OS language. The ui-dev rule already applies from PR 1: new UI text goes through
+   `fl!` with an `en` and a `ru` entry.
    No `version.md` change.
 2. **Batch and file list** (`Refs #18`): `batch/view.rs`, `batch/actions/*`, the batch header
    and outcome tooltips in `folder/view.rs`, `files()` removed. No `version.md` change.
 3. **The rest and switch-on** (`Closes #18`): folder controls, rename errors, video controls,
    subtitle toggle, comment placeholder, window titles; `ru` added to the offered list; the
-   Language row in Settings; README sentence and `version.md`; the rule "new UI text goes through
-   `fl!` with an `en` and a `ru` entry, checked with a `--lang ru` screenshot" added to
-   `.claude/skills/ui-dev/SKILL.md` (the review-gate skill is guarded: open question 10).
+   Language row in Settings; README sentence and `version.md`. This PR ships the Russian UI in a
+   release, so it waits for the owner: it is opened with the issue labelled `awaiting-owner` and
+   merged only after the owner has read `i18n/ru/frename.ftl` and the `--lang ru` screenshots.
 
 ## Test plan
 
@@ -310,11 +328,12 @@ it as a dev-dependency with the same version to parse files):
   English ids.
 - **Russian plurals:** every select expression whose variants in the English file use CLDR
   category keys (`one`, `other`, …) has `one`, `few` and `many` variants in `ru`.
-- **No English literals in views** (added in PR 3, when all strings are moved): a scan of
-  `src/features/**/*.rs` fails on a string literal with Latin letters passed to `text(`,
-  `.placeholder(`, `tooltip(`, button or radio labels, or a sentence `format!` in a view, with a
-  short allowlist (icons, key names, `IN`/`OUT`/`CC`/`SRT`/`XMP`). This keeps later features
-  from putting English into the Russian UI; the key tests alone only see strings already in `fl!`.
+- **No English words in UI code** (added in PR 3, when all strings are moved): a scan of every
+  string literal in `src/features/**` and `src/widgets/**`, outside `#[cfg(test)]` code and
+  `log::` calls, fails on a literal containing a Latin word, with a short allowlist (icons, key
+  names, `IN`/`OUT`/`CC`/`SRT`/`XMP`, `fl!` ids, file-name tokens). It catches words in `LABEL`
+  consts, `match` arms and `Err("…")` as well as in `text(…)`; the key tests alone only see
+  strings already in `fl!`.
 - **Resolution:** `resolve(stored, os_languages)` — `""` + `["ru-RU"]` → ru; `""` + `["uk-UA",
   "ru-RU"]` → ru (second preference); `""` + `["de-DE"]` → en; `"xx"` stored → System; `"en"`
   stored overrides a Russian OS.
@@ -327,7 +346,8 @@ Layout check (PR 1 adds, every PR runs it under Xvfb and gives the screenshots t
 reviewer): `frename --demo docs/screenshots/main.toml --out ru.png --lang ru`, the same with
 `--batch`, and with `--settings` (a screenshot of the settings window instead of the main one;
 demo mode today only captures the main window, `src/demo.rs`). `--lang` sets the seeded
-`AppSettings::language`, so the Russian UI takes the same path as a user's choice. Look for
+`AppSettings::language`, so the Russian UI takes the same path as a user's choice. A second run
+with `LANG=ru_RU.UTF-8 LANGUAGE=ru` and `--lang ""` (System) goes through the OS-locale path. Look for
 wrapped action labels, clipped buttons and settings content past 560 px. Running this in CI needs
 a change to `.github/workflows/screenshots.yml`, a guarded file (open question 7).
 
@@ -354,9 +374,10 @@ By hand, by the owner: Russian Windows first start, switch in Settings, wording 
    users besides the owner.
 6. **Settings overflow in Russian.** Decided: PR 1 wraps the settings body in a `scrollable` and
    keeps 560×560 (see Edge cases).
-7. **Russian screenshots in CI.** *Recommended:* the owner allows one step in
-   `screenshots.yml` that renders `--lang ru` as a build artifact (never published to the README);
-   until then the agent runs it locally for each PR.
+7. **Russian screenshots in CI (owner only, guarded file).** *Recommended:* the owner allows one
+   step in `screenshots.yml` that renders `--lang ru` as a build artifact (never published to the
+   README), and adds `i18n/**` and `i18n.toml` to its `paths` filters, so a wording-only change
+   re-renders the screenshots; until then the agent runs it locally for each PR.
 8. **Global loader vs. a translator passed to every view.** *Recommended:* global, set only in
    `update`, as core already does for the commented tag and storage settings.
 9. **Russian text in the repository (owner only).** `AGENTS.md` says code, comments, names and
