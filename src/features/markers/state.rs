@@ -3,18 +3,14 @@
 
 use std::time::{Duration, Instant};
 
-use iced::widget::text_editor;
-
 /// A second `F2` within this time after one that added a marker opens that marker's row, so
 /// `F2 F2` marks a moment and names it; later, `F2` adds again.
 pub const NAME_WINDOW: Duration = Duration::from_millis(1500);
 
-/// The row open for editing.
+/// The row open for editing: its name field is shown.
 #[derive(Debug)]
 pub struct MarkerEdit {
     pub guid: String,
-    /// Backing state of the row's multi-line comment editor.
-    pub comment: text_editor::Content,
 }
 
 #[derive(Debug, Default)]
@@ -34,20 +30,13 @@ impl MarkersState {
         self.edit.as_ref()
     }
 
-    pub fn edit_mut(&mut self) -> Option<&mut MarkerEdit> {
-        self.edit.as_mut()
-    }
-
     pub fn is_editing(&self) -> bool {
         self.edit.is_some()
     }
 
-    /// Open the row of `guid` with its comment in the editor.
-    pub fn open(&mut self, guid: String, comment: &str) {
-        self.edit = Some(MarkerEdit {
-            guid,
-            comment: text_editor::Content::with_text(comment),
-        });
+    /// Open the row of `guid` for renaming.
+    pub fn open(&mut self, guid: String) {
+        self.edit = Some(MarkerEdit { guid });
         self.color_picker = None;
         self.last_added = None;
     }

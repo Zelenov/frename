@@ -23,7 +23,7 @@ const NOTICE_DURATION: Duration = Duration::from_secs(2);
 /// video is not covered twice. Kept across files, like volume.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Overlay {
-    /// No list; fullscreen still shows the subtitle list when there are subtitles.
+    /// No list.
     #[default]
     Closed,
     Subtitles,
@@ -245,6 +245,9 @@ impl VideoPlayerState {
                     video_controls::Message::NextMarker => {
                         Task::done(Message::Markers(markers::Message::Next))
                     }
+                    video_controls::Message::EditMarker(guid) => {
+                        Task::done(Message::Markers(markers::Message::Open(guid)))
+                    }
                     video_controls::Message::SetVolume(v) => {
                         if let Some(video) = &mut self.current_video {
                             video.set_volume(v as f64);
@@ -351,7 +354,7 @@ impl VideoPlayerState {
     pub fn subtitles(&self) -> Option<&Subtitles> {
         self.subtitles.as_deref()
     }
-    /// Whether the subtitle list is open (windowed mode; fullscreen shows it anyway).
+    /// Whether the subtitle list is open.
     pub fn show_cue_list(&self) -> bool {
         self.overlay == Overlay::Subtitles
     }

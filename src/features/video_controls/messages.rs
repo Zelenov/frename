@@ -25,7 +25,7 @@ pub enum Message {
     SetVolume(f32),
     /// Save the current frame as a JPEG next to the video (F12 or button).
     TakeScreenshot,
-    /// Add a marker at the playhead, or name the one just added (F2 or `◆+`).
+    /// Add a marker at the playhead, or name the one just added (F2 or `📍`).
     AddMarker,
     /// Delete the marker under the playhead (Shift+F2).
     DeleteMarker,
@@ -33,4 +33,6 @@ pub enum Message {
     PreviousMarker,
     /// Jump to the next marker (Shift+F3).
     NextMarker,
+    /// The label over the progress bar was clicked: rename the marker with this GUID.
+    EditMarker(String),
 }

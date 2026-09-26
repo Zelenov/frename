@@ -51,9 +51,12 @@ pub struct FileSnapshot {
     /// a reparse after a save do not read them) or the file cannot hold them: saving such a
     /// snapshot leaves the file's markers as they are.
     markers: Option<Vec<Marker>>,
-    /// The comment and in/out points are stored inside the video and are still loading: a
-    /// folder scan defers that. Until they are loaded the snapshot does not know them, so
-    /// saving it leaves them as they are in the file.
+    /// How many clip markers the file holds, as its XMP (or the tag file's file list) told
+    /// when it was parsed. [`Self::marker_count`] prefers `markers` when they were read.
+    marker_count: usize,
+    /// The file's XMP (comment and in/out points stored inside the video, marker count) is
+    /// still loading: a folder scan defers that. Until it is loaded the snapshot does not know
+    /// them, so saving it leaves them as they are in the file.
     comment_loading: bool,
 }
 
@@ -73,6 +76,7 @@ impl FileSnapshot {
             segment_end: None,
             comment: String::new(),
             markers: None,
+            marker_count: 0,
             comment_loading: false,
         }
     }
@@ -124,6 +128,13 @@ impl FileSnapshot {
     }
     pub fn set_markers(&mut self, markers: Option<Vec<Marker>>) {
         self.markers = markers;
+    }
+    /// How many clip markers the file holds: the markers read, else the count parsed.
+    pub fn marker_count(&self) -> usize {
+        self.markers.as_ref().map_or(self.marker_count, Vec::len)
+    }
+    pub fn set_marker_count(&mut self, count: usize) {
+        self.marker_count = count;
     }
     /// Whether the comment and in/out points are still loading.
     pub fn comment_loading(&self) -> bool {

@@ -120,7 +120,7 @@ impl ProductionFileTagger {
         if !(snapshot.comment_loading() && storage.comment == CommentStorage::InVideo) {
             metadata::save_comment_text_file(&new_path, snapshot.comment(), saved.comment);
         }
-        metadata::cache::refresh_after_save(path, &new_path, storage);
+        metadata::cache::refresh_after_save(path, &new_path);
         new_path
     }
 }

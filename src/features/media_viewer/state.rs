@@ -100,9 +100,6 @@ impl MediaViewerState {
             Message::Video(video::Message::ScreenshotTaken(position_ms, jpeg)) => {
                 Task::done(Message::ScreenshotTaken(position_ms, jpeg))
             }
-            Message::Video(video::Message::Markers(msg)) => {
-                Task::done(Message::Markers(msg, self.video.position_ms()))
-            }
             Message::Image(image::Message::ToggleFullscreen) => {
                 Task::done(Message::ToggleFullscreen)
             }
@@ -130,7 +127,7 @@ impl MediaViewerState {
             Message::ToggleFullscreen => Task::none(),
             // Intercepted by FolderWorkspace; no-op here if they ever reach update().
             Message::SegmentStartMarked(_) | Message::SegmentEndMarked(_) => Task::none(),
-            Message::ScreenshotTaken(_, _) | Message::Markers(..) => Task::none(),
+            Message::ScreenshotTaken(_, _) => Task::none(),
         }
     }
 

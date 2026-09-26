@@ -68,7 +68,7 @@ pub fn view<'a>(
         let active_cue = subtitles.and_then(|s| s.cue_index_at(position));
         // The list keeps the last cue lit through the gaps, so the place is never lost.
         let list_cue = subtitles.and_then(|s| s.last_started_index(position));
-        let has_markers = markers.markers.is_some_and(|m| !m.is_empty());
+        let can_hold_markers = markers.markers.is_some();
         let caption = |subs| {
             if is_fullscreen {
                 cue_text(subs, active_cue)
@@ -79,7 +79,7 @@ pub fn view<'a>(
 
         // Fullscreen lays the subtitles over the picture; otherwise they get a strip
         // of their own between the picture and the controls. The side list shows the
-        // markers when they were asked for, else the subtitles (always in fullscreen).
+        // markers or the subtitles when they were asked for (CC / ◆, in fullscreen too).
         let strip = subtitles
             .filter(|_| !is_fullscreen)
             .map(|subs| subtitle_strip(subs, active_cue));
@@ -87,13 +87,19 @@ pub fn view<'a>(
             let list = markers::view::view(markers.markers, markers.state, state.position_ms())
                 .map(Message::Markers);
             let tabs = subtitles.map(|_| overlay_tabs(Overlay::Markers));
-            Some(side_overlay(subtitles.map_or("", caption), tabs, list))
+            Some(side_overlay(
+                subtitles.map_or("", caption),
+                tabs,
+                Some(list),
+            ))
         } else {
             subtitles
                 .filter(|_| is_fullscreen || state.show_cue_list())
                 .map(|subs| {
-                    let tabs = has_markers.then(|| overlay_tabs(Overlay::Subtitles));
-                    side_overlay(caption(subs), tabs, cue_list(subs, list_cue))
+                    let list = state.show_cue_list().then(|| cue_list(subs, list_cue));
+                    let tabs = (list.is_some() && can_hold_markers)
+                        .then(|| overlay_tabs(Overlay::Subtitles));
+                    side_overlay(caption(subs), tabs, list)
                 })
         };
         let video_area: Element<'_, Message> = match side_list {
@@ -104,9 +110,8 @@ pub fn view<'a>(
             None => video_area.into(),
         };
 
-        // Windowed mode only: fullscreen always shows the list.
         let cue_list_btn: Option<Element<'_, Message>> =
-            (subtitles.is_some() && !is_fullscreen).then(|| cue_list_button(state.show_cue_list()));
+            subtitles.map(|_| cue_list_button(state.show_cue_list()));
         let marker_list_btn = marker_list_button(state.show_marker_list());
 
         let bar_markers = markers
@@ -119,12 +124,22 @@ pub fn view<'a>(
                 color: theme::marker_color(m.color),
             })
             .collect();
+        // Like a subtitle line: the name of the marker the playhead is on, over its tick.
+        let marker_label = markers
+            .markers
+            .and_then(|m| markers::view::marker_at(m, state.position_ms()))
+            .map(|m| video_controls::view::MarkerLabel {
+                at: m.start_ms as f32 / 1000.0,
+                name: m.name.as_str(),
+                guid: m.guid.as_deref(),
+            });
         let controls_inner = video_controls::view::view(
             state.controls(),
             position_secs,
             segment_start,
             segment_end,
             bar_markers,
+            marker_label,
             markers.markers.is_some(),
         )
         .map(Message::Controls);
@@ -156,8 +171,9 @@ pub fn view<'a>(
         let controls = container(
             row![controls_inner]
                 .push(notice)
-                .push(marker_list_btn)
+                // Same order as the tabs over the side list: Subtitles, Markers.
                 .push(cue_list_btn)
+                .push(marker_list_btn)
                 .push(fullscreen_btn)
                 .width(Length::Fill)
                 .height(Length::Fill)
@@ -267,15 +283,20 @@ fn marker_list_button<'a>(shown: bool) -> Element<'a, Message> {
 
 /// `Subtitles` and `Markers` tabs over the side list, `active` lit.
 fn overlay_tabs<'a>(active: Overlay) -> Element<'a, Message> {
-    let tab = |label: &'a str, overlay: Overlay| {
-        button(text(label).size(12))
-            .on_press(Message::ShowOverlay(overlay))
-            .padding([3, 10])
-            .style(theme::overlay_tab_style(active == overlay))
+    // Each tab leads with the icon of its button in the controls bar.
+    let tab = |icon: &'a str, label: &'a str, overlay: Overlay| {
+        button(
+            row![text(icon).size(11), text(label).size(12)]
+                .spacing(6)
+                .align_y(Alignment::Center),
+        )
+        .on_press(Message::ShowOverlay(overlay))
+        .padding([3, 10])
+        .style(theme::overlay_tab_style(active == overlay))
     };
     row![
-        tab("Subtitles", Overlay::Subtitles),
-        tab("Markers", Overlay::Markers)
+        tab("CC", "Subtitles", Overlay::Subtitles),
+        tab("◆", "Markers", Overlay::Markers)
     ]
     .spacing(4)
     .padding([6, 12])
@@ -284,12 +305,13 @@ fn overlay_tabs<'a>(active: Overlay) -> Element<'a, Message> {
 
 /// A list laid over the picture on the right, with `tabs` above it, plus (fullscreen only)
 /// the current cue captioned over the lower part of the picture — windowed mode already
-/// shows it on the strip below. Empty areas let clicks through to the video underneath
-/// (pause, double-click to toggle fullscreen).
+/// shows it on the strip below. Without a list the caption alone is laid over the picture.
+/// Empty areas let clicks through to the video underneath (pause, double-click to toggle
+/// fullscreen).
 fn side_overlay<'a>(
     current: &'a str,
     tabs: Option<Element<'a, Message>>,
-    list: Element<'a, Message>,
+    list: Option<Element<'a, Message>>,
 ) -> Element<'a, Message> {
     let caption: Element<'a, Message> = if current.is_empty() {
         iced::widget::Space::new().into()
@@ -310,6 +332,9 @@ fn side_overlay<'a>(
         .center_x(Length::FillPortion(3))
         .align_bottom(Length::Fill)
         .padding([48, 24]);
+    let Some(list) = list else {
+        return caption_area.width(Length::Fill).into();
+    };
 
     let panel = container(column![].push(tabs).push(list).height(Length::Fill))
         .width(Length::Fill)

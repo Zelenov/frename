@@ -104,7 +104,8 @@ impl FileTagger {
     /// so a failed write leaves the file as it was. Lines past the end of the clip stay.
     pub fn comment_to_markers(path: &Path) -> Result<MoveOutcome, MarkersError> {
         let mut snapshot = Self::parse(path, &FolderInfo::default());
-        let markers = Self::load_markers(path).ok_or(MarkersError::CannotHoldMarkers)?;
+        let markers =
+            Self::load_markers(path).ok_or_else(|| crate::metadata::cannot_hold_markers(path))?;
         let clip_length = crate::metadata::clip_length_ms(&Self::disk_path(path));
         let result = crate::markers::comment_to_markers(snapshot.comment(), &markers, clip_length);
         if result.past_end > 0 {

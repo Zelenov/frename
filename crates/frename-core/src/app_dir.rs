@@ -13,6 +13,11 @@ pub fn app_data_dir() -> PathBuf {
     })
 }
 
+/// The log file, in [`app_data_dir`]. Started afresh on each run.
+pub fn log_path() -> PathBuf {
+    app_data_dir().join("frename_debug.log")
+}
+
 /// Environment variable that sets [`app_data_dir`] outright.
 pub const DATA_DIR_VAR: &str = "FRENAME_DATA_DIR";
 

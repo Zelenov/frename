@@ -20,6 +20,7 @@ pub fn view<'a>(
     segment_start: Option<f32>,
     segment_end: Option<f32>,
     markers: Vec<BarMarker>,
+    marker_label: Option<MarkerLabel<'a>>,
     can_add_markers: bool,
 ) -> Element<'a, Message> {
     let back10_btn: Element<'_, Message> = tooltip(
@@ -114,7 +115,8 @@ pub fn view<'a>(
     let bar = ProgressBar::new(0.0..=duration, current_pos, Message::Seek)
         .on_release(Message::SeekReleased)
         .segment_range(segment_start, segment_end)
-        .markers(markers);
+        .markers(markers)
+        .label(marker_label.map(|label| (label.at, marker_label_button(label))));
 
     let volume_icon: Element<'_, Message> =
         container(text("🔊").size(13)).center_y(Length::Fill).into();
@@ -144,7 +146,7 @@ pub fn view<'a>(
 
     let add_marker_btn: Element<'_, Message> = tooltip(
         button(
-            container(text("◆+").size(13))
+            container(text("📍").size(14))
                 .center_x(iced::Length::Fill)
                 .center_y(iced::Length::Fill),
         )
@@ -184,5 +186,38 @@ pub fn view<'a>(
         .width(iced::Length::Fill)
         .height(CONTROLS_HEIGHT)
         .style(theme::panel_container_style)
+        .into()
+}
+
+/// The marker the playhead is on, as the progress bar labels it.
+#[derive(Debug, Clone, Copy)]
+pub struct MarkerLabel<'a> {
+    /// Where its tick is, in seconds.
+    pub at: f32,
+    pub name: &'a str,
+    /// `None` for a marker frename cannot change (it has no GUID).
+    pub guid: Option<&'a str>,
+}
+
+/// The label over the marker's tick: its name and ✎. A click opens the marker's row in the
+/// marker list with the name field focused.
+fn marker_label_button(label: MarkerLabel<'_>) -> Element<'_, Message> {
+    let name = if label.name.trim().is_empty() {
+        text("Add a name").size(12).color(theme::TEXT_MUTED)
+    } else {
+        text(label.name).size(12).color(theme::TEXT)
+    };
+    let content = row![name]
+        .push(
+            label
+                .guid
+                .map(|_| text("✎").size(11).color(theme::TEXT_MUTED)),
+        )
+        .spacing(6)
+        .align_y(iced::Alignment::Center);
+    button(content)
+        .on_press_maybe(label.guid.map(|guid| Message::EditMarker(guid.to_string())))
+        .padding([2, 6])
+        .style(theme::marker_label_style)
         .into()
 }

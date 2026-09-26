@@ -2,11 +2,10 @@
 //! for editing. Rows have a fixed height (the open one a taller fixed height), so the list is
 //! scrolled to a row by arithmetic, as the subtitle list is.
 
-use frename_core::{format_marker_time, Marker, MarkerColor};
-use iced::widget::text_editor::Binding;
+use frename_core::{format_marker_time, Marker, MarkerColor, MARKER_SNAP_MS};
 use iced::widget::{
-    button, column, container, mouse_area, row, scrollable, text, text_editor, text_input, tooltip,
-    Column, Space,
+    button, column, container, mouse_area, row, scrollable, text, text_input, tooltip, Column,
+    Space,
 };
 use iced::{Alignment, Element, Length};
 
@@ -15,16 +14,33 @@ use crate::theme;
 
 pub const MARKER_LIST_SCROLLABLE_ID: &str = "marker_list";
 pub const MARKER_NAME_INPUT_ID: &str = "marker_name_input";
-/// Room for the first line, the name and two lines of the comment; longer text is clipped.
-const ROW_HEIGHT: f32 = 78.0;
-/// The open row: first line, name field and comment editor.
-const OPEN_ROW_HEIGHT: f32 = 170.0;
+/// Room for the first line and the name; a longer name is clipped.
+const ROW_HEIGHT: f32 = 56.0;
+/// The open row: first line and name field.
+const OPEN_ROW_HEIGHT: f32 = 66.0;
 const ROW_SPACING: f32 = 2.0;
 /// Distance from one closed row's top to the next.
 pub const ROW_PITCH: f32 = ROW_HEIGHT + ROW_SPACING;
 const DOT_SIZE: f32 = 14.0;
 const ICON_SIZE: f32 = 22.0;
-const COMMENT_EDITOR_HEIGHT: f32 = 76.0;
+
+/// How long after a point marker its label stays shown over the progress bar, as a subtitle
+/// line stays for its cue.
+const NAME_HOLD_MS: u64 = 2_000;
+
+/// The marker the playhead is on, which the progress bar labels (its name, or a prompt to
+/// name it): from just before its start to its end, or to [`NAME_HOLD_MS`] after a point
+/// marker. A marker already started wins over the next one coming up, then the latest start.
+pub fn marker_at(markers: &[Marker], position_ms: u64) -> Option<&Marker> {
+    markers
+        .iter()
+        .filter(|m| {
+            let from = m.start_ms.saturating_sub(MARKER_SNAP_MS);
+            let to = m.end_ms().max(m.start_ms + NAME_HOLD_MS);
+            (from..=to).contains(&position_ms)
+        })
+        .max_by_key(|m| (m.start_ms <= position_ms, m.start_ms))
+}
 
 /// Index of the lit row: the last marker at or before `position_ms`.
 pub fn lit_index(markers: &[Marker], position_ms: u64) -> Option<usize> {
@@ -41,7 +57,7 @@ pub fn view<'a>(
         return note("This file cannot hold markers");
     };
     if markers.is_empty() {
-        return note("No markers yet — press F2 to add one");
+        return empty_list();
     }
     let lit = lit_index(markers, position_ms);
     let rows = markers
@@ -66,7 +82,22 @@ fn note<'a>(message: &'a str) -> Element<'a, Message> {
         .into()
 }
 
-/// `m:ss` or `m:ss–m:ss`.
+/// An empty list: a note and a button that adds the first marker.
+fn empty_list<'a>() -> Element<'a, Message> {
+    column![
+        text("No markers yet").size(13).color(theme::TEXT_MUTED),
+        button(text("📍 Add a marker (F2)").size(13))
+            .on_press(Message::Add)
+            .padding([4, 10])
+            .style(theme::overlay_tab_style(false)),
+    ]
+    .spacing(8)
+    .padding([8, 16])
+    .width(Length::Fill)
+    .into()
+}
+
+/// `m:ss` or `m:ss–m:ss` (a ranged marker read from the file).
 fn time_label(marker: &Marker) -> String {
     let start = format_marker_time(marker.start_ms);
     if marker.duration_ms == 0 {
@@ -136,27 +167,10 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
                 .into()
         }
         Some(guid) => {
-            let length: Element<'a, Message> = if marker.duration_ms > 0 {
-                icon_button(
-                    "⇤",
-                    "Make it a point marker",
-                    Some(Message::ClearEnd(guid.to_string())),
-                )
-            } else {
-                icon_button(
-                    "⇥",
-                    "End it at the playhead",
-                    Some(Message::SetEndHere(guid.to_string())),
-                )
-            };
             let edit: Element<'a, Message> = if open.is_some() {
                 icon_button("✓", "Done (Enter)", Some(Message::Close))
             } else {
-                icon_button(
-                    "✎",
-                    "Name and comment",
-                    Some(Message::Open(guid.to_string())),
-                )
+                icon_button("✎", "Rename", Some(Message::Open(guid.to_string())))
             };
             row![
                 dot(
@@ -166,7 +180,6 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
                 ),
                 time,
                 Space::new().width(Length::Fill),
-                length,
                 edit,
                 icon_button(
                     "✕",
@@ -190,34 +203,14 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
     };
 
     let (body, height): (Element<'a, Message>, f32) = match open {
-        Some(edit) => {
+        Some(_) => {
             let name = text_input("Name", &marker.name)
                 .id(iced::widget::Id::new(MARKER_NAME_INPUT_ID))
                 .on_input(Message::NameInput)
                 .on_submit(Message::Close)
                 .size(13)
                 .padding([3, 6]);
-            let comment = text_editor(&edit.comment)
-                .on_action(Message::CommentAction)
-                .placeholder("Comment...")
-                .height(COMMENT_EDITOR_HEIGHT)
-                .size(12)
-                .padding([3, 6])
-                // Enter is a line break here: the name field's Enter closes the row.
-                .key_binding(|kp| {
-                    if matches!(
-                        kp.key,
-                        iced::keyboard::Key::Named(iced::keyboard::key::Named::Enter)
-                    ) {
-                        Some(Binding::Enter)
-                    } else {
-                        Binding::from_key_press(kp)
-                    }
-                });
-            (
-                column![first_line, name, comment].spacing(4).into(),
-                OPEN_ROW_HEIGHT,
-            )
+            (column![first_line, name].spacing(4).into(), OPEN_ROW_HEIGHT)
         }
         None => {
             let name = text(if marker.name.is_empty() {
@@ -226,14 +219,9 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
                 marker.name.as_str()
             })
             .size(13)
-            .color(if lit { theme::TEXT } else { theme::TEXT_SOFT });
-            let comment = text(marker.comment.as_str())
-                .size(12)
-                .color(theme::TEXT_MUTED);
-            (
-                column![first_line, name, comment].spacing(2).into(),
-                ROW_HEIGHT,
-            )
+            .color(if lit { theme::TEXT } else { theme::TEXT_SOFT })
+            .wrapping(iced::widget::text::Wrapping::None);
+            (column![first_line, name].spacing(2).into(), ROW_HEIGHT)
         }
     };
     let row_box = container(body)
@@ -268,6 +256,27 @@ mod tests {
         assert_eq!(lit_index(&markers, 1_000), Some(0));
         assert_eq!(lit_index(&markers, 4_999), Some(0));
         assert_eq!(lit_index(&markers, 9_000), Some(1));
+    }
+
+    #[test]
+    fn the_bar_labels_the_marker_the_playhead_is_on() {
+        let mut first = Marker::new(10_000);
+        first.name = "Lion".into();
+        let mut second = Marker::new(11_000);
+        second.name = "Cub".into();
+        let unnamed = Marker::new(20_000);
+        let markers = [first, second, unnamed];
+        let name = |ms| marker_at(&markers, ms).map(|m| m.name.as_str());
+        assert_eq!(name(9_000), None);
+        assert_eq!(name(9_600), Some("Lion"), "just before it");
+        assert_eq!(name(10_900), Some("Lion"));
+        assert_eq!(name(11_500), Some("Cub"), "the later one wins");
+        assert_eq!(name(13_001), None, "held two seconds");
+        assert_eq!(
+            name(20_000),
+            Some(""),
+            "unnamed: labelled so it can be named"
+        );
     }
 
     #[test]

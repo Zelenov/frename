@@ -180,13 +180,14 @@ pub fn metadata_storage() -> MetadataStorage {
     }
 }
 
-/// Fill in the comment, and the in/out points when the file name has none, of a snapshot
-/// parsed from the file name.
+/// Fill in the comment, the in/out points when the file name has none, and the marker count
+/// of a snapshot parsed from the file name.
 ///
 /// `has_text_file` says whether the folder listing shows a `.comment.txt` for this file.
 /// A text file wins over XMP: in XMP storage one only exists as a legacy comment or as the
 /// fallback for a failed XMP write, and either way it holds the newest text. In/out points
-/// in the file name win over XMP the same way. The file is opened only when XMP is needed.
+/// in the file name win over XMP the same way. The XMP is read whatever the storage, for the
+/// marker count; a folder scan takes it from the file list or defers it.
 pub(crate) fn load(
     path: &Path,
     has_text_file: bool,
@@ -200,9 +201,7 @@ pub(crate) fn load(
     if has_text_file {
         snapshot.set_comment(crate::comment::load_comment(path));
     }
-    if !comment_from_xmp && !in_out_from_xmp {
-        return;
-    }
+    // Read whatever the storage: the marker count always comes from the video.
     let fields = match source {
         XmpSource::Read => xmp::read(path),
         XmpSource::Cached(cached) => xmp::XmpFields {
@@ -211,12 +210,14 @@ pub(crate) fn load(
                 start: cached.start,
                 end: cached.end,
             },
+            markers: cached.markers.unwrap_or_default(),
         },
         XmpSource::Deferred => {
             snapshot.set_comment_loading(true);
             return;
         }
     };
+    snapshot.set_marker_count(fields.markers);
     if comment_from_xmp {
         snapshot.set_comment(fields.comment);
     }
@@ -231,6 +232,9 @@ pub(crate) fn load(
 pub enum MarkersError {
     /// The format cannot hold XMP (the toolkit has no handler that writes into it).
     CannotHoldMarkers,
+    /// Named MOV/MP4, but the content is not a movie: a download or copy that did not finish
+    /// leaves such a file, often all zeros. It does not play either.
+    Damaged,
     /// The write failed: the file is read-only, open in another app (Premiere holds clips it
     /// imported), or the disk is full. The text says what the system reported.
     WriteFailed(String),
@@ -240,6 +244,10 @@ impl std::fmt::Display for MarkersError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::CannotHoldMarkers => write!(f, "this format cannot hold markers"),
+            Self::Damaged => write!(
+                f,
+                "the file is damaged: its content is not a video (a download or copy that did                  not finish?)"
+            ),
             Self::WriteFailed(reason) => write!(f, "{reason}"),
         }
     }
@@ -250,6 +258,16 @@ pub(crate) fn load_markers(path: &Path) -> Option<Vec<Marker>> {
     let mut markers = xmp::read_markers(path)?;
     crate::markers::sort_markers(&mut markers);
     Some(markers)
+}
+
+/// Why the file at `path` holds no markers when its XMP cannot be opened: damaged, or a
+/// format without XMP.
+pub(crate) fn cannot_hold_markers(path: &Path) -> MarkersError {
+    if bmff::is_damaged(path) {
+        MarkersError::Damaged
+    } else {
+        MarkersError::CannotHoldMarkers
+    }
 }
 
 /// Length of the clip in milliseconds, when the file's header tells it.
@@ -267,12 +285,15 @@ pub(crate) fn save_markers(
     known: &HashSet<String>,
 ) -> Result<(), MarkersError> {
     xmp::write_markers(path, markers, known).map_err(|e| match e {
-        xmp::XmpWriteError::Unsupported => MarkersError::CannotHoldMarkers,
+        xmp::XmpWriteError::Unsupported => cannot_hold_markers(path),
         other => {
             log::warn!("metadata: markers not saved into {path:?}: {other}");
             MarkersError::WriteFailed(other.to_string())
         }
-    })
+    })?;
+    // The write keeps the file's time, so a same-size file would still match its old line.
+    cache::reload_line(path);
+    Ok(())
 }
 
 /// Where [`load`] gets a file's XMP from.

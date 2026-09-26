@@ -2,11 +2,10 @@
 //! are drawn on it in their colors; with Shift held, a seek snaps to the nearest marker.
 
 use iced::advanced::layout::{self, Layout};
-use iced::advanced::renderer;
 use iced::advanced::widget::{self, Widget};
-use iced::advanced::{self, Clipboard, Shell};
+use iced::advanced::{self, overlay, renderer, Clipboard, Shell};
 use iced::{keyboard, mouse};
-use iced::{Border, Color, Element, Event, Length, Rectangle, Shadow, Size};
+use iced::{Border, Color, Element, Event, Length, Point, Rectangle, Shadow, Size, Vector};
 
 use crate::theme;
 
@@ -19,6 +18,8 @@ const TICK_OVERHANG: f32 = 3.0;
 const BAND_HEIGHT: f32 = 3.0;
 /// A Shift seek snaps to a marker this close to the cursor (px).
 const SNAP_DISTANCE: f32 = 8.0;
+/// Gap between the label and the top of the marker's tick.
+const LABEL_GAP: f32 = 2.0;
 
 /// A clip marker as the bar draws it, in the bar's unit.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -39,7 +40,7 @@ struct State {
 
 /// A rectangular progress bar that supports click and drag to seek.
 /// Works with absolute values in a range, like `Slider`.
-pub struct ProgressBar<'a, Message> {
+pub struct ProgressBar<'a, Message, Theme = iced::Theme, Renderer = iced::Renderer> {
     /// Minimum value
     min: f32,
     /// Maximum value
@@ -58,9 +59,11 @@ pub struct ProgressBar<'a, Message> {
     fill_color: Option<Color>,
     /// Clip markers to draw as colored ticks (ranged ones with a band) and snap to.
     markers: Vec<BarMarker>,
+    /// Shown above the bar at a value: the name of the marker the playhead is on.
+    label: Option<(f32, Element<'a, Message, Theme, Renderer>)>,
 }
 
-impl<'a, Message> ProgressBar<'a, Message> {
+impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
     /// Create a new progress bar with a range and current value.
     /// Usage: `ProgressBar::new(0.0..=duration, position, Message::Seek)`
     pub fn new(
@@ -80,6 +83,7 @@ impl<'a, Message> ProgressBar<'a, Message> {
             segment_end: None,
             fill_color: None,
             markers: Vec::new(),
+            label: None,
         }
     }
 
@@ -105,6 +109,14 @@ impl<'a, Message> ProgressBar<'a, Message> {
     /// Set the clip markers (in the same unit as the range).
     pub fn markers(mut self, markers: impl IntoIterator<Item = BarMarker>) -> Self {
         self.markers = markers.into_iter().collect();
+        self
+    }
+
+    /// Show `content` above the bar, centred on `value` (in the range's unit) and kept within
+    /// the bar's width. It is an overlay: it reaches above the widget, over the picture, and
+    /// takes the clicks there instead of what it covers.
+    pub fn label(mut self, label: Option<(f32, Element<'a, Message, Theme, Renderer>)>) -> Self {
+        self.label = label;
         self
     }
 
@@ -159,7 +171,8 @@ fn snap_to_marker(value: f32, markers: &[BarMarker], px_per_unit: f32) -> f32 {
         .map_or(value, |(start, _)| start)
 }
 
-impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer> for ProgressBar<'a, Message>
+impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
+    for ProgressBar<'a, Message, Theme, Renderer>
 where
     Message: Clone,
     Renderer: advanced::Renderer,
@@ -170,6 +183,20 @@ where
 
     fn state(&self) -> widget::tree::State {
         widget::tree::State::new(State::default())
+    }
+
+    fn children(&self) -> Vec<widget::Tree> {
+        self.label
+            .iter()
+            .map(|(_, content)| widget::Tree::new(content))
+            .collect()
+    }
+
+    fn diff(&self, tree: &mut widget::Tree) {
+        match &self.label {
+            Some((_, content)) => tree.diff_children(std::slice::from_ref(content)),
+            None => tree.children.clear(),
+        }
     }
 
     fn size(&self) -> Size<Length> {
@@ -386,6 +413,29 @@ where
         }
     }
 
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut widget::Tree,
+        layout: Layout<'b>,
+        _renderer: &Renderer,
+        _viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
+        let span = self.max - self.min;
+        let min = self.min;
+        let (value, content) = self.label.as_mut().filter(|_| span > 0.0)?;
+        let bounds = layout.bounds() + translation;
+        let bar_y = bounds.y + (bounds.height - BAR_HEIGHT) / 2.0;
+        let x = bounds.x + ((*value - min) / span).clamp(0.0, 1.0) * bounds.width;
+        Some(overlay::Element::new(Box::new(LabelOverlay {
+            content,
+            tree: tree.children.first_mut()?,
+            anchor: Point::new(x, bar_y - TICK_OVERHANG - LABEL_GAP),
+            min_x: bounds.x,
+            max_x: bounds.x + bounds.width,
+        })))
+    }
+
     fn mouse_interaction(
         &self,
         tree: &widget::Tree,
@@ -404,15 +454,98 @@ where
     }
 }
 
-impl<'a, Message, Theme, Renderer> From<ProgressBar<'a, Message>>
+impl<'a, Message, Theme, Renderer> From<ProgressBar<'a, Message, Theme, Renderer>>
     for Element<'a, Message, Theme, Renderer>
 where
     Message: 'a + Clone,
     Theme: 'a,
     Renderer: 'a + advanced::Renderer,
 {
-    fn from(bar: ProgressBar<'a, Message>) -> Self {
+    fn from(bar: ProgressBar<'a, Message, Theme, Renderer>) -> Self {
         Self::new(bar)
+    }
+}
+
+/// The label over the bar, laid out centred on `anchor` (the top of the marker's tick) and
+/// kept between `min_x` and `max_x`.
+struct LabelOverlay<'a, 'b, Message, Theme, Renderer> {
+    content: &'b mut Element<'a, Message, Theme, Renderer>,
+    tree: &'b mut widget::Tree,
+    anchor: Point,
+    min_x: f32,
+    max_x: f32,
+}
+
+impl<Message, Theme, Renderer> overlay::Overlay<Message, Theme, Renderer>
+    for LabelOverlay<'_, '_, Message, Theme, Renderer>
+where
+    Renderer: advanced::Renderer,
+{
+    fn layout(&mut self, renderer: &Renderer, bounds: Size) -> layout::Node {
+        let node = self.content.as_widget_mut().layout(
+            self.tree,
+            renderer,
+            &layout::Limits::new(Size::ZERO, bounds),
+        );
+        let size = node.size();
+        let x = (self.anchor.x - size.width / 2.0)
+            .clamp(self.min_x, (self.max_x - size.width).max(self.min_x));
+        node.move_to(Point::new(x, self.anchor.y - size.height))
+    }
+
+    fn draw(
+        &self,
+        renderer: &mut Renderer,
+        theme: &Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+    ) {
+        self.content.as_widget().draw(
+            self.tree,
+            renderer,
+            theme,
+            style,
+            layout,
+            cursor,
+            &layout.bounds(),
+        );
+    }
+
+    fn update(
+        &mut self,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+    ) {
+        self.content.as_widget_mut().update(
+            self.tree,
+            event,
+            layout,
+            cursor,
+            renderer,
+            clipboard,
+            shell,
+            &layout.bounds(),
+        );
+    }
+
+    fn mouse_interaction(
+        &self,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &Renderer,
+    ) -> mouse::Interaction {
+        self.content.as_widget().mouse_interaction(
+            self.tree,
+            layout,
+            cursor,
+            &layout.bounds(),
+            renderer,
+        )
     }
 }
 

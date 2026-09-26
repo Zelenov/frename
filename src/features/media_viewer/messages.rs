@@ -1,7 +1,6 @@
 //! Messages for the media_viewer feature.
 
 use super::{image, video};
-use crate::features::markers;
 
 /// Messages handled by MediaViewerState.
 /// FolderWorkspace intercepts `Unloaded`; all other variants are forwarded to update().
@@ -24,7 +23,4 @@ pub enum Message {
     SegmentEndMarked(f32),
     /// Frame captured at position (ms) with JPEG bytes. Intercepted by FolderWorkspace.
     ScreenshotTaken(u64, Vec<u8>),
-    /// A marker key or a marker list row, with the playhead (ms). Intercepted by
-    /// FolderWorkspace, which owns the markers.
-    Markers(markers::Message, u64),
 }

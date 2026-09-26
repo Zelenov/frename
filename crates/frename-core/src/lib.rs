@@ -16,7 +16,7 @@ mod tags;
 pub(crate) mod transliteration;
 pub mod undo;
 
-pub use app_dir::{app_data_dir, DATA_DIR_VAR};
+pub use app_dir::{app_data_dir, log_path, DATA_DIR_VAR};
 pub use db::{
     AppDatabase, AppSettings, AppStateStore, Initializable, LoggingAppStateStore, StoredTagStore,
     VideoSettings, WindowGeometry,

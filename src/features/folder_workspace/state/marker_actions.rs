@@ -1,5 +1,5 @@
 //! What the marker keys and the marker list do to the open file's markers: add, name, color,
-//! lengthen, delete and jump. The markers live in the file workspace's tag list, like in/out,
+//! delete and jump. The markers live in the file workspace's tag list, like in/out,
 //! so saving, undo and renames carry them; this module also writes them into the file when it
 //! is saved.
 
@@ -7,7 +7,7 @@ use std::path::Path;
 
 use frename_core::{
     AddMarkerCommand, DeleteMarkerCommand, FileId, FileTagger, Marker, MarkersError,
-    SetMarkerColorCommand, SetMarkerDurationCommand, MARKER_SNAP_MS,
+    SetMarkerColorCommand, MARKER_SNAP_MS,
 };
 use iced::widget::operation;
 use iced::Task;
@@ -56,18 +56,6 @@ impl FolderWorkspace {
                 }
                 Task::none()
             }
-            M::CommentAction(action) => {
-                if let Some(edit) = self.markers.edit_mut() {
-                    edit.comment.perform(action);
-                    // text() appends a trailing newline; strip it for storage.
-                    let comment = edit.comment.text().trim_end_matches('\n').to_string();
-                    let guid = edit.guid.clone();
-                    self.file_workspace
-                        .tag_list_mut()
-                        .update_marker(&guid, |m| m.comment = comment);
-                }
-                Task::none()
-            }
             M::ToggleColorPicker(guid) => {
                 self.markers.toggle_color_picker(guid);
                 Task::none()
@@ -94,17 +82,6 @@ impl FolderWorkspace {
                 }
                 Task::none()
             }
-            M::SetEndHere(guid) => {
-                let Some(marker) = self.file_workspace.tag_list().marker(&guid) else {
-                    return Task::none();
-                };
-                if position_ms <= marker.start_ms {
-                    return Self::notice("Move the playhead past the marker first");
-                }
-                let new_ms = position_ms - marker.start_ms;
-                self.set_marker_duration(guid, new_ms)
-            }
-            M::ClearEnd(guid) => self.set_marker_duration(guid, 0),
             M::Delete(guid) => {
                 self.delete_marker(&guid);
                 Task::none()
@@ -112,13 +89,13 @@ impl FolderWorkspace {
         }
     }
 
-    /// `F2` / `◆+`: add a marker at the playhead; or open the row of the marker it just added
+    /// `F2` / `📍`: add a marker at the playhead; or open the row of the marker it just added
     /// (`F2 F2`) or of the one under the playhead, to name it. With a row open, close it and
     /// add without opening, so the next moment can be caught while typing.
     fn add_marker_key(&mut self, position_ms: u64) -> Task<Message> {
         let Some(markers) = self.file_workspace.markers() else {
             // The list says the file cannot hold markers: a key press never does nothing.
-            return show_marker_list();
+            return self.show_marker_list();
         };
         let near = nearest(markers, position_ms).map(|m| m.guid.clone());
         if self.markers.is_editing() {
@@ -135,9 +112,10 @@ impl FolderWorkspace {
         }
         match near {
             Some(Some(guid)) => self.open_marker_row(guid),
-            Some(None) => {
-                Task::batch([show_marker_list(), Self::notice("That marker is read-only")])
-            }
+            Some(None) => Task::batch([
+                self.show_marker_list(),
+                Self::notice("That marker is read-only"),
+            ]),
             None => self.add_marker(position_ms, true),
         }
     }
@@ -183,28 +161,6 @@ impl FolderWorkspace {
         }
     }
 
-    fn set_marker_duration(&mut self, guid: String, new_ms: u64) -> Task<Message> {
-        let Some(old_ms) = self
-            .file_workspace
-            .tag_list()
-            .marker(&guid)
-            .map(|m| m.duration_ms)
-        else {
-            return Task::none();
-        };
-        if old_ms != new_ms {
-            self.file_workspace
-                .tag_list_mut()
-                .update_marker(&guid, |m| m.duration_ms = new_ms);
-            self.history.push(Box::new(SetMarkerDurationCommand {
-                guid,
-                old_ms,
-                new_ms,
-            }));
-        }
-        Task::none()
-    }
-
     /// `Shift+F1` / `Shift+F3`: jump to the previous / next marker, exactly onto it.
     fn jump_to_marker(&mut self, position_ms: u64, forward: bool) -> Task<Message> {
         let starts = self
@@ -220,11 +176,15 @@ impl FolderWorkspace {
                 .filter(|&start| start + PREVIOUS_SLACK_MS <= position_ms)
                 .max()
         };
-        match target {
-            Some(ms) => seek_exact(ms),
-            None if forward => Self::notice("No marker after this"),
-            None => Self::notice("No marker before this"),
-        }
+        target.map_or_else(Task::none, seek_exact)
+    }
+
+    /// Show the marker list, in this update: a focus or scroll task started with it must find
+    /// the list already there, which a `Task::done` would only show after them.
+    fn show_marker_list(&mut self) -> Task<Message> {
+        self.media_viewer
+            .update(media_viewer::Message::Video(video::Message::ShowMarkerList))
+            .map(Message::MediaViewer)
     }
 
     /// Open the row of the marker for editing, with its name focused, in the marker list.
@@ -235,11 +195,10 @@ impl FolderWorkspace {
         let Some(index) = markers.iter().position(|m| m.has_guid(&guid)) else {
             return Task::none();
         };
-        let comment = markers[index].comment.clone();
-        self.markers.open(guid, &comment);
+        self.markers.open(guid);
         let name = iced::widget::Id::new(markers::view::MARKER_NAME_INPUT_ID);
         Task::batch([
-            show_marker_list(),
+            self.show_marker_list(),
             scroll_marker_list_to(index),
             operation::focus(name),
         ])
@@ -300,7 +259,7 @@ impl FolderWorkspace {
                 self.unsaved_markers.remove(&id);
                 Task::none()
             }
-            Err(MarkersError::CannotHoldMarkers) => {
+            Err(MarkersError::CannotHoldMarkers | MarkersError::Damaged) => {
                 self.unsaved_markers.remove(&id);
                 Task::none()
             }
@@ -331,12 +290,6 @@ fn nearest(markers: &[Marker], position_ms: u64) -> Option<&Marker> {
 fn seek_exact(ms: u64) -> Task<Message> {
     Task::done(Message::MediaViewer(media_viewer::Message::Video(
         video::Message::SeekExact(ms),
-    )))
-}
-
-fn show_marker_list() -> Task<Message> {
-    Task::done(Message::MediaViewer(media_viewer::Message::Video(
-        video::Message::ShowMarkerList,
     )))
 }
 

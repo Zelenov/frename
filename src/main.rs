@@ -59,7 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // AppImage it is not the executable's folder, and may not exist yet.
     let data_dir = app_data_dir();
     std::fs::create_dir_all(&data_dir)?;
-    let log_file = File::create(data_dir.join("frename_debug.log"))?;
+    let log_file = File::create(frename_core::log_path())?;
 
     // Log only this app's crates. Dependencies are far noisier than they look: cosmic_text emits a
     // `relayout` record per text layout and naga one per shader-validation step, which measured at

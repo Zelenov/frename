@@ -1,13 +1,20 @@
 # NEXT
 ## Added
-- Markers: `F2` (or ◆+) marks a moment of the video, `F2` again names it. Each marker has a name, a comment of several lines, one of Premiere's colors and an optional length, and is saved inside the video, where Premiere Pro shows it on the clip after import.
-- The marker list (◆, in fullscreen too) shares the side of the picture with the subtitle list, with a tab for each: click a marker to jump to it or edit it.
+- Markers: `F2` (or 📍) marks a moment of the video, `F2` again names it. Each marker has a name and one of Premiere's colors, and is saved inside the video, where Premiere Pro shows it on the clip after import.
+- The marker list (◆, in fullscreen too) shares the side of the picture with the subtitle list, with a tab for each (CC Subtitles, ◆ Markers): click a marker to jump to it or edit it. An empty list has an Add button.
 - `Shift+F1` / `Shift+F3` jump to the previous / next marker, `Shift+F2` deletes the marker under the playhead, and dragging the progress bar with `Shift` snaps to markers. Markers show as colored ticks on the progress bar.
+- While the playhead is on a marker, its name shows above its tick on the progress bar, the way a subtitle line shows. Click it to rename the marker.
+- The batch report has an Open log button next to the failed files: the log says why each one failed.
+- The file list shows 📍 and the number of markers of each file, and the Filter dropdown can show only files with markers.
 - Batch action "Markers ⇄ comment" turns comment lines like `03:24 — Take 3` into markers, or copies markers into the comment.
 
 ## Changed
 - `F12` just saves the current frame as a JPEG next to the video, like VLC: no mark on the progress bar, no time in the comment, and the picture is no longer renamed with the video. Frames saved before stay on disk.
 - `F1`, `F3` and `F12` no longer react while `Shift` is held.
+- The Filter dropdown moved from the bottom bar into the file search bar.
+- In fullscreen the CC button is shown too and opens or closes the subtitle list; before, fullscreen always showed the list.
+- A video whose content is not a video (all zeros, as a download that did not finish leaves it) is reported as damaged in the log, not as a format that cannot hold markers.
+- Long button labels and file names in the batch panel no longer run past its edge.
 
 # 0.68
 ## Added

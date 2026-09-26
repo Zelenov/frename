@@ -60,6 +60,8 @@ pub(super) struct XmpFields {
     pub comment: String,
     /// Both ends `None` when there is no in/out marker.
     pub segment: Segment,
+    /// How many clip markers the file holds.
+    pub markers: usize,
 }
 
 /// Read the comment and in/out segment from the file's XMP. Empty when the file has none,
@@ -96,6 +98,7 @@ fn fields_of(meta: &XmpMeta) -> XmpFields {
         segment: in_out_range(meta)
             .map(|range| range.to_segment(clip_duration_ms(meta)))
             .unwrap_or_default(),
+        markers: markers_of(meta).len(),
     }
 }
 

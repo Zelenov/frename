@@ -92,11 +92,11 @@ Next time you start frename, it reopens the last folder and clip.
 While a text box (tag search, file search, comment) has the cursor, it takes the keys it needs:
 arrows, `Delete`, `Space`, `Enter`, `Ctrl+C`, and in the comment box also `PageUp` / `PageDown`.
 Press `Esc` first to give the keys back to the app. `[` and `]` set in and out points, except while
-you type in a marker's name or comment. The F-keys always work.
+you type in a marker's name. The F-keys always work.
 
 Undo (`Ctrl+Z`) covers tagging, adding, deleting, starring and reordering tags, pasting, in/out
-points, adding, deleting, coloring and lengthening markers, and the rename when you leave a clip.
-It does not cover comment or marker text, a rename by hand
+points, adding, deleting and coloring markers, and the rename when you leave a clip.
+It does not cover comment text or marker names, a rename by hand
 (double-click), untagging with 🗑, the 🔓↑ / 🔓↓ buttons, or batch actions; opening a folder or running a batch
 action clears the undo history.
 
@@ -126,15 +126,16 @@ A folder without one starts with a set for travel and documentary work: `pick`, 
 
 The progress bar shows what you have noted about a clip:
 
-- **Markers:** `F2` or ◆+ marks the moment under the playhead with a colored tick. ◆ opens the
+- **Markers:** `F2` or 📍 marks the moment under the playhead with a colored tick. ◆ opens the
   marker list over the picture (in fullscreen too; it shares the place with the subtitle list, with a
-  tab for each). Click a marker's row to give it a name and a comment of several lines, its dot to
-  pick one of Premiere's colors, ⇥ to end it at the playhead (a ranged marker, drawn as a band), ✕
-  to delete it, and its time to jump there. Markers are saved inside the video when you leave the
-  clip, and Premiere Pro shows them on the clip with their name, comment, length and color after
+  tab for each; an empty list has an Add button). Click a marker's row to name it, its dot to
+  pick one of Premiere's colors, ✕ to delete it, and its time to jump there. Markers are saved inside the video when you leave the
+  clip, and Premiere Pro shows them on the clip with their name, length and color after
   you import it (re-import a clip it already has: Premiere reads the markers once). Markers
-  Premiere wrote are shown too and kept. If a clip is open in Premiere, its markers may not save:
+  Premiere wrote are shown too and kept (one with a length is drawn as a band). If a clip is open in Premiere, its markers may not save:
   the file gets a red ✕ in the list, and frename tries again when you next leave it.
+  While the playhead is on a marker, its name shows above its tick; click it to rename the
+  marker.
 - **Frames:** `F12` or 📷 saves the current frame as a JPEG next to the video
   (`clip.mp4.snap.00-01-05-250.jpg`) and shows `Frame saved`.
 - **In and out points:** `[` and `]` mark the usable segment, highlighted on the progress bar.
@@ -148,7 +149,7 @@ The progress bar shows what you have noted about a clip:
 
 Some formats, such as mkv, cannot hold comments, in/out points or markers inside them; for those,
 frename keeps comments and in/out points in `.comment.txt` and the file name whatever Settings say,
-and ◆+ is off. mp4 and mov hold everything.
+and 📍 is off. mp4 and mov hold everything.
 
 `.comment.txt` files and subtitles are renamed together with their video.
 
@@ -157,14 +158,16 @@ and ◆+ is off. mp4 and mov hold everything.
 ## Finding files
 
 - **Search** the file list by name. Tags already in a name are searchable too.
-- **Filter** the list to files that are untagged, have subtitles, or have a comment.
+- **Filter** the list to files that are untagged, have subtitles, a comment or markers: the
+  Filter dropdown sits at the right end of the search bar. A file with markers shows 📍 and
+  their number in the list.
 - The list shows only videos (mp4, mov, mkv, avi, webm, and other common formats), oldest first.
 
 ## Subtitles
 
 A `.srt` with the same name as the video (`clip.srt` for `clip.mp4`) is shown under the picture.
 The CC button opens a list of every line; click a line to jump to it. In fullscreen the subtitles
-are shown over the picture with the list beside them.
+are shown over the picture, and CC opens the list beside them there too.
 
 ## Batch mode
 
@@ -176,8 +179,9 @@ and Cancel. Each file then shows a green or red check box. Actions:
 - move comments between the video and `.comment.txt` files;
 - move in/out points between the file name and the video;
 - turn comment lines that start with a time (`03:24 — Take 3 — nice light`, `0:41-0:47 — Lion`)
-  into markers, or copy the markers into the comment as such lines. The marker's name and comment
-  are split at the first ` — ` or ` -- `, not at a plain ` - `;
+  into markers, or copy the markers into the comment as such lines. What follows the name after
+  a second ` — ` or ` -- ` (not a plain ` - `) goes into the marker's comment, which Premiere
+  shows and frename keeps but does not show;
 - tag commented videos with "Commented" and untag the rest;
 - put the tags in every name in tag panel order;
 - add or remove the space after each tag, as set in Settings;

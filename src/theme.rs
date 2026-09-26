@@ -353,3 +353,23 @@ pub fn overlay_tab_style(
         }
     }
 }
+
+/// The marker label over the progress bar: a pill on the picture that renames the marker.
+pub fn marker_label_style(
+    _theme: &iced::Theme,
+    status: iced::widget::button::Status,
+) -> iced::widget::button::Style {
+    let bg = match status {
+        iced::widget::button::Status::Hovered | iced::widget::button::Status::Pressed => {
+            ACCENT_SELECTED
+        }
+        _ => BG_ELEVATED,
+    };
+    iced::widget::button::Style {
+        background: Some(Background::Color(bg)),
+        text_color: TEXT,
+        border: iced::border::rounded(4),
+        shadow: iced::Shadow::default(),
+        snap: true,
+    }
+}
