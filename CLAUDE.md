@@ -40,7 +40,7 @@ Reviewers follow `.claude/skills/review-gate/SKILL.md`. User-facing text follows
 `.claude/skills/readme/SKILL.md`.
 
 In autonomous mode the "implement only what is explicitly requested" rule of `AGENTS.md` means:
-the issue is the request. Do exactly what the issue and its approved design ask, nothing beyond it.
+the issue is the request. Do exactly what the issue asks (the agent's design notes only fill in details), nothing beyond it.
 Ideas of your own become new issues labelled `idea`, never extra code in the current PR.
 
 ## Labels
@@ -50,13 +50,13 @@ Ideas of your own become new issues labelled `idea`, never extra code in the cur
 | `P1` `P2` `P3` | owner/agent | Priority (lower number first). |
 | `regression` | owner | A release broke something; picked before everything else. |
 | `feature`, `process` | owner/agent | Kind of work. |
-| `needs-design` | owner/agent | A design doc in `docs/design/` must be merged before code. |
+| `needs-design` | owner/agent | The agent writes its own design notes in `docs/design/` on the feature branch before coding. Not a gate; the owner does not approve designs. |
 | `approved` | owner | Makes an `idea` or a non-owner issue implementable. |
 | `idea` | agent | Agent's own proposal; not implemented until `approved`. |
 | `in-progress` | agent | An agent session is working on it (see heartbeat lock). |
-| `awaiting-owner` | agent | Legacy: design questions for the owner. The pipeline no longer stops for design questions; owner removes it after answering. |
+| `awaiting-owner` | agent | Legacy, no longer set: the pipeline never waits for design answers. |
 | `needs-owner` | agent | On an issue: agent cannot proceed at all (guarded file, failed release); owner answers and removes it to let the agent retry. |
-| `owner-review` | agent | Design or review did not converge: the feature is built on its PR but not merged or released. Owner merges it, or removes the label from the PR to hand it back. |
+| `owner-review` | agent | Code review or CI did not converge: the feature is built on its PR but not merged or released. Owner merges it, or removes the label from the PR to hand it back. |
 | `hold` | owner | Do not work on / merge this. |
 | `blocked`, `rejected` | owner | Not now / never. |
 | `agent` | agent | PR opened by the agent pipeline. |

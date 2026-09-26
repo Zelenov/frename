@@ -33,7 +33,7 @@ Code PR — all three, every round:
    (short, user language, per `readme` skill). For UI changes it looks at an Xvfb screenshot when
    the app runs on Linux.
 
-Design doc — reviewers 2 and 3 only, judging the design: missing flows, edge cases, simpler
+Design doc (advisory only, one round, never blocks; see `nightly` step 3) — reviewers 2 and 3, judging the design: missing flows, edge cases, simpler
 alternatives, feasibility (is every format/API claim sourced?).
 
 ## Verdict format

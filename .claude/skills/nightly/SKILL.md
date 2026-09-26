@@ -3,7 +3,7 @@ name: nightly
 description: >
   Unattended feature pipeline for frename. Use when a scheduled (nightly) session starts, or when
   asked to "take the next issue", "work the backlog", or ship a feature end-to-end without a human:
-  pick an issue, design if needed, implement, independent review loop, CI, merge, release.
+  pick an issue, implement, independent review loop, CI, merge, release.
 ---
 
 # Nightly pipeline
@@ -125,32 +125,25 @@ Label `idea`. It becomes work only when the owner labels it `approved`. Then sto
 Follow-up problems found while working (bugs, cleanups) are filed the same way, labelled `idea`
 (or `regression` only if the owner confirms).
 
-## 3. Design gate (issues labelled `needs-design`)
+## 3. Design notes (issues labelled `needs-design`)
 
-If `docs/design/<slug>.md` for this issue is not on `main` yet:
+The design is the agent's own working tool, never a gate and never something the owner approves or
+reads before the feature exists. The owner wants the feature, released or waiting on a branch, and
+discusses the implementation afterwards.
+
 1. Research what the feature depends on (formats, APIs, Premiere behaviour) and cite sources.
-   Check `docs/research/` first.
-2. Write `docs/design/<slug>.md`: problem, user flows, UI sketch (ASCII or SVG), keyboard shortcuts,
-   data format, edge cases, out of scope, test plan, open questions each with a recommended answer.
-3. Open questions do not stop the work: the owner does not read designs before they are built.
-   Decide each one with its recommended answer (the one you judge best for the editor) and list
-   them in the doc under `## Decisions made without the owner`.
-4. Run the review gate in design mode.
-5. **Converged** (both reviewers approve within 4 rounds): open a docs-only PR labelled `agent`,
-   body `Refs #N` (**never** `Closes`: merging a design must not close the issue). Merge it under
-   step 7's merge conditions; it has no version step and does not touch `version.md`. Comment a
-   short summary with the decisions on the issue and continue with section 4 (Implement) in the
-   same session. The feature goes all the way to a release.
-6. **Not converged** (4 design rounds without both approving): do not stop and do not ask. Take the
-   last version of the design, fix what you agree with, and for each remaining objection decide
-   what you judge right and write it under `## Unresolved review findings` (finding, your decision,
-   why). Do not merge the design PR (close it with a comment pointing to the implementation PR).
-   The design doc goes into the implementation branch instead, and the work continues with
-   section 4 in the same session, on the "Owner review" track: it ends in an unmerged PR, never a
-   release.
-
-Owner answers (given later, on the issue or the PR) are folded into the design doc in the
-implementation PR.
+   Check `docs/research/` and `docs/design/` first.
+2. On the implementation branch (section 4), write `docs/design/<slug>.md` as far as it helps:
+   user flows, UI sketch, keyboard shortcuts, data format, edge cases, test plan. Every open
+   question is decided by the agent with the answer it judges best for the editor, listed under
+   `## Decisions made without the owner`. Never ask the owner, never wait.
+3. Optionally run one design-mode round of the review gate as advice: take what is useful, write
+   the rest under `## Review notes not taken` with a one-line reason. It never blocks and has no
+   round limit to hit.
+4. The doc ships in the same PR as the code; there is no separate design PR. An open docs-only
+   design PR from earlier sessions is closed with a comment pointing to the implementation PR, and
+   its doc is carried into the implementation branch.
+5. Continue with section 4 in the same session.
 
 ## 4. Implement
 
@@ -188,15 +181,12 @@ cargo build --release --locked
 4. Count review rounds and CI fix rounds since the PR opened, or since the last
    `Retry after owner` line in the PR body. After 4 review rounds or 3 CI fix rounds without
    convergence: finish the work as far as you can and move the PR to "Owner review" (below).
-5. On the "Owner review" track (the design did not converge) the code still goes through the
-   review gate and CI, up to the same limits, to make the branch as good as possible; then it moves
-   to "Owner review" whatever the outcome.
 
 ## Owner review (not converged: implemented, not released)
 
-The owner prefers a finished branch to look at over a question to answer. When the design or the
-code review does not converge, the agent still builds the feature as far as it can, following its
-own best judgement, and leaves it unmerged:
+The owner prefers a finished branch to look at over a question to answer. When the code review
+or CI does not converge, the agent still finishes the feature as far as it can, following its own
+best judgement, and leaves it unmerged:
 
 1. Implement everything that can be built without the owner. Only what truly cannot (a secret
    that is not available, a guarded file the issue does not allow, a check only the owner can do
@@ -205,7 +195,7 @@ own best judgement, and leaves it unmerged:
    never set a version number.
 3. Mark the PR ready for review (not draft), add the label `owner-review` to the PR and the issue,
    remove `in-progress`. Put at the top of the PR body:
-   `🤖 agent: ⚠️ Not released — <design|code review|CI> did not converge.` followed by: what was
+   `🤖 agent: ⚠️ Not released — <code review|CI> did not converge.` followed by: what was
    built, the decisions made without the owner, the unresolved reviewer findings with the decision
    taken on each, what is left out and why, the CI state, and how to try it (the CI artifacts:
    Windows build, AppImage).
@@ -235,8 +225,8 @@ Merge (squash, with `expectedHeadSha` = the checked head) only when all hold:
   `needs-owner` or `owner-review`, and the issue is open;
 - every reviewer of the last round approved, and the review is current (above);
 - if the PR changes `version.md`: `M` is published, no `release-failed` issue is open, its first
-  line is `# X.Y`, a version newer than `M`, and `# NEXT` appears nowhere in the file. Otherwise `version.md` is identical to `main` (design docs, release
-  fixes and internal changes do not bump the version);
+  line is `# X.Y`, a version newer than `M`, and `# NEXT` appears nowhere in the file. Otherwise `version.md` is identical to `main` (release fixes and internal
+  changes do not bump the version);
 - every CI check is green on the head commit;
 - no merge conflict.
 
@@ -262,7 +252,7 @@ less than 90 minutes ago) and watch the run to completion.
 6. While a `release-failed` issue is open, merge nothing that changes `version.md`; other work can
    continue up to that point.
 
-After an implementation PR (not a design-doc PR): comment on the issue what shipped, which version,
+After merging an implementation PR: comment on the issue what shipped, which version,
 how to try it, what the owner has to check by hand (e.g. Premiere Pro behaviour), and remove
 `in-progress`.
 
