@@ -39,10 +39,10 @@ The in/out part is there only when you mark a segment and keep in/out points in 
 2. The video starts playing.
 3. Tag what you see: click a tag, or move with the arrow keys and press `Shift+Space`.
 4. Press `[` and `]` to mark the usable segment of the clip (in and out points).
-5. Press `F12` to save a screenshot of an interesting moment.
-6. Type a note in the comment box if needed. Press `F12` first to start the note with the current time.
-7. Press `PageDown` to go to the next clip. The clip you leave is renamed.
-8. Most clips share most tags with their neighbors: press `Ctrl+C` on one clip and `Ctrl+V` on the next, then adjust.
+5. Press `F12` to save a screenshot of an interesting moment. It also starts a line with that time
+   in the comment box, so type your note after it. Or just type a note there.
+6. Press `PageDown` to go to the next clip. The clip you leave is renamed.
+7. Most clips share most tags with their neighbors: press `Ctrl+C` on one clip and `Ctrl+V` on the next, then adjust.
 
 Next time you start frename, it reopens the last folder and clip.
 
@@ -62,8 +62,8 @@ Next time you start frename, it reopens the last folder and clip.
 |---|---|
 | `↑` `↓` `←` `→` | Move the selection in the tag grid |
 | `Shift+Space` | Tag or untag the file with the selected tag |
-| Any letter | Type into the tag search |
-| `Enter` | Add the typed tag to the folder's tags |
+| Any letter, `Backspace` | Type into the tag search |
+| `Enter` | Add the typed tag, or the selected unsaved (○) tag, to the folder's tags |
 | `Delete` | Delete the selected tag from the folder's tags |
 | `Escape` | Clear the tag and file searches |
 | `Ctrl+C` | Copy the file's tags (and its new name to the clipboard) |
@@ -84,13 +84,20 @@ Next time you start frename, it reopens the last folder and clip.
 | `F5` | Fullscreen on / off (or double-click the picture) |
 | `Escape` | Leave fullscreen |
 
+While the tag search has the cursor, `←` `→`, `Delete`, `Space` and `Ctrl+C` act on the search
+text. Press `Esc` or click a tag first.
+
+Undo (`Ctrl+Z`) covers tagging, adding, deleting, starring and reordering tags, pasting, in/out
+points and the rename when you leave a clip. It does not cover a rename by hand (double-click),
+untagging with 🗑, the 🔓↑ / 🔓↓ buttons, or batch actions; opening a folder or running a batch
+action clears the undo history.
+
 ---
 
 ## Tags
 
 Each folder has its own tags, kept in a `.frename` file inside the folder. The file travels with the
-footage. Its lines are the tags in the order the tag panel shows them; you can reorder, rename or
-delete lines by hand, but add new tags in the app.
+footage.
 A folder without one starts with a set for travel and documentary work: `pick`, `skip`, `review`,
 `wide`, `close`, `drone`, `golden-hour`, `people`, `wildlife`, and more.
 
@@ -98,14 +105,12 @@ A folder without one starts with a set for travel and documentary work: `pick`, 
 - **Search:** type anything to filter the tags.
 - **Add a tag:** type a new name and press `Enter`.
 - **Unsaved tags:** a tag that is already in a file's name but not in the folder's tags shows as
-  unsaved (○). Press `Enter` or click ○ to add it.
+  unsaved (○). Select it and press `Enter`, or click ○, to add it.
 - **Order:** the order of tags in the tag panel is the order they get in file names. Drag chips in
   the file name to change it, or drop a chip on 🗑 to untag it. When the file's order differs from
-  the panel's, the ↑ button makes the file's order the panel order and ↓ puts the file's chips in
-  panel order. When they match, 🔒 keeps them locked together.
-
-Undo (`Ctrl+Z`) covers tagging, adding, deleting, starring and reordering tags, pasting, in/out
-points and the rename when you leave a clip. A rename by hand (double-click) cannot be undone.
+  the panel's, 🔓↑ copies the file's order to the tag panel and 🔓↓ puts the file's tags in panel
+  order. When they match, 🔒 keeps them in step: reordering one reorders the other (click it to
+  unlock).
 
 ---
 
@@ -122,7 +127,9 @@ The progress bar shows what you have noted about a clip:
 - **Comments:** free text per clip. By default it is saved inside the video, where Premiere Pro
   shows it in the Description column and finds it by search. Settings can keep it in a
   `.comment.txt` next to the video instead. The file list shows the first line of each comment.
-  While comments are inside the video, a clip with a comment gets a "Commented" tag.
+  While comments are inside the video, frename tags a clip "Commented" when it gets its first
+  comment and untags it when the comment is cleared (you can rename or turn off this tag in
+  Settings). For clips commented earlier, use the batch action.
 
 Some formats, such as mkv, cannot hold comments or in/out points inside them; for those, frename
 keeps them in `.comment.txt` and the file name whatever Settings say.
@@ -150,7 +157,7 @@ and Cancel. Each file then shows a green or red check box. Actions:
 
 - move comments between the video and `.comment.txt` files;
 - move in/out points between the file name and the video;
-- tag commented videos with "Commented" (or untag the rest);
+- tag commented videos with "Commented" and untag the rest;
 - put the tags in every name in tag panel order;
 - read every file again (use this if the list looks out of date).
 
