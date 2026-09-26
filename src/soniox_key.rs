@@ -34,6 +34,16 @@ impl std::fmt::Debug for SonioxKey {
     }
 }
 
+/// What is typed in the key field: a key too, so printed as `***` as well.
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct TypedKey(pub String);
+
+impl std::fmt::Debug for TypedKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("TypedKey(***)")
+    }
+}
+
 /// Where the key in use comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeySource {
@@ -42,7 +52,7 @@ pub enum KeySource {
 }
 
 /// What was found when the key was read.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct KeyInfo {
     pub key: Option<(SonioxKey, KeySource)>,
     /// Whether this system has a credential store to save a key in.
@@ -144,6 +154,7 @@ mod tests {
         assert_eq!(key.expose(), "secret-key");
         assert_eq!(format!("{key:?}"), "SonioxKey(***)");
         assert!(SonioxKey::new("  ").is_none());
+        assert_eq!(format!("{:?}", TypedKey("typed".into())), "TypedKey(***)");
     }
 
     /// A round trip where the system has a credential store (Windows CI); where it has none

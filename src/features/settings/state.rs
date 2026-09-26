@@ -6,7 +6,7 @@ use iced::Task;
 use super::Message;
 use crate::features::batch::generate_subtitles::{Config, KeyStatus};
 use crate::features::batch::Operation;
-use crate::soniox_key::{self, KeyInfo, KeySource, SonioxKey};
+use crate::soniox_key::{self, KeyInfo, KeySource, SonioxKey, TypedKey};
 
 /// The Soniox API key as the settings window shows it. The key itself lives in the credential
 /// store, read once per session, when first needed.
@@ -17,7 +17,7 @@ pub struct SonioxKeyState {
     /// A read was started.
     requested: bool,
     /// What is typed in the key field.
-    input: String,
+    input: TypedKey,
     /// Show the typed key instead of dots.
     show: bool,
     /// Replace was pressed: the field is shown over the saved key.
@@ -34,7 +34,7 @@ impl SonioxKeyState {
     }
 
     pub fn input(&self) -> &str {
-        &self.input
+        &self.input.0
     }
 
     pub fn show(&self) -> bool {
@@ -134,7 +134,10 @@ impl SettingsState {
                 if std::mem::replace(&mut key.requested, true) {
                     return Some(Task::none());
                 }
-                blocking(soniox_key::load, Message::SonioxKeyLoaded)
+                blocking(soniox_key::load, Message::SonioxKeyLoaded, |_| {
+                    // Read as "no key, nowhere to store one" rather than "Reading…" for good.
+                    Message::SonioxKeyLoaded(KeyInfo::default())
+                })
             }
             Message::SonioxKeyLoaded(info) => {
                 key.info = Some(info.clone());
@@ -150,13 +153,14 @@ impl SettingsState {
                 Task::none()
             }
             Message::SaveSonioxKey => {
-                let Some(new_key) = SonioxKey::new(&key.input).filter(|_| !key.busy) else {
+                let Some(new_key) = SonioxKey::new(&key.input.0).filter(|_| !key.busy) else {
                     return Some(Task::none());
                 };
                 key.busy = true;
                 blocking(
                     move || soniox_key::save(&new_key).map(|()| new_key),
                     Message::SonioxKeySaved,
+                    |e| Message::SonioxKeySaved(Err(e)),
                 )
             }
             Message::SonioxKeySaved(result) => {
@@ -167,7 +171,7 @@ impl SettingsState {
                             key: Some((saved.clone(), KeySource::Stored)),
                             store_available: true,
                         });
-                        key.input.clear();
+                        key.input = TypedKey::default();
                         key.show = false;
                         key.replacing = false;
                         key.error = None;
@@ -178,7 +182,7 @@ impl SettingsState {
             }
             Message::ReplaceSonioxKey => {
                 key.replacing = true;
-                key.input.clear();
+                key.input = TypedKey::default();
                 Task::none()
             }
             Message::RemoveSonioxKey => {
@@ -186,13 +190,19 @@ impl SettingsState {
                     return Some(Task::none());
                 }
                 key.busy = true;
-                blocking(soniox_key::remove, Message::SonioxKeyRemoved)
+                blocking(soniox_key::remove, Message::SonioxKeyRemoved, |e| {
+                    Message::SonioxKeyRemoved(Err(e))
+                })
             }
             Message::SonioxKeyRemoved(result) => {
                 key.busy = false;
                 match result {
                     // What is left: the environment variable, if set.
-                    Ok(()) => return Some(blocking(soniox_key::load, Message::SonioxKeyLoaded)),
+                    Ok(()) => {
+                        return Some(blocking(soniox_key::load, Message::SonioxKeyLoaded, |_| {
+                            Message::SonioxKeyLoaded(KeyInfo::default())
+                        }))
+                    }
                     Err(e) => key.error = Some(e.clone()),
                 }
                 Task::none()
@@ -288,21 +298,21 @@ impl SettingsState {
 }
 
 /// Run `work` on a blocking thread (the credential store may be a D-Bus round trip) and turn
-/// its answer into a message.
+/// its answer into a message; `failed` makes one if the thread itself fails.
 fn blocking<T: Send + 'static>(
     work: impl FnOnce() -> T + Send + 'static,
     message: impl FnOnce(T) -> Message + Send + 'static,
+    failed: impl FnOnce(String) -> Message + Send + 'static,
 ) -> Task<Message> {
     Task::future(async move {
         match tokio::task::spawn_blocking(work).await {
-            Ok(result) => Some(message(result)),
+            Ok(result) => message(result),
             Err(e) => {
                 log::error!("settings: credential store task failed: {e}");
-                None
+                failed("The key could not be read or saved (see the log).".to_string())
             }
         }
     })
-    .and_then(Task::done)
 }
 
 #[cfg(test)]

@@ -30,8 +30,8 @@ pub const LABEL: &str = "Generate subtitles";
 /// How long the price lookup may take before the typical price is used.
 const PRICE_TIMEOUT: Duration = Duration::from_secs(10);
 /// What the plan says about files the built-in decoder cannot read while ffmpeg is missing.
-const INSTALL_FFMPEG: &str = "install ffmpeg to read .mkv, .m2ts, .avi …: install ffmpeg from \
-                              ffmpeg.org, add it to PATH, restart frename";
+const INSTALL_FFMPEG: &str =
+    "to read .mkv, .m2ts, .avi …, install ffmpeg from ffmpeg.org, add it to PATH, restart frename";
 /// Shown when Soniox refuses the key, in the plan and when it stops a job.
 pub const KEY_REJECTED: &str = "Soniox rejected the key";
 
@@ -80,6 +80,9 @@ pub enum Message {
     SetConfig(Config),
     /// Transcribe again videos that already have subtitles.
     SetReplace(bool),
+    /// A key was saved in the settings: look its price up again, even for the same key (it may
+    /// have been refused before and fixed on the account since).
+    KeySaved,
 }
 
 /// What the checked files need, from their names and headers only.
@@ -148,6 +151,7 @@ impl Options {
                 self.replace = replace;
                 self.invalidate_plan();
             }
+            Message::KeySaved => self.price = None,
         }
     }
 
@@ -383,6 +387,12 @@ fn plan_lines(plan: &Plan, price: Option<Price>) -> Vec<String> {
             format!(" + {} of unknown length", plan.unknown_length)
         } else {
             String::new()
+        };
+        // Nothing to price when no length is known.
+        let cost = if plan.audio_s == 0.0 {
+            "cost unknown".to_string()
+        } else {
+            cost
         };
         lines.push(format!(
             "{} to transcribe, {} of audio{unknown} · {cost}",
@@ -983,6 +993,20 @@ mod tests {
         assert_eq!(
             plan_lines(&Plan::default(), None),
             ["Nothing to transcribe"]
+        );
+        let unknown = Plan {
+            transcribe: 2,
+            unknown_length: 2,
+            unreadable: 1,
+            ..Plan::default()
+        };
+        assert_eq!(
+            plan_lines(&unknown, Some(Price::Typical)),
+            [
+                "2 videos to transcribe, 0 s of audio + 2 of unknown length · cost unknown",
+                "1 cannot be read (to read .mkv, .m2ts, .avi …, install ffmpeg from ffmpeg.org, \
+                 add it to PATH, restart frename)",
+            ]
         );
     }
 

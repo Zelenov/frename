@@ -655,8 +655,9 @@ impl FolderWorkspace {
         let (plan_request, price_request) = self.batch.take_subtitle_requests();
         let mut tasks = Vec::new();
         if let Some(request) = plan_request {
+            // Every checked file, listed or hidden by a filter: the job runs them all.
             let files: Vec<PathBuf> = self.directory.as_ref().map_or_else(Vec::new, |dir| {
-                dir.files_in_order()
+                dir.all_files()
                     .filter(|f| self.batch.is_checked(f.id()))
                     .map(|f| f.file_path().to_path_buf())
                     .collect()

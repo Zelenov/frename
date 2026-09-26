@@ -51,7 +51,7 @@ arboard = "3"
 rfd = "0.17"
 
 # Subtitles from speech (Soniox), as a library: no command line parts. Pinned to a commit.
-sonisub = { git = "https://github.com/Zelenov/sonisub", rev = "728ed34243f8f71d32096d779dba0ad3d9d9ffc7", default-features = false }
+sonisub = { git = "https://github.com/Zelenov/sonisub", rev = "dc87fb6c853d64a0809788a0ad68a2ab4fa1eb9b", default-features = false }
 # sonisub's errors, and its progress bars: frename hands it a hidden one (same version as sonisub).
 anyhow = "1"
 indicatif = "0.18"

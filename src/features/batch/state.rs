@@ -146,6 +146,8 @@ impl BatchState {
                 | Message::Invert(_)
                 | Message::SelectAction(_)
                 | Message::CloseReport
+                // Files may have been renamed or got subtitles outside batch mode.
+                | Message::SetActive(true)
         ) {
             self.actions.generate_subtitles().invalidate_plan();
         }

@@ -3,7 +3,7 @@
 use frename_core::{CommentStorage, CueLength, InOutStorage};
 
 use crate::features::batch::Operation;
-use crate::soniox_key::{KeyInfo, SonioxKey};
+use crate::soniox_key::{KeyInfo, SonioxKey, TypedKey};
 
 /// User changes in the settings window. Each one is saved immediately.
 #[derive(Debug, Clone)]
@@ -31,7 +31,7 @@ pub enum Message {
     /// The key was read (internal).
     SonioxKeyLoaded(KeyInfo),
     /// Typing in the key field.
-    SonioxKeyInput(String),
+    SonioxKeyInput(TypedKey),
     /// Show or mask the typed key.
     ToggleShowSonioxKey,
     /// Save the typed key in the credential store.

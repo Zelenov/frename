@@ -329,9 +329,18 @@ impl FrenameApp {
                         frename_core::set_space_after_tags(space);
                         Task::none()
                     }
+                    // A saved key gets its price looked up again, even when it is the same key.
+                    settings::Message::SonioxKeySaved(Ok(_)) => Task::batch([
+                        Task::done(Message::FolderWorkspace(folder_workspace::Message::Batch(
+                            batch::Message::Action(batch::ActionMessage::GenerateSubtitles(
+                                batch::generate_subtitles::Message::KeySaved,
+                            )),
+                        ))),
+                        self.send_subtitle_config(),
+                    ]),
                     // The subtitle action follows the key and the subtitle settings.
                     settings::Message::SonioxKeyLoaded(_)
-                    | settings::Message::SonioxKeySaved(_)
+                    | settings::Message::SonioxKeySaved(Err(_))
                     | settings::Message::SetSubtitleLanguage(..)
                     | settings::Message::SetSubtitleCueLength(_) => self.send_subtitle_config(),
                     settings::Message::LoadSonioxKey

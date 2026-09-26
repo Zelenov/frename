@@ -10,7 +10,7 @@ use crate::theme;
 
 use super::{Message, SettingsState};
 use crate::features::batch::Operation;
-use crate::soniox_key::{self, KeySource};
+use crate::soniox_key::{self, KeySource, TypedKey};
 
 /// The window's scrollable content; the Subtitles section is last, so "Open Settings" from the
 /// subtitle action scrolls it to the end.
@@ -165,7 +165,7 @@ fn subtitles(state: &SettingsState) -> Element<'_, Message> {
                     .width(Length::Fixed(260.0));
                 if !key.busy() {
                     input = input
-                        .on_input(Message::SonioxKeyInput)
+                        .on_input(|typed| Message::SonioxKeyInput(TypedKey(typed)))
                         .on_submit(Message::SaveSonioxKey);
                 }
                 let can_save = !key.busy() && !key.input().trim().is_empty();
