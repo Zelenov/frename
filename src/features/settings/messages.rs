@@ -29,22 +29,33 @@ pub enum Message {
     OpenBatchAction(Operation),
     /// The language AI descriptions are written in.
     SetSummaryLanguage(SummaryLanguage),
-    /// Typing in the API key field.
-    KeyInput(String),
+    /// The API key section; never saved with the settings (the key lives in the credential
+    /// store).
+    Key(KeyMessage),
+}
+
+/// The API key section's messages.
+#[derive(Debug, Clone)]
+pub enum KeyMessage {
+    /// Typing in the key field.
+    Input(String),
     /// Show or hide the typed key.
-    ToggleShowKey,
+    ToggleShow,
     /// Save the typed key in the credential store. Handled by the app, on a worker thread.
-    SaveKey,
+    Save,
     /// Show the key field again to type a new key over the saved one.
-    ReplaceKey,
+    Replace,
     /// Keep the saved key after all.
-    CancelReplaceKey,
+    CancelReplace,
+    /// Ask before removing the saved key (a key is shown only once, when it is made).
+    AskRemove,
+    CancelRemove,
     /// Remove the saved key from the credential store. Handled by the app.
-    RemoveKey,
+    Remove,
     /// Whether a key is saved: read in the background, or after Save / Remove. `Err` says why a
     /// save or removal failed. `request` numbers the read, so an answer that took longer than a
     /// later one cannot override it.
-    KeyState {
+    State {
         request: u64,
         result: Result<KeyState, String>,
     },

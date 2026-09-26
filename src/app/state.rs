@@ -337,14 +337,16 @@ impl FrenameApp {
                     settings::Message::SetSummaryLanguage(language) => Task::done(
                         describe_ai_message(batch::describe_ai::Message::SetLanguage(language)),
                     ),
-                    settings::Message::SaveKey => match self.settings.typed_key() {
-                        Some(key) => key_task(self.settings.begin_key_request(), move || {
-                            frename_core::ai::key::save_key(&key)
-                                .map_err(|e| format!("The key could not be saved: {e}"))
-                        }),
-                        None => Task::none(),
-                    },
-                    settings::Message::RemoveKey => {
+                    settings::Message::Key(settings::KeyMessage::Save) => {
+                        match self.settings.typed_key() {
+                            Some(key) => key_task(self.settings.begin_key_request(), move || {
+                                frename_core::ai::key::save_key(&key)
+                                    .map_err(|e| format!("The key could not be saved: {e}"))
+                            }),
+                            None => Task::none(),
+                        }
+                    }
+                    settings::Message::Key(settings::KeyMessage::Remove) => {
                         key_task(self.settings.begin_key_request(), || {
                             frename_core::ai::key::delete_key()
                                 .map_err(|e| format!("The key could not be removed: {e}"))
@@ -352,16 +354,15 @@ impl FrenameApp {
                     }
                     // The batch panel shows whether a key is saved too.
                     // Passed on as the settings took it (a stale answer changed nothing).
-                    settings::Message::KeyState { .. } => match self.settings.key().state {
-                        Some(state) => Task::done(describe_ai_message(
-                            batch::describe_ai::Message::KeyState(state),
-                        )),
-                        None => Task::none(),
-                    },
-                    settings::Message::KeyInput(_)
-                    | settings::Message::ToggleShowKey
-                    | settings::Message::ReplaceKey
-                    | settings::Message::CancelReplaceKey => Task::none(),
+                    settings::Message::Key(settings::KeyMessage::State { .. }) => {
+                        match self.settings.key().state {
+                            Some(state) => Task::done(describe_ai_message(
+                                batch::describe_ai::Message::KeyState(state),
+                            )),
+                            None => Task::none(),
+                        }
+                    }
+                    settings::Message::Key(_) => Task::none(),
                 }
             }
             Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
@@ -506,13 +507,9 @@ impl FrenameApp {
         if let Some(id) = self.settings_window {
             return Task::batch([window::gain_focus(id), after]);
         }
-        // Whether a key is saved is read when the window first opens, not at start-up: reading
-        // may unlock a keyring.
-        let read_key = if self.settings.key().state.is_none() {
-            key_task(self.settings.begin_key_request(), || Ok(()))
-        } else {
-            Task::none()
-        };
+        // Whether a key is saved is read each time the window opens, not at start-up: reading
+        // may unlock a keyring, and a keyring locked before may be open now.
+        let read_key = key_task(self.settings.begin_key_request(), || Ok(()));
         let (id, open) = window::open(window::Settings {
             size: SETTINGS_WINDOW_SIZE,
             position: window::Position::Centered,
@@ -612,7 +609,10 @@ fn key_task(
         })
         .await
         .unwrap_or_else(|e| Err(e.to_string()));
-        Message::Settings(settings::Message::KeyState { request, result })
+        Message::Settings(settings::Message::Key(settings::KeyMessage::State {
+            request,
+            result,
+        }))
     })
 }
 

@@ -197,17 +197,6 @@ impl Actions {
         }
     }
 
-    /// The run button's label and whether it can run, for `action` on the `checked` files.
-    pub fn run_button(&self, action: Action, checked: &[&File]) -> (String, bool) {
-        match action {
-            Action::DescribeAi => self.describe_ai.run_button(checked),
-            _ => (
-                format!("Run on {}", files(checked.len())),
-                !checked.is_empty() && self.operation(action).is_some(),
-            ),
-        }
-    }
-
     /// What `action` shows next to the run button (why it cannot run), if anything.
     pub fn footer(&self, action: Action) -> Option<Element<'_, ActionMessage>> {
         match action {
@@ -216,17 +205,25 @@ impl Actions {
         }
     }
 
-    /// The panel of `action` for the `checked` files: its title, what it does, and its options.
-    pub fn view(&self, action: Action, checked: &[&File]) -> Element<'_, ActionMessage> {
-        match action {
-            Action::DescribeAi => self.describe_ai.view(checked),
+    /// The panel of `action` for the `checked` files (its title, what it does, and its options),
+    /// the run button's label, and whether it can run.
+    pub fn panel(
+        &self,
+        action: Action,
+        checked: &[&File],
+    ) -> (Element<'_, ActionMessage>, String, bool) {
+        let view = match action {
+            Action::DescribeAi => return self.describe_ai.panel(checked),
             Action::MoveComments => self.move_comments.view().map(ActionMessage::MoveComments),
             Action::MoveInOut => self.move_in_out.view().map(ActionMessage::MoveInOut),
             Action::TagCommented => tag_commented::view(),
             Action::FixTags => fix_tags::view(),
             Action::RespaceTags => tag_spacing::view(),
             Action::ReloadFiles => reload_files::view(),
-        }
+        };
+        let label = format!("Run on {}", files(checked.len()));
+        let ready = !checked.is_empty() && self.operation(action).is_some();
+        (view, label, ready)
     }
 }
 

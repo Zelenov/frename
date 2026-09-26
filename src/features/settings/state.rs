@@ -3,7 +3,7 @@
 use frename_core::ai::key::KeyState;
 use frename_core::{AppDatabase, AppSettings, AppStateStore};
 
-use super::Message;
+use super::{KeyMessage, Message};
 use crate::features::batch::Operation;
 
 /// Current app settings, loaded from the app database and saved back on every change.
@@ -29,6 +29,8 @@ pub struct KeySection {
     pub state: Option<KeyState>,
     /// Typing a new key over a saved one.
     pub replacing: bool,
+    /// Whether "Remove the saved key?" is being asked.
+    pub confirm_remove: bool,
     /// Why the last save or removal failed.
     pub error: Option<String>,
     /// The last read of the store asked for, and the newest one answered.
@@ -51,16 +53,7 @@ impl Default for SettingsState {
 impl SettingsState {
     /// Apply a change and persist the result.
     pub fn update(&mut self, message: Message) {
-        let persists = !matches!(
-            message,
-            Message::KeyInput(_)
-                | Message::ToggleShowKey
-                | Message::SaveKey
-                | Message::ReplaceKey
-                | Message::CancelReplaceKey
-                | Message::RemoveKey
-                | Message::KeyState { .. }
-        );
+        let persists = !matches!(message, Message::Key(_));
         self.apply(message);
         if persists {
             AppDatabase::new().set_app_settings(self.settings.clone());
@@ -104,6 +97,51 @@ impl SettingsState {
         self.tag_spacing_changed
     }
 
+    fn apply_key(&mut self, message: KeyMessage) {
+        match message {
+            KeyMessage::Input(input) => {
+                self.key.input = input;
+                self.key.error = None;
+            }
+            KeyMessage::ToggleShow => self.key.shown = !self.key.shown,
+            KeyMessage::Replace => self.key.replacing = true,
+            KeyMessage::CancelReplace => {
+                self.key.replacing = false;
+                self.key.input.clear();
+                self.key.error = None;
+            }
+            // Done by the app on a worker thread; the answer comes back as `KeyState`.
+            KeyMessage::Save => self.key.error = None,
+            KeyMessage::AskRemove => self.key.confirm_remove = true,
+            KeyMessage::CancelRemove => self.key.confirm_remove = false,
+            KeyMessage::Remove => {
+                self.key.confirm_remove = false;
+                self.key.error = None;
+            }
+            // An answer older than one already taken is stale.
+            KeyMessage::State { request, .. } if request <= self.key.answered => {}
+            KeyMessage::State {
+                request,
+                result: Ok(state),
+            } => {
+                self.key.answered = request;
+                if state == KeyState::Saved {
+                    self.key.input.clear();
+                    self.key.shown = false;
+                }
+                self.key.replacing = false;
+                self.key.state = Some(state);
+            }
+            KeyMessage::State {
+                request,
+                result: Err(error),
+            } => {
+                self.key.answered = request;
+                self.key.error = Some(error);
+            }
+        }
+    }
+
     fn apply(&mut self, message: Message) {
         match message {
             Message::SetAutoplayVideo(autoplay) => self.settings.autoplay_video = autoplay,
@@ -141,40 +179,7 @@ impl SettingsState {
             }
             Message::OpenBatchAction(Operation::RespaceTags) => self.tag_spacing_changed = false,
             Message::SetSummaryLanguage(language) => self.settings.summary_language = language,
-            Message::KeyInput(input) => {
-                self.key.input = input;
-                self.key.error = None;
-            }
-            Message::ToggleShowKey => self.key.shown = !self.key.shown,
-            Message::ReplaceKey => self.key.replacing = true,
-            Message::CancelReplaceKey => {
-                self.key.replacing = false;
-                self.key.input.clear();
-                self.key.error = None;
-            }
-            // Done by the app on a worker thread; the answer comes back as `KeyState`.
-            Message::SaveKey | Message::RemoveKey => self.key.error = None,
-            // An answer older than one already taken is stale.
-            Message::KeyState { request, .. } if request <= self.key.answered => {}
-            Message::KeyState {
-                request,
-                result: Ok(state),
-            } => {
-                self.key.answered = request;
-                if state == KeyState::Saved {
-                    self.key.input.clear();
-                    self.key.shown = false;
-                }
-                self.key.replacing = false;
-                self.key.state = Some(state);
-            }
-            Message::KeyState {
-                request,
-                result: Err(error),
-            } => {
-                self.key.answered = request;
-                self.key.error = Some(error);
-            }
+            Message::Key(message) => self.apply_key(message),
             Message::OpenBatchAction(
                 Operation::TagCommented
                 | Operation::FixTags
@@ -267,27 +272,27 @@ mod tests {
             tag_spacing_changed: false,
             key: KeySection::default(),
         };
-        state.apply(Message::KeyInput(" sk-ant-123 ".to_string()));
+        state.apply(Message::Key(KeyMessage::Input(" sk-ant-123 ".to_string())));
         assert_eq!(state.typed_key().as_deref(), Some("sk-ant-123"));
         let request = state.begin_key_request();
-        state.apply(Message::KeyState {
+        state.apply(Message::Key(KeyMessage::State {
             request,
             result: Err("locked".to_string()),
-        });
+        }));
         assert_eq!(state.key().error.as_deref(), Some("locked"));
         assert_eq!(state.key().input, " sk-ant-123 ", "kept to try again");
         let slow_read = state.begin_key_request();
         let save = state.begin_key_request();
-        state.apply(Message::KeyState {
+        state.apply(Message::Key(KeyMessage::State {
             request: save,
             result: Ok(KeyState::Saved),
-        });
+        }));
         assert!(state.key().input.is_empty());
         assert_eq!(state.key().state, Some(KeyState::Saved));
-        state.apply(Message::KeyState {
+        state.apply(Message::Key(KeyMessage::State {
             request: slow_read,
             result: Ok(KeyState::Missing),
-        });
+        }));
         assert_eq!(
             state.key().state,
             Some(KeyState::Saved),

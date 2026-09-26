@@ -17,10 +17,10 @@ const ANSWER_TIMEOUT: Duration = Duration::from_secs(60);
 const SLOW_UPLOAD_BYTES_PER_S: u64 = 50_000;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 
-/// The whole request's timeout: the answer's time plus the upload of `body_len` bytes on a
-/// slow uplink, so a request is not given up while it is still being sent.
-fn timeout_for(body_len: usize) -> Duration {
-    ANSWER_TIMEOUT + Duration::from_secs(body_len as u64 / SLOW_UPLOAD_BYTES_PER_S)
+/// The whole request's timeout: `answer` plus the upload of `body_len` bytes on a slow uplink,
+/// so a request is not given up while it is still being sent.
+fn timeout_for(answer: Duration, body_len: usize) -> Duration {
+    answer + Duration::from_secs(body_len as u64 / SLOW_UPLOAD_BYTES_PER_S)
 }
 
 /// How failed requests are retried.
@@ -33,6 +33,11 @@ pub struct RetryPolicy {
     pub rate_limit_wait: Duration,
     /// Waits are slept in steps this long, checking the cancel flag between them.
     pub step: Duration,
+    /// 429s in a row after which the request fails instead of waiting again: an account
+    /// whose per-minute limit is below one request would otherwise wait forever.
+    pub max_rate_limit_waits: usize,
+    /// Time for the answer, before the upload time is added (see [`timeout_for`]).
+    pub answer_timeout: Duration,
 }
 
 impl Default for RetryPolicy {
@@ -45,6 +50,8 @@ impl Default for RetryPolicy {
             ],
             rate_limit_wait: Duration::from_secs(30),
             step: Duration::from_millis(250),
+            max_rate_limit_waits: 20,
+            answer_timeout: ANSWER_TIMEOUT,
         }
     }
 }
@@ -135,14 +142,22 @@ impl AiProvider for Anthropic {
     fn complete(&self, request: &AiRequest, cancel: &AtomicBool) -> Result<AiResponse, AiError> {
         let body = Self::body(request).to_string();
         let mut retries = self.retry.delays.iter();
+        let mut rate_limited = 0;
         loop {
             match self.attempt(&body) {
                 Attempt::Done(result) => return result,
+                Attempt::RateLimited(_) if rate_limited >= self.retry.max_rate_limit_waits => {
+                    return Err(AiError::Rejected(
+                        "Anthropic's rate limit was still reached after many waits".to_string(),
+                    ));
+                }
                 Attempt::RateLimited(wait) => {
+                    rate_limited += 1;
                     log::info!("ai: rate limited, waiting {} s", wait.as_secs());
                     self.wait(wait, cancel)?;
                 }
                 Attempt::Retry(why) => {
+                    rate_limited = 0;
                     let Some(delay) = retries.next() else {
                         return Err(AiError::Network(why));
                     };
@@ -162,11 +177,13 @@ impl Anthropic {
             .header("x-api-key", &self.key)
             .header("anthropic-version", API_VERSION)
             .header("content-type", "application/json")
-            .timeout(timeout_for(body.len()))
+            .timeout(timeout_for(self.retry.answer_timeout, body.len()))
             .body(body.to_string())
             .send();
         let response = match sent {
             Ok(response) => response,
+            // Nothing reached Anthropic yet: safe to try again.
+            Err(e) if e.is_connect() => return Attempt::Retry(format!("connection failed: {e}")),
             Err(e) if e.is_timeout() => return Attempt::Done(Err(AiError::Timeout)),
             Err(e) => return Attempt::Retry(format!("connection failed: {e}")),
         };
@@ -310,6 +327,8 @@ mod tests {
             delays: vec![Duration::from_millis(1); 3],
             rate_limit_wait: Duration::from_millis(1),
             step: Duration::from_millis(1),
+            max_rate_limit_waits: 20,
+            answer_timeout: Duration::from_millis(500),
         }
     }
 
@@ -405,10 +424,42 @@ mod tests {
             .is_some_and(|s| s.contains("usage limits")));
     }
 
+    /// A request that got no answer in time may have been billed: it is not sent again.
+    #[test]
+    fn a_timeout_is_not_retried() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let url = format!("http://{}", listener.local_addr().expect("addr"));
+        let count = Arc::new(Mutex::new(0));
+        let seen = count.clone();
+        std::thread::spawn(move || {
+            let mut held = Vec::new();
+            while let Ok((stream, _)) = listener.accept() {
+                *seen.lock().expect("lock") += 1;
+                held.push(stream); // read nothing, answer nothing
+            }
+        });
+        let provider = Anthropic::with_endpoint("k".into(), url, fast_retries()).expect("client");
+        let result = provider.complete(&request(), &AtomicBool::new(false));
+        assert_eq!(result, Err(AiError::Timeout));
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(*count.lock().expect("lock"), 1, "sent once");
+    }
+
+    #[test]
+    fn endless_rate_limits_fail_the_file_instead_of_waiting_forever() {
+        let limited = || http("429 Too Many Requests", "retry-after: 0\r\n", "{}");
+        let (result, n) = complete(vec![limited(); 21]);
+        assert!(matches!(result, Err(AiError::Rejected(_))));
+        assert_eq!(n, 21);
+    }
+
     #[test]
     fn the_timeout_grows_with_the_upload() {
-        assert_eq!(timeout_for(0), Duration::from_secs(60));
-        assert_eq!(timeout_for(3_000_000), Duration::from_secs(120));
+        assert_eq!(timeout_for(ANSWER_TIMEOUT, 0), Duration::from_secs(60));
+        assert_eq!(
+            timeout_for(ANSWER_TIMEOUT, 3_000_000),
+            Duration::from_secs(120)
+        );
     }
 
     #[test]

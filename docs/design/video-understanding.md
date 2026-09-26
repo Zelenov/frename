@@ -23,17 +23,22 @@ batch-API pricing, caching across runs (stages 2–3).
 ## User flows
 
 1. **Set the key once.** Settings → new section **AI** (last section; see Settings layout):
-   an *Anthropic API key* field (masked, with *Show*) and under it
-   `Saved in Windows Credential Manager on this computer.` (the macOS / Linux store's name on
-   those systems) and a **Save** button. Once a key is saved the field shows `Key saved` with
-   **Replace** and **Remove** buttons instead; *Description language*: a dropdown whose first entry reads
+   an *Anthropic API key* field (masked; *Show*, **Save** and, while replacing, *Cancel* under it;
+   `Enter` saves) and the line `Save keeps it in Windows Credential Manager on this computer.`
+   (the macOS / Linux store's name on those systems). Once a key is saved the field shows
+   `Key saved` with **Replace** and **Remove** buttons instead, and the line reads `Saved in …`;
+   Remove asks first (`Remove the saved key? You will need to paste it again.`), since a key is
+   shown only once when it is made. Without a password store the section says so and what would
+   help (`Needs a password store, such as GNOME Keyring or KWallet.`). The key's state is read
+   each time Settings opens, so a keyring unlocked meanwhile is noticed; *Description language*: a dropdown whose first entry reads
    **Same as the subtitles (English if none)**, then English, Russian, Ukrainian, German, Spanish,
    French. A line of text says where to get a key. The model is Claude Haiku 4.5; a
    model or provider choice comes with stage 3.
 2. **Run it.** Batch mode → check clips → action **Describe with AI**. The action panel shows,
    before *Run*:
    - `12 videos, 38 min · about $0.20 with Claude Haiku 4.5` — or `Estimating… 340 / 2000`
-     while durations and comments are read (see Cost); amounts under a cent read `under $0.01`;
+     while durations and comments are read (see Cost), or `No videos to describe.`; amounts
+     under a cent read `under $0.01`;
    - `Takes about 7 min. The folder is locked until it ends. Cancel keeps the videos already
      described; running it again skips them.` — one file at a time, like every batch action, so
      the editor knows before paying; estimated as 15 s per request plus 0.3 s per frame, rounded
@@ -43,14 +48,15 @@ batch-API pricing, caching across runs (stages 2–3).
      `.srt`, another: `Without subtitles (only the picture is described): 4 videos.`;
    - `Descriptions in the subtitles' language (English if none)` (or `Descriptions in Russian`)
      with a *Change* link to Settings;
-   - `Frames and subtitles of these videos are sent to Anthropic.`;
+   - (in the action's description at the top) that frames and subtitles are sent to Anthropic;
    - a checkbox **Redo videos that already have an AI description** (off by default).
    The run button reads `Describe 12 videos` (the videos that will actually be sent, not the
    checked count; the job runs over exactly those, so its progress reads `0 / 12`; the action
    hands `start_batch` the list) and is disabled while the panel says `Estimating…` or when no
    video would be sent, so nothing runs without a price shown. Without a key, it is also disabled and the panel shows `Set an Anthropic API key in Settings`
    with an **Open Settings** button (the existing `ActionMessage::OpenSettings`), which opens
-   Settings scrolled to the AI section.
+   Settings scrolled to the AI section. The options scroll; the run button and the key line
+   stay pinned under them, so a small window or a job report never hides them.
 3. **Progress and cancel** work like every batch action: per-file green/red result. *Cancel*
    changes the panel to `Stopping…` (as for every action) and takes effect within a second
    between frame samples, between requests and during retry waits: a video stopped there ends
@@ -234,8 +240,11 @@ SDK. `base64 = "0.22"`.
 - Response `stop_reason` other than `end_turn` (e.g. `max_tokens`, `refusal`) fails the file with
   a plain reason (flow 3); its usage still counts.
 - **Retries:** on 500, 502, 503, 529 and connection errors (no response), up to 3 retries after 2,
-  8, 30 s. A **429** waits `retry-after` (or 30 s) and does not use up a retry: a new key's
-  per-minute token limit is easily reached by a long job, which should slow down, not fail. Waits
+  8, 30 s; a connect timeout counts as a connection error (nothing was sent). A **429** waits
+  `retry-after` (or 30 s) and does not use up a retry: a new key's per-minute token limit is
+  easily reached by a long job, which should slow down, not fail. After 20 waits in a row the
+  file fails (`Anthropic's rate limit was still reached after many waits`), so an account whose
+  limit is below one request cannot hold the job forever. Waits
   are slept in 250 ms steps that check the cancel token. 400 fails the file at once; 401/403 stop
   the job.
 - **Out of credit:** a 402, or a 400 whose error is about the credit balance, stops the job like
@@ -246,7 +255,7 @@ SDK. `base64 = "0.22"`.
 - **Timeout:** 60 s for the answer plus 1 s per 50 KB of request (about 60 s more for 60 frames),
   so a slow uplink does not time out while still uploading. A timeout fails the file
   (`No answer in time`) instead of retrying: the server may have processed and billed the
-  request already.
+  request already. A test with a server that never answers checks it is sent once.
 
 ## Batch changes
 

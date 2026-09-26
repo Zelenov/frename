@@ -337,13 +337,16 @@ pub fn probe(path: &Path) -> Probe {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
     use std::path::PathBuf;
 
+    #[cfg(target_os = "linux")]
     fn repo() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
     }
 
     /// The clips of `tests/self-test-clips.txt`, which CI decodes on Linux.
+    #[cfg(target_os = "linux")]
     fn ci_clips() -> Vec<PathBuf> {
         std::fs::read_to_string(repo().join("tests/self-test-clips.txt"))
             .expect("clip list")

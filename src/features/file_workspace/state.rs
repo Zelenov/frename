@@ -30,9 +30,9 @@ pub struct FileWorkspace<S> {
     /// for saving; empty when there is none.
     ai_block: String,
     /// Whether the AI description shows its segments, not only its summary.
-    pub show_ai_segments: bool,
+    show_ai_segments: bool,
     /// Whether "Remove the AI description?" is being asked.
-    pub confirm_remove_ai: bool,
+    confirm_remove_ai: bool,
 }
 
 impl<S: StoredTagStore + Clone> FileWorkspace<S> {
@@ -121,6 +121,16 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.comment_content
             .perform(text_editor::Action::Move(text_editor::Motion::DocumentEnd));
         self.store_comment(comment);
+    }
+
+    /// Whether the AI description shows its segments.
+    pub fn show_ai_segments(&self) -> bool {
+        self.show_ai_segments
+    }
+
+    /// Whether "Remove the AI description?" is being asked.
+    pub fn confirm_remove_ai(&self) -> bool {
+        self.confirm_remove_ai
     }
 
     /// Show or hide the AI description's segments, or remove it after asking.
@@ -346,7 +356,7 @@ mod tests {
     fn remove_takes_out_only_the_block_after_asking() {
         let mut workspace = open(&format!("Mine\n\n{BLOCK}"));
         workspace.update_ai_block(AiBlockMessage::AskRemove);
-        assert!(workspace.confirm_remove_ai);
+        assert!(workspace.confirm_remove_ai());
         workspace.update_ai_block(AiBlockMessage::CancelRemove);
         assert_eq!(workspace.ai_block(), BLOCK);
 

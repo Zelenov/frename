@@ -11,7 +11,7 @@ use iced::{Element, Length};
 use crate::theme;
 
 use super::state::KeySection;
-use super::{Message, SettingsState};
+use super::{KeyMessage, Message, SettingsState};
 
 /// The settings' scrollable content, which "Describe with AI" opens scrolled to its end, where
 /// the AI section is.
@@ -160,38 +160,50 @@ fn ai_options(key: &KeySection, language: SummaryLanguage) -> Element<'_, Messag
             .size(13)
             .color(theme::ERROR)
             .into(),
+        Some(KeyState::Saved) if key.confirm_remove => row![
+            text("Remove the saved key? You will need to paste it again.").size(12),
+            small_button("Remove", Message::Key(KeyMessage::Remove)),
+            small_button("Keep", Message::Key(KeyMessage::CancelRemove)),
+        ]
+        .spacing(8)
+        .align_y(iced::Alignment::Center)
+        .into(),
         Some(KeyState::Saved) if !key.replacing => row![
             text("Key saved").size(13),
-            small_button("Replace", Message::ReplaceKey),
-            small_button("Remove", Message::RemoveKey),
+            small_button("Replace", Message::Key(KeyMessage::Replace)),
+            small_button("Remove", Message::Key(KeyMessage::AskRemove)),
         ]
         .spacing(8)
         .align_y(iced::Alignment::Center)
         .into(),
         _ => {
             let can_save = !key.input.trim().is_empty();
+            let save = can_save.then_some(Message::Key(KeyMessage::Save));
             let cancel = key
                 .replacing
-                .then(|| small_button("Cancel", Message::CancelReplaceKey));
-            row![
+                .then(|| small_button("Cancel", Message::Key(KeyMessage::CancelReplace)));
+            // The buttons go under the field, so the row fits the window with Cancel too.
+            column![
                 text_input("sk-ant-…", &key.input)
                     .secure(!key.shown)
-                    .on_input(Message::KeyInput)
-                    .on_submit_maybe(can_save.then_some(Message::SaveKey))
+                    .on_input(|input| Message::Key(KeyMessage::Input(input)))
+                    .on_submit_maybe(save.clone())
                     .size(13)
                     .padding([3, 6])
-                    .width(Length::Fixed(220.0)),
-                small_button(
-                    if key.shown { "Hide" } else { "Show" },
-                    Message::ToggleShowKey
-                ),
-                button(text("Save").size(12))
-                    .on_press_maybe(can_save.then_some(Message::SaveKey))
-                    .padding([3, 10]),
+                    .width(Length::Fixed(260.0)),
+                row![
+                    small_button(
+                        if key.shown { "Hide" } else { "Show" },
+                        Message::Key(KeyMessage::ToggleShow)
+                    ),
+                    button(text("Save").size(12))
+                        .on_press_maybe(save)
+                        .padding([3, 10]),
+                ]
+                .extend(cancel)
+                .spacing(8),
             ]
-            .extend(cancel)
-            .spacing(8)
-            .align_y(iced::Alignment::Center)
+            .spacing(6)
             .into()
         }
     };

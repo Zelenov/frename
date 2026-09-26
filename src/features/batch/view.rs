@@ -93,7 +93,7 @@ fn action_options<'a>(
             .filter(|f| state.is_checked(f.id()))
             .collect()
     });
-    let (label, ready) = state.actions().run_button(state.action(), &checked);
+    let (panel, label, ready) = state.actions().panel(state.action(), &checked);
     let can_run = ready && !state.is_running();
     let run = button(text(label).size(13))
         .on_press_maybe(can_run.then_some(Message::Run))
@@ -101,14 +101,9 @@ fn action_options<'a>(
 
     // The options scroll; the run button, and why it may be off, stay in view below them, even
     // in a small window or under a job's report.
-    let options = scrollable(
-        state
-            .actions()
-            .view(state.action(), &checked)
-            .map(Message::Action),
-    )
-    .height(Length::Fill)
-    .style(theme::dark_scrollable_style);
+    let options = scrollable(panel.map(Message::Action))
+        .height(Length::Fill)
+        .style(theme::dark_scrollable_style);
     column![options]
         .extend(
             state

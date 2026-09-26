@@ -116,24 +116,9 @@ impl Options {
         missing
     }
 
-    /// The videos of `checked` a run will send, in order.
+    /// The videos of `checked` a run will send, in order: the ones its plan counts.
     pub fn files_to_send(&self, checked: &[&File]) -> Vec<FileId> {
-        checked
-            .iter()
-            .filter(|f| self.will_send(f))
-            .map(|f| f.id())
-            .collect()
-    }
-
-    fn will_send(&self, file: &File) -> bool {
-        file.kind() == FileKind::Video
-            && !file.snapshot().comment_loading()
-            && (self.redo || block::ai_block(file.comment()).is_none())
-            && self
-                .probes
-                .get(&file.id())
-                .and_then(|p| p.duration_s)
-                .is_some_and(|d| d <= MAX_DURATION_S)
+        self.plan(checked).send
     }
 
     /// What a run on `checked` would send, skip and cost.
@@ -167,6 +152,7 @@ impl Options {
                 None => plan.unreadable += 1,
                 Some(d) if d > MAX_DURATION_S => plan.too_long += 1,
                 Some(d) => {
+                    plan.send.push(file.id());
                     plan.videos += 1;
                     plan.seconds += d;
                     plan.usage += describe::estimate_usage(d, probe.subtitle_bytes);
@@ -181,23 +167,24 @@ impl Options {
         plan
     }
 
-    /// The run button's label and whether it can run: `Describe 12 videos` once the estimate
-    /// and the key are known.
-    pub fn run_button(&self, checked: &[&File]) -> (String, bool) {
+    /// The panel for `checked`, and the run button's label and whether it can run
+    /// (`Describe 12 videos` once the estimate and the key are known). The plan is made once.
+    pub fn panel(&self, checked: &[&File]) -> (Element<'_, ActionMessage>, String, bool) {
         let plan = self.plan(checked);
         let label = format!("Describe {}", videos(plan.videos));
         let ready = !plan.estimating && plan.videos > 0 && self.key == Some(KeyState::Saved);
-        (label, ready)
+        (self.view(&plan), label, ready)
     }
 
-    pub fn view(&self, checked: &[&File]) -> Element<'_, ActionMessage> {
-        let plan = self.plan(checked);
+    fn view(&self, plan: &Plan) -> Element<'_, ActionMessage> {
         let mut lines = column![].spacing(6);
         let muted = |line: String| text(line).size(12).color(theme::TEXT_MUTED);
         if plan.estimating {
             let known = plan.probed + plan.described;
             lines =
                 lines.push(text(format!("Estimating… {known} / {}", plan.checked_videos)).size(13));
+        } else if plan.videos == 0 {
+            lines = lines.push(text("No videos to describe.").size(13));
         } else {
             lines = lines.push(
                 text(format!(
@@ -291,6 +278,8 @@ fn link_button(label: &str, message: ActionMessage) -> Element<'_, ActionMessage
 /// What a run on the checked files would do.
 #[derive(Debug, Default, PartialEq)]
 struct Plan {
+    /// The videos that will be sent, in order; the job runs over exactly these.
+    send: Vec<FileId>,
     /// Videos that will be sent.
     videos: usize,
     seconds: f64,
@@ -347,13 +336,13 @@ fn minutes(seconds: f64) -> String {
     }
 }
 
-/// "Language: Russian", or as the subtitles.
+/// "Descriptions in Russian", or in the subtitles' language.
 fn language_line(language: SummaryLanguage) -> String {
     match language {
         SummaryLanguage::SameAsSubtitles => {
-            "Language: as the subtitles (English if none)".to_string()
+            "Descriptions in the subtitles' language (English if none)".to_string()
         }
-        language => format!("Language: {language}"),
+        language => format!("Descriptions in {language}"),
     }
 }
 
@@ -569,6 +558,11 @@ mod tests {
         assert_eq!(options.files_to_send(&checked).len(), 2);
     }
 
+    fn run_button(options: &Options, checked: &[&File]) -> (String, bool) {
+        let (_, label, ready) = options.panel(checked);
+        (label, ready)
+    }
+
     #[test]
     fn the_run_button_waits_for_the_estimate_and_the_key() {
         let files = [file("a.mp4", "")];
@@ -576,16 +570,16 @@ mod tests {
         let mut options = Options::default();
         options.update(Message::Probed(vec![(files[0].id(), probe(Some(10.0)))]));
         assert_eq!(
-            options.run_button(&checked),
+            run_button(&options, &checked),
             ("Describe 1 video".to_string(), false),
             "key not read yet"
         );
         assert!(options.request_key_state(), "asked once");
         assert!(!options.request_key_state());
         options.update(Message::KeyState(KeyState::Missing));
-        assert!(!options.run_button(&checked).1);
+        assert!(!run_button(&options, &checked).1);
         options.update(Message::KeyState(KeyState::Saved));
-        assert!(options.run_button(&checked).1);
+        assert!(run_button(&options, &checked).1);
     }
 
     #[test]

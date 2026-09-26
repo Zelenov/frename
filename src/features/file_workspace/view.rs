@@ -156,7 +156,7 @@ where
     let summary = text(format!("AI: {}", block::block_summary(ai)))
         .size(12)
         .color(theme::TEXT_MUTED);
-    let actions: Element<'a, Message> = if file_workspace.confirm_remove_ai {
+    let actions: Element<'a, Message> = if file_workspace.confirm_remove_ai() {
         row![
             text("Remove the AI description? Getting it back needs a new AI run.")
                 .size(11)
@@ -169,7 +169,7 @@ where
         .align_y(iced::Alignment::Center)
         .into()
     } else {
-        let toggle = if file_workspace.show_ai_segments {
+        let toggle = if file_workspace.show_ai_segments() {
             "Hide segments"
         } else {
             "Show segments"
@@ -183,7 +183,7 @@ where
         .into()
     };
     let mut content = column![summary].spacing(4);
-    if file_workspace.show_ai_segments {
+    if file_workspace.show_ai_segments() {
         let lines = block::block_segments(ai)
             .into_iter()
             .chain(ai.lines().last())
