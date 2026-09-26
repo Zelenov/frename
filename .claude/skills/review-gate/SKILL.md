@@ -55,7 +55,7 @@ A finding without a concrete failure scenario or a concrete improvement is dropp
 2. Re-run the local gate.
 3. Start a **new** round with fresh reviewers (never reuse a reviewer that saw an earlier round —
    it anchors on its old findings). Give them the full current diff.
-4. Repeat until all three approve in the same round. Four rounds without that → `needs-owner`
-   (see `nightly` step 6).
+4. Repeat until all three approve in the same round. Four rounds without that → the change is
+   finished as far as possible and left unmerged for the owner (`nightly` → "Owner review").
 
 Record every round in the PR description: SHA, each reviewer's verdict, findings count, what was fixed.

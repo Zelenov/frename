@@ -54,8 +54,9 @@ Ideas of your own become new issues labelled `idea`, never extra code in the cur
 | `approved` | owner | Makes an `idea` or a non-owner issue implementable. |
 | `idea` | agent | Agent's own proposal; not implemented until `approved`. |
 | `in-progress` | agent | An agent session is working on it (see heartbeat lock). |
-| `awaiting-owner` | agent | Design questions for the owner; owner removes it after answering. |
-| `needs-owner` | agent | On an issue: agent is stuck; owner answers and removes it to let the agent retry. |
+| `awaiting-owner` | agent | Legacy: design questions for the owner. The pipeline no longer stops for design questions; owner removes it after answering. |
+| `needs-owner` | agent | On an issue: agent cannot proceed at all (guarded file, failed release); owner answers and removes it to let the agent retry. |
+| `owner-review` | agent | Design or review did not converge: the feature is built on its PR but not merged or released. Owner merges it, or removes the label from the PR to hand it back. |
 | `hold` | owner | Do not work on / merge this. |
 | `blocked`, `rejected` | owner | Not now / never. |
 | `agent` | agent | PR opened by the agent pipeline. |

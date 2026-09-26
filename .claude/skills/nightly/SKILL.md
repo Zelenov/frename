@@ -81,8 +81,10 @@ failure: wait for it or stop), the last release failed:
 - none exists → start step 7 "Release failed" from item 1.
 
 Then open PRs labelled `agent`, oldest first. Skip a PR if it or its linked issue has `needs-owner`,
-`hold`, `awaiting-owner`, `blocked` or `rejected`, or the linked issue is closed. For each remaining
-PR, take the lock on its issue, then:
+`owner-review`, `hold`, `awaiting-owner`, `blocked` or `rejected`, or the linked issue is closed. A PR
+whose `owner-review` label the owner removed is handed back (see "Owner review"): write
+`Retry after owner <date>` into its body and treat it like any other PR. For each remaining PR, take
+the lock on its issue, then:
 - merge conflict → merge `main` in and resolve (this needs a new review round if it touched code;
   see step 7);
 - CI red → fix (step 6);
@@ -94,8 +96,10 @@ PR, take the lock on its issue, then:
 ## 2. Pick the issue
 
 Candidates: open issues that are requests (see Trust), excluding labels `blocked`,
-`awaiting-owner`, `needs-owner`, `hold`, `rejected`, excluding issues with an open linked PR
-(step 1 handles those), and excluding `in-progress` issues whose heartbeat is fresh.
+`awaiting-owner`, `needs-owner`, `owner-review`, `hold`, `rejected`, excluding issues with an open
+linked PR (step 1 handles those), excluding `in-progress` issues whose heartbeat is fresh, and
+excluding issues that need another issue's work which is not on `main` yet (e.g. its PR is in
+`owner-review`).
 
 Order: `in-progress` with a stale heartbeat (resume it), then `regression`, then `P1` < `P2` < `P3`
 < unlabelled; ties by issue number.
@@ -128,17 +132,25 @@ If `docs/design/<slug>.md` for this issue is not on `main` yet:
    Check `docs/research/` first.
 2. Write `docs/design/<slug>.md`: problem, user flows, UI sketch (ASCII or SVG), keyboard shortcuts,
    data format, edge cases, out of scope, test plan, open questions each with a recommended answer.
-3. Run the review gate in design mode.
-4. Open a docs-only PR labelled `agent`, body `Refs #N` (**never** `Closes`: merging a design must
-   not close the issue). Merge it under step 7's merge conditions; it has no version step and does
-   not touch `version.md`.
-5. If the design has open questions only the owner can answer: comment on the issue with a short
-   summary and the questions, swap `in-progress` for `awaiting-owner`, and go to step 2. The owner
-   answers and removes `awaiting-owner`.
-   If not (the recommended answers are safe defaults, or the owner already decided): comment the
-   summary and continue with section 4 (Implement) in the same session.
+3. Open questions do not stop the work: the owner does not read designs before they are built.
+   Decide each one with its recommended answer (the one you judge best for the editor) and list
+   them in the doc under `## Decisions made without the owner`.
+4. Run the review gate in design mode.
+5. **Converged** (both reviewers approve within 4 rounds): open a docs-only PR labelled `agent`,
+   body `Refs #N` (**never** `Closes`: merging a design must not close the issue). Merge it under
+   step 7's merge conditions; it has no version step and does not touch `version.md`. Comment a
+   short summary with the decisions on the issue and continue with section 4 (Implement) in the
+   same session. The feature goes all the way to a release.
+6. **Not converged** (4 design rounds without both approving): do not stop and do not ask. Take the
+   last version of the design, fix what you agree with, and for each remaining objection decide
+   what you judge right and write it under `## Unresolved review findings` (finding, your decision,
+   why). Do not merge the design PR (close it with a comment pointing to the implementation PR).
+   The design doc goes into the implementation branch instead, and the work continues with
+   section 4 in the same session, on the "Owner review" track: it ends in an unmerged PR, never a
+   release.
 
-Owner answers are folded into the design doc in the implementation PR.
+Owner answers (given later, on the issue or the PR) are folded into the design doc in the
+implementation PR.
 
 ## 4. Implement
 
@@ -175,9 +187,36 @@ cargo build --release --locked
    new review round (step 7 checks this).
 4. Count review rounds and CI fix rounds since the PR opened, or since the last
    `Retry after owner` line in the PR body. After 4 review rounds or 3 CI fix rounds without
-   convergence: label the **issue** `needs-owner` (remove `in-progress`), comment what is stuck and
-   why, go to step 2. When the owner has removed `needs-owner`, the next session writes
-   `Retry after owner <date>` into the PR body and starts counting again.
+   convergence: finish the work as far as you can and move the PR to "Owner review" (below).
+5. On the "Owner review" track (the design did not converge) the code still goes through the
+   review gate and CI, up to the same limits, to make the branch as good as possible; then it moves
+   to "Owner review" whatever the outcome.
+
+## Owner review (not converged: implemented, not released)
+
+The owner prefers a finished branch to look at over a question to answer. When the design or the
+code review does not converge, the agent still builds the feature as far as it can, following its
+own best judgement, and leaves it unmerged:
+
+1. Implement everything that can be built without the owner. Only what truly cannot (a secret
+   that is not available, a guarded file the issue does not allow, a check only the owner can do
+   such as Premiere Pro behaviour) is left out, and listed.
+2. Keep the branch green where possible: local gate, pushed, CI run. Keep `# NEXT` in `version.md`;
+   never set a version number.
+3. Mark the PR ready for review (not draft), add the label `owner-review` to the PR and the issue,
+   remove `in-progress`. Put at the top of the PR body:
+   `🤖 agent: ⚠️ Not released — <design|code review|CI> did not converge.` followed by: what was
+   built, the decisions made without the owner, the unresolved reviewer findings with the decision
+   taken on each, what is left out and why, the CI state, and how to try it (the CI artifacts:
+   Windows build, AppImage).
+4. Comment the same summary in short on the issue, with the PR link. Go to step 2.
+5. Never merge an `owner-review` PR and never release it. The owner either merges it themselves,
+   or removes `owner-review` from the PR (with comments if something must change) to hand it back:
+   the next session then treats it as a normal PR (step 1), counts rounds afresh, and merges and
+   releases it once every gate of step 7 passes.
+
+`needs-owner` stays only for what the agent cannot do at all: a guarded file the issue does not
+allow, a failed release (step 7), an `approved` non-owner issue without a scope comment.
 
 ## 7. Merge and release
 
@@ -192,8 +231,8 @@ Right before merging:
    difference (including anything done while resolving a merge conflict) → new review round (step 6).
 
 Merge (squash, with `expectedHeadSha` = the checked head) only when all hold:
-- neither the PR nor its linked issue has `hold`, `blocked`, `rejected`, `awaiting-owner` or
-  `needs-owner`, and the issue is open;
+- neither the PR nor its linked issue has `hold`, `blocked`, `rejected`, `awaiting-owner`,
+  `needs-owner` or `owner-review`, and the issue is open;
 - every reviewer of the last round approved, and the review is current (above);
 - if the PR changes `version.md`: `M` is published, no `release-failed` issue is open, its first
   line is `# X.Y`, a version newer than `M`, and `# NEXT` appears nowhere in the file. Otherwise `version.md` is identical to `main` (design docs, release
