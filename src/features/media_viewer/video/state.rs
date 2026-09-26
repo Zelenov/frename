@@ -30,6 +30,27 @@ pub enum Overlay {
     Markers,
 }
 
+/// A range playing from its start to its end.
+#[derive(Debug, Clone, Copy)]
+struct RangePlay {
+    start: Duration,
+    end: Duration,
+    /// Playback was seen inside the range. Until then a tick may still report the position
+    /// before the seek to its start landed, which can be past its end: pausing on that, mid
+    /// seek, was lost by the pipeline, and the video played on with the bar stopped.
+    entered: bool,
+}
+
+impl RangePlay {
+    /// Whether playback at `position` has played the range to its end.
+    fn done_at(&mut self, position: Duration) -> bool {
+        if (self.start..self.end).contains(&position) {
+            self.entered = true;
+        }
+        self.entered && position >= self.end
+    }
+}
+
 /// Video player component state.
 pub struct VideoPlayerState {
     current_video: Option<Video>,
@@ -64,9 +85,9 @@ pub struct VideoPlayerState {
     /// Cue the list last scrolled to; the list follows only when this changes, so a
     /// user scrolling it by hand is not fought on every tick.
     followed_cue: Option<usize>,
-    /// A clicked range is playing: pause when playback reaches this. Any seek or pause by
+    /// A clicked range is playing: pause when playback reaches its end. Any seek or pause by
     /// the user forgets it.
-    play_until: Option<Duration>,
+    play_until: Option<RangePlay>,
 }
 
 impl Default for VideoPlayerState {
@@ -194,7 +215,12 @@ impl VideoPlayerState {
                     self.position = position;
                 }
                 let follow = self.follow_cue(false);
-                if !self.play_until.is_some_and(|end| self.position >= end) {
+                let position = self.position;
+                if !self
+                    .play_until
+                    .as_mut()
+                    .is_some_and(|range| range.done_at(position))
+                {
                     return follow;
                 }
                 // The clicked range has played: stop at its end.
@@ -435,7 +461,11 @@ impl VideoPlayerState {
             return Task::none();
         }
         let seek = self.seek_to(start, true);
-        self.play_until = Some(end);
+        self.play_until = Some(RangePlay {
+            start,
+            end,
+            entered: false,
+        });
         if !self.paused {
             return seek;
         }
@@ -856,4 +886,23 @@ fn nv12_to_rgb(yuv: &[u8], width: u32, height: u32, stride: u32) -> Vec<u8> {
         }
     }
     rgb
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_range_stops_at_its_end_only_after_playing_inside_it() {
+        let secs = Duration::from_secs;
+        let mut range = RangePlay {
+            start: secs(10),
+            end: secs(20),
+            entered: false,
+        };
+        // A tick from before the seek landed, past the end: not the end of the range.
+        assert!(!range.done_at(secs(40)));
+        assert!(!range.done_at(secs(12)));
+        assert!(range.done_at(secs(20)));
+    }
 }
