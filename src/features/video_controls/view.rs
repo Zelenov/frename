@@ -12,21 +12,14 @@ const CONTROLS_HEIGHT: f32 = 32.0;
 /// Render the video player controls.
 /// `position_secs` is the live playback position read from the video at view time.
 /// `segment_start` and `segment_end` are the optional segment markers (in seconds) for the current file.
-/// `markers` are the clip markers (in seconds) drawn on the bar; `can_add_markers` is false when
-/// the file cannot hold them. With `bar_on_own_row` the progress bar is left out (the caller puts
-/// [`progress_bar`] on a row of its own) and the buttons keep to the left, the volume to the right.
-#[allow(clippy::too_many_arguments)]
-pub fn view<'a>(
-    state: &'a VideoControlsState,
-    position_secs: f32,
-    segment_start: Option<f32>,
-    segment_end: Option<f32>,
-    markers: Vec<BarMarker>,
-    marker_label: Option<MarkerLabel<'a>>,
+/// `can_add_markers` is false when the file cannot hold markers; `marker_held` shows 📍 pressed.
+/// The progress bar is not part of it: the caller puts [`progress_bar`] on a row of its own
+/// above the buttons, which keep to the left, the volume to the right.
+pub fn view(
+    state: &VideoControlsState,
     can_add_markers: bool,
     marker_held: bool,
-    bar_on_own_row: bool,
-) -> Element<'a, Message> {
+) -> Element<'_, Message> {
     let back10_btn: Element<'_, Message> = tooltip(
         button(
             container(text("⏪").size(16))
@@ -108,19 +101,8 @@ pub fn view<'a>(
     )
     .into();
 
-    // On a row of its own the bar is left out here and a gap pushes the volume to the right.
-    let bar: Element<'_, Message> = if bar_on_own_row {
-        Space::new().width(Length::Fill).into()
-    } else {
-        progress_bar(
-            state,
-            position_secs,
-            segment_start,
-            segment_end,
-            markers,
-            marker_label,
-        )
-    };
+    // The bar is on its own row above: a gap pushes the volume to the right.
+    let bar: Element<'_, Message> = Space::new().width(Length::Fill).into();
 
     let volume_icon: Element<'_, Message> =
         container(text("🔊").size(13)).center_y(Length::Fill).into();
