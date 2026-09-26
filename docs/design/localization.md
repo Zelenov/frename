@@ -124,7 +124,8 @@ on Linux `LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG` (`sys-locale-0.3.2/src/wind
 **i18n-embed with i18n-embed-fl (Fluent).** In an unattended pipeline the most likely mistake is
 a key or argument typo in a view; `fl!` turns it into a build error before review. Fluent lets the
 Russian file choose its own plural forms per sentence, which a helper like `files()` cannot: "Run on
-14 files" needs the genitive (`для 1 файла`, `для 5 файлов`), "14 checked" another construction. The
+14 files" becomes `Применить к 1 файлу` / `к 5 файлам` (dative, its own forms), "14 checked" another
+construction. The
 remaining gap (a key missing from `ru`, a key no longer used) is closed by two tests. The cost,
 33 small crates and ~0.5 MB in a 42 MB binary, is small next to iced and GStreamer.
 
@@ -196,9 +197,11 @@ src/i18n.rs                loader, fl! wrapper, language resolution
 - **Arguments** are named for what they hold (`$count`, `$tag`, `$done`), never positional.
 - **Glossary.** Every Russian string uses these terms, so three PRs written by different sessions
   stay consistent and match the Russian Premiere Pro UI where it has a term. Many Russian-speaking
-  editors run English Premiere, so a Premiere UI name keeps its English name with the Russian one
-  in brackets. The owner confirms the
-  table before PR 1 (open question 9); `i18n/ru/frename.ftl` starts with it as a comment.
+  editors run English Premiere, so a Premiere UI name is written English first, then the Russian
+  name after a slash in guillemets: `Description / «Описание»`. That form needs no brackets, so it
+  also reads inside a text that already has some (`(XMP; в Premiere Pro — колонка Description /
+  «Описание»)`). The owner confirms the table before PR 1 (open question 9);
+  `i18n/ru/frename.ftl` starts with it as a comment.
 
   | English | Russian |
   |---|---|
@@ -209,9 +212,15 @@ src/i18n.rs                loader, fl! wrapper, language resolution
   | subtitles | субтитры |
   | screenshot | скриншот |
   | marker (Premiere) | маркер |
-  | subclip (Premiere) | подклип (subclip) |
-  | Description column (Premiere) | колонка Description (Описание) |
+  | subclip (Premiere) | subclip / «подклип» |
+  | Description column (Premiere) | колонка Description / «Описание» |
   | checked (files) | отмечено |
+  | All / Invert (check boxes) | Все / Инвертировать |
+  | untagged (filter) | без тегов |
+  | changed / unchanged / failed (batch counts) | изменено / без изменений / с ошибкой (colon form) |
+  | Cancel / Stopping… | Отмена / Остановка… |
+  | log, "see the log" | журнал, «подробности в журнале» |
+  | System (language list) | Как в системе (…) |
   | batch action | пакетное действие |
   | file list / folder | список файлов / папка |
   | settings | настройки |
@@ -286,8 +295,9 @@ Not translated:
   wraps the settings body (`settings/view.rs:109`) in a `scrollable`: cheap, harmless in English,
   and it keeps the bottom sections reachable once the Language row and a move offer are added.
 - **Plurals:** the Russian file uses `one`/`few`/`many` with `many` as default; numbers are
-  integers, so `other` never occurs. Sentences with counts use a colon form where it reads better
-  (`Отмечено: 14`) to avoid agreement.
+  integers, so `other` never occurs. A message whose English text has no plural selector may use
+  a colon form in Russian (`Отмечено: 14`) to avoid agreement; a message with a selector in English
+  keeps one in Russian (the plural test checks exactly that).
 - **Strings from core:** none today. Rule going forward: core returns enums or data, the UI turns
   them into words; a core `Display` text is for logs.
 - **A string built from pieces** (`FilterItem`'s `Display`, `folder_controls/view.rs:56-60`,
@@ -328,12 +338,16 @@ it as a dev-dependency with the same version to parse files):
   English ids.
 - **Russian plurals:** every select expression whose variants in the English file use CLDR
   category keys (`one`, `other`, …) has `one`, `few` and `many` variants in `ru`.
-- **No English words in UI code** (added in PR 3, when all strings are moved): a scan of every
-  string literal in `src/features/**` and `src/widgets/**`, outside `#[cfg(test)]` code and
-  `log::` calls, fails on a literal containing a Latin word, with a short allowlist (icons, key
-  names, `IN`/`OUT`/`CC`/`SRT`/`XMP`, `fl!` ids, file-name tokens). It catches words in `LABEL`
-  consts, `match` arms and `Err("…")` as well as in `text(…)`; the key tests alone only see
-  strings already in `fl!`.
+- **No English words in UI text** (added in PR 3, when all strings are moved). Scope, stated so
+  the test never needs loosening: string literals that are arguments of UI constructors (`text(`,
+  `.placeholder(`, `tooltip(`, `button(text(`, `radio(`, `checkbox(`, `.label(`) and `const`
+  items of type `&str` in `src/features/**/view.rs`, `src/features/batch/actions/*.rs` and
+  `src/widgets/**`. A literal with a Latin word fails unless it is on an allowlist in the test,
+  and every allowlist entry carries a one-line reason (icon, key name, `IN`/`OUT`/`CC`/`SRT`/
+  `XMP`, file-name token). Internal strings elsewhere (GStreamer pipelines, widget ids,
+  `expect` messages, log text) are out of its scope. The scan does not see words built in
+  `state.rs` (e.g. today's rename errors); the "state holds meaning" rule above removes those,
+  and the product reviewer's `--lang ru` screenshots cover what remains.
 - **Resolution:** `resolve(stored, os_languages)` — `""` + `["ru-RU"]` → ru; `""` + `["uk-UA",
   "ru-RU"]` → ru (second preference); `""` + `["de-DE"]` → en; `"xx"` stored → System; `"en"`
   stored overrides a Russian OS.
@@ -351,7 +365,11 @@ with `LANG=ru_RU.UTF-8 LANGUAGE=ru` and `--lang ""` (System) goes through the OS
 wrapped action labels, clipped buttons and settings content past 560 px. Running this in CI needs
 a change to `.github/workflows/screenshots.yml`, a guarded file (open question 7).
 
-By hand, by the owner: Russian Windows first start, switch in Settings, wording of the Russian text.
+By hand, by the owner, before PR 3 merges (the screenshots are Linux with Open Sans; Windows uses
+Segoe UI with other widths): a Windows build from the PR in Russian: first start, switch in
+Settings, and the states the demo screenshots do not show — an inline rename error, a finished
+batch job with a failure (counts line, "see the log"), a move offer after changing a storage
+option, the filter dropdown, tooltips. And the wording of `i18n/ru/frename.ftl`.
 
 ## Out of scope
 
@@ -380,12 +398,13 @@ By hand, by the owner: Russian Windows first start, switch in Settings, wording 
    re-renders the screenshots; until then the agent runs it locally for each PR.
 8. **Global loader vs. a translator passed to every view.** *Recommended:* global, set only in
    `update`, as core already does for the commented tag and storage settings.
-9. **Russian text in the repository (owner only).** `AGENTS.md` says code, comments, names and
-   docs are English only. Translations cannot be: `i18n/ru/*.ftl` is Russian by nature, and this
-   doc quotes Russian examples. *Recommended:* the owner allows an exception for `i18n/<lang>/*.ftl`
-   and for Russian examples in `docs/design/localization.md`, written into `AGENTS.md` by the owner
-   (a guarded file). Rust code and tests stay English: tests compare against `.ftl` variants.
-   The owner also confirms or edits the glossary above.
+9. **Russian text in the repository (owner only).** Two guarded places say English only:
+   `AGENTS.md:32` ("English only in code, comments, names, and docs") and the "Language" section
+   of `.claude/skills/nightly/SKILL.md` ("Other languages appear only as test data"). Translations
+   cannot be English: `i18n/ru/*.ftl` is Russian by nature, and this doc quotes Russian examples.
+   *Recommended:* the owner adds to both: "Exception: translations in `i18n/<lang>/*.ftl`, and
+   Russian examples in `docs/design/localization.md`." Rust code and tests stay English: tests
+   compare against `.ftl` variants. The owner also confirms or edits the glossary above.
 10. **Review-gate rule (owner only).** *Recommended:* one line in the product reviewer's checklist
     in `.claude/skills/review-gate/SKILL.md` (guarded): "new UI text has `en` and `ru` keys; look
     at the `--lang ru` screenshot".
