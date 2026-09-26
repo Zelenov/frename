@@ -47,7 +47,7 @@ About **75 translatable strings** (a hand count of `text(…)`, labels, tooltips
 | `src/features/folder_controls/view.rs` | ~9 | filter names and `Filter ({n})` (`:31-37`, `:90-94`), tooltips |
 | `src/features/folder/view.rs` | ~6 | `All`, `Invert`, `{n} checked` (`:229`), outcome tooltips (`:255-257`) |
 | `src/features/folder_workspace/state.rs:1760-1774` | 4 | inline rename errors, stored as `&'static str` in `InlineRename::error` (`src/features/folder/mod.rs:27`) |
-| video controls, subtitle toggle, comment box, window title | ~7 | `video_controls/view.rs:82,98`, `media_viewer/video/view.rs:199-201`, `file_workspace/view.rs:77`, `app/state.rs:479` |
+| video controls, subtitle toggle, comment box, window title | ~7 | `video_controls/view.rs:82,98`, `media_viewer/video/view.rs:199-201`, `file_workspace/view.rs:77`, `app/state.rs:517-520` |
 
 Most of the main window is icons (`📂`, `⚙`, `☑`, `⏪`, `🔊`) whose tooltips are key names
 (`Page Up`, `Space`, `F12`, `Esc`, `Enter`, `Delete`). The empty start screen is an icon only
@@ -70,7 +70,7 @@ Open Sans on Linux (`docs/screenshots/render.sh:7`).
 **Settings** are one SQLite row, `app_settings`, one column per field, added by migrations
 (`crates/frename-core/src/db/schema.rs:59-92`), read into `AppSettings`
 (`crates/frename-core/src/db/traits.rs:41-68`). The settings window is fixed at 560×560 and not
-resizable (`src/app/state.rs:197`, `:414`), and its body is a plain column with no
+resizable (`src/app/state.rs:197`, `:456`), and its body is a plain column with no
 scrollable (`src/features/settings/view.rs:109`).
 
 ## Options
@@ -136,6 +136,8 @@ translation becomes Rust code with hand-written plural rules for each language.
    file and video are untouched. Picking `System` goes back to following the OS.
 3. **Fallback.** OS language unsupported (e.g. `de-DE`, `uk-UA`) or unreadable → English. A stored
    language this build does not know (after a downgrade) → treated as `System`.
+4. **OS language changed while frename runs.** The OS language is read at start-up and when
+   `System` is picked; a change in Windows takes effect on the next start.
 
 ## UI sketch
 
@@ -182,6 +184,24 @@ src/i18n.rs                loader, fl! wrapper, language resolution
   `batch-action-move-comments-hint`. Every `fl!` call takes a string literal (needed for the
   compile-time check and the unused-key test).
 - **Arguments** are named for what they hold (`$count`, `$tag`, `$done`), never positional.
+- **Glossary.** Every Russian string uses these terms, so three PRs written by different sessions
+  stay consistent and match the Russian Premiere Pro UI where it has a term. The owner confirms the
+  table before PR 1 (open question 9); `i18n/ru/frename.ftl` starts with it as a comment.
+
+  | English | Russian |
+  |---|---|
+  | tag / tags | тег / теги |
+  | in / out points | точки входа / выхода |
+  | comment | комментарий |
+  | subtitles | субтитры |
+  | screenshot | скриншот |
+  | marker (Premiere) | маркер |
+  | subclip | подклип |
+  | checked (files) | отмечено |
+  | batch action | пакетное действие |
+  | file list / folder | список файлов / папка |
+  | settings | настройки |
+
 - **Plurals** are selectors in the message, per language:
 
 ```ftl
@@ -202,12 +222,15 @@ batch-run = Запустить для { $count ->
   `AppSettings::language: String`, `""` meaning System. Core stores the code and knows nothing
   about translation; `src/i18n.rs` owns the supported list (`en`, `ru`).
 - **Runtime:** one global `FluentLanguageLoader` in `src/i18n.rs`, set only from `update`
-  (`Message::Settings(SetLanguage)` in `src/app/state.rs:269`, the way `set_commented_tag` is) and
+  (`Message::Settings(SetLanguage)` in `src/app/state.rs:288`, the way `set_commented_tag` is at
+  `:302-309`) and
   read in `view`. This follows the existing global settings in core
   (`crates/frename-core/src/metadata/mod.rs:118`) and avoids threading a translator through every
   view. `set_use_isolating(false)` is applied after every load: the Unicode isolation marks Fluent
   puts around arguments are only needed for right-to-left text, and whether iced draws them as
-  invisible is not verified.
+  invisible is not verified. Tests never touch the global loader: each builds its own
+  `FluentLanguageLoader` from the embedded files, so parallel tests cannot switch each other's
+  language.
 - **State holds meaning, views hold words.** `InlineRename::error` becomes an enum
   (`RenameProblem::{Empty, BadCharacter, TrailingDotOrSpace, Exists}`), batch `LABEL` consts
   become `fn label() -> String`, and `move_offer`/`section` take `String` instead of
@@ -226,9 +249,12 @@ Not translated:
 - **The "Commented" default** (`DEFAULT_COMMENTED_TAG`). It is written into file names and matched
   when a comment is cleared; a Russian default would rename files differently depending on the UI
   language, and switching language would orphan the old tag. It stays `Commented`; users rename it
-  in Settings (open question 2).
+  in Settings (open question 2). The Russian hint under that field says the name can be changed
+  (e.g. to «Прокомментировано»), so the English default does not look like a missed translation.
 - **Key names** (`Space`, `Page Up`, `Esc`), badges `IN`/`OUT`, `CC`, `SRT`, `XMP`, product names.
 - **Log messages**, command-line errors (`--demo`, `--self-test`), `GSTREAMER_SETUP.md` text.
+- **The native file dialog and window title-bar buttons**: drawn by the OS in the OS language,
+  whatever Settings say.
 - **README, version.md, docs, code, commits**: English only (`AGENTS.md`). The README gains one
   sentence: the UI follows the system language, English or Russian, changeable in Settings.
 
@@ -241,8 +267,9 @@ Not translated:
 - **Long strings:** text in iced wraps by default, so a longer label grows a row rather than
   overflowing. Places with fixed widths to check: batch action list 190 px
   (`batch/view.rs:16`), commented-tag input row (`settings/view.rs:121-143`), the rename error next
-  to the input in the file list (`folder/view.rs:343`), and the fixed 560 px settings height, which
-  has no scrollable (open question 6).
+  to the input in the file list (`folder/view.rs:343`), and the fixed 560 px settings height. PR 1
+  wraps the settings body (`settings/view.rs:109`) in a `scrollable`: cheap, harmless in English,
+  and it keeps the bottom sections reachable once the Language row and a move offer are added.
 - **Plurals:** the Russian file uses `one`/`few`/`many` with `many` as default; numbers are
   integers, so `other` never occurs. Sentences with counts use a colon form where it reads better
   (`Отмечено: 14`) to avoid agreement.
@@ -259,7 +286,7 @@ Each PR goes through the full gate. Russian becomes selectable only in the last 
 release ships a half-translated UI.
 
 1. **Infrastructure + Settings** (`Refs #18`): `i18n.toml`, `i18n/{en,ru}/frename.ftl`,
-   `src/i18n.rs`, the `language` column and migration, OS language resolution (until PR 3
+   `src/i18n.rs`, the `language` column and migration, the settings `scrollable`, OS language resolution (until PR 3
    Russian is neither taken from the OS nor listed in Settings; only a stored `ru`, which just
    the demo `--lang` writes, turns it on), Settings window strings through
    `fl!`, the two key tests, and demo flags `--lang <code>` and `--settings` (see Test plan).
@@ -268,22 +295,32 @@ release ships a half-translated UI.
    and outcome tooltips in `folder/view.rs`, `files()` removed. No `version.md` change.
 3. **The rest and switch-on** (`Closes #18`): folder controls, rename errors, video controls,
    subtitle toggle, comment placeholder, window titles; `ru` added to the offered list; the
-   Language row in Settings; README sentence and `version.md`.
+   Language row in Settings; README sentence and `version.md`; the rule "new UI text goes through
+   `fl!` with an `en` and a `ru` entry, checked with a `--lang ru` screenshot" added to
+   `.claude/skills/ui-dev/SKILL.md` (the review-gate skill is guarded: open question 10).
 
 ## Test plan
 
-Unit tests in the UI crate (fluent-syntax is already a transitive dependency; add it as a
-dev-dependency to parse files):
+Unit tests in the UI crate (fluent-syntax becomes a transitive dependency through i18n-embed; add
+it as a dev-dependency with the same version to parse files):
 - **Key parity:** every `.ftl` under `i18n/` parses without errors and has exactly the English
   message ids and attributes, and each message uses the same `$arguments` as in English. Fails
   naming the file and key.
 - **No unused keys:** collect `fl!("…")` ids from `src/**/*.rs` with a regex; the set equals the
   English ids.
-- **Russian plurals:** every Russian message that selects on a number has `one`, `few`, `many`.
+- **Russian plurals:** every select expression whose variants in the English file use CLDR
+  category keys (`one`, `other`, …) has `one`, `few` and `many` variants in `ru`.
+- **No English literals in views** (added in PR 3, when all strings are moved): a scan of
+  `src/features/**/*.rs` fails on a string literal with Latin letters passed to `text(`,
+  `.placeholder(`, `tooltip(`, button or radio labels, or a sentence `format!` in a view, with a
+  short allowlist (icons, key names, `IN`/`OUT`/`CC`/`SRT`/`XMP`). This keeps later features
+  from putting English into the Russian UI; the key tests alone only see strings already in `fl!`.
 - **Resolution:** `resolve(stored, os_languages)` — `""` + `["ru-RU"]` → ru; `""` + `["uk-UA",
   "ru-RU"]` → ru (second preference); `""` + `["de-DE"]` → en; `"xx"` stored → System; `"en"`
   stored overrides a Russian OS.
-- **Formatting:** `batch-run` for 1, 2, 5, 11, 21 in `ru`; no U+2068/U+2069 in any output.
+- **Formatting:** `batch-run` for 1, 2, 5, 11, 21 in `ru` picks the `one`/`few`/`many` variant
+  (compared with the variant text read from the `.ftl`, not with Russian literals in Rust code);
+  no U+2068/U+2069 in any output.
 - **Settings migration:** a version-7 database gains `language = ''`; round-trip of `AppSettings`.
 
 Layout check (PR 1 adds, every PR runs it under Xvfb and gives the screenshots to the product
@@ -303,6 +340,7 @@ By hand, by the owner: Russian Windows first start, switch in Settings, wording 
 - Localized number, date and timecode formats (timecodes stay `HH:MM:SS`).
 - Loading translation files from disk at run time or community translation tooling.
 - Changing the `Commented` tag of existing files.
+- The log stays English; UI texts that say "see the log" are translated, the log is not.
 
 ## Open questions (with recommended answers)
 
@@ -314,10 +352,19 @@ By hand, by the owner: Russian Windows first start, switch in Settings, wording 
 4. **Translate the `IN`/`OUT` badges?** *Recommended:* no; they mirror `in_`/`out_` in file names.
 5. **A third language?** *Recommended:* none until a user asks in an issue; the evidence shows no
    users besides the owner.
-6. **Settings overflow in Russian.** *Recommended:* wrap the settings body in a `scrollable` and
-   keep 560×560, if the PR 1 screenshot shows it does not fit.
+6. **Settings overflow in Russian.** Decided: PR 1 wraps the settings body in a `scrollable` and
+   keeps 560×560 (see Edge cases).
 7. **Russian screenshots in CI.** *Recommended:* the owner allows one step in
    `screenshots.yml` that renders `--lang ru` as a build artifact (never published to the README);
    until then the agent runs it locally for each PR.
 8. **Global loader vs. a translator passed to every view.** *Recommended:* global, set only in
    `update`, as core already does for the commented tag and storage settings.
+9. **Russian text in the repository (owner only).** `AGENTS.md` says code, comments, names and
+   docs are English only. Translations cannot be: `i18n/ru/*.ftl` is Russian by nature, and this
+   doc quotes Russian examples. *Recommended:* the owner allows an exception for `i18n/<lang>/*.ftl`
+   and for Russian examples in `docs/design/localization.md`, written into `AGENTS.md` by the owner
+   (a guarded file). Rust code and tests stay English: tests compare against `.ftl` variants.
+   The owner also confirms or edits the glossary above.
+10. **Review-gate rule (owner only).** *Recommended:* one line in the product reviewer's checklist
+    in `.claude/skills/review-gate/SKILL.md` (guarded): "new UI text has `en` and `ru` keys; look
+    at the `--lang ru` screenshot".
