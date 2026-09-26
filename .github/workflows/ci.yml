@@ -25,7 +25,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-            gstreamer1.0-libav
+            gstreamer1.0-libav xvfb imagemagick mesa-vulkan-drivers
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -41,6 +41,36 @@ jobs:
 
       - name: Test
         run: cargo test --workspace --locked
+
+      - name: Build app
+        run: cargo build --locked
+
+      # Opens each clip the way the player does and waits for a decoded frame. No display:
+      # the self-test must not need one.
+      - name: Self-test
+        run: |
+          mapfile -t clips < <(grep -v '^#' tests/self-test-clips.txt | grep .)
+          ./target/debug/frename --self-test "${clips[@]}"
+
+      - name: Screenshot of the main window
+        if: always()
+        run: |
+          Xvfb :99 -screen 0 1600x900x24 &
+          sleep 2
+          (cd tests/folder && DISPLAY=:99 ../../target/debug/frename > ../../app.log 2>&1 &)
+          sleep 15
+          pgrep -x frename || { echo "frename is not running"; cat app.log; exit 1; }
+          DISPLAY=:99 import -window root screenshot-main-window.png
+          pkill -x frename
+          tail -n 20 app.log
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshot-main-window-${{ github.sha }}
+          path: screenshot-main-window.png
+          retention-days: 14
+          if-no-files-found: warn
 
   windows:
     name: ci-windows
