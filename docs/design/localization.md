@@ -215,7 +215,11 @@ src/i18n.rs                loader, fl! wrapper, language resolution
   | subclip (Premiere) | subclip / «подклип» |
   | Description column (Premiere) | колонка Description / «Описание» |
   | checked (files) | отмечено |
-  | All / Invert (check boxes) | Все / Инвертировать |
+  | All / Invert (check boxes) | Все / Обратить (as Explorer's «Обратить выделение»; short for the narrow header) |
+  | video / clip | видео (one term for both) |
+  | tag panel | панель тегов |
+  | file name | имя файла |
+  | a tag name inside a sentence | in «…» quotes: «Commented» |
   | untagged (filter) | без тегов |
   | changed / unchanged / failed (batch counts) | изменено / без изменений / с ошибкой (colon form) |
   | Cancel / Stopping… | Отмена / Остановка… |
@@ -307,8 +311,10 @@ Not translated:
 
 ## Migration plan
 
-Each PR goes through the full gate. Russian becomes selectable only in the last one, so no
-release ships a half-translated UI.
+Each PR goes through the full gate, on its own branch from fresh `main` (`agent/18-i18n-1`,
+`-2`, `-3`); after each merge an issue comment records "PR n merged, next: PR n+1" so the next
+session starts the right one instead of continuing a merged branch. Russian becomes selectable
+only in the last one, so no release ships a half-translated UI.
 
 1. **Infrastructure + Settings** (`Refs #18`): `i18n.toml`, `i18n/{en,ru}/frename.ftl`,
    `src/i18n.rs`, the `language` column and migration, the settings `scrollable`, OS language resolution (until PR 3
@@ -316,16 +322,18 @@ release ships a half-translated UI.
    the demo `--lang` writes, turns it on), Settings window strings through
    `fl!`, the two key tests, and demo flags `--lang <code>` and `--settings` (see Test plan). The
    demo seeds `language = "en"` unless `--lang` is given, so README screenshots never follow the
-   renderer's OS language. The ui-dev rule already applies from PR 1: new UI text goes through
-   `fl!` with an `en` and a `ru` entry.
+   renderer's OS language. PR 1 also adds the rule to `.claude/skills/ui-dev/SKILL.md` (not
+   guarded): new UI text goes through `fl!` with `en` and `ru` entries, and state holds enums, not
+   words.
    No `version.md` change.
 2. **Batch and file list** (`Refs #18`): `batch/view.rs`, `batch/actions/*`, the batch header
    and outcome tooltips in `folder/view.rs`, `files()` removed. No `version.md` change.
 3. **The rest and switch-on** (`Closes #18`): folder controls, rename errors, video controls,
    subtitle toggle, comment placeholder, window titles; `ru` added to the offered list; the
    Language row in Settings; README sentence and `version.md`. This PR ships the Russian UI in a
-   release, so it waits for the owner: it is opened with the issue labelled `awaiting-owner` and
-   merged only after the owner has read `i18n/ru/frename.ftl` and the `--lang ru` screenshots.
+   release, so it waits for the owner: once its review gate has approved and CI is green, the
+   issue gets `awaiting-owner`, and the PR merges only after the owner has read the review sheet
+   and the `--lang ru` screenshots and done the hand check below.
 
 ## Test plan
 
@@ -339,21 +347,25 @@ it as a dev-dependency with the same version to parse files):
 - **Russian plurals:** every select expression whose variants in the English file use CLDR
   category keys (`one`, `other`, …) has `one`, `few` and `many` variants in `ru`.
 - **No English words in UI text** (added in PR 3, when all strings are moved). Scope, stated so
-  the test never needs loosening: string literals that are arguments of UI constructors (`text(`,
-  `.placeholder(`, `tooltip(`, `button(text(`, `radio(`, `checkbox(`, `.label(`) and `const`
-  items of type `&str` in `src/features/**/view.rs`, `src/features/batch/actions/*.rs` and
-  `src/widgets/**`. A literal with a Latin word fails unless it is on an allowlist in the test,
-  and every allowlist entry carries a one-line reason (icon, key name, `IN`/`OUT`/`CC`/`SRT`/
-  `XMP`, file-name token). Internal strings elsewhere (GStreamer pipelines, widget ids,
-  `expect` messages, log text) are out of its scope. The scan does not see words built in
-  `state.rs` (e.g. today's rename errors); the "state holds meaning" rule above removes those,
-  and the product reviewer's `--lang ru` screenshots cover what remains.
+  the test never needs loosening: every string literal in `src/features/**/view.rs`,
+  `src/features/batch/actions/*.rs`, `src/features/folder_controls/**` and `src/widgets/**`,
+  found with a token-level lexer (`proc-macro2` / `syn` on the file, so multi-line calls such as
+  `section(\n "Video"` are seen), skipping comments, `#[cfg(test)]` modules, the id argument of
+  `fl!(…)` and `{…}` format placeholders. A literal with a Latin word fails unless it is on an
+  allowlist in the test, and every entry carries a one-line reason (key names such as
+  `"Delete"`/`"Enter"`, `IN`/`OUT`/`CC`/`SRT`/`XMP`, file-name tokens). That covers `section("…")`
+  arguments, `match` arms, tuple tooltips and `format!` sentences, not only `text(…)`. Words built
+  in `state.rs` (today's rename errors) are removed by the "state holds meaning" rule above.
 - **Resolution:** `resolve(stored, os_languages)` — `""` + `["ru-RU"]` → ru; `""` + `["uk-UA",
   "ru-RU"]` → ru (second preference); `""` + `["de-DE"]` → en; `"xx"` stored → System; `"en"`
   stored overrides a Russian OS.
-- **Formatting:** `batch-run` for 1, 2, 5, 11, 21 in `ru` picks the `one`/`few`/`many` variant
-  (compared with the variant text read from the `.ftl`, not with Russian literals in Rust code);
-  no U+2068/U+2069 in any output.
+- **Plural categories:** a test-only FTL resource with ASCII variants (`[one] one`, `[few] few`,
+  `*[many] many`) loaded into a bundle for `ru` gives `one` for 1 and 21, `few` for 2 and 22,
+  `many` for 5, 11 and 25; no Russian in Rust code. `batch-run` in `ru` has no U+2068/U+2069.
+- **Review sheet** (PR 3): a test run writes every `ru` message rendered with sample arguments
+  (1, 2, 5, 11, 21 and a sample tag) to `target/ru-messages.txt`; the PR gives it to the product
+  reviewer and the owner, who read real sentences instead of `.ftl` selectors (e.g. «из 1 файла /
+  из 5 файлов» after «Остановлено после», genitive, not the dative of `batch-run`).
 - **Settings migration:** a version-7 database gains `language = ''`; round-trip of `AppSettings`.
 
 Layout check (PR 1 adds, every PR runs it under Xvfb and gives the screenshots to the product
@@ -368,8 +380,10 @@ a change to `.github/workflows/screenshots.yml`, a guarded file (open question 7
 By hand, by the owner, before PR 3 merges (the screenshots are Linux with Open Sans; Windows uses
 Segoe UI with other widths): a Windows build from the PR in Russian: first start, switch in
 Settings, and the states the demo screenshots do not show — an inline rename error, a finished
-batch job with a failure (counts line, "see the log"), a move offer after changing a storage
-option, the filter dropdown, tooltips. And the wording of `i18n/ru/frename.ftl`.
+batch job with a failure (counts line, "see the log"; make one fail by running "Move comments" on
+a read-only video), a cancelled job ("Stopping…", "Stopped after N of M"), a run on one file, the
+commented tag turned off ("Tag: off", its hints), a move offer after changing a storage option,
+the filter dropdown, tooltips. And the review sheet above.
 
 ## Out of scope
 
