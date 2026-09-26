@@ -27,15 +27,16 @@ batch-API pricing, caching across runs (stages 2–3).
    `Saved in Windows Credential Manager on this computer.` (the macOS / Linux store's name on
    those systems) and a **Save** button. Once a key is saved the field shows `Key saved` with
    **Replace** and **Remove** buttons instead; *Summary language*: a dropdown whose first entry reads
-   **Same as the subtitles (English if none)**, then English, Russian and the other languages of
-   the app's users. A line of text says where to get a key. The model is Claude Haiku 4.5; a
+   **Same as the subtitles (English if none)**, then English, Russian, Ukrainian, German, Spanish,
+   French. A line of text says where to get a key. The model is Claude Haiku 4.5; a
    model or provider choice comes with stage 3.
 2. **Run it.** Batch mode → check clips → action **Describe with AI**. The action panel shows,
    before *Run*:
    - `12 videos, 38 min · about $0.35 with Claude Haiku 4.5` — or `Estimating…` while durations
      and comments are read (see Cost); when some checked clips are skipped, a second line says
-     why: `3 already described and 1 over 30 min are skipped.`; when some have no `.srt`, another:
+     why: `3 already described, 1 over 30 min, 200 photos and 1 unreadable are skipped.`; when some have no `.srt`, another:
      `4 videos have no subtitles: only the picture is described.`;
+   - `Descriptions in: Same as the subtitles (English if none)` with a *Change* link to Settings;
    - `Frames and subtitles of these videos are sent to Anthropic.`;
    - a checkbox **Redo videos that already have an AI description** (off by default).
    The run button reads `Describe 12 videos` (the videos that will actually be sent, not the
@@ -56,7 +57,7 @@ batch-API pricing, caching across runs (stages 2–3).
    AI block is shown under it, read-only, in muted text: collapsed to its summary line by default,
    with a **Show segments** toggle that expands it inside a scrollable area of at most 6 lines, so
    the tag grid above keeps its room. A small **Remove AI description** button asks
-   `Remove the AI description? This cannot be undone.` first (comment edits are not in the undo
+   `Remove the AI description? Getting it back needs a new AI run.` first (comment edits are not in the undo
    history). Typing can therefore never damage the block or mix with it. Premiere and
    `.comment.txt` get the whole comment (editor text, blank line, AI block); a clip with no text
    of the editor's shows the AI summary on the comment's first line (see The AI block).
@@ -80,8 +81,9 @@ AI
 ```
 
 The key is written to the credential store only on **Save**, through a `Task` (never on each
-keystroke, never from `view`). Settings state keeps `has_key: bool` (read once at start-up and
-after Save, also through a `Task`) and passes it to the batch panel; `view` never touches the
+keystroke, never from `view`). Settings state keeps `has_key: Option<bool>`, read through a
+`Task` the first time the AI section or the Describe action is shown (not at start-up: a locked
+Linux keyring would prompt every launch) and after Save, and passes it to the batch panel; `view` never touches the
 store.
 
 ## The AI block
@@ -128,7 +130,8 @@ The comment is saved through the normal save path, so it follows the Settings co
 (XMP or `.comment.txt`). **"Commented" means the editor's text only**, everywhere: a comment that
 holds nothing but an AI block does not count as commented, so describing 2000 clips does not add
 the tag to (and rename) every clip, and the tag keeps meaning "I commented this". Every place that
-asks "does this file have a comment?" uses `editor_comment`:
+asks "does this file have a comment?" uses a non-allocating `has_editor_comment(&str) -> bool`
+(the count is computed in `view` for thousands of files):
 - the rule that checks the tag when a comment goes from empty to non-empty (file workspace);
 - `FileTagger::sync_commented_tag` (the **Tag commented videos** batch action; its hint says
   "each checked video with a comment of yours");
@@ -139,12 +142,14 @@ AI summary when there is no editor text). The README says so.
 ## Frames
 
 - In the app (`src/`, where GStreamer lives). The clip is opened paused
-  (`uridecodebin ! videoconvert ! videoflip video-direction=auto ! videoscale ! appsink`, no audio
+  (`uridecodebin ! videoscale ! videoconvert ! videoflip video-direction=auto ! appsink`, scaling
+  first so 4K frames are not converted and rotated at full size; no audio
   branch; `videoflip` applies the orientation tag, so a phone portrait clip stored as 1920×1080
   with a rotation tag comes out upright) and, for each sample time, the pipeline **seeks** there
   (`FLUSH | KEY_UNIT | SNAP_NEAREST`) and pulls one frame; the frame's real timestamp is what the
-  model is told. A sample whose real timestamp equals the previous one (keyframes further apart
-  than the interval, e.g. screen recordings) is dropped, so no duplicate frame is billed. That decodes about one GOP per sample instead of the
+  model is told. When a snapped timestamp repeats the previous one (keyframes further apart than
+  the interval, e.g. screen recordings or a 10 s GOP), that sample is re-sought with `ACCURATE`,
+  so a sparse-keyframe clip still gets its frames and no duplicate is billed. That decodes about one GOP per sample instead of the
   whole clip (a 20-min 4K clip would otherwise decode ~36 000 frames to keep 60).
 - Size: the long side scaled to 512 px, aspect ratio kept (a portrait phone clip gives 288×512,
   not a letterboxed 162×288 picture in a 512×288 frame); JPEG via the `image` crate (already a
@@ -158,7 +163,10 @@ AI summary when there is no editor text). The README says so.
   "about". 60 frames ≈ 12 k tokens. Haiku 4.5 has a 200K context and takes up to 100 images per
   request, so 60 fits.
 - A test checks extraction time on the test clips (well under a second per frame), and a test
-  clip with a rotation tag checks that frames come out upright (portrait size).
+  clip with a rotation tag checks that frames come out upright (portrait size). That clip is made
+  once with `ffmpeg -display_rotation 90` from an existing test clip (command in
+  `tests/media/README.md`), committed, and added to `tests/self-test-clips.txt`, so it is also
+  decoded on both CI systems.
 
 ## Request
 
@@ -194,6 +202,9 @@ SDK. `base64 = "0.22"`.
   per-minute token limit is easily reached by a long job, which should slow down, not fail. Waits
   are slept in 250 ms steps that check the cancel token. 400 fails the file at once; 401/403 stop
   the job.
+- **Out of credit:** a 402, or a 400 whose error is about the credit balance, stops the job like
+  401: `Stopped: the Anthropic account has no credit left.` Any other 400 fails the file with the
+  API's own error message as the reason.
 - **Timeout:** 60 s per request. A timeout fails the file (`No answer within 60 s`) instead of
   retrying: the server may have processed and billed the request already.
 
@@ -203,6 +214,9 @@ The shared batch job cannot carry this today: `Operation` is `Copy` with `run(se
 ItemResult`, `ItemResult` has only a status and an update, a failed file shows only its name
 ("see the log for why"), and cancel is a flag on the UI side that a running file cannot see.
 Stage 1 changes the shared code, for every action:
+- Each action can give the run button its own label and the count of items that will run
+  (`Describe 12 videos`) and its own stopping text; the others keep `Run on N files`.
+- The failed-list heading becomes `Failed:` when every failed item carries a reason.
 - `ItemResult` gains `reason: Option<String>` (shown after the file's name in the failed list;
   the other actions keep `None` for now, so their panel looks as before), `usage: Option<AiUsage>`
   (summed by the job for flow 6), and `stop_job: Option<String>` (the job stops, marks the rest
@@ -218,9 +232,13 @@ Stage 1 changes the shared code, for every action:
   (instructions) input tokens, plus 600 output tokens, times the model's price, labelled "about".
   Prices are a table in the code with the date they were checked (Haiku 4.5 $1 / $5 per million
   input / output tokens).
+- **Only videos count:** checked files of other kinds (photos) are left out and named in the
+  skipped line; they end as unchanged.
 - **Durations** are not in the file snapshot. When the checked set changes, an async `Task` reads
-  the missing durations with GStreamer's discoverer (header only; 4 at a time, on a blocking
-  thread) and caches them by `FileId`; meanwhile the panel says `Estimating…`. It also stays on
+  the missing durations with a duration query on a paused `uridecodebin` pipeline, the way the
+  frame sampler opens a clip (4 at a time, on a blocking thread, 5 s timeout each), and caches the
+  result by `FileId`, including "unreadable" for a clip that fails or times out, which is then
+  skipped, named in the skipped line, and never queried again; meanwhile the panel says `Estimating…`. It also stays on
   `Estimating…` while any checked clip's comment is still loading (`comment_loading`), since
   whether it already has an AI block is not known yet. Clips skipped because they already have an
   AI block (Redo off) or are over 30 min are left out of the count and the estimate and named in
