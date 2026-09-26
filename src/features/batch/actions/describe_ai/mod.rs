@@ -29,6 +29,8 @@ pub const LABEL: &str = "Describe with AI";
 
 /// Clip lengths read at once in the background.
 const PROBES_AT_ONCE: usize = 4;
+/// Clip lengths read before the panel hears of them.
+const PROBES_PER_MESSAGE: usize = 16;
 /// For the time estimate: one request, and sampling one frame.
 const SECONDS_PER_REQUEST: f64 = 15.0;
 const SECONDS_PER_FRAME: f64 = 0.3;
@@ -101,15 +103,20 @@ impl Options {
         self.probing.clear();
     }
 
-    /// Checked videos whose length is not known or being read yet; they are marked as being
-    /// read.
+    /// The next checked videos whose length is not known, at most [`PROBES_PER_MESSAGE`] and
+    /// only once the last ones are in, so the estimate counts up as they arrive. They are
+    /// marked as being read; each answer asks for the next ones.
     pub(in crate::features::batch) fn missing_probes<'a>(
         &mut self,
         checked: impl Iterator<Item = &'a File>,
     ) -> Vec<(FileId, PathBuf)> {
+        if !self.probing.is_empty() {
+            return Vec::new();
+        }
         let missing: Vec<(FileId, PathBuf)> = checked
             .filter(|f| f.kind() == FileKind::Video)
-            .filter(|f| !self.probes.contains_key(&f.id()) && !self.probing.contains(&f.id()))
+            .filter(|f| !self.probes.contains_key(&f.id()))
+            .take(PROBES_PER_MESSAGE)
             .map(|f| (f.id(), f.file_path().to_path_buf()))
             .collect();
         self.probing.extend(missing.iter().map(|(id, _)| *id));
@@ -153,11 +160,10 @@ impl Options {
                 Some(d) if d > MAX_DURATION_S => plan.too_long += 1,
                 Some(d) => {
                     plan.send.push(file.id());
-                    plan.videos += 1;
                     plan.seconds += d;
                     plan.usage += describe::estimate_usage(d, probe.subtitle_bytes);
-                    plan.run_seconds += SECONDS_PER_REQUEST
-                        + SECONDS_PER_FRAME * describe::sample_times(d).len() as f64;
+                    plan.run_seconds +=
+                        SECONDS_PER_REQUEST + SECONDS_PER_FRAME * describe::frame_count(d) as f64;
                     if !file.has_subtitles() {
                         plan.no_subtitles += 1;
                     }
@@ -171,8 +177,8 @@ impl Options {
     /// (`Describe 12 videos` once the estimate and the key are known). The plan is made once.
     pub fn panel(&self, checked: &[&File]) -> (Element<'_, ActionMessage>, String, bool) {
         let plan = self.plan(checked);
-        let label = format!("Describe {}", videos(plan.videos));
-        let ready = !plan.estimating && plan.videos > 0 && self.key == Some(KeyState::Saved);
+        let label = format!("Describe {}", videos(plan.send.len()));
+        let ready = !plan.estimating && !plan.send.is_empty() && self.key == Some(KeyState::Saved);
         (self.view(&plan), label, ready)
     }
 
@@ -183,26 +189,28 @@ impl Options {
             let known = plan.probed + plan.described;
             lines =
                 lines.push(text(format!("Estimating… {known} / {}", plan.checked_videos)).size(13));
-        } else if plan.videos == 0 {
-            lines = lines.push(text("No videos to describe.").size(13));
         } else {
-            lines = lines.push(
-                text(format!(
-                    "{}, {} · about {} with {}",
-                    videos(plan.videos),
-                    minutes(plan.seconds),
-                    dollars(MODEL.cost_usd(plan.usage)),
-                    MODEL.label
-                ))
-                .size(13),
-            );
-            if plan.videos > 0 {
-                lines = lines.push(muted(format!(
-                    "Takes about {}. The folder is locked until it ends. Cancel keeps the videos \
-                     already described; running it again skips them.",
-                    duration_text(plan.run_seconds)
-                )));
+            if plan.send.is_empty() {
+                lines = lines.push(text("No videos to describe.").size(13));
+            } else {
+                lines = lines
+                    .push(
+                        text(format!(
+                            "{}, {} · about {} with {}",
+                            videos(plan.send.len()),
+                            minutes(plan.seconds),
+                            dollars(MODEL.cost_usd(plan.usage)),
+                            MODEL.label
+                        ))
+                        .size(13),
+                    )
+                    .push(muted(format!(
+                        "Takes about {}. The folder is locked until it ends. Cancel keeps the \
+                         videos already described; running it again skips them.",
+                        duration_text(plan.run_seconds)
+                    )));
             }
+            // Also when nothing is sent: it says why.
             if let Some(skipped) = plan.skipped_line() {
                 lines = lines.push(muted(skipped));
             }
@@ -257,10 +265,20 @@ impl Options {
                 .into(),
             ),
             Some(KeyState::Unavailable) => Some(
-                text("Cannot store an API key on this system: it needs a password store, such as GNOME Keyring or KWallet.")
+                row![
+                    text(
+                        "The system keyring could not be opened: it may be locked, or there is \
+                         none (such as GNOME Keyring or KWallet)."
+                    )
                     .size(13)
                     .color(theme::ERROR)
-                    .into(),
+                    .width(Length::Fill),
+                    // Opening the settings reads the key's state again.
+                    link_button("Open Settings", ActionMessage::OpenAiSettings),
+                ]
+                .spacing(8)
+                .align_y(iced::Alignment::Center)
+                .into(),
             ),
             Some(KeyState::Saved) | None => None,
         }
@@ -280,8 +298,6 @@ fn link_button(label: &str, message: ActionMessage) -> Element<'_, ActionMessage
 struct Plan {
     /// The videos that will be sent, in order; the job runs over exactly these.
     send: Vec<FileId>,
-    /// Videos that will be sent.
-    videos: usize,
     seconds: f64,
     usage: AiUsage,
     /// About how long the run takes.
@@ -520,7 +536,7 @@ mod tests {
         assert_eq!(options.missing_probes(checked.iter().copied()).len(), 4);
         assert!(
             options.missing_probes(checked.iter().copied()).is_empty(),
-            "asked once"
+            "asked once, and the next ones only after the answer"
         );
         assert!(options.plan(&checked).estimating);
 
@@ -534,7 +550,7 @@ mod tests {
         assert!(!plan.estimating);
         assert_eq!(
             (
-                plan.videos,
+                plan.send.len(),
                 plan.described,
                 plan.too_long,
                 plan.unreadable,
@@ -551,7 +567,7 @@ mod tests {
         assert_eq!(options.files_to_send(&checked), vec![files[0].id()]);
         options.update(Message::SetRedo(true));
         assert_eq!(
-            options.plan(&checked).videos,
+            options.plan(&checked).send.len(),
             2,
             "redo sends described ones"
         );
@@ -561,6 +577,24 @@ mod tests {
     fn run_button(options: &Options, checked: &[&File]) -> (String, bool) {
         let (_, label, ready) = options.panel(checked);
         (label, ready)
+    }
+
+    #[test]
+    fn lengths_are_read_a_few_at_a_time_so_the_estimate_counts_up() {
+        let files: Vec<File> = (0..20).map(|i| file(&format!("{i}.mp4"), "")).collect();
+        let checked: Vec<&File> = files.iter().collect();
+        let mut options = Options::default();
+        let first = options.missing_probes(checked.iter().copied());
+        assert_eq!(first.len(), PROBES_PER_MESSAGE);
+        options.update(Message::Probed(
+            first
+                .iter()
+                .map(|(id, _)| (*id, probe(Some(10.0))))
+                .collect(),
+        ));
+        assert_eq!(options.plan(&checked).probed, PROBES_PER_MESSAGE);
+        let rest = options.missing_probes(checked.iter().copied());
+        assert_eq!(rest.len(), 20 - PROBES_PER_MESSAGE);
     }
 
     #[test]

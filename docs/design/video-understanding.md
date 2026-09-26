@@ -29,7 +29,10 @@ batch-API pricing, caching across runs (stages 2–3).
    `Key saved` with **Replace** and **Remove** buttons instead, and the line reads `Saved in …`;
    Remove asks first (`Remove the saved key? You will need to paste it again.`), since a key is
    shown only once when it is made. Without a password store the section says so and what would
-   help (`Needs a password store, such as GNOME Keyring or KWallet.`). The key's state is read
+   help (`The system keyring could not be opened` / `It may be locked, or there is none (such as
+   GNOME Keyring or KWallet).`; the batch panel says the same with an **Open Settings** link,
+   which reads the state again). Save or Remove failing says so in plain words; the store's own
+   error goes to the log. The key's state is read
    each time Settings opens, so a keyring unlocked meanwhile is noticed; *Description language*: a dropdown whose first entry reads
    **Same as the subtitles (English if none)**, then English, Russian, Ukrainian, German, Spanish,
    French. A line of text says where to get a key. The model is Claude Haiku 4.5; a
@@ -220,7 +223,7 @@ parsed JSON plus `usage`. The clip prompt is built above it.
 
 The Anthropic implementation: raw HTTP (`POST https://api.anthropic.com/v1/messages`, headers
 `x-api-key`, `anthropic-version: 2023-06-01`) with `reqwest = "0.12"` (features `blocking`,
-`json`, `rustls-tls-native-roots`, `default-features = false`; the OS certificate store is
+`rustls-tls-native-roots`, `default-features = false`; the OS certificate store is
 trusted, as corporate TLS-inspecting proxies need) on the batch thread; there is no official Rust
 SDK. `base64 = "0.22"`.
 
@@ -310,9 +313,9 @@ The key is stored with the operating system's credential store through the `keyr
 the features are explicit: `windows-native`, `apple-native`, `sync-secret-service`,
 `crypto-rust`, `vendored` (dbus for the AppImage), with the version pinned to `3` (keyring 4 has
 different features). If the store is unavailable (e.g. a Linux
-desktop without Secret Service), the field says `Cannot store the key on this system` and the
-action stays disabled, the panel saying `Cannot store an API key on this system` (no Open
-Settings button, which could not help). Tests use an entry of their own (user
+desktop without Secret Service, or a keyring left locked), the field says `The system keyring
+could not be opened` and the action stays disabled, the panel saying the same with an Open
+Settings link (opening Settings reads the state again). Tests use an entry of their own (user
 `anthropic-api-key-test-<pid>`), so a developer's real key is never touched: a save / read /
 delete round trip where a store works (always on the Windows CI job); on Linux CI (no Secret
 Service running) the "unavailable" state is returned, not a mock that pretends to save.

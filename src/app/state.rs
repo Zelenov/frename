@@ -340,16 +340,24 @@ impl FrenameApp {
                     settings::Message::Key(settings::KeyMessage::Save) => {
                         match self.settings.typed_key() {
                             Some(key) => key_task(self.settings.begin_key_request(), move || {
-                                frename_core::ai::key::save_key(&key)
-                                    .map_err(|e| format!("The key could not be saved: {e}"))
+                                frename_core::ai::key::save_key(&key).map_err(|e| {
+                                    log::warn!("ai: saving the key failed: {e}");
+                                    "The key could not be saved. The system keyring may be \
+                                         locked."
+                                        .to_string()
+                                })
                             }),
                             None => Task::none(),
                         }
                     }
                     settings::Message::Key(settings::KeyMessage::Remove) => {
                         key_task(self.settings.begin_key_request(), || {
-                            frename_core::ai::key::delete_key()
-                                .map_err(|e| format!("The key could not be removed: {e}"))
+                            frename_core::ai::key::delete_key().map_err(|e| {
+                                log::warn!("ai: removing the key failed: {e}");
+                                "The key could not be removed. The system keyring may be \
+                                     locked."
+                                    .to_string()
+                            })
                         })
                     }
                     // The batch panel shows whether a key is saved too.

@@ -13,10 +13,11 @@ use crate::theme;
 use super::state::KeySection;
 use super::{KeyMessage, Message, SettingsState};
 
+use crate::features::batch::Operation;
+
 /// The settings' scrollable content, which "Describe with AI" opens scrolled to its end, where
 /// the AI section is.
 pub const SETTINGS_SCROLLABLE_ID: &str = "settings-content";
-use crate::features::batch::Operation;
 
 /// Render the settings window: one titled section per area, one control per setting.
 pub fn view(state: &SettingsState) -> Element<'_, Message> {
@@ -156,17 +157,20 @@ fn ai_options(key: &KeySection, language: SummaryLanguage) -> Element<'_, Messag
         "the system keyring"
     };
     let key_row: Element<'_, Message> = match key.state {
-        Some(KeyState::Unavailable) => text("Cannot store the key on this system")
+        Some(KeyState::Unavailable) => text("The system keyring could not be opened")
             .size(13)
             .color(theme::ERROR)
             .into(),
-        Some(KeyState::Saved) if key.confirm_remove => row![
+        // The question and its buttons on lines of their own, so they fit the window.
+        Some(KeyState::Saved) if key.confirm_remove => column![
             text("Remove the saved key? You will need to paste it again.").size(12),
-            small_button("Remove", Message::Key(KeyMessage::Remove)),
-            small_button("Keep", Message::Key(KeyMessage::CancelRemove)),
+            row![
+                small_button("Remove", Message::Key(KeyMessage::Remove)),
+                small_button("Keep", Message::Key(KeyMessage::CancelRemove)),
+            ]
+            .spacing(8),
         ]
-        .spacing(8)
-        .align_y(iced::Alignment::Center)
+        .spacing(6)
         .into(),
         Some(KeyState::Saved) if !key.replacing => row![
             text("Key saved").size(13),
@@ -213,7 +217,7 @@ fn ai_options(key: &KeySection, language: SummaryLanguage) -> Element<'_, Messag
     .spacing(6);
     options = match key.state {
         Some(KeyState::Unavailable) => options.push(muted(
-            "Needs a password store, such as GNOME Keyring or KWallet.",
+            "It may be locked, or there is none (such as GNOME Keyring or KWallet). Settings checks again each time it opens.",
         )),
         Some(KeyState::Saved) if !key.replacing => options.push(
             text(format!("Saved in {store} on this computer."))

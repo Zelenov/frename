@@ -192,7 +192,8 @@ The ⚙ button opens Settings:
   tag, or none;
 - where in/out points are kept (file name or inside the video);
 - your Anthropic API key for Describe with AI, kept in the system's password store (Windows
-  Credential Manager), and the language of the descriptions.
+  Credential Manager, macOS Keychain, or a keyring such as GNOME Keyring on Linux), and the
+  language of the descriptions.
 
 After you change where comments or in/out points are kept, or the tag spacing, Settings offer the
 batch action that updates the existing files.

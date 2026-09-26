@@ -454,6 +454,35 @@ mod tests {
     }
 
     #[test]
+    fn a_429_waits_as_long_as_retry_after_says() {
+        let wait = |retry_after| match classify(429, retry_after, "{}", Duration::from_secs(30)) {
+            Attempt::RateLimited(wait) => wait,
+            _ => panic!("a 429 waits"),
+        };
+        assert_eq!(wait(Some(Duration::from_secs(7))), Duration::from_secs(7));
+        assert_eq!(wait(None), Duration::from_secs(30));
+        let (url, count) = server(vec![
+            http("429 Too Many Requests", "Retry-After: 1\r\n", "{}"),
+            ok(),
+        ]);
+        let slow_default = RetryPolicy {
+            rate_limit_wait: Duration::from_secs(60),
+            ..fast_retries()
+        };
+        let provider = Anthropic::with_endpoint("k".into(), url, slow_default).expect("client");
+        let started = std::time::Instant::now();
+        assert!(provider
+            .complete(&request(), &AtomicBool::new(false))
+            .is_ok());
+        let waited = started.elapsed();
+        assert!(
+            waited >= Duration::from_secs(1) && waited < Duration::from_secs(30),
+            "the header's 1 s, not the 60 s default: {waited:?}"
+        );
+        assert_eq!(*count.lock().expect("lock"), 2);
+    }
+
+    #[test]
     fn the_timeout_grows_with_the_upload() {
         assert_eq!(timeout_for(ANSWER_TIMEOUT, 0), Duration::from_secs(60));
         assert_eq!(

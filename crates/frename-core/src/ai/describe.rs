@@ -146,15 +146,28 @@ pub struct Description {
 /// Where to take frames in a clip `duration_s` long: one every 2 s, at most 60 (a longer clip
 /// is sampled evenly), one in the middle of a clip shorter than 2 s.
 pub fn sample_times(duration_s: f64) -> Vec<f64> {
-    if duration_s <= 0.0 {
-        return Vec::new();
-    }
     if duration_s < FRAME_INTERVAL_S {
-        return vec![duration_s / 2.0];
+        return (duration_s > 0.0)
+            .then_some(duration_s / 2.0)
+            .into_iter()
+            .collect();
     }
     let interval = FRAME_INTERVAL_S.max(duration_s / MAX_FRAMES as f64);
-    let count = ((duration_s / interval).ceil() as usize).min(MAX_FRAMES);
-    (0..count).map(|i| i as f64 * interval).collect()
+    (0..frame_count(duration_s))
+        .map(|i| i as f64 * interval)
+        .collect()
+}
+
+/// How many frames [`sample_times`] takes from a clip `duration_s` long, without listing them.
+pub fn frame_count(duration_s: f64) -> usize {
+    if duration_s <= 0.0 {
+        return 0;
+    }
+    if duration_s < FRAME_INTERVAL_S {
+        return 1;
+    }
+    let interval = FRAME_INTERVAL_S.max(duration_s / MAX_FRAMES as f64);
+    ((duration_s / interval).ceil() as usize).min(MAX_FRAMES)
 }
 
 /// At most this many segments, so the comment stays short: one per 30 s, from 3 to 12.
@@ -185,7 +198,7 @@ pub fn frame_tokens(width: u32, height: u32) -> u64 {
 /// instructions, and a typical answer.
 pub fn estimate_usage(duration_s: f64, subtitle_bytes: usize) -> AiUsage {
     let (w, h) = frame_size(1920, 1080);
-    let frames = sample_times(duration_s).len() as u64;
+    let frames = frame_count(duration_s) as u64;
     AiUsage {
         input_tokens: frames * frame_tokens(w, h)
             + (subtitle_bytes as f64 / CHARS_PER_TOKEN) as u64
@@ -343,6 +356,9 @@ mod tests {
         assert_eq!(long.len(), 60);
         assert!((long[1] - 10.0).abs() < 1e-9, "evenly spread");
         assert!(sample_times(0.0).is_empty());
+        for d in [0.0, 1.0, 10.0, 38.0, 600.0, 1800.0] {
+            assert_eq!(frame_count(d), sample_times(d).len(), "{d}");
+        }
     }
 
     #[test]

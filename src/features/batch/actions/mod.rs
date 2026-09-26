@@ -4,7 +4,10 @@
 //! that runs an action over them are shared (see [`super::state`]).
 //!
 //! Adding an action: a module with `LABEL`, `view` and `run` (plus `Options` with `Message`
-//! and `update` when it has settings), then one line in each match below.
+//! and `update` when it has settings), then one line in each match below. An action that needs
+//! more than "Run on N files" can also give the run button its own label and readiness
+//! ([`Actions::panel`]), a line pinned next to it ([`Actions::footer`]), and the files its job
+//! runs over ([`Actions::job_files`]), as "Describe with AI" does.
 
 pub mod describe_ai;
 mod fix_tags;
