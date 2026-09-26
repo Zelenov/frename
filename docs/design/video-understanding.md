@@ -325,21 +325,15 @@ One PR: core `ai` module, key storage, Settings section (scrollable), the shared
 the action, README and `version.md`.
 Body `Refs #17` (stages 2–3 remain).
 
-## Open questions (with recommended answers)
+## Decisions
 
-1. **Provider for stage 1: Claude (frames + SRT) or Gemini (native video + audio)?** Gemini is
-   cheaper (research: ~$3 vs ~$10 per 1000 one-minute clips) and hears the audio; Claude is what
-   the owner chose for #13, whose issue says it shares the provider layer with this one, and a key
-   exists already. *Recommended:* **Claude** for stage 1; Gemini as a second provider in stage 3.
-2. **Where the description goes: comment AI block (as the issue says) vs a separate field.**
-   *Recommended:* the comment AI block — it reaches Premiere today and #13 wants the same block.
-3. **Summary language default** (a UI decision #13 left open for you). With "Same as the
-   subtitles (English if none)" one folder can end up mixed: English on silent B-roll, Russian on
-   interviews with Russian subtitles. *Recommended:* keep that default but make it a visible
-   dropdown, so one change to "Russian" makes every description Russian.
-4. **Key storage: OS credential store vs `frename.db`.** *Recommended:* credential store — the
-   database sits next to the exe for zip users (possibly in a synced folder).
-5. **#13 overlap.** *Recommended:* #13 becomes a second mode of this action ("from subtitles only",
-   no frames, much cheaper), designed and shipped after this one, reusing block and provider.
-6. **Model choice in stage 1.** *Recommended:* Claude Haiku 4.5 only (cheapest, no thinking to
-   control); a better-model option comes with the provider choice in stage 3.
+The owner accepted the recommended answers (2026-09-26, "implement as you see it"):
+
+1. **Provider for stage 1:** Claude (frames + SRT). Gemini comes as a second provider in stage 3.
+2. **Where the description goes:** the comment AI block.
+3. **Summary language default:** "Same as the subtitles (English if none)", as a visible dropdown
+   in Settings and a line in the run panel.
+4. **Key storage:** the OS credential store.
+5. **#13 overlap:** #13 becomes a "from subtitles only" mode of this action, shipped after it,
+   reusing the block and the provider.
+6. **Model:** Claude Haiku 4.5 only in stage 1.
