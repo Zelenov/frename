@@ -29,7 +29,7 @@ When a task touches one of these areas, read the corresponding skill and follow 
 
 ## Coding standards
 
-- **Rust**: `rustfmt` and `clippy`; `Result<T, E>` in production (no `.unwrap()`); explicit types in public APIs; descriptive names. **English only** in code, comments, names, and docs (no Russian or other languages).
+- **Rust**: `rustfmt` and `clippy`; `Result<T, E>` in production (no `.unwrap()`); explicit types in public APIs; descriptive names. **English only** in code, comments, names, and docs (no Russian or other languages). Exception: translations in `i18n/<lang>/*.ftl`, and Russian examples in `docs/design/localization.md`.
 - **Windows**: `std::path::Path` / `PathBuf`; case-insensitive filesystems; long paths (`\\?\`) when needed; `windows` crate for Win APIs.
 - **Errors**: Custom types (e.g. thiserror), context in messages, no panic in library code, log appropriately.
 - **Testing**: Unit tests next to source (`#[cfg(test)]`), integration in `tests/`, fixtures in `tests/fixtures/`, cover Windows path edge cases.

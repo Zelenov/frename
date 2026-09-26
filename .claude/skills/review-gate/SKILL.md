@@ -31,7 +31,8 @@ Code PR — all three, every round:
 3. **Product** — does it do what the issue and design ask, from the editor's point of view?
    Keyboard flow, discoverability, consistency with existing UI, README and `version.md` text
    (short, user language, per `readme` skill). For UI changes it looks at an Xvfb screenshot when
-   the app runs on Linux.
+   the app runs on Linux. New UI text has `en` and `ru` keys; look at the `--lang ru`
+   screenshot.
 
 Design doc — reviewers 2 and 3 only, judging the design: missing flows, edge cases, simpler
 alternatives, feasibility (is every format/API claim sourced?).

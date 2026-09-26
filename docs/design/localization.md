@@ -2,8 +2,9 @@
 
 Design for issue #18: decide whether and how to localize the UI, then do it.
 
-This doc quotes Russian examples. `AGENTS.md` allows English only in docs, so it stays unmerged
-(PR #34, issue labelled `awaiting-owner`) until the owner answers open question 9.
+This doc quotes Russian examples; `AGENTS.md` allows them here (open question 9, answered).
+The owner asked for the whole feature in one PR instead of the three below; the order of work
+inside it is the same.
 Code references are to `main` at `8a0bddc` (demo mode from #14 included; line numbers in other
 files may be off by a few lines).
 
