@@ -676,11 +676,8 @@ impl FolderWorkspace {
                 msg,
             )))
         };
-        let key = if options.needs_key_state() {
-            // Asked once; a failed read below still answers.
-            options.update(batch::describe_ai::Message::KeyState(
-                frename_core::ai::key::KeyState::Missing,
-            ));
+        // Asked once; a failed read below still answers.
+        let key = if options.request_key_state() {
             Task::future(async move {
                 let state = tokio::task::spawn_blocking(batch::describe_ai::read_key_state)
                     .await

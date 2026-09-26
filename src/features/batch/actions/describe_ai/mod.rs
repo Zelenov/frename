@@ -59,6 +59,8 @@ pub struct Options {
     probing: HashSet<FileId>,
     /// `None` until read (only when the action is first shown: reading may unlock a keyring).
     key: Option<KeyState>,
+    /// The key's state has been asked for; the answer is on its way.
+    key_requested: bool,
 }
 
 impl Options {
@@ -82,9 +84,11 @@ impl Options {
         })
     }
 
-    /// Whether the key's state still has to be read.
-    pub fn needs_key_state(&self) -> bool {
-        self.key.is_none()
+    /// Whether the key's state still has to be read; marks it as asked for.
+    pub fn request_key_state(&mut self) -> bool {
+        let needed = self.key.is_none() && !self.key_requested;
+        self.key_requested = true;
+        needed
     }
 
     /// Forget what was read about the files of the folder that was open.
@@ -576,6 +580,8 @@ mod tests {
             ("Describe 1 video".to_string(), false),
             "key not read yet"
         );
+        assert!(options.request_key_state(), "asked once");
+        assert!(!options.request_key_state());
         options.update(Message::KeyState(KeyState::Missing));
         assert!(!options.run_button(&checked).1);
         options.update(Message::KeyState(KeyState::Saved));
