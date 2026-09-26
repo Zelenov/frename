@@ -15,8 +15,9 @@ sonisub command line on a folder separately, with a key in an environment variab
    *Show*, **Save**; once saved `Key saved` with **Replace** / **Remove**, and a line naming where
    it is kept on this system, e.g. `Saved in Windows Credential Manager on this computer.`, and
    `Get a key at console.soniox.com.` and `The audio is sent to Soniox to transcribe it.`),
-   *Languages* (the languages spoken in the footage, as hints: checkboxes English and Russian on by
-   default, plus Ukrainian, German, Spanish, French; none checked means `Detect automatically`, no
+   *Languages* (the languages spoken in the footage, as hints: checkboxes for every language Soniox
+   lists — `GET /models` through sonisub's `languages::fetch`, once a key is saved — English and
+   Russian on by default; none checked means `Detect automatically`, no
    hints), and *Cue length*: **Short** (default: one line
    of up to 100 characters and at most 8 s per cue — sonisub's defaults, `Layout::default()`) or
    **One sentence per cue** (no length limit; `Layout::unlimited()`), with the note
@@ -263,8 +264,9 @@ The owner accepted the recommended answers ("implement as you see it", issue #12
 
 ## Implementation notes
 
-- sonisub is used from crates.io (`sonisub = { version = "0.2", default-features = false }`,
-  MIT); 0.2.0 carries the per-job cancel, timeouts, `cli` feature and no-console changes above.
+- sonisub is used from crates.io (`sonisub = { version = "0.3", default-features = false }`,
+  MIT); 0.2.0 brought the per-job cancel, timeouts, `cli` feature and no-console changes above,
+  0.3.0 the list of languages Soniox supports.
 - The key store is the one "Describe with AI" (#17) added: `frename_core::ai::key` now keeps one
   entry per service (`ApiKey::Anthropic`, `ApiKey::Soniox`), and Settings shows one key block per
   section with the same Save / Replace / Remove. The Subtitles section comes last, after AI, so

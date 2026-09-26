@@ -83,16 +83,6 @@ impl CueLength {
     }
 }
 
-/// Languages offered as hints for generating subtitles: code sent to the service, and name.
-pub const SUBTITLE_LANGUAGES: [(&str, &str); 6] = [
-    ("en", "English"),
-    ("ru", "Russian"),
-    ("uk", "Ukrainian"),
-    ("de", "German"),
-    ("es", "Spanish"),
-    ("fr", "French"),
-];
-
 /// Language hints checked until the user changes them.
 pub const DEFAULT_SUBTITLE_LANGUAGES: [&str; 2] = ["en", "ru"];
 

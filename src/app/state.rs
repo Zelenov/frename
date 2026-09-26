@@ -415,9 +415,22 @@ impl FrenameApp {
                             (ApiKey::Anthropic, Some(state)) => Task::done(describe_ai_message(
                                 batch::describe_ai::Message::KeyState(state),
                             )),
-                            (ApiKey::Soniox, Some(state)) => Task::done(subtitles_message(
-                                batch::generate_subtitles::Message::KeyState(state),
-                            )),
+                            (ApiKey::Soniox, Some(state)) => {
+                                let passed = Task::done(subtitles_message(
+                                    batch::generate_subtitles::Message::KeyState(state),
+                                ));
+                                // With a key known, the window lists all of Soniox's languages.
+                                let window_open = self.settings_window.is_some();
+                                let list = if state == api_key::KeyState::Saved
+                                    && window_open
+                                    && self.settings.begin_subtitle_languages()
+                                {
+                                    subtitle_languages_task()
+                                } else {
+                                    Task::none()
+                                };
+                                Task::batch([passed, list])
+                            }
                             (_, None) => Task::none(),
                         }
                     }
@@ -427,7 +440,8 @@ impl FrenameApp {
                     settings::Message::SetMonochromeTags(_)
                     | settings::Message::Updates(_)
                     | settings::Message::ImportOldSettings
-                    | settings::Message::OldSettingsFolderPicked(_) => Task::none(),
+                    | settings::Message::OldSettingsFolderPicked(_)
+                    | settings::Message::SubtitleLanguagesListed(_) => Task::none(),
                 };
                 Task::batch([task, effect])
             }
@@ -703,6 +717,16 @@ fn subtitles_message(message: batch::generate_subtitles::Message) -> Message {
     Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
         batch::ActionMessage::GenerateSubtitles(message),
     )))
+}
+
+/// Ask Soniox for the languages it recognises, on a worker thread.
+fn subtitle_languages_task() -> Task<Message> {
+    Task::future(async {
+        let result = tokio::task::spawn_blocking(batch::generate_subtitles::supported_languages)
+            .await
+            .unwrap_or_else(|e| Err(e.to_string()));
+        Message::Settings(settings::Message::SubtitleLanguagesListed(result))
+    })
 }
 
 /// Run `change` on the credential store on a worker thread (it may wait on a keyring), then

@@ -43,6 +43,9 @@ pub enum Message {
     SetAiModel(Model),
     /// Check or uncheck a language spoken in the footage (a code such as "en"), for subtitles.
     SetSubtitleLanguage(String, bool),
+    /// The languages Soniox recognises, (code, name), or why they could not be listed. Asked
+    /// for by the app once a Soniox key is known; never saved.
+    SubtitleLanguagesListed(Result<Vec<(String, String)>, String>),
     /// How long generated subtitle cues may get.
     SetSubtitleCueLength(CueLength),
     /// An API key section; never saved with the settings (the keys live in the credential

@@ -20,7 +20,7 @@ use sonisub::batch::{self as plan_batch, Action as Planned, Totals};
 use sonisub::cancel::CancelToken;
 use sonisub::job::{self, Outcome};
 use sonisub::soniox::{self, api_error, Client};
-use sonisub::{audio, srt, usage};
+use sonisub::{audio, languages, srt, usage};
 
 use super::super::{ItemProgress, ItemResult, ItemStatus};
 use super::ActionMessage;
@@ -552,6 +552,40 @@ pub fn price() -> Price {
     }
 }
 
+/// The languages Soniox recognises, as (code, English name) sorted by name (blocking, at most
+/// [`PRICE_TIMEOUT`]). `Err` says in plain words why there is no list.
+pub fn supported_languages() -> Result<Vec<(String, String)>, String> {
+    let Some(key) = soniox_key() else {
+        return Err("Save a Soniox key to choose from all its languages.".to_string());
+    };
+    let (sender, receiver) = std::sync::mpsc::channel();
+    // Its own thread for the same reasons as the price lookup.
+    std::thread::spawn(move || {
+        let fetched = Client::new(soniox::DEFAULT_BASE, &key).and_then(|c| languages::fetch(&c));
+        let _ = sender.send(fetched);
+    });
+    match receiver.recv_timeout(PRICE_TIMEOUT) {
+        Ok(Ok(list)) => {
+            let mut list: Vec<(String, String)> =
+                list.into_iter().map(|l| (l.code, l.name_en)).collect();
+            list.sort_by(|a, b| a.1.cmp(&b.1));
+            Ok(list)
+        }
+        Ok(Err(e)) if api_error(&e).is_some_and(|a| a.status == Some(401)) => {
+            log::warn!("subtitles: Soniox rejected the key: {e:#}");
+            Err("Soniox rejected the key.".to_string())
+        }
+        Ok(Err(e)) => {
+            log::warn!("subtitles: listing Soniox languages failed: {e:#}");
+            Err("Could not get the languages from Soniox.".to_string())
+        }
+        Err(_) => {
+            log::warn!("subtitles: listing Soniox languages took too long");
+            Err("Could not get the languages from Soniox.".to_string())
+        }
+    }
+}
+
 /// What the job does to each file: the options it started with, and what it sent so far.
 /// Operations compare equal only when they are the same run.
 #[derive(Debug, Clone)]
@@ -935,7 +969,7 @@ mod tests {
         );
         assert_eq!(
             status(Outcome::Skipped {
-                srt: PathBuf::from("clip.srt")
+                files: vec![PathBuf::from("clip.srt")]
             }),
             (
                 ItemStatus::Skipped,

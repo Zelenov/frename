@@ -34,6 +34,19 @@ pub struct SettingsState {
     import: OldSettingsImport,
     /// The API key sections; never persisted here (the keys live in the credential store).
     keys: Keys,
+    /// The languages Soniox offers as hints; asked for each time the window opens with a key.
+    subtitle_languages: LanguageList,
+}
+
+/// Where the list of languages Soniox recognises stands.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum LanguageList {
+    #[default]
+    NotAsked,
+    Loading,
+    /// (code, English name), sorted by name.
+    Listed(Vec<(String, String)>),
+    Failed(String),
 }
 
 /// One key section per service.
@@ -74,6 +87,7 @@ impl Default for SettingsState {
             updates: updates::UpdatesState::default(),
             import,
             keys: Keys::default(),
+            subtitle_languages: LanguageList::default(),
         }
     }
 }
@@ -98,6 +112,13 @@ impl SettingsState {
             // The key lives in the credential store, never in the saved settings.
             Message::Key(which, message) => {
                 self.apply_key(which, message);
+                Task::none()
+            }
+            Message::SubtitleLanguagesListed(result) => {
+                self.subtitle_languages = match result {
+                    Ok(list) => LanguageList::Listed(list),
+                    Err(why) => LanguageList::Failed(why),
+                };
                 Task::none()
             }
             message => {
@@ -131,6 +152,23 @@ impl SettingsState {
             ApiKey::Anthropic => &mut self.keys.anthropic,
             ApiKey::Soniox => &mut self.keys.soniox,
         }
+    }
+
+    /// The languages Soniox offers as hints.
+    pub fn subtitle_languages(&self) -> &LanguageList {
+        &self.subtitle_languages
+    }
+
+    /// Whether to ask Soniox for its languages now: not while asking, nor once listed.
+    pub fn begin_subtitle_languages(&mut self) -> bool {
+        if matches!(
+            self.subtitle_languages,
+            LanguageList::Loading | LanguageList::Listed(_)
+        ) {
+            return false;
+        }
+        self.subtitle_languages = LanguageList::Loading;
+        true
     }
 
     /// Number a new read (or change) of the key's store; its answer comes back with it.
@@ -254,12 +292,7 @@ impl SettingsState {
                 if on {
                     languages.push(code);
                 }
-                // Kept in the order the window lists them.
-                languages.sort_by_key(|l| {
-                    frename_core::SUBTITLE_LANGUAGES
-                        .iter()
-                        .position(|(c, _)| c == l)
-                });
+                languages.sort();
             }
             Message::SetSubtitleCueLength(length) => self.settings.subtitle_cue_length = length,
             Message::Key(which, message) => self.apply_key(which, message),
@@ -274,7 +307,8 @@ impl SettingsState {
             // Handled by `update`.
             Message::Updates(_)
             | Message::ImportOldSettings
-            | Message::OldSettingsFolderPicked(_) => {}
+            | Message::OldSettingsFolderPicked(_)
+            | Message::SubtitleLanguagesListed(_) => {}
         }
     }
 }
@@ -305,6 +339,7 @@ mod tests {
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
             keys: Keys::default(),
+            subtitle_languages: LanguageList::default(),
         };
         state.apply(Message::SetMonochromeTags(true));
         assert!(state.settings().monochrome_tags);
@@ -333,6 +368,7 @@ mod tests {
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
             keys: Keys::default(),
+            subtitle_languages: LanguageList::default(),
         };
         state.apply(Message::SetCommentStorage(state.settings().comment_storage));
         assert!(
@@ -364,6 +400,7 @@ mod tests {
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
             keys: Keys::default(),
+            subtitle_languages: LanguageList::default(),
         };
         state.apply(Message::SetCommentedTag("Has comment.v2:".to_string()));
         assert_eq!(state.settings().commented_tag, "Has commentv2");
@@ -379,6 +416,7 @@ mod tests {
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
             keys: Keys::default(),
+            subtitle_languages: LanguageList::default(),
         };
         state.apply(Message::Key(
             ApiKey::Anthropic,
@@ -463,6 +501,7 @@ mod tests {
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
             keys: Keys::default(),
+            subtitle_languages: LanguageList::default(),
         };
         state.apply(Message::Key(
             ApiKey::Soniox,
@@ -486,7 +525,7 @@ mod tests {
     }
 
     #[test]
-    fn subtitle_languages_keep_the_window_order_and_none_means_detect() {
+    fn subtitle_languages_are_sorted_and_none_means_detect() {
         let mut state = SettingsState {
             settings: AppSettings::default(),
             comment_storage_changed: false,
@@ -495,10 +534,11 @@ mod tests {
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
             keys: Keys::default(),
+            subtitle_languages: LanguageList::default(),
         };
         state.apply(Message::SetSubtitleLanguage("de".to_string(), true));
         state.apply(Message::SetSubtitleLanguage("en".to_string(), false));
-        assert_eq!(state.settings().subtitle_languages, ["ru", "de"]);
+        assert_eq!(state.settings().subtitle_languages, ["de", "ru"]);
         state.apply(Message::SetSubtitleLanguage("ru".to_string(), false));
         state.apply(Message::SetSubtitleLanguage("de".to_string(), false));
         assert!(state.settings().subtitle_languages.is_empty());

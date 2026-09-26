@@ -3,7 +3,7 @@
 use clipscribe::{Model, MODELS};
 use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::ai::SummaryLanguage;
-use frename_core::{CommentStorage, CueLength, InOutStorage, SUBTITLE_LANGUAGES};
+use frename_core::{CommentStorage, CueLength, InOutStorage};
 use iced::widget::{
     button, checkbox, column, container, pick_list, radio, row, scrollable, text, text_input,
 };
@@ -11,7 +11,7 @@ use iced::{Element, Length};
 
 use crate::theme;
 
-use super::state::{KeySection, OldSettingsImport};
+use super::state::{KeySection, LanguageList, OldSettingsImport};
 use super::{KeyMessage, Message, SettingsState};
 
 use crate::features::batch::Operation;
@@ -161,6 +161,7 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
             "Subtitles",
             subtitle_options(
                 state.key(ApiKey::Soniox),
+                state.subtitle_languages(),
                 &settings.subtitle_languages,
                 settings.subtitle_cue_length,
             ),
@@ -223,24 +224,41 @@ fn ai_options(key: &KeySection, language: SummaryLanguage, model: Model) -> Elem
 /// long a cue may get.
 fn subtitle_options<'a>(
     key: &'a KeySection,
+    list: &'a LanguageList,
     languages: &'a [String],
     cue_length: CueLength,
 ) -> Element<'a, Message> {
     let muted = |line: &'static str| text(line).size(12).color(theme::TEXT_MUTED);
     let checked = |code: &str| languages.iter().any(|l| l == code);
-    let language_rows = SUBTITLE_LANGUAGES.chunks(3).map(|chunk| {
-        row(chunk.iter().map(|(code, name)| {
-            let code = code.to_string();
-            checkbox(checked(&code))
-                .label(*name)
-                .text_size(13)
-                .on_toggle(move |on| Message::SetSubtitleLanguage(code.clone(), on))
-                .width(Length::Fixed(110.0))
-                .into()
-        }))
-        .spacing(8)
-        .into()
-    });
+    // Soniox's own list; until it comes (or without a key) the checked codes stay uncheckable.
+    let offered: Vec<(String, String)> = match list {
+        LanguageList::Listed(all) => all.clone(),
+        _ => languages.iter().map(|c| (c.clone(), c.clone())).collect(),
+    };
+    let language_rows: Vec<Element<'a, Message>> = offered
+        .chunks(4)
+        .map(|chunk| {
+            row(chunk.iter().map(|(code, name)| {
+                let code = code.clone();
+                checkbox(checked(&code))
+                    .label(name.clone())
+                    .text_size(13)
+                    .on_toggle(move |on| Message::SetSubtitleLanguage(code.clone(), on))
+                    .width(Length::Fixed(118.0))
+                    .into()
+            }))
+            .spacing(8)
+            .into()
+        })
+        .collect();
+    let status = match list {
+        LanguageList::NotAsked if key.state == Some(KeyState::Missing) => {
+            Some("Save the key to choose from all the languages Soniox knows.".to_string())
+        }
+        LanguageList::NotAsked | LanguageList::Listed(_) => None,
+        LanguageList::Loading => Some("Getting the languages from Soniox…".to_string()),
+        LanguageList::Failed(why) => Some(why.clone()),
+    };
     let hint = if languages.is_empty() {
         "None checked: detected automatically."
     } else {
@@ -256,6 +274,7 @@ fn subtitle_options<'a>(
     )
     .push(text("Languages").size(13))
     .extend(language_rows)
+    .extend(status.map(|s| text(s).size(12).color(theme::TEXT_MUTED).into()))
     .push(muted(hint))
     .push(
         row![

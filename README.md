@@ -235,7 +235,7 @@ The ⚙ button opens Settings:
   Credential Manager, macOS Keychain, or a keyring such as GNOME Keyring on Linux), the model
   (Claude Haiku 4.5, Sonnet 5 or Opus 5, with their prices) and the language of the descriptions;
 - for Generate subtitles: your Soniox API key (kept the same way), the languages spoken in your
-  footage, and whether a subtitle is a short line or a whole sentence.
+  footage (any of the languages Soniox knows), and whether a subtitle is a short line or a whole sentence.
 
 After you change where comments or in/out points are kept, or the tag spacing, Settings offer the
 batch action that updates the existing files.

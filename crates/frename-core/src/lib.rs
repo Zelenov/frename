@@ -40,7 +40,7 @@ pub use metadata::{
 pub use ordered::{OrderKey, OrderableEntry, OrderedCollection, OrderedThing};
 pub use subtitles::{
     load_subtitles, subtitle_path, transcript_path, CueLength, SubtitleCue, Subtitles,
-    DEFAULT_SUBTITLE_LANGUAGES, SUBTITLE_LANGUAGES,
+    DEFAULT_SUBTITLE_LANGUAGES,
 };
 pub use tags::{
     install_file_tagger, set_space_after_tags, space_after_tags, CachedFile, DefaultTag,

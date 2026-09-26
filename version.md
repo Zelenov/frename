@@ -1,7 +1,7 @@
-# NEXT
+# 0.72
 ## Added
 - Batch action "Generate subtitles": transcribes the checked videos with Soniox and saves a `.srt` next to each, with the audio length and cost shown before you start, and why each video got no subtitles listed afterwards. You need your own Soniox API key.
-- Settings → Subtitles: the Soniox API key (kept in the system's password store), the languages spoken in the footage, and short or sentence-long subtitles.
+- Settings → Subtitles: the Soniox API key (kept in the system's password store), the languages spoken in the footage (any language Soniox supports), and short or sentence-long subtitles.
 
 ## Changed
 - A saved `.soniox.json` transcript is renamed together with its video.
