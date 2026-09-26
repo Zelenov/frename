@@ -150,14 +150,52 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::process::exit(0);
 }
 
-/// The paths after `--self-test`, when the app was started to test its GStreamer.
+/// The paths given with `--self-test` (every argument after it that is not a flag), when the
+/// app was started to test its GStreamer.
 fn self_test_paths(args: &[String]) -> Option<Vec<std::path::PathBuf>> {
     let at = args.iter().position(|a| a == "--self-test")?;
     Some(
         args[at + 1..]
             .iter()
-            .take_while(|a| !a.starts_with("--"))
+            .filter(|a| !a.starts_with("--"))
             .map(Into::into)
             .collect(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|a| a.to_string()).collect()
+    }
+
+    #[test]
+    fn no_self_test_flag_means_a_normal_start() {
+        assert_eq!(self_test_paths(&args(&["frename", "--debug"])), None);
+    }
+
+    #[test]
+    fn paths_after_the_flag_are_tested_and_flags_between_them_are_skipped() {
+        assert_eq!(
+            self_test_paths(&args(&[
+                "frename",
+                "--self-test",
+                "--debug",
+                "a clip.mp4",
+                "folder"
+            ])),
+            Some(vec![PathBuf::from("a clip.mp4"), PathBuf::from("folder")])
+        );
+    }
+
+    #[test]
+    fn the_flag_alone_tests_nothing() {
+        assert_eq!(
+            self_test_paths(&args(&["frename", "--self-test"])),
+            Some(Vec::new())
+        );
+    }
 }

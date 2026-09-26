@@ -425,16 +425,76 @@ const VFR_NOMINAL_FRAMERATE: &str = "30/1";
 /// for that reason alone is retried once with the framerate relabelled. Everything else
 /// takes the first path, which builds exactly the graph `Video::new` builds.
 fn open_video(uri: &url::Url) -> Result<Video, VideoError> {
-    gst::init()?;
+    open_video_with(uri, None).map_err(|failure| {
+        for problem in &failure.problems {
+            log::warn!("GStreamer: {problem}");
+        }
+        failure.error
+    })
+}
 
-    match open_pipeline(uri, false) {
-        Err(VideoError::Framerate(rate)) => {
+/// Why a video could not be opened: the player's error plus the errors and warnings GStreamer
+/// posted on the way. A missing decoder, for one, is only a warning followed by the end of the
+/// stream, so the error alone does not name it.
+pub(crate) struct OpenFailure {
+    pub error: VideoError,
+    pub problems: Vec<String>,
+}
+
+impl std::fmt::Display for OpenFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.error)?;
+        for problem in &self.problems {
+            write!(f, "; {problem}")?;
+        }
+        Ok(())
+    }
+}
+
+impl From<VideoError> for OpenFailure {
+    fn from(error: VideoError) -> Self {
+        Self {
+            error,
+            problems: Vec::new(),
+        }
+    }
+}
+
+/// [`open_video`], with the sound sent to `audio_sink` (a `playbin` sink description) instead
+/// of the default device when one is given.
+fn open_video_with(uri: &url::Url, audio_sink: Option<&str>) -> Result<Video, OpenFailure> {
+    gst::init().map_err(VideoError::from)?;
+
+    match open_pipeline(uri, false, audio_sink) {
+        Err(OpenFailure {
+            error: VideoError::Framerate(rate),
+            ..
+        }) => {
             log::info!(
                 "Source reports framerate {rate} (variable); retrying as {VFR_NOMINAL_FRAMERATE}"
             );
-            open_pipeline(uri, true)
+            open_pipeline(uri, true, audio_sink)
         }
         other => other,
+    }
+}
+
+/// Open `uri` exactly as the player does, with the sound going nowhere, and wait until a
+/// decoded frame has reached the player's video sink. Used by `--self-test`.
+pub(crate) fn check_decodes(uri: &url::Url, timeout: Duration) -> Result<(), String> {
+    let video = open_video_with(uri, Some("fakesink")).map_err(|failure| failure.to_string())?;
+    let sink = player_video_sink(&video.pipeline())
+        .ok_or_else(|| VideoError::AppSink("iced_video".to_string()).to_string())?;
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        let sample: Option<gst::Sample> = sink.property("last-sample");
+        if sample.is_some() {
+            return Ok(());
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(format!("no frame reached the player within {timeout:?}"));
+        }
+        std::thread::sleep(Duration::from_millis(20));
     }
 }
 
@@ -444,31 +504,63 @@ fn open_video(uri: &url::Url) -> Result<Video, VideoError> {
 /// only 5 seconds — too little for a cold file on cloud-backed storage (Dropbox or
 /// OneDrive "online-only"), where the first read waits on a full download. Reaching
 /// `Playing` up front means the wait inside the player returns immediately.
-fn open_pipeline(uri: &url::Url, relabel_framerate: bool) -> Result<Video, VideoError> {
-    let pipeline = gst::parse::launch(&description(uri, relabel_framerate))?
+fn open_pipeline(
+    uri: &url::Url,
+    relabel_framerate: bool,
+    audio_sink: Option<&str>,
+) -> Result<Video, OpenFailure> {
+    let pipeline = gst::parse::launch(&description(uri, relabel_framerate, audio_sink))
+        .map_err(VideoError::from)?
         .downcast::<gst::Pipeline>()
         .map_err(|_| VideoError::Cast)?;
 
     // Every failure past this point has to stop the pipeline, or playbin keeps the
     // audio device open and the sound of an abandoned load carries on in the background.
-    if let Err(e) = preroll(&pipeline) {
+    // What GStreamer said is read first: stopping the pipeline flushes its bus.
+    let fail = |error: VideoError| {
+        let problems = bus_problems(&pipeline);
         let _ = pipeline.set_state(gst::State::Null);
-        return Err(e);
-    }
-
-    let (video_sink, text_sink) = match sinks(&pipeline) {
-        Ok(sinks) => sinks,
-        Err(e) => {
-            let _ = pipeline.set_state(gst::State::Null);
-            return Err(e);
-        }
+        OpenFailure { error, problems }
     };
 
-    Video::from_gst_pipeline(pipeline, video_sink, Some(text_sink))
+    preroll(&pipeline).map_err(fail)?;
+    let (video_sink, text_sink) = sinks(&pipeline).map_err(fail)?;
+    // A stream that ended without a video frame (no decoder for it, or no video at all)
+    // prerolls fine but leaves the sink without caps; the player would refuse it with the
+    // same error after tearing the pipeline down, and the reason with it.
+    if video_sink
+        .static_pad("sink")
+        .and_then(|pad| pad.current_caps())
+        .is_none()
+    {
+        return Err(fail(VideoError::Caps));
+    }
+
+    Ok(Video::from_gst_pipeline(
+        pipeline,
+        video_sink,
+        Some(text_sink),
+    )?)
 }
 
-/// The `playbin` description, optionally rewriting the framerate on the way to the sink.
-pub(crate) fn description(uri: &url::Url, relabel_framerate: bool) -> String {
+/// The errors and warnings waiting on the pipeline's bus, as text. Reads them off the bus, so
+/// only for a pipeline that is being given up.
+fn bus_problems(pipeline: &gst::Pipeline) -> Vec<String> {
+    let Some(bus) = pipeline.bus() else {
+        return Vec::new();
+    };
+    std::iter::from_fn(|| bus.pop())
+        .filter_map(|message| match message.view() {
+            gst::MessageView::Error(e) => Some(e.error().to_string()),
+            gst::MessageView::Warning(w) => Some(w.error().to_string()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The `playbin` description, optionally rewriting the framerate on the way to the sink and
+/// sending the sound to `audio_sink` instead of the default device.
+fn description(uri: &url::Url, relabel_framerate: bool, audio_sink: Option<&str>) -> String {
     // capssetter has to sit behind the NV12 filter, not in front of it: offering its own
     // framerate to a filter that then has to negotiate it upstream collapses the whole
     // graph with "internal data stream error" — including on files that were fine.
@@ -484,9 +576,12 @@ pub(crate) fn description(uri: &url::Url, relabel_framerate: bool) -> String {
             .to_string()
     };
 
+    let audio_sink = audio_sink
+        .map(|sink| format!(" audio-sink=\"{sink}\""))
+        .unwrap_or_default();
     format!(
         "playbin uri=\"{}\" text-sink=\"appsink name=iced_text sync=true drop=true\" \
-         video-sink=\"{video_sink}\"",
+         video-sink=\"{video_sink}\"{audio_sink}",
         uri.as_str()
     )
 }
@@ -501,9 +596,7 @@ fn preroll(pipeline: &gst::Pipeline) -> Result<(), VideoError> {
 }
 
 /// Pull the two appsinks that `Video::from_gst_pipeline` expects out of the playbin.
-pub(crate) fn sinks(
-    pipeline: &gst::Pipeline,
-) -> Result<(gst_app::AppSink, gst_app::AppSink), VideoError> {
+fn sinks(pipeline: &gst::Pipeline) -> Result<(gst_app::AppSink, gst_app::AppSink), VideoError> {
     // playbin wraps the video-sink description in a bin and exposes it through a
     // GhostPad, so the appsink has to be looked up by name inside that bin.
     let video_sink: gst::Element = pipeline.property("video-sink");
@@ -530,28 +623,29 @@ pub(crate) fn sinks(
 // Frame capture helpers
 // ---------------------------------------------------------------------------
 
+/// The `iced_video` appsink of a running player pipeline, found inside playbin's video-sink bin.
+fn player_video_sink(pipeline: &gst::Pipeline) -> Option<gst::Element> {
+    let video_sink: gst::Element = pipeline.property("video-sink");
+    if let Ok(bin) = video_sink.clone().downcast::<gst::Bin>() {
+        return bin.by_name("iced_video");
+    }
+    // video-sink wraps its sink pad in a GhostPad; parent of that pad is the bin.
+    video_sink
+        .pads()
+        .into_iter()
+        .find_map(|p| p.dynamic_cast::<gst::GhostPad>().ok())
+        .and_then(|gp| gp.parent_element())
+        .and_then(|e| e.downcast::<gst::Bin>().ok())
+        .and_then(|b| b.by_name("iced_video"))
+}
+
 /// Capture the current video frame as JPEG bytes.
 ///
 /// Reads the `last-sample` property of the iced_video AppSink.
 /// This holds the most recently delivered NV12 frame and does not
 /// compete with the worker thread's continuous pull loop.
 fn capture_jpeg(video: &Video) -> Option<Vec<u8>> {
-    let pipeline = video.pipeline();
-
-    // Locate the iced_video appsink inside the video-sink bin.
-    let video_sink: gst::Element = pipeline.property("video-sink");
-    let appsink_el = if let Ok(bin) = video_sink.clone().downcast::<gst::Bin>() {
-        bin.by_name("iced_video")?
-    } else {
-        // video-sink wraps its sink pad in a GhostPad; parent of that pad is the bin.
-        video_sink
-            .pads()
-            .into_iter()
-            .find_map(|p| p.dynamic_cast::<gst::GhostPad>().ok())
-            .and_then(|gp| gp.parent_element())
-            .and_then(|e| e.downcast::<gst::Bin>().ok())
-            .and_then(|b| b.by_name("iced_video"))?
-    };
+    let appsink_el = player_video_sink(&video.pipeline())?;
 
     // last-sample holds the most recently delivered frame — no queue contention.
     let sample: Option<gst::Sample> = appsink_el.property("last-sample");

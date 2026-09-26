@@ -1,0 +1,6 @@
+# Clips `frename --self-test` must decode, one path per line. CI runs the self-test on them
+# (.github/workflows/ci.yml) and so does a unit test (src/self_test.rs). The AVI sample in
+# tests/folder is not here: no decoder in Ubuntu's GStreamer takes its H.264 variant (#24).
+tests/folder/file_example_MP4_480_1_5MG.mp4
+tests/folder/file_example_MOV_480_700kB.mov
+tests/folder/Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm
