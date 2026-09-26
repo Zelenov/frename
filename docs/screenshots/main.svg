@@ -28,19 +28,19 @@
     <text x="1595" y="560">All tags</text>
     <text x="1602" y="716">Current video tags</text>
     <text x="1390" y="1028">Comments</text>
-    <text x="287" y="1010" text-anchor="end">In</text>
-    <text x="405" y="752" text-anchor="end">Subtitles</text>
-    <text x="543" y="768">Out</text>
-    <text x="416" y="1030">Markers</text>
+    <text x="61" y="982" text-anchor="end">In</text>
+    <text x="405" y="728" text-anchor="end">Subtitles</text>
+    <text x="657" y="740">Out</text>
+    <text x="363" y="1002">Markers</text>
     <text x="397" y="337" text-anchor="end">Subtitle list</text>
   </g>
   <use xlink:href="#arrow" href="#arrow" transform="translate(1550,228) rotate(148.4)"/>
   <use xlink:href="#arrow" href="#arrow" transform="translate(1550,276) rotate(-164.3) scale(1,-1)"/>
   <use xlink:href="#arrow" href="#arrow" transform="translate(1510,800) rotate(148.4)"/>
   <use xlink:href="#arrow" href="#arrow" transform="translate(1390,927) rotate(-148.2) scale(1,-1)"/>
-  <use xlink:href="#arrow" href="#arrow" transform="translate(400,919) rotate(-30.3) scale(1,-1)"/>
-  <use xlink:href="#arrow" href="#arrow" transform="translate(420,848) rotate(90)"/>
-  <use xlink:href="#arrow" href="#arrow" transform="translate(489,893) rotate(122.8) scale(1,-1)"/>
-  <use xlink:href="#arrow" href="#arrow" transform="translate(456,919) rotate(-149.7)"/>
+  <use xlink:href="#arrow" href="#arrow" transform="translate(174,891) rotate(-30.3) scale(1,-1)"/>
+  <use xlink:href="#arrow" href="#arrow" transform="translate(420,824) rotate(90)"/>
+  <use xlink:href="#arrow" href="#arrow" transform="translate(603,865) rotate(122.8) scale(1,-1)"/>
+  <use xlink:href="#arrow" href="#arrow" transform="translate(403,891) rotate(-149.7)"/>
   <use xlink:href="#arrow" href="#arrow" transform="translate(471,245) rotate(-15.7)"/>
 </svg>

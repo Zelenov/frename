@@ -8,6 +8,7 @@
 ## Changed
 - `F12` just saves the current frame as a JPEG next to the video, like VLC: no mark on the progress bar, no time in the comment, and the picture is no longer renamed with the video. Frames saved before stay on disk.
 - `F1`, `F3` and `F12` no longer react while `Shift` is held.
+- When the video panel is narrow, the progress bar gets a row of its own above the buttons, so it stays long enough to seek.
 
 # 0.68
 ## Added

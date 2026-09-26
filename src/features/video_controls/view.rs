@@ -13,7 +13,9 @@ const CONTROLS_HEIGHT: f32 = 32.0;
 /// `position_secs` is the live playback position read from the video at view time.
 /// `segment_start` and `segment_end` are the optional segment markers (in seconds) for the current file.
 /// `markers` are the clip markers (in seconds) drawn on the bar; `can_add_markers` is false when
-/// the file cannot hold them.
+/// the file cannot hold them. With `bar_on_own_row` the progress bar is left out (the caller puts
+/// [`progress_bar`] on a row of its own) and the buttons keep to the left, the volume to the right.
+#[allow(clippy::too_many_arguments)]
 pub fn view<'a>(
     state: &'a VideoControlsState,
     position_secs: f32,
@@ -21,6 +23,7 @@ pub fn view<'a>(
     segment_end: Option<f32>,
     markers: Vec<BarMarker>,
     can_add_markers: bool,
+    bar_on_own_row: bool,
 ) -> Element<'a, Message> {
     let back10_btn: Element<'_, Message> = tooltip(
         button(
@@ -103,18 +106,12 @@ pub fn view<'a>(
     )
     .into();
 
-    let duration = state.duration_secs();
-    // While seeking, show the drag position; otherwise use live video position
-    let current_pos = if state.is_seeking() {
-        state.seek_position_secs()
+    // On a row of its own the bar is left out here and a gap pushes the volume to the right.
+    let bar: Element<'_, Message> = if bar_on_own_row {
+        Space::new().width(Length::Fill).into()
     } else {
-        position_secs
+        progress_bar(state, position_secs, segment_start, segment_end, markers)
     };
-
-    let bar = ProgressBar::new(0.0..=duration, current_pos, Message::Seek)
-        .on_release(Message::SeekReleased)
-        .segment_range(segment_start, segment_end)
-        .markers(markers);
 
     let volume_icon: Element<'_, Message> =
         container(text("🔊").size(13)).center_y(Length::Fill).into();
@@ -184,5 +181,26 @@ pub fn view<'a>(
         .width(iced::Length::Fill)
         .height(CONTROLS_HEIGHT)
         .style(theme::panel_container_style)
+        .into()
+}
+
+/// The seek bar with the in/out range and the clip markers, filling the width it is given.
+pub fn progress_bar<'a>(
+    state: &'a VideoControlsState,
+    position_secs: f32,
+    segment_start: Option<f32>,
+    segment_end: Option<f32>,
+    markers: Vec<BarMarker>,
+) -> Element<'a, Message> {
+    // While seeking, show the drag position; otherwise use live video position
+    let current_pos = if state.is_seeking() {
+        state.seek_position_secs()
+    } else {
+        position_secs
+    };
+    ProgressBar::new(0.0..=state.duration_secs(), current_pos, Message::Seek)
+        .on_release(Message::SeekReleased)
+        .segment_range(segment_start, segment_end)
+        .markers(markers)
         .into()
 }

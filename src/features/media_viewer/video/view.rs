@@ -13,6 +13,10 @@ use crate::features::video_controls::{self, BarMarker};
 use crate::theme;
 
 const CONTROLS_HEIGHT: f32 = 32.0;
+/// Below this width the progress bar gets a row of its own above the buttons: the buttons,
+/// volume and list toggles of one row take about 520 px, which would leave the bar too short.
+const BAR_OWN_ROW_BELOW: f32 = 760.0;
+const BAR_ROW_HEIGHT: f32 = 24.0;
 /// Fixed so the video does not jump as cues of one or two lines come and go.
 const SUBTITLE_STRIP_HEIGHT: f32 = 48.0;
 const SUBTITLE_STRIP_TEXT_SIZE: f32 = 14.0;
@@ -44,6 +48,29 @@ pub fn view<'a>(
     segment_start: Option<f32>,
     segment_end: Option<f32>,
     markers: MarkersView<'a>,
+) -> Element<'a, Message> {
+    // The layout of the controls depends on the width the player gets.
+    iced::widget::responsive(move |size| {
+        sized_view(
+            state,
+            is_fullscreen,
+            segment_start,
+            segment_end,
+            markers,
+            size.width,
+        )
+    })
+    .into()
+}
+
+/// [`view`] for a player `width` pixels wide.
+fn sized_view<'a>(
+    state: &'a VideoPlayerState,
+    is_fullscreen: bool,
+    segment_start: Option<f32>,
+    segment_end: Option<f32>,
+    markers: MarkersView<'a>,
+    width: f32,
 ) -> Element<'a, Message> {
     if let Some(video) = state.current_video() {
         let player = VideoPlayer::new(video)
@@ -109,7 +136,7 @@ pub fn view<'a>(
             (subtitles.is_some() && !is_fullscreen).then(|| cue_list_button(state.show_cue_list()));
         let marker_list_btn = marker_list_button(state.show_marker_list());
 
-        let bar_markers = markers
+        let bar_markers: Vec<BarMarker> = markers
             .markers
             .unwrap_or_default()
             .iter()
@@ -119,6 +146,25 @@ pub fn view<'a>(
                 color: theme::marker_color(m.color),
             })
             .collect();
+        // A narrow player would squeeze the bar between the buttons: give it a row of its own.
+        let bar_on_own_row = width < BAR_OWN_ROW_BELOW;
+        let bar_row: Option<Element<'_, Message>> = bar_on_own_row.then(|| {
+            container(
+                video_controls::view::progress_bar(
+                    state.controls(),
+                    position_secs,
+                    segment_start,
+                    segment_end,
+                    bar_markers.clone(),
+                )
+                .map(Message::Controls),
+            )
+            .padding([0, 12])
+            .width(Length::Fill)
+            .center_y(BAR_ROW_HEIGHT)
+            .style(theme::panel_container_style)
+            .into()
+        });
         let controls_inner = video_controls::view::view(
             state.controls(),
             position_secs,
@@ -126,6 +172,7 @@ pub fn view<'a>(
             segment_end,
             bar_markers,
             markers.markers.is_some(),
+            bar_on_own_row,
         )
         .map(Message::Controls);
 
@@ -169,6 +216,7 @@ pub fn view<'a>(
 
         column![video_area]
             .push(strip)
+            .push(bar_row)
             .push(controls)
             .width(Length::Fill)
             .height(Length::Fill)
