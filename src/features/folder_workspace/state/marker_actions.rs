@@ -293,9 +293,10 @@ impl FolderWorkspace {
         let current = markers[index].name.clone();
         self.markers.open(guid, &current);
         let name = iced::widget::Id::new(markers::view::MARKER_NAME_INPUT_ID);
+        let offset = markers::view::row_offset(markers, index.saturating_sub(1));
         Task::batch([
             self.show_marker_list(),
-            scroll_marker_list_to(index),
+            scroll_marker_list_to(offset),
             operation::focus(name),
         ])
     }
@@ -321,7 +322,10 @@ impl FolderWorkspace {
         if !self.markers.follow(lit) && !force {
             return Task::none();
         }
-        scroll_marker_list_to(lit.unwrap_or(0))
+        scroll_marker_list_to(markers::view::row_offset(
+            markers,
+            lit.unwrap_or(0).saturating_sub(1),
+        ))
     }
 
     /// The open file's markers were just read from it (another file was opened): remember their
@@ -398,12 +402,12 @@ fn seek_exact(ms: u64) -> Task<Message> {
     )))
 }
 
-/// Scroll the marker list so row `index` sits near its top, one row of context above it. Rows
-/// above an open row are closed rows, so their height is known.
-fn scroll_marker_list_to(index: usize) -> Task<Message> {
+/// Scroll the marker list to `y`: the top of the row before the one to show, so it keeps a
+/// row of context above it (see [`markers::view::row_offset`]).
+fn scroll_marker_list_to(y: f32) -> Task<Message> {
     let offset = iced::widget::scrollable::AbsoluteOffset {
         x: None,
-        y: Some(index.saturating_sub(1) as f32 * markers::view::ROW_PITCH),
+        y: Some(y),
     };
     operation::scroll_to::<()>(iced::widget::Id::new(MARKER_LIST_SCROLLABLE_ID), offset).discard()
 }

@@ -199,6 +199,7 @@ fn sized_view<'a>(
             bar_markers,
             marker_label,
             markers.markers.is_some(),
+            markers.state.recording().is_some(),
             bar_on_own_row,
         )
         .map(Message::Controls);

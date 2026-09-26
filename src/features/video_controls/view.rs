@@ -24,6 +24,7 @@ pub fn view<'a>(
     markers: Vec<BarMarker>,
     marker_label: Option<MarkerLabel<'a>>,
     can_add_markers: bool,
+    marker_held: bool,
     bar_on_own_row: bool,
 ) -> Element<'a, Message> {
     let back10_btn: Element<'_, Message> = tooltip(
@@ -170,7 +171,15 @@ pub fn view<'a>(
         .width(CONTROLS_HEIGHT)
         .height(iced::Length::Fill)
         .padding(0)
-        .style(theme::icon_button_style(can_add_markers)),
+        // Pressed while `F2` or the button is held: a marker is being drawn.
+        .style(move |t, status| {
+            let status = if marker_held {
+                button::Status::Pressed
+            } else {
+                status
+            };
+            theme::icon_button_style(can_add_markers)(t, status)
+        }),
         text(if can_add_markers {
             "Add marker (F2, hold for a range; again to name it)"
         } else {

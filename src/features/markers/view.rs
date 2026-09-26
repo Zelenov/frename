@@ -14,17 +14,34 @@ use crate::theme;
 
 pub const MARKER_LIST_SCROLLABLE_ID: &str = "marker_list";
 pub const MARKER_NAME_INPUT_ID: &str = "marker_name_input";
-/// Every row, open for renaming or not: the first line and two lines of the name; a longer
-/// name is clipped. One height, so opening a row moves nothing.
-const ROW_HEIGHT: f32 = 80.0;
+/// A row with a one-line name: the first line and the name. A longer name wraps and makes
+/// its row taller.
+const ROW_HEIGHT: f32 = 62.0;
 const ROW_SPACING: f32 = 2.0;
 /// The name, shown or edited, in the same box: the field's text size, padding and height.
 const NAME_SIZE: f32 = 13.0;
 const NAME_PADDING: [f32; 2] = [3.0, 6.0];
-/// Two wrapped lines of the name.
-const NAME_HEIGHT: f32 = 41.0;
-/// Distance from one row's top to the next.
-pub const ROW_PITCH: f32 = ROW_HEIGHT + ROW_SPACING;
+/// Height of one line of the name.
+const NAME_LINE_HEIGHT: f32 = 17.0;
+/// Room for the name's text in a row of the list, at its usual width (px).
+const NAME_TEXT_WIDTH: f32 = 290.0;
+/// A generous average width of a character of the name (px).
+const NAME_CHAR_WIDTH: f32 = 7.0;
+/// How many lines the name of `marker` wraps to in the list, as an estimate: good enough to
+/// scroll a row into view.
+fn name_lines(marker: &Marker) -> usize {
+    let per_line = (NAME_TEXT_WIDTH / NAME_CHAR_WIDTH) as usize;
+    marker.name.chars().count().div_ceil(per_line).max(1)
+}
+
+/// Distance from the top of the list to the top of row `index`, from the rows above it.
+pub fn row_offset(markers: &[Marker], index: usize) -> f32 {
+    markers
+        .iter()
+        .take(index)
+        .map(|m| ROW_HEIGHT + (name_lines(m) - 1) as f32 * NAME_LINE_HEIGHT + ROW_SPACING)
+        .sum()
+}
 const DOT_SIZE: f32 = 14.0;
 const ICON_SIZE: f32 = 22.0;
 
@@ -251,7 +268,6 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
             })
             .size(NAME_SIZE)
             .padding(NAME_PADDING)
-            .height(NAME_HEIGHT)
             .into(),
         None => container(
             text(if marker.name.is_empty() {
@@ -265,18 +281,10 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
         .padding(NAME_PADDING)
         .into(),
     };
-    let body = column![
-        first_line,
-        container(name)
-            // Two lines: the bottom padding is cut, and with it the top of a third line.
-            .height(NAME_HEIGHT - NAME_PADDING[0])
-            .clip(true)
-    ]
-    .spacing(4);
+    let body = column![first_line, name].spacing(4);
     let row_box = container(body)
         .width(Length::Fill)
-        .height(ROW_HEIGHT)
-        .clip(true)
+        .height(Length::Shrink)
         .padding([6, 10])
         .style(move |theme| {
             let mut style = container::Style::default();
