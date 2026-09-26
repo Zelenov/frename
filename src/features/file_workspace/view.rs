@@ -74,7 +74,7 @@ where
 
     let comment_input = text_editor_widget(&file_workspace.comment_content)
         .on_action(Message::CommentAction)
-        .placeholder("Comment...")
+        .placeholder(fl!("file-workspace-comment-placeholder"))
         .height(80)
         .padding([4, 6])
         // Explicitly capture Enter so the event is not treated as Ignored by Iced,

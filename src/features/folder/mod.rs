@@ -24,5 +24,14 @@ pub struct InlineRename {
     /// The name as typed so far: the whole file name, extension included.
     pub text: String,
     /// Why the last Enter was refused; cleared by the next edit.
-    pub error: Option<&'static str>,
+    pub error: Option<RenameProblem>,
+}
+
+/// Why a typed file name was refused. The view turns it into words.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RenameProblem {
+    Empty,
+    BadCharacter,
+    TrailingDotOrSpace,
+    Exists,
 }

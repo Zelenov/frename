@@ -9,7 +9,9 @@ use iced::Element;
 
 use super::super::ItemResult;
 
-pub const LABEL: &str = "Move comments";
+pub fn label() -> String {
+    fl!("batch-action-move-comments")
+}
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -49,14 +51,14 @@ impl Options {
     pub fn view(&self) -> Element<'_, Message> {
         let choices = column![
             radio(
-                "From text files into the videos (XMP)",
+                fl!("batch-action-move-comments-into-videos"),
                 CommentStorage::InVideo,
                 Some(self.to),
                 Message::SetTo
             )
             .text_size(13),
             radio(
-                "From the videos (XMP) into text files",
+                fl!("batch-action-move-comments-into-text-files"),
                 CommentStorage::TextFile,
                 Some(self.to),
                 Message::SetTo
@@ -65,9 +67,8 @@ impl Options {
         ]
         .spacing(8);
         super::panel(
-            LABEL,
-            "Moves the comment of each checked file to the chosen place. Tags and in/out points stay where they are."
-                .to_string(),
+            label(),
+            fl!("batch-action-move-comments-hint"),
             choices.into(),
         )
     }

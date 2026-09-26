@@ -196,9 +196,9 @@ fn cue_list_button<'a>(shown: bool) -> Element<'a, Message> {
         .padding(0)
         .style(theme::icon_button_style(true)),
         text(if shown {
-            "Hide subtitle list"
+            fl!("media-viewer-video-hide-subtitles")
         } else {
-            "Show subtitle list"
+            fl!("media-viewer-video-show-subtitles")
         }),
         tooltip::Position::Top,
     )

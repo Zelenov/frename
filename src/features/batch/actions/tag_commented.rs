@@ -12,7 +12,9 @@ use super::super::ItemResult;
 use super::ActionMessage;
 use crate::theme;
 
-pub const LABEL: &str = "Tag commented videos";
+pub fn label() -> String {
+    fl!("batch-action-tag-commented")
+}
 
 /// Runs only while the commented tag is turned on in the settings.
 pub fn operation() -> Option<super::Operation> {
@@ -24,28 +26,25 @@ pub fn operation() -> Option<super::Operation> {
 pub fn view<'a>() -> Element<'a, ActionMessage> {
     let tag = frename_core::commented_tag();
     let hint = match &tag {
-        Some(tag) => format!(
-            "Adds the “{tag}” tag to each checked video that has a comment and removes it from \
-             those without one. Files whose tag changes are renamed."
-        ),
-        None => "Adds the tag for videos with a comment to each checked video that has one and removes it \
-                 from those without one. The tag is turned off in the settings."
-            .to_string(),
+        Some(tag) => fl!("batch-action-tag-commented-hint", tag = tag.as_str()),
+        None => fl!("batch-action-tag-commented-hint-off"),
     };
     let status = match tag {
-        Some(tag) => text(format!("Tag: {tag}")).size(13),
-        None => text("Tag: off").size(13).color(theme::ERROR),
+        Some(tag) => text(fl!("batch-action-tag-commented-status", tag = tag)).size(13),
+        None => text(fl!("batch-action-tag-commented-status-off"))
+            .size(13)
+            .color(theme::ERROR),
     };
     let settings = row![
         status,
-        button(text("Tag settings…").size(12))
+        button(text(fl!("batch-action-tag-commented-settings")).size(12))
             .on_press(ActionMessage::OpenSettings)
             .padding([3, 10])
             .style(theme::icon_button_style(true)),
     ]
     .spacing(12)
     .align_y(iced::Alignment::Center);
-    super::panel(LABEL, hint, settings.into())
+    super::panel(label(), hint, settings.into())
 }
 
 /// Bring the commented tag of the file at `path` in line with its comment.

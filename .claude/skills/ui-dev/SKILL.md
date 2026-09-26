@@ -73,6 +73,17 @@ Palette has 16 entries; index wraps modulo 16.
 
 ---
 
+## UI text
+
+Every word the user reads goes through `fl!("<feature>-<element>")` (`src/i18n.rs`), with an entry
+in both `i18n/en/frename.ftl` and `i18n/ru/frename.ftl`; the Russian one uses the glossary at the
+top of its file. `fl!` checks the id and its `$arguments` against the English file at compile time;
+tests fail on a key missing from `ru`, an unused key, a Russian plural without `one`/`few`/`many`,
+and English words left in a string literal of UI code. Counts are arguments with a plural selector
+in the message (`fl!("batch-run", count = n)`), never glued words. State holds meaning (enums,
+numbers, names), views turn it into words, so a language switch redraws everything on screen.
+Key names (`Esc`, `F12`), `IN`/`OUT` and tag names are not translated.
+
 ## Sizing conventions
 
 - `Length::Fill` — take all available space in the axis

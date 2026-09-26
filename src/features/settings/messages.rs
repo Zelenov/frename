@@ -7,6 +7,8 @@ use crate::features::batch::Operation;
 /// User changes in the settings window. Each one is saved immediately.
 #[derive(Debug, Clone)]
 pub enum Message {
+    /// The UI language code (`en`, `ru`); empty follows the OS language.
+    SetLanguage(String),
     /// Start playing videos as soon as they are opened.
     SetAutoplayVideo(bool),
     /// Draw every tag in one neutral color.

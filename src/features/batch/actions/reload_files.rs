@@ -9,15 +9,14 @@ use iced::Element;
 
 use super::super::{ItemResult, ItemStatus};
 
-pub const LABEL: &str = "Reset cache and reload";
+pub fn label() -> String {
+    fl!("batch-action-reload-files")
+}
 
 pub fn view<'a, M: 'a>() -> Element<'a, M> {
     super::panel(
-        LABEL,
-        "Reads the comment and in/out points of each checked file from the file itself again and \
-         replaces what the folder remembered for it. Use it after the files were changed in another \
-         program. Files whose remembered values were missing or out of date count as changed."
-            .to_string(),
+        label(),
+        fl!("batch-action-reload-files-hint"),
         column![].into(),
     )
 }

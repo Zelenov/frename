@@ -25,7 +25,7 @@ use iced::{Subscription, Task};
 use crate::features::batch::{self, BatchState, ItemResult, ItemStatus};
 use crate::features::file_name_panel::{self, FileNamePanelState};
 use crate::features::file_workspace::FileWorkspace;
-use crate::features::folder;
+use crate::features::folder::{self, RenameProblem};
 use crate::features::media_viewer::{self, video as media_viewer_video, MediaViewerState};
 use crate::features::sync_panel;
 use crate::features::tag_panel::{self, TagPanelState, TAG_LIST_SCROLLABLE_ID};
@@ -1756,21 +1756,21 @@ fn check_new_file_name(
     folder: &std::path::Path,
     current: &str,
     typed: &str,
-) -> Result<(), &'static str> {
+) -> Result<(), RenameProblem> {
     if typed.is_empty() {
-        return Err("Name is empty");
+        return Err(RenameProblem::Empty);
     }
     if typed.chars().any(|c| {
         matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || c.is_control()
     }) {
-        return Err("Not allowed: \\ / : * ? \" < > |");
+        return Err(RenameProblem::BadCharacter);
     }
     if typed.ends_with('.') || typed.ends_with(' ') {
-        return Err("Cannot end with a dot or space");
+        return Err(RenameProblem::TrailingDotOrSpace);
     }
     // A change of case only is the same file on Windows, not a clash.
     if !typed.eq_ignore_ascii_case(current) && folder.join(typed).exists() {
-        return Err("A file with this name exists");
+        return Err(RenameProblem::Exists);
     }
     Ok(())
 }
@@ -1785,6 +1785,7 @@ mod tests {
         AppDatabase, File, FileId, FileSnapshot, Initializable, LoggingAppStateStore,
     };
 
+    use crate::features::folder::RenameProblem;
     use crate::features::{batch, folder, tag_panel};
 
     use super::{Directory, FolderWorkspace, ItemResult, ItemStatus, Message};
@@ -2420,27 +2421,24 @@ mod tests {
         );
         assert!(
             crate::features::folder_workspace::state::check_new_file_name(&folder, "a.mp4", "")
-                .is_err()
+                == Err(RenameProblem::Empty)
         );
         assert!(
             crate::features::folder_workspace::state::check_new_file_name(
                 &folder, "a.mp4", "a:b.mp4"
-            )
-            .is_err()
+            ) == Err(RenameProblem::BadCharacter)
         );
         assert!(
             crate::features::folder_workspace::state::check_new_file_name(
                 &folder, "a.mp4", "a.mp4."
-            )
-            .is_err()
+            ) == Err(RenameProblem::TrailingDotOrSpace)
         );
         assert!(
             crate::features::folder_workspace::state::check_new_file_name(
                 &folder,
                 "a.mp4",
                 "taken.mp4"
-            )
-            .is_err(),
+            ) == Err(RenameProblem::Exists),
             "must not overwrite"
         );
         assert_eq!(

@@ -143,7 +143,7 @@ fn save_png(shot: &window::Screenshot, expected: (u32, u32), path: &Path) -> Res
         .map_err(|e| format!("cannot save {}: {e}", path.display()))
 }
 
-/// What `--demo <scenario> --out <png> [--batch] [--mono]` asks for.
+/// What `--demo <scenario> --out <png> [--batch] [--mono] [--lang <code>]` asks for.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DemoArgs {
     pub scenario: PathBuf,
@@ -152,6 +152,9 @@ pub struct DemoArgs {
     pub batch: bool,
     /// Turn on the monochrome tags setting.
     pub mono: bool,
+    /// The UI language setting: `en` unless given, so screenshots never follow the renderer's
+    /// OS language; `--lang ""` follows it (System).
+    pub lang: String,
 }
 
 /// The demo the command line asks for; `None` for a normal start.
@@ -165,14 +168,20 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
             .ok_or(format!("{flag} needs a value"))
     };
     let out_at = args.iter().position(|a| a == "--out");
+    let lang_at = args.iter().position(|a| a == "--lang");
     Some(value("--demo", Some(at)).and_then(|scenario| {
         let out =
             value("--out", out_at).map_err(|_| "--demo needs --out <file.png>".to_string())?;
+        let lang = match lang_at {
+            None => "en".to_string(),
+            Some(_) => value("--lang", lang_at)?.to_string_lossy().into_owned(),
+        };
         Ok(DemoArgs {
             scenario,
             out,
             batch: args.iter().any(|a| a == "--batch"),
             mono: args.iter().any(|a| a == "--mono"),
+            lang,
         })
     }))
 }
@@ -216,6 +225,7 @@ pub fn prepare(args: &DemoArgs, work: &Path) -> Result<DemoRun, String> {
         &folder,
         &file,
         args.mono,
+        &args.lang,
     );
     Ok(DemoRun::new(
         scenario,
@@ -246,18 +256,21 @@ mod tests {
                 scenario: "a.toml".into(),
                 out: "a.png".into(),
                 batch: false,
-                mono: false
+                mono: false,
+                lang: "en".to_string(),
             }))
         );
         assert_eq!(
             demo_args(&args(&[
-                "frename", "--batch", "--out", "a.png", "--demo", "a.toml", "--mono"
+                "frename", "--batch", "--out", "a.png", "--demo", "a.toml", "--mono", "--lang",
+                "ru"
             ])),
             Some(Ok(DemoArgs {
                 scenario: "a.toml".into(),
                 out: "a.png".into(),
                 batch: true,
-                mono: true
+                mono: true,
+                lang: "ru".to_string(),
             }))
         );
     }

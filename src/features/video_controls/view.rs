@@ -79,7 +79,7 @@ pub fn view<'a>(
         .height(iced::Length::Fill)
         .padding(0)
         .style(theme::icon_button_style(true)),
-        text("[  Set In"),
+        text(fl!("video-controls-set-in")),
         tooltip::Position::Top,
     )
     .into();
@@ -95,7 +95,7 @@ pub fn view<'a>(
         .height(iced::Length::Fill)
         .padding(0)
         .style(theme::icon_button_style(true)),
-        text("]  Set Out"),
+        text(fl!("video-controls-set-out")),
         tooltip::Position::Top,
     )
     .into();
