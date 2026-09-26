@@ -7,9 +7,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
 use frename_core::ai::{
-    self, AiError, AiModel, AnthropicProvider, SummaryEstimate, SummaryLanguage,
+    self, AiError, AiModel, AnthropicProvider, SummarizeError, SummarizeOutcome, SummaryEstimate,
+    SummaryLanguage,
 };
-use frename_core::{FileTagger, FolderInfo, SaveAndReparse};
 use iced::widget::{button, checkbox, column, text};
 use iced::Element;
 
@@ -219,33 +219,9 @@ fn skipped_line(estimate: &SummaryEstimate) -> Option<String> {
     (!parts.is_empty()).then(|| format!("{} are skipped.", parts.join(" and ")))
 }
 
-/// Work out the estimate for the files at `paths`. Blocking: reads their subtitles and, when
-/// summarized videos are not redone, their comments.
+/// Work out the estimate for the files at `paths`. Blocking.
 pub fn estimate(paths: &[PathBuf], job: Job) -> SummaryEstimate {
-    let mut estimate = SummaryEstimate::default();
-    for path in paths {
-        let Some(subtitles) = frename_core::load_subtitles(path) else {
-            estimate.without_subtitles += 1;
-            continue;
-        };
-        if !job.redo && ai::has_ai_block(&comment(path)) {
-            estimate.already_summarized += 1;
-            continue;
-        }
-        estimate.add_video(ai::summary_prompt(&subtitles, job.language).chars().count());
-    }
-    estimate
-}
-
-/// The comment of the file at `path`, read from the file when the folder scan deferred it.
-fn comment(path: &Path) -> String {
-    let snapshot = FileTagger::parse(path, &FolderInfo::default());
-    let snapshot = if snapshot.comment_loading() {
-        FileTagger::load_comment(path, &snapshot)
-    } else {
-        snapshot
-    };
-    snapshot.comment().to_string()
+    ai::estimate_files(paths, job.language, job.redo)
 }
 
 /// Summarize the video at `path` and write the summary into its comment.
@@ -257,53 +233,41 @@ pub fn run(job: Job, path: &Path, cancel: &AtomicBool) -> ItemResult {
             ..ItemResult::failed("No Anthropic API key")
         };
     };
-    let Some(subtitles) = frename_core::load_subtitles(path) else {
-        return ItemResult::new(ItemStatus::Skipped, None);
-    };
-    let mut snapshot = FileTagger::parse(path, &FolderInfo::default());
-    if snapshot.comment_loading() {
-        snapshot = FileTagger::load_comment(path, &snapshot);
-    }
-    // Writing over a comment that was never read would lose it.
-    if snapshot.comment_loading() {
-        return ItemResult::failed("The comment could not be read");
-    }
-    if !job.redo && ai::has_ai_block(snapshot.comment()) {
-        return ItemResult::new(ItemStatus::Skipped, None);
-    }
-
     let provider = AnthropicProvider::new(key);
-    let (summary, usage) =
-        match ai::summarize(&provider, job.model, job.language, &subtitles, cancel) {
-            Ok(answer) => answer,
-            Err(AiError::Cancelled) => return ItemResult::new(ItemStatus::Skipped, None),
-            Err(error) => {
-                log::warn!("ai summary: {}: {error}", path.display());
-                return ItemResult {
-                    stop_job: error.stops_job(),
-                    ..ItemResult::failed(error.to_string())
-                };
+    match ai::summarize_file(&provider, path, job.model, job.language, job.redo, cancel) {
+        Ok(SummarizeOutcome::Written {
+            path: new_path,
+            snapshot,
+            usage,
+        }) => {
+            log::info!(
+                "ai summary: {} with {}: {} input + {} output tokens, ${:.4}",
+                path.display(),
+                job.model.label(),
+                usage.input_tokens,
+                usage.output_tokens,
+                usage.cost(job.model)
+            );
+            ItemResult::new(ItemStatus::Done, Some((new_path, *snapshot)))
+        }
+        Ok(SummarizeOutcome::NoSubtitles | SummarizeOutcome::AlreadySummarized)
+        | Err(SummarizeError::Ai(AiError::Cancelled)) => ItemResult::new(ItemStatus::Skipped, None),
+        Err(error) => {
+            log::warn!("ai summary: {}: {error}", path.display());
+            let stop_job = matches!(&error, SummarizeError::Ai(e) if e.stops_job());
+            let update = match &error {
+                SummarizeError::NotSaved { path, snapshot } => {
+                    Some((path.clone(), (**snapshot).clone()))
+                }
+                _ => None,
+            };
+            ItemResult {
+                stop_job,
+                update,
+                ..ItemResult::failed(error.to_string())
             }
-        };
-    log::info!(
-        "ai summary: {} with {}: {} input + {} output tokens, ${:.4}",
-        path.display(),
-        job.model.label(),
-        usage.input_tokens,
-        usage.output_tokens,
-        usage.cost(job.model)
-    );
-
-    let block = ai::format_ai_block(&summary, job.model.label(), &ai::today());
-    snapshot.set_comment(ai::replace_ai_block(snapshot.comment(), &block));
-    let (new_path, saved) = snapshot.save_and_reparse(path);
-    if ai::ai_block(saved.comment()) != Some(block.as_str()) {
-        return ItemResult {
-            update: Some((new_path, saved)),
-            ..ItemResult::failed("The comment could not be saved")
-        };
+        }
     }
-    ItemResult::new(ItemStatus::Done, Some((new_path, saved)))
 }
 
 #[cfg(test)]
@@ -368,27 +332,5 @@ mod tests {
         );
         assert_eq!(skipped_line(&none), None);
         assert_eq!(dollars(0.004), "under $0.01");
-    }
-
-    #[test]
-    fn the_estimate_counts_videos_with_subtitles_and_skips_summarized_ones() {
-        let dir = std::env::temp_dir().join(format!("frename-ai-estimate-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        let with = dir.join("talk.mp4");
-        let without = dir.join("broll.mp4");
-        std::fs::write(
-            frename_core::subtitle_path(&with),
-            "1\n00:00:00,000 --> 00:00:04,000\nHello\n",
-        )
-        .expect("srt");
-        let job = Job {
-            model: AiModel::ClaudeHaiku45,
-            language: SummaryLanguage::English,
-            redo: false,
-        };
-        let estimate = estimate(&[with, without], job);
-        assert_eq!((estimate.videos, estimate.without_subtitles), (1, 1));
-        assert!(estimate.usage.input_tokens > 0);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

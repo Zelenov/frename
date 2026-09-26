@@ -22,8 +22,10 @@ pub struct FileWorkspace<S> {
     store: S,
     /// Stored tags with checked state (synced from file on load; toggles update only this, not the file).
     tag_list: TagList<S>,
-    /// Backing state for the multiline comment editor.
+    /// Backing state for the multiline comment editor: the editor's part of the comment.
     pub comment_content: text_editor::Content,
+    /// The comment's AI block, kept apart from the box and joined after its text on every edit.
+    ai_block: Option<String>,
 }
 
 impl<S: StoredTagStore + Clone> FileWorkspace<S> {
@@ -35,6 +37,7 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
             store: store.clone(),
             tag_list: TagList::new(store, FileSnapshot::default()),
             comment_content: text_editor::Content::new(),
+            ai_block: None,
         }
     }
 
@@ -44,6 +47,7 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
             None => {
                 self.loading = false;
                 self.file = None;
+                self.ai_block = None;
                 self.tag_list = TagList::new(self.store.clone(), FileSnapshot::default());
             }
             Some(f) => {
@@ -58,6 +62,7 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
                 // The box holds the editor's text; the AI block is shown apart, read-only.
                 self.comment_content =
                     text_editor::Content::with_text(&ai::editor_comment(snapshot.comment()));
+                self.ai_block = ai::ai_block(snapshot.comment()).map(str::to_string);
                 self.file = Some(f);
                 self.tag_list = TagList::new(self.store.clone(), snapshot);
             }
@@ -87,14 +92,15 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.store.get_tag_color_mapping().unwrap_or_default()
     }
 
-    /// The editor's part of the comment: the whole comment without its AI block.
+    /// The editor's part of the comment: what the box holds, without the AI block.
     pub fn comment(&self) -> String {
-        ai::editor_comment(self.tag_list.comment())
+        let text = self.comment_content.text();
+        text.trim_end_matches('\n').to_string()
     }
 
     /// The comment's AI block, shown read-only under the editable box.
     pub fn ai_block(&self) -> Option<&str> {
-        ai::ai_block(self.tag_list.comment())
+        self.ai_block.as_deref()
     }
 
     /// Replace the editor's part of the comment (does not write to disk); the AI block stays.
@@ -117,17 +123,21 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
 
     /// Remove the AI block from the comment, keeping the editor's text.
     pub fn remove_ai_block(&mut self) {
+        self.ai_block = None;
         let editor = self.comment();
-        self.store_comment(editor);
+        self.store_editor_comment(&editor);
     }
 
     /// Store the editor's text joined with the comment's AI block, which stays as it is.
     fn store_editor_comment(&mut self, editor: &str) {
-        let block = self.ai_block().unwrap_or_default().to_string();
-        let comment = if block.is_empty() {
-            editor.to_string()
-        } else {
-            ai::replace_ai_block(editor, &block)
+        // Appended as is, not re-parsed: text the editor pastes into the box is never taken
+        // for a block.
+        let comment = match &self.ai_block {
+            Some(block) if !editor.trim().is_empty() => {
+                format!("{}\n\n{block}", editor.trim_end())
+            }
+            Some(block) => block.clone(),
+            None => editor.to_string(),
         };
         self.store_comment(comment);
     }
@@ -316,7 +326,21 @@ mod tests {
         workspace.set_comment("0:12: ".to_string());
         // Trailing space goes with the blank line before the block; the box keeps it.
         assert_eq!(workspace.tag_list().comment(), format!("0:12:\n\n{BLOCK}"));
-        assert_eq!(workspace.comment(), "0:12:");
+        assert_eq!(workspace.comment(), "0:12: ", "what the box holds");
+    }
+
+    #[test]
+    fn a_pasted_old_summary_stays_the_editors_text() {
+        let mut workspace = workspace_with_comment(BLOCK);
+        let pasted = "AI: Old.\n— Claude Opus 5, 2026-01-01 —";
+        workspace.set_comment(pasted.to_string());
+        workspace.apply_comment_action(Action::Edit(Edit::Insert('!')));
+        assert_eq!(
+            workspace.tag_list().comment(),
+            format!("{pasted}!\n\n{BLOCK}"),
+            "one block, the pasted text kept as typed"
+        );
+        assert_eq!(workspace.ai_block(), Some(BLOCK));
     }
 
     #[test]

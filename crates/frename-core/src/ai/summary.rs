@@ -112,6 +112,8 @@ pub fn parse_summary(answer: &Value, subtitles: &Subtitles) -> Result<AiSummary,
         if !valid || description.is_empty() || segments.len() as u64 >= MAX_SEGMENTS {
             continue;
         }
+        // A minute past the last cue at most: also keeps a huge number from overflowing.
+        let end = end.min(last + 60.0);
         segments.push(AiSegment {
             start: Duration::from_secs_f64(start),
             end: Duration::from_secs_f64(end),
@@ -214,7 +216,7 @@ mod tests {
                 {"start_s": 0, "end_s": 30, "description": "Greeting"},
                 {"start_s": 20, "end_s": 40, "description": "Overlaps"},
                 {"start_s": 60, "end_s": 50, "description": "Backwards"},
-                {"start_s": 60, "end_s": 95, "description": "Beets"},
+                {"start_s": 60, "end_s": 1e300, "description": "Beets"},
                 {"start_s": 95, "end_s": 99, "description": " "},
                 {"start_s": 200, "end_s": 300, "description": "After the end"}
             ]
@@ -227,6 +229,7 @@ mod tests {
             .map(|s| s.description.as_str())
             .collect();
         assert_eq!(kept, ["Greeting", "Beets"]);
+        assert_eq!(summary.segments[1].end, Duration::from_secs(150), "clamped");
     }
 
     #[test]

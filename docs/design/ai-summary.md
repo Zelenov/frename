@@ -74,9 +74,15 @@ a request being model + prompt + JSON schema. `AnthropicProvider` sends raw HTTP
 `POST /v1/messages` (there is no official Rust SDK) through an `HttpTransport` trait, so the retry
 and error logic is tested with a fake transport and no network.
 
+- Per file, `frename-core::ai::summarize_file` reads the subtitles and the comment (loading a
+  deferred one first; an unreadable comment fails the file rather than being overwritten), skips
+  already summarized videos unless *Redo*, asks the provider, writes the block through the normal
+  save path and checks it came back. The app's action only maps the outcome to the job's result
+  and builds the provider.
 - Structured output: `output_config.format` with a strict schema
   `{summary, segments: [{start_s, end_s, description}]}`; the answer is still validated (empty
-  summary fails; backwards, overlapping or out-of-range segments are dropped; at most 8).
+  summary fails; backwards, overlapping or out-of-range segments are dropped, an end is clamped to
+  a minute past the last cue; at most 8).
 - Opus 5 and Sonnet 5 run with `effort: low` (a summary is a simple task; keeps thinking short and
   cheap). Opus 5 requests carry `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`), so
   a request a safety classifier declines is re-run on Anthropic's recommended fallback model.
@@ -107,7 +113,9 @@ file are written to the log.
 
 ## Tests
 
-- Core, no network: block format/parse/replace (editor text byte-identical, unterminated block
+- Core, no network: `summarize_file` with a mock `AiProvider` on files (block added after the
+  editor's text, a redo replaces only the block, no request without *Redo*, a failed request
+  leaves the comment, no subtitles → nothing sent), `estimate_files`; block format/parse/replace (editor text byte-identical, unterminated block
   left alone, `--` end line, text after a block, CRLF, Cyrillic, emoji), `has_editor_comment`,
   prompt and schema, answer validation, estimate, retry/rate-limit/timeout/key/credit handling
   with a fake transport, request body per model, settings round trip in the database.
@@ -121,5 +129,5 @@ file are written to the log.
 
 ChatGPT (OpenAI) is the owner's second provider. It fits `AiProvider` (chat completions with a
 `json_schema` response format) plus a provider choice and a second key in Settings. It is left for
-a follow-up: api.openai.com is not reachable from the agent environment, so it could not be
-tested end to end here.
+a follow-up (#39): api.openai.com is not reachable from the agent environment, so it could not be
+tested end to end here. Error messages are worded without a provider name for that reason.

@@ -74,11 +74,11 @@ impl AiError {
 impl std::fmt::Display for AiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::KeyRejected => write!(f, "Anthropic rejected the API key"),
-            Self::NoCredit => write!(f, "The Anthropic account has no credit left"),
-            Self::BadRequest(message) => write!(f, "Anthropic refused the request: {message}"),
+            Self::KeyRejected => write!(f, "The API key was rejected"),
+            Self::NoCredit => write!(f, "The API account has no credit left"),
+            Self::BadRequest(message) => write!(f, "The request was refused: {message}"),
             Self::Timeout => write!(f, "No answer within {} s", REQUEST_TIMEOUT.as_secs()),
-            Self::Unavailable(why) => write!(f, "Anthropic is not reachable: {why}"),
+            Self::Unavailable(why) => write!(f, "The AI service is not reachable: {why}"),
             Self::Refused => write!(f, "The model declined to summarize this video"),
             Self::Truncated => write!(f, "The answer was cut off"),
             Self::InvalidAnswer(why) => write!(f, "Unreadable answer: {why}"),

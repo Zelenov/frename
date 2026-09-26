@@ -43,8 +43,9 @@ impl FileTagger {
     }
 
     /// Bring the tag `tag` in line with the file's comment: added last when the file has a
-    /// comment of the editor's, removed when it has none (an AI block alone does not count). Returns the outcome like a move: `NothingToMove` when
-    /// the name already matches, `Failed` when the rename did not happen.
+    /// comment of the editor's, removed when it has none (an AI block alone does not count).
+    /// Returns the outcome like a move: `NothingToMove` when the name already matches, `Failed`
+    /// when the rename did not happen.
     pub fn sync_commented_tag(path: &Path, tag: &str) -> MoveOutcome {
         let mut snapshot = Self::parse(path, &FolderInfo::default());
         let commented = crate::ai::has_editor_comment(snapshot.comment());

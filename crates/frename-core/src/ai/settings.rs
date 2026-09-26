@@ -58,12 +58,7 @@ impl AiModel {
         }
     }
 
-    /// Name stored in the app database.
-    pub fn as_str(self) -> &'static str {
-        self.id()
-    }
-
-    /// Parse a stored name; unknown names fall back to the default.
+    /// Parse a stored [`Self::id`]; unknown names fall back to the default.
     pub fn from_name(name: &str) -> Self {
         Self::ALL
             .into_iter()
@@ -186,7 +181,7 @@ mod tests {
     #[test]
     fn stored_names_round_trip_and_unknown_ones_fall_back() {
         for model in AiModel::ALL {
-            assert_eq!(AiModel::from_name(model.as_str()), model);
+            assert_eq!(AiModel::from_name(model.id()), model);
         }
         for language in SummaryLanguage::ALL {
             assert_eq!(SummaryLanguage::from_name(language.as_str()), language);

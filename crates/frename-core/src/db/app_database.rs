@@ -220,7 +220,7 @@ impl AppStateStore for AppDatabase {
                     settings.commented_tag,
                     settings.commented_tag_enabled,
                     settings.space_after_tags,
-                    settings.ai_model.as_str(),
+                    settings.ai_model.id(),
                     settings.summary_language.as_str(),
                     settings.anthropic_api_key,
                 ],
