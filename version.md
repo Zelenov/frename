@@ -1,4 +1,4 @@
-# NEXT
+# 0.67
 ## Added
 - A Linux version: one AppImage file from the release page, with video playback built in.
 
