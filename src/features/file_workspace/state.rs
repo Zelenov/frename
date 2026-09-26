@@ -25,7 +25,18 @@ pub struct FileWorkspace<S> {
     /// Backing state for the multiline comment editor: the whole comment, its AI description
     /// included, edited as plain text.
     pub comment_content: text_editor::Content,
+    /// Height of the comment box, set by dragging the handle above it.
+    comment_height: f32,
+    /// The comment box takes the whole panel instead of the tags.
+    comment_expanded: bool,
 }
+
+/// Height of the comment box until it is resized.
+pub const COMMENT_HEIGHT: f32 = 80.0;
+/// The comment box keeps at least about two lines.
+pub const COMMENT_MIN_HEIGHT: f32 = 48.0;
+/// And leaves the tags room: taller than this, "Expand" is the way.
+pub const COMMENT_MAX_HEIGHT: f32 = 600.0;
 
 impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     /// Create a file workspace with the given store. Tag list is built from the store; no file selected.
@@ -36,6 +47,8 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
             store: store.clone(),
             tag_list: TagList::new(store, FileSnapshot::default()),
             comment_content: text_editor::Content::new(),
+            comment_height: COMMENT_HEIGHT,
+            comment_expanded: false,
         }
     }
 
@@ -92,6 +105,33 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     /// Tag name -> color index mapping (for rendering file name chips in lists).
     pub fn tag_color_mapping(&self) -> TagColorMapping {
         self.store.get_tag_color_mapping().unwrap_or_default()
+    }
+
+    /// Height of the comment box when it does not take the whole panel.
+    pub fn comment_height(&self) -> f32 {
+        self.comment_height
+    }
+
+    /// Whether the comment box takes the whole panel instead of the tags.
+    pub fn comment_expanded(&self) -> bool {
+        self.comment_expanded
+    }
+
+    /// Resize the comment box, within [`COMMENT_MIN_HEIGHT`]..=[`COMMENT_MAX_HEIGHT`], or let it
+    /// take the whole panel.
+    pub fn update_comment_layout(&mut self, layout: super::CommentLayout) {
+        match layout {
+            super::CommentLayout::Grow(by) => {
+                self.comment_height =
+                    (self.comment_height + by).clamp(COMMENT_MIN_HEIGHT, COMMENT_MAX_HEIGHT);
+            }
+            super::CommentLayout::ToggleExpanded => self.comment_expanded = !self.comment_expanded,
+        }
+    }
+
+    /// Whether the comment's cursor is on its last line.
+    pub fn comment_cursor_on_last_line(&self) -> bool {
+        self.comment_content.cursor().position.line + 1 >= self.comment_content.line_count()
     }
 
     /// Apply a text_editor action to the comment content and sync the string to tag_list.
@@ -249,6 +289,7 @@ impl Default for FileWorkspace<FolderTagStore> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::features::file_workspace::CommentLayout;
     use iced::widget::text_editor::{Action, Edit};
     use std::time::SystemTime;
 
@@ -271,6 +312,43 @@ mod tests {
 
     fn tags(workspace: &FileWorkspace<FolderTagStore>) -> Vec<String> {
         workspace.tag_list().file_snapshot().tags().to_vec()
+    }
+
+    #[test]
+    fn the_comment_box_resizes_within_its_limits_and_expands() {
+        let mut workspace = open("");
+        assert_eq!(workspace.comment_height(), COMMENT_HEIGHT);
+        workspace.update_comment_layout(CommentLayout::Grow(40.0));
+        assert_eq!(workspace.comment_height(), COMMENT_HEIGHT + 40.0);
+        workspace.update_comment_layout(CommentLayout::Grow(-10_000.0));
+        assert_eq!(workspace.comment_height(), COMMENT_MIN_HEIGHT);
+        workspace.update_comment_layout(CommentLayout::Grow(10_000.0));
+        assert_eq!(workspace.comment_height(), COMMENT_MAX_HEIGHT);
+
+        assert!(!workspace.comment_expanded());
+        workspace.update_comment_layout(CommentLayout::ToggleExpanded);
+        assert!(workspace.comment_expanded());
+        workspace.update_comment_layout(CommentLayout::ToggleExpanded);
+        assert!(!workspace.comment_expanded());
+        assert_eq!(
+            workspace.comment_height(),
+            COMMENT_MAX_HEIGHT,
+            "collapsing gives the box its height back"
+        );
+    }
+
+    #[test]
+    fn typing_on_the_last_line_is_told_apart() {
+        let mut workspace = open(
+            "one
+two",
+        );
+        assert!(
+            !workspace.comment_cursor_on_last_line(),
+            "starts at the top"
+        );
+        workspace.apply_comment_action(Action::Move(text_editor::Motion::DocumentEnd));
+        assert!(workspace.comment_cursor_on_last_line());
     }
 
     #[test]

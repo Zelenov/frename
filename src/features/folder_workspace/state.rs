@@ -269,7 +269,20 @@ impl FolderWorkspace {
                 media_viewer::Message::Video(media_viewer_video::Message::CaptureSegmentEnd),
             )),
             Message::CommentAction(action) => {
+                let typed = matches!(action, iced::widget::text_editor::Action::Edit(_));
                 self.file_workspace.apply_comment_action(action);
+                // The box grows with its text inside a scrollable: typing on the last line
+                // keeps that line in view.
+                if typed && self.file_workspace.comment_cursor_on_last_line() {
+                    iced::widget::operation::snap_to_end(iced::widget::Id::new(
+                        crate::features::file_workspace::view::COMMENT_SCROLLABLE_ID,
+                    ))
+                } else {
+                    Task::none()
+                }
+            }
+            Message::CommentLayout(layout) => {
+                self.file_workspace.update_comment_layout(layout);
                 Task::none()
             }
             // Save the frame next to the video, like VLC's snapshot, and forget it.
