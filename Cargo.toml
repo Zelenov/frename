@@ -63,7 +63,7 @@ ureq = { version = "3", default-features = false }
 dirs = "6"
 
 # Subtitles from speech (Soniox), as a library: no command line parts.
-sonisub = { version = "0.2", default-features = false }
+sonisub = { version = "0.3", default-features = false }
 # sonisub's errors, and its progress bars: frename hands it a hidden one (same version as sonisub).
 anyhow = "1"
 indicatif = "0.18"
