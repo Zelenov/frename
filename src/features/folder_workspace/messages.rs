@@ -85,6 +85,8 @@ pub enum Message {
     SetSegmentEnd,
     /// User interacted with the multiline comment editor.
     CommentAction(text_editor::Action),
+    /// Show the AI description's segments, or remove it.
+    AiBlock(crate::features::file_workspace::AiBlockMessage),
     /// Screenshot captured at position (ms) with JPEG bytes.
     ScreenshotTaken(u64, Vec<u8>),
     /// Open a native file picker dialog so the user can choose a file to open.
@@ -97,7 +99,8 @@ pub enum Message {
     /// A file of the running batch job is done (internal).
     BatchItemDone {
         id: FileId,
-        result: batch::ItemResult,
+        /// Boxed: it is much larger than the other messages.
+        result: Box<batch::ItemResult>,
     },
     /// The batch job ended, finished or cancelled (internal): the open file comes back.
     BatchFinished,
