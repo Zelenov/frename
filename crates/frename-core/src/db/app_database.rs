@@ -10,7 +10,7 @@ use std::time::Duration;
 use rusqlite::Connection;
 
 use crate::ai::SummaryLanguage;
-use crate::{CommentStorage, FolderAndFile, InOutStorage};
+use crate::{CommentStorage, CueLength, FolderAndFile, InOutStorage};
 
 use super::migrations;
 use super::traits::{
@@ -179,7 +179,7 @@ impl AppStateStore for AppDatabase {
         let conn = lock_connection(&conn);
         conn.query_row(
             "SELECT autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled,
-                    space_after_tags, summary_language, ai_model
+                    space_after_tags, summary_language, ai_model, subtitle_languages, subtitle_cue_length
              FROM app_settings WHERE id = 1",
             [],
             |row| Ok(AppSettings {
@@ -192,6 +192,13 @@ impl AppStateStore for AppDatabase {
                 space_after_tags: row.get::<_, i64>(6)? != 0,
                 summary_language: SummaryLanguage::from_name(&row.get::<_, String>(7)?),
                 ai_model: row.get::<_, String>(8)?,
+                subtitle_languages: row
+                    .get::<_, String>(9)?
+                    .split(',')
+                    .filter(|code| !code.is_empty())
+                    .map(str::to_string)
+                    .collect(),
+                subtitle_cue_length: CueLength::from_name(&row.get::<_, String>(10)?),
             }),
         ).ok()
     }
@@ -200,8 +207,9 @@ impl AppStateStore for AppDatabase {
         if let Ok(conn) = self.conn() {
             let conn = lock_connection(&conn);
             let _ = conn.execute(
-                "INSERT INTO app_settings (id, autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled, space_after_tags, summary_language, ai_model)
-                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                "INSERT INTO app_settings (id, autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled, space_after_tags, summary_language, ai_model,
+                                           subtitle_languages, subtitle_cue_length)
+                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                  ON CONFLICT(id) DO UPDATE SET
                      autoplay_video = excluded.autoplay_video,
                      monochrome_tags = excluded.monochrome_tags,
@@ -211,7 +219,9 @@ impl AppStateStore for AppDatabase {
                      commented_tag_enabled = excluded.commented_tag_enabled,
                      space_after_tags = excluded.space_after_tags,
                      summary_language = excluded.summary_language,
-                     ai_model = excluded.ai_model",
+                     ai_model = excluded.ai_model,
+                     subtitle_languages = excluded.subtitle_languages,
+                     subtitle_cue_length = excluded.subtitle_cue_length",
                 rusqlite::params![
                     settings.autoplay_video,
                     settings.monochrome_tags,
@@ -222,6 +232,8 @@ impl AppStateStore for AppDatabase {
                     settings.space_after_tags,
                     settings.summary_language.as_str(),
                     settings.ai_model,
+                    settings.subtitle_languages.join(","),
+                    settings.subtitle_cue_length.as_str(),
                 ],
             );
         }
@@ -324,5 +336,28 @@ mod tests {
         };
         db.set_update_check(state.clone());
         assert_eq!(db.get_update_check(), Some(state));
+    }
+
+    #[test]
+    fn app_settings_round_trip_with_the_subtitle_settings() {
+        let path = std::env::temp_dir().join(format!(
+            "frename-subtitle-settings-{}.db",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let db = AppDatabase::with_path(&path);
+        db.initialize().expect("migrate");
+
+        let mut settings = AppSettings::default();
+        assert_eq!(settings.subtitle_languages, ["en", "ru"]);
+        settings.subtitle_languages = vec!["de".into(), "fr".into()];
+        settings.subtitle_cue_length = CueLength::Sentence;
+        db.set_app_settings(settings.clone());
+        assert_eq!(db.get_app_settings(), Some(settings.clone()));
+
+        // No language checked: detect automatically.
+        settings.subtitle_languages.clear();
+        db.set_app_settings(settings.clone());
+        assert_eq!(db.get_app_settings(), Some(settings));
     }
 }

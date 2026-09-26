@@ -1,9 +1,9 @@
 //! UI for the settings window.
 
 use clipscribe::{Model, MODELS};
-use frename_core::ai::key::KeyState;
+use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::ai::SummaryLanguage;
-use frename_core::{CommentStorage, InOutStorage};
+use frename_core::{CommentStorage, CueLength, InOutStorage, SUBTITLE_LANGUAGES};
 use iced::widget::{
     button, checkbox, column, container, pick_list, radio, row, scrollable, text, text_input,
 };
@@ -17,8 +17,8 @@ use super::{KeyMessage, Message, SettingsState};
 use crate::features::batch::Operation;
 use crate::features::updates;
 
-/// The settings' scrollable content, which "Describe with AI" opens scrolled to its end, where
-/// the AI section is.
+/// The settings' scrollable content, which "Describe with AI" and "Generate subtitles" open
+/// scrolled to its end, where their sections are.
 pub const SETTINGS_SCROLLABLE_ID: &str = "settings-content";
 
 /// Render the settings window: one titled section per area, one control per setting.
@@ -146,15 +146,25 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
             old_settings_import(state.old_settings_import()),
         ));
     }
-    // Last, so "Describe with AI" can open the window scrolled to its end, at this section.
-    sections = sections.push(section(
-        "AI",
-        ai_options(
-            state.key(),
-            settings.summary_language,
-            Model::from_id(&settings.ai_model),
-        ),
-    ));
+    // Last, so "Describe with AI" and "Generate subtitles" can open the window scrolled to its
+    // end, at these sections.
+    sections = sections
+        .push(section(
+            "AI",
+            ai_options(
+                state.key(ApiKey::Anthropic),
+                settings.summary_language,
+                Model::from_id(&settings.ai_model),
+            ),
+        ))
+        .push(section(
+            "Subtitles",
+            subtitle_options(
+                state.key(ApiKey::Soniox),
+                &settings.subtitle_languages,
+                settings.subtitle_cue_length,
+            ),
+        ));
 
     // The window is not resizable: whatever does not fit scrolls.
     container(
@@ -171,6 +181,120 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
 /// The AI section: the Anthropic API key, and the model and language of descriptions.
 fn ai_options(key: &KeySection, language: SummaryLanguage, model: Model) -> Element<'_, Message> {
     let muted = |line: &'static str| text(line).size(12).color(theme::TEXT_MUTED);
+    key_block(
+        ApiKey::Anthropic,
+        key,
+        "Anthropic API key",
+        "sk-ant-…",
+        "Get a key at console.anthropic.com → API keys.",
+    )
+    .push(
+        row![
+            text("Model").size(13),
+            pick_list(MODELS, Some(model), Message::SetAiModel)
+                .text_size(13)
+                .padding([3, 8]),
+        ]
+        .spacing(12)
+        .align_y(iced::Alignment::Center),
+    )
+    .push(
+        row![
+            text("Description language").size(13),
+            pick_list(
+                SummaryLanguage::ALL,
+                Some(language),
+                Message::SetSummaryLanguage
+            )
+            .text_size(13)
+            .padding([3, 8]),
+        ]
+        .spacing(12)
+        .align_y(iced::Alignment::Center),
+    )
+    .push(muted(
+        "Used by Describe with AI in batch mode. Haiku is the cheapest and fine for most \
+         clips; Sonnet and Opus notice more and cost more.",
+    ))
+    .into()
+}
+
+/// The Subtitles section: the Soniox API key, the languages spoken in the footage, and how
+/// long a cue may get.
+fn subtitle_options<'a>(
+    key: &'a KeySection,
+    languages: &'a [String],
+    cue_length: CueLength,
+) -> Element<'a, Message> {
+    let muted = |line: &'static str| text(line).size(12).color(theme::TEXT_MUTED);
+    let checked = |code: &str| languages.iter().any(|l| l == code);
+    let language_rows = SUBTITLE_LANGUAGES.chunks(3).map(|chunk| {
+        row(chunk.iter().map(|(code, name)| {
+            let code = code.to_string();
+            checkbox(checked(&code))
+                .label(*name)
+                .text_size(13)
+                .on_toggle(move |on| Message::SetSubtitleLanguage(code.clone(), on))
+                .width(Length::Fixed(110.0))
+                .into()
+        }))
+        .spacing(8)
+        .into()
+    });
+    let hint = if languages.is_empty() {
+        "None checked: detected automatically."
+    } else {
+        "The languages spoken in the footage, as hints."
+    };
+    let selected = Some(cue_length);
+    key_block(
+        ApiKey::Soniox,
+        key,
+        "Soniox API key",
+        "Paste the key",
+        "Get a key at console.soniox.com. The audio is sent to Soniox to transcribe it.",
+    )
+    .push(text("Languages").size(13))
+    .extend(language_rows)
+    .push(muted(hint))
+    .push(
+        row![
+            text("Cue length").size(13),
+            radio(
+                "Short (one line, up to 8 s)",
+                CueLength::Short,
+                selected,
+                Message::SetSubtitleCueLength,
+            )
+            .text_size(13),
+            radio(
+                "One sentence",
+                CueLength::Sentence,
+                selected,
+                Message::SetSubtitleCueLength,
+            )
+            .text_size(13),
+        ]
+        .spacing(12)
+        .align_y(iced::Alignment::Center),
+    )
+    .push(muted(
+        "Used by Generate subtitles in batch mode. The cue length applies to new subtitles.",
+    ))
+    .into()
+}
+
+/// An API key's field (or "Key saved" with Replace / Remove), where it is kept, and where to
+/// get one.
+fn key_block<'a>(
+    which: ApiKey,
+    key: &'a KeySection,
+    label: &'static str,
+    placeholder: &'static str,
+    get_one: &'static str,
+) -> iced::widget::Column<'a, Message> {
+    let muted = |line: &'static str| text(line).size(12).color(theme::TEXT_MUTED);
+    let message = move |m: KeyMessage| Message::Key(which, m);
     let store = if cfg!(windows) {
         "Windows Credential Manager"
     } else if cfg!(target_os = "macos") {
@@ -187,8 +311,8 @@ fn ai_options(key: &KeySection, language: SummaryLanguage, model: Model) -> Elem
         Some(KeyState::Saved) if key.confirm_remove => column![
             text("Remove the saved key? You will need to paste it again.").size(12),
             row![
-                small_button("Remove", Message::Key(KeyMessage::Remove)),
-                small_button("Keep", Message::Key(KeyMessage::CancelRemove)),
+                small_button("Remove", message(KeyMessage::Remove)),
+                small_button("Keep", message(KeyMessage::CancelRemove)),
             ]
             .spacing(8),
         ]
@@ -196,23 +320,23 @@ fn ai_options(key: &KeySection, language: SummaryLanguage, model: Model) -> Elem
         .into(),
         Some(KeyState::Saved) if !key.replacing => row![
             text("Key saved").size(13),
-            small_button("Replace", Message::Key(KeyMessage::Replace)),
-            small_button("Remove", Message::Key(KeyMessage::AskRemove)),
+            small_button("Replace", message(KeyMessage::Replace)),
+            small_button("Remove", message(KeyMessage::AskRemove)),
         ]
         .spacing(8)
         .align_y(iced::Alignment::Center)
         .into(),
         _ => {
             let can_save = !key.input.trim().is_empty();
-            let save = can_save.then_some(Message::Key(KeyMessage::Save));
+            let save = can_save.then_some(message(KeyMessage::Save));
             let cancel = key
                 .replacing
-                .then(|| small_button("Cancel", Message::Key(KeyMessage::CancelReplace)));
+                .then(|| small_button("Cancel", message(KeyMessage::CancelReplace)));
             // The buttons go under the field, so the row fits the window with Cancel too.
             column![
-                text_input("sk-ant-…", &key.input)
+                text_input(placeholder, &key.input)
                     .secure(!key.shown)
-                    .on_input(|input| Message::Key(KeyMessage::Input(input)))
+                    .on_input(move |input| message(KeyMessage::Input(input)))
                     .on_submit_maybe(save.clone())
                     .size(13)
                     .padding([3, 6])
@@ -220,7 +344,7 @@ fn ai_options(key: &KeySection, language: SummaryLanguage, model: Model) -> Elem
                 row![
                     small_button(
                         if key.shown { "Hide" } else { "Show" },
-                        Message::Key(KeyMessage::ToggleShow)
+                        message(KeyMessage::ToggleShow)
                     ),
                     button(text("Save").size(12))
                         .on_press_maybe(save)
@@ -233,7 +357,7 @@ fn ai_options(key: &KeySection, language: SummaryLanguage, model: Model) -> Elem
             .into()
         }
     };
-    let mut options = column![row![text("Anthropic API key").size(13), key_row]
+    let mut options = column![row![text(label).size(13), key_row]
         .spacing(12)
         .align_y(iced::Alignment::Center)]
     .spacing(6);
@@ -252,41 +376,12 @@ fn ai_options(key: &KeySection, language: SummaryLanguage, model: Model) -> Elem
                     .size(12)
                     .color(theme::TEXT_MUTED),
             )
-            .push(muted("Get a key at console.anthropic.com → API keys.")),
+            .push(muted(get_one)),
     };
     if let Some(error) = &key.error {
         options = options.push(text(error.as_str()).size(12).color(theme::ERROR));
     }
     options
-        .push(
-            row![
-                text("Model").size(13),
-                pick_list(MODELS, Some(model), Message::SetAiModel)
-                    .text_size(13)
-                    .padding([3, 8]),
-            ]
-            .spacing(12)
-            .align_y(iced::Alignment::Center),
-        )
-        .push(
-            row![
-                text("Description language").size(13),
-                pick_list(
-                    SummaryLanguage::ALL,
-                    Some(language),
-                    Message::SetSummaryLanguage
-                )
-                .text_size(13)
-                .padding([3, 8]),
-            ]
-            .spacing(12)
-            .align_y(iced::Alignment::Center),
-        )
-        .push(muted(
-            "Used by Describe with AI in batch mode. Haiku is the cheapest and fine for most \
-             clips; Sonnet and Opus notice more and cost more.",
-        ))
-        .into()
 }
 
 fn small_button(label: &str, message: Message) -> Element<'_, Message> {

@@ -454,7 +454,7 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
         return ItemResult::new(ItemStatus::Skipped, None);
     }
     // Removed in the settings while the job runs: every later video would fail the same way.
-    let Some(api_key) = key::read_key() else {
+    let Some(api_key) = key::read_key(key::ApiKey::Anthropic) else {
         return ItemResult {
             stop_job: Some("Stopped: no Anthropic API key. Set one in Settings.".to_string()),
             ..ItemResult::failed("No API key")

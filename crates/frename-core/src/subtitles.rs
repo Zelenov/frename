@@ -5,7 +5,7 @@
 //! `{filename}.comment.txt` sidecars frename creates itself. Parsing and the file name are
 //! clipscribe's (`clipscribe::srt`), which describes clips from the same files.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 pub use clipscribe::srt::subtitle_path;
@@ -55,6 +55,54 @@ impl Subtitles {
     }
 }
 
+/// How long a generated subtitle cue may get.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CueLength {
+    /// One line of up to 100 characters and at most 8 s per cue.
+    #[default]
+    Short,
+    /// One sentence per cue, however long.
+    Sentence,
+}
+
+impl CueLength {
+    /// Stable name for persisting the setting.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Short => "short",
+            Self::Sentence => "sentence",
+        }
+    }
+
+    /// Parse a persisted name; unknown names fall back to the default.
+    pub fn from_name(name: &str) -> Self {
+        match name {
+            "sentence" => Self::Sentence,
+            _ => Self::Short,
+        }
+    }
+}
+
+/// Languages offered as hints for generating subtitles: code sent to the service, and name.
+pub const SUBTITLE_LANGUAGES: [(&str, &str); 6] = [
+    ("en", "English"),
+    ("ru", "Russian"),
+    ("uk", "Ukrainian"),
+    ("de", "German"),
+    ("es", "Spanish"),
+    ("fr", "French"),
+];
+
+/// Language hints checked until the user changes them.
+pub const DEFAULT_SUBTITLE_LANGUAGES: [&str; 2] = ["en", "ru"];
+
+/// Path of the transcript saved next to a video when its subtitles were generated
+/// (`clip.mp4` → `clip.soniox.json`). An empty one marks a video already found to have no
+/// speech, so it is not paid for twice.
+pub fn transcript_path(video_path: &Path) -> PathBuf {
+    video_path.with_extension("soniox.json")
+}
+
 /// Load the subtitles next to `video_path`. `None` when there is no file, it cannot be
 /// read, or it holds no valid cue.
 pub fn load_subtitles(video_path: &Path) -> Option<Subtitles> {
@@ -80,11 +128,20 @@ pub fn load_subtitles(video_path: &Path) -> Option<Subtitles> {
     Some(subtitles)
 }
 
-/// Move the subtitle file along when its video is renamed, so the pair keeps matching.
-/// Does nothing when there is no subtitle file; never overwrites an existing one.
+/// Move the subtitle file and the saved transcript along when their video is renamed, so they
+/// keep matching. Does nothing for a file that is not there; never overwrites an existing one.
 pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
-    let old_path = subtitle_path(old_video_path);
-    let new_path = subtitle_path(new_video_path);
+    rename_companion(
+        &subtitle_path(old_video_path),
+        &subtitle_path(new_video_path),
+    );
+    rename_companion(
+        &transcript_path(old_video_path),
+        &transcript_path(new_video_path),
+    );
+}
+
+fn rename_companion(old_path: &Path, new_path: &Path) {
     if old_path == new_path || !old_path.is_file() {
         return;
     }
@@ -96,7 +153,7 @@ pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
         );
         return;
     }
-    match std::fs::rename(&old_path, &new_path) {
+    match std::fs::rename(old_path, new_path) {
         Ok(()) => log::info!(
             "subtitles: renamed {} → {}",
             old_path.display(),
@@ -199,6 +256,25 @@ mod tests {
             Some("old")
         );
         assert!(subtitle_path(&old_video).exists());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rename_moves_the_saved_transcript_with_the_video() {
+        let dir = std::env::temp_dir().join(format!("frename-marker-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let old_video = dir.join("clip.MP4");
+        let new_video = dir.join("tag.clip.MP4");
+        std::fs::write(transcript_path(&old_video), "{}").expect("write marker");
+
+        rename_subtitle_file(&old_video, &new_video);
+        assert!(!transcript_path(&old_video).exists());
+        assert_eq!(
+            transcript_path(&new_video),
+            dir.join("tag.clip.soniox.json")
+        );
+        assert!(transcript_path(&new_video).is_file());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

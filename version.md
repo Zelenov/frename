@@ -1,3 +1,11 @@
+# NEXT
+## Added
+- Batch action "Generate subtitles": transcribes the checked videos with Soniox and saves a `.srt` next to each, with the audio length and cost shown before you start, and why each video got no subtitles listed afterwards. You need your own Soniox API key.
+- Settings → Subtitles: the Soniox API key (kept in the system's password store), the languages spoken in the footage, and short or sentence-long subtitles.
+
+## Changed
+- A saved `.soniox.json` transcript is renamed together with its video.
+
 # 0.71
 ## Added
 - Batch action "Describe with AI": Claude watches each checked video (a frame every 2 s, and its subtitles) and writes a one-line summary and time-ranged segments into its comment, after your own text. The panel shows the price and time before it runs; you need your own Anthropic API key.

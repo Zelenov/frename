@@ -3,9 +3,9 @@
 use std::path::PathBuf;
 
 use clipscribe::Model;
-use frename_core::ai::key::KeyState;
+use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::ai::SummaryLanguage;
-use frename_core::{CommentStorage, InOutStorage};
+use frename_core::{CommentStorage, CueLength, InOutStorage};
 
 use crate::features::batch::Operation;
 use crate::features::updates;
@@ -41,9 +41,13 @@ pub enum Message {
     SetSummaryLanguage(SummaryLanguage),
     /// The model AI descriptions are written with.
     SetAiModel(Model),
-    /// The API key section; never saved with the settings (the key lives in the credential
+    /// Check or uncheck a language spoken in the footage (a code such as "en"), for subtitles.
+    SetSubtitleLanguage(String, bool),
+    /// How long generated subtitle cues may get.
+    SetSubtitleCueLength(CueLength),
+    /// An API key section; never saved with the settings (the keys live in the credential
     /// store).
-    Key(KeyMessage),
+    Key(ApiKey, KeyMessage),
 }
 
 /// The API key section's messages.

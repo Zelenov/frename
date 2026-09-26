@@ -131,9 +131,13 @@ fn job_panel<'a>(
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default()
     };
+    let action = state.job_action().unwrap_or(state.action());
     let counts = text(format!(
-        "✓ {} changed   – {} unchanged   ✗ {} failed",
-        progress.done, progress.skipped, progress.failed
+        "✓ {} {}   – {} unchanged   ✗ {} failed",
+        progress.done,
+        action.done_label(),
+        progress.skipped,
+        progress.failed
     ))
     .size(12)
     .color(theme::TEXT_SOFT);
@@ -209,6 +213,9 @@ fn job_panel<'a>(
                 spend_line(state.job_ai_model(), usage)
             ));
         }
+        if let Some(report) = state.report() {
+            summary.push_str(&format!("   {report}"));
+        }
         panel = panel.push(text(summary).size(13)).push(
             row![counts, Space::new().width(Length::Fill),]
                 .extend((!state.retryable().is_empty()).then(|| {
@@ -221,19 +228,34 @@ fn job_panel<'a>(
                 .align_y(iced::Alignment::Center),
         );
         let failed = state.failed();
-        if !failed.is_empty() {
-            let heading = if failed.iter().all(|(_, reason)| reason.is_some()) {
+        // Generating subtitles also says why each video it left alone got none.
+        let skipped = if action == Action::GenerateSubtitles {
+            state.skipped_with_reason()
+        } else {
+            Vec::new()
+        };
+        if !failed.is_empty() || !skipped.is_empty() {
+            let heading = if action == Action::GenerateSubtitles {
+                "Not subtitled:"
+            } else if failed.iter().all(|(_, reason)| reason.is_some()) {
                 "Failed:"
             } else {
                 "Failed (the log says why):"
             };
-            let names = column(failed.into_iter().map(|(id, reason)| {
+            let failed_lines = failed.into_iter().map(|(id, reason)| {
                 let line = match reason {
                     Some(reason) => format!("{} — {reason}", name(id)),
                     None => name(id),
                 };
                 text(line).size(12).color(theme::ERROR).into()
-            }));
+            });
+            let skipped_lines = skipped.into_iter().map(|(id, reason)| {
+                text(format!("{} — {reason}", name(id)))
+                    .size(12)
+                    .color(theme::TEXT_SOFT)
+                    .into()
+            });
+            let names = column(failed_lines.chain(skipped_lines));
             panel = panel
                 .push(
                     row![

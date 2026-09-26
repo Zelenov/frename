@@ -11,6 +11,7 @@
 
 pub mod describe_ai;
 mod fix_tags;
+pub mod generate_subtitles;
 mod markers_comment;
 mod move_comments;
 mod move_in_out;
@@ -43,11 +44,12 @@ pub enum Action {
     RespaceTags,
     ReloadFiles,
     DescribeAi,
+    GenerateSubtitles,
 }
 
 impl Action {
     /// Every action, in list order.
-    pub const ALL: [Action; 8] = [
+    pub const ALL: [Action; 9] = [
         Action::MoveComments,
         Action::MoveInOut,
         Action::MarkersComment,
@@ -56,6 +58,7 @@ impl Action {
         Action::RespaceTags,
         Action::ReloadFiles,
         Action::DescribeAi,
+        Action::GenerateSubtitles,
     ];
 
     pub fn label(self) -> &'static str {
@@ -68,6 +71,15 @@ impl Action {
             Self::RespaceTags => tag_spacing::LABEL,
             Self::ReloadFiles => reload_files::LABEL,
             Self::DescribeAi => describe_ai::LABEL,
+            Self::GenerateSubtitles => generate_subtitles::LABEL,
+        }
+    }
+
+    /// The counts line's word for a file the action did its work on.
+    pub fn done_label(self) -> &'static str {
+        match self {
+            Self::GenerateSubtitles => "subtitled",
+            _ => "changed",
         }
     }
 }
@@ -85,6 +97,8 @@ pub enum Operation {
     ReloadFiles,
     /// Describe each video with AI.
     DescribeAi(describe_ai::Run),
+    /// Transcribe each video with Soniox into `clip.srt`.
+    GenerateSubtitles(generate_subtitles::Run),
 }
 
 impl Operation {
@@ -100,6 +114,15 @@ impl Operation {
             Self::RespaceTags => tag_spacing::run(path),
             Self::ReloadFiles => reload_files::run(path),
             Self::DescribeAi(options) => describe_ai::run(*options, path, cancel, progress),
+            Self::GenerateSubtitles(run) => generate_subtitles::run(run, path, cancel, progress),
+        }
+    }
+
+    /// A line for the job's summary, for actions with more to say than the counts.
+    pub fn report(&self) -> Option<String> {
+        match self {
+            Self::GenerateSubtitles(run) => run.report(),
+            _ => None,
         }
     }
 
@@ -122,6 +145,7 @@ impl Operation {
             Self::RespaceTags => Action::RespaceTags,
             Self::ReloadFiles => Action::ReloadFiles,
             Self::DescribeAi(_) => Action::DescribeAi,
+            Self::GenerateSubtitles(_) => Action::GenerateSubtitles,
         }
     }
 }
@@ -133,6 +157,7 @@ pub enum ActionMessage {
     MoveInOut(move_in_out::Message),
     MarkersComment(markers_comment::Message),
     DescribeAi(describe_ai::Message),
+    GenerateSubtitles(generate_subtitles::Message),
     /// Open the settings window, where an action's global settings live (e.g. the commented
     /// tag). Handled by the app, which owns the windows.
     OpenSettings,
@@ -141,20 +166,28 @@ pub enum ActionMessage {
     /// Have the settings read whether an API key is saved; the answer comes back as
     /// `DescribeAi(KeyState)`. Handled by the app.
     ReadKeyState,
+    /// Open the settings window at its Subtitles section (the Soniox key). Handled by the app.
+    OpenSubtitleSettings,
+    /// Have the settings read whether a Soniox key is saved; the answer comes back as
+    /// `GenerateSubtitles(KeyState)`. Handled by the app.
+    ReadSonioxKeyState,
 }
 
 impl ActionMessage {
     /// Whether it may change the options while a job runs: results of background reads.
     pub fn applies_while_running(&self) -> bool {
-        matches!(
-            self,
-            Self::DescribeAi(
-                describe_ai::Message::Probed(_)
-                    | describe_ai::Message::KeyState(_)
-                    | describe_ai::Message::SetLanguage(_)
-                    | describe_ai::Message::SetModel(_)
-            )
-        )
+        match self {
+            Self::GenerateSubtitles(message) => message.applies_while_running(),
+            _ => matches!(
+                self,
+                Self::DescribeAi(
+                    describe_ai::Message::Probed(_)
+                        | describe_ai::Message::KeyState(_)
+                        | describe_ai::Message::SetLanguage(_)
+                        | describe_ai::Message::SetModel(_)
+                )
+            ),
+        }
     }
 }
 
@@ -165,6 +198,7 @@ pub struct Actions {
     move_in_out: move_in_out::Options,
     markers_comment: markers_comment::Options,
     describe_ai: describe_ai::Options,
+    generate_subtitles: generate_subtitles::Options,
 }
 
 impl Actions {
@@ -174,14 +208,21 @@ impl Actions {
             ActionMessage::MoveInOut(message) => self.move_in_out.update(message),
             ActionMessage::MarkersComment(message) => self.markers_comment.update(message),
             ActionMessage::DescribeAi(message) => self.describe_ai.update(message),
+            ActionMessage::GenerateSubtitles(message) => self.generate_subtitles.update(message),
             ActionMessage::OpenSettings
             | ActionMessage::OpenAiSettings
-            | ActionMessage::ReadKeyState => {}
+            | ActionMessage::ReadKeyState
+            | ActionMessage::OpenSubtitleSettings
+            | ActionMessage::ReadSonioxKeyState => {}
         }
     }
 
     pub(super) fn describe_ai_mut(&mut self) -> &mut describe_ai::Options {
         &mut self.describe_ai
+    }
+
+    pub(super) fn generate_subtitles_mut(&mut self) -> &mut generate_subtitles::Options {
+        &mut self.generate_subtitles
     }
 
     /// Set the options of `operation`'s action to do what it does.
@@ -194,7 +235,8 @@ impl Actions {
             | Operation::FixTags
             | Operation::RespaceTags
             | Operation::ReloadFiles
-            | Operation::DescribeAi(_) => {}
+            | Operation::DescribeAi(_)
+            | Operation::GenerateSubtitles(_) => {}
         }
     }
 
@@ -209,6 +251,7 @@ impl Actions {
             Action::RespaceTags => Some(Operation::RespaceTags),
             Action::ReloadFiles => Some(Operation::ReloadFiles),
             Action::DescribeAi => Some(self.describe_ai.operation()),
+            Action::GenerateSubtitles => self.generate_subtitles.operation(),
         }
     }
 
@@ -230,6 +273,7 @@ impl Actions {
     pub fn footer(&self, action: Action) -> Option<Element<'_, ActionMessage>> {
         match action {
             Action::DescribeAi => self.describe_ai.footer(),
+            Action::GenerateSubtitles => self.generate_subtitles.footer(),
             _ => None,
         }
     }
@@ -243,6 +287,7 @@ impl Actions {
     ) -> (Element<'_, ActionMessage>, String, bool) {
         let view = match action {
             Action::DescribeAi => return self.describe_ai.panel(checked),
+            Action::GenerateSubtitles => return self.generate_subtitles.panel(checked),
             Action::MoveComments => self.move_comments.view().map(ActionMessage::MoveComments),
             Action::MoveInOut => self.move_in_out.view().map(ActionMessage::MoveInOut),
             Action::MarkersComment => self

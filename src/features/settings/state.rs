@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use frename_core::ai::key::KeyState;
+use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::{old_settings, AppDatabase, AppSettings, AppStateStore};
 use iced::Task;
 
@@ -32,8 +32,15 @@ pub struct SettingsState {
     tag_spacing_changed: bool,
     updates: updates::UpdatesState,
     import: OldSettingsImport,
-    /// The API key section; never persisted here (the key lives in the credential store).
-    key: KeySection,
+    /// The API key sections; never persisted here (the keys live in the credential store).
+    keys: Keys,
+}
+
+/// One key section per service.
+#[derive(Debug, Clone, Default)]
+pub struct Keys {
+    anthropic: KeySection,
+    soniox: KeySection,
 }
 
 /// The API key field and what is known about the saved key.
@@ -66,7 +73,7 @@ impl Default for SettingsState {
             tag_spacing_changed: false,
             updates: updates::UpdatesState::default(),
             import,
-            key: KeySection::default(),
+            keys: Keys::default(),
         }
     }
 }
@@ -89,8 +96,8 @@ impl SettingsState {
                 Task::none()
             }
             // The key lives in the credential store, never in the saved settings.
-            Message::Key(message) => {
-                self.apply_key(message);
+            Message::Key(which, message) => {
+                self.apply_key(which, message);
                 Task::none()
             }
             message => {
@@ -111,20 +118,31 @@ impl SettingsState {
         &self.import
     }
 
-    /// The API key section.
-    pub fn key(&self) -> &KeySection {
-        &self.key
+    /// The section of the `which` API key.
+    pub fn key(&self, which: ApiKey) -> &KeySection {
+        match which {
+            ApiKey::Anthropic => &self.keys.anthropic,
+            ApiKey::Soniox => &self.keys.soniox,
+        }
+    }
+
+    fn key_mut(&mut self, which: ApiKey) -> &mut KeySection {
+        match which {
+            ApiKey::Anthropic => &mut self.keys.anthropic,
+            ApiKey::Soniox => &mut self.keys.soniox,
+        }
     }
 
     /// Number a new read (or change) of the key's store; its answer comes back with it.
-    pub fn begin_key_request(&mut self) -> u64 {
-        self.key.requested += 1;
-        self.key.requested
+    pub fn begin_key_request(&mut self, which: ApiKey) -> u64 {
+        let key = self.key_mut(which);
+        key.requested += 1;
+        key.requested
     }
 
     /// The key typed to be saved (trimmed); `None` when the field is empty.
-    pub fn typed_key(&self) -> Option<String> {
-        Some(self.key.input.trim().to_string()).filter(|k| !k.is_empty())
+    pub fn typed_key(&self, which: ApiKey) -> Option<String> {
+        Some(self.key(which).input.trim().to_string()).filter(|k| !k.is_empty())
     }
 
     /// Current settings.
@@ -148,46 +166,47 @@ impl SettingsState {
         self.tag_spacing_changed
     }
 
-    fn apply_key(&mut self, message: KeyMessage) {
+    fn apply_key(&mut self, which: ApiKey, message: KeyMessage) {
+        let key = self.key_mut(which);
         match message {
             KeyMessage::Input(input) => {
-                self.key.input = input;
-                self.key.error = None;
+                key.input = input;
+                key.error = None;
             }
-            KeyMessage::ToggleShow => self.key.shown = !self.key.shown,
-            KeyMessage::Replace => self.key.replacing = true,
+            KeyMessage::ToggleShow => key.shown = !key.shown,
+            KeyMessage::Replace => key.replacing = true,
             KeyMessage::CancelReplace => {
-                self.key.replacing = false;
-                self.key.input.clear();
-                self.key.error = None;
+                key.replacing = false;
+                key.input.clear();
+                key.error = None;
             }
             // Done by the app on a worker thread; the answer comes back as `KeyState`.
-            KeyMessage::Save => self.key.error = None,
-            KeyMessage::AskRemove => self.key.confirm_remove = true,
-            KeyMessage::CancelRemove => self.key.confirm_remove = false,
+            KeyMessage::Save => key.error = None,
+            KeyMessage::AskRemove => key.confirm_remove = true,
+            KeyMessage::CancelRemove => key.confirm_remove = false,
             KeyMessage::Remove => {
-                self.key.confirm_remove = false;
-                self.key.error = None;
+                key.confirm_remove = false;
+                key.error = None;
             }
             // An answer older than one already taken is stale.
-            KeyMessage::State { request, .. } if request <= self.key.answered => {}
+            KeyMessage::State { request, .. } if request <= key.answered => {}
             KeyMessage::State {
                 request,
                 result: Ok(state),
             } => {
-                self.key.answered = request;
+                key.answered = request;
                 if state == KeyState::Saved {
-                    self.key.input.clear();
-                    self.key.shown = false;
+                    key.input.clear();
+                    key.shown = false;
                 }
-                self.key.replacing = false;
-                self.key.state = Some(state);
+                key.replacing = false;
+                key.state = Some(state);
             }
             // A failed save or removal leaves the store as it was: a read asked for before it
             // still tells the truth, so it does not become stale.
             KeyMessage::State {
                 result: Err(error), ..
-            } => self.key.error = Some(error),
+            } => key.error = Some(error),
         }
     }
 
@@ -229,13 +248,28 @@ impl SettingsState {
             Message::OpenBatchAction(Operation::RespaceTags) => self.tag_spacing_changed = false,
             Message::SetSummaryLanguage(language) => self.settings.summary_language = language,
             Message::SetAiModel(model) => self.settings.ai_model = model.id.to_string(),
-            Message::Key(message) => self.apply_key(message),
+            Message::SetSubtitleLanguage(code, on) => {
+                let languages = &mut self.settings.subtitle_languages;
+                languages.retain(|l| *l != code);
+                if on {
+                    languages.push(code);
+                }
+                // Kept in the order the window lists them.
+                languages.sort_by_key(|l| {
+                    frename_core::SUBTITLE_LANGUAGES
+                        .iter()
+                        .position(|(c, _)| c == l)
+                });
+            }
+            Message::SetSubtitleCueLength(length) => self.settings.subtitle_cue_length = length,
+            Message::Key(which, message) => self.apply_key(which, message),
             Message::OpenBatchAction(
                 Operation::MarkersComment(_)
                 | Operation::TagCommented
                 | Operation::FixTags
                 | Operation::ReloadFiles
-                | Operation::DescribeAi(_),
+                | Operation::DescribeAi(_)
+                | Operation::GenerateSubtitles(_),
             ) => {}
             // Handled by `update`.
             Message::Updates(_)
@@ -270,7 +304,7 @@ mod tests {
             tag_spacing_changed: false,
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
-            key: KeySection::default(),
+            keys: Keys::default(),
         };
         state.apply(Message::SetMonochromeTags(true));
         assert!(state.settings().monochrome_tags);
@@ -298,7 +332,7 @@ mod tests {
             tag_spacing_changed: false,
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
-            key: KeySection::default(),
+            keys: Keys::default(),
         };
         state.apply(Message::SetCommentStorage(state.settings().comment_storage));
         assert!(
@@ -329,7 +363,7 @@ mod tests {
             tag_spacing_changed: false,
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
-            key: KeySection::default(),
+            keys: Keys::default(),
         };
         state.apply(Message::SetCommentedTag("Has comment.v2:".to_string()));
         assert_eq!(state.settings().commented_tag, "Has commentv2");
@@ -344,50 +378,129 @@ mod tests {
             tag_spacing_changed: false,
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
-            key: KeySection::default(),
+            keys: Keys::default(),
         };
-        state.apply(Message::Key(KeyMessage::Input(" sk-ant-123 ".to_string())));
-        assert_eq!(state.typed_key().as_deref(), Some("sk-ant-123"));
-        let request = state.begin_key_request();
-        state.apply(Message::Key(KeyMessage::State {
-            request,
-            result: Err("locked".to_string()),
-        }));
-        assert_eq!(state.key().error.as_deref(), Some("locked"));
-        assert_eq!(state.key().input, " sk-ant-123 ", "kept to try again");
-        let slow_read = state.begin_key_request();
-        let save = state.begin_key_request();
-        state.apply(Message::Key(KeyMessage::State {
-            request: save,
-            result: Ok(KeyState::Saved),
-        }));
-        assert!(state.key().input.is_empty());
-        assert_eq!(state.key().state, Some(KeyState::Saved));
-        state.apply(Message::Key(KeyMessage::State {
-            request: slow_read,
-            result: Ok(KeyState::Missing),
-        }));
+        state.apply(Message::Key(
+            ApiKey::Anthropic,
+            KeyMessage::Input(" sk-ant-123 ".to_string()),
+        ));
         assert_eq!(
-            state.key().state,
+            state.typed_key(ApiKey::Anthropic).as_deref(),
+            Some("sk-ant-123")
+        );
+        let request = state.begin_key_request(ApiKey::Anthropic);
+        state.apply(Message::Key(
+            ApiKey::Anthropic,
+            KeyMessage::State {
+                request,
+                result: Err("locked".to_string()),
+            },
+        ));
+        assert_eq!(
+            state.key(ApiKey::Anthropic).error.as_deref(),
+            Some("locked")
+        );
+        assert_eq!(
+            state.key(ApiKey::Anthropic).input,
+            " sk-ant-123 ",
+            "kept to try again"
+        );
+        let slow_read = state.begin_key_request(ApiKey::Anthropic);
+        let save = state.begin_key_request(ApiKey::Anthropic);
+        state.apply(Message::Key(
+            ApiKey::Anthropic,
+            KeyMessage::State {
+                request: save,
+                result: Ok(KeyState::Saved),
+            },
+        ));
+        assert!(state.key(ApiKey::Anthropic).input.is_empty());
+        assert_eq!(state.key(ApiKey::Anthropic).state, Some(KeyState::Saved));
+        state.apply(Message::Key(
+            ApiKey::Anthropic,
+            KeyMessage::State {
+                request: slow_read,
+                result: Ok(KeyState::Missing),
+            },
+        ));
+        assert_eq!(
+            state.key(ApiKey::Anthropic).state,
             Some(KeyState::Saved),
             "a read that answers late does not undo the save"
         );
 
-        let read = state.begin_key_request();
-        let failed_save = state.begin_key_request();
-        state.apply(Message::Key(KeyMessage::State {
-            request: failed_save,
-            result: Err("locked".to_string()),
-        }));
-        state.apply(Message::Key(KeyMessage::State {
-            request: read,
-            result: Ok(KeyState::Missing),
-        }));
+        let read = state.begin_key_request(ApiKey::Anthropic);
+        let failed_save = state.begin_key_request(ApiKey::Anthropic);
+        state.apply(Message::Key(
+            ApiKey::Anthropic,
+            KeyMessage::State {
+                request: failed_save,
+                result: Err("locked".to_string()),
+            },
+        ));
+        state.apply(Message::Key(
+            ApiKey::Anthropic,
+            KeyMessage::State {
+                request: read,
+                result: Ok(KeyState::Missing),
+            },
+        ));
         assert_eq!(
-            state.key().state,
+            state.key(ApiKey::Anthropic).state,
             Some(KeyState::Missing),
             "a read answered after a failed save still counts"
         );
         assert!(!format!("{:?}", state.settings()).contains("sk-ant"));
+    }
+
+    #[test]
+    fn the_two_keys_have_sections_of_their_own() {
+        let mut state = SettingsState {
+            settings: AppSettings::default(),
+            comment_storage_changed: false,
+            in_out_storage_changed: false,
+            tag_spacing_changed: false,
+            updates: updates::UpdatesState::default(),
+            import: OldSettingsImport::None,
+            keys: Keys::default(),
+        };
+        state.apply(Message::Key(
+            ApiKey::Soniox,
+            KeyMessage::Input("soniox-key".to_string()),
+        ));
+        assert_eq!(
+            state.typed_key(ApiKey::Soniox).as_deref(),
+            Some("soniox-key")
+        );
+        assert_eq!(state.typed_key(ApiKey::Anthropic), None);
+        let request = state.begin_key_request(ApiKey::Soniox);
+        state.apply(Message::Key(
+            ApiKey::Soniox,
+            KeyMessage::State {
+                request,
+                result: Ok(KeyState::Saved),
+            },
+        ));
+        assert_eq!(state.key(ApiKey::Soniox).state, Some(KeyState::Saved));
+        assert_eq!(state.key(ApiKey::Anthropic).state, None);
+    }
+
+    #[test]
+    fn subtitle_languages_keep_the_window_order_and_none_means_detect() {
+        let mut state = SettingsState {
+            settings: AppSettings::default(),
+            comment_storage_changed: false,
+            in_out_storage_changed: false,
+            tag_spacing_changed: false,
+            updates: updates::UpdatesState::default(),
+            import: OldSettingsImport::None,
+            keys: Keys::default(),
+        };
+        state.apply(Message::SetSubtitleLanguage("de".to_string(), true));
+        state.apply(Message::SetSubtitleLanguage("en".to_string(), false));
+        assert_eq!(state.settings().subtitle_languages, ["ru", "de"]);
+        state.apply(Message::SetSubtitleLanguage("ru".to_string(), false));
+        state.apply(Message::SetSubtitleLanguage("de".to_string(), false));
+        assert!(state.settings().subtitle_languages.is_empty());
     }
 }
