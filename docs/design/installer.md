@@ -41,16 +41,20 @@ app can update itself.
 5. **Not installed** (`cargo run`, or a plain `frename.exe` copied out of a package): the Updates
    section says `Updates work in the installed version` and the button is disabled
    (`UpdateManager::new` returns `NotInstalled` then — research doc).
-6. **Settings from the zip version.** On the first interactive start with no `frename.db` in the
-   data folder, frename **looks** for an old one, the issue's "database found next to the exe":
+6. **Settings from the zip version.** On the first interactive start of an installed or portable
+   package with no `frename.db` in the data folder, frename **looks** for an old one, the issue's "database found next to the exe":
    a `frename.db` next to a `frename.exe` in the user's Downloads, Desktop and Documents folders
    and their subfolders up to two levels deep (the places a downloaded zip gets unpacked), newest
    first. Only when one is found, a native dialog (`rfd`, already a dependency) asks, before the
    main window opens:
-   `Import settings and recent folders from C:\Users\…\Downloads\frename?` — **Import** /
+   `Import your settings and recent folders from C:\Users\…\Downloads\frename?` — **Import** /
    **Start fresh**. Nothing found → no dialog, the app just starts: a clean install asks nothing.
    Either answer creates the new database, so the question never comes back. `--self-test` and any
-   other non-interactive start never look and never ask.
+   other non-interactive start never look and never ask. Settings also get a small
+   **Import from an old frename folder…** button (folder picker, then the same import, then
+   `Restart frename to use the imported settings`) — the only way back when the search misses a
+   zip kept elsewhere (e.g. `D:\Tools\frename`), which would otherwise silently put a user who
+   chose text-file comments back on the default, writing into their videos.
 
 ## UI sketch
 
@@ -74,14 +78,16 @@ Updates
 While downloading: `Downloading 0.68… 42%`, both buttons disabled. Errors: `no connection`
 for network failures; `GitHub did not respond, try later` for server errors and rate limits.
 A failed download shows `Could not update: no connection` (or the reason) and enables both
-buttons again. Versions are shown as `version.md` writes them: a trailing `.0` of Velopack's
+buttons again. Closing frename during a download cancels it; nothing is applied, and the next
+**Update and restart** downloads again (Velopack keeps finished packages only). Versions are shown as `version.md` writes them: a trailing `.0` of Velopack's
 3-part version is dropped everywhere in the UI (`0.67`, not `0.67.0`). While a batch job runs,
 **Update and restart** is disabled with the tooltip `Wait for the batch to finish`.
 
 The settings window is not resizable and every section must fit (`SETTINGS_WINDOW_SIZE` in
-`src/app/state.rs`, 560×560 today); it may grow to at most 700 px high (a 1366×768 laptop with the
-taskbar). If the section does not fit, the version goes on the button row
-(`frename 0.67 · [ Check for updates ] …`).
+`src/app/state.rs`, 560×560 today). It becomes 560×680 (fits a 1366×768 laptop with the taskbar).
+The PR checks the worst case in a screenshot: both "move existing…" offers shown, the update row
+with **Update and restart**, and the import button. If that does not fit in 680 px, the settings
+content becomes a scrollable column instead of growing further.
 
 ## Keyboard shortcuts
 
@@ -114,9 +120,13 @@ The portable zip has the same layout with a `.portable` marker file in its root
   file, `packaging/windows/gstreamer-plugins.txt`, with the research doc's set (core/base, audio
   out, isomp4, matroska, avi, parsers, `debugutilsbad` for `capssetter`, libav, d3d11, dav1d,
   opus, vorbis, mpg123, jpeg). The DLLs they need are not hand-listed: a CI script walks
-  `dumpbin /dependents` from `frename.exe` and every allowlisted plugin and copies each DLL it
-  finds in GStreamer's `bin\`. No GPL parts (no x264/x265, no `ugly`).
-- **VC++ runtime** is copied app-local from the runner's Visual Studio redist folder, instead of
+  `dumpbin /dependents` recursively from `frename.exe`, `gst-plugin-scanner.exe` and every
+  allowlisted plugin, and copies each DLL it finds in GStreamer's `bin\` or in the Visual Studio
+  CRT redist folder (so CRT DLLs imported only by GStreamer, FFmpeg or a C++ plugin, such as
+  `msvcp140_1.dll`, come along too). `dumpbin` is not on `PATH` on the runner; the script finds it
+  with `vswhere`. No GPL parts (no x264/x265, no `ugly`).
+- **VC++ runtime** is copied app-local (by the walk above) from the runner's Visual Studio redist
+  folder, instead of
   `vpk --framework vcredist143-x64`. `bootstrapping.mdx` does not say how the redistributable is
   installed; it is a per-machine install (Microsoft's `vc_redist.x64.exe` writes to
   `System32`), so on a machine without it the one-click install would stop at a UAC prompt.
@@ -128,20 +138,26 @@ The portable zip has the same layout with a `.portable` marker file in its root
 
 ### Start-up order (`src/main.rs`)
 
-1. `velopack::VelopackApp::build().run()` — must be first; it handles install/update hooks and
-   exits for them (research doc; `velopack` `app.rs`).
-2. Work out the data folder (below) with Velopack's locator. Unless `--self-test`: if it has no
-   `frename.db`, run the old-database search and dialog (flow 6).
-3. `configure_bundled_gstreamer(exe_dir, data_dir)` — Windows only, before any thread and before `gst::init`, as in
+1. `velopack::VelopackApp::build().set_auto_apply_on_startup(false).run()` — must be first; it
+   handles install/update hooks and exits for them (research doc; `velopack` `app.rs`). Auto-apply
+   is turned off: by default (`auto_apply: true` in `app.rs`) a start that finds a downloaded
+   package applies it and restarts, which would update without the button and could kill another
+   running frename with unsaved edits. Updates are applied only by **Update and restart**.
+2. Work out the data folder (below) with Velopack's locator — no dialogs or threads yet.
+3. `configure_bundled_gstreamer(exe_dir, data_dir)` — Windows only, before any thread (so before
+   the import dialog, whose shell COM code starts threads) and before `gst::init`, as in
    the research doc: when `lib\gstreamer-1.0\gstcoreelements.dll` exists next to the exe, remove
    `GST_PLUGIN_PATH`, `GST_PLUGIN_PATH_1_0`, `GST_PLUGIN_SYSTEM_PATH`, `GST_PLUGIN_SCANNER`,
    `GST_REGISTRY`, and set `GST_PLUGIN_SYSTEM_PATH_1_0`, `GST_PLUGIN_SCANNER_1_0` and
    `GST_REGISTRY_1_0` (registry file in the data folder). The exe's folder is first in the Windows
    DLL search order, so a system GStreamer on `PATH` is not loaded. Without the bundled plugins
    (a developer build) nothing changes and the system GStreamer is used, as today.
+4. Only for an installed or portable Windows package (the locator says so), not for `--self-test`
+   or an unpackaged build: if the data folder has no `frename.db`, the old-database search and
+   dialog (flow 6).
    It is split into a pure function that returns the variables to remove and set (tested on every
    OS) and a Windows-only caller that applies them.
-4. Logging, `gst::init`, database, window — as today, with the paths below.
+5. Logging, `gst::init`, database, window — as today, with the paths below.
 
 ### Data folder
 
@@ -224,8 +240,11 @@ log (CI prints it):
 - every clip in `<folder>` plays through frename's own pipeline builder with `audio-sink=fakesink`
   until the first video sample or end of stream, 20 s timeout each.
 
-Fixtures: tiny clips (a few KB each) committed under `tests/media/`: H.264/AAC `.mp4`, HEVC `.mov`,
-VP9/Opus `.webm`, AV1 `.mkv`, MPEG-4/MP3 `.avi`, plus the existing variable-frame-rate case the
+Fixtures: tiny clips (a few KB each) under `tests/media/`: H.264/AAC `.mp4`, HEVC `.mov`,
+VP9/Opus `.webm`, AV1 `.mkv`, MPEG-4/MP3 `.avi` — trimmed from the clips already in `tests/folder`
+where they have that codec, generated with `ffmpeg` otherwise (the command lines go in
+`tests/media/README.md`) — plus a new variable-frame-rate clip (`ffmpeg` with `-fps_mode vfr` from
+a source with dropped frames) for the
 `capssetter` retry exists for. `--self-test` is shared with #11 (Linux) and #15 (macOS).
 
 ### Installer smoke test
@@ -237,9 +256,11 @@ has the build GStreamer on `PATH`, which would hide a DLL missing from the bundl
 and:
 1. fails if a system GStreamer is on the runner (`GSTREAMER_1_0_ROOT_MSVC_X86_64`, or
    `gst-launch-1.0` on `PATH`), so the test proves the clean-machine case;
-2. runs `Setup.exe --silent` with `Start-Process -Wait` (it is a GUI exe too), checks that every
-   CRT DLL `dumpbin /dependents` lists for `frename.exe` is present in `current\` (the runner has
-   the VC++ runtime in `System32`, which would hide a missing app-local one), then runs the
+2. runs `Setup.exe --silent` with `Start-Process -Wait` (it is a GUI exe too), walks
+   `dumpbin /dependents` over every `.exe` and `.dll` under `current\` and fails on any import that
+   is neither in `current\` nor a Windows system DLL (KnownDLLs, `api-ms-win-*`, `ucrtbase`) — the
+   runner has the VC++ runtime in `System32`, which would otherwise hide a missing app-local CRT
+   DLL, and a plugin that fails to load is dropped silently, then runs the
    installed app's self-test as `current\frename.exe` directly, not through the root stub, whose
    exit-code behaviour is not documented;
 3. installs an **older** official GStreamer runtime system-wide (`msiexec /i … /qn`), put it on
@@ -260,11 +281,15 @@ Runners have no GPU or audio device, so this covers the software decode path (re
 
 ### Release (`release.yml`)
 
-`build-windows` additionally: bundles, runs the smoke test, then
+`build-windows` additionally bundles GStreamer and runs
 `vpk download github --repoUrl https://github.com/Zelenov/frename` (the previous release, so
-deltas are built — `docs/distributing/github-actions.mdx`) and
+deltas are built — `docs/distributing/github-actions.mdx`). The first Velopack release follows
+v0.66, which has no Velopack files; what `vpk download` does then is not documented, so the step
+tolerates a failure there (`continue-on-error` with a log line) — it only costs the delta. Then
 `vpk pack -u frename -v X.Y.0 -p dist\frename -e frename.exe --packTitle frename --icon frename-icon.ico`.
-The `release` job uploads through the existing `softprops/action-gh-release` step:
+A new `release-install-test` job on a fresh runner runs the same steps as `ci-windows-install` on
+these artifacts; the `release` job needs it, so a broken installer is never published. The
+`release` job uploads through the existing `softprops/action-gh-release` step:
 - `frename-windows-x64-vX.Y.0.zip` — Velopack's `frename-win-Portable.zip`, renamed (the pipeline's
   "published" check looks for this name);
 - `frename-win-Setup.exe`;
@@ -311,7 +336,11 @@ The legacy `RELEASES` file is not uploaded (only for Squirrel migrations — `ch
 Two PRs, each through the review gate:
 1. **Self-contained app** — data folder, `configure_bundled_gstreamer`, `--self-test` and fixtures,
    GStreamer from the official MSIs in CI, bundling, `vpk pack`, Setup + portable zip on releases,
-   smoke test in the new `ci-windows-install` job, the vendored zip removed, README and `GSTREAMER_SETUP.md` (becomes
+   smoke test in the new `ci-windows-install` job, the vendored zip removed, README (Requirements
+   becomes "Download `frename-win-Setup.exe`; Windows may warn once: More info → Run anyway", the
+   `frename.db` "next to the executable" line is corrected, zip users are told to delete the old
+   frename folder — or unzip the portable zip over it — after the first start of the new version,
+   and that the GStreamer they installed can be uninstalled) and `GSTREAMER_SETUP.md` (becomes
    "building from source" only), `version.md`. Body `Refs #10`.
 2. **Updates** — Settings section, start-up check, gear dot, update and restart. Body `Closes #10`.
 
@@ -334,7 +363,7 @@ explicitly.
   `PATH`); a fixture that fails to decode makes the job red (checked once by hand in the PR by
   pointing it at a corrupt file).
 - Updates feature: state machine tests with a fake update source (no network): up to date, update
-  found, download progress, error, not installed, batch running.
+  found, download cancelled by closing, download progress, error, not installed, batch running.
 - By the owner, on Windows: install from `Setup.exe` on a machine without GStreamer; play a clip;
   after the next release, **Check for updates** finds it and **Update and restart** lands on the new
   version with settings kept.
@@ -342,12 +371,13 @@ explicitly.
 ## Open questions (with recommended answers)
 
 1. **Settings of users coming from the zip version.** *Recommended:* the automatic search with a
-   dialog only when an old database is found (flow 6). If the search misses (the zip was somewhere
-   else), those settings start fresh; a manual "Import from a folder…" button in Settings would
-   cover that but is more than the issue asks, so it is left out unless the owner wants it.
+   dialog only when an old database is found, plus the Settings import button for a zip kept
+   elsewhere (flow 6). Rejected: starting fresh, which puts comment storage back on the default.
 2. **Data folder for the installed app: removed on uninstall** (Velopack root) or kept
    (`%AppData%\frename`, roaming)? *Recommended:* the Velopack root, as the issue says
-   `%LocalAppData%`; nothing irreplaceable lives in it.
+   `%LocalAppData%`. It holds folder history and settings only: the tag library is not in it
+   (tags live in each folder's `.frename` file via `FolderTagStore`; the old `stored_tags` table is
+   unused since 0.62), so uninstalling loses nothing that cannot be set again.
 3. **Portable data stays in the portable folder**, not `%LocalAppData%`. *Recommended:* yes — a
    portable build must not write outside its folder, and that is where the old zip kept its data.
 4. **Start-up check default.** *Recommended:* on, at most once a day, never downloads by itself.
