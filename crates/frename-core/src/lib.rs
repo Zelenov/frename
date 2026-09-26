@@ -3,6 +3,7 @@
 mod app_dir;
 pub(crate) mod comment;
 mod db;
+pub mod demo;
 mod directory;
 mod file;
 mod file_kind;
@@ -14,7 +15,7 @@ mod tags;
 pub(crate) mod transliteration;
 pub mod undo;
 
-pub use app_dir::app_data_dir;
+pub use app_dir::{app_data_dir, DATA_DIR_VAR};
 pub use db::{
     AppDatabase, AppSettings, AppStateStore, Initializable, LoggingAppStateStore, StoredTagStore,
     VideoSettings, WindowGeometry,
@@ -31,9 +32,10 @@ pub use metadata::{
 pub use ordered::{OrderKey, OrderableEntry, OrderedCollection, OrderedThing};
 pub use subtitles::{load_subtitles, subtitle_path, SubtitleCue, Subtitles};
 pub use tags::{
-    install_file_tagger, CachedFile, DefaultTag, FileSnapshot, FileTagger, FileTaggerBackend,
-    FolderInfo, FolderTagStore, InMemoryFileTagger, LoggingFileTagger, ProductionFileTagger,
-    SaveAndReparse, Screenshot, StoredTag, Tag, TagColorMapping, TagId, TagList, DEFAULT_TAGS,
+    install_file_tagger, set_space_after_tags, space_after_tags, CachedFile, DefaultTag,
+    FileSnapshot, FileTagger, FileTaggerBackend, FolderInfo, FolderTagStore, InMemoryFileTagger,
+    LoggingFileTagger, ProductionFileTagger, SaveAndReparse, Screenshot, StoredTag, Tag,
+    TagColorMapping, TagId, TagList, DEFAULT_TAGS,
 };
 pub use undo::{
     CreateTagCommand, DeleteTagCommand, History, NavigateFileCommand, PasteTagsCommand,

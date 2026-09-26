@@ -65,12 +65,14 @@ C:\Work\my\frename\
 | `file.rs` | `File` — path + metadata + snapshot |
 | `directory.rs` | `Directory<S>` — folder with sorted file list + selection |
 | `folder_file.rs` | `FolderAndFile` — session: folder path + optional file path |
+| `demo.rs` | `DemoScenario` — stage a demo folder and seed the app state for it |
 
 ### frename binary (`src/`)
 | Path | What lives here |
 |---|---|
 | `main.rs` | Logging init, GStreamer check, `iced::application` |
 | `app/` | `FrenameApp` root: routes messages, global subscription |
+| `demo.rs` | Demo mode (`--demo`): wait for the video, set up the scenario, screenshot, exit |
 | `features/folder_workspace/` | Main coordinator: directory, file workspace, layout |
 | `features/file_workspace/` | Current file + `TagList` + tag operations |
 | `features/tag_panel/` | Tag selection grid: cursor, bounds, scroll state |
@@ -147,6 +149,18 @@ iced::application(FrenameApp::new)
 ```
 
 ---
+
+## Demo mode (screenshots of any state)
+
+`frename --demo <scenario.toml> --out <file.png>` copies the clips a scenario names into a temp
+folder, stores the window size, panel widths and settings it asks for in a temp database
+(`FRENAME_DATA_DIR`), opens the folder, pauses the video at `seek`, optionally turns on batch mode,
+and saves a PNG of the window (iced `window::screenshot`, no window frame). Scenarios and the
+annotated templates for the README are in `docs/screenshots/`. The README images are rendered by
+hand with `docs/screenshots/render.sh` (Windows or Linux), only when a change makes them wrong; CI
+does not make them. Arrows in the templates are the one shape from the original PSD, only rotated
+or mirrored (see the comment in `main.svg`). Use demo mode to look at a screen past the folder
+picker: write a scenario for it and run it (under Xvfb on a headless Linux).
 
 ## Common patterns
 

@@ -90,3 +90,8 @@ ALTER TABLE app_settings ADD COLUMN commented_tag TEXT NOT NULL DEFAULT 'Comment
 pub const M7_COMMENTED_TAG_ENABLED: &str = "
 ALTER TABLE app_settings ADD COLUMN commented_tag_enabled INTEGER NOT NULL DEFAULT 1;
 ";
+
+/// Migration 8: whether file names put a space after each tag (`Food. clip.mp4`). Off.
+pub const M8_SPACE_AFTER_TAGS: &str = "
+ALTER TABLE app_settings ADD COLUMN space_after_tags INTEGER NOT NULL DEFAULT 0;
+";

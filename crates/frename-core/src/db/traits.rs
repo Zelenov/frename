@@ -52,6 +52,8 @@ pub struct AppSettings {
     pub commented_tag: String,
     /// Whether commented videos get [`Self::commented_tag`] at all. Defaults to true.
     pub commented_tag_enabled: bool,
+    /// Whether file names put a space after each tag (`Food. clip.mp4`). Defaults to false.
+    pub space_after_tags: bool,
 }
 
 impl Default for AppSettings {
@@ -63,6 +65,7 @@ impl Default for AppSettings {
             in_out_storage: InOutStorage::default(),
             commented_tag: crate::DEFAULT_COMMENTED_TAG.to_string(),
             commented_tag_enabled: true,
+            space_after_tags: false,
         }
     }
 }

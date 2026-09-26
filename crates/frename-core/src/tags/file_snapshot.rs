@@ -5,6 +5,7 @@
 //! `FileSnapshot::parse()` is the inverse: parses a raw file-name string back into a snapshot.
 
 use regex::Regex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
 use super::screenshot::Screenshot;
@@ -16,6 +17,22 @@ use super::screenshot::Screenshot;
 fn segment_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"^(in|out)_(\d{2})_(\d{2})_(\d{2})$").unwrap())
+}
+
+// Whether saved names put a space after the dot that ends each tag, process-wide like the
+// metadata storage: names are built deep inside the tagger, far from the setting.
+static SPACE_AFTER_TAGS: AtomicBool = AtomicBool::new(false);
+
+/// Choose whether file names put a space after each tag: `Food. Goat. clip.mp4` instead of
+/// `Food.Goat.clip.mp4`. Names are read the same way either way; files take the new form
+/// when they are next saved.
+pub fn set_space_after_tags(space: bool) {
+    SPACE_AFTER_TAGS.store(space, Ordering::Relaxed);
+}
+
+/// The choice made with [`set_space_after_tags`]. Off by default.
+pub fn space_after_tags() -> bool {
+    SPACE_AFTER_TAGS.load(Ordering::Relaxed)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -123,8 +140,15 @@ impl FileSnapshot {
     // Serialise: snapshot → file name string
     // ------------------------------------------------------------------
 
-    /// Build the full file name: `[tags.]name[.in_HH_MM_SS][.out_HH_MM_SS].ext`.
+    /// Build the full file name: `[tags.]name[.in_HH_MM_SS][.out_HH_MM_SS].ext`, with a space
+    /// after each tag's dot when [`space_after_tags`] is on.
     pub fn file_name(&self) -> String {
+        self.file_name_with(space_after_tags())
+    }
+
+    /// [`Self::file_name`] with the tag spacing given explicitly.
+    pub fn file_name_with(&self, space_after_tags: bool) -> String {
+        let tag_separator = if space_after_tags { ". " } else { "." };
         let mut middle: Vec<String> = Vec::new();
         if !self.name_without_extension.is_empty() {
             middle.push(self.name_without_extension.clone());
@@ -150,9 +174,14 @@ impl FileSnapshot {
         if self.tags.is_empty() {
             name_ext
         } else if name_ext.is_empty() {
-            self.tags.join(".")
+            self.tags.join(tag_separator)
         } else {
-            format!("{}.{}", self.tags.join("."), name_ext)
+            format!(
+                "{}{}{}",
+                self.tags.join(tag_separator),
+                tag_separator,
+                name_ext
+            )
         }
     }
 
@@ -222,5 +251,35 @@ impl FileSnapshot {
         snap.set_segment_start(segment_start);
         snap.set_segment_end(segment_end);
         snap
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_space_after_each_tag_is_written_on_request_and_read_either_way() {
+        let mut snapshot = FileSnapshot::parse("Food.Goat.clip.in_00_00_07.mp4");
+        assert_eq!(
+            snapshot.file_name_with(true),
+            "Food. Goat. clip.in_00_00_07.mp4"
+        );
+        assert_eq!(
+            snapshot.file_name_with(false),
+            "Food.Goat.clip.in_00_00_07.mp4"
+        );
+
+        let spaced = FileSnapshot::parse("Food. Goat. clip.in_00_00_07.mp4");
+        assert_eq!(spaced.tags(), ["Food", "Goat"]);
+        assert_eq!(spaced.name_without_extension(), "clip");
+        assert_eq!(spaced.segment_start(), Some(7.0));
+
+        snapshot.set_tags(Vec::<String>::new());
+        assert_eq!(
+            snapshot.file_name_with(true),
+            "clip.in_00_00_07.mp4",
+            "no tags, no space"
+        );
     }
 }

@@ -1,3 +1,8 @@
+# 0.68
+## Added
+- A setting puts a space after each tag in file names (`Food. Goat. clip.mp4`); names are read the same either way.
+- Batch action "Apply tag spacing" renames checked files to the chosen spacing; Settings offer it after the setting changes.
+
 # 0.67
 ## Added
 - A Linux version: one AppImage file from the release page, with video playback built in.
