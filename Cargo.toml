@@ -62,6 +62,12 @@ ureq = { version = "3", default-features = false }
 # Downloads, Desktop and Documents, where an old zip version is looked for
 dirs = "6"
 
+# Subtitles from speech (Soniox), as a library: no command line parts.
+sonisub = { version = "0.3", default-features = false }
+# sonisub's errors, and its progress bars: frename hands it a hidden one (same version as sonisub).
+anyhow = "1"
+indicatif = "0.18"
+
 [profile.dev.package."*"]
 # Dependencies are rebuilt rarely but run on every frame (text layout, image decode, SQLite,
 # shader compilation), so optimise them even in debug builds. Own crates stay at opt-level 0

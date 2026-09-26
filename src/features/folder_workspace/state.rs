@@ -709,7 +709,60 @@ impl FolderWorkspace {
         // Batch mode does not edit the open file, so its rename editor goes.
         self.inline_rename = None;
         self.batch.update(msg);
-        self.describe_ai_reads()
+        Task::batch([self.describe_ai_reads(), self.subtitle_reads()])
+    }
+
+    /// What "Generate subtitles" shows before it runs is worked out in the background while
+    /// its panel is shown: the plan of the checked videos (their headers), the price, and
+    /// whether a Soniox key is saved.
+    fn subtitle_reads(&mut self) -> Task<Message> {
+        let Some(dir) = self.directory.as_ref() else {
+            return Task::none();
+        };
+        let batch = &mut self.batch;
+        // Every checked file, listed or hidden by a filter: the job runs them all.
+        let checked: Vec<&frename_core::File> = dir
+            .all_files()
+            .filter(|f| batch.is_checked(f.id()))
+            .collect();
+        let reads = batch.subtitle_reads(&checked);
+        let wrap = |msg: batch::generate_subtitles::Message| {
+            Message::Batch(batch::Message::Action(
+                batch::ActionMessage::GenerateSubtitles(msg),
+            ))
+        };
+        let mut tasks = Vec::new();
+        // The app reads it (the settings show it too) and passes the answer back.
+        if reads.key_state {
+            tasks.push(Task::done(Message::Batch(batch::Message::Action(
+                batch::ActionMessage::ReadSonioxKeyState,
+            ))));
+        }
+        if let Some((generation, files, replace)) = reads.plan {
+            tasks.push(Task::future(async move {
+                let plan = tokio::task::spawn_blocking(move || {
+                    batch::generate_subtitles::plan(&files, replace)
+                })
+                .await
+                .unwrap_or_else(|e| {
+                    log::error!("subtitles: working out the plan failed: {e}");
+                    batch::generate_subtitles::Plan::default()
+                });
+                wrap(batch::generate_subtitles::Message::PlanReady {
+                    generation,
+                    plan: Box::new(plan),
+                })
+            }));
+        }
+        if reads.price {
+            tasks.push(Task::future(async move {
+                let price = tokio::task::spawn_blocking(batch::generate_subtitles::price)
+                    .await
+                    .unwrap_or(batch::generate_subtitles::Price::Typical);
+                wrap(batch::generate_subtitles::Message::PriceReady(price))
+            }));
+        }
+        Task::batch(tasks)
     }
 
     /// What "Describe with AI" shows before it runs needs reading from disk: the length of
@@ -839,10 +892,19 @@ impl FolderWorkspace {
 
     /// Take a finished file into the list (it may have been renamed), then start the next.
     fn batch_item_done(&mut self, id: FileId, result: Box<ItemResult>) -> Task<Message> {
-        if let (Some(dir), Some((path, snapshot))) =
-            (self.directory.as_mut(), result.update.as_ref())
-        {
-            dir.rename_file(id, path, snapshot);
+        if let Some(dir) = self.directory.as_mut() {
+            if let Some((path, snapshot)) = result.update.as_ref() {
+                dir.rename_file(id, path, snapshot);
+            }
+            // Its subtitles marker, the "with subtitles" filter and its count, after a job
+            // that may have written a `.srt`.
+            let has_subtitles = dir.file_by_id(id).map(|f| {
+                frename_core::subtitle_path(&frename_core::FileTagger::disk_path(f.file_path()))
+                    .is_file()
+            });
+            if let Some(has_subtitles) = has_subtitles {
+                dir.set_has_subtitles(id, has_subtitles);
+            }
         }
         self.batch.finish(id, &result);
         self.next_batch_item()
@@ -852,7 +914,9 @@ impl FolderWorkspace {
     fn batch_finished(&mut self) -> Task<Message> {
         // The job renamed files behind the history: undoing across it would use stale paths.
         self.history = WorkspaceHistory::new(HISTORY_DEPTH);
-        let load_comments = self.load_next_comment_batch(false);
+        // The job may have written subtitles: the plan is made again.
+        let load_comments =
+            Task::batch([self.load_next_comment_batch(false), self.subtitle_reads()]);
         let Some(file) = self
             .directory
             .as_ref()

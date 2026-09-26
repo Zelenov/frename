@@ -1,8 +1,27 @@
-//! The Anthropic API key, kept in the operating system's credential store (Windows Credential
-//! Manager, macOS Keychain, Secret Service on Linux). Never in the database, logs or files.
+//! The API keys (Anthropic for AI descriptions, Soniox for subtitles), kept in the operating
+//! system's credential store (Windows Credential Manager, macOS Keychain, Secret Service on
+//! Linux). Never in the database, logs or files.
 
 const SERVICE: &str = "frename";
-const USER: &str = "anthropic-api-key";
+
+/// Which service a key is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ApiKey {
+    /// AI descriptions.
+    Anthropic,
+    /// Subtitles from speech.
+    Soniox,
+}
+
+impl ApiKey {
+    /// The store entry's user name.
+    fn user(self) -> &'static str {
+        match self {
+            Self::Anthropic => "anthropic-api-key",
+            Self::Soniox => "soniox-api-key",
+        }
+    }
+}
 
 /// Whether a key is saved, or that the store cannot be used on this system.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,8 +49,8 @@ fn entry(user: &str) -> Result<keyring::Entry, keyring::Error> {
 }
 
 /// The saved key; `None` when there is none or the store cannot be used.
-pub fn read_key() -> Option<String> {
-    read_key_of(USER)
+pub fn read_key(which: ApiKey) -> Option<String> {
+    read_key_of(which.user())
 }
 
 fn read_key_of(user: &str) -> Option<String> {
@@ -43,8 +62,8 @@ fn read_key_of(user: &str) -> Option<String> {
 }
 
 /// Whether a key is saved. Blocking (may unlock a keyring): run it on a worker thread.
-pub fn key_state() -> KeyState {
-    key_state_of(USER)
+pub fn key_state(which: ApiKey) -> KeyState {
+    key_state_of(which.user())
 }
 
 fn key_state_of(user: &str) -> KeyState {
@@ -59,8 +78,8 @@ fn key_state_of(user: &str) -> KeyState {
 }
 
 /// Save `key`, replacing any saved one.
-pub fn save_key(key: &str) -> Result<(), KeyError> {
-    save_key_of(USER, key)
+pub fn save_key(which: ApiKey, key: &str) -> Result<(), KeyError> {
+    save_key_of(which.user(), key)
 }
 
 fn save_key_of(user: &str, key: &str) -> Result<(), KeyError> {
@@ -70,8 +89,8 @@ fn save_key_of(user: &str, key: &str) -> Result<(), KeyError> {
 }
 
 /// Remove the saved key; removing none is no error.
-pub fn delete_key() -> Result<(), KeyError> {
-    delete_key_of(USER)
+pub fn delete_key(which: ApiKey) -> Result<(), KeyError> {
+    delete_key_of(which.user())
 }
 
 fn delete_key_of(user: &str) -> Result<(), KeyError> {
@@ -90,7 +109,7 @@ mod tests {
     /// into a mock.
     #[test]
     fn the_key_round_trips_or_the_store_says_it_is_unavailable() {
-        let user = format!("{USER}-test-{}", std::process::id());
+        let user = format!("{}-test-{}", ApiKey::Soniox.user(), std::process::id());
         match key_state_of(&user) {
             KeyState::Unavailable => {
                 if cfg!(windows) {

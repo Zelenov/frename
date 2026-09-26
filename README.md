@@ -171,6 +171,8 @@ A `.srt` with the same name as the video (`clip.srt` for `clip.mp4`) is shown un
 The CC button opens a list of every line; click a line to jump to it. In fullscreen the subtitles
 are shown over the picture, and CC opens the list beside them there too.
 
+No subtitles yet? Check the videos in batch mode and run **Generate subtitles** (see below).
+
 ## Batch mode
 
 ![Batch mode](docs/frename-screenshot-batch.jpg)
@@ -188,7 +190,8 @@ and Cancel. Each file then shows a green or red check box. Actions:
 - put the tags in every name in tag panel order;
 - add or remove the space after each tag, as set in Settings;
 - read every file again (use this if the list looks out of date);
-- describe each video with AI (see below).
+- describe each video with AI (see below);
+- generate subtitles from the speech (see below).
 
 ### Describe with AI
 
@@ -205,6 +208,16 @@ there like any other text. It starts at a line beginning with `AI: ` and runs to
 comment; a new run replaces only that part and never touches the text above it. Premiere Pro and
 `.comment.txt` get the whole comment.
 
+### Generate subtitles
+
+**Generate subtitles** sends the audio of each checked video to [Soniox](https://soniox.com), a
+paid speech-to-text service (a few cents per hour of audio), and saves the subtitles next to it as
+`clip.srt`. Before you run it, the panel shows how much audio will be sent and about what it
+costs. Videos that already have subtitles are skipped unless you tick **Replace existing
+subtitles**, and a video found to have no speech is not sent again. Afterwards the panel lists
+every video that got no subtitles and why. You need your own Soniox API key: set it in Settings →
+Subtitles. Formats such as mkv, m2ts and avi need [ffmpeg](https://ffmpeg.org) on your PATH.
+
 ## Settings
 
 The ⚙ button opens Settings:
@@ -220,7 +233,9 @@ The ⚙ button opens Settings:
   an update is ready; nothing is downloaded until you click;
 - your Anthropic API key for Describe with AI, kept in the system's password store (Windows
   Credential Manager, macOS Keychain, or a keyring such as GNOME Keyring on Linux), the model
-  (Claude Haiku 4.5, Sonnet 5 or Opus 5, with their prices) and the language of the descriptions.
+  (Claude Haiku 4.5, Sonnet 5 or Opus 5, with their prices) and the language of the descriptions;
+- for Generate subtitles: your Soniox API key (kept the same way), the languages spoken in your
+  footage (any of the languages Soniox knows), and whether a subtitle is a short line or a whole sentence.
 
 After you change where comments or in/out points are kept, or the tag spacing, Settings offer the
 batch action that updates the existing files.

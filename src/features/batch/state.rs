@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use clipscribe::AiUsage;
 use frename_core::{File, FileId, FileSnapshot};
 
-use super::actions::Actions;
+use super::actions::{generate_subtitles, Actions};
 use super::{Action, Message, Operation};
 
 /// How far the file in work is, told by its operation from the worker thread. Only slow
@@ -219,7 +219,13 @@ impl BatchState {
             return;
         }
         match message {
-            Message::SetActive(active) => self.active = active,
+            Message::SetActive(active) => {
+                // Files may have been renamed or got subtitles outside batch mode.
+                if active && !self.active {
+                    self.actions.generate_subtitles_mut().invalidate_plan();
+                }
+                self.active = active;
+            }
             Message::SelectAction(action) => self.action = action,
             Message::Action(message) => self.actions.update(message),
             Message::Prepare { operation, files } => {
@@ -303,6 +309,12 @@ impl BatchState {
             .filter(|_| !job.cancelled && job.stopped.is_none())
         else {
             job.running = false;
+            // The job may have written subtitles: the plan is made again.
+            self.actions.generate_subtitles_mut().invalidate_plan();
+            let job = self.job.as_mut()?;
+            if let Some(report) = job.operation.report() {
+                log::info!("batch: {}: {report}", job.operation.action().label());
+            }
             if let Some(usage) = job.usage {
                 log::info!(
                     "batch: {} spent {}",
@@ -425,6 +437,17 @@ impl BatchState {
         self.checked.clear();
         self.job = None;
         self.actions.describe_ai_mut().reset_files();
+        self.actions.generate_subtitles_mut().invalidate_plan();
+    }
+
+    /// What "Generate subtitles" needs worked out in the background while its panel is shown
+    /// for `checked` (in list order): its plan, the price, whether a key is saved. Each is
+    /// marked as asked for.
+    pub fn subtitle_reads(&mut self, checked: &[&File]) -> generate_subtitles::Reads {
+        if !self.active || self.action != Action::GenerateSubtitles || self.is_running() {
+            return generate_subtitles::Reads::default();
+        }
+        self.actions.generate_subtitles_mut().reads(checked)
     }
 
     /// What "Describe with AI" needs read from disk while its panel is shown for `checked`: the
@@ -503,6 +526,29 @@ impl BatchState {
                 .map(|id| (id, job.reasons.get(&id).map(String::as_str)))
                 .collect()
         })
+    }
+
+    /// Files of the current job that were left alone for a reason (e.g. "no speech"), in job
+    /// order: the subtitle action lists them with the failed ones.
+    pub fn skipped_with_reason(&self) -> Vec<(FileId, &str)> {
+        self.job.as_ref().map_or_else(Vec::new, |job| {
+            job.order
+                .iter()
+                .copied()
+                .filter(|id| job.statuses.get(id) == Some(&ItemStatus::Skipped))
+                .filter_map(|id| job.reasons.get(&id).map(|r| (id, r.as_str())))
+                .collect()
+        })
+    }
+
+    /// The action of the current job, which the report's wording follows.
+    pub fn job_action(&self) -> Option<Action> {
+        self.job.as_ref().map(|job| job.operation.action())
+    }
+
+    /// The current job's own summary line (e.g. what it spent), when it has one.
+    pub fn report(&self) -> Option<String> {
+        self.job.as_ref().and_then(|job| job.operation.report())
     }
 
     /// How far the current job is; `None` without one.
@@ -653,6 +699,11 @@ mod tests {
         assert!(!batch.start(Vec::new()), "nothing checked");
         for action in Action::ALL {
             batch.update(Message::SelectAction(action));
+            if action == Action::GenerateSubtitles {
+                // Waits for its plan, key and price.
+                assert_eq!(batch.operation(), None);
+                continue;
+            }
             assert_eq!(batch.operation().map(|op| op.action()), Some(action));
         }
         batch.update(Message::SelectAction(Action::FixTags));
