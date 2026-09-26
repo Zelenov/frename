@@ -13,7 +13,8 @@ sonisub command line on a folder separately, with a key in an environment variab
 
 1. **Set the key once.** Settings → new section **Subtitles**: a *Soniox API key* field (masked,
    *Show*, **Save**; once saved `Key saved` with **Replace** / **Remove**, and a line naming where
-   it is kept on this system, e.g. `Saved in Windows Credential Manager on this computer.`),
+   it is kept on this system, e.g. `Saved in Windows Credential Manager on this computer.`, and
+   `Get a key at console.soniox.com.`),
    *Languages* (the languages spoken in the footage, as hints: checkboxes English and Russian on by
    default, plus Ukrainian, German, Spanish, French), and *Cue length*: **Short** (default: one line
    of up to 100 characters and at most 8 s per cue — sonisub's defaults, `Layout::default()`) or
@@ -21,21 +22,28 @@ sonisub command line on a folder separately, with a key in an environment variab
 2. **Run it.** Batch mode → check clips → action **Generate subtitles**. Before *Run*, the panel
    shows the plan, computed from the files and their headers only (sonisub's `batch::plan`):
    - `8 videos to transcribe, 41 min of audio · about $0.07` (the price per hour learned from the
-     account's last 30 days of Soniox usage, or sonisub's $0.10/h fallback when there is none;
-     `Estimating…` while it is fetched and headers are read; `+ 2 of unknown length` when a header
-     cannot be read);
+     account's last 30 days of Soniox usage; when there is none, or the lookup fails or takes over
+     10 s, sonisub's $0.10/h fallback, shown as `about $0.07 (typical price)`; `Estimating…` while
+     it is fetched and headers are read, never longer than the timeout; `+ 2 of unknown length`
+     when a header cannot be read but ffmpeg is there to try);
    - one line per kind of file not sent, singular/plural correct: `3 already have subtitles`,
      `2 rebuilt free from a saved transcript`, `1 had no speech last time`, `2 have no audio`,
-     `1 photo`, `1 shares its subtitle name with another video` (e.g. `clip.MP4` and `clip.MOV`
-     both map to `clip.srt`; the second is skipped);
+     `1 shares its subtitle name with another video` (e.g. `clip.MP4` and `clip.MOV` both map to
+     `clip.srt`; the second is skipped, also with Replace on), `3 cannot be read (install ffmpeg to
+     read .mkv, .m2ts, .avi …)` for files the built-in decoder cannot read when no `ffmpeg` is on
+     `PATH`;
    - a *Names and terms* field (optional, e.g. `Nairobi, Maasai`; sonisub's context, improves
      recognition) and a checkbox **Replace existing subtitles** (off) with the hint
      `Transcribes again; costs as shown.` — toggling it recomputes the plan and the price (it also
      ignores saved transcripts, sonisub's `force`);
-   - `The audio of these videos is sent to Soniox.`
+   - `The audio of these videos is sent to Soniox and deleted there afterwards.`
    The run button reads `Transcribe 8 videos` — deliberately not `Run on N files`, because this
    run costs money and the number must be the videos actually sent — and is disabled while
    estimating or without a key (then `Set a Soniox API key in Settings` with **Open Settings**).
+   With nothing to send but free rebuilds it reads `Build 2 subtitles (free)`; with nothing to do
+   at all it is disabled and the panel says `Nothing to transcribe`.
+   **The editor keeps working while it runs** (see Background job): transcribing only reads the
+   videos and writes `.srt` files next to them, so the video stays open and the file list works.
 3. **Progress and cancel** like every batch action; *Cancel* stops the current file within a few
    seconds (sonisub checks the job's cancel token during extraction, upload retries and polling)
    and sonisub deletes what it created on Soniox; that file counts as not reached, not as failed.
@@ -44,12 +52,14 @@ sonisub command line on a folder separately, with a key in an environment variab
    `Soniox stopped: <reason>`, instead of extracting and uploading every remaining file only to
    fail it the same way.
 4. **Result.** Each transcribed video gets `clip.srt` next to it (the path frename already reads:
-   same folder and stem). After the job each file's result is listed with its reason: `subtitled`,
-   `no speech`, `no audio`, `already had subtitles`, `failed: <reason>` (see Batch changes). The
+   same folder and stem). The counts line reads `✓ 8 subtitled – 3 unchanged ✗ 1 failed` (the
+   action names its done state), and every file that was not subtitled is listed with its reason
+   (`no speech`, `no audio`, `already had subtitles`, `audio format not supported`,
+   `failed: <reason>`) in the existing scrollable result list (see Batch changes). The
    open file's subtitles appear at once, and the list's subtitles marker, the "with subtitles"
    filter and its count are updated from `subtitle_path(..).is_file()` for each finished item. The
-   job's summary line adds `Soniox: 41 min · $0.07` (seconds sent, `Outcome::uploaded_s`, times the
-   price), also written to the log.
+   job's summary line adds `Soniox: 41 min · about $0.07` (seconds sent, `Outcome::uploaded_s`,
+   times the price used for the estimate), also written to the log.
 
 ## Settings layout
 
@@ -58,6 +68,22 @@ The Settings window is a fixed 560×560 with four sections already; a fifth does
 seen"). Its content becomes a scrollable column; the window keeps its size. **Open Settings** from
 the action opens it scrolled to the Subtitles section. (#17's design needs the same; whichever ships
 first adds it.)
+
+## Background job
+
+Today every batch job closes the open video, blocks opening other files, pauses comment loading
+and clears undo at the end (`run_batch` and the guards in `folder_workspace/state.rs`): right for
+actions that rewrite files, wrong for a job that only reads videos for many minutes. An operation
+therefore declares whether it **touches the videos**. Generate subtitles does not, so its job:
+- does not unload the open video, does not block navigation or comment loading, and does not
+  clear undo;
+- takes each file's **current** path from the `Directory` by `FileId` when that file's turn comes
+  (the job already advances one file per step on the UI side), so a video the editor renamed
+  meanwhile is read under its new name;
+- if the video was renamed while its own file was being transcribed, moves the new `.srt` (and a
+  `.soniox.json` marker) to the new stem when the item finishes, the same way a rename moves them;
+- a video removed meanwhile ends as `failed: file not found`.
+Undo is not affected: writing a `.srt` is not an undoable edit.
 
 ## Batch changes
 
@@ -71,9 +97,14 @@ cannot see. This PR changes the shared code (the same changes #17's design lists
   `stop_job: Option<String>` (stops the job, the rest not reached, reason as the summary line);
   other actions leave both `None`.
 - *Cancel* also sets the running job's cancel token.
+- Each action gives the run button its own label and enabled state and names its done state in the
+  counts line; the others keep `Run on N files` and `changed`.
+- `Operation` gains `touches_videos() -> bool` (true for the existing actions), which the job uses
+  as described under Background job.
 - The plan: when the checked set, the Replace checkbox or the key changes, the action starts a
-  `Task` that runs `batch::plan` (on videos only, filtered by `FileKind`) and the price lookup on a
-  blocking thread; each request carries a generation number, and an answer for an older one is
+  `Task` that works out shared subtitle names (passed to the job as a skip set, so `run` returns
+  them as skipped even with Replace on), runs `batch::plan` and the price lookup (10 s timeout) on
+  a blocking thread; each request carries a generation number, and an answer for an older one is
   dropped. The panel shows `Estimating…` until the current one arrives.
 - Every Soniox client call (`check_auth`, `usage::fetch`, the per-file `process`) runs on a
   blocking thread, and the client is created and dropped there: `reqwest::blocking::Client` panics
@@ -92,25 +123,34 @@ cannot see. This PR changes the shared code (the same changes #17's design lists
 - **Progress bars:** sonisub draws `indicatif` bars; frename passes a `MultiProgress` with a hidden
   draw target, so nothing is drawn (a release build has no console).
 - **Options** from Settings: `languages`, `layout` (`Layout::default()` or `Layout::unlimited()`),
-  `context` and `force` from the panel; `keep_json` off; `audio: Backend::Native` (the `Auto`
-  fallback starts `ffmpeg`, which would flash a console window from a GUI app on Windows);
+  `context` and `force` from the panel; `keep_json` off; `audio:`
+  `Backend::Auto` (the built-in decoder, then `ffmpeg` when it is on `PATH`, which frename's own
+  file list includes: .mkv, .m2ts, .avi, .wmv … need it);
   `reference` = `frename-<millis>`, one per run, so a run's usage can be told apart.
 
 ### Changes in sonisub (a PR there first)
 
 - **Cancel:** sonisub's cancel flag is process-wide and can only be set (`cancel::interrupt`); a
-  second job after a cancelled one would stop at once. Add a per-job
-  `cancel: Option<Arc<AtomicBool>>` to `job::Options`, checked wherever `interrupted()` is today
-  (either one stops the work); the CLI keeps using the global flag.
+  second job after a cancelled one would stop at once. Add a per-job cancel token
+  (`Arc<AtomicBool>`) that reaches every place `interrupted()` is checked: `job::Options::cancel`,
+  `Client::with_cancel(token)` (used by `Client::send`'s retries and the upload progress reader)
+  and a `cancel` argument to `audio::extract` (native decoding and the ffmpeg path). Either the
+  token or the global flag stops the work; the CLI keeps the global flag. These are public
+  signature changes, listed in the sonisub PR and its version notes.
+- **No console window for ffmpeg:** on Windows, `with_ffmpeg` sets `CREATE_NO_WINDOW`
+  (`CommandExt::creation_flags`), so a GUI app using the `Auto` backend does not flash a console.
 - **A `cli` feature** (default on) for `clap` and `ctrlc`: `audio::Backend` derives
-  `clap::ValueEnum` only under it, so frename, with `default-features = false`, does not build them.
+  `clap::ValueEnum` only under it, and the binary gets `[[bin]] required-features = ["cli"]`, so
+  frename, with `default-features = false`, builds neither, and the crate builds without the
+  feature.
 - **Cleanup warnings:** `RemoteGuard` reports a failed delete on Soniox with `eprintln!`, which a
   GUI release build throws away; it logs through the `log` crate instead (the CLI prints `log`
   output as today).
 - The rest of the API above is public already. sonisub's own tests and release are unaffected.
-- **Build cost in frename:** sonisub brings `reqwest` 0.13 with rustls (frename has no HTTP stack
-  yet), `symphonia` and `flacenc`. The PR records the release binary size before/after and needs
-  both CI jobs green (Windows and Linux).
+- **Build cost in frename:** sonisub brings `reqwest` 0.13 with rustls, whose crypto is
+  `aws-lc-rs` / `aws-lc-sys` (a C build; frename has no HTTP stack yet), `symphonia` and `flacenc`.
+  The PR records the release binary size and the CI build time before/after and needs both CI jobs
+  green (Windows and Linux).
 
 ## Things sonisub leaves next to the video
 
@@ -131,19 +171,18 @@ one, so the features are named per system: `windows-native` (Windows Credential 
 `apple-native` (macOS Keychain), `sync-secret-service` + `crypto-rust` + `vendored` (Linux Secret
 Service; `vendored` builds dbus, so no `libdbus-dev` is needed on CI or in the AppImage). The
 "Saved in …" line names the system's store. Where there is no store (a Linux desktop without Secret
-Service, headless CI), the field says `Cannot store the key on this system`; the `SONIOX_API_KEY`
-environment variable, which sonisub itself reads, is then used if set, and the action is disabled
-otherwise. (#17's design uses the same mechanism for the Anthropic key; whichever ships first adds
+Service, headless CI), the field says `Cannot store the key on this system`; frename then reads
+the `SONIOX_API_KEY` environment variable itself (the sonisub library does not) and uses it if
+set; the action is disabled otherwise. (#17's design uses the same mechanism for the Anthropic key; whichever ships first adds
 it, the other reuses it.)
 
 ## Edge cases
 
-- **The open video:** transcribing does not need the file unlocked (sonisub only reads it); the
-  batch handles the open file as every action does.
+- **The open video:** stays open and playing (see Background job); sonisub only reads the file.
 - **A `.srt` appears for the open file:** the player loads subtitles when a video opens; after the
   job, the open file's subtitles are reloaded so they show at once.
-- **Files without audio, photos:** skipped (photos filtered by `FileKind` before planning, since
-  sonisub would plan an unreadable photo as "unknown length"), named in the skipped lines, unchanged.
+- **Files without audio:** skipped, named in the skipped lines, unchanged. (The file list holds only
+  videos, so nothing else can be checked; the job still ignores any path that is not a video.)
 - **Two videos with the same stem** (`clip.MP4`, `clip.MOV`): both map to `clip.srt`; the plan skips
   the second with `shares its subtitle name with another video`.
 - **Long files:** no limit; the plan shows their audio length and cost.
@@ -154,7 +193,8 @@ it, the other reuses it.)
 - **A `.soniox.json` next to the video** (from an earlier sonisub run): sonisub uses it and builds
   the `.srt` without calling the API (free); the plan counts it as cached.
 - **Installer (#10):** nothing extra ships; sonisub is compiled into frename (its audio decoding is
-  pure Rust; `ffmpeg` is used only if it is on `PATH` and the built-in decoder fails).
+  pure Rust for MP4/MOV/M4A with AAC, MP3, WAV, FLAC, OGG; other containers need `ffmpeg` on `PATH`,
+  which the plan says). Bundling ffmpeg is out of scope.
 
 ## Out of scope
 
@@ -164,13 +204,16 @@ it, the other reuses it.)
 
 ## Test plan
 
-- sonisub: the per-job cancel token stops `process` (and the global flag still does); the crate builds
-  with `--no-default-features`.
+- sonisub: the per-job cancel token stops `process`, an upload and an extraction (and the global flag
+  still does); the crate builds with `--no-default-features`.
 - frename, no network: the action on a video whose `clip.soniox.json` fixture (copied from sonisub's
   `tests/fixtures`) lies next to it writes the expected `.srt` without a client call; the plan counts
-  skip / cached / cached silent / no audio / photos / shared names; outcome → result mapping with
+  skip / cached / cached silent / no audio / shared names / unreadable without ffmpeg; the price
+  lookup falls back on error and timeout; outcome → result mapping with
   reasons; a fatal error stops the job; a cancelled file is not reached, not failed; a second job
-  after a cancelled one runs; the subtitles marker and count update after the job; renaming a video
+  after a cancelled one runs; the subtitles marker and count update after the job; the open video
+  stays loaded and navigation works during the job; a video renamed during its turn gets its `.srt`
+  under the new name; renaming a video
   renames its `.soniox.json` marker; keyring round trip on Windows CI, and "unavailable" (not a mock)
   on Linux CI.
 - Live test only when `SONIOX_API_KEY` is set (skipped otherwise): one short clip from
@@ -180,7 +223,8 @@ it, the other reuses it.)
 
 ## Delivery
 
-1. A sonisub PR: per-job cancel token, `cli` feature, cleanup warnings through `log`, tests.
+1. A sonisub PR: per-job cancel token, `CREATE_NO_WINDOW` for ffmpeg, `cli` feature, cleanup
+   warnings through `log`, tests.
 2. The frename PR: dependency pinned to that commit, Settings section, the action, key storage,
    the marker rename, README and `version.md`. Body `Closes #12`.
 
