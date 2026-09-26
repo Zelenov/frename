@@ -1,6 +1,6 @@
 //! Demo mode: `frename --demo <scenario.toml> --out <png>` opens a staged folder in a known state,
-//! saves a screenshot of the main window and exits. CI uses it for the README screenshots
-//! (`docs/screenshots/`).
+//! saves a screenshot of the main window and exits. `docs/screenshots/render.sh` uses it for the
+//! README screenshots.
 //!
 //! Everything runs in a throwaway work folder: the staged clips and the app's own database and
 //! log (`FRENAME_DATA_DIR`), so the user's files and settings are never touched.
@@ -106,12 +106,15 @@ impl DemoRun {
     }
 }
 
-/// What to do once the video is ready: pause at the scenario's time, and turn on batch mode with
-/// every file checked when asked to.
+/// What to do once the video is ready: pause at the scenario's time, open the subtitle list when
+/// the scenario asks for it, and turn on batch mode with every file checked when asked to.
 fn steps(scenario: &DemoScenario, batch: bool) -> Vec<folder_workspace::Message> {
-    let mut steps = vec![folder_workspace::Message::MediaViewer(
-        media_viewer::Message::Video(video::Message::Seek(scenario.seek)),
-    )];
+    let video =
+        |message| folder_workspace::Message::MediaViewer(media_viewer::Message::Video(message));
+    let mut steps = vec![video(video::Message::Seek(scenario.seek))];
+    if scenario.subtitle_list {
+        steps.push(video(video::Message::ToggleCueList));
+    }
     if batch {
         steps.push(folder_workspace::Message::Folder(
             folder::Message::SetBatchMode(true),
@@ -140,13 +143,15 @@ fn save_png(shot: &window::Screenshot, expected: (u32, u32), path: &Path) -> Res
         .map_err(|e| format!("cannot save {}: {e}", path.display()))
 }
 
-/// What `--demo <scenario> --out <png> [--batch]` asks for.
+/// What `--demo <scenario> --out <png> [--batch] [--mono]` asks for.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DemoArgs {
     pub scenario: PathBuf,
     pub out: PathBuf,
     /// Show batch mode with every file checked: one scenario gives both README screenshots.
     pub batch: bool,
+    /// Turn on the monochrome tags setting.
+    pub mono: bool,
 }
 
 /// The demo the command line asks for; `None` for a normal start.
@@ -167,6 +172,7 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
             scenario,
             out,
             batch: args.iter().any(|a| a == "--batch"),
+            mono: args.iter().any(|a| a == "--mono"),
         })
     }))
 }
@@ -204,7 +210,13 @@ pub fn prepare(args: &DemoArgs, work: &Path) -> Result<DemoRun, String> {
     let folder = work.join("folder");
     let file = frename_core::demo::stage(&scenario, scenario_dir, &folder)
         .map_err(|e| format!("cannot stage the demo folder: {e}"))?;
-    frename_core::demo::seed(&frename_core::AppDatabase::new(), &scenario, &folder, &file);
+    frename_core::demo::seed(
+        &frename_core::AppDatabase::new(),
+        &scenario,
+        &folder,
+        &file,
+        args.mono,
+    );
     Ok(DemoRun::new(
         scenario,
         args.out.clone(),
@@ -233,17 +245,19 @@ mod tests {
             Some(Ok(DemoArgs {
                 scenario: "a.toml".into(),
                 out: "a.png".into(),
-                batch: false
+                batch: false,
+                mono: false
             }))
         );
         assert_eq!(
             demo_args(&args(&[
-                "frename", "--batch", "--out", "a.png", "--demo", "a.toml"
+                "frename", "--batch", "--out", "a.png", "--demo", "a.toml", "--mono"
             ])),
             Some(Ok(DemoArgs {
                 scenario: "a.toml".into(),
                 out: "a.png".into(),
-                batch: true
+                batch: true,
+                mono: true
             }))
         );
     }
@@ -286,6 +300,20 @@ mod tests {
         assert!(matches!(
             batch[2],
             folder_workspace::Message::Folder(folder::Message::ToggleAllChecked)
+        ));
+    }
+
+    #[test]
+    fn the_subtitle_list_opens_only_when_the_scenario_asks() {
+        let mut with_list = scenario();
+        with_list.subtitle_list = true;
+        let steps = steps(&with_list, false);
+        assert_eq!(steps.len(), 2);
+        assert!(matches!(
+            steps[1],
+            folder_workspace::Message::MediaViewer(media_viewer::Message::Video(
+                video::Message::ToggleCueList
+            ))
         ));
     }
 

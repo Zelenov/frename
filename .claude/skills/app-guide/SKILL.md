@@ -156,9 +156,11 @@ iced::application(FrenameApp::new)
 folder, stores the window size, panel widths and settings it asks for in a temp database
 (`FRENAME_DATA_DIR`), opens the folder, pauses the video at `seek`, optionally turns on batch mode,
 and saves a PNG of the window (iced `window::screenshot`, no window frame). Scenarios and the
-annotated templates for the README are in `docs/screenshots/`; `docs/screenshots/render.sh` renders
-them (CI: `.github/workflows/screenshots.yml`). Use it to look at a screen past the folder picker:
-write a scenario for it and run it under Xvfb.
+annotated templates for the README are in `docs/screenshots/`. The README images are rendered by
+hand with `docs/screenshots/render.sh` (Windows or Linux), only when a change makes them wrong; CI
+does not make them. Arrows in the templates are the one shape from the original PSD, only rotated
+or mirrored (see the comment in `main.svg`). Use demo mode to look at a screen past the folder
+picker: write a scenario for it and run it (under Xvfb on a headless Linux).
 
 ## Common patterns
 
