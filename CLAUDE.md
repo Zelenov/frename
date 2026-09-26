@@ -86,13 +86,14 @@ Xvfb :99 -screen 0 1600x900x24 &
 sleep 15 && DISPLAY=:99 import -window root screenshot.png
 ```
 
-Verified: it renders under Xvfb (software rendering). Today it starts on the empty "open a folder"
-screen and has no command-line option to open a folder, so screens past it cannot be reached yet;
-issue #14 (demo mode) adds that. Until then the product reviewer reviews the `view` code plus a
-written description of the UI, and screenshots are taken wherever they can be.
+Verified: it renders under Xvfb (software rendering). Demo mode opens a staged folder in a known
+state and saves a screenshot of the main window: `frename --demo <scenario.toml> --out <png>`
+(scenarios and `render.sh` in `docs/screenshots/`). Other windows (Settings, dialogs) are captured
+with `import` under Xvfb as above.
 
 Look at the screenshot of every screen a change touches before asking for review; give the product
-reviewer the screenshot path.
+reviewer the screenshot path. Every agent PR with a visible change shows its screenshots in the PR
+body (`nightly` skill → "Screenshots in the PR").
 
 ## Never
 

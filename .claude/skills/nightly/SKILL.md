@@ -153,11 +153,37 @@ discusses the implementation afterwards.
   every later commit and every fix round. Never force-push.
 - Follow `AGENTS.md`, the Iced Elm skill, and the matching project skills.
 - Every behaviour change in `frename-core` gets unit tests; bug fixes get a test that failed before.
-- UI changes: see "Looking at the UI" in `CLAUDE.md`.
+- UI changes: see "Looking at the UI" in `CLAUDE.md`, and "Screenshots in the PR" below.
 - User-facing change → update `README.md` (per `readme` skill) and add release notes to
   `version.md` (per `create-release-version` skill) as a new first block headed `# NEXT`. The real
   version number is set at merge time (step 7), never earlier.
 - Commit in small logical steps; messages in English.
+
+### Screenshots in the PR
+
+Every PR that changes anything the user can see shows it: the owner looks at the PR, not at the
+code. The PR body has a `## Screenshots` section with one image per screen or state the change
+touches (e.g. the new dialog, the menu open, an error state), each with a one-line caption. When an
+existing screen changes, show before and after side by side (`| Before | After |` table).
+
+- Take them with demo mode (`frename --demo <scenario.toml> --out <png>`, scenarios in
+  `docs/screenshots/`); add or extend a scenario in the same PR when the feature needs a state no
+  scenario reaches. Windows other than the main one (Settings, dialogs) and states demo mode
+  cannot reach: run the app under Xvfb and capture with `import` (see `CLAUDE.md`).
+- Look at every image before posting it (Read the PNG): no clipped text, no missing glyphs, the
+  feature actually visible. A screenshot that shows the wrong thing is worse than none.
+- Store them on the branch `pr-screenshots` (an orphan branch, never merged, never deleted), under
+  `<issue-number>/<name>.png`, and embed them with
+  `https://raw.githubusercontent.com/Zelenov/frename/pr-screenshots/<issue-number>/<name>.png`.
+  Create the branch with `git switch --orphan pr-screenshots` the first time; afterwards fetch it,
+  add files, commit, push (never force-push). Screenshots never go into the feature branch unless
+  they are README images.
+- Refresh them after every fix round that changes the UI (new file names, e.g. `-r2`, so old PR
+  revisions keep their images), and in the "Owner review" summary.
+- When a screen really cannot be captured (e.g. a native OS dialog), say so in the section and
+  describe it in words instead.
+- Changes with nothing visible (CI, refactors, core-only) write `## Screenshots` → "No visible
+  change."
 
 ## 5. Local gate
 
@@ -196,7 +222,7 @@ best judgement, and leaves it unmerged:
 3. Mark the PR ready for review (not draft), add the label `owner-review` to the PR and the issue,
    remove `in-progress`. Put at the top of the PR body:
    `🤖 agent: ⚠️ Not released — <code review|CI> did not converge.` followed by: what was
-   built, the decisions made without the owner, the unresolved reviewer findings with the decision
+   built, the screenshots (as in "Screenshots in the PR"), the decisions made without the owner, the unresolved reviewer findings with the decision
    taken on each, what is left out and why, the CI state, and how to try it (the CI artifacts:
    Windows build, AppImage).
 4. Comment the same summary in short on the issue, with the PR link. Go to step 2.
@@ -252,8 +278,8 @@ less than 90 minutes ago) and watch the run to completion.
 6. While a `release-failed` issue is open, merge nothing that changes `version.md`; other work can
    continue up to that point.
 
-After merging an implementation PR: comment on the issue what shipped, which version,
-how to try it, what the owner has to check by hand (e.g. Premiere Pro behaviour), and remove
+After merging an implementation PR: comment on the issue what shipped (with the main
+screenshot), which version, how to try it, what the owner has to check by hand (e.g. Premiere Pro behaviour), and remove
 `in-progress`.
 
 ## 8. End of session
