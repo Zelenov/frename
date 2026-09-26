@@ -82,35 +82,6 @@ impl InOutStorage {
     }
 }
 
-/// Where "Describe with AI" puts the moments of a clip (its timed segments).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum AiMomentStorage {
-    /// As lines of the comment's AI block, below its summary.
-    #[default]
-    Comment,
-    /// As markers inside the video file (XMP) in [`crate::AI_MARKER_COLOR`], which Premiere
-    /// Pro shows on the clip; the comment's AI block keeps only the summary.
-    InVideo,
-}
-
-impl AiMomentStorage {
-    /// Stable name for persisting the setting.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Comment => "comment",
-            Self::InVideo => "xmp",
-        }
-    }
-
-    /// Parse a persisted name; unknown names fall back to the default.
-    pub fn from_name(name: &str) -> Self {
-        match name {
-            "xmp" => Self::InVideo,
-            _ => Self::Comment,
-        }
-    }
-}
-
 /// Both storage choices, as the file tagger applies them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct MetadataStorage {

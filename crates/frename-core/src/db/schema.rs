@@ -118,11 +118,6 @@ pub const M11_AI_MODEL: &str = "
 ALTER TABLE app_settings ADD COLUMN ai_model TEXT NOT NULL DEFAULT 'claude-haiku-4-5';
 ";
 
-/// Migration 13: where AI descriptions put a clip's moments (`AiMomentStorage::as_str`).
-pub const M13_AI_MOMENTS: &str = "
-ALTER TABLE app_settings ADD COLUMN ai_moments TEXT NOT NULL DEFAULT 'comment';
-";
-
 /// Migration 12: generating subtitles. The languages spoken in the footage, as comma-separated
 /// hints (empty: detect automatically), and how long a cue may get (`CueLength::as_str`).
 pub const M12_SUBTITLE_SETTINGS: &str = "

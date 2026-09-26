@@ -236,7 +236,7 @@ pub fn progress_bar<'a>(
 /// The marker the playhead is on, as the progress bar labels it.
 #[derive(Debug, Clone, Copy)]
 pub struct MarkerLabel<'a> {
-    /// Where its tick is, in seconds.
+    /// Where the label is centred, in seconds: a point's tick, or the middle of a range.
     pub at: f32,
     pub name: &'a str,
     /// `None` for a marker frename cannot change (it has no GUID).

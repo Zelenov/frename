@@ -14,7 +14,7 @@ use clipscribe::{
 };
 use frename_core::ai::block;
 use frename_core::ai::key::{self, KeyState};
-use frename_core::{AiMomentStorage, File, FileId, FileKind, FileTagger, FolderInfo};
+use frename_core::{CommentStorage, File, FileId, FileKind, FileTagger, FolderInfo};
 use iced::widget::{button, checkbox, column, row, text};
 use iced::{Element, Length};
 
@@ -44,8 +44,6 @@ pub enum Message {
     SetLanguage(SummaryLanguage),
     /// The model descriptions are written with, from the settings.
     SetModel(Model),
-    /// Where a clip's moments go, from the settings.
-    SetMoments(AiMomentStorage),
 }
 
 /// What the job does to each file: the options it started with.
@@ -55,8 +53,6 @@ pub struct Run {
     pub redo: bool,
     /// The model's id (see [`Model::from_id`]).
     pub model: &'static str,
-    /// Where the clip's moments go.
-    pub moments: AiMomentStorage,
 }
 
 impl Run {
@@ -70,7 +66,6 @@ pub struct Options {
     redo: bool,
     language: SummaryLanguage,
     model: Model,
-    moments: AiMomentStorage,
     /// What is known about each checked video, kept while the folder is open.
     probes: HashMap<FileId, Probe>,
     /// Videos whose length is being read.
@@ -94,7 +89,6 @@ impl Options {
             Message::KeyState(state) => self.key = Some(state),
             Message::SetLanguage(language) => self.language = language,
             Message::SetModel(model) => self.model = model,
-            Message::SetMoments(moments) => self.moments = moments,
         }
     }
 
@@ -103,7 +97,6 @@ impl Options {
             language: self.language,
             redo: self.redo,
             model: self.model.id,
-            moments: self.moments,
         })
     }
 
@@ -447,7 +440,8 @@ pub fn probe_all(clips: Vec<(FileId, PathBuf)>) -> Vec<(FileId, Probe)> {
 }
 
 /// Describe the video at `path` and write the description into its comment, and its moments
-/// into the comment too or into the video as markers (see [`AiMomentStorage`]).
+/// into the video as markers while comments are kept inside the video (XMP), where Premiere
+/// Pro shows them on the clip; with comments in text files, into the comment too.
 pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress) -> ItemResult {
     let is_video = path
         .extension()
@@ -523,9 +517,9 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
     };
     let usage = Some(described.usage);
     progress.set(0.98, "saving");
-    let new_block = match options.moments {
-        AiMomentStorage::Comment => block::format_block(&described.description),
-        AiMomentStorage::InVideo => {
+    let new_block = match frename_core::metadata_storage().comment {
+        CommentStorage::TextFile => block::format_block(&described.description),
+        CommentStorage::InVideo => {
             // Markers first, before the comment's save may rename the file.
             let segments = block::segment_lines(&described.description);
             match FileTagger::save_ai_markers(path, &segments) {
@@ -720,7 +714,6 @@ mod tests {
                 language: SummaryLanguage::English,
                 redo: false,
                 model: Model::default().id,
-                moments: AiMomentStorage::Comment,
             },
             Path::new("C:/clips/photo.jpg"),
             &AtomicBool::new(false),

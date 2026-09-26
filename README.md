@@ -215,9 +215,10 @@ there like any other text. It starts at a line beginning with `AI: ` and runs to
 comment; a new run replaces only that part and never touches the text above it. Premiere Pro and
 `.comment.txt` get the whole comment.
 
-Settings can put the segments into the video instead, as white markers Premiere Pro shows on the
-clip; the comment then keeps only the summary. A new run replaces the white markers and leaves
-markers of other colors alone, so recolor one to keep it.
+While comments are kept inside the video (Settings, the default), the segments go into the video
+as white markers Premiere Pro shows on the clip, and the comment keeps only the summary. A new
+run replaces the white markers and leaves markers of other colors alone, so recolor one to keep
+it. Formats that cannot hold markers get the segments in the comment.
 
 ### Generate subtitles
 

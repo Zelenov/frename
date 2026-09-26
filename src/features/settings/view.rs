@@ -3,7 +3,7 @@
 use clipscribe::{Model, MODELS};
 use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::ai::SummaryLanguage;
-use frename_core::{AiMomentStorage, CommentStorage, CueLength, InOutStorage};
+use frename_core::{CommentStorage, CueLength, InOutStorage};
 use iced::widget::{
     button, checkbox, column, container, pick_list, radio, row, scrollable, text, text_input,
 };
@@ -155,7 +155,6 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
                 state.key(ApiKey::Anthropic),
                 settings.summary_language,
                 Model::from_id(&settings.ai_model),
-                settings.ai_moments,
             ),
         ))
         .push(section(
@@ -180,14 +179,8 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
     .into()
 }
 
-/// The AI section: the Anthropic API key, the model and language of descriptions, and where
-/// a clip's moments go.
-fn ai_options(
-    key: &KeySection,
-    language: SummaryLanguage,
-    model: Model,
-    moments: AiMomentStorage,
-) -> Element<'_, Message> {
+/// The AI section: the Anthropic API key, and the model and language of descriptions.
+fn ai_options(key: &KeySection, language: SummaryLanguage, model: Model) -> Element<'_, Message> {
     let muted = |line: &'static str| text(line).size(12).color(theme::TEXT_MUTED);
     key_block(
         ApiKey::Anthropic,
@@ -220,30 +213,9 @@ fn ai_options(
         .spacing(12)
         .align_y(iced::Alignment::Center),
     )
-    .push(text("The moments of a clip (0:00–0:07 …)").size(13))
-    .push(
-        column![
-            radio(
-                "In the comment, below the description",
-                AiMomentStorage::Comment,
-                Some(moments),
-                Message::SetAiMoments,
-            )
-            .text_size(13),
-            radio(
-                "Inside the video file (XMP): white markers Premiere Pro shows on the clip",
-                AiMomentStorage::InVideo,
-                Some(moments),
-                Message::SetAiMoments,
-            )
-            .text_size(13),
-        ]
-        .spacing(6),
-    )
     .push(muted(
         "Used by Describe with AI in batch mode. Haiku is the cheapest and fine for most \
-         clips; Sonnet and Opus notice more and cost more. As markers, a new description \
-         replaces the white markers of the last one; recolor a marker to keep it.",
+         clips; Sonnet and Opus notice more and cost more.",
     ))
     .into()
 }

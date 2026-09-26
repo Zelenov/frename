@@ -161,7 +161,8 @@ fn sized_view<'a>(
             })
             .collect();
         let marker_label = labelled.map(|m| video_controls::view::MarkerLabel {
-            at: m.start_ms as f32 / 1000.0,
+            // Over a point's pin, or over the middle of a range's band.
+            at: (m.start_ms + m.end_ms()) as f32 / 2000.0,
             name: m.name.as_str(),
             guid: m.guid.as_deref(),
             color: theme::marker_color(m.color),
