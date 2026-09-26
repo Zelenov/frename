@@ -275,8 +275,12 @@ impl FrenameApp {
                         self.settings.settings().summary_language,
                     ),
                 ));
+                let model = Task::done(describe_ai_message(batch::describe_ai::Message::SetModel(
+                    frename_core::ai::describe::Model::from_id(&self.settings.settings().ai_model),
+                )));
                 let load = Task::batch([
                     language,
+                    model,
                     Task::done(Message::FolderWorkspace(
                         folder_workspace::Message::LoadLastSession,
                     )),
@@ -360,6 +364,9 @@ impl FrenameApp {
                     settings::Message::SetSummaryLanguage(language) => Task::done(
                         describe_ai_message(batch::describe_ai::Message::SetLanguage(language)),
                     ),
+                    settings::Message::SetAiModel(model) => Task::done(describe_ai_message(
+                        batch::describe_ai::Message::SetModel(model),
+                    )),
                     settings::Message::Key(settings::KeyMessage::Save) => {
                         match self.settings.typed_key() {
                             Some(key) => key_task(self.settings.begin_key_request(), move || {

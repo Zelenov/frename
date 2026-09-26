@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use frename_core::ai::describe::Model;
 use frename_core::ai::key::KeyState;
 use frename_core::ai::SummaryLanguage;
 use frename_core::{CommentStorage, InOutStorage};
@@ -38,6 +39,8 @@ pub enum Message {
     OldSettingsFolderPicked(Option<PathBuf>),
     /// The language AI descriptions are written in.
     SetSummaryLanguage(SummaryLanguage),
+    /// The model AI descriptions are written with.
+    SetAiModel(Model),
     /// The API key section; never saved with the settings (the key lives in the credential
     /// store).
     Key(KeyMessage),

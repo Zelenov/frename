@@ -112,3 +112,8 @@ CREATE TABLE IF NOT EXISTS update_check (
 pub const M10_SUMMARY_LANGUAGE: &str = "
 ALTER TABLE app_settings ADD COLUMN summary_language TEXT NOT NULL DEFAULT 'subtitles';
 ";
+
+/// Migration 11: the model AI descriptions are written with (`Model::id`).
+pub const M11_AI_MODEL: &str = "
+ALTER TABLE app_settings ADD COLUMN ai_model TEXT NOT NULL DEFAULT 'claude-haiku-4-5';
+";

@@ -228,6 +228,7 @@ impl SettingsState {
             }
             Message::OpenBatchAction(Operation::RespaceTags) => self.tag_spacing_changed = false,
             Message::SetSummaryLanguage(language) => self.settings.summary_language = language,
+            Message::SetAiModel(model) => self.settings.ai_model = model.id.to_string(),
             Message::Key(message) => self.apply_key(message),
             Message::OpenBatchAction(
                 Operation::MarkersComment(_)

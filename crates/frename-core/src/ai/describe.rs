@@ -7,15 +7,40 @@ use super::block::format_time;
 use super::provider::{AiContent, AiRequest, AiResponse, AiUsage};
 use crate::Subtitles;
 
-/// The model stage 1 uses.
-pub const MODEL: Model = Model {
-    id: "claude-haiku-4-5",
-    label: "Claude Haiku 4.5",
-    input_usd_per_mtok: 1.0,
-    output_usd_per_mtok: 5.0,
-};
+/// The models descriptions can be written with, cheapest first; the first is the default.
+/// Sonnet and Opus think before answering: at low effort, since describing frames needs little
+/// reasoning, with room for the thinking in their answer budget.
+pub const MODELS: [Model; 3] = [
+    Model {
+        id: "claude-haiku-4-5",
+        label: "Claude Haiku 4.5",
+        input_usd_per_mtok: 1.0,
+        output_usd_per_mtok: 5.0,
+        effort: None,
+        max_answer_tokens: 4000,
+        answer_tokens: 600,
+    },
+    Model {
+        id: "claude-sonnet-5",
+        label: "Claude Sonnet 5",
+        input_usd_per_mtok: 2.0,
+        output_usd_per_mtok: 10.0,
+        effort: Some("low"),
+        max_answer_tokens: 16000,
+        answer_tokens: 1500,
+    },
+    Model {
+        id: "claude-opus-5",
+        label: "Claude Opus 5",
+        input_usd_per_mtok: 5.0,
+        output_usd_per_mtok: 25.0,
+        effort: Some("low"),
+        max_answer_tokens: 16000,
+        answer_tokens: 1500,
+    },
+];
 
-/// When the prices in [`MODEL`] were checked.
+/// When the prices in [`MODELS`] were checked.
 pub const PRICES_CHECKED: &str = "2026-09-26";
 
 /// Clips longer than this are skipped.
@@ -28,23 +53,31 @@ pub const MAX_FRAMES: usize = 60;
 pub const FRAME_LONG_SIDE: u32 = 512;
 /// Instruction tokens per request, for the estimate.
 const INSTRUCTION_TOKENS: u64 = 600;
-/// Answer tokens per request, for the estimate.
-const ANSWER_TOKENS: u64 = 600;
 /// Characters of subtitle text per token, for the estimate.
 const CHARS_PER_TOKEN: f64 = 3.5;
-const MAX_ANSWER_TOKENS: u32 = 4000;
 
-/// A model and its prices.
+/// A model, its prices and how it is asked.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Model {
     pub id: &'static str,
-    /// The name the comment and the panel show.
+    /// The name the panel and the settings show.
     pub label: &'static str,
     pub input_usd_per_mtok: f64,
     pub output_usd_per_mtok: f64,
+    /// `output_config.effort`; `None` for a model without it (Haiku 4.5 rejects it).
+    pub effort: Option<&'static str>,
+    /// Output tokens a request may use, thinking included.
+    pub max_answer_tokens: u32,
+    /// Output tokens of a typical answer, thinking included, for the estimate.
+    pub answer_tokens: u64,
 }
 
 impl Model {
+    /// The model with the stored id; an unknown id falls back to the default.
+    pub fn from_id(id: &str) -> Self {
+        MODELS.into_iter().find(|m| m.id == id).unwrap_or(MODELS[0])
+    }
+
     /// What `usage` costs, in US dollars.
     pub fn cost_usd(&self, usage: AiUsage) -> f64 {
         (usage.input_tokens as f64 * self.input_usd_per_mtok
@@ -111,6 +144,23 @@ impl SummaryLanguage {
             Self::Spanish => "Write in Spanish.",
             Self::French => "Write in French.",
         }
+    }
+}
+
+impl Default for Model {
+    fn default() -> Self {
+        MODELS[0]
+    }
+}
+
+impl std::fmt::Display for Model {
+    /// `Claude Sonnet 5 ($2 / $10 per M tokens)`, as the settings list it.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} (${} / ${} per M tokens)",
+            self.label, self.input_usd_per_mtok, self.output_usd_per_mtok
+        )
     }
 }
 
@@ -193,17 +243,17 @@ pub fn frame_tokens(width: u32, height: u32) -> u64 {
     u64::from(width.div_ceil(28)) * u64::from(height.div_ceil(28))
 }
 
-/// Estimated tokens of describing one clip, before its frames are known: 16:9 frames, the
-/// subtitles (`subtitle_bytes`, the `.srt` file's size, an upper bound on its text), the
-/// instructions, and a typical answer.
-pub fn estimate_usage(duration_s: f64, subtitle_bytes: usize) -> AiUsage {
+/// Estimated tokens of describing one clip with `model`, before its frames are known: 16:9
+/// frames, the subtitles (`subtitle_bytes`, the `.srt` file's size, an upper bound on its
+/// text), the instructions, and a typical answer.
+pub fn estimate_usage(model: Model, duration_s: f64, subtitle_bytes: usize) -> AiUsage {
     let (w, h) = frame_size(1920, 1080);
     let frames = frame_count(duration_s) as u64;
     AiUsage {
         input_tokens: frames * frame_tokens(w, h)
             + (subtitle_bytes as f64 / CHARS_PER_TOKEN) as u64
             + INSTRUCTION_TOKENS,
-        output_tokens: ANSWER_TOKENS,
+        output_tokens: model.answer_tokens,
     }
 }
 
@@ -239,8 +289,9 @@ pub fn schema() -> Value {
     })
 }
 
-/// The request describing a clip `duration_s` long from its frames and subtitles.
+/// The request to `model` describing a clip `duration_s` long from its frames and subtitles.
 pub fn build_request(
+    model: Model,
     frames: &[Frame],
     subtitles: Option<&Subtitles>,
     duration_s: f64,
@@ -282,10 +333,11 @@ pub fn build_request(
         content.push(AiContent::Jpeg(frame.jpeg.clone()));
     }
     AiRequest {
-        model: MODEL.id.to_string(),
+        model: model.id.to_string(),
         content,
         schema: schema(),
-        max_tokens: MAX_ANSWER_TOKENS,
+        max_tokens: model.max_answer_tokens,
+        effort: model.effort,
     }
 }
 
@@ -377,12 +429,23 @@ mod tests {
     }
 
     #[test]
+    fn a_stored_model_id_is_read_back_and_an_unknown_one_is_the_default() {
+        assert_eq!(Model::from_id("claude-sonnet-5").label, "Claude Sonnet 5");
+        assert_eq!(Model::from_id("claude-gone-1"), MODELS[0]);
+        assert_eq!(
+            MODELS[0].to_string(),
+            "Claude Haiku 4.5 ($1 / $5 per M tokens)"
+        );
+        assert!(MODELS[0].effort.is_none(), "Haiku 4.5 rejects effort");
+    }
+
+    #[test]
     fn a_thousand_one_minute_clips_cost_about_ten_dollars() {
         let mut usage = AiUsage::default();
         for _ in 0..1000 {
-            usage += estimate_usage(60.0, 1050);
+            usage += estimate_usage(MODELS[0], 60.0, 1050);
         }
-        let cost = MODEL.cost_usd(usage);
+        let cost = MODELS[0].cost_usd(usage);
         assert!((8.0..12.0).contains(&cost), "{cost}");
     }
 
@@ -400,6 +463,7 @@ mod tests {
             },
         ];
         let request = build_request(
+            MODELS[0],
             &frames,
             Some(&subtitles),
             4.0,
@@ -419,7 +483,13 @@ mod tests {
             false
         );
 
-        let silent = build_request(&frames, None, 4.0, SummaryLanguage::SameAsSubtitles);
+        let silent = build_request(
+            MODELS[0],
+            &frames,
+            None,
+            4.0,
+            SummaryLanguage::SameAsSubtitles,
+        );
         let AiContent::Text(instructions) = &silent.content[0] else {
             panic!("instructions first");
         };

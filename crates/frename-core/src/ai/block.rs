@@ -7,13 +7,13 @@
 //! AI: A guide leads two tourists through a spice market.
 //! 0:00–0:14 Walking through the market entrance, crowd, handheld.
 //! 0:14–0:41 Close-ups of spice sacks; the guide explains prices.
-//! — Claude Haiku 4.5, 2026-09-26 —
 //! ```
 //!
 //! A block starts with a line beginning `AI: ` at the start of the comment or after a blank
-//! line, and ends with the first following line `— <model>, <YYYY-MM-DD> —` (`--` also
-//! accepted, so hand-typed edits survive). An `AI: ` line with no end line is the editor's
-//! text. A comment holds at most one block; text found after it is the editor's too.
+//! line, and runs to the end of the comment. When several lines qualify, the last one starts
+//! it, so everything above it stays the editor's. Blocks written before the end line was
+//! dropped end with a line `— <model>, <YYYY-MM-DD> —` (or with `--`); text after such a line
+//! is the editor's too.
 
 use std::ops::Range;
 
@@ -22,25 +22,26 @@ use super::describe::Description;
 /// What starts the block's first line, before the summary.
 const START: &str = "AI: ";
 
-/// Byte range of the comment's AI block, from the start of its `AI: ` line to the end of its
-/// end line (without the line break after it). `None` when the comment has none.
+/// Byte range of the comment's AI block, from the start of its last `AI: ` line to the end
+/// of the comment (trailing white space left out), or to the end of an old block's end line.
+/// `None` when the comment has none.
 fn find(comment: &str) -> Option<Range<usize>> {
     let mut offset = 0;
     let mut previous_blank = true;
-    let mut start = None;
+    let mut block: Option<Range<usize>> = None;
     for line in comment.split_inclusive('\n') {
         let content = line.trim_end_matches(['\n', '\r']);
-        // A later `AI: ` paragraph moves the start: the block is the last one opened before
-        // its end line, so an editor's paragraph that happens to start with `AI: ` stays theirs.
         if previous_blank && content.starts_with(START) {
-            start = Some(offset);
-        } else if let Some(start) = start.filter(|_| is_end_line(content)) {
-            return Some(start..offset + content.len());
+            block = Some(offset..comment.len());
+        } else if let Some(open) = block.as_mut().filter(|b| b.end == comment.len()) {
+            if is_end_line(content) {
+                open.end = offset + content.len();
+            }
         }
         previous_blank = content.trim().is_empty();
         offset += line.len();
     }
-    None
+    block.map(|b| b.start..comment[..b.end].trim_end().len().max(b.start))
 }
 
 /// Whether `line` closes a block: `— <model>, <YYYY-MM-DD> —`, or with `--` for the dashes.
@@ -74,75 +75,45 @@ pub fn ai_block(comment: &str) -> Option<&str> {
     find(comment).map(|range| &comment[range])
 }
 
-/// The text before the block and the text after it, each with its edges trimmed. Both empty
-/// when the comment is only a block.
-fn editor_parts(comment: &str) -> (&str, &str) {
-    match find(comment) {
-        Some(range) => (
-            comment[..range.start].trim_end(),
-            comment[range.end..].trim(),
-        ),
-        None => (comment.trim_end(), ""),
-    }
-}
-
-/// The comment without its AI block: the editor's text before the block and any text after
-/// it, joined by a blank line.
-pub fn editor_comment(comment: &str) -> String {
-    match editor_parts(comment) {
-        (before, "") => before.to_string(),
-        ("", after) => after.to_string(),
-        (before, after) => format!("{before}\n\n{after}"),
-    }
-}
-
 /// Whether the comment holds text of the editor's, not just an AI block. Does not allocate:
 /// the folder list asks this for every file.
 pub fn has_editor_comment(comment: &str) -> bool {
-    let (before, after) = editor_parts(comment);
-    !before.trim().is_empty() || !after.is_empty()
-}
-
-/// The whole comment: the editor's text, a blank line, then the block. Either may be empty;
-/// without a block the editor's text is returned as it is.
-pub fn join_comment(editor: &str, block: &str) -> String {
-    let block = block.trim();
-    if block.is_empty() {
-        return editor.to_string();
-    }
-    let editor = editor.trim_end();
-    if editor.is_empty() {
-        block.to_string()
-    } else {
-        format!("{editor}\n\n{block}")
+    match find(comment) {
+        Some(range) => {
+            !comment[..range.start].trim().is_empty() || !comment[range.end..].trim().is_empty()
+        }
+        None => !comment.trim().is_empty(),
     }
 }
 
-/// `comment` with its AI block (if any) replaced by `block`, or removed when `block` is empty.
-/// Text found after the old block moves before the new one.
+/// `comment` with its AI block replaced by `block`, or with `block` added at the end after a
+/// blank line when it has none. Everything outside the old block is kept byte for byte.
 pub fn replace_block(comment: &str, block: &str) -> String {
-    join_comment(&editor_comment(comment), block)
-}
-
-/// The block's summary (its first line without `AI: `).
-pub fn block_summary(block: &str) -> &str {
-    let first = block.lines().next().unwrap_or_default();
-    first.strip_prefix(START).unwrap_or(first).trim()
-}
-
-/// The block's segment lines, between its summary and its end line.
-pub fn block_segments(block: &str) -> Vec<&str> {
-    let lines: Vec<&str> = block.lines().collect();
-    match lines.len() {
-        0..=2 => Vec::new(),
-        n => lines[1..n - 1].to_vec(),
+    let block = block.trim();
+    if let Some(range) = find(comment) {
+        return format!(
+            "{}{block}{}",
+            &comment[..range.start],
+            &comment[range.end..]
+        );
     }
+    if comment.trim().is_empty() {
+        return block.to_string();
+    }
+    let gap = if comment.ends_with("\n\n") || comment.ends_with("\r\n\r\n") {
+        ""
+    } else if comment.ends_with('\n') {
+        "\n"
+    } else {
+        "\n\n"
+    };
+    format!("{comment}{gap}{block}")
 }
 
-/// Write `description` as a block, signed with the model's name and the day (`YYYY-MM-DD`).
-/// Line breaks and runs of white space in the model's text become single spaces, so the
-/// summary stays on the first line and no model text can end the block early.
-pub fn format_block(description: &Description, model_label: &str, date: &str) -> String {
+/// Write `description` as a block: `AI: ` and the summary, then one line per segment. Line
+/// breaks and runs of white space in the model's text become single spaces, so the summary
+/// stays on the first line.
+pub fn format_block(description: &Description) -> String {
     let mut block = format!("{START}{}", one_line(&description.summary));
     for segment in &description.segments {
         block.push_str(&format!(
@@ -152,7 +123,6 @@ pub fn format_block(description: &Description, model_label: &str, date: &str) ->
             one_line(&segment.description)
         ));
     }
-    block.push_str(&format!("\n— {model_label}, {date} —"));
     block
 }
 
@@ -172,36 +142,12 @@ pub fn format_time(seconds: f64) -> String {
     }
 }
 
-/// Today's date (UTC) as `YYYY-MM-DD`, for the block's end line.
-pub fn today() -> String {
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    date_from_unix_days((secs / 86_400) as i64)
-}
-
-/// The civil date of a day counted from 1970-01-01 (Howard Hinnant's `civil_from_days`).
-fn date_from_unix_days(days: i64) -> String {
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = doy - (153 * mp + 2) / 5 + 1;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = yoe + era * 400 + i64::from(month <= 2);
-    format!("{year:04}-{month:02}-{day:02}")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::ai::describe::Segment;
 
-    const BLOCK: &str =
-        "AI: A guide leads tourists.\n0:00–0:14 Entrance.\n— Claude Haiku 4.5, 2026-09-26 —";
+    const BLOCK: &str = "AI: A guide leads tourists.\n0:00–0:14 Entrance.";
 
     fn description() -> Description {
         Description {
@@ -216,45 +162,55 @@ mod tests {
 
     #[test]
     fn format_writes_the_summary_first_and_collapses_line_breaks() {
-        let block = format_block(&description(), "Claude Haiku 4.5", "2026-09-26");
-        assert_eq!(block, BLOCK);
-        assert_eq!(block_summary(&block), "A guide leads tourists.");
-        assert_eq!(block_segments(&block), vec!["0:00–0:14 Entrance."]);
+        assert_eq!(format_block(&description()), BLOCK);
     }
 
     #[test]
-    fn model_text_that_looks_like_an_end_line_cannot_end_the_block() {
-        let mut d = description();
-        d.segments[0].description = "x\n— Evil, 2026-01-01 —\nmore".to_string();
-        let block = format_block(&d, "Claude Haiku 4.5", "2026-09-26");
-        let comment = join_comment("Mine", &block);
-        assert_eq!(ai_block(&comment), Some(block.as_str()));
-    }
-
-    #[test]
-    fn replace_keeps_the_editors_text_byte_for_byte() {
-        let editor = "Шаткий проход 🎥\n  indented line";
-        let comment = join_comment(editor, BLOCK);
-        assert_eq!(editor_comment(&comment), editor);
+    fn a_new_run_keeps_everything_above_the_block_byte_for_byte() {
+        let editor = "Шаткий проход 🎥\n  indented line  \n\n";
+        let comment = format!("{editor}{BLOCK}");
+        assert_eq!(ai_block(&comment), Some(BLOCK));
         let new_block = BLOCK.replace("tourists", "visitors");
-        let replaced = replace_block(&comment, &new_block);
-        assert_eq!(replaced, format!("{editor}\n\n{new_block}"));
-        assert_eq!(replaced.matches("AI: ").count(), 1);
+        assert_eq!(
+            replace_block(&comment, &new_block),
+            format!("{editor}{new_block}")
+        );
     }
 
     #[test]
-    fn a_comment_without_a_block_gets_one_appended_and_an_empty_one_is_just_the_block() {
+    fn a_comment_without_a_block_gets_one_after_a_blank_line() {
         assert_eq!(replace_block("", BLOCK), BLOCK);
         assert_eq!(replace_block("Mine", BLOCK), format!("Mine\n\n{BLOCK}"));
-        assert_eq!(replace_block(&format!("Mine\n\n{BLOCK}"), ""), "Mine");
+        assert_eq!(replace_block("Mine\n", BLOCK), format!("Mine\n\n{BLOCK}"));
+        assert_eq!(replace_block("Mine\n\n", BLOCK), format!("Mine\n\n{BLOCK}"));
     }
 
     #[test]
-    fn an_unterminated_block_is_the_editors_text() {
-        let comment = "AI: my own note\nno end line";
+    fn the_block_runs_to_the_end_of_the_comment() {
+        let comment = format!("Mine\n\n{BLOCK}\n0:14–0:20 Added by hand.\n");
+        assert_eq!(
+            ai_block(&comment),
+            Some(format!("{BLOCK}\n0:14–0:20 Added by hand.").as_str())
+        );
+        assert_eq!(replace_block(&comment, BLOCK), format!("Mine\n\n{BLOCK}\n"));
+    }
+
+    #[test]
+    fn the_last_ai_paragraph_starts_the_block() {
+        let editor = "AI: check the audio later\nsecond line\n\n";
+        let comment = format!("{editor}{BLOCK}");
+        assert_eq!(ai_block(&comment), Some(BLOCK));
+        assert_eq!(
+            replace_block(&comment, "AI: New"),
+            format!("{editor}AI: New")
+        );
+        assert!(has_editor_comment(&comment));
+    }
+
+    #[test]
+    fn an_ai_line_inside_a_paragraph_does_not_start_a_block() {
+        let comment = "Note\nAI: not a block\n0:00–0:01 x";
         assert_eq!(ai_block(comment), None);
-        assert_eq!(editor_comment(comment), comment);
-        assert!(has_editor_comment(comment));
         assert_eq!(
             replace_block(comment, BLOCK),
             format!("{comment}\n\n{BLOCK}")
@@ -262,38 +218,19 @@ mod tests {
     }
 
     #[test]
-    fn an_ai_line_inside_a_paragraph_does_not_start_a_block() {
-        let comment = "Note\nAI: not a block\n0:00–0:01 x\n— M, 2026-01-01 —";
-        assert_eq!(ai_block(comment), None);
-    }
-
-    #[test]
-    fn an_editors_paragraph_starting_with_ai_stays_theirs() {
-        let editor = "AI: check the audio later\nsecond line";
-        let described = replace_block(editor, BLOCK);
-        assert_eq!(ai_block(&described), Some(BLOCK));
-        assert_eq!(editor_comment(&described), editor);
-        assert_eq!(replace_block(&described, BLOCK), described);
-        assert!(has_editor_comment(&described));
-    }
-
-    #[test]
-    fn hand_typed_double_dashes_end_a_block() {
-        let comment = "Mine\n\nAI: Summary\n-- Claude Haiku 4.5, 2026-09-26 --";
-        assert_eq!(block_summary(ai_block(comment).expect("block")), "Summary");
-        assert_eq!(editor_comment(comment), "Mine");
-    }
-
-    #[test]
-    fn text_after_a_block_is_kept_and_moves_before_it() {
-        let comment = format!("Before\n\n{BLOCK}\n\nAfter");
-        assert_eq!(editor_comment(&comment), "Before\n\nAfter");
+    fn an_old_block_ends_at_its_end_line_and_text_after_it_is_kept() {
+        let old = "AI: Summary\n0:00–0:14 Entrance.\n— Claude Haiku 4.5, 2026-09-26 —";
+        let comment = format!("Before\n\n{old}\n\nAfter");
+        assert_eq!(ai_block(&comment), Some(old));
         assert_eq!(
             replace_block(&comment, BLOCK),
-            format!("Before\n\nAfter\n\n{BLOCK}")
+            format!("Before\n\n{BLOCK}\n\nAfter")
         );
-        let only_after = format!("{BLOCK}\nAfter");
-        assert_eq!(editor_comment(&only_after), "After");
+        let dashes = "Mine\n\nAI: Summary\n-- Claude Haiku 4.5, 2026-09-26 --";
+        assert_eq!(
+            ai_block(dashes),
+            Some("AI: Summary\n-- Claude Haiku 4.5, 2026-09-26 --")
+        );
     }
 
     #[test]
@@ -307,9 +244,9 @@ mod tests {
 
     #[test]
     fn crlf_comments_are_parsed() {
-        let comment = "Mine\r\n\r\nAI: S\r\n— M, 2026-09-26 —\r\n";
-        assert_eq!(ai_block(comment), Some("AI: S\r\n— M, 2026-09-26 —"));
-        assert_eq!(editor_comment(comment), "Mine");
+        let comment = "Mine\r\n\r\nAI: S\r\n0:00–0:01 x\r\n";
+        assert_eq!(ai_block(comment), Some("AI: S\r\n0:00–0:01 x"));
+        assert_eq!(replace_block(comment, "AI: T"), "Mine\r\n\r\nAI: T\r\n");
     }
 
     #[test]
@@ -319,12 +256,5 @@ mod tests {
         assert_eq!(format_time(3599.0), "59:59");
         assert_eq!(format_time(3600.0), "1:00:00");
         assert_eq!(format_time(3725.0), "1:02:05");
-    }
-
-    #[test]
-    fn dates_are_civil_dates() {
-        assert_eq!(date_from_unix_days(0), "1970-01-01");
-        assert_eq!(date_from_unix_days(20_722), "2026-09-26");
-        assert_eq!(date_from_unix_days(11_016), "2000-02-29");
     }
 }

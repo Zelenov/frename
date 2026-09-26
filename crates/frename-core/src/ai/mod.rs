@@ -8,5 +8,5 @@ pub mod describe;
 pub mod key;
 pub mod provider;
 
-pub use block::{editor_comment, has_editor_comment};
+pub use block::has_editor_comment;
 pub use describe::SummaryLanguage;

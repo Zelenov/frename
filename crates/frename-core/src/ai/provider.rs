@@ -22,6 +22,9 @@ pub struct AiRequest {
     /// JSON schema the answer must follow.
     pub schema: serde_json::Value,
     pub max_tokens: u32,
+    /// How much the model may think (`low` … `max`); `None` leaves it out, for models
+    /// without the setting.
+    pub effort: Option<&'static str>,
 }
 
 /// Tokens a request was billed for.

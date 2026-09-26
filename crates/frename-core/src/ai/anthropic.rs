@@ -12,7 +12,7 @@ const API_URL: &str = "https://api.anthropic.com";
 const API_VERSION: &str = "2023-06-01";
 /// Time for the answer; a request that has not answered by then (plus its upload time, see
 /// [`timeout_for`]) fails the file. See [`AiError::Timeout`].
-const ANSWER_TIMEOUT: Duration = Duration::from_secs(60);
+const ANSWER_TIMEOUT: Duration = Duration::from_secs(120);
 /// Upload speed the timeout allows for, in bytes per second.
 const SLOW_UPLOAD_BYTES_PER_S: u64 = 50_000;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -103,11 +103,16 @@ impl Anthropic {
                 }),
             })
             .collect();
+        let mut output_config =
+            json!({"format": {"type": "json_schema", "schema": request.schema}});
+        if let Some(effort) = request.effort {
+            output_config["effort"] = json!(effort);
+        }
         json!({
             "model": request.model,
             "max_tokens": request.max_tokens,
             "messages": [{"role": "user", "content": content}],
-            "output_config": {"format": {"type": "json_schema", "schema": request.schema}},
+            "output_config": output_config,
         })
     }
 
@@ -348,6 +353,7 @@ mod tests {
             ],
             schema: json!({"type": "object"}),
             max_tokens: 10,
+            effort: None,
         }
     }
 
@@ -365,6 +371,15 @@ mod tests {
         assert_eq!(body["messages"][0]["content"][1]["source"]["data"], "AQI=");
         assert_eq!(body["output_config"]["format"]["type"], "json_schema");
         assert!(body.get("thinking").is_none());
+        assert!(
+            body["output_config"].get("effort").is_none(),
+            "Haiku 4.5 rejects it"
+        );
+        let body = Anthropic::body(&AiRequest {
+            effort: Some("low"),
+            ..request()
+        });
+        assert_eq!(body["output_config"]["effort"], "low");
     }
 
     #[test]
@@ -491,10 +506,10 @@ mod tests {
 
     #[test]
     fn the_timeout_grows_with_the_upload() {
-        assert_eq!(timeout_for(ANSWER_TIMEOUT, 0), Duration::from_secs(60));
+        assert_eq!(timeout_for(ANSWER_TIMEOUT, 0), Duration::from_secs(120));
         assert_eq!(
             timeout_for(ANSWER_TIMEOUT, 3_000_000),
-            Duration::from_secs(120)
+            Duration::from_secs(180)
         );
     }
 

@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
-use frename_core::ai::describe::{self, SummaryLanguage, MAX_DURATION_S, MODEL};
+use frename_core::ai::describe::{self, Model, SummaryLanguage, MAX_DURATION_S};
 use frename_core::ai::key::{self, KeyState};
 use frename_core::ai::provider::{AiError, AiProvider, AiUsage};
 use frename_core::ai::{anthropic::Anthropic, block};
@@ -45,6 +45,8 @@ pub enum Message {
     KeyState(KeyState),
     /// The language descriptions are written in, from the settings.
     SetLanguage(SummaryLanguage),
+    /// The model descriptions are written with, from the settings.
+    SetModel(Model),
 }
 
 /// What the job does to each file: the options it started with.
@@ -52,12 +54,21 @@ pub enum Message {
 pub struct Run {
     pub language: SummaryLanguage,
     pub redo: bool,
+    /// The model's id (see [`Model::from_id`]).
+    pub model: &'static str,
+}
+
+impl Run {
+    pub fn model(&self) -> Model {
+        Model::from_id(self.model)
+    }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Options {
     redo: bool,
     language: SummaryLanguage,
+    model: Model,
     /// What is known about each checked video, kept while the folder is open.
     probes: HashMap<FileId, Probe>,
     /// Videos whose length is being read.
@@ -80,6 +91,7 @@ impl Options {
             }
             Message::KeyState(state) => self.key = Some(state),
             Message::SetLanguage(language) => self.language = language,
+            Message::SetModel(model) => self.model = model,
         }
     }
 
@@ -87,6 +99,7 @@ impl Options {
         super::Operation::DescribeAi(Run {
             language: self.language,
             redo: self.redo,
+            model: self.model.id,
         })
     }
 
@@ -166,7 +179,7 @@ impl Options {
                 Some(d) => {
                     plan.send.push(file.id());
                     plan.seconds += d;
-                    plan.usage += describe::estimate_usage(d, probe.subtitle_bytes);
+                    plan.usage += describe::estimate_usage(self.model, d, probe.subtitle_bytes);
                     plan.run_seconds +=
                         SECONDS_PER_REQUEST + SECONDS_PER_FRAME * describe::frame_count(d) as f64;
                     if !file.has_subtitles() {
@@ -204,8 +217,8 @@ impl Options {
                             "{}, {} · about {} with {}",
                             videos(plan.send.len()),
                             minutes(plan.seconds),
-                            dollars(MODEL.cost_usd(plan.usage)),
-                            MODEL.label
+                            dollars(self.model.cost_usd(plan.usage)),
+                            self.model.label
                         ))
                         .size(13),
                     )
@@ -461,8 +474,13 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
     };
     drop(clip);
     let subtitles = frename_core::load_subtitles(&on_disk);
-    let request =
-        describe::build_request(&frames, subtitles.as_ref(), duration_s, options.language);
+    let request = describe::build_request(
+        options.model(),
+        &frames,
+        subtitles.as_ref(),
+        duration_s,
+        options.language,
+    );
     progress.creep(
         asked_at,
         0.97,
@@ -489,7 +507,7 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
         }
     };
     progress.set(0.98, "saving");
-    let new_block = block::format_block(&description, MODEL.label, &block::today());
+    let new_block = block::format_block(&description);
     snapshot.set_comment(block::replace_block(snapshot.comment(), &new_block));
     let new_path = FileTagger::save(&snapshot, path);
     log::info!(
@@ -553,7 +571,7 @@ mod tests {
         }
     }
 
-    const BLOCK: &str = "AI: x\n— Claude Haiku 4.5, 2026-09-26 —";
+    const BLOCK: &str = "AI: x";
 
     #[test]
     fn the_plan_sends_only_readable_short_undescribed_videos() {
@@ -667,6 +685,7 @@ mod tests {
             Run {
                 language: SummaryLanguage::English,
                 redo: false,
+                model: Model::default().id,
             },
             Path::new("C:/clips/photo.jpg"),
             &AtomicBool::new(false),
@@ -696,7 +715,13 @@ mod tests {
             .sample(duration_s, &AtomicBool::new(false), |_, _| {})
             .expect("frames")
             .expect("not cancelled");
-        let request = describe::build_request(&frames, None, duration_s, SummaryLanguage::English);
+        let request = describe::build_request(
+            Model::default(),
+            &frames,
+            None,
+            duration_s,
+            SummaryLanguage::English,
+        );
         let provider = Anthropic::new(api_key.trim().to_string()).expect("client");
         let response = match provider.complete(&request, &AtomicBool::new(false)) {
             Ok(response) => response,
@@ -712,9 +737,9 @@ mod tests {
             "live: {} frames, usage {:?} (estimated {:?}), cost {}\n{}",
             frames.len(),
             response.usage,
-            describe::estimate_usage(duration_s, 0),
-            dollars(MODEL.cost_usd(response.usage)),
-            block::format_block(&description, MODEL.label, &block::today())
+            describe::estimate_usage(Model::default(), duration_s, 0),
+            dollars(Model::default().cost_usd(response.usage)),
+            block::format_block(&description)
         );
         assert!(!description.summary.is_empty());
         assert!(!description.segments.is_empty());

@@ -1,5 +1,6 @@
 //! UI for the settings window.
 
+use frename_core::ai::describe::{Model, MODELS};
 use frename_core::ai::key::KeyState;
 use frename_core::ai::SummaryLanguage;
 use frename_core::{CommentStorage, InOutStorage};
@@ -148,7 +149,11 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
     // Last, so "Describe with AI" can open the window scrolled to its end, at this section.
     sections = sections.push(section(
         "AI",
-        ai_options(state.key(), settings.summary_language),
+        ai_options(
+            state.key(),
+            settings.summary_language,
+            Model::from_id(&settings.ai_model),
+        ),
     ));
 
     // The window is not resizable: whatever does not fit scrolls.
@@ -163,8 +168,8 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
     .into()
 }
 
-/// The AI section: the Anthropic API key and the language of descriptions.
-fn ai_options(key: &KeySection, language: SummaryLanguage) -> Element<'_, Message> {
+/// The AI section: the Anthropic API key, and the model and language of descriptions.
+fn ai_options(key: &KeySection, language: SummaryLanguage, model: Model) -> Element<'_, Message> {
     let muted = |line: &'static str| text(line).size(12).color(theme::TEXT_MUTED);
     let store = if cfg!(windows) {
         "Windows Credential Manager"
@@ -255,6 +260,16 @@ fn ai_options(key: &KeySection, language: SummaryLanguage) -> Element<'_, Messag
     options
         .push(
             row![
+                text("Model").size(13),
+                pick_list(MODELS, Some(model), Message::SetAiModel)
+                    .text_size(13)
+                    .padding([3, 8]),
+            ]
+            .spacing(12)
+            .align_y(iced::Alignment::Center),
+        )
+        .push(
+            row![
                 text("Description language").size(13),
                 pick_list(
                     SummaryLanguage::ALL,
@@ -268,7 +283,8 @@ fn ai_options(key: &KeySection, language: SummaryLanguage) -> Element<'_, Messag
             .align_y(iced::Alignment::Center),
         )
         .push(muted(
-            "Used by Describe with AI in batch mode. The model is Claude Haiku 4.5.",
+            "Used by Describe with AI in batch mode. Haiku is the cheapest and fine for most \
+             clips; Sonnet and Opus notice more and cost more.",
         ))
         .into()
 }

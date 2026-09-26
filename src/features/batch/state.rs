@@ -307,7 +307,7 @@ impl BatchState {
                 log::info!(
                     "batch: {} spent {}",
                     job.operation.action().label(),
-                    super::actions::spend_line(usage)
+                    super::actions::spend_line(job.operation.ai_model(), usage)
                 );
             }
             return None;
@@ -398,6 +398,14 @@ impl BatchState {
         self.action = job.operation.action();
         self.checked = files.into_iter().collect();
         true
+    }
+
+    /// The model the current job's AI requests go to.
+    pub fn job_ai_model(&self) -> frename_core::ai::describe::Model {
+        self.job
+            .as_ref()
+            .map(|job| job.operation.ai_model())
+            .unwrap_or_default()
     }
 
     /// Whether a file of the current job failed because the AI account has no credit left.

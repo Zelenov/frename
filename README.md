@@ -192,15 +192,16 @@ and Cancel. Each file then shows a green or red check box. Actions:
 
 **Describe with AI** writes what happens in each checked video, and when: a one-line summary and
 time-ranged segments, even for clips with no speech. frename sends frames (one every 2 s, at most
-60 per clip) and the video's `.srt`, if there is one, to Claude Haiku 4.5, and puts the answer at
-the end of the comment, below your own text, which is never changed. Before you run it, the panel
-shows how many videos will be sent, the price (about $10 per 1000 one-minute clips) and how long
-it takes. Videos already described are skipped unless you tick Redo, and so are clips over 30 min.
+60 per clip) and the video's `.srt`, if there is one, to Claude (Haiku 4.5 unless you pick Sonnet
+or Opus in Settings), and puts the answer at the end of the comment, below your own text, which is
+never changed. Before you run it, the panel shows how many videos will be sent, the price (with
+Haiku, about $10 per 1000 one-minute clips) and how long it takes. Videos already described are skipped unless you tick Redo, and so are clips over 30 min.
 Cancel keeps what is done. You need your own Anthropic API key: set it in Settings.
 
 The description is part of the comment, in the comment box with your text: edit it or delete it
-there like any other text. It starts with `AI: ` and ends with a line naming the model and the
-date; a new run replaces only that part. Premiere Pro and `.comment.txt` get the whole comment.
+there like any other text. It starts at a line beginning with `AI: ` and runs to the end of the
+comment; a new run replaces only that part and never touches the text above it. Premiere Pro and
+`.comment.txt` get the whole comment.
 
 ## Settings
 
@@ -216,8 +217,8 @@ The ⚙ button opens Settings:
   frename also checks once a day by itself (you can turn that off) and puts a dot on ⚙ when
   an update is ready; nothing is downloaded until you click;
 - your Anthropic API key for Describe with AI, kept in the system's password store (Windows
-  Credential Manager, macOS Keychain, or a keyring such as GNOME Keyring on Linux), and the
-  language of the descriptions.
+  Credential Manager, macOS Keychain, or a keyring such as GNOME Keyring on Linux), the model
+  (Claude Haiku 4.5, Sonnet 5 or Opus 5, with their prices) and the language of the descriptions.
 
 After you change where comments or in/out points are kept, or the tag spacing, Settings offer the
 batch action that updates the existing files.

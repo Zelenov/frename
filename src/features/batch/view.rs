@@ -204,7 +204,10 @@ fn job_panel<'a>(
             } else {
                 ""
             };
-            summary.push_str(&format!("   AI: {at_least}{}", spend_line(usage)));
+            summary.push_str(&format!(
+                "   AI: {at_least}{}",
+                spend_line(state.job_ai_model(), usage)
+            ));
         }
         panel = panel.push(text(summary).size(13)).push(
             row![counts, Space::new().width(Length::Fill),]

@@ -21,7 +21,7 @@ mod tag_spacing;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
-use frename_core::ai::describe::MODEL;
+use frename_core::ai::describe::Model;
 use frename_core::ai::provider::AiUsage;
 use frename_core::{
     CommentStorage, File, FileId, FileSnapshot, FileTagger, FolderInfo, InOutStorage, MoveOutcome,
@@ -103,6 +103,14 @@ impl Operation {
         }
     }
 
+    /// The model this operation's AI requests go to; the default for actions without any.
+    pub fn ai_model(&self) -> Model {
+        match self {
+            Self::DescribeAi(run) => run.model(),
+            _ => Model::default(),
+        }
+    }
+
     /// The action this operation belongs to.
     pub fn action(&self) -> Action {
         match self {
@@ -144,6 +152,7 @@ impl ActionMessage {
                 describe_ai::Message::Probed(_)
                     | describe_ai::Message::KeyState(_)
                     | describe_ai::Message::SetLanguage(_)
+                    | describe_ai::Message::SetModel(_)
             )
         )
     }
@@ -267,12 +276,12 @@ pub fn files(n: usize) -> String {
     format!("{n} {}", if n == 1 { "file" } else { "files" })
 }
 
-/// What a job's AI requests cost: `$0.31 (Claude Haiku 4.5)`.
-pub fn spend_line(usage: AiUsage) -> String {
+/// What a job's AI requests to `model` cost: `$0.31 (Claude Haiku 4.5)`.
+pub fn spend_line(model: Model, usage: AiUsage) -> String {
     format!(
         "{} ({})",
-        describe_ai::dollars(MODEL.cost_usd(usage)),
-        MODEL.label
+        describe_ai::dollars(model.cost_usd(usage)),
+        model.label
     )
 }
 

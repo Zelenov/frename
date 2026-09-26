@@ -57,6 +57,9 @@ pub struct AppSettings {
     pub space_after_tags: bool,
     /// The language AI descriptions are written in. Defaults to the subtitles' language.
     pub summary_language: SummaryLanguage,
+    /// The id of the model AI descriptions are written with (see
+    /// [`crate::ai::describe::Model::from_id`]). Defaults to the cheapest.
+    pub ai_model: String,
 }
 
 impl Default for AppSettings {
@@ -70,6 +73,7 @@ impl Default for AppSettings {
             commented_tag_enabled: true,
             space_after_tags: false,
             summary_language: SummaryLanguage::default(),
+            ai_model: crate::ai::describe::MODELS[0].id.to_string(),
         }
     }
 }
