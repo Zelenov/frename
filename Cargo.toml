@@ -50,6 +50,17 @@ arboard = "3"
 # Native file/folder picker dialogs
 rfd = "0.17"
 
+# UI translations: Fluent files in i18n/, embedded; fl! checks message ids at compile time
+i18n-embed = { version = "0.16", features = ["fluent-system", "desktop-requester"] }
+i18n-embed-fl = "0.10"
+rust-embed = "8"
+
+[dev-dependencies]
+# Parse the .ftl files in the translation tests
+fluent-syntax = "0.12"
+fluent-bundle = "0.16"
+proc-macro2 = "1"
+
 [profile.dev.package."*"]
 # Dependencies are rebuilt rarely but run on every frame (text layout, image decode, SQLite,
 # shader compilation), so optimise them even in debug builds. Own crates stay at opt-level 0

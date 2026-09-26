@@ -12,32 +12,32 @@ use super::super::ItemResult;
 use super::ActionMessage;
 use crate::theme;
 
-pub const LABEL: &str = "Apply tag spacing";
+pub fn label() -> String {
+    fl!("batch-action-respace-tags")
+}
 
 pub fn view<'a>() -> Element<'a, ActionMessage> {
     let (hint, status) = if frename_core::space_after_tags() {
         (
-            "Renames each checked file to put a space after each tag, as set in the settings: \
-             Food. Goat. clip.mp4.",
-            "Spacing: a space after each tag",
+            fl!("batch-action-respace-tags-hint-space"),
+            fl!("batch-action-respace-tags-status-space"),
         )
     } else {
         (
-            "Renames each checked file to have no space after its tags, as set in the settings: \
-             Food.Goat.clip.mp4.",
-            "Spacing: no space after tags",
+            fl!("batch-action-respace-tags-hint-no-space"),
+            fl!("batch-action-respace-tags-status-no-space"),
         )
     };
     let settings = row![
         text(status).size(13),
-        button(text("Spacing settings…").size(12))
+        button(text(fl!("batch-action-respace-tags-settings")).size(12))
             .on_press(ActionMessage::OpenSettings)
             .padding([3, 10])
             .style(theme::icon_button_style(true)),
     ]
     .spacing(12)
     .align_y(iced::Alignment::Center);
-    super::panel(LABEL, hint.to_string(), settings.into())
+    super::panel(label(), hint, settings.into())
 }
 
 /// Rename the file at `path` to the chosen tag spacing.

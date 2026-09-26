@@ -95,3 +95,8 @@ ALTER TABLE app_settings ADD COLUMN commented_tag_enabled INTEGER NOT NULL DEFAU
 pub const M8_SPACE_AFTER_TAGS: &str = "
 ALTER TABLE app_settings ADD COLUMN space_after_tags INTEGER NOT NULL DEFAULT 0;
 ";
+
+/// Migration 9: the UI language code (`en`, `ru`); empty follows the OS language.
+pub const M9_LANGUAGE: &str = "
+ALTER TABLE app_settings ADD COLUMN language TEXT NOT NULL DEFAULT '';
+";

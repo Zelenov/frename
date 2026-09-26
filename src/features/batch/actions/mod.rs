@@ -3,7 +3,7 @@
 //! file. This module only lists them and dispatches to them; the checked files and the job
 //! that runs an action over them are shared (see [`super::state`]).
 //!
-//! Adding an action: a module with `LABEL`, `view` and `run` (plus `Options` with `Message`
+//! Adding an action: a module with `label`, `view` and `run` (plus `Options` with `Message`
 //! and `update` when it has settings), then one line in each match below.
 
 mod fix_tags;
@@ -46,14 +46,14 @@ impl Action {
         Action::ReloadFiles,
     ];
 
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            Self::MoveComments => move_comments::LABEL,
-            Self::MoveInOut => move_in_out::LABEL,
-            Self::TagCommented => tag_commented::LABEL,
-            Self::FixTags => fix_tags::LABEL,
-            Self::RespaceTags => tag_spacing::LABEL,
-            Self::ReloadFiles => reload_files::LABEL,
+            Self::MoveComments => move_comments::label(),
+            Self::MoveInOut => move_in_out::label(),
+            Self::TagCommented => tag_commented::label(),
+            Self::FixTags => fix_tags::label(),
+            Self::RespaceTags => tag_spacing::label(),
+            Self::ReloadFiles => reload_files::label(),
         }
     }
 }
@@ -160,7 +160,7 @@ impl Actions {
 }
 
 /// An action's panel as every action shows it: title, what it does, then its options.
-fn panel<'a, M: 'a>(title: &'a str, hint: String, options: Element<'a, M>) -> Element<'a, M> {
+fn panel<'a, M: 'a>(title: String, hint: String, options: Element<'a, M>) -> Element<'a, M> {
     column![
         text(title).size(15),
         text(hint).size(12).color(theme::TEXT_MUTED),

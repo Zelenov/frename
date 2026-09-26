@@ -43,6 +43,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 8,
         sql: schema::M8_SPACE_AFTER_TAGS,
     },
+    Migration {
+        version: 9,
+        sql: schema::M9_LANGUAGE,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
@@ -126,6 +130,27 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 8);
+        assert_eq!(current_version(&conn).expect("version"), 9);
+    }
+
+    #[test]
+    fn a_version_8_database_gains_an_empty_language() {
+        let conn = database_at_version_1();
+        for m in MIGRATIONS.iter().filter(|m| (2..=8).contains(&m.version)) {
+            conn.execute_batch(m.sql).expect("migration");
+        }
+        conn.execute("UPDATE schema_version SET version = 8", [])
+            .expect("set version");
+        conn.execute("INSERT INTO app_settings (id) VALUES (1)", [])
+            .expect("settings row");
+        run(&conn).expect("migrate");
+        let language: String = conn
+            .query_row(
+                "SELECT language FROM app_settings WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("language column");
+        assert_eq!(language, "");
     }
 }

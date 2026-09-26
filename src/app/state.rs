@@ -232,6 +232,7 @@ impl FrenameApp {
         frename_core::set_in_out_storage(settings.settings().in_out_storage);
         frename_core::set_commented_tag(settings.settings().effective_commented_tag());
         frename_core::set_space_after_tags(settings.settings().space_after_tags);
+        crate::i18n::apply(&settings.settings().language);
         Self {
             drag_drop_state: drag_drop::DragDropState::default(),
             folder_workspace: folder_workspace::FolderWorkspace::new(),
@@ -292,6 +293,11 @@ impl FrenameApp {
                 // comment and in/out storage live in core, which saves them. Moving what the
                 // files already have is a batch action in the main window.
                 match msg {
+                    // Both windows redraw in the new language on the next frame.
+                    settings::Message::SetLanguage(language) => {
+                        crate::i18n::apply(&language);
+                        Task::none()
+                    }
                     settings::Message::SetCommentStorage(storage) => {
                         frename_core::set_comment_storage(storage);
                         Task::none()
@@ -521,7 +527,7 @@ impl FrenameApp {
     /// Window title: the settings window has a fixed one; the main window shows the open file.
     pub fn title(&self, window_id: window::Id) -> String {
         if self.settings_window == Some(window_id) {
-            return String::from("Settings");
+            return fl!("settings-window-title");
         }
         self.folder_workspace.current_file().map_or_else(
             || String::from("frename"),

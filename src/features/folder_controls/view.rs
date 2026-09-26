@@ -28,11 +28,11 @@ enum FilterKind {
 }
 
 impl FilterKind {
-    fn label(self) -> &'static str {
+    fn label(self) -> String {
         match self {
-            Self::Untagged => "Untagged",
-            Self::Subtitles => "Subtitles",
-            Self::Comments => "Comments",
+            Self::Untagged => fl!("folder-controls-filter-untagged"),
+            Self::Subtitles => fl!("folder-controls-filter-subtitles"),
+            Self::Comments => fl!("folder-controls-filter-comments"),
         }
     }
 
@@ -88,9 +88,9 @@ fn filter_dropdown(filters: ListFilters) -> Element<'static, folder::Message> {
     let items = filters.items();
     let active = items.iter().filter(|item| item.active).count();
     let placeholder = if active == 0 {
-        "Filter".to_string()
+        fl!("folder-controls-filter")
     } else {
-        format!("Filter ({active})")
+        fl!("folder-controls-filter-active", count = active)
     };
     // No tooltip: it would draw over the open list.
     pick_list(items.to_vec(), None::<FilterItem>, |item| {
@@ -156,7 +156,7 @@ pub fn view(
         .height(iced::Length::Fill)
         .padding(0)
         .style(theme::icon_button_style(has_selected)),
-        text("Scroll to file"),
+        text(fl!("folder-controls-scroll")),
         iced::widget::tooltip::Position::Top,
     )
     .into();
@@ -172,7 +172,7 @@ pub fn view(
         .height(iced::Length::Fill)
         .padding(0)
         .style(theme::icon_button_style(true)),
-        text("Open file"),
+        text(fl!("folder-controls-open")),
         iced::widget::tooltip::Position::Top,
     )
     .into();
@@ -188,15 +188,15 @@ pub fn view(
         .height(iced::Length::Fill)
         .padding(0)
         .style(theme::icon_button_style(true)),
-        text("Settings"),
+        text(fl!("folder-controls-settings")),
         iced::widget::tooltip::Position::Top,
     )
     .into();
 
     let batch_hint = if batch_mode {
-        "Back to the open file"
+        fl!("folder-controls-batch-back")
     } else {
-        "Batch actions on checked files"
+        fl!("folder-controls-batch")
     };
     let batch_btn: Element<'_, folder::Message> = tooltip(
         button(

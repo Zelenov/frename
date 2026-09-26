@@ -169,6 +169,7 @@ and Cancel. Each file then shows a green or red check box. Actions:
 
 The ⚙ button opens Settings:
 
+- the language: English or Russian; by default the system language;
 - play videos automatically when opened;
 - draw all tags in one neutral color;
 - put a space after each tag in file names (`Food. Goat. clip.mp4`);

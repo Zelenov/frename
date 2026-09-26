@@ -10,6 +10,9 @@ use simplelog::{
 };
 use std::fs::File;
 
+#[macro_use]
+mod i18n;
+
 mod app;
 mod crash_guard;
 mod demo;

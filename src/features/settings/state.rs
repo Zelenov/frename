@@ -57,6 +57,7 @@ impl SettingsState {
 
     fn apply(&mut self, message: Message) {
         match message {
+            Message::SetLanguage(language) => self.settings.language = language,
             Message::SetAutoplayVideo(autoplay) => self.settings.autoplay_video = autoplay,
             Message::SetMonochromeTags(monochrome) => self.settings.monochrome_tags = monochrome,
             Message::SetSpaceAfterTags(space) => {
@@ -126,6 +127,10 @@ mod tests {
         state.apply(Message::SetInOutStorage(InOutStorage::InVideo));
         assert_eq!(state.settings().in_out_storage, InOutStorage::InVideo);
         assert_eq!(state.settings().comment_storage, CommentStorage::TextFile);
+
+        state.apply(Message::SetLanguage("ru".to_string()));
+        assert_eq!(state.settings().language, "ru");
+        assert_eq!(state.settings().in_out_storage, InOutStorage::InVideo);
     }
 
     #[test]

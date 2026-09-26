@@ -246,7 +246,7 @@ batch-run = Применить к { $count ->
 }
 ```
 
-- **Setting:** migration 8, `ALTER TABLE app_settings ADD COLUMN language TEXT NOT NULL DEFAULT ''`;
+- **Setting:** migration 9, `ALTER TABLE app_settings ADD COLUMN language TEXT NOT NULL DEFAULT ''`;
   `AppSettings::language: String`, `""` meaning System. Core stores the code and knows nothing
   about translation; `src/i18n.rs` owns the supported list (`en`, `ru`).
 - **Runtime:** one global `FluentLanguageLoader` in `src/i18n.rs`, set only from `update`
@@ -367,7 +367,7 @@ it as a dev-dependency with the same version to parse files):
   (1, 2, 5, 11, 21 and a sample tag) to `target/ru-messages.txt`; the PR gives it to the product
   reviewer and the owner, who read real sentences instead of `.ftl` selectors (e.g. «из 1 файла /
   из 5 файлов» after «Остановлено после», genitive, not the dative of `batch-run`).
-- **Settings migration:** a version-7 database gains `language = ''`; round-trip of `AppSettings`.
+- **Settings migration:** a version-8 database gains `language = ''`; round-trip of `AppSettings`.
 
 Layout check (PR 1 adds, every PR runs it under Xvfb and gives the screenshots to the product
 reviewer): `frename --demo docs/screenshots/main.toml --out ru.png --lang ru`, the same with

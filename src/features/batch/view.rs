@@ -34,8 +34,8 @@ pub fn view<'a>(state: &'a BatchState, directory: Option<&'a Directory>) -> Elem
     // The panel's title: without it the list reads as loose buttons, not as actions on the
     // checked files.
     let heading = row![
-        text("Batch actions").size(18),
-        text(format!("on {} checked", files(state.checked_count())))
+        text(fl!("batch-title")).size(18),
+        text(fl!("batch-on-checked", count = state.checked_count()))
             .size(13)
             .color(theme::TEXT_MUTED),
     ]
@@ -47,7 +47,7 @@ pub fn view<'a>(state: &'a BatchState, directory: Option<&'a Directory>) -> Elem
             .on_press_maybe((!state.is_running()).then_some(Message::SetActive(false)))
             .padding([2, 8])
             .style(theme::icon_button_style(!state.is_running())),
-        container(text("Back to the open file"))
+        container(text(fl!("batch-back")))
             .padding([2, 6])
             .style(theme::elevated_container_style),
         tooltip::Position::Left,
@@ -86,7 +86,7 @@ fn action_entry(action: Action, selected: Action) -> Element<'static, Message> {
 fn action_options(state: &BatchState) -> Element<'_, Message> {
     let count = state.checked_count();
     let can_run = count > 0 && state.operation().is_some() && !state.is_running();
-    let run = button(text(format!("Run on {}", files(count))).size(13))
+    let run = button(text(fl!("batch-run", count = count)).size(13))
         .on_press_maybe(can_run.then_some(Message::Run))
         .padding([6, 14]);
 
@@ -112,9 +112,11 @@ fn job_panel<'a>(
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default()
     };
-    let counts = text(format!(
-        "✓ {} changed   – {} unchanged   ✗ {} failed",
-        progress.done, progress.skipped, progress.failed
+    let counts = text(fl!(
+        "batch-counts",
+        done = progress.done,
+        skipped = progress.skipped,
+        failed = progress.failed
     ))
     .size(12)
     .color(theme::TEXT_SOFT);
@@ -123,9 +125,9 @@ fn job_panel<'a>(
     if progress.running {
         let current = state.current().map(name).unwrap_or_default();
         let (label, cancel) = if progress.cancelled {
-            ("Stopping…", None)
+            (fl!("batch-stopping"), None)
         } else {
-            ("Cancel", Some(Message::Cancel))
+            (fl!("batch-cancel"), Some(Message::Cancel))
         };
         panel = panel
             .push(
@@ -151,19 +153,19 @@ fn job_panel<'a>(
             );
     } else {
         let summary = if progress.finished < progress.total {
-            format!(
-                "Stopped after {} of {}.",
-                progress.finished,
-                files(progress.total)
+            fl!(
+                "batch-stopped",
+                finished = progress.finished,
+                total = progress.total
             )
         } else {
-            format!("Finished {}.", files(progress.total))
+            fl!("batch-finished", total = progress.total)
         };
         panel = panel.push(text(summary).size(13)).push(
             row![
                 counts,
                 Space::new().width(Length::Fill),
-                button(text("Close").size(13)).on_press(Message::CloseReport),
+                button(text(fl!("batch-close")).size(13)).on_press(Message::CloseReport),
             ]
             .align_y(iced::Alignment::Center),
         );
@@ -175,11 +177,7 @@ fn job_panel<'a>(
                     .map(|id| text(name(id)).size(12).color(theme::ERROR).into()),
             );
             panel = panel
-                .push(
-                    text("Failed (see the log for why):")
-                        .size(12)
-                        .color(theme::TEXT_MUTED),
-                )
+                .push(text(fl!("batch-failed")).size(12).color(theme::TEXT_MUTED))
                 .push(
                     container(
                         scrollable(names)
@@ -195,9 +193,4 @@ fn job_panel<'a>(
         .width(Length::Fill)
         .style(theme::elevated_container_style)
         .into()
-}
-
-/// "5 files" / "1 file".
-fn files(n: usize) -> String {
-    format!("{n} {}", if n == 1 { "file" } else { "files" })
 }

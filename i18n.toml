@@ -1,0 +1,5 @@
+# i18n-embed / fl! configuration: English is the source language and the fallback.
+fallback_language = "en"
+
+[fluent]
+assets_dir = "i18n"

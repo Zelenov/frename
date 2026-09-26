@@ -54,6 +54,9 @@ pub struct AppSettings {
     pub commented_tag_enabled: bool,
     /// Whether file names put a space after each tag (`Food. clip.mp4`). Defaults to false.
     pub space_after_tags: bool,
+    /// UI language code (`en`, `ru`); empty follows the OS language. Defaults to empty. Core
+    /// only stores it; the UI owns the supported languages.
+    pub language: String,
 }
 
 impl Default for AppSettings {
@@ -66,6 +69,7 @@ impl Default for AppSettings {
             commented_tag: crate::DEFAULT_COMMENTED_TAG.to_string(),
             commented_tag_enabled: true,
             space_after_tags: false,
+            language: String::new(),
         }
     }
 }

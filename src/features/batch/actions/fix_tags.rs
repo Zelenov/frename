@@ -9,17 +9,12 @@ use iced::Element;
 
 use super::super::ItemResult;
 
-pub const LABEL: &str = "Fix tags by priority";
+pub fn label() -> String {
+    fl!("batch-action-fix-tags")
+}
 
 pub fn view<'a, M: 'a>() -> Element<'a, M> {
-    super::panel(
-        LABEL,
-        "Puts the tags in the name of each checked file in the order of the tag panel, so the \
-         higher a tag is there, the earlier it comes in the name. Tags the folder does not know \
-         yet come first, as in the tag panel. Files whose order changes are renamed."
-            .to_string(),
-        column![].into(),
-    )
+    super::panel(label(), fl!("batch-action-fix-tags-hint"), column![].into())
 }
 
 /// Sort the tags of the file at `path` in the folder's order.

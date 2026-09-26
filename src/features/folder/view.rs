@@ -14,7 +14,10 @@ use crate::widgets;
 use crate::widgets::search_bar::FILE_SEARCH_BAR_INPUT_ID;
 
 use super::Message;
-use super::{InlineRename, FOLDER_LIST_SCROLLABLE_ID, FOLDER_RENAME_INPUT_ID, FOLDER_ROW_HEIGHT};
+use super::{
+    InlineRename, RenameProblem, FOLDER_LIST_SCROLLABLE_ID, FOLDER_RENAME_INPUT_ID,
+    FOLDER_ROW_HEIGHT,
+};
 
 const SUBTITLES_MARKER_WIDTH: f32 = 28.0;
 /// Width of the check box column in batch mode.
@@ -205,13 +208,13 @@ fn batch_header<'a>(
     let any_listed = listed.peek().is_some();
     let all_checked = any_listed && listed.all(|f| batch.is_checked(f.id()));
     let mut all = checkbox(all_checked)
-        .label("All")
+        .label(fl!("folder-all"))
         .text_size(12)
         .size(CHECK_SIZE);
     if !locked {
         all = all.on_toggle(|_| Message::ToggleAllChecked);
     }
-    let invert = button(text("Invert").size(12))
+    let invert = button(text(fl!("folder-invert")).size(12))
         .on_press_maybe((!locked).then_some(Message::InvertChecks))
         .padding([2, 8])
         .style(theme::icon_button_style(!locked));
@@ -226,7 +229,7 @@ fn batch_header<'a>(
         }),
         invert,
         iced::widget::Space::new().width(Length::Fill),
-        text(format!("{} checked", batch.checked_count()))
+        text(fl!("folder-checked", count = batch.checked_count()))
             .size(12)
             .color(theme::TEXT_MUTED),
     ]
@@ -252,9 +255,9 @@ fn check_cell(
     // The file in work keeps its plain box: most files take milliseconds, so anything shown
     // for them would only flicker. The job panel names the file in work.
     let outcome = match batch.status(id) {
-        Some(ItemStatus::Done) => Some((theme::VOLUME, None, "Changed")),
-        Some(ItemStatus::Skipped) => Some((theme::VOLUME, None, "Nothing to change")),
-        Some(ItemStatus::Failed) => Some((theme::ERROR, Some('✕'), "Failed, see the log")),
+        Some(ItemStatus::Done) => Some((theme::VOLUME, None, fl!("folder-outcome-changed"))),
+        Some(ItemStatus::Skipped) => Some((theme::VOLUME, None, fl!("folder-outcome-unchanged"))),
+        Some(ItemStatus::Failed) => Some((theme::ERROR, Some('✕'), fl!("folder-outcome-failed"))),
         Some(ItemStatus::Pending | ItemStatus::Running) | None => None,
     };
     let mut check = checkbox(batch.is_checked(id)).size(CHECK_SIZE);
@@ -340,8 +343,8 @@ fn rename_editor(rename: &InlineRename) -> Element<'_, Message> {
             },
         );
     let mut content = row![input].spacing(6).align_y(iced::Alignment::Center);
-    if let Some(error) = rename.error {
-        content = content.push(text(error).size(11).color(theme::ERROR));
+    if let Some(problem) = rename.error {
+        content = content.push(text(rename_problem(problem)).size(11).color(theme::ERROR));
     }
     container(content)
         .padding(iced::Padding {
@@ -354,4 +357,14 @@ fn rename_editor(rename: &InlineRename) -> Element<'_, Message> {
         .height(Length::Fill)
         .center_y(Length::Fill)
         .into()
+}
+
+/// Why a typed name was refused, in words.
+fn rename_problem(problem: RenameProblem) -> String {
+    match problem {
+        RenameProblem::Empty => fl!("folder-rename-error-empty"),
+        RenameProblem::BadCharacter => fl!("folder-rename-error-bad-character"),
+        RenameProblem::TrailingDotOrSpace => fl!("folder-rename-error-trailing"),
+        RenameProblem::Exists => fl!("folder-rename-error-exists"),
+    }
 }
