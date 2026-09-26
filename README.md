@@ -137,7 +137,8 @@ The progress bar shows what you have noted about a clip:
   Premiere wrote are shown too and kept. If a clip is open in Premiere, its markers may not save:
   the file gets a red ✕ in the list, and frename tries again when you next leave it.
   While the playhead is on a marker, its name becomes the pin's head; click it to rename the
-  marker.
+  marker. Settings → Markers and ranges can keep them in the comment instead, one line each
+  (`0:41–0:47 — Lion`): in frename they still work as markers.
 - **Ranges:** hold `F2` (or 📍) while the clip plays to mark a stretch (`0:41–0:47 — Lion`); a
   band just above the bar shows it, and overlapping bands stack. Drag the handles at the ends of the current
   range to change it (`Shift` snaps), drag them together or `Alt`+click the band to make it a
@@ -215,10 +216,11 @@ there like any other text. It starts at a line beginning with `AI: ` and runs to
 comment; a new run replaces only that part and never touches the text above it. Premiere Pro and
 `.comment.txt` get the whole comment.
 
-While comments are kept inside the video (Settings, the default), the segments go into the video
-as white markers Premiere Pro shows on the clip, and the comment keeps only the summary. A new
-run replaces the white markers and leaves markers of other colors alone, so recolor one to keep
-it. Formats that cannot hold markers get the segments in the comment.
+While markers are kept inside the video (Settings → Markers and ranges, the default), the
+segments become white "AI" markers Premiere Pro shows on the clip, and the comment keeps only the
+summary. A new run replaces the AI markers and leaves the others alone, so give one a color to
+keep it. With markers kept in the comment, or a format that cannot hold markers, the segments
+are lines of the description.
 
 ### Generate subtitles
 

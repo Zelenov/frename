@@ -61,10 +61,9 @@ impl FolderWorkspace {
                 self.markers.close();
                 Task::none()
             }
-            M::NameInput(text) => {
-                if let Some(guid) = self.markers.edit().map(|e| e.guid.clone()) {
-                    // A name is one line.
-                    let name = text.replace(['\r', '\n'], " ");
+            M::NameAction(action) => {
+                // A name is one line: the field wraps it, `Enter` closes the row.
+                if let Some((guid, name)) = self.markers.edit_name(action) {
                     self.file_workspace
                         .tag_list_mut()
                         .update_marker(&guid, |m| m.name = name);
@@ -291,7 +290,8 @@ impl FolderWorkspace {
         let Some(index) = markers.iter().position(|m| m.has_guid(&guid)) else {
             return Task::none();
         };
-        self.markers.open(guid);
+        let current = markers[index].name.clone();
+        self.markers.open(guid, &current);
         let name = iced::widget::Id::new(markers::view::MARKER_NAME_INPUT_ID);
         Task::batch([
             self.show_marker_list(),

@@ -34,10 +34,12 @@ impl Recording {
     }
 }
 
-/// The row open for editing: its name field is shown.
+/// The row open for editing: its name field is shown, wrapping a long name.
 #[derive(Debug)]
 pub struct MarkerEdit {
     pub guid: String,
+    /// The name field's text and cursor.
+    pub name: iced::widget::text_editor::Content,
 }
 
 #[derive(Debug, Default)]
@@ -63,15 +65,34 @@ impl MarkersState {
         self.edit.is_some()
     }
 
-    /// Open the row of `guid` for renaming.
-    pub fn open(&mut self, guid: String) {
-        self.edit = Some(MarkerEdit { guid });
+    /// Open the row of `guid` for renaming; its field starts with `name`, the cursor at the end.
+    pub fn open(&mut self, guid: String, name: &str) {
+        let mut content = iced::widget::text_editor::Content::with_text(name);
+        content.perform(iced::widget::text_editor::Action::Move(
+            iced::widget::text_editor::Motion::DocumentEnd,
+        ));
+        self.edit = Some(MarkerEdit {
+            guid,
+            name: content,
+        });
         self.color_picker = None;
         self.last_added = None;
     }
 
     pub fn close(&mut self) {
         self.edit = None;
+    }
+
+    /// Apply an edit to the open row's name field; returns the open marker and its new name,
+    /// on one line.
+    pub fn edit_name(
+        &mut self,
+        action: iced::widget::text_editor::Action,
+    ) -> Option<(String, String)> {
+        let edit = self.edit.as_mut()?;
+        edit.name.perform(action);
+        let name = edit.name.text().replace(['\r', '\n'], " ");
+        Some((edit.guid.clone(), name.trim_end_matches(' ').to_string()))
     }
 
     pub fn color_picker(&self) -> Option<&str> {

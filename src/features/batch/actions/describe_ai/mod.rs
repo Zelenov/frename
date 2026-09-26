@@ -14,7 +14,7 @@ use clipscribe::{
 };
 use frename_core::ai::block;
 use frename_core::ai::key::{self, KeyState};
-use frename_core::{CommentStorage, File, FileId, FileKind, FileTagger, FolderInfo};
+use frename_core::{File, FileId, FileKind, FileTagger, FolderInfo, MarkerStorage};
 use iced::widget::{button, checkbox, column, row, text};
 use iced::{Element, Length};
 
@@ -440,8 +440,8 @@ pub fn probe_all(clips: Vec<(FileId, PathBuf)>) -> Vec<(FileId, Probe)> {
 }
 
 /// Describe the video at `path` and write the description into its comment, and its moments
-/// into the video as markers while comments are kept inside the video (XMP), where Premiere
-/// Pro shows them on the clip; with comments in text files, into the comment too.
+/// into the video as markers while markers are kept there (Settings), where Premiere Pro shows
+/// them on the clip; with markers kept in comments, into the comment too.
 pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress) -> ItemResult {
     let is_video = path
         .extension()
@@ -517,9 +517,9 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
     };
     let usage = Some(described.usage);
     progress.set(0.98, "saving");
-    let new_block = match frename_core::metadata_storage().comment {
-        CommentStorage::TextFile => block::format_block(&described.description),
-        CommentStorage::InVideo => {
+    let new_block = match frename_core::marker_storage() {
+        MarkerStorage::Comment => block::format_block(&described.description),
+        MarkerStorage::InVideo => {
             // Markers first, before the comment's save may rename the file.
             let segments = block::segment_lines(&described.description);
             match FileTagger::save_ai_markers(path, &segments) {

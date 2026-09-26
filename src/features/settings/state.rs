@@ -28,6 +28,8 @@ pub struct SettingsState {
     comment_storage_changed: bool,
     /// The in/out storage changed since the window last offered moving the files' points.
     in_out_storage_changed: bool,
+    /// The marker storage changed since the window last offered moving the files' markers.
+    marker_storage_changed: bool,
     /// The tag spacing changed since the window last offered renaming the files to it.
     tag_spacing_changed: bool,
     updates: updates::UpdatesState,
@@ -83,6 +85,7 @@ impl Default for SettingsState {
             settings: AppDatabase::new().get_app_settings().unwrap_or_default(),
             comment_storage_changed: false,
             in_out_storage_changed: false,
+            marker_storage_changed: false,
             tag_spacing_changed: false,
             updates: updates::UpdatesState::default(),
             import,
@@ -199,6 +202,11 @@ impl SettingsState {
         self.in_out_storage_changed
     }
 
+    /// Whether to offer moving the files' markers to the storage just chosen.
+    pub fn marker_storage_changed(&self) -> bool {
+        self.marker_storage_changed
+    }
+
     /// Whether to offer renaming the files to the tag spacing just chosen.
     pub fn tag_spacing_changed(&self) -> bool {
         self.tag_spacing_changed
@@ -260,6 +268,10 @@ impl SettingsState {
                 self.comment_storage_changed |= self.settings.comment_storage != storage;
                 self.settings.comment_storage = storage;
             }
+            Message::SetMarkerStorage(storage) => {
+                self.marker_storage_changed |= self.settings.marker_storage != storage;
+                self.settings.marker_storage = storage;
+            }
             Message::SetInOutStorage(storage) => {
                 self.in_out_storage_changed |= self.settings.in_out_storage != storage;
                 self.settings.in_out_storage = storage;
@@ -283,6 +295,9 @@ impl SettingsState {
             Message::OpenBatchAction(Operation::MoveInOut(_)) => {
                 self.in_out_storage_changed = false
             }
+            Message::OpenBatchAction(Operation::MarkersComment(_)) => {
+                self.marker_storage_changed = false
+            }
             Message::OpenBatchAction(Operation::RespaceTags) => self.tag_spacing_changed = false,
             Message::SetSummaryLanguage(language) => self.settings.summary_language = language,
             Message::SetAiModel(model) => self.settings.ai_model = model.id.to_string(),
@@ -297,8 +312,7 @@ impl SettingsState {
             Message::SetSubtitleCueLength(length) => self.settings.subtitle_cue_length = length,
             Message::Key(which, message) => self.apply_key(which, message),
             Message::OpenBatchAction(
-                Operation::MarkersComment(_)
-                | Operation::TagCommented
+                Operation::TagCommented
                 | Operation::FixTags
                 | Operation::ReloadFiles
                 | Operation::DescribeAi(_)
@@ -335,6 +349,7 @@ mod tests {
             settings: AppSettings::default(),
             comment_storage_changed: false,
             in_out_storage_changed: false,
+            marker_storage_changed: false,
             tag_spacing_changed: false,
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
@@ -364,6 +379,7 @@ mod tests {
             settings: AppSettings::default(),
             comment_storage_changed: false,
             in_out_storage_changed: false,
+            marker_storage_changed: false,
             tag_spacing_changed: false,
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
@@ -396,6 +412,7 @@ mod tests {
             settings: AppSettings::default(),
             comment_storage_changed: false,
             in_out_storage_changed: false,
+            marker_storage_changed: false,
             tag_spacing_changed: false,
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
@@ -412,6 +429,7 @@ mod tests {
             settings: AppSettings::default(),
             comment_storage_changed: false,
             in_out_storage_changed: false,
+            marker_storage_changed: false,
             tag_spacing_changed: false,
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
@@ -497,6 +515,7 @@ mod tests {
             settings: AppSettings::default(),
             comment_storage_changed: false,
             in_out_storage_changed: false,
+            marker_storage_changed: false,
             tag_spacing_changed: false,
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
@@ -530,6 +549,7 @@ mod tests {
             settings: AppSettings::default(),
             comment_storage_changed: false,
             in_out_storage_changed: false,
+            marker_storage_changed: false,
             tag_spacing_changed: false,
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,

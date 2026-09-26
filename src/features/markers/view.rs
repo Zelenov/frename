@@ -2,10 +2,10 @@
 //! for renaming. Every row has the same fixed height, open or not, so the list is scrolled to
 //! a row by arithmetic, as the subtitle list is.
 
-use frename_core::{format_marker_time, Marker, MarkerColor, MARKER_SNAP_MS};
+use frename_core::{format_marker_time, Marker, MarkerColor, AI_MARKER_COLOR, MARKER_SNAP_MS};
 use iced::widget::{
-    button, column, container, mouse_area, row, scrollable, text, text_input, tooltip, Column,
-    Space,
+    button, column, container, mouse_area, row, scrollable, stack, text, text_editor, tooltip,
+    Column, Space,
 };
 use iced::{Alignment, Element, Length};
 
@@ -14,14 +14,15 @@ use crate::theme;
 
 pub const MARKER_LIST_SCROLLABLE_ID: &str = "marker_list";
 pub const MARKER_NAME_INPUT_ID: &str = "marker_name_input";
-/// Every row, open for renaming or not: the first line and the name; a longer name is
-/// clipped. One height, so opening a row moves nothing.
-const ROW_HEIGHT: f32 = 62.0;
+/// Every row, open for renaming or not: the first line and two lines of the name; a longer
+/// name is clipped. One height, so opening a row moves nothing.
+const ROW_HEIGHT: f32 = 80.0;
 const ROW_SPACING: f32 = 2.0;
 /// The name, shown or edited, in the same box: the field's text size, padding and height.
 const NAME_SIZE: f32 = 13.0;
 const NAME_PADDING: [f32; 2] = [3.0, 6.0];
-const NAME_HEIGHT: f32 = 23.0;
+/// Two wrapped lines of the name.
+const NAME_HEIGHT: f32 = 41.0;
 /// Distance from one row's top to the next.
 pub const ROW_PITCH: f32 = ROW_HEIGHT + ROW_SPACING;
 const DOT_SIZE: f32 = 14.0;
@@ -151,21 +152,48 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
 
     let first_line: Element<'a, Message> = match guid {
         Some(guid) if state.color_picker() == Some(guid) => {
-            let colors = MarkerColor::ALL.into_iter().map(|color| {
+            // The editor's colors, then, set apart, the AI's: White is what marks a marker as
+            // the AI's, so it is picked as "AI", not as a color.
+            let pick = |color: MarkerColor| {
                 dot(
                     color,
                     color == marker.color,
                     Some(Message::SetColor(guid.to_string(), color)),
                 )
-            });
+            };
+            let colors = MarkerColor::ALL
+                .into_iter()
+                .filter(|&color| color != AI_MARKER_COLOR)
+                .map(pick);
+            let ai = tooltip(
+                button(
+                    row![
+                        Space::new().width(DOT_SIZE).height(DOT_SIZE),
+                        text("AI").size(11).color(theme::TEXT_SOFT)
+                    ]
+                    .spacing(4)
+                    .align_y(Alignment::Center),
+                )
+                .on_press(Message::SetColor(guid.to_string(), AI_MARKER_COLOR))
+                .padding(0)
+                .style(theme::icon_button_style(true)),
+                text("AI marker: replaced when the AI describes this clip again").size(12),
+                tooltip::Position::Top,
+            );
+            let ai = stack![ai, container(pick(AI_MARKER_COLOR)).center_y(Length::Fill)];
             row(colors)
+                .push(
+                    container(Space::new().width(1).height(DOT_SIZE))
+                        .style(|_| container::Style::default().background(theme::TEXT_MUTED)),
+                )
+                .push(ai)
                 .push(Space::new().width(Length::Fill))
                 .push(icon_button(
                     "✕",
                     "Keep the color",
                     Some(Message::ToggleColorPicker(guid.to_string())),
                 ))
-                .spacing(6)
+                .spacing(4)
                 .align_y(Alignment::Center)
                 .into()
         }
@@ -206,12 +234,24 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
     };
 
     let name: Element<'a, Message> = match open {
-        Some(_) => text_input("Name", &marker.name)
+        Some(edit) => text_editor(&edit.name)
             .id(iced::widget::Id::new(MARKER_NAME_INPUT_ID))
-            .on_input(Message::NameInput)
-            .on_submit(Message::Close)
+            .placeholder("Name")
+            .on_action(Message::NameAction)
+            // `Enter` closes the row: a name is one line, wrapped to fit.
+            .key_binding(|press| {
+                if matches!(
+                    press.key,
+                    iced::keyboard::Key::Named(iced::keyboard::key::Named::Enter)
+                ) {
+                    Some(text_editor::Binding::Custom(Message::Close))
+                } else {
+                    text_editor::Binding::from_key_press(press)
+                }
+            })
             .size(NAME_SIZE)
             .padding(NAME_PADDING)
+            .height(NAME_HEIGHT)
             .into(),
         None => container(
             text(if marker.name.is_empty() {
@@ -220,13 +260,19 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
                 marker.name.as_str()
             })
             .size(NAME_SIZE)
-            .color(if lit { theme::TEXT } else { theme::TEXT_SOFT })
-            .wrapping(iced::widget::text::Wrapping::None),
+            .color(if lit { theme::TEXT } else { theme::TEXT_SOFT }),
         )
         .padding(NAME_PADDING)
         .into(),
     };
-    let body = column![first_line, container(name).height(NAME_HEIGHT)].spacing(4);
+    let body = column![
+        first_line,
+        container(name)
+            // Two lines: the bottom padding is cut, and with it the top of a third line.
+            .height(NAME_HEIGHT - NAME_PADDING[0])
+            .clip(true)
+    ]
+    .spacing(4);
     let row_box = container(body)
         .width(Length::Fill)
         .height(ROW_HEIGHT)

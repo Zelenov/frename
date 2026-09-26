@@ -40,6 +40,11 @@ impl Default for Options {
 }
 
 impl Options {
+    /// Preset the direction, when Settings opens the action.
+    pub fn prepare(&mut self, direction: Direction) {
+        self.direction = direction;
+    }
+
     pub fn update(&mut self, message: Message) {
         match message {
             Message::SetDirection(direction) => self.direction = direction,

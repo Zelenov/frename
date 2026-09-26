@@ -338,6 +338,84 @@ pub fn replace_ai_markers(
     (markers, dropped)
 }
 
+/// Markers kept in a comment (see [`crate::MarkerStorage::Comment`]): `comment` without the
+/// lines that are markers, and those markers. The editor's timecoded lines are the editor's
+/// markers; the segment lines of the AI block are markers in [`AI_MARKER_COLOR`], and the block
+/// keeps its summary. [`markers_into_comment`] puts them back.
+pub fn markers_from_comment(comment: &str) -> (String, Vec<Marker>) {
+    let moved = comment_to_markers(comment, &[], None);
+    let mut markers = moved.added;
+    sort_markers(&mut markers);
+    let text = moved.comment;
+    let Some(block) = crate::ai::block::ai_block_range(&text) else {
+        return (text, markers);
+    };
+    // The block's segment lines are the AI markers now: the block keeps the rest.
+    let kept: Vec<&str> = text[block.clone()]
+        .lines()
+        .filter(|line| parse_ai_line(line).is_none())
+        .collect();
+    let text = format!(
+        "{}{}{}",
+        &text[..block.start],
+        kept.join("\n"),
+        &text[block.end..]
+    );
+    (text, markers)
+}
+
+/// A segment line of the AI block for `marker`: `0:00–0:14 Street.`
+fn format_ai_line(marker: &Marker) -> String {
+    let mut line = format_marker_time(marker.start_ms);
+    if marker.duration_ms > 0 {
+        line.push('–');
+        line.push_str(&format_marker_time(marker.end_ms()));
+    }
+    format!("{line} {}", marker.name.trim())
+}
+
+/// `comment` (as [`markers_from_comment`] left it) with `markers` written back as lines: the
+/// editor's at the end of the editor's text, in time order; the AI's (in [`AI_MARKER_COLOR`])
+/// as the AI block's segment lines, under its summary. Without a block, the AI's markers are
+/// plain lines too.
+pub fn markers_into_comment(comment: &str, markers: &[Marker]) -> String {
+    let mut sorted = markers.to_vec();
+    sort_markers(&mut sorted);
+    let block = crate::ai::block::ai_block_range(comment);
+    let (ai, mine): (Vec<&Marker>, Vec<&Marker>) = sorted
+        .iter()
+        .partition(|m| m.color == AI_MARKER_COLOR && block.is_some());
+    let (editor, block_text, after) = match &block {
+        Some(range) => (
+            &comment[..range.start],
+            &comment[range.clone()],
+            &comment[range.end..],
+        ),
+        None => (comment, "", ""),
+    };
+    let mut result = editor.trim_end().to_string();
+    for marker in &mine {
+        if !result.is_empty() {
+            result.push('\n');
+        }
+        result.push_str(&format_marker_line(marker));
+    }
+    if block.is_none() {
+        return result;
+    }
+    // The summary line first, the segments under it, then whatever else the block holds.
+    let mut lines = block_text.lines();
+    let mut block_out: Vec<String> = lines.next().map(str::to_string).into_iter().collect();
+    block_out.extend(ai.iter().map(|m| format_ai_line(m)));
+    block_out.extend(lines.map(str::to_string));
+    if !result.is_empty() {
+        result.push_str("\n\n");
+    }
+    result.push_str(&block_out.join("\n"));
+    result.push_str(after);
+    result
+}
+
 /// What "comment → markers" does to one file: the markers to add and the comment left over.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommentToMarkers {
@@ -783,6 +861,44 @@ mod tests {
             ]
         );
         assert_eq!(dropped, [old_ai.guid.unwrap()].into_iter().collect());
+    }
+
+    #[test]
+    fn markers_kept_in_a_comment_come_out_and_go_back() {
+        let (text, markers) = markers_from_comment(AI_COMMENT);
+        assert_eq!(text, "Mine\n\nAI: A walk.");
+        assert_eq!(
+            spans(&markers),
+            [
+                (0, 14_000, "Street, handheld.", AI_MARKER_COLOR),
+                (2_000, 0, "Take 3", MarkerColor::Green),
+                (14_000, 27_000, "Market — spices.", AI_MARKER_COLOR),
+                (62_000, 0, "A dog barks.", AI_MARKER_COLOR),
+            ]
+        );
+        let back = markers_into_comment(&text, &markers);
+        assert_eq!(
+            back,
+            "Mine\n0:02 — Take 3\n\nAI: A walk.\n0:00–0:14 Street, handheld.\n0:14–0:41 Market — spices.\n1:02 A dog barks."
+        );
+        // Stable: out and back again gives the same comment.
+        let (text, markers) = markers_from_comment(&back);
+        assert_eq!(markers_into_comment(&text, &markers), back);
+    }
+
+    #[test]
+    fn a_comment_without_markers_or_a_block_is_left_as_it_is() {
+        assert_eq!(
+            markers_from_comment("Just text"),
+            ("Just text".to_string(), vec![])
+        );
+        assert_eq!(markers_into_comment("Just text", &[]), "Just text");
+        let mut lion = marker(41_000, 6_000, "Lion", "roars");
+        lion.color = MarkerColor::Red;
+        assert_eq!(
+            markers_into_comment("", &[lion]),
+            "0:41–0:47 — Lion — roars"
+        );
     }
 
     #[test]

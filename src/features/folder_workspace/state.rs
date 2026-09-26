@@ -972,10 +972,18 @@ impl FolderWorkspace {
         };
 
         // Markers first, while the file still has the path they were read from; they travel
-        // with it through the rename.
-        let markers_saved = match snapshot.markers() {
-            Some(markers) => self.save_markers(id, &current_path, markers),
-            None => Task::none(),
+        // with it through the rename. Kept in the comment, they go back into it as lines.
+        let mut snapshot = snapshot;
+        let markers_saved = match (snapshot.markers(), frename_core::marker_storage()) {
+            (Some(markers), frename_core::MarkerStorage::Comment) => {
+                let comment = frename_core::markers_into_comment(snapshot.comment(), markers);
+                snapshot.set_comment(comment);
+                Task::none()
+            }
+            (Some(markers), frename_core::MarkerStorage::InVideo) => {
+                self.save_markers(id, &current_path, markers)
+            }
+            (None, _) => Task::none(),
         };
         let path_before = current_path.clone();
         let (new_path, snapshot_after_save) = snapshot.save_and_reparse(&current_path);
@@ -2748,6 +2756,13 @@ mod tests {
         workspace
     }
 
+    /// Typing `text` into the open marker row's name field.
+    fn type_name(text: &str) -> crate::features::markers::Message {
+        crate::features::markers::Message::NameAction(iced::widget::text_editor::Action::Edit(
+            iced::widget::text_editor::Edit::Paste(std::sync::Arc::new(text.to_string())),
+        ))
+    }
+
     fn marker_names(workspace: &FolderWorkspace) -> Vec<(u64, String)> {
         workspace
             .file_workspace()
@@ -2768,11 +2783,13 @@ mod tests {
         assert!(workspace.markers().is_editing());
 
         // As the name field sends it: through the video, with no task run afterwards.
-        for name in ["a", "as", "asa"] {
+        for letter in ['a', 's', 'a'] {
             let _ = workspace.update(Message::MediaViewer(
                 crate::features::media_viewer::Message::Video(
-                    crate::features::media_viewer::video::Message::Markers(M::NameInput(
-                        name.to_string(),
+                    crate::features::media_viewer::video::Message::Markers(M::NameAction(
+                        iced::widget::text_editor::Action::Edit(
+                            iced::widget::text_editor::Edit::Insert(letter),
+                        ),
                     )),
                 ),
             ));
@@ -2791,7 +2808,7 @@ mod tests {
         // A second F2 right away opens the marker just added instead of adding one.
         send_marker(&mut workspace, M::Add, 1_300);
         assert!(workspace.markers().is_editing());
-        send_marker(&mut workspace, M::NameInput("Take 3".to_string()), 1_300);
+        send_marker(&mut workspace, type_name("Take 3"), 1_300);
         // Keys of the workspace are off while the row is open: undo would remove the marker.
         let _ = workspace.update(Message::Undo);
         assert_eq!(marker_names(&workspace), [(1_000, "Take 3".to_string())]);
@@ -2974,7 +2991,7 @@ mod tests {
             .clone()
             .unwrap();
         send_marker(&mut workspace, M::Open(guid), 1_000);
-        send_marker(&mut workspace, M::NameInput("after".to_string()), 1_000);
+        send_marker(&mut workspace, type_name("after"), 1_000);
         // The refresh opens the same file under its new name: nothing is read from disk again.
         flush_file_opened(&mut workspace);
         assert!(workspace

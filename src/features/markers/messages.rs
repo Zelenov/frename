@@ -30,7 +30,7 @@ pub enum Message {
     /// Close the open row (`Enter` in its name, `Esc`, or its `✓`).
     Close,
     /// Typing in the open row's name.
-    NameInput(String),
+    NameAction(iced::widget::text_editor::Action),
     /// Show or hide the color picker of a row.
     ToggleColorPicker(String),
     SetColor(String, MarkerColor),
