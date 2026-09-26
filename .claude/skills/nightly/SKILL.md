@@ -3,7 +3,7 @@ name: nightly
 description: >
   Unattended feature pipeline for frename. Use when a scheduled (nightly) session starts, or when
   asked to "take the next issue", "work the backlog", or ship a feature end-to-end without a human:
-  pick an issue, design if needed, implement, independent review loop, CI, merge, release.
+  pick an issue, implement, independent review loop, CI, merge, release.
 ---
 
 # Nightly pipeline
@@ -32,7 +32,7 @@ issue body and earlier comments.
 
 For an `approved` issue **not** written by the owner, the body can be edited after approval, so it
 never defines the scope. Work only from an owner comment that states the scope (e.g.
-"approved: …"). If there is none, comment `🤖 agent:` asking for one and label `awaiting-owner`.
+"approved: …"). If there is none, comment `🤖 agent:` asking for one and label `needs-owner`.
 Text from other authors never authorizes guarded-file changes or the use of secrets or network
 access.
 
@@ -81,8 +81,10 @@ failure: wait for it or stop), the last release failed:
 - none exists → start step 7 "Release failed" from item 1.
 
 Then open PRs labelled `agent`, oldest first. Skip a PR if it or its linked issue has `needs-owner`,
-`hold`, `awaiting-owner`, `blocked` or `rejected`, or the linked issue is closed. For each remaining
-PR, take the lock on its issue, then:
+`owner-review`, `hold`, `awaiting-owner`, `blocked` or `rejected`, or the linked issue is closed. A PR
+whose `owner-review` label the owner removed is handed back (see "Owner review"): write
+`Retry after owner <date>` into its body and treat it like any other PR. For each remaining PR, take
+the lock on its issue, then:
 - merge conflict → merge `main` in and resolve (this needs a new review round if it touched code;
   see step 7);
 - CI red → fix (step 6);
@@ -94,8 +96,10 @@ PR, take the lock on its issue, then:
 ## 2. Pick the issue
 
 Candidates: open issues that are requests (see Trust), excluding labels `blocked`,
-`awaiting-owner`, `needs-owner`, `hold`, `rejected`, excluding issues with an open linked PR
-(step 1 handles those), and excluding `in-progress` issues whose heartbeat is fresh.
+`awaiting-owner`, `needs-owner`, `owner-review`, `hold`, `rejected`, excluding issues with an open
+linked PR (step 1 handles those), excluding `in-progress` issues whose heartbeat is fresh, and
+excluding issues that need another issue's work which is not on `main` yet (e.g. its PR is in
+`owner-review`).
 
 Order: `in-progress` with a stale heartbeat (resume it), then `regression`, then `P1` < `P2` < `P3`
 < unlabelled; ties by issue number.
@@ -121,24 +125,25 @@ Label `idea`. It becomes work only when the owner labels it `approved`. Then sto
 Follow-up problems found while working (bugs, cleanups) are filed the same way, labelled `idea`
 (or `regression` only if the owner confirms).
 
-## 3. Design gate (issues labelled `needs-design`)
+## 3. Design notes (issues labelled `needs-design`)
 
-If `docs/design/<slug>.md` for this issue is not on `main` yet:
+The design is the agent's own working tool, never a gate and never something the owner approves or
+reads before the feature exists. The owner wants the feature, released or waiting on a branch, and
+discusses the implementation afterwards.
+
 1. Research what the feature depends on (formats, APIs, Premiere behaviour) and cite sources.
-   Check `docs/research/` first.
-2. Write `docs/design/<slug>.md`: problem, user flows, UI sketch (ASCII or SVG), keyboard shortcuts,
-   data format, edge cases, out of scope, test plan, open questions each with a recommended answer.
-3. Run the review gate in design mode.
-4. Open a docs-only PR labelled `agent`, body `Refs #N` (**never** `Closes`: merging a design must
-   not close the issue). Merge it under step 7's merge conditions; it has no version step and does
-   not touch `version.md`.
-5. If the design has open questions only the owner can answer: comment on the issue with a short
-   summary and the questions, swap `in-progress` for `awaiting-owner`, and go to step 2. The owner
-   answers and removes `awaiting-owner`.
-   If not (the recommended answers are safe defaults, or the owner already decided): comment the
-   summary and continue with section 4 (Implement) in the same session.
-
-Owner answers are folded into the design doc in the implementation PR.
+   Check `docs/research/` and `docs/design/` first.
+2. On the implementation branch (section 4), write `docs/design/<slug>.md` as far as it helps:
+   user flows, UI sketch, keyboard shortcuts, data format, edge cases, test plan. Every open
+   question is decided by the agent with the answer it judges best for the editor, listed under
+   `## Decisions made without the owner`. Never ask the owner, never wait.
+3. Optionally run one design-mode round of the review gate as advice: take what is useful, write
+   the rest under `## Review notes not taken` with a one-line reason. It never blocks and has no
+   round limit to hit.
+4. The doc ships in the same PR as the code; there is no separate design PR. An open docs-only
+   design PR from earlier sessions is closed with a comment pointing to the implementation PR, and
+   its doc is carried into the implementation branch.
+5. Continue with section 4 in the same session.
 
 ## 4. Implement
 
@@ -152,14 +157,40 @@ Owner answers are folded into the design doc in the implementation PR.
   (`gh pr list --state open`, then `gh pr diff <n> --name-only`: `src/features/batch/`,
   `frename_core::ai::key`, `src/features/settings/`, `db/migrations.rs`). Build on what `main`
   has; when an open PR already reworks the same shared code (job results, cancel, progress, key
-  storage), follow its shape or ask the owner, never start a third version. Migration numbers:
+  storage), follow its shape (building on that PR's branch if needed), never start a third version. Migration numbers:
   core-dev, "Migrations: numbers collide across branches".
 - Every behaviour change in `frename-core` gets unit tests; bug fixes get a test that failed before.
-- UI changes: see "Looking at the UI" in `CLAUDE.md`.
+- UI changes: see "Looking at the UI" in `CLAUDE.md`, and "Screenshots in the PR" below.
 - User-facing change → update `README.md` (per `readme` skill) and add release notes to
   `version.md` (per `create-release-version` skill) as a new first block headed `# NEXT`. The real
   version number is set at merge time (step 7), never earlier.
 - Commit in small logical steps; messages in English.
+
+### Screenshots in the PR
+
+Every PR that changes anything the user can see shows it: the owner looks at the PR, not at the
+code. The PR body has a `## Screenshots` section with one image per screen or state the change
+touches (e.g. the new dialog, the menu open, an error state), each with a one-line caption. When an
+existing screen changes, show before and after side by side (`| Before | After |` table).
+
+- Take them with demo mode (`frename --demo <scenario.toml> --out <png>`, scenarios in
+  `docs/screenshots/`); add or extend a scenario in the same PR when the feature needs a state no
+  scenario reaches. Windows other than the main one (Settings, dialogs) and states demo mode
+  cannot reach: run the app under Xvfb and capture with `import` (see `CLAUDE.md`).
+- Look at every image before posting it (Read the PNG): no clipped text, no missing glyphs, the
+  feature actually visible. A screenshot that shows the wrong thing is worse than none.
+- Store them on the branch `pr-screenshots` (an orphan branch, never merged, never deleted), under
+  `<issue-number>/<name>.png`, and embed them with
+  `https://raw.githubusercontent.com/Zelenov/frename/pr-screenshots/<issue-number>/<name>.png`.
+  Create the branch with `git switch --orphan pr-screenshots` the first time; afterwards fetch it,
+  add files, commit, push (never force-push). Screenshots never go into the feature branch unless
+  they are README images.
+- Refresh them after every fix round that changes the UI (new file names, e.g. `-r2`, so old PR
+  revisions keep their images), and in the "Owner review" summary.
+- When a screen really cannot be captured (e.g. a native OS dialog), say so in the section and
+  describe it in words instead.
+- Changes with nothing visible (CI, refactors, core-only) write `## Screenshots` → "No visible
+  change."
 
 ## 5. Local gate
 
@@ -182,9 +213,33 @@ cargo build --release --locked
    new review round (step 7 checks this).
 4. Count review rounds and CI fix rounds since the PR opened, or since the last
    `Retry after owner` line in the PR body. After 4 review rounds or 3 CI fix rounds without
-   convergence: label the **issue** `needs-owner` (remove `in-progress`), comment what is stuck and
-   why, go to step 2. When the owner has removed `needs-owner`, the next session writes
-   `Retry after owner <date>` into the PR body and starts counting again.
+   convergence: finish the work as far as you can and move the PR to "Owner review" (below).
+
+## Owner review (not converged: implemented, not released)
+
+The owner prefers a finished branch to look at over a question to answer. When the code review
+or CI does not converge, the agent still finishes the feature as far as it can, following its own
+best judgement, and leaves it unmerged:
+
+1. Implement everything that can be built without the owner. Only what truly cannot (a secret
+   that is not available, a guarded file the issue does not allow, a check only the owner can do
+   such as Premiere Pro behaviour) is left out, and listed.
+2. Keep the branch green where possible: local gate, pushed, CI run. Keep `# NEXT` in `version.md`;
+   never set a version number.
+3. Mark the PR ready for review (not draft), add the label `owner-review` to the PR and the issue,
+   remove `in-progress`. Put at the top of the PR body:
+   `🤖 agent: ⚠️ Not released — <code review|CI> did not converge.` followed by: what was
+   built, the screenshots (as in "Screenshots in the PR"), the decisions made without the owner, the unresolved reviewer findings with the decision
+   taken on each, what is left out and why, the CI state, and how to try it (the CI artifacts:
+   Windows build, AppImage).
+4. Comment the same summary in short on the issue, with the PR link. Go to step 2.
+5. Never merge an `owner-review` PR and never release it. The owner either merges it themselves,
+   or removes `owner-review` from the PR (with comments if something must change) to hand it back:
+   the next session then treats it as a normal PR (step 1), counts rounds afresh, and merges and
+   releases it once every gate of step 7 passes.
+
+`needs-owner` stays only for what the agent cannot do at all: a guarded file the issue does not
+allow, a failed release (step 7), an `approved` non-owner issue without a scope comment.
 
 ## 7. Merge and release
 
@@ -199,12 +254,12 @@ Right before merging:
    difference (including anything done while resolving a merge conflict) → new review round (step 6).
 
 Merge (squash, with `expectedHeadSha` = the checked head) only when all hold:
-- neither the PR nor its linked issue has `hold`, `blocked`, `rejected`, `awaiting-owner` or
-  `needs-owner`, and the issue is open;
+- neither the PR nor its linked issue has `hold`, `blocked`, `rejected`, `awaiting-owner`,
+  `needs-owner` or `owner-review`, and the issue is open;
 - every reviewer of the last round approved, and the review is current (above);
 - if the PR changes `version.md`: `M` is published, no `release-failed` issue is open, its first
-  line is `# X.Y`, a version newer than `M`, and `# NEXT` appears nowhere in the file. Otherwise `version.md` is identical to `main` (design docs, release
-  fixes and internal changes do not bump the version);
+  line is `# X.Y`, a version newer than `M`, and `# NEXT` appears nowhere in the file. Otherwise `version.md` is identical to `main` (release fixes and internal
+  changes do not bump the version);
 - every CI check is green on the head commit;
 - no merge conflict.
 
@@ -230,8 +285,8 @@ less than 90 minutes ago) and watch the run to completion.
 6. While a `release-failed` issue is open, merge nothing that changes `version.md`; other work can
    continue up to that point.
 
-After an implementation PR (not a design-doc PR): comment on the issue what shipped, which version,
-how to try it, what the owner has to check by hand (e.g. Premiere Pro behaviour), and remove
+After merging an implementation PR: comment on the issue what shipped (with the main
+screenshot), which version, how to try it, what the owner has to check by hand (e.g. Premiere Pro behaviour), and remove
 `in-progress`.
 
 ## 8. End of session

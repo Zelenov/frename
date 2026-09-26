@@ -30,10 +30,11 @@ Code PR — all three, every round:
    duplication, dead code, scope creep beyond the issue, missing tests for new core behaviour.
 3. **Product** — does it do what the issue and design ask, from the editor's point of view?
    Keyboard flow, discoverability, consistency with existing UI, README and `version.md` text
-   (short, user language, per `readme` skill). For UI changes it looks at an Xvfb screenshot when
-   the app runs on Linux.
+   (short, user language, per `readme` skill). For UI changes it looks at the screenshots and checks that
+   the PR body shows every screen the change touches (a missing or wrong screenshot is a `major`
+   finding).
 
-Design doc — reviewers 2 and 3 only, judging the design: missing flows, edge cases, simpler
+Design doc (advisory only, one round, never blocks; see `nightly` step 3) — reviewers 2 and 3, judging the design: missing flows, edge cases, simpler
 alternatives, feasibility (is every format/API claim sourced?).
 
 ## Verdict format
@@ -55,7 +56,7 @@ A finding without a concrete failure scenario or a concrete improvement is dropp
 2. Re-run the local gate.
 3. Start a **new** round with fresh reviewers (never reuse a reviewer that saw an earlier round —
    it anchors on its old findings). Give them the full current diff.
-4. Repeat until all three approve in the same round. Four rounds without that → `needs-owner`
-   (see `nightly` step 6).
+4. Repeat until all three approve in the same round. Four rounds without that → the change is
+   finished as far as possible and left unmerged for the owner (`nightly` → "Owner review").
 
 Record every round in the PR description: SHA, each reviewer's verdict, findings count, what was fixed.

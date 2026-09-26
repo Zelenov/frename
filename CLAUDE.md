@@ -59,7 +59,7 @@ Reviewers follow `.claude/skills/review-gate/SKILL.md`. User-facing text follows
 `.claude/skills/readme/SKILL.md`.
 
 In autonomous mode the "implement only what is explicitly requested" rule of `AGENTS.md` means:
-the issue is the request. Do exactly what the issue and its approved design ask, nothing beyond it.
+the issue is the request. Do exactly what the issue asks (the agent's design notes only fill in details), nothing beyond it.
 Ideas of your own become new issues labelled `idea`, never extra code in the current PR.
 
 ## Labels
@@ -69,12 +69,13 @@ Ideas of your own become new issues labelled `idea`, never extra code in the cur
 | `P1` `P2` `P3` | owner/agent | Priority (lower number first). |
 | `regression` | owner | A release broke something; picked before everything else. |
 | `feature`, `process` | owner/agent | Kind of work. |
-| `needs-design` | owner/agent | A design doc in `docs/design/` must be merged before code. |
+| `needs-design` | owner/agent | The agent writes its own design notes in `docs/design/` on the feature branch before coding. Not a gate; the owner does not approve designs. |
 | `approved` | owner | Makes an `idea` or a non-owner issue implementable. |
 | `idea` | agent | Agent's own proposal; not implemented until `approved`. |
 | `in-progress` | agent | An agent session is working on it (see heartbeat lock). |
-| `awaiting-owner` | agent | Design questions for the owner; owner removes it after answering. |
-| `needs-owner` | agent | On an issue: agent is stuck; owner answers and removes it to let the agent retry. |
+| `awaiting-owner` | agent | Legacy, no longer set: the pipeline never waits for design answers. |
+| `needs-owner` | agent | On an issue: agent cannot proceed at all (guarded file, failed release); owner answers and removes it to let the agent retry. |
+| `owner-review` | agent | Code review or CI did not converge: the feature is built on its PR but not merged or released. Owner merges it, or removes the label from the PR to hand it back. |
 | `hold` | owner | Do not work on / merge this. |
 | `blocked`, `rejected` | owner | Not now / never. |
 | `agent` | agent | PR opened by the agent pipeline. |
@@ -104,13 +105,14 @@ Xvfb :99 -screen 0 1600x900x24 &
 sleep 15 && DISPLAY=:99 import -window root screenshot.png
 ```
 
-Verified: it renders under Xvfb (software rendering). Today it starts on the empty "open a folder"
-screen and has no command-line option to open a folder, so screens past it cannot be reached yet;
-issue #14 (demo mode) adds that. Until then the product reviewer reviews the `view` code plus a
-written description of the UI, and screenshots are taken wherever they can be.
+Verified: it renders under Xvfb (software rendering). Demo mode opens a staged folder in a known
+state and saves a screenshot of the main window: `frename --demo <scenario.toml> --out <png>`
+(scenarios and `render.sh` in `docs/screenshots/`). Other windows (Settings, dialogs) are captured
+with `import` under Xvfb as above.
 
 Look at the screenshot of every screen a change touches before asking for review; give the product
-reviewer the screenshot path.
+reviewer the screenshot path. Every agent PR with a visible change shows its screenshots in the PR
+body (`nightly` skill → "Screenshots in the PR").
 
 ## Never
 
