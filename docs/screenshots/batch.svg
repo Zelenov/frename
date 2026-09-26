@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- README screenshot template: the demo screenshot batch.png (batch.toml) with labels and arrows.
+     The window is placed at 100,204 at its real size (1920x1009, see batch.toml); labels and arrow
+     ends are in canvas pixels. Rendered by docs/screenshots/render.sh. -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="2532" height="1417" viewBox="0 0 2532 1417">
+  <defs>
+    <marker id="head" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5"
+            orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#B2B3B8"/>
+    </marker>
+  </defs>
+  <rect width="2532" height="1417" fill="#282923"/>
+  <image x="100" y="204" width="1920" height="1009" xlink:href="batch.png" href="batch.png"/>
+  <g font-family="Segoe UI, Open Sans, sans-serif" font-size="43" fill="#B2B3B8">
+    <text x="537" y="140" text-anchor="middle">Video player</text>
+    <text x="1172" y="140" text-anchor="middle">Checked files</text>
+    <text x="1695" y="140" text-anchor="middle">Batch actions</text>
+    <text x="2090" y="640" text-anchor="start">Pick an action</text>
+    <text x="2090" y="810" text-anchor="start">Run it</text>
+    <text x="1210" y="1330" text-anchor="middle">Batch mode on / off</text>
+  </g>
+  <g fill="none" stroke="#B2B3B8" stroke-width="5" stroke-linecap="round" marker-end="url(#head)">
+    <path d="M2080,625 Q1753,607 1490,412"/>
+    <path d="M2080,795 Q1821,684 1710,425"/>
+    <path d="M1210,1285 Q1210,1245 1210,1205"/>
+  </g>
+</svg>

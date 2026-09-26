@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- README screenshot template: the demo screenshot main.png (main.toml) with labels and arrows.
+     The window is placed at 100,204 at its real size (1920x1009, see main.toml); labels and arrow
+     ends are in canvas pixels. Rendered by docs/screenshots/render.sh. -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="2532" height="1417" viewBox="0 0 2532 1417">
+  <defs>
+    <marker id="head" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5"
+            orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#B2B3B8"/>
+    </marker>
+  </defs>
+  <rect width="2532" height="1417" fill="#282923"/>
+  <image x="100" y="204" width="1920" height="1009" xlink:href="main.png" href="main.png"/>
+  <g font-family="Segoe UI, Open Sans, sans-serif" font-size="43" fill="#B2B3B8">
+    <text x="537" y="140" text-anchor="middle">Video player</text>
+    <text x="1172" y="140" text-anchor="middle">All files</text>
+    <text x="1695" y="140" text-anchor="middle">Tags</text>
+    <text x="2090" y="140" text-anchor="start">Searchbar</text>
+    <text x="2110" y="380" text-anchor="start">Starred</text>
+    <text x="2110" y="640" text-anchor="start">All tags</text>
+    <text x="2060" y="1000" text-anchor="start">Current video tags</text>
+    <text x="1800" y="1330" text-anchor="middle">Comments</text>
+    <text x="300" y="1110" text-anchor="middle">In</text>
+    <text x="760" y="1090" text-anchor="middle">Out</text>
+    <text x="500" y="1330" text-anchor="middle">Screenshots</text>
+  </g>
+  <g fill="none" stroke="#B2B3B8" stroke-width="5" stroke-linecap="round" marker-end="url(#head)">
+    <path d="M2150,165 Q2074,166 2030,228"/>
+    <path d="M2150,345 Q2007,240 1830,262"/>
+    <path d="M2150,1020 Q2089,1091 1995,1085"/>
+    <path d="M1790,1285 Q1776,1225 1720,1200"/>
+    <path d="M330,1115 Q380,1135 386,1188"/>
+    <path d="M740,1105 Q677,1125 655,1188"/>
+    <path d="M520,1285 Q539,1226 598,1205"/>
+    <path d="M460,1285 Q470,1240 440,1205"/>
+  </g>
+</svg>
