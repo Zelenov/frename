@@ -84,7 +84,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-            gstreamer1.0-libav patchelf file imagemagick
+            gstreamer1.0-libav patchelf file imagemagick xvfb mesa-vulkan-drivers
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -94,12 +94,26 @@ jobs:
         run: cargo build --release --locked
 
       - name: Build AppImage
-        run: packaging/linux/build-appimage.sh 0.0.0-ci target/release/frename dist
+        run: packaging/linux/build-appimage.sh 0.0.0-ci target/release/frename dist/frename-0.0.0-ci-x86_64.AppImage
+
+      # The self-test in the next job never opens a window; this checks the AppImage's window.
+      - name: Screenshot of the AppImage's main window
+        run: |
+          Xvfb :99 -screen 0 1600x900x24 &
+          sleep 2
+          (cd tests/folder && DISPLAY=:99 APPIMAGE_EXTRACT_AND_RUN=1 ../../dist/frename-0.0.0-ci-x86_64.AppImage > ../../appimage.log 2>&1 &)
+          sleep 20
+          pgrep -f frename-0.0.0-ci || { echo "the AppImage is not running"; cat appimage.log; exit 1; }
+          DISPLAY=:99 import -window root screenshot-appimage.png
+          pkill -f frename-0.0.0-ci
+          tail -n 20 appimage.log
 
       - uses: actions/upload-artifact@v4
         with:
           name: frename-linux-x86_64-${{ github.sha }}
-          path: dist/frename-0.0.0-ci-x86_64.AppImage
+          path: |
+            dist/frename-0.0.0-ci-x86_64.AppImage
+            screenshot-appimage.png
           retention-days: 14
 
   # Plays the test clips with the AppImage on a desktop base that has no GStreamer.

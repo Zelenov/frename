@@ -186,14 +186,16 @@ jobs:
         with:
           toolchain: stable
 
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
       - name: Build release binary
         run: cargo build --release --locked
 
       - name: Build AppImage
         run: |
           version="${{ needs.prepare.outputs.version }}.0"
-          packaging/linux/build-appimage.sh "$version" target/release/frename dist
-          mv "dist/frename-$version-x86_64.AppImage" "dist/frename-linux-x86_64-v$version.AppImage"
+          packaging/linux/build-appimage.sh "$version" target/release/frename "dist/frename-linux-x86_64-v$version.AppImage"
 
       - uses: actions/upload-artifact@v4
         with:

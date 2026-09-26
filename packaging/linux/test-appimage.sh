@@ -18,7 +18,8 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
   libfribidi0 libdrm2 libgbm1 libwayland-client0 libasound2t64 libgl1 libegl1 libxkbcommon0 \
   > /dev/null
 
-if dpkg -l | grep -qi gstreamer; then
+# Not `grep -q`: it stops reading early, dpkg dies of SIGPIPE, and pipefail turns a match into a miss.
+if dpkg -l | grep -i gstreamer > /dev/null; then
   echo "A system GStreamer is installed; this test needs a machine without one." >&2
   exit 1
 fi
