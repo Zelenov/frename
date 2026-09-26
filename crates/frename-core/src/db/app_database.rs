@@ -51,14 +51,12 @@ pub struct AppDatabase {
 }
 
 impl AppDatabase {
-    /// Creates the database using the default path (next to the executable, or temp dir if unavailable).
+    /// Creates the database at the default path, `frename.db` in [`crate::app_data_dir`].
     #[allow(clippy::new_without_default)] // opens the database file; not a cheap default
     pub fn new() -> Self {
-        let path = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.join("frename.db")))
-            .unwrap_or_else(|| std::env::temp_dir().join("frename.db"));
-        Self { path }
+        Self {
+            path: crate::app_data_dir().join("frename.db"),
+        }
     }
 
     /// Creates the database at the given path (for tests or custom location).

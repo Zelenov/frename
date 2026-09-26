@@ -1,5 +1,6 @@
 //! Core logic for frename - file renaming utility.
 
+mod app_dir;
 pub(crate) mod comment;
 mod db;
 mod directory;
@@ -13,6 +14,7 @@ mod tags;
 pub(crate) mod transliteration;
 pub mod undo;
 
+pub use app_dir::app_data_dir;
 pub use db::{
     AppDatabase, AppSettings, AppStateStore, Initializable, LoggingAppStateStore, StoredTagStore,
     VideoSettings, WindowGeometry,
