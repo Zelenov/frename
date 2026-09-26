@@ -15,6 +15,7 @@ mod crash_guard;
 mod demo;
 mod features;
 mod self_test;
+mod soniox_key;
 mod tag_colors;
 mod theme;
 mod widgets;

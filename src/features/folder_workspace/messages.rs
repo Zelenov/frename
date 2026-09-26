@@ -97,7 +97,7 @@ pub enum Message {
     /// A file of the running batch job is done (internal).
     BatchItemDone {
         id: FileId,
-        result: batch::ItemResult,
+        result: Box<batch::ItemResult>,
     },
     /// The batch job ended, finished or cancelled (internal): the open file comes back.
     BatchFinished,

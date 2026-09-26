@@ -39,8 +39,12 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
+      # With the SONIOX_API_KEY secret set, one test also generates subtitles with the real
+      # Soniox (about 30 s of audio); without it that test is skipped (issue #12).
       - name: Test
         run: cargo test --workspace --locked
+        env:
+          SONIOX_API_KEY: ${{ secrets.SONIOX_API_KEY }}
 
       - name: Build app
         run: cargo build --locked

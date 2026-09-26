@@ -95,3 +95,10 @@ ALTER TABLE app_settings ADD COLUMN commented_tag_enabled INTEGER NOT NULL DEFAU
 pub const M8_SPACE_AFTER_TAGS: &str = "
 ALTER TABLE app_settings ADD COLUMN space_after_tags INTEGER NOT NULL DEFAULT 0;
 ";
+
+/// Migration 9: generating subtitles. The languages spoken in the footage, as comma-separated
+/// hints (empty: detect automatically), and how long a cue may get (`CueLength::as_str`).
+pub const M9_SUBTITLE_SETTINGS: &str = "
+ALTER TABLE app_settings ADD COLUMN subtitle_languages TEXT NOT NULL DEFAULT 'en,ru';
+ALTER TABLE app_settings ADD COLUMN subtitle_cue_length TEXT NOT NULL DEFAULT 'short';
+";

@@ -1,8 +1,9 @@
 //! Messages from the settings window.
 
-use frename_core::{CommentStorage, InOutStorage};
+use frename_core::{CommentStorage, CueLength, InOutStorage};
 
 use crate::features::batch::Operation;
+use crate::soniox_key::{KeyInfo, SonioxKey};
 
 /// User changes in the settings window. Each one is saved immediately.
 #[derive(Debug, Clone)]
@@ -24,4 +25,27 @@ pub enum Message {
     /// After a storage change: open batch mode in the main window, set up to move the files'
     /// comments or in/out points to the new storage. Handled by the app.
     OpenBatchAction(Operation),
+    /// Read the Soniox API key from the credential store, unless it was read already (sent
+    /// when the window opens or the subtitle action is chosen).
+    LoadSonioxKey,
+    /// The key was read (internal).
+    SonioxKeyLoaded(KeyInfo),
+    /// Typing in the key field.
+    SonioxKeyInput(String),
+    /// Show or mask the typed key.
+    ToggleShowSonioxKey,
+    /// Save the typed key in the credential store.
+    SaveSonioxKey,
+    /// The key was saved, or why not (internal).
+    SonioxKeySaved(Result<SonioxKey, String>),
+    /// Show the key field again to type a new key over the saved one.
+    ReplaceSonioxKey,
+    /// Delete the saved key.
+    RemoveSonioxKey,
+    /// The key was deleted, or why not (internal).
+    SonioxKeyRemoved(Result<(), String>),
+    /// Check or uncheck a language spoken in the footage (a code such as "en").
+    SetSubtitleLanguage(String, bool),
+    /// How long generated subtitle cues may get.
+    SetSubtitleCueLength(CueLength),
 }

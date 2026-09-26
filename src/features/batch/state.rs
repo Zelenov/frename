@@ -5,13 +5,16 @@ use std::path::PathBuf;
 
 use frename_core::{FileId, FileSnapshot};
 
+use super::actions::generate_subtitles::PlanRequest;
 use super::actions::Actions;
-use super::{Action, Message, Operation};
+use super::{Action, ActionMessage, Message, Operation};
+use crate::soniox_key::SonioxKey;
 
 /// Where one file of a job stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ItemStatus {
-    /// Not reached yet; after a cancel, never reached.
+    /// Not reached yet; after a cancel, never reached. An operation cancelled in the middle of
+    /// a file returns it too: that file was not done, and not failed either.
     Pending,
     Running,
     /// Changed.
@@ -28,6 +31,30 @@ pub struct ItemResult {
     pub status: ItemStatus,
     /// The file's path and snapshot afterwards, when the operation touched it.
     pub update: Option<(PathBuf, FileSnapshot)>,
+    /// Why the file was left alone or failed, shown after its name in the job's results.
+    pub reason: Option<String>,
+    /// Stop the job after this file: the rest would fail the same way (e.g. a rejected key).
+    pub stop_job: Option<JobStop>,
+}
+
+impl ItemResult {
+    pub fn new(status: ItemStatus, update: Option<(PathBuf, FileSnapshot)>) -> Self {
+        Self {
+            status,
+            update,
+            reason: None,
+            stop_job: None,
+        }
+    }
+}
+
+/// Why a job stopped before its last file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JobStop {
+    /// The job's summary line.
+    pub message: String,
+    /// Whether the settings window can fix it (e.g. a rejected key).
+    pub open_settings: bool,
 }
 
 /// One run of an operation over the files checked when it started.
@@ -37,9 +64,13 @@ struct Job {
     /// Files in the order they are processed.
     order: Vec<FileId>,
     statuses: HashMap<FileId, ItemStatus>,
+    /// Why files were left alone or failed, for the results list.
+    reasons: HashMap<FileId, String>,
     /// Index into `order` of the next file to start.
     next: usize,
     cancelled: bool,
+    /// Set when a file's result stopped the job.
+    stopped: Option<JobStop>,
     /// False once the job has finished or stopped; the report stays until it is closed.
     running: bool,
     /// Files whose check changed after the job: the list shows their check box again, while
@@ -92,16 +123,45 @@ impl Default for BatchState {
 impl BatchState {
     /// Apply a message. `Run` is started by the workspace through [`Self::start`].
     pub fn update(&mut self, message: Message) {
-        // Nothing changes under a running job but its own cancel.
-        if self.is_running() && !matches!(message, Message::Cancel) {
+        // Nothing changes under a running job but its own cancel, and answers from outside
+        // (the settings, the price lookup) that the next run needs.
+        let passes = matches!(
+            message,
+            Message::Cancel
+                | Message::SubtitlePriceReady { .. }
+                | Message::Action(ActionMessage::GenerateSubtitles(
+                    super::actions::generate_subtitles::Message::SetConfig(_)
+                ))
+        );
+        if self.is_running() && !passes {
             return;
+        }
+        // Whatever changes the checked files changes what they need.
+        if matches!(
+            message,
+            Message::Prepare { .. }
+                | Message::Toggle(_)
+                | Message::CheckAll(_)
+                | Message::CheckNone
+                | Message::Invert(_)
+                | Message::SelectAction(_)
+                | Message::CloseReport
+        ) {
+            self.actions.generate_subtitles().invalidate_plan();
         }
         match message {
             Message::SetActive(active) => self.active = active,
             Message::SelectAction(action) => self.action = action,
             Message::Action(message) => self.actions.update(message),
+            Message::SubtitlePlanReady { generation, plan } => self
+                .actions
+                .generate_subtitles()
+                .plan_ready(generation, *plan),
+            Message::SubtitlePriceReady { key, price } => {
+                self.actions.generate_subtitles().price_ready(key, price)
+            }
             Message::Prepare { operation, files } => {
-                self.actions.prepare(operation);
+                self.actions.prepare(&operation);
                 self.action = operation.action();
                 self.active = true;
                 self.job = None;
@@ -130,8 +190,9 @@ impl BatchState {
                 }
             }
             Message::Cancel => {
-                if let Some(job) = self.job.as_mut() {
+                if let Some(job) = self.job.as_mut().filter(|job| job.running) {
                     job.cancelled = true;
+                    job.operation.cancel();
                 }
             }
             Message::CloseReport => self.job = None,
@@ -154,8 +215,10 @@ impl BatchState {
             operation,
             order: files,
             statuses,
+            reasons: HashMap::new(),
             next: 0,
             cancelled: false,
+            stopped: None,
             running: true,
             dismissed: HashSet::new(),
         });
@@ -166,20 +229,46 @@ impl BatchState {
     /// cancelled or has no files left (`None`).
     pub fn begin_next(&mut self) -> Option<(FileId, Operation)> {
         let job = self.job.as_mut().filter(|job| job.running)?;
-        let Some(id) = job.order.get(job.next).copied().filter(|_| !job.cancelled) else {
+        let stop = job.cancelled || job.stopped.is_some();
+        let Some(id) = job.order.get(job.next).copied().filter(|_| !stop) else {
             job.running = false;
+            // The job changed the files: what they need is worked out again.
+            self.actions.generate_subtitles().invalidate_plan();
             return None;
         };
         job.next += 1;
         job.statuses.insert(id, ItemStatus::Running);
-        Some((id, job.operation))
+        Some((id, job.operation.clone()))
     }
 
     /// Record how a file of the running job went.
-    pub fn finish(&mut self, id: FileId, status: ItemStatus) {
+    pub fn finish(&mut self, id: FileId, result: &ItemResult) {
         if let Some(job) = self.job.as_mut() {
-            job.statuses.insert(id, status);
+            job.statuses.insert(id, result.status);
+            if let Some(reason) = &result.reason {
+                job.reasons.insert(id, reason.clone());
+            }
+            if job.stopped.is_none() {
+                job.stopped = result.stop_job.clone();
+            }
         }
+    }
+
+    /// The plan and price the selected subtitle action is waiting for, to be worked out by
+    /// the workspace; each is handed out once per change.
+    pub fn take_subtitle_requests(&mut self) -> (Option<PlanRequest>, Option<SonioxKey>) {
+        if !self.active || self.action != Action::GenerateSubtitles || self.is_running() {
+            return (None, None);
+        }
+        let options = self.actions.generate_subtitles();
+        (options.take_plan_request(), options.take_price_request())
+    }
+
+    /// Whether the selected subtitle action waits for the key to be read from the store.
+    pub fn needs_subtitle_key(&mut self) -> bool {
+        self.active
+            && self.action == Action::GenerateSubtitles
+            && self.actions.generate_subtitles().needs_key()
     }
 
     /// Show the check boxes of `ids` again instead of their outcome in the finished job.
@@ -193,6 +282,7 @@ impl BatchState {
     pub fn reset_files(&mut self) {
         self.checked.clear();
         self.job = None;
+        self.actions.generate_subtitles().invalidate_plan();
     }
 
     /// Whether the right half shows the batch panel instead of the open file.
@@ -246,15 +336,45 @@ impl BatchState {
             .find(|id| job.statuses.get(id) == Some(&ItemStatus::Running))
     }
 
-    /// Files of the current job that failed, in job order.
-    pub fn failed(&self) -> Vec<FileId> {
+    /// Files of the current job to list after it: the failed ones, and those left alone for a
+    /// reason, in job order.
+    pub fn results(&self) -> Vec<(FileId, ItemStatus, Option<&str>)> {
         self.job.as_ref().map_or_else(Vec::new, |job| {
             job.order
                 .iter()
-                .copied()
-                .filter(|id| job.statuses.get(id) == Some(&ItemStatus::Failed))
+                .filter_map(|id| {
+                    let status = *job.statuses.get(id)?;
+                    let reason = job.reasons.get(id).map(String::as_str);
+                    let listed = status == ItemStatus::Failed
+                        || (status == ItemStatus::Skipped && reason.is_some());
+                    listed.then_some((*id, status, reason))
+                })
                 .collect()
         })
+    }
+
+    /// Why the current job stopped before its last file, if a file stopped it.
+    pub fn stopped(&self) -> Option<&JobStop> {
+        self.job.as_ref().and_then(|job| job.stopped.as_ref())
+    }
+
+    /// The action of the current job, which the panel's labels follow while it is shown.
+    pub fn job_action(&self) -> Option<Action> {
+        self.job.as_ref().map(|job| job.operation.action())
+    }
+
+    /// The current job's own summary line (e.g. what it spent), when it has one.
+    pub fn report(&self) -> Option<String> {
+        self.job.as_ref().and_then(|job| job.operation.report())
+    }
+
+    /// The run button of the selected action: label, and whether it can run now.
+    pub fn run_button(&self) -> (String, bool) {
+        let (label, enabled) = self.actions.run_button(self.action, self.checked_count());
+        (
+            label,
+            enabled && self.checked_count() > 0 && !self.is_running(),
+        )
     }
 
     /// How far the current job is; `None` without one.
@@ -330,7 +450,7 @@ mod tests {
             (files[0], Operation::MoveComments(CommentStorage::InVideo))
         );
         assert_eq!(batch.current(), Some(files[0]));
-        batch.finish(first, ItemStatus::Done);
+        batch.finish(first, &ItemResult::new(ItemStatus::Done, None));
 
         batch.update(Message::Toggle(files[0]));
         assert!(
@@ -361,9 +481,9 @@ mod tests {
         let mut batch = state();
         batch.start(files.clone());
         let (id, _) = batch.begin_next().expect("the file");
-        batch.finish(id, ItemStatus::Failed);
+        batch.finish(id, &ItemResult::new(ItemStatus::Failed, None));
         assert!(batch.begin_next().is_none());
-        assert_eq!(batch.failed(), files);
+        assert_eq!(batch.results(), vec![(files[0], ItemStatus::Failed, None)]);
     }
 
     #[test]
@@ -374,7 +494,7 @@ mod tests {
         batch.start(files.clone());
         for _ in 0..2 {
             let (id, _) = batch.begin_next().expect("a file");
-            batch.finish(id, ItemStatus::Done);
+            batch.finish(id, &ItemResult::new(ItemStatus::Done, None));
         }
         assert!(batch.begin_next().is_none());
 
@@ -390,11 +510,85 @@ mod tests {
     }
 
     #[test]
+    fn a_result_that_stops_the_job_ends_it_and_says_why() {
+        let files = ids(3);
+        let mut batch = state();
+        batch.start(files.clone());
+        let (id, _) = batch.begin_next().expect("first file");
+        let stop = JobStop {
+            message: "Soniox rejected the key".to_string(),
+            open_settings: true,
+        };
+        batch.finish(
+            id,
+            &ItemResult {
+                reason: Some("failed: Soniox: bad key".to_string()),
+                stop_job: Some(stop.clone()),
+                ..ItemResult::new(ItemStatus::Failed, None)
+            },
+        );
+        assert!(batch.begin_next().is_none(), "the rest is not reached");
+        assert_eq!(batch.stopped(), Some(&stop));
+        assert_eq!(
+            batch.results(),
+            vec![(
+                files[0],
+                ItemStatus::Failed,
+                Some("failed: Soniox: bad key")
+            )]
+        );
+        assert_eq!(batch.status(files[1]), Some(ItemStatus::Pending));
+    }
+
+    #[test]
+    fn files_left_alone_for_a_reason_are_listed_after_the_job() {
+        let files = ids(3);
+        let mut batch = state();
+        batch.start(files.clone());
+        let results = [
+            ItemResult::new(ItemStatus::Done, None),
+            ItemResult {
+                reason: Some("no speech".to_string()),
+                ..ItemResult::new(ItemStatus::Skipped, None)
+            },
+            ItemResult::new(ItemStatus::Skipped, None),
+        ];
+        for result in &results {
+            let (id, _) = batch.begin_next().expect("a file");
+            batch.finish(id, result);
+        }
+        assert_eq!(
+            batch.results(),
+            vec![(files[1], ItemStatus::Skipped, Some("no speech"))],
+            "a file left alone without a reason is not listed"
+        );
+    }
+
+    #[test]
+    fn a_file_cancelled_in_the_middle_is_not_reached() {
+        let files = ids(2);
+        let mut batch = state();
+        batch.start(files.clone());
+        let (id, _) = batch.begin_next().expect("first file");
+        batch.update(Message::Cancel);
+        batch.finish(id, &ItemResult::new(ItemStatus::Pending, None));
+        assert!(batch.begin_next().is_none());
+        let progress = batch.progress().expect("report");
+        assert_eq!((progress.finished, progress.failed), (0, 0));
+        assert_eq!(batch.status(files[0]), Some(ItemStatus::Pending));
+    }
+
+    #[test]
     fn every_action_runs_and_none_runs_without_files() {
         let mut batch = state();
         assert!(!batch.start(Vec::new()), "nothing checked");
         for action in Action::ALL {
             batch.update(Message::SelectAction(action));
+            if action == Action::GenerateSubtitles {
+                // Waits for its key, plan and price.
+                assert_eq!(batch.operation(), None);
+                continue;
+            }
             assert_eq!(batch.operation().map(|op| op.action()), Some(action));
         }
         batch.update(Message::SelectAction(Action::FixTags));

@@ -365,6 +365,18 @@ impl<S: AppStateStore + Clone> Directory<S> {
         }
     }
 
+    /// Record whether the file identified by `id` has a `.srt` next to it, for its marker, the
+    /// "with subtitles" filter and its count. Returns true if the file was found.
+    pub fn set_has_subtitles(&mut self, id: FileId, has_subtitles: bool) -> bool {
+        match self.files_by_id.get_mut(&id) {
+            Some(file) => {
+                file.set_has_subtitles(has_subtitles);
+                true
+            }
+            None => false,
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------------
@@ -669,6 +681,22 @@ mod tests {
         dir.set_subtitled_only(true);
         assert_eq!(listed_names(&dir), vec!["b.mp4"]);
         assert_eq!(dir.subtitled_count(), 1);
+    }
+
+    #[test]
+    fn generated_subtitles_show_in_the_filter_and_its_count() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4"]);
+        let id = dir.files_in_order().nth(1).expect("b.mp4").id();
+        dir.set_subtitled_only(true);
+        assert_eq!(dir.subtitled_count(), 0);
+
+        assert!(dir.set_has_subtitles(id, true));
+        assert_eq!(listed_names(&dir), vec!["b.mp4"]);
+        assert_eq!(dir.subtitled_count(), 1);
+        assert!(dir.file_by_id(id).is_some_and(|f| f.has_subtitles()));
+
+        dir.set_has_subtitles(id, false);
+        assert_eq!(dir.subtitled_count(), 0);
     }
 
     #[test]

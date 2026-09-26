@@ -151,6 +151,13 @@ A `.srt` with the same name as the video (`clip.srt` for `clip.mp4`) is shown un
 The CC button opens a list of every line; click a line to jump to it. In fullscreen the subtitles
 are shown over the picture with the list beside them.
 
+frename can make the `.srt` for you: check the videos in batch mode and run **Generate subtitles**.
+It sends their audio to [Soniox](https://soniox.com) (a paid speech-to-text service, a few cents
+per hour of audio), and shows how much audio will be sent and roughly what it costs before you
+start. Videos that already have subtitles are skipped unless you tick **Replace existing
+subtitles**. Set your Soniox API key once in Settings → Subtitles. Formats such as mkv, m2ts and
+avi need [ffmpeg](https://ffmpeg.org) on your PATH.
+
 ## Batch mode
 
 ![Batch mode](docs/frename-screenshot-batch.jpg)
@@ -163,7 +170,8 @@ and Cancel. Each file then shows a green or red check box. Actions:
 - tag commented videos with "Commented" and untag the rest;
 - put the tags in every name in tag panel order;
 - add or remove the space after each tag, as set in Settings;
-- read every file again (use this if the list looks out of date).
+- read every file again (use this if the list looks out of date);
+- generate subtitles (see [Subtitles](#subtitles)).
 
 ## Settings
 
@@ -174,7 +182,10 @@ The ⚙ button opens Settings:
 - put a space after each tag in file names (`Food. Goat. clip.mp4`);
 - where comments are kept (inside the video or `.comment.txt`), and the name of the "Commented"
   tag, or none;
-- where in/out points are kept (file name or inside the video).
+- where in/out points are kept (file name or inside the video);
+- for generating subtitles: your Soniox API key (kept in your system's password store, never in
+  frename's files), the languages spoken in your footage, and whether a subtitle is a short line or
+  a whole sentence.
 
 After you change where comments or in/out points are kept, or the tag spacing, Settings offer the
 batch action that updates the existing files.

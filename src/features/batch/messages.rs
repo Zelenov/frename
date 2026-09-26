@@ -2,7 +2,9 @@
 
 use frename_core::FileId;
 
+use super::actions::generate_subtitles::{Plan, Price};
 use super::{ActionMessage, Operation};
+use crate::soniox_key::SonioxKey;
 
 /// Batch mode messages: from the batch panel, and from the folder list via the workspace.
 #[derive(Debug, Clone)]
@@ -33,4 +35,9 @@ pub enum Message {
     Cancel,
     /// Dismiss the report of a finished job, with the outcomes shown in the list.
     CloseReport,
+    /// The plan of the checked files for generating subtitles (internal); `generation` ties it
+    /// to the checks it was worked out for.
+    SubtitlePlanReady { generation: u64, plan: Box<Plan> },
+    /// The Soniox price for `key` was looked up (internal).
+    SubtitlePriceReady { key: SonioxKey, price: Price },
 }

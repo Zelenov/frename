@@ -264,9 +264,12 @@ impl FrenameApp {
         match message {
             // Only the main window's events get through the subscription filter.
             Message::WindowReady => {
-                let load = Task::done(Message::FolderWorkspace(
-                    folder_workspace::Message::LoadLastSession,
-                ));
+                let load = Task::batch([
+                    Task::done(Message::FolderWorkspace(
+                        folder_workspace::Message::LoadLastSession,
+                    )),
+                    self.send_subtitle_config(),
+                ]);
                 if self.demo.is_none() {
                     return load;
                 }
@@ -287,11 +290,11 @@ impl FrenameApp {
             }
             Message::OpenSettings => self.open_settings_window(),
             Message::Settings(msg) => {
-                self.settings.update(msg.clone());
+                let task = self.settings.update(msg.clone()).map(Message::Settings);
                 // Tag colors are read from the settings at view time; autoplay lives in the player;
                 // comment and in/out storage live in core, which saves them. Moving what the
                 // files already have is a batch action in the main window.
-                match msg {
+                let effect = match msg {
                     settings::Message::SetCommentStorage(storage) => {
                         frename_core::set_comment_storage(storage);
                         Task::none()
@@ -326,7 +329,20 @@ impl FrenameApp {
                         frename_core::set_space_after_tags(space);
                         Task::none()
                     }
-                }
+                    // The subtitle action follows the key and the subtitle settings.
+                    settings::Message::SonioxKeyLoaded(_)
+                    | settings::Message::SonioxKeySaved(_)
+                    | settings::Message::SetSubtitleLanguage(..)
+                    | settings::Message::SetSubtitleCueLength(_) => self.send_subtitle_config(),
+                    settings::Message::LoadSonioxKey
+                    | settings::Message::SonioxKeyInput(_)
+                    | settings::Message::ToggleShowSonioxKey
+                    | settings::Message::SaveSonioxKey
+                    | settings::Message::ReplaceSonioxKey
+                    | settings::Message::RemoveSonioxKey
+                    | settings::Message::SonioxKeyRemoved(_) => Task::none(),
+                };
+                Task::batch([task, effect])
             }
             Message::FolderWorkspace(folder_workspace::Message::Folder(
                 folder::Message::OpenSettings,
@@ -334,6 +350,14 @@ impl FrenameApp {
             | Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
                 batch::ActionMessage::OpenSettings,
             ))) => Task::done(Message::OpenSettings),
+            // The key is set in the Subtitles section, the last one.
+            Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
+                batch::ActionMessage::OpenSubtitleSettings,
+            ))) => self
+                .open_settings_window()
+                .chain(iced::widget::operation::snap_to_end(iced::widget::Id::new(
+                    settings::view::SETTINGS_SCROLLABLE_ID,
+                ))),
             Message::CloseRequested(id) => {
                 crate::crash_guard::mark_closing();
                 // A batch job may be writing a file: stop it after that file, then close.
@@ -398,10 +422,19 @@ impl FrenameApp {
                         media_viewer_video::Message::VideoReady { .. }
                     ))
                 );
-                let task = self
+                let mut task = self
                     .folder_workspace
                     .update(msg)
                     .map(Message::FolderWorkspace);
+                // The subtitle action was chosen: it needs the key, read once when first needed.
+                if !self.settings.soniox_key_requested()
+                    && self.folder_workspace.batch_needs_subtitle_key()
+                {
+                    task = Task::batch([
+                        task,
+                        Task::done(Message::Settings(settings::Message::LoadSonioxKey)),
+                    ]);
+                }
                 let main_window = self.main_window;
                 let demo_steps = match self.demo.as_mut() {
                     Some(demo) if video_ready => demo.video_ready(main_window),
@@ -450,10 +483,23 @@ impl FrenameApp {
             .map(Message::FolderWorkspace)
     }
 
-    /// Open the settings window, or focus it when it is already open.
+    /// Tell the subtitle action what it needs from the settings: the key, the languages and
+    /// the cue length.
+    fn send_subtitle_config(&self) -> Task<Message> {
+        let config = self.settings.subtitle_config();
+        Task::done(Message::FolderWorkspace(folder_workspace::Message::Batch(
+            batch::Message::Action(batch::ActionMessage::GenerateSubtitles(
+                batch::generate_subtitles::Message::SetConfig(config),
+            )),
+        )))
+    }
+
+    /// Open the settings window, or focus it when it is already open. The Soniox key is read
+    /// the first time, for its section.
     fn open_settings_window(&mut self) -> Task<Message> {
+        let load_key = Task::done(Message::Settings(settings::Message::LoadSonioxKey));
         if let Some(id) = self.settings_window {
-            return window::gain_focus(id);
+            return Task::batch([window::gain_focus(id), load_key]);
         }
         let (id, open) = window::open(window::Settings {
             size: SETTINGS_WINDOW_SIZE,
@@ -463,7 +509,7 @@ impl FrenameApp {
             ..window::Settings::default()
         });
         self.settings_window = Some(id);
-        open.discard()
+        Task::batch([open.discard(), load_key])
     }
 
     /// Feature subscriptions (file drop, window opened, global keyboard to search bar).

@@ -144,7 +144,7 @@ impl FolderWorkspace {
                 let files = self.listed_ids();
                 Task::done(Message::Batch(batch::Message::Prepare { operation, files }))
             }
-            Message::BatchItemDone { id, result } => self.batch_item_done(id, result),
+            Message::BatchItemDone { id, result } => self.batch_item_done(id, *result),
             Message::BatchFinished => self.batch_finished(),
             Message::CommentBatchLoaded {
                 generation,
@@ -437,7 +437,8 @@ impl FolderWorkspace {
         // with them: undoing "create tag" from the previous folder would delete it from this one.
         self.file_workspace = FileWorkspace::new(FolderTagStore::for_folder(&folder));
         self.history = WorkspaceHistory::new(HISTORY_DEPTH);
-        let load_comments_task = self.load_next_comment_batch(true);
+        let load_comments_task =
+            Task::batch([self.load_next_comment_batch(true), self.subtitle_tasks()]);
         let dir = self.directory.as_mut().expect("just set");
         let selected = target_file.as_deref().and_then(|p| dir.open_path(p));
         if let Some(file) = selected {
@@ -645,7 +646,52 @@ impl FolderWorkspace {
         // Batch mode does not edit the open file, so its rename editor goes.
         self.inline_rename = None;
         self.batch.update(msg);
-        Task::none()
+        self.subtitle_tasks()
+    }
+
+    /// Work out what the subtitle action waits for, on blocking threads: the plan of the
+    /// checked files (headers only) and the Soniox price for the key.
+    fn subtitle_tasks(&mut self) -> Task<Message> {
+        let (plan_request, price_request) = self.batch.take_subtitle_requests();
+        let mut tasks = Vec::new();
+        if let Some(request) = plan_request {
+            let files: Vec<PathBuf> = self.directory.as_ref().map_or_else(Vec::new, |dir| {
+                dir.files_in_order()
+                    .filter(|f| self.batch.is_checked(f.id()))
+                    .map(|f| f.file_path().to_path_buf())
+                    .collect()
+            });
+            tasks.push(Task::future(async move {
+                let plan = tokio::task::spawn_blocking(move || {
+                    batch::generate_subtitles::plan(&files, request.replace)
+                })
+                .await
+                .unwrap_or_else(|e| {
+                    log::error!("subtitle plan task failed: {e}");
+                    batch::generate_subtitles::Plan::default()
+                });
+                Message::Batch(batch::Message::SubtitlePlanReady {
+                    generation: request.generation,
+                    plan: Box::new(plan),
+                })
+            }));
+        }
+        if let Some(key) = price_request {
+            tasks.push(Task::future(async move {
+                let lookup = key.clone();
+                let price =
+                    tokio::task::spawn_blocking(move || batch::generate_subtitles::price(&lookup))
+                        .await
+                        .unwrap_or(batch::generate_subtitles::Price::Typical);
+                Message::Batch(batch::Message::SubtitlePriceReady { key, price })
+            }));
+        }
+        Task::batch(tasks)
+    }
+
+    /// Whether the batch panel waits for the Soniox key to be read (the settings read it).
+    pub fn batch_needs_subtitle_key(&mut self) -> bool {
+        self.batch.needs_subtitle_key()
     }
 
     /// Start the selected batch action on the checked files, in folder order. A playing video
@@ -696,7 +742,8 @@ impl FolderWorkspace {
             .and_then(|d| d.file_by_id(id))
             .map(|f| f.file_path().to_path_buf())
         else {
-            self.batch.finish(id, ItemStatus::Failed);
+            self.batch
+                .finish(id, &ItemResult::new(ItemStatus::Failed, None));
             return self.next_batch_item();
         };
         Task::future(async move {
@@ -704,23 +751,30 @@ impl FolderWorkspace {
                 .await
                 .unwrap_or_else(|e| {
                     log::error!("batch operation task failed: {e}");
-                    ItemResult {
-                        status: ItemStatus::Failed,
-                        update: None,
-                    }
+                    ItemResult::new(ItemStatus::Failed, None)
                 });
-            Message::BatchItemDone { id, result }
+            Message::BatchItemDone {
+                id,
+                result: Box::new(result),
+            }
         })
     }
 
-    /// Take a finished file into the list (it may have been renamed), then start the next.
+    /// Take a finished file into the list (it may have been renamed, or got subtitles), then
+    /// start the next.
     fn batch_item_done(&mut self, id: FileId, result: ItemResult) -> Task<Message> {
-        if let (Some(dir), Some((path, snapshot))) =
-            (self.directory.as_mut(), result.update.as_ref())
-        {
-            dir.rename_file(id, path, snapshot);
+        if let Some(dir) = self.directory.as_mut() {
+            if let Some((path, snapshot)) = result.update.as_ref() {
+                dir.rename_file(id, path, snapshot);
+            }
+            let has_subtitles = dir
+                .file_by_id(id)
+                .map(|f| frename_core::subtitle_path(f.file_path()).is_file());
+            if let Some(has_subtitles) = has_subtitles {
+                dir.set_has_subtitles(id, has_subtitles);
+            }
         }
-        self.batch.finish(id, result.status);
+        self.batch.finish(id, &result);
         self.next_batch_item()
     }
 
@@ -728,16 +782,27 @@ impl FolderWorkspace {
     fn batch_finished(&mut self) -> Task<Message> {
         // The job renamed files behind the history: undoing across it would use stale paths.
         self.history = WorkspaceHistory::new(HISTORY_DEPTH);
+        if let Some(report) = self.batch.report() {
+            log::info!("batch: {report}");
+        }
+        if let Some(stop) = self.batch.stopped() {
+            log::warn!("batch: stopped: {}", stop.message);
+        }
         let load_comments = self.load_next_comment_batch(false);
+        let subtitles = self.subtitle_tasks();
         let Some(file) = self
             .directory
             .as_ref()
             .and_then(|d| d.selected_file())
             .cloned()
         else {
-            return load_comments;
+            return Task::batch([load_comments, subtitles]);
         };
-        Task::batch([Task::done(Message::FileOpened(file)), load_comments])
+        Task::batch([
+            Task::done(Message::FileOpened(file)),
+            load_comments,
+            subtitles,
+        ])
     }
 
     /// Called when media has unloaded. Persist pending snapshot (FileUpdated) then open the new media.
@@ -2135,10 +2200,7 @@ mod tests {
             "navigation is locked"
         );
 
-        let skipped = || ItemResult {
-            status: ItemStatus::Skipped,
-            update: None,
-        };
+        let skipped = || Box::new(ItemResult::new(ItemStatus::Skipped, None));
         let _ = workspace.update(Message::BatchItemDone {
             id: file_id_at(&workspace, 0),
             result: skipped(),
@@ -2171,10 +2233,7 @@ mod tests {
 
         let _ = workspace.update(Message::Batch(batch::Message::Cancel));
         let first = file_id_at(&workspace, 0);
-        let done = ItemResult {
-            status: ItemStatus::Done,
-            update: None,
-        };
+        let done = Box::new(ItemResult::new(ItemStatus::Done, None));
         let _ = workspace.update(Message::BatchItemDone {
             id: first,
             result: done,

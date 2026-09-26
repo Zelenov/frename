@@ -2,7 +2,7 @@
 
 use uuid::Uuid;
 
-use crate::{CommentStorage, FolderAndFile, InOutStorage, StoredTag, TagColorMapping};
+use crate::{CommentStorage, CueLength, FolderAndFile, InOutStorage, StoredTag, TagColorMapping};
 
 /// Saved window position and size (logical pixels).
 #[derive(Debug, Clone, Copy)]
@@ -54,6 +54,12 @@ pub struct AppSettings {
     pub commented_tag_enabled: bool,
     /// Whether file names put a space after each tag (`Food. clip.mp4`). Defaults to false.
     pub space_after_tags: bool,
+    /// Languages spoken in the footage, as hints for generating subtitles (codes such as
+    /// "en"). Empty: detect automatically. Defaults to
+    /// [`crate::DEFAULT_SUBTITLE_LANGUAGES`].
+    pub subtitle_languages: Vec<String>,
+    /// How long generated subtitle cues may get. Defaults to short.
+    pub subtitle_cue_length: CueLength,
 }
 
 impl Default for AppSettings {
@@ -66,6 +72,11 @@ impl Default for AppSettings {
             commented_tag: crate::DEFAULT_COMMENTED_TAG.to_string(),
             commented_tag_enabled: true,
             space_after_tags: false,
+            subtitle_languages: crate::DEFAULT_SUBTITLE_LANGUAGES
+                .iter()
+                .map(|code| code.to_string())
+                .collect(),
+            subtitle_cue_length: CueLength::default(),
         }
     }
 }

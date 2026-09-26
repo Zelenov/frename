@@ -1,13 +1,20 @@
 //! UI for the settings window.
 
-use frename_core::{CommentStorage, InOutStorage};
-use iced::widget::{button, checkbox, column, container, radio, row, text, text_input};
+use frename_core::{CommentStorage, CueLength, InOutStorage, SUBTITLE_LANGUAGES};
+use iced::widget::{
+    button, checkbox, column, container, radio, row, scrollable, text, text_input, Space,
+};
 use iced::{Element, Length};
 
 use crate::theme;
 
 use super::{Message, SettingsState};
 use crate::features::batch::Operation;
+use crate::soniox_key::{self, KeySource};
+
+/// The window's scrollable content; the Subtitles section is last, so "Open Settings" from the
+/// subtitle action scrolls it to the end.
+pub const SETTINGS_SCROLLABLE_ID: &str = "settings_scrollable";
 
 /// Render the settings window: one titled section per area, one control per setting.
 pub fn view(state: &SettingsState) -> Element<'_, Message> {
@@ -121,11 +128,148 @@ pub fn view(state: &SettingsState) -> Element<'_, Message> {
     .spacing(8);
     let in_out = section("In/out points", in_out_options.into());
 
-    container(column![video, tags, comments, in_out].spacing(20))
-        .padding(20)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(theme::main_container_style)
+    let subtitles = section("Subtitles", subtitles(state));
+
+    // Five sections do not fit the fixed window: its content scrolls.
+    let content = column![video, tags, comments, in_out, subtitles]
+        .spacing(20)
+        .padding(20);
+    container(
+        scrollable(content)
+            .id(iced::widget::Id::new(SETTINGS_SCROLLABLE_ID))
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(theme::dark_scrollable_style),
+    )
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .style(theme::main_container_style)
+    .into()
+}
+
+/// Generating subtitles with Soniox: the API key, the languages spoken in the footage, and
+/// how long a cue may get.
+fn subtitles(state: &SettingsState) -> Element<'_, Message> {
+    let key = state.soniox_key();
+    let muted = |line: String| text(line).size(12).color(theme::TEXT_MUTED);
+
+    let mut key_block = column![text("Soniox API key").size(13)].spacing(6);
+    match key.info() {
+        None => key_block = key_block.push(muted("Reading…".to_string())),
+        Some(info) => {
+            if key.editing() {
+                let mut input = text_input("Paste the key", key.input())
+                    .size(13)
+                    .padding([3, 6])
+                    .secure(!key.show())
+                    .width(Length::Fixed(260.0));
+                if !key.busy() {
+                    input = input
+                        .on_input(Message::SonioxKeyInput)
+                        .on_submit(Message::SaveSonioxKey);
+                }
+                let can_save = !key.busy() && !key.input().trim().is_empty();
+                key_block = key_block.push(
+                    row![
+                        input,
+                        button(text(if key.show() { "Hide" } else { "Show" }).size(12))
+                            .on_press(Message::ToggleShowSonioxKey)
+                            .padding([3, 10])
+                            .style(theme::icon_button_style(true)),
+                        button(text("Save").size(13))
+                            .on_press_maybe(can_save.then_some(Message::SaveSonioxKey))
+                            .padding([3, 12]),
+                    ]
+                    .spacing(8)
+                    .align_y(iced::Alignment::Center),
+                );
+            } else {
+                key_block = key_block.push(
+                    row![
+                        text("Key saved").size(13),
+                        button(text("Replace").size(12))
+                            .on_press(Message::ReplaceSonioxKey)
+                            .padding([3, 10])
+                            .style(theme::icon_button_style(true)),
+                        button(text("Remove").size(12))
+                            .on_press_maybe((!key.busy()).then_some(Message::RemoveSonioxKey))
+                            .padding([3, 10])
+                            .style(theme::icon_button_style(!key.busy())),
+                    ]
+                    .spacing(8)
+                    .align_y(iced::Alignment::Center),
+                );
+            }
+            if let Some(error) = key.error() {
+                key_block = key_block.push(text(error).size(12).color(theme::ERROR));
+            }
+            let place = if info.store_available {
+                format!("Saved in {} on this computer.", soniox_key::store_name())
+            } else {
+                "Cannot store the key on this system.".to_string()
+            };
+            key_block = key_block.push(muted(place));
+            if matches!(info.key, Some((_, KeySource::Environment))) && key.editing() {
+                key_block = key_block.push(muted(
+                    "Using the key from the SONIOX_API_KEY environment variable.".to_string(),
+                ));
+            }
+        }
+    }
+    key_block = key_block
+        .push(muted("Get a key at console.soniox.com.".to_string()))
+        .push(muted(
+            "The audio is sent to Soniox to transcribe it.".to_string(),
+        ));
+
+    let settings = state.settings();
+    let checked = |code: &str| settings.subtitle_languages.iter().any(|l| l == code);
+    let language_rows = SUBTITLE_LANGUAGES.chunks(3).map(|chunk| {
+        row(chunk.iter().map(|(code, name)| {
+            let code = code.to_string();
+            checkbox(checked(&code))
+                .label(*name)
+                .text_size(13)
+                .on_toggle(move |on| Message::SetSubtitleLanguage(code.clone(), on))
+                .width(Length::Fixed(120.0))
+                .into()
+        }))
+        .spacing(8)
+        .into()
+    });
+    let hint = if settings.subtitle_languages.is_empty() {
+        "None checked: Detect automatically."
+    } else {
+        "The languages spoken in the footage, as hints."
+    };
+    let languages = column![text("Languages").size(13)]
+        .extend(language_rows)
+        .push(muted(hint.to_string()))
+        .spacing(6);
+
+    let selected = Some(settings.subtitle_cue_length);
+    let cue_length = column![
+        text("Cue length").size(13),
+        radio(
+            "Short: one line of up to 100 characters, at most 8 s",
+            CueLength::Short,
+            selected,
+            Message::SetSubtitleCueLength,
+        )
+        .text_size(13),
+        radio(
+            "One sentence per cue",
+            CueLength::Sentence,
+            selected,
+            Message::SetSubtitleCueLength,
+        )
+        .text_size(13),
+        muted("Applies to new subtitles; changing it later means transcribing again.".to_string()),
+    ]
+    .spacing(6);
+
+    column![key_block, languages, cue_length, Space::new().height(8)]
+        .spacing(14)
         .into()
 }
 

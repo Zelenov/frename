@@ -10,6 +10,6 @@ mod messages;
 mod state;
 pub mod view;
 
-pub use actions::{Action, ActionMessage, Operation};
+pub use actions::{generate_subtitles, Action, ActionMessage, Operation};
 pub use messages::Message;
-pub use state::{BatchState, ItemResult, ItemStatus};
+pub use state::{BatchState, ItemResult, ItemStatus, JobStop};

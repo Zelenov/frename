@@ -1,3 +1,12 @@
+# NEXT
+## Added
+- Batch action "Generate subtitles": transcribes the checked videos with Soniox and saves a `.srt` next to each, with the audio length and cost shown before you start, Cancel, and why each skipped video was skipped.
+- Settings → Subtitles: the Soniox API key (kept in the system's password store), the languages spoken in the footage, and short or sentence-long subtitles.
+
+## Changed
+- Settings scroll.
+- A saved `.soniox.json` transcript is renamed together with its video.
+
 # 0.68
 ## Added
 - A setting puts a space after each tag in file names (`Food. Goat. clip.mp4`); names are read the same either way.

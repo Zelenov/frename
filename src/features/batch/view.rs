@@ -11,7 +11,7 @@ use crate::features::folder_workspace::Directory;
 use crate::theme;
 
 use super::state::Progress;
-use super::{Action, BatchState, Message};
+use super::{Action, ActionMessage, BatchState, ItemStatus, Message};
 
 const ACTION_LIST_WIDTH: f32 = 190.0;
 const FAILED_LIST_HEIGHT: f32 = 120.0;
@@ -84,9 +84,8 @@ fn action_entry(action: Action, selected: Action) -> Element<'static, Message> {
 
 /// The selected action's panel, and the button that runs it on the checked files.
 fn action_options(state: &BatchState) -> Element<'_, Message> {
-    let count = state.checked_count();
-    let can_run = count > 0 && state.operation().is_some() && !state.is_running();
-    let run = button(text(format!("Run on {}", files(count))).size(13))
+    let (label, can_run) = state.run_button();
+    let run = button(text(label).size(13))
         .on_press_maybe(can_run.then_some(Message::Run))
         .padding([6, 14]);
 
@@ -112,9 +111,13 @@ fn job_panel<'a>(
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default()
     };
+    let action = state.job_action().unwrap_or(state.action());
     let counts = text(format!(
-        "✓ {} changed   – {} unchanged   ✗ {} failed",
-        progress.done, progress.skipped, progress.failed
+        "✓ {} {}   – {} unchanged   ✗ {} failed",
+        progress.done,
+        action.done_label(),
+        progress.skipped,
+        progress.failed
     ))
     .size(12)
     .color(theme::TEXT_SOFT);
@@ -127,6 +130,13 @@ fn job_panel<'a>(
         } else {
             ("Cancel", Some(Message::Cancel))
         };
+        if action == Action::GenerateSubtitles {
+            panel = panel.push(
+                text("Closing frename stops the run; finished subtitles are kept.")
+                    .size(12)
+                    .color(theme::TEXT_MUTED),
+            );
+        }
         panel = panel
             .push(
                 row![
@@ -159,7 +169,25 @@ fn job_panel<'a>(
         } else {
             format!("Finished {}.", files(progress.total))
         };
-        panel = panel.push(text(summary).size(13)).push(
+        panel = panel.push(text(summary).size(13));
+        if let Some(stop) = state.stopped() {
+            let mut line = row![text(stop.message.as_str()).size(13).color(theme::ERROR)]
+                .spacing(12)
+                .align_y(iced::Alignment::Center);
+            if stop.open_settings {
+                line = line.push(
+                    button(text("Open Settings").size(12))
+                        .on_press(Message::Action(ActionMessage::OpenSubtitleSettings))
+                        .padding([3, 10])
+                        .style(theme::icon_button_style(true)),
+                );
+            }
+            panel = panel.push(line);
+        }
+        if let Some(report) = state.report() {
+            panel = panel.push(text(report).size(12).color(theme::TEXT_SOFT));
+        }
+        panel = panel.push(
             row![
                 counts,
                 Space::new().width(Length::Fill),
@@ -167,16 +195,23 @@ fn job_panel<'a>(
             ]
             .align_y(iced::Alignment::Center),
         );
-        let failed = state.failed();
-        if !failed.is_empty() {
-            let names = column(
-                failed
-                    .into_iter()
-                    .map(|id| text(name(id)).size(12).color(theme::ERROR).into()),
-            );
+        let results = state.results();
+        if !results.is_empty() {
+            let names = column(results.into_iter().map(|(id, status, reason)| {
+                let line = match reason {
+                    Some(reason) => format!("{} — {reason}", name(id)),
+                    None => name(id),
+                };
+                let color = if status == ItemStatus::Failed {
+                    theme::ERROR
+                } else {
+                    theme::TEXT_SOFT
+                };
+                text(line).size(12).color(color).into()
+            }));
             panel = panel
                 .push(
-                    text("Failed (see the log for why):")
+                    text(action.results_heading())
                         .size(12)
                         .color(theme::TEXT_MUTED),
                 )

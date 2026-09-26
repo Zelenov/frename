@@ -50,6 +50,24 @@ arboard = "3"
 # Native file/folder picker dialogs
 rfd = "0.17"
 
+# Subtitles from speech (Soniox), as a library: no command line parts. Pinned to a commit.
+sonisub = { git = "https://github.com/Zelenov/sonisub", rev = "728ed34243f8f71d32096d779dba0ad3d9d9ffc7", default-features = false }
+# sonisub's errors, and its progress bars: frename hands it a hidden one (same version as sonisub).
+anyhow = "1"
+indicatif = "0.18"
+
+# The Soniox API key in the operating system's credential store. keyring has no default store
+# and silently falls back to an in-memory mock without one, so each system names its own.
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# `vendored` builds dbus itself: no libdbus-dev on CI or in the AppImage.
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust", "vendored"] }
+
 [profile.dev.package."*"]
 # Dependencies are rebuilt rarely but run on every frame (text layout, image decode, SQLite,
 # shader compilation), so optimise them even in debug builds. Own crates stay at opt-level 0
