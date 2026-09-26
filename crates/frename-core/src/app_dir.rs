@@ -44,7 +44,17 @@ fn runs_from_appimage(exe: Option<&Path>, var: &impl Fn(&str) -> Option<OsString
 mod tests {
     use super::*;
 
-    fn env<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<OsString> + 'a {
+    /// `path` made absolute on this platform: Windows needs a drive for a path to be absolute.
+    fn abs(path: &str) -> String {
+        if cfg!(windows) {
+            format!("C:{path}")
+        } else {
+            path.to_string()
+        }
+    }
+
+    /// An environment holding exactly `pairs`.
+    fn env(pairs: Vec<(&'static str, String)>) -> impl Fn(&str) -> Option<OsString> {
         move |name| {
             pairs
                 .iter()
@@ -53,46 +63,56 @@ mod tests {
         }
     }
 
-    const EXE: &str = "/opt/frename/frename";
-    const MOUNTED_EXE: &str = "/tmp/.mount_frenam1/usr/bin/frename";
-    const APPIMAGE: (&str, &str) = ("APPIMAGE", "/home/ed/frename.AppImage");
-    const APPDIR: (&str, &str) = ("APPDIR", "/tmp/.mount_frenam1");
+    fn exe() -> PathBuf {
+        PathBuf::from(abs("/opt/frename/frename"))
+    }
+    fn mounted_exe() -> PathBuf {
+        PathBuf::from(abs("/tmp/.mount_frenam1/usr/bin/frename"))
+    }
+    fn appimage() -> (&'static str, String) {
+        ("APPIMAGE", abs("/home/ed/frename.AppImage"))
+    }
+    fn appdir() -> (&'static str, String) {
+        ("APPDIR", abs("/tmp/.mount_frenam1"))
+    }
+    fn home() -> (&'static str, String) {
+        ("HOME", abs("/home/ed"))
+    }
 
     #[test]
     fn next_to_the_executable_normally() {
         assert_eq!(
-            data_dir_for(Some(Path::new(EXE)), env(&[("HOME", "/home/ed")])),
-            PathBuf::from("/opt/frename")
+            data_dir_for(Some(&exe()), env(vec![home()])),
+            PathBuf::from(abs("/opt/frename"))
         );
     }
 
     #[test]
     fn in_the_xdg_data_folder_inside_an_appimage() {
-        let exe = Some(Path::new(MOUNTED_EXE));
         assert_eq!(
             data_dir_for(
-                exe,
-                env(&[
-                    APPIMAGE,
-                    APPDIR,
-                    ("XDG_DATA_HOME", "/data"),
-                    ("HOME", "/home/ed")
+                Some(&mounted_exe()),
+                env(vec![
+                    appimage(),
+                    appdir(),
+                    ("XDG_DATA_HOME", abs("/data")),
+                    home()
                 ])
             ),
-            PathBuf::from("/data/frename")
+            PathBuf::from(abs("/data")).join("frename")
         );
         for xdg in ["", "relative/data"] {
             assert_eq!(
                 data_dir_for(
-                    exe,
-                    env(&[
-                        APPIMAGE,
-                        APPDIR,
-                        ("XDG_DATA_HOME", xdg),
-                        ("HOME", "/home/ed")
+                    Some(&mounted_exe()),
+                    env(vec![
+                        appimage(),
+                        appdir(),
+                        ("XDG_DATA_HOME", xdg.to_string()),
+                        home()
                     ])
                 ),
-                PathBuf::from("/home/ed/.local/share/frename"),
+                PathBuf::from(abs("/home/ed")).join(".local/share/frename"),
                 "XDG_DATA_HOME={xdg:?}"
             );
         }
@@ -101,7 +121,7 @@ mod tests {
     #[test]
     fn an_appimage_without_a_home_uses_the_temp_folder_not_the_read_only_mount() {
         assert_eq!(
-            data_dir_for(Some(Path::new(MOUNTED_EXE)), env(&[APPIMAGE, APPDIR])),
+            data_dir_for(Some(&mounted_exe()), env(vec![appimage(), appdir()])),
             std::env::temp_dir()
         );
     }
@@ -109,16 +129,25 @@ mod tests {
     #[test]
     fn appimage_variables_inherited_from_another_appimage_are_ignored() {
         assert_eq!(
+            data_dir_for(Some(&exe()), env(vec![appimage(), appdir(), home()])),
+            PathBuf::from(abs("/opt/frename"))
+        );
+    }
+
+    #[test]
+    fn an_empty_appdir_is_no_appimage() {
+        // An empty path is a prefix of every path; without the guard every exe would qualify.
+        assert_eq!(
             data_dir_for(
-                Some(Path::new(EXE)),
-                env(&[APPIMAGE, APPDIR, ("HOME", "/home/ed")])
+                Some(&exe()),
+                env(vec![appimage(), ("APPDIR", String::new()), home()])
             ),
-            PathBuf::from("/opt/frename")
+            PathBuf::from(abs("/opt/frename"))
         );
     }
 
     #[test]
     fn the_temp_folder_when_the_executable_is_unknown() {
-        assert_eq!(data_dir_for(None, env(&[])), std::env::temp_dir());
+        assert_eq!(data_dir_for(None, env(vec![])), std::env::temp_dir());
     }
 }

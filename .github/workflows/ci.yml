@@ -111,9 +111,14 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: frename-linux-x86_64-${{ github.sha }}
-          path: |
-            dist/frename-0.0.0-ci-x86_64.AppImage
-            screenshot-appimage.png
+          path: dist/frename-0.0.0-ci-x86_64.AppImage
+          retention-days: 14
+
+      # A separate artifact: sharing one with the AppImage would move the AppImage under dist/dist/.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-appimage-${{ github.sha }}
+          path: screenshot-appimage.png
           retention-days: 14
 
   # Plays the test clips with the AppImage on a desktop base that has no GStreamer.
