@@ -397,13 +397,12 @@ impl FrenameApp {
                     .folder_workspace
                     .update(msg)
                     .map(Message::FolderWorkspace);
-                if let Some((steps, capture)) = video_ready
-                    .then(|| {
-                        let main_window = self.main_window;
-                        self.demo.as_mut().and_then(|d| d.video_ready(main_window))
-                    })
-                    .flatten()
-                {
+                let main_window = self.main_window;
+                let demo_steps = match self.demo.as_mut() {
+                    Some(demo) if video_ready => demo.video_ready(main_window),
+                    _ => None,
+                };
+                if let Some((steps, capture)) = demo_steps {
                     let steps = steps
                         .into_iter()
                         .map(|step| Task::done(Message::FolderWorkspace(step)));

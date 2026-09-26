@@ -118,7 +118,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let demo_work = demo.as_ref().map(|(_, _, work)| work.clone());
     let demo = match demo {
-        Some((scenario, out, work)) => Some(demo::prepare(&scenario, out, work)?),
+        Some((scenario, out, work)) => match demo::prepare(&scenario, out, work.clone()) {
+            Ok(run) => Some(run),
+            Err(e) => {
+                let _ = std::fs::remove_dir_all(&work);
+                return Err(e.into());
+            }
+        },
         None => None,
     };
 

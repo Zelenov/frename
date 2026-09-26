@@ -16,13 +16,13 @@
     <text x="537" y="140" text-anchor="middle">Video player</text>
     <text x="1172" y="140" text-anchor="middle">Checked files</text>
     <text x="1695" y="140" text-anchor="middle">Batch actions</text>
-    <text x="2090" y="640" text-anchor="start">Pick an action</text>
-    <text x="2090" y="810" text-anchor="start">Run it</text>
+    <text x="1525" y="580" text-anchor="middle">Pick an action</text>
+    <text x="1850" y="580" text-anchor="middle">Run it</text>
     <text x="1210" y="1330" text-anchor="middle">Batch mode on / off</text>
   </g>
   <g fill="none" stroke="#B2B3B8" stroke-width="5" stroke-linecap="round" marker-end="url(#head)">
-    <path d="M2080,625 Q1753,607 1490,412"/>
-    <path d="M2080,795 Q1821,684 1710,425"/>
+    <path d="M1480,535 Q1475,476 1470,418"/>
+    <path d="M1830,535 Q1788,452 1700,422"/>
     <path d="M1210,1285 Q1210,1245 1210,1205"/>
   </g>
 </svg>

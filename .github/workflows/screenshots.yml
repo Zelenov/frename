@@ -36,10 +36,9 @@ jobs:
   screenshots:
     name: screenshots
     runs-on: ubuntu-24.04
+    # Builds and runs the PR's code: read-only. Publishing is the next job's.
     permissions:
-      contents: write
-      pull-requests: write
-      actions: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -63,8 +62,9 @@ jobs:
           sleep 2
           DISPLAY=:99 docs/screenshots/render.sh target/debug/frename
 
-      # The video frame and font rendering differ a little from run to run: keep an image that
-      # changed in fewer than 0.2% of its pixels, so only real changes make a PR.
+      # Renders come out identical from run to run on the same runner image; a driver or font
+      # update may still move a few pixels. Keep an image that changed in fewer than 0.01% of its
+      # pixels (about 350), so such noise makes no PR while a changed label or icon does.
       - name: Keep images that did not really change
         run: |
           for image in docs/frename-screenshot.jpg docs/frename-screenshot-batch.jpg; do
@@ -76,10 +76,20 @@ jobs:
             size=$(identify -format '%[fx:w*h]' "$image")
             changed=$(compare -metric AE -fuzz 4% "$image" /tmp/old.jpg null: 2>&1 || true)
             echo "$image: $changed of $size pixels changed"
-            if awk -v c="$changed" -v s="$size" 'BEGIN { exit !(c * 500 < s) }'; then
+            if ! awk -v c="$changed" 'BEGIN { exit !(c ~ /^[0-9.e+]+$/) }'; then
+              echo "::error::cannot compare $image: $changed"; exit 1
+            fi
+            if awk -v c="$changed" -v s="$size" 'BEGIN { exit !(c * 10000 < s) }'; then
               git checkout -- "$image"
             fi
           done
+
+      - name: Note which images changed
+        id: changed
+        run: |
+          if [ -n "$(git status --porcelain -- docs/frename-screenshot*.jpg)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
@@ -87,18 +97,33 @@ jobs:
           path: docs/frename-screenshot*.jpg
           retention-days: 14
 
+    outputs:
+      changed: ${{ steps.changed.outputs.changed }}
+
+  publish:
+    name: publish screenshots
+    needs: screenshots
+    if: github.event_name != 'pull_request' && needs.screenshots.outputs.changed == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: screenshots-${{ github.sha }}
+          path: docs
+
       # Needs Settings → Actions → General → "Allow GitHub Actions to create and approve pull
       # requests". A PR opened with GITHUB_TOKEN does not start CI by itself, so CI is started on
       # the branch explicitly: its checks land on the PR's head commit.
       - name: Open or update the screenshots PR
-        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -z "$(git status --porcelain -- docs/frename-screenshot*.jpg)" ]; then
-            echo "The screenshots are current."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$BRANCH"

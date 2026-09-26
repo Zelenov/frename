@@ -18,10 +18,11 @@
     <text x="1695" y="140" text-anchor="middle">Tags</text>
     <text x="2090" y="140" text-anchor="start">Searchbar</text>
     <text x="2110" y="380" text-anchor="start">Starred</text>
-    <text x="2110" y="640" text-anchor="start">All tags</text>
+    <text x="2110" y="540" text-anchor="start">All tags</text>
     <text x="2060" y="1000" text-anchor="start">Current video tags</text>
     <text x="1800" y="1330" text-anchor="middle">Comments</text>
     <text x="300" y="1110" text-anchor="middle">In</text>
+    <text x="540" y="1040" text-anchor="middle">Subtitles</text>
     <text x="760" y="1090" text-anchor="middle">Out</text>
     <text x="500" y="1330" text-anchor="middle">Screenshots</text>
   </g>
@@ -32,6 +33,8 @@
     <path d="M1790,1285 Q1776,1225 1720,1200"/>
     <path d="M330,1115 Q380,1135 386,1188"/>
     <path d="M740,1105 Q677,1125 655,1188"/>
+    <path d="M2100,522 Q2038,467 1955,470"/>
+    <path d="M540,1055 Q540,1094 540,1132"/>
     <path d="M520,1285 Q539,1226 598,1205"/>
     <path d="M460,1285 Q470,1240 440,1205"/>
   </g>

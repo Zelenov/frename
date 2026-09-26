@@ -1,6 +1,6 @@
-# README screenshot: the main window. Rendered by .github/workflows/screenshots.yml; see README.md there.
+# README screenshot: the main window. Rendered by render.sh here (CI: .github/workflows/screenshots.yml).
 source = "../../tests/folder"
-open = "pick.wide.wildlife.golden-hour.in_00_00_03.out_00_00_21.MVI_0410.mp4"
+open = "pick.wide.night.city.in_00_00_03.out_00_00_21.MVI_0410.mp4"
 seek = 10.0
 batch = false
 window = [1920, 1009]
@@ -45,11 +45,11 @@ name = "MVI_0409.webm"
 
 [[files]]
 from = "file_example_MP4_480_1_5MG.mp4"
-name = "pick.wide.wildlife.golden-hour.in_00_00_03.out_00_00_21.MVI_0410.mp4"
-comment = "00-00-06-120: Good light on the water"
+name = "pick.wide.night.city.in_00_00_03.out_00_00_21.MVI_0410.mp4"
+comment = "00-00-06-120: City lights over Europe, keep this one"
 subtitles = """1
 00:00:08,000 --> 00:00:13,000
-The tide is coming in
+Europe lights up after dark
 """
 snaps = ["00-00-06-120", "00-00-17-480"]
 

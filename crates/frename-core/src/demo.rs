@@ -53,7 +53,7 @@ pub struct DemoFile {
     /// Subtitles, saved as the `.srt` next to the copy.
     #[serde(default)]
     pub subtitles: Option<String>,
-    /// Screenshot marker times, `HH-MM-SS-mmm`.
+    /// Screenshot marker times, `HH-MM-SS-mmm` (as in a screenshot's file name).
     #[serde(default)]
     pub snaps: Vec<String>,
 }
@@ -93,6 +93,16 @@ impl DemoScenario {
                     return Err(DemoError(format!("not a plain file name: {name:?}")));
                 }
             }
+            if let Some(bad) = file
+                .snaps
+                .iter()
+                .find(|at| crate::Screenshot::parse_time(at).is_none())
+            {
+                return Err(DemoError(format!(
+                    "{:?}: screenshot time {bad:?} is not HH-MM-SS-mmm",
+                    file.name
+                )));
+            }
             if !file.snaps.is_empty() && self.snap_image.is_none() {
                 return Err(DemoError(format!(
                     "{:?} has screenshot markers but the scenario has no snap_image",
@@ -110,6 +120,14 @@ impl DemoScenario {
                 "open = {:?} is not one of the staged files",
                 self.open
             )));
+        }
+        // The demo waits for the video to be ready before it takes the screenshot.
+        let extension = Path::new(&self.open)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or_default();
+        if crate::FileKind::from_extension(extension) != crate::FileKind::Video {
+            return Err(DemoError(format!("open = {:?} is not a video", self.open)));
         }
         let mut sorted: Vec<&str> = names.collect();
         sorted.sort_unstable();
@@ -149,11 +167,12 @@ pub fn stage(
             std::fs::write(crate::subtitle_path(&target), subtitles)?;
         }
         for at in &file.snaps {
-            // Checked by `DemoScenario::check`.
+            // Both checked by `DemoScenario::check`.
             let image = scenario.snap_image.as_deref().unwrap_or_default();
+            let position_ms = crate::Screenshot::parse_time(at).unwrap_or_default();
             std::fs::copy(
                 source.join(image),
-                into.join(format!("{}.snap.{at}.jpg", file.name)),
+                crate::tags::production_file_tagger::screenshot_path(&target, position_ms),
             )?;
         }
     }
@@ -235,6 +254,27 @@ name = "pick.a.mp4"
         let text = MINIMAL.replace("[[files]]", "snap_image = \"s.jpg\"\n[[files]]")
             + "snaps = [\"00-00-01-000\"]\n";
         assert!(DemoScenario::parse(&text).is_ok());
+    }
+
+    #[test]
+    fn marker_times_must_be_screenshot_times() {
+        let with_snaps = |snaps: &str| {
+            MINIMAL.replace("[[files]]", "snap_image = \"s.jpg\"\n[[files]]")
+                + &format!("snaps = [{snaps}]\n")
+        };
+        assert!(DemoScenario::parse(&with_snaps("\"00-00-06-120\"")).is_ok());
+        for bad in ["\"00:00:06\"", "\"../x\"", "\"6\""] {
+            assert!(DemoScenario::parse(&with_snaps(bad)).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn only_a_video_can_be_opened() {
+        let text = MINIMAL.replace("pick.a.mp4", "pick.a.jpg");
+        assert!(DemoScenario::parse(&text)
+            .unwrap_err()
+            .0
+            .contains("not a video"));
     }
 
     #[test]
