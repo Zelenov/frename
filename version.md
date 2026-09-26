@@ -1,3 +1,16 @@
+# 0.71
+## Added
+- Batch action "Describe with AI": Claude watches each checked video (a frame every 2 s, and its subtitles) and writes a one-line summary and time-ranged segments into its comment, after your own text. The panel shows the price and time before it runs; you need your own Anthropic API key.
+- Settings → AI: the Anthropic API key (kept in the system's password store), the model (Claude Haiku 4.5, Sonnet 5 or Opus 5, with prices) and the language of descriptions.
+- A new run replaces only the AI part of a comment, from its last `AI: ` line to the end; everything above it is kept as it is.
+- The batch report offers Add credit when the Anthropic account has no credit left, and Retry for the files that failed or were not reached.
+- The comment box scrolls, can be made taller or shorter with the bar above it, and Expand gives it the whole panel.
+
+## Changed
+- Batch mode starts with the open file checked.
+- The batch progress bar moves while a file is in work (frames read, waiting for Claude) instead of only when it finishes.
+- Turning batch mode on or off keeps the file list's scroll position.
+
 # 0.70
 ## Added
 - Markers: `F2` (or 📍) marks a moment of the video, `F2` again names it. Each marker has a name and one of Premiere's colors, and is saved inside the video, where Premiere Pro shows it on the clip after import.
