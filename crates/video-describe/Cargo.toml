@@ -1,0 +1,25 @@
+[package]
+name = "video-describe"
+version = "0.1.0"
+edition = "2021"
+description = "Describe what happens in a video clip, and when, with Claude: a video file (and its subtitles) in, a summary and time-ranged key moments out."
+
+[features]
+default = ["frames"]
+# Reading frames from video files with GStreamer, and `describe` itself. Without it the crate
+# still has the models, the request and answer, the estimate and the Anthropic client.
+frames = ["dep:gstreamer", "dep:gstreamer-app", "dep:gstreamer-video", "dep:image", "dep:url"]
+
+[dependencies]
+log = "0.4"
+serde_json = "1"
+# HTTP to the Anthropic API, trusting the OS certificate store (corporate TLS-inspecting
+# proxies need it).
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls-native-roots"] }
+base64 = "0.22"
+
+gstreamer = { version = "0.23", optional = true }
+gstreamer-app = { version = "0.23", optional = true }
+gstreamer-video = { version = "0.23", optional = true }
+image = { version = "0.25", optional = true }
+url = { version = "2.5", optional = true }

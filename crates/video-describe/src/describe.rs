@@ -3,9 +3,8 @@
 
 use serde_json::{json, Value};
 
-use super::block::format_time;
 use super::provider::{AiContent, AiRequest, AiResponse, AiUsage};
-use crate::Subtitles;
+use crate::Cue;
 
 /// The models descriptions can be written with, cheapest first; the first is the default.
 /// Sonnet and Opus think before answering: at low effort, since describing frames needs little
@@ -293,11 +292,11 @@ pub fn schema() -> Value {
 pub fn build_request(
     model: Model,
     frames: &[Frame],
-    subtitles: Option<&Subtitles>,
+    subtitles: &[Cue],
     duration_s: f64,
     language: SummaryLanguage,
 ) -> AiRequest {
-    let has_subtitles = subtitles.is_some_and(|s| !s.is_empty());
+    let has_subtitles = !subtitles.is_empty();
     let mut instructions = format!(
         "You describe a video clip for a video editor who has not watched it. It is {} long. \
          You get frames sampled from it, each preceded by its time as t=m:ss{}.\n\
@@ -316,9 +315,9 @@ pub fn build_request(
         duration_s,
         language.instruction(has_subtitles),
     );
-    if let Some(subtitles) = subtitles.filter(|_| has_subtitles) {
+    if has_subtitles {
         instructions.push_str("\n\nSubtitles:\n");
-        for cue in subtitles.cues() {
+        for cue in subtitles {
             instructions.push_str(&format!(
                 "[{}–{}] {}\n",
                 format_time(cue.start.as_secs_f64()),
@@ -387,6 +386,17 @@ pub fn parse_answer(response: &AiResponse, duration_s: f64) -> Result<Descriptio
     })
 }
 
+/// `m:ss` below an hour, `h:mm:ss` from an hour on. Seconds are rounded down.
+pub fn format_time(seconds: f64) -> String {
+    let total = seconds.max(0.0) as u64;
+    let (h, m, s) = (total / 3600, total / 60 % 60, total % 60);
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{m}:{s:02}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -451,7 +461,11 @@ mod tests {
 
     #[test]
     fn the_request_has_instructions_subtitles_and_labelled_frames() {
-        let subtitles = Subtitles::parse("1\n00:00:01,000 --> 00:00:03,000\nПривет,\nмир\n");
+        let subtitles = [Cue {
+            start: std::time::Duration::from_secs(1),
+            end: std::time::Duration::from_secs(3),
+            text: "Привет,\nмир".to_string(),
+        }];
         let frames = vec![
             Frame {
                 time_s: 0.0,
@@ -465,7 +479,7 @@ mod tests {
         let request = build_request(
             MODELS[0],
             &frames,
-            Some(&subtitles),
+            &subtitles,
             4.0,
             SummaryLanguage::SameAsSubtitles,
         );
@@ -486,7 +500,7 @@ mod tests {
         let silent = build_request(
             MODELS[0],
             &frames,
-            None,
+            &[],
             4.0,
             SummaryLanguage::SameAsSubtitles,
         );
@@ -535,5 +549,14 @@ mod tests {
             SummaryLanguage::from_name("??"),
             SummaryLanguage::SameAsSubtitles
         );
+    }
+
+    #[test]
+    fn times_are_minutes_below_an_hour_and_hours_above() {
+        assert_eq!(format_time(0.0), "0:00");
+        assert_eq!(format_time(62.9), "1:02");
+        assert_eq!(format_time(3599.0), "59:59");
+        assert_eq!(format_time(3600.0), "1:00:00");
+        assert_eq!(format_time(3725.0), "1:02:05");
     }
 }

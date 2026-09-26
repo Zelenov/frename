@@ -14,7 +14,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use frename_core::ai::describe::{frame_size, sample_times, Frame, FRAME_LONG_SIDE};
+use crate::describe::{frame_size, sample_times, Frame, FRAME_LONG_SIDE};
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
@@ -313,30 +313,13 @@ fn to_jpeg(image: image::RgbImage) -> Result<Vec<u8>, String> {
     Ok(jpeg)
 }
 
-/// What the estimate needs to know about a clip before it runs.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Probe {
-    /// Length in seconds; `None` when the clip could not be read in time.
-    pub duration_s: Option<f64>,
-    /// Size of its `.srt` file in bytes: an upper bound on the subtitle text's length.
-    pub subtitle_bytes: usize,
-}
-
-/// Read what the estimate needs about the clip at `path`, giving up after [`OPEN_TIMEOUT`].
-pub fn probe(path: &Path) -> Probe {
-    // A debug build renames in memory only: GStreamer needs the name on disk.
-    let path = &frename_core::FileTagger::disk_path(path);
-    let duration_s = Clip::open(path, OPEN_TIMEOUT)
-        .map_err(|e| log::info!("ai: cannot read {}: {e}", path.display()))
+/// The length in seconds of the clip at `path`, for an estimate before describing it; `None`
+/// when it could not be read within [`OPEN_TIMEOUT`].
+pub fn clip_duration_s(path: &Path) -> Option<f64> {
+    Clip::open(path, OPEN_TIMEOUT)
+        .map_err(|e| log::info!("video-describe: cannot read {}: {e}", path.display()))
         .ok()
-        .and_then(|clip| clip.duration_s());
-    let subtitle_bytes = std::fs::metadata(frename_core::subtitle_path(path))
-        .map(|m| m.len() as usize)
-        .unwrap_or(0);
-    Probe {
-        duration_s,
-        subtitle_bytes,
-    }
+        .and_then(|clip| clip.duration_s())
 }
 
 #[cfg(test)]
@@ -346,8 +329,9 @@ mod tests {
     use std::path::PathBuf;
 
     #[cfg(target_os = "linux")]
+    /// The frename repository, whose test clips these tests read.
     fn repo() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
     }
 
     /// The clips of `tests/self-test-clips.txt`, which CI decodes on Linux.
@@ -495,11 +479,12 @@ mod tests {
 
     #[test]
     fn a_file_that_is_not_a_video_is_unreadable() {
-        let dir = std::env::temp_dir().join(format!("frename-frames-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("video-describe-frames-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("dir");
         let fake = dir.join("fake.mp4");
         std::fs::write(&fake, b"not a movie").expect("write");
-        assert_eq!(probe(&fake).duration_s, None);
+        assert_eq!(clip_duration_s(&fake), None);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

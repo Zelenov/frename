@@ -6,7 +6,7 @@ use std::time::Duration;
 use base64::Engine;
 use serde_json::{json, Value};
 
-use super::provider::{AiContent, AiError, AiProvider, AiRequest, AiResponse, AiUsage};
+use crate::provider::{AiContent, AiError, AiProvider, AiRequest, AiResponse, AiUsage};
 
 const API_URL: &str = "https://api.anthropic.com";
 const API_VERSION: &str = "2023-06-01";

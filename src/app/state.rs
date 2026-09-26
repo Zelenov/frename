@@ -276,7 +276,7 @@ impl FrenameApp {
                     ),
                 ));
                 let model = Task::done(describe_ai_message(batch::describe_ai::Message::SetModel(
-                    frename_core::ai::describe::Model::from_id(&self.settings.settings().ai_model),
+                    video_describe::Model::from_id(&self.settings.settings().ai_model),
                 )));
                 let load = Task::batch([
                     language,

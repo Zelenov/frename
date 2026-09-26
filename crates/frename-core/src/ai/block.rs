@@ -17,7 +17,7 @@
 
 use std::ops::Range;
 
-use super::describe::Description;
+use video_describe::{format_time, Description};
 
 /// What starts the block's first line, before the summary.
 const START: &str = "AI: ";
@@ -131,21 +131,10 @@ fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// `m:ss` below an hour, `h:mm:ss` from an hour on. Seconds are rounded down.
-pub fn format_time(seconds: f64) -> String {
-    let total = seconds.max(0.0) as u64;
-    let (h, m, s) = (total / 3600, total / 60 % 60, total % 60);
-    if h > 0 {
-        format!("{h}:{m:02}:{s:02}")
-    } else {
-        format!("{m}:{s:02}")
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ai::describe::Segment;
+    use video_describe::Segment;
 
     const BLOCK: &str = "AI: A guide leads tourists.\n0:00–0:14 Entrance.";
 
@@ -247,14 +236,5 @@ mod tests {
         let comment = "Mine\r\n\r\nAI: S\r\n0:00–0:01 x\r\n";
         assert_eq!(ai_block(comment), Some("AI: S\r\n0:00–0:01 x"));
         assert_eq!(replace_block(comment, "AI: T"), "Mine\r\n\r\nAI: T\r\n");
-    }
-
-    #[test]
-    fn times_are_minutes_below_an_hour_and_hours_above() {
-        assert_eq!(format_time(0.0), "0:00");
-        assert_eq!(format_time(62.9), "1:02");
-        assert_eq!(format_time(3599.0), "59:59");
-        assert_eq!(format_time(3600.0), "1:00:00");
-        assert_eq!(format_time(3725.0), "1:02:05");
     }
 }

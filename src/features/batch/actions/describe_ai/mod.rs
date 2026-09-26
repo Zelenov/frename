@@ -5,21 +5,18 @@
 //! Before running, the panel shows what will be sent and about what it costs: clip lengths are
 //! read in the background (see [`Options::missing_probes`]) and kept per file.
 
-mod frames;
-
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
-use frename_core::ai::describe::{self, Model, SummaryLanguage, MAX_DURATION_S};
+use frename_core::ai::block;
 use frename_core::ai::key::{self, KeyState};
-use frename_core::ai::provider::{AiError, AiProvider, AiUsage};
-use frename_core::ai::{anthropic::Anthropic, block};
 use frename_core::{File, FileId, FileKind, FileTagger, FolderInfo};
 use iced::widget::{button, checkbox, column, row, text};
 use iced::{Element, Length};
-
-pub use frames::Probe;
+use video_describe::{
+    self as describe, AiError, AiUsage, Model, Stage, SummaryLanguage, MAX_DURATION_S,
+};
 
 use super::super::{ItemProgress, ItemResult, ItemStatus};
 use super::ActionMessage;
@@ -400,6 +397,27 @@ pub fn dollars(usd: f64) -> String {
     }
 }
 
+/// What the estimate needs to know about a clip before it runs.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Probe {
+    /// Length in seconds; `None` when the clip could not be read in time.
+    pub duration_s: Option<f64>,
+    /// Size of its `.srt` file in bytes: an upper bound on the subtitle text's length.
+    pub subtitle_bytes: usize,
+}
+
+/// Read what the estimate needs about the clip at `path`.
+fn probe(path: &Path) -> Probe {
+    // A debug build renames in memory only: GStreamer needs the name on disk.
+    let path = &FileTagger::disk_path(path);
+    Probe {
+        duration_s: describe::frames::clip_duration_s(path),
+        subtitle_bytes: std::fs::metadata(frename_core::subtitle_path(path))
+            .map(|m| m.len() as usize)
+            .unwrap_or(0),
+    }
+}
+
 /// Read the lengths of `clips`, a few at once. Blocking: runs on a worker thread.
 pub fn probe_all(clips: Vec<(FileId, PathBuf)>) -> Vec<(FileId, Probe)> {
     let chunk = clips.len().div_ceil(PROBES_AT_ONCE).max(1);
@@ -409,7 +427,7 @@ pub fn probe_all(clips: Vec<(FileId, PathBuf)>) -> Vec<(FileId, Probe)> {
             .map(|part| {
                 scope.spawn(move || {
                     part.iter()
-                        .map(|(id, path)| (*id, frames::probe(path)))
+                        .map(|(id, path)| (*id, probe(path)))
                         .collect::<Vec<_>>()
                 })
             })
@@ -442,80 +460,78 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
             ..ItemResult::failed("No API key")
         };
     };
-    let unreadable = |e: String| {
-        log::warn!("ai: cannot read {}: {e}", path.display());
-        ItemResult::failed("Video could not be read")
-    };
     // A debug build renames in memory only: the clip and its subtitles are read by the name on disk.
     let on_disk = FileTagger::disk_path(path);
-    let clip = match frames::Clip::open(&on_disk, frames::OPEN_TIMEOUT) {
-        Ok(clip) => clip,
-        Err(e) => return unreadable(e),
+    let subtitles: Vec<describe::Cue> = frename_core::load_subtitles(&on_disk)
+        .map(|s| {
+            s.cues()
+                .iter()
+                .map(|cue| describe::Cue {
+                    start: cue.start,
+                    end: cue.end,
+                    text: cue.text.clone(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let describe_options = describe::Options {
+        api_key,
+        model: options.model(),
+        language: options.language,
     };
-    let Some(duration_s) = clip.duration_s() else {
-        return unreadable("no duration".to_string());
-    };
-    if duration_s > MAX_DURATION_S {
-        return ItemResult::new(ItemStatus::Skipped, None);
-    }
-    // Shares of the file's time, as the estimate counts it: sampling frames, then the answer.
-    let sampling_s = SECONDS_PER_FRAME * describe::frame_count(duration_s) as f64;
-    let asked_at = (sampling_s / (sampling_s + SECONDS_PER_REQUEST)) as f32;
-    let frames = match clip.sample(duration_s, cancel, |done, total| {
-        progress.set(
-            asked_at * done as f32 / total.max(1) as f32,
-            format!("frame {} of {total}", done + 1),
+    // The file's share of reading frames, as the estimate counts it; waiting for the answer
+    // takes the rest.
+    let mut asked_at = 0.0;
+    let described =
+        describe::describe(
+            &on_disk,
+            &subtitles,
+            &describe_options,
+            cancel,
+            |stage| match stage {
+                Stage::Frame { done, total } => {
+                    let sampling_s = SECONDS_PER_FRAME * total as f64;
+                    asked_at = (sampling_s / (sampling_s + SECONDS_PER_REQUEST)) as f32;
+                    progress.set(
+                        asked_at * done as f32 / total.max(1) as f32,
+                        format!("frame {} of {total}", done + 1),
+                    );
+                }
+                Stage::Asking => progress.creep(
+                    asked_at,
+                    0.97,
+                    std::time::Duration::from_secs_f64(SECONDS_PER_REQUEST),
+                    "waiting for Claude",
+                ),
+            },
         );
-    }) {
-        Ok(Some(frames)) if !frames.is_empty() => frames,
-        Ok(Some(_)) => return unreadable("no frames".to_string()),
-        Ok(None) => return ItemResult::new(ItemStatus::Pending, None),
-        Err(e) => return unreadable(e),
-    };
-    drop(clip);
-    let subtitles = frename_core::load_subtitles(&on_disk);
-    let request = describe::build_request(
-        options.model(),
-        &frames,
-        subtitles.as_ref(),
-        duration_s,
-        options.language,
-    );
-    progress.creep(
-        asked_at,
-        0.97,
-        std::time::Duration::from_secs_f64(SECONDS_PER_REQUEST),
-        "waiting for Claude",
-    );
-    let provider = match Anthropic::new(api_key) {
-        Ok(provider) => provider,
-        Err(e) => return ai_failed(e),
-    };
-    let response = match provider.complete(&request, cancel) {
-        Ok(response) => response,
-        Err(AiError::Cancelled) => return ItemResult::new(ItemStatus::Pending, None),
-        Err(e) => return ai_failed(e),
-    };
-    let usage = Some(response.usage);
-    let description = match describe::parse_answer(&response, duration_s) {
-        Ok(description) => description,
-        Err(reason) => {
+    let described = match described {
+        Ok(described) => described,
+        Err(describe::Error::Cancelled) => return ItemResult::new(ItemStatus::Pending, None),
+        Err(describe::Error::TooLong(_)) => return ItemResult::new(ItemStatus::Skipped, None),
+        Err(describe::Error::Unreadable(e)) => {
+            log::warn!("ai: cannot read {}: {e}", path.display());
+            return ItemResult::failed("Video could not be read");
+        }
+        Err(describe::Error::Ai(e)) => return ai_failed(e),
+        Err(describe::Error::BadAnswer { reason, usage }) => {
             return ItemResult {
-                usage,
+                usage: Some(usage),
                 ..ItemResult::failed(reason)
             }
         }
     };
+    let usage = Some(described.usage);
     progress.set(0.98, "saving");
-    let new_block = block::format_block(&description);
+    let new_block = block::format_block(&described.description);
     snapshot.set_comment(block::replace_block(snapshot.comment(), &new_block));
     let new_path = FileTagger::save(&snapshot, path);
     log::info!(
         "ai: described {} ({} frames, {} in / {} out tokens)",
         new_path.display(),
-        frames.len(),
-        response.usage.input_tokens,
-        response.usage.output_tokens
+        described.frames,
+        described.usage.input_tokens,
+        described.usage.output_tokens
     );
     // A save that failed (a read-only share) only logs: check the description is there, so a
     // paid answer that was lost is reported, not counted as done.
@@ -692,60 +708,5 @@ mod tests {
             &ItemProgress::default(),
         );
         assert_eq!(result.status, ItemStatus::Skipped);
-    }
-
-    /// A real request, only when `FRENAME_ANTHROPIC_API_KEY` is set (never in CI without the
-    /// secret): one test clip, Claude Haiku 4.5, a summary and segments inside the clip. Prints
-    /// the real token usage for the estimate to be checked against.
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn live_description_of_a_test_clip() {
-        let Some(api_key) = std::env::var("FRENAME_ANTHROPIC_API_KEY")
-            .ok()
-            .filter(|k| !k.trim().is_empty())
-        else {
-            eprintln!("FRENAME_ANTHROPIC_API_KEY not set: live test skipped");
-            return;
-        };
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/folder/file_example_MP4_480_1_5MG.mp4");
-        let clip = frames::Clip::open(&path, std::time::Duration::from_secs(20)).expect("clip");
-        let duration_s = clip.duration_s().expect("duration");
-        let frames = clip
-            .sample(duration_s, &AtomicBool::new(false), |_, _| {})
-            .expect("frames")
-            .expect("not cancelled");
-        let request = describe::build_request(
-            Model::default(),
-            &frames,
-            None,
-            duration_s,
-            SummaryLanguage::English,
-        );
-        let provider = Anthropic::new(api_key.trim().to_string()).expect("client");
-        let response = match provider.complete(&request, &AtomicBool::new(false)) {
-            Ok(response) => response,
-            // The key works but its account cannot pay: nothing about the code to test.
-            Err(e @ (AiError::OutOfCredit | AiError::LimitReached(_))) => {
-                eprintln!("live test skipped: {}", e.reason());
-                return;
-            }
-            Err(e) => panic!("answer: {e:?}"),
-        };
-        let description = describe::parse_answer(&response, duration_s).expect("description");
-        eprintln!(
-            "live: {} frames, usage {:?} (estimated {:?}), cost {}\n{}",
-            frames.len(),
-            response.usage,
-            describe::estimate_usage(Model::default(), duration_s, 0),
-            dollars(Model::default().cost_usd(response.usage)),
-            block::format_block(&description)
-        );
-        assert!(!description.summary.is_empty());
-        assert!(!description.segments.is_empty());
-        assert!(description
-            .segments
-            .iter()
-            .all(|s| s.start_s >= 0.0 && s.end_s <= duration_s));
     }
 }

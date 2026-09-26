@@ -1,6 +1,5 @@
 //! UI for the settings window.
 
-use frename_core::ai::describe::{Model, MODELS};
 use frename_core::ai::key::KeyState;
 use frename_core::ai::SummaryLanguage;
 use frename_core::{CommentStorage, InOutStorage};
@@ -8,6 +7,7 @@ use iced::widget::{
     button, checkbox, column, container, pick_list, radio, row, scrollable, text, text_input,
 };
 use iced::{Element, Length};
+use video_describe::{Model, MODELS};
 
 use crate::theme;
 

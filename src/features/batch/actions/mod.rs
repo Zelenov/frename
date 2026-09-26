@@ -21,13 +21,13 @@ mod tag_spacing;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
-use frename_core::ai::describe::Model;
-use frename_core::ai::provider::AiUsage;
 use frename_core::{
     CommentStorage, File, FileId, FileSnapshot, FileTagger, FolderInfo, InOutStorage, MoveOutcome,
 };
 use iced::widget::{column, text};
 use iced::Element;
+use video_describe::AiUsage;
+use video_describe::Model;
 
 use super::{ItemProgress, ItemResult, ItemStatus};
 use crate::theme;

@@ -1440,6 +1440,7 @@ dependencies = [
  "ureq",
  "url",
  "velopack",
+ "video-describe",
  "windows-sys 0.61.2",
  "winres",
 ]
@@ -1448,18 +1449,17 @@ dependencies = [
 name = "frename-core"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
  "indexmap",
  "keyring",
  "log",
  "regex",
- "reqwest",
  "rusqlite",
  "serde",
  "serde_json",
  "tokio",
  "toml 1.1.6+spec-1.1.0",
  "uuid",
+ "video-describe",
  "xmp_toolkit",
 ]
 
@@ -5675,6 +5675,21 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "video-describe"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "gstreamer",
+ "gstreamer-app",
+ "gstreamer-video",
+ "image",
+ "log",
+ "reqwest",
+ "serde_json",
+ "url",
+]
 
 [[package]]
 name = "wait-timeout"
