@@ -64,6 +64,11 @@ keyboard, next to Premiere Pro. The rules below come from that.
    (BIR «Пиктограммы»; DI p. 396).
 8. **Built for 1080p at 150 %** (1280×720 logical, a 1280×680 work area under the taskbar): every
    window and default layout fits there.
+9. **Offer the action, not directions.** Wherever frename could tell the user to go somewhere and
+   do something ("Generate them in batch mode", "Set a key in Settings"), it shows the button that
+   does it instead, and the button takes them there with everything prepared: the right window,
+   page, action, files and field. What stays text is only what no click can do for them (a fact,
+   or typing into a field that is already in front of them).
 
 ## 2. Approaches considered
 
@@ -355,7 +360,7 @@ selected where it has one). iced 0.14 gives buttons, checkboxes and radios no ke
 |---|---|---|
 | **primary** | `accent` fill, white SemiBold text | The one commit action of a window or panel: *Describe 12 files*, *Save key*. At most one per window (PUI; MiM ch. 7). |
 | **secondary** | `bg.raised` fill, `border.control` edge, `text.primary` | Every other command: *Close*, *Cancel*, *Replace…*, *Check for updates*, *Move comments…*. |
-| **ghost** | no fill, `text.primary`; hover shows `state.hover` | Minor actions inside a row: *Show*, *Open the log*, *Change*. |
+| **ghost** | no fill, `text.primary`; hover shows `state.hover` | Minor commands that act right here, inside a row or a list's header: *Invert*, *Copy the list*, *Undo*. Not for going somewhere: that is a link (§8.21). |
 | **danger-ghost** | no fill, `error` text and a 1 px `error` edge | The first step of a destructive action: *Remove…*. Clearly a button, but quieter than a filled one until confirmed (PUI "friction"; RUI "Semantics are secondary"). |
 | **danger** | `danger` fill, white SemiBold | Only inside the confirmation of a destructive action: *Remove key*. |
 | **icon** | 32×32 (toolbar) or 24×24 (row), transparent | Frequent toolbar actions with a known picture. Always a tooltip. |
@@ -369,8 +374,9 @@ selected where it has one). iced 0.14 gives buttons, checkboxes and radios no ke
 - **Close and Cancel** are secondary buttons, except on a *result* screen where nothing is left to
   commit (a finished batch job, #58): there Close is the primary button, and it is still the last
   one on the right (§9.2).
-- Labels are verb + object in sentence case: *Save key*, *Describe 12 files*, never *OK*, *Yes*,
-  *Submit* (DI "Prominent Done Button"; PUI; BIR «Кнопка»). The count goes into the label when
+- Labels are verb + object in sentence case and name what the click achieves, not the place it
+  opens: *Set the key…*, not *Open Settings*; *Generate subtitles…*, not *Go to batch mode*;
+  *Save key*, *Describe 12 files*, never *OK*, *Yes*, *Submit* (DI "Prominent Done Button"; PUI; BIR «Кнопка»). The count goes into the label when
   it helps ("Run on 12 files").
 - **Ellipsis** only when the button asks for more before acting (*Replace…* shows a field,
   *Import settings from an old frename folder…* opens a picker); never on a button that acts at once
@@ -583,14 +589,31 @@ the next step ("Open a folder of clips"), one line of
 `secondary` with the other ways, and the action as a button (primary if it is *the* thing to do)
 (RUI "Don't overlook empty states"; DI "Instant Gratification"; BIR «Взгляд новичка»). Smaller
 empty areas (an empty filter result, no markers yet) get one line of `secondary` and, if there is
-one, a ghost button ("Add a marker `F2`").
+one, a secondary button ("Add a marker `F2`", "Generate subtitles…"). The line never tells the user
+where to go to do something (§1 principle 9): if a click can get there, the button is there.
 
-### 8.21 Link
+### 8.21 Link, and when a button instead
 
-A ghost button whose text is `accent.text`: *Change*, *Open Settings*, *Add credit* in a notice. It
-navigates (opens a page of frename, or a web page with a 12-px `external-link` icon after the words)
-and never runs a command (BIR: «Ссылки не предназначены для отдачи команды»). A web address that is
-only information ("console.soniox.com") is plain text, not a link.
+Words in `accent.text`, no box, underlined on hover; a 12-px `external-link` icon after the words
+when it opens a web page or another program.
+
+**The system.** One question decides: *is this the way forward, or a side trip?*
+
+| | Button (§8.1) | Link |
+|---|---|---|
+| What the click does | changes something, starts something, or takes the user to where the next step of their task is done, with it prepared | opens something to look at, or to adjust a detail shown right next to it; nothing changes and the task goes on where it was |
+| Where it sits | on its own: a button bar, a notice's action row, an empty state, a list's header | inside a line of text, right after the value or sentence it is about; never alone on a line |
+| Can it be the only way out of a dead end | yes: it must be | never: a dead end gets a button |
+| Examples | *Generate subtitles…* (no subtitles), *Set the key…* (no key), *Add credit* (no credit), *Choose the tag…* (tagging off), *Check all 24 files* (nothing checked), *Open another folder…*, *Run again on 5 files* | *Change* after "Claude Haiku 4.5", *Change* after the spacing, *Show the tag list* after "Order: as in the tag list", *Open the log*, a help page |
+
+- A button that takes the user elsewhere ends with "…" (it does not act yet: §8.1 "Ellipsis") and
+  opens the place ready: the Settings page scrolled to the row with the field focused; batch mode
+  with the action selected and the files checked. It never runs a paid or destructive action by
+  itself: the user still presses Run after seeing the plan.
+- A link never runs a command (BIR: «Ссылки не предназначены для отдачи команды»). A web address
+  that is only information ("console.soniox.com") is plain text, not a link.
+- Weight among buttons: *primary* when it is the one thing to do in that window or panel,
+  *secondary* otherwise, *ghost* for small commands in a row (§8.1).
 
 ## 9. Windows, dialogs and surfaces
 
@@ -710,11 +733,12 @@ In order of preference (AF "Do, don't ask"; BIR «Привычка»; PUI "frict
 - **Wording:** what happened · why (if known) · what to do, in the user's words, no blame, no
   "please", no "error:" prefix, no codes in the first line (PUI "Write clear error messages";
   AF ch. 21). "The Anthropic account has no credit left. Add credit, then run again." Technical
-  details go to the log, with an *Open the log* button.
+  details go to the log, with an *Open the log* link.
 - **Once:** a message appears in one place. The batch result's title and its failed row do not
   both say "no credit left" (#58's complaint).
-- **Action button** when there is a fix: *Add credit* (opens the billing page), *Open Settings*
-  (for a missing key, opening the right page).
+- **Action button** when there is a fix, named by the fix (§8.21): *Add credit* (opens the
+  billing page), *Top up on Soniox* (the Soniox console), *Set the key…* / *Check the key…* (the
+  right Settings page, scrolled to the key row, the field focused).
 
 ### 10.4 Empty states
 
@@ -917,7 +941,7 @@ touches batch mode; steps 7–9 are **behaviour** for #58.
 
 | State | Drawn | Today |
 |---|---|---|
-| No file open | `bg.panel`, centered: `clapperboard` 48 in `text.secondary`, "No clip open" (`title`), "Pick a file in the list." (`secondary`); the timeline and controls bar stay, disabled, so nothing jumps when a clip opens | 🎬 alone |
+| No file open | `bg.panel`, centered: `clapperboard` 48 in `text.secondary`, "No clip open" (`title`), the secondary button "Open the first clip `PgDn`" (or, with the list scrolled, the first listed); the timeline and controls bar stay, disabled, so nothing jumps when a clip opens | 🎬 alone |
 | Loading | picture area black; centered `loader-circle` 24 turning, the file name in `mono` under it; after 3 s also "Waiting for the file… (a cloud file may take a while)" | ⏳ alone |
 | Failed | `bg.panel`, centered: `circle-x` 48 in `error`, "This clip cannot be played" (`title`), the reason in one line (`secondary`), link *Open the log*; the controls bar stays but its buttons are disabled | red ✕ 80, no reason |
 | No picture | a file with sound only: the "Failed" look with the reason "This file has no video picture" | 📄 |
@@ -1112,7 +1136,11 @@ left to right, with the widths §13.9 folds by:
 - **File cannot hold markers:** `circle-alert` in `text.secondary` and "This file cannot hold
   markers" (`body`), "Premiere reads markers from MP4 and MOV files." (`secondary`).
 - **No subtitles** (Subtitles tab chosen, the clip has none): "This clip has no subtitles"
-  (`body`) and "Generate them in batch mode." (`secondary`).
+  (`body`) and the secondary button `captions` "Generate subtitles…". It enters batch mode with
+  this clip checked (the other checks are kept but the count says so) and Generate subtitles
+  selected, so the page shows the cost; nothing runs until Run. While a job runs it is disabled
+  with the reason "Another action is running". No key yet: the button is the same; the batch page
+  then offers *Set the key…*.
 
 #### 13.3.7 In and out points
 - Set with `[` / `]` (in rounds down to a whole second, out up); blocked in batch mode. Shown on the timeline (§13.3.4),
@@ -1399,6 +1427,15 @@ in `text.secondary`:
 - Rows as the Settings navigation (§14): 32 px, the selected one `state.selected` with the bar and
   SemiBold; hover `state.hover`. Icons `text.secondary`, the selected row's `text.primary`; badges
   right-aligned.
+- **Paid badge = who will bill for it.** The action's name says what it does and never names a
+  company ("Describe with AI", "Generate subtitles"). The badge names the service that will be
+  used, as chosen in Settings: "Anthropic" today; "OpenAI" when that is chosen once #17 or a later
+  issue adds it. The choice is a setting, not an option on the page (settings choose, actions
+  use). The page's first option row repeats it with the model: "Service: Anthropic · Claude Haiku
+  4.5 *Change*". With no service set up yet, the badge is `badge.warning` "No key", and the page
+  shows the notice with *Set the key…*. The badge never lists several services: the one that will
+  bill is the only fact the list needs. When the row is too narrow for both, the name is cut with
+  "…" before the badge goes, and the badge goes before the icon (§13.9).
 - **Why icons for all:** an icon is for recognition (BIR «Пиктограммы»): after a week the editor
   finds "Describe with AI" by its sparkles without reading. One action with an icon and eight
   without (the mockup of §2) was inconsistent; the rule is all or none, and the list is long enough
@@ -1422,7 +1459,7 @@ Every page has the same parts, in this order:
    `body.strong`.
 5. **A notice** when something stops it from running, with the button that fixes it.
 6. **Button bar:** on the left the reason Run is off, if it is (unless a notice above already says
-   it); on the right the **primary** Run button with a verb and the count (§8.1); with nothing
+   it), with the button that removes the reason when there is one (§8.21); on the right the **primary** Run button with a verb and the count (§8.1); with nothing
    checked the count is left out ("Move comments"). No Cancel: leaving is the `x` or Esc. The count on
    Run is the files that will be worked on, which may be fewer than the checked ones (the plan says
    why: "Skipped: 3 already described").
@@ -1431,15 +1468,15 @@ Every page has the same parts, in this order:
 
 | Action | Changes | Options | Run label | Run is off when (the reason shown) |
 |---|---|---|---|---|
-| Move comments | writes into the videos / text files | radio: "From text files into the videos" (description "XMP, the Description column in Premiere Pro") · "From the videos into text files" (`clip.comment.txt`) | Move 12 comments | nothing checked: "Check the files in the list"; a job runs: "Another action is running" |
+| Move comments | writes into the videos / text files | radio: "From text files into the videos" (description "XMP, the Description column in Premiere Pro") · "From the videos into text files" (`clip.comment.txt`) | Move 12 comments | nothing checked: "No files checked" and the secondary button *Check all 24 files* (the listed ones) next to it; a job runs: "Another action is running" |
 | Move in/out points | renames files; writes into the videos | radio: "From file names into the videos" · "From the videos into file names" | Move in/out of 12 files | nothing checked |
 | Markers ⇄ comment | writes into the videos; may rename | radio: "Comment lines into markers" (example `0:41–0:47 — Lion`) · "Markers into the comment (a copy)"; ⓘ with the line format | Convert 12 files | nothing checked |
-| Tag commented videos | renames files; also removes the tag from files without a comment | row "Tag" with the tag name and a link *Change in Settings*; when the tag is off, a warning notice "Tagging commented videos is off" with *Open Settings* | Tag 12 files | the tag is off (the notice says why; today a red "Tag: off") |
-| Fix tags by priority | renames files | none; a line "Order: as in the tag list" with a link that closes batch mode | Reorder tags in 12 names | nothing checked |
-| Apply tag spacing | renames files | row "Spacing" with the current choice and *Change in Settings* | Rename 12 files | nothing checked |
+| Tag commented videos | renames files; also removes the tag from files without a comment | row "Tag" with the tag name and the link *Change*; when the tag is off, a warning notice "Tagging commented videos is off" with the button *Choose the tag…* (Settings → Saving, at the tag row) | Tag 12 files | the tag is off (the notice says why; today a red "Tag: off") |
+| Fix tags by priority | renames files | none; a line "Order: as in the tag list" with the link *Show the tag list* (leaves batch mode) | Reorder tags in 12 names | nothing checked |
+| Apply tag spacing | renames files | row "Spacing" with the current choice and the link *Change* | Rename 12 files | nothing checked |
 | Reset cache and reload | changes only frename's records | none | Reload 12 files | nothing checked |
-| Describe with AI | writes into comments (and markers) | rows: Model (the model and *Change*), Language (*Change*), checkbox "Describe again the videos that have a description"; plan rows and "Without subtitles: 4" (they are described from the picture only); skipped line in `secondary` ("Skipped: 3 already described, 1 over 30 min") | Describe 12 videos · about $0.35 | estimating: a spinner line "Reading clip lengths… 40 of 120" over the plan rows drawn as empty skeletons, Run "Describe videos", reason "Waiting for the estimate"; no key (error notice + *Open Settings*); nothing to send |
-| Generate subtitles | writes `.srt` files | rows: Languages (from Settings, as a line, *Change*), Cue length, checkbox "Replace existing subtitles"; plan rows: videos, length, cost with its source ("from your account" / "typical price"; "cost unknown" when neither is known), time; `secondary` lines: what is skipped and why, "The audio is sent to Soniox", "Uploads are deleted from Soniox afterwards (the log lists any that could not be)", and that the clips get the "subtitled" tag when Settings says so | Transcribe 12 videos · about $0.07 (or "Build 3 subtitles, free") | key missing or rejected (notice + *Open Settings*); nothing to transcribe |
+| Describe with AI | writes into comments (and markers) | rows: Model (the model and *Change*), Language (*Change*), checkbox "Describe again the videos that have a description"; plan rows and "Without subtitles: 4" (they are described from the picture only); skipped line in `secondary` ("Skipped: 3 already described, 1 over 30 min") | Describe 12 videos · about $0.35 | estimating: a spinner line "Reading clip lengths… 40 of 120" over the plan rows drawn as empty skeletons, Run "Describe videos", reason "Waiting for the estimate"; no key (error notice "No Anthropic API key yet" + *Set the key…*); key rejected (+ *Check the key…*); nothing to send |
+| Generate subtitles | writes `.srt` files | rows: Languages (from Settings, as a line, *Change*), Cue length, checkbox "Replace existing subtitles"; plan rows: videos, length, cost with its source ("from your account" / "typical price"; "cost unknown" when neither is known), time; `secondary` lines: what is skipped and why, "The audio is sent to Soniox", "Uploads are deleted from Soniox afterwards (the log lists any that could not be)", and that the clips get the "subtitled" tag when Settings says so | Transcribe 12 videos · about $0.07 (or "Build 3 subtitles, free") | key missing or rejected (notice + *Set the key…* / *Check the key…*); nothing to transcribe |
 
 Today seven actions share one generic "Run on N files". What explains a disabled Run today: the red
 key footers of AI and subtitles, "Tag: off", and the labels "No videos to describe." / "Nothing to
@@ -1489,7 +1526,8 @@ The job's page stays until Close:
    - stopped by the user: `circle-minus` info notice "Stopped after 7 of 12 files" (the files not
      reached are not listed: they did not fail; "Run again" covers them);
    - stopped by an error: error notice "Stopped: the Anthropic account has no credit left" with the
-     fix (*Add credit* for billing, *Open Settings* for a key) — the reason is not repeated below;
+     fix (*Add credit* for Anthropic billing, *Top up on Soniox* for an empty Soniox balance or
+     budget, *Check the key…* for a rejected key) — the reason is not repeated below;
    - finished with some failures: warning notice "Done with problems: 3 of 12 files not done".
 2. **Figures:** three figures in a row — changed, unchanged, not done — and a fourth, "not reached"
    (`text.secondary`), when the job stopped early; each a `heading` number over
@@ -1498,8 +1536,8 @@ The job's page stays until Close:
    timeout may have been billed).
 4. **Files not done:** a table (§10.5) with the header "File" / "Why", the file name in `mono`, the
    reason in `body`, 8 rows then it scrolls; when every file has the stop reason, only the names
-   (the reason is in the notice). Above it at the right: ghost *Copy the list* (copies "name — reason"
-   lines) and *Open the log*.
+   (the reason is in the notice). Above it at the right: ghost button *Copy the list* (copies
+   "name — reason" lines) and the link *Open the log*.
 5. **Button bar:** secondary "Run again on 5 files" (the not done and not reached; it checks exactly
    those files and starts at once), then **primary Close** `Esc` at the right (§8.1: the result screen's primary is Close). A key cap on a filled
    button is drawn with a white 60 % edge and white text.
@@ -1527,18 +1565,18 @@ Every place that can be empty, with what it shows (words in `title` + `secondary
 | File list | loading another folder | the old rows dimmed with a spinner line on top "Opening …" |
 | File list | the new folder cannot be read | the old folder stays; an error notice at the top of the list "Cannot open “Lisbon”: access denied" with *Try again* (**behaviour**, #59: today nothing is shown) |
 | File list | search or filters hide every file | `search-x` "No files match" · the active filters as removable badges · *Show all* |
-| Video pane | no file open | `clapperboard` "No clip open" · "Pick a file in the list." |
+| Video pane | no file open | `clapperboard` "No clip open" · *Open the first clip `PgDn`* |
 | Video pane | cannot play | §13.3.1 |
-| Subtitle list | no subtitles | "This clip has no subtitles" · "Generate them in batch mode." |
+| Subtitle list | no subtitles | "This clip has no subtitles" · *Generate subtitles…* |
 | Marker list | no markers | "No markers yet" · *Add a marker F2* |
 | Marker list | format without markers | "This file cannot hold markers" |
 | Tag grid | no file open | `tag` "Open a clip to tag it" |
-| Tag grid | folder has no tags | "No tags yet" · "Type a name and press Enter to create the first one." |
+| Tag grid | folder has no tags | "No tags yet" · "Type a name and press Enter to create the first one." (the one hint that stays text: typing goes into the tag search right above it, which takes focus) |
 | Tag grid | no match | the "Create “…”" cell |
 | Starred strip | nothing starred | takes no space |
 | File name card | no tags on the clip | "No tags on this clip" |
 | Comment | empty | the placeholder "Comment" |
-| Batch panel | nothing checked | the action page as usual, Run off with "Check the files in the list" |
+| Batch panel | nothing checked | the action page as usual, Run off with "No files checked" and *Check all 24 files* |
 | Batch result | nothing failed | no "Files not done" block |
 
 ### 13.8 Colors of the content
@@ -1727,7 +1765,7 @@ these rules.
 - **Opened on a page:** ⚙ opens the last page shown in this session (*Interface* the first time), or
   *Updates* when an update is ready (the dot on ⚙ leads to it, and the *Updates* item shows the
   same dot). *Describe with AI* and *Generate subtitles* in batch mode open their pages (they used to
-  open "scrolled to the end"); the *Settings…* links of *Tag commented* and *Apply tag spacing* open
+  open "scrolled to the end"); the *Change* links and *Choose the tag…* buttons of *Tag commented* and *Apply tag spacing* open
   *Saving*.
 
 ### 14.2 Pages
