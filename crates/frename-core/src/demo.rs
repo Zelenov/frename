@@ -36,16 +36,13 @@ pub struct DemoScenario {
     #[serde(default)]
     pub marker_list: bool,
     /// Turn the open clip by this many quarter turns clockwise (negative: counter-clockwise),
-    /// as `Ctrl+Alt+→` / `←` do, after the seek. The shot is then taken while the controls bar
-    /// still shows its note.
+    /// as `Ctrl+Alt+→` / `←` do, after the seek. The shot is then taken while the note is still
+    /// shown over the picture.
     #[serde(default)]
     pub rotate: i32,
     /// In batch mode (`--batch`), the action to select, by its English name ("Rotate videos").
     #[serde(default)]
     pub batch_action: Option<String>,
-    /// In batch mode, run the selected action on every file and show its report.
-    #[serde(default)]
-    pub batch_run: bool,
     /// The staged files, oldest first: the file list shows them in this order.
     pub files: Vec<DemoFile>,
 }

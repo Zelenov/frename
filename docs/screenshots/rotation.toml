@@ -1,6 +1,6 @@
-# Rotation (#66): the open clip turned 90° right, as Ctrl+Alt+→ does, with the controls bar's
-# note over the picture. Not a README image; for looking at the feature (`frename --demo`).
-# `--batch` shows the "Rotate videos" action selected; add `batch_run = true` for its report.
+# Rotation (#66): the open clip turned 90° right, as Ctrl+Alt+→ does, with its note over the
+# picture. Not a README image; for looking at the feature (`frename --demo`).
+# `--batch` shows the "Rotate videos" action selected.
 source = "../../tests/folder"
 open = "pick.wide.MVI_0701.mp4"
 seek = 2.0
