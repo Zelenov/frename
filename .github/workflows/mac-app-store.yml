@@ -2,15 +2,14 @@ name: Mac App Store
 run-name: Mac App Store - ${{ github.ref_name }}
 
 # Builds the Mac App Store .pkg, signed with the owner's certificates, and validates it with App
-# Store Connect; with `upload` it also uploads it (then it shows in TestFlight). release.yml runs
-# it with upload after every published release; by hand: Actions → Mac App Store → Run workflow
-# (docs/mac-app-store-setup.md). Without the MAS_* secrets it builds an unsigned .pkg and says so.
+# Store Connect; with upload it also uploads it (then it shows in TestFlight). Runs with upload
+# after every successful Release run on main, as a run of its own so a Store problem never marks
+# a release failed; by hand: Actions → Mac App Store → Run workflow (docs/mac-app-store-setup.md).
+# Without the MAS_* secrets it builds an unsigned .pkg and says so.
 on:
-  workflow_call:
-    inputs:
-      upload:
-        type: boolean
-        default: false
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   workflow_dispatch:
     inputs:
       upload:
@@ -23,8 +22,13 @@ permissions:
 
 jobs:
   build:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: macos-14
     env:
+      # After a release: the released commit, uploaded. By hand: the chosen branch, as ticked.
+      UPLOAD: ${{ github.event_name == 'workflow_run' || inputs.upload }}
       # The GStreamer bundled in frename.app: as ci.yml.
       GST_VERSION: 1.28.7
       GST_MACOS_SHA256: 529fdf4a4027d942e59b5b3564f6400adaa008f63ce5f3fed4ffe35d73911994
@@ -40,6 +44,8 @@ jobs:
       APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Version
         run: |
@@ -49,9 +55,9 @@ jobs:
             VERSION=0.0.1
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          # A new, higher build number for every run, whether started by a release or by hand:
-          # App Store Connect refuses one it has seen. UTC date, then the minute of the day.
-          BUILD_NUMBER="$(date -u +%y%m%d).$((10#$(date -u +%H) * 60 + 10#$(date -u +%M)))"
+          # A new, higher build number for every run (App Store Connect refuses one it has seen):
+          # this workflow's run number, which grows whether a release or a person started it.
+          BUILD_NUMBER="${{ github.run_number }}"
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
           echo "Version $VERSION, build $BUILD_NUMBER"
 
@@ -98,9 +104,10 @@ jobs:
           identity() {
             local policy="$1"; shift
             for name in "$@"; do
-              hash="$(security find-identity -v -p "$policy" "$keychain" | grep -F "\"$name:" | awk '{print $2}' | head -1)"
-              [ -n "$hash" ] && { echo "$hash"; return; }
+              hash="$(security find-identity -v -p "$policy" "$keychain" | grep -F "\"$name:" | awk '{print $2}' | head -1 || true)"
+              [ -n "$hash" ] && { echo "$hash"; return 0; }
             done
+            return 0
           }
           app_identity="$(identity codesigning "Apple Distribution" "3rd Party Mac Developer Application")"
           installer_identity="$(identity basic "Mac Installer Distribution" "3rd Party Mac Developer Installer")"
@@ -120,6 +127,9 @@ jobs:
       - name: Validate with App Store Connect
         if: env.MAS_CERTIFICATES_P12 != '' && env.APP_STORE_CONNECT_API_KEY_ID != ''
         run: |
+          for name in APP_STORE_CONNECT_API_ISSUER_ID APP_STORE_CONNECT_API_KEY_P8; do
+            [ -n "${!name}" ] || { echo "::error::APP_STORE_CONNECT_API_KEY_ID is set but $name is not (docs/mac-app-store-setup.md, step 7)"; exit 1; }
+          done
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$APP_STORE_CONNECT_API_KEY_P8" > ~/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_API_KEY_ID.p8
           xcrun altool --validate-app -f dist/frename.pkg -t macos \
@@ -127,8 +137,10 @@ jobs:
 
       # The version record in App Store Connect must read exactly $VERSION (version.md's, `0.77`).
       - name: Upload to App Store Connect
-        if: inputs.upload && env.MAS_CERTIFICATES_P12 != '' && env.APP_STORE_CONNECT_API_KEY_ID != ''
+        id: upload
+        if: env.UPLOAD == 'true' && env.MAS_CERTIFICATES_P12 != '' && env.APP_STORE_CONNECT_API_KEY_ID != ''
         run: |
+          [ -n "$MAS_APPLE_APP_ID" ] || { echo "::error::MAS_APPLE_APP_ID is not set (docs/mac-app-store-setup.md, step 7)"; exit 1; }
           xcrun altool --upload-package dist/frename.pkg -t macos \
             --apiKey "$APP_STORE_CONNECT_API_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_API_ISSUER_ID" \
             --apple-id "$MAS_APPLE_APP_ID" --bundle-id io.github.zelenov.frename \
@@ -138,10 +150,18 @@ jobs:
         if: always()
         run: |
           if [ -f dist/frename.pkg ] && pkgutil --check-signature dist/frename.pkg > /dev/null; then
-            echo "Mac App Store build $VERSION ($BUILD_NUMBER): signed for the App Store." >> "$GITHUB_STEP_SUMMARY"
+            signed="signed for the App Store"
           else
-            echo "Mac App Store build $VERSION ($BUILD_NUMBER): unsigned (MAS_* secrets not set; see docs/mac-app-store-setup.md)." >> "$GITHUB_STEP_SUMMARY"
+            signed="unsigned (MAS_* secrets not set; see docs/mac-app-store-setup.md)"
           fi
+          if [ "${{ steps.upload.outcome }}" = success ]; then
+            uploaded="uploaded to App Store Connect"
+          elif [ "$UPLOAD" = true ]; then
+            uploaded="NOT uploaded (needs the signing and APP_STORE_CONNECT_* secrets)"
+          else
+            uploaded="not uploaded (not asked)"
+          fi
+          echo "Mac App Store build $VERSION ($BUILD_NUMBER): $signed; $uploaded." >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v6
         with:

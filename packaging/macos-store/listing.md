@@ -135,6 +135,7 @@ better once one is at hand: App Review may ask for screenshots "of the app in us
 - Notes: "frename renames and tags video files in a folder the user opens with the 📂 button
   (bottom of the file list) or by dropping a folder on the window. To try it, open any folder
   with a few .mp4 or .mov files, click a tag on the right, then press Page Down (fn + ↓ on a
-  MacBook keyboard) or click ▶ under the file list: the clip you left is renamed with its tag. The optional Describe with AI and Generate subtitles actions need the
-  reviewer's own Anthropic or Soniox API key and are not needed to review the app."
+  MacBook keyboard) or click ▶ under the file list: the clip you left is renamed with its tag.
+  The optional Describe with AI and Generate subtitles actions need the reviewer's own Anthropic
+  or Soniox API key and are not needed to review the app."
 - Contact: the owner's name, phone and e-mail.

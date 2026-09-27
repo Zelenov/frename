@@ -118,11 +118,18 @@ pub fn check_credential_store() -> Result<(), KeyError> {
 mod tests {
     use super::*;
 
+    /// The Keychain tests take turns: macOS's file-based Keychain can hang under concurrent calls
+    /// (seen on CI).
+    static STORE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     /// The key goes to the store and back under a test entry of its own; where no store works
     /// (CI's Linux runner has no Secret Service), it says so instead of pretending to save
     /// into a mock.
     #[test]
     fn the_key_round_trips_or_the_store_says_it_is_unavailable() {
+        let _turn = STORE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let user = format!("{}-test-{}", ApiKey::Soniox.user(), std::process::id());
         match key_state_of(&user) {
             KeyState::Unavailable => {
@@ -145,6 +152,9 @@ mod tests {
 
     #[test]
     fn the_store_check_passes_wherever_a_store_works() {
+        let _turn = STORE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let user = format!("{}-check-{}", ApiKey::Anthropic.user(), std::process::id());
         match key_state_of(&user) {
             KeyState::Unavailable => assert!(check_credential_store().is_err()),

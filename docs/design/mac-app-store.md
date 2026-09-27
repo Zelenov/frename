@@ -89,11 +89,11 @@ frename in the Mac App Store, next to the free ad-hoc-signed download from #15
   TestFlight), so this is as far as CI can test the sandbox.
 - `mac-app-store.yml`: with the secrets, builds the signed `.pkg`, `xcrun altool --validate-app`,
   and with **upload** `xcrun altool --upload-package` with the App Store Connect API key.
-  `release.yml` calls it with upload after every published (non-draft) release, after the
-  `release` job so a Store problem never holds back the downloads; it can also be started by hand.
-  The version is `version.md`'s (`0.77`, which the App Store Connect version record must match);
-  the build number is the UTC date and minute of the day (`260927.874`), so it grows whichever way
-  the workflow started. `altool` remains the supported command-line upload for the App
+  It runs with upload after every successful `Release` run on `main` (`workflow_run`, on the
+  released commit) as a run of its own, so a Store problem never turns a release red or holds
+  back the downloads; it can also be started by hand. The version is `version.md`'s (`0.77`,
+  which the App Store Connect version record must match); the build number is the workflow's run
+  number, which grows however the run started. `altool` remains the supported command-line upload for the App
   Store (only its notarization use ended, [TN3147 via fastlane](https://github.com/fastlane/fastlane/discussions/21347));
   notarization is not used for Store builds.
 
@@ -126,8 +126,8 @@ frename in the Mac App Store, next to the free ad-hoc-signed download from #15
   every way of opening a clip keeps working.
 - **"Data Not Collected"** in the privacy answers: the optional AI actions send data from the
   user's Mac to the service the user chose, under the user's key; the developer gets nothing.
-- **Build number = UTC date and minute**: always increasing across release and manual runs
-  (their run numbers are separate counters), no file to keep.
+- **Build number = this workflow's run number**: always increasing, whether a release or a
+  person started it, no file to keep.
 - **Screenshots**: the README ones at 2560×1600 (the issue asks for these); real Mac captures
   from TestFlight are better later.
 - **`ffmpeg` for subtitles of mkv/m2ts/avi** stays a `PATH` lookup: a sandboxed app cannot run a

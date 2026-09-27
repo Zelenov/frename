@@ -45,12 +45,17 @@ impl BookmarkStore {
         std::fs::read(self.file(folder)).ok()
     }
 
-    /// Save `bookmark` for `folder`, replacing an older one, and forget all but the [`KEEP`]
-    /// newest folders.
+    /// Save `bookmark` for `folder`, replacing an older one, and, when the folder is new, forget
+    /// all but the [`KEEP`] newest folders.
     pub fn save(&self, folder: &Path, bookmark: &[u8]) -> std::io::Result<()> {
         std::fs::create_dir_all(&self.dir)?;
-        std::fs::write(self.file(folder), bookmark)?;
-        self.prune()
+        let file = self.file(folder);
+        let new = !file.exists();
+        std::fs::write(file, bookmark)?;
+        if new {
+            self.prune()?;
+        }
+        Ok(())
     }
 
     fn prune(&self) -> std::io::Result<()> {

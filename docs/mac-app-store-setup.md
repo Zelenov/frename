@@ -120,7 +120,7 @@ never does.
    `main`, tick **Upload the build to App Store Connect** → Run.
 2. The run (about 20 minutes) builds `frename.pkg`, signs it, **validates** it with App Store
    Connect, uploads it, and keeps it as an artifact. Its summary says "signed for the App Store"
-   and the version and build, e.g. `0.77 (260927.874)`. A red "Validate" step prints Apple's
+   and the version and build, e.g. `0.77 (3)`. A red "Validate" step prints Apple's
    reason; send the run link to the agent. From then on every published release runs the same
    workflow by itself.
 3. App Store Connect → frename → **TestFlight**: the build appears after processing (15–60 min).
@@ -166,15 +166,17 @@ fixes it and you run step 8 again (a new build number is automatic).
 
 ## 11. Later versions
 
-After a GitHub release (the version in `version.md` is published), the release workflow builds,
-signs and uploads the Store build by itself (its last job, "mac-app-store"):
+After a GitHub release (the version in `version.md` is published), the **Mac App Store**
+workflow starts by itself and builds, signs and uploads the Store build. (Until the step 7
+secrets exist, it builds only an unsigned `.pkg` and says so in its summary; that is expected.)
 
 1. Wait for the build in App Store Connect → TestFlight (about an hour after the release).
 2. App Store Connect → frename → **+ Version** → exactly the release's version (e.g. `0.78`) →
    What's New (the newest `version.md` block) → select the new build → Add for Review → Submit.
 
-If that job failed (e.g. an expired certificate), fix the secret and run Actions → **Mac App
-Store** → Run workflow on `main` with upload ticked.
+If that run failed (e.g. an expired certificate), fix the secret and run Actions → **Mac App
+Store** → Run workflow on `main` with upload ticked. A failed Store run never marks the release
+itself as failed.
 
 Once a year: renew the membership, then the certificates and profile (steps 3–4), and update the
 `MAS_CERTIFICATES_P12`, `MAS_CERTIFICATES_PASSWORD` and `MAS_PROVISIONING_PROFILE` secrets.
