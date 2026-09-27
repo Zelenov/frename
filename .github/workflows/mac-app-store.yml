@@ -24,7 +24,8 @@ jobs:
   build:
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
+       && github.event.workflow_run.event == 'push')
     runs-on: macos-14
     env:
       # After a release: the released commit, uploaded. By hand: the chosen branch, as ticked.
@@ -56,8 +57,9 @@ jobs:
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           # A new, higher build number for every run (App Store Connect refuses one it has seen):
-          # this workflow's run number, which grows whether a release or a person started it.
-          BUILD_NUMBER="${{ github.run_number }}"
+          # this workflow's run number (grows whether a release or a person started it), then the
+          # attempt, for "Re-run jobs".
+          BUILD_NUMBER="${{ github.run_number }}.${{ github.run_attempt }}"
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
           echo "Version $VERSION, build $BUILD_NUMBER"
 
@@ -156,8 +158,10 @@ jobs:
           fi
           if [ "${{ steps.upload.outcome }}" = success ]; then
             uploaded="uploaded to App Store Connect"
-          elif [ "$UPLOAD" = true ]; then
+          elif [ "$UPLOAD" = true ] && { [ -z "$MAS_CERTIFICATES_P12" ] || [ -z "$APP_STORE_CONNECT_API_KEY_ID" ]; }; then
             uploaded="NOT uploaded (needs the signing and APP_STORE_CONNECT_* secrets)"
+          elif [ "$UPLOAD" = true ]; then
+            uploaded="NOT uploaded: see the red step in this run"
           else
             uploaded="not uploaded (not asked)"
           fi

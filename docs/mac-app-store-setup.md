@@ -120,8 +120,8 @@ never does.
    `main`, tick **Upload the build to App Store Connect** → Run.
 2. The run (about 20 minutes) builds `frename.pkg`, signs it, **validates** it with App Store
    Connect, uploads it, and keeps it as an artifact. Its summary says "signed for the App Store"
-   and the version and build, e.g. `0.77 (3)`. A red "Validate" step prints Apple's
-   reason; send the run link to the agent. From then on every published release runs the same
+   and the version and build, e.g. `0.77 (3.1)`. Any red step prints the reason (Apple's, or
+   which secret is missing); send the run link to the agent. From then on every published release runs the same
    workflow by itself.
 3. App Store Connect → frename → **TestFlight**: the build appears after processing (15–60 min).
    Answer the export question if asked: frename uses only standard encryption for HTTPS
@@ -167,8 +167,11 @@ fixes it and you run step 8 again (a new build number is automatic).
 ## 11. Later versions
 
 After a GitHub release (the version in `version.md` is published), the **Mac App Store**
-workflow starts by itself and builds, signs and uploads the Store build. (Until the step 7
-secrets exist, it builds only an unsigned `.pkg` and says so in its summary; that is expected.)
+workflow starts by itself (Actions → **Mac App Store**, the run right after the Release run) and
+builds, signs and uploads the Store build; its summary reads e.g.
+`0.78 (12.1): signed for the App Store; uploaded to App Store Connect.` (Until the step 7 secrets
+exist, it builds only an unsigned `.pkg` and says so; that is expected.) Only a release made by
+merging to `main` starts it, not a Release run started by hand.
 
 1. Wait for the build in App Store Connect → TestFlight (about an hour after the release).
 2. App Store Connect → frename → **+ Version** → exactly the release's version (e.g. `0.78`) →

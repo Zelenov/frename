@@ -89,11 +89,11 @@ frename in the Mac App Store, next to the free ad-hoc-signed download from #15
   TestFlight), so this is as far as CI can test the sandbox.
 - `mac-app-store.yml`: with the secrets, builds the signed `.pkg`, `xcrun altool --validate-app`,
   and with **upload** `xcrun altool --upload-package` with the App Store Connect API key.
-  It runs with upload after every successful `Release` run on `main` (`workflow_run`, on the
-  released commit) as a run of its own, so a Store problem never turns a release red or holds
+  It runs with upload after every successful `Release` run started by a push to `main`
+  (`workflow_run`, on the released commit; a Release re-run by hand publishes nothing new) as a run of its own, so a Store problem never turns a release red or holds
   back the downloads; it can also be started by hand. The version is `version.md`'s (`0.77`,
   which the App Store Connect version record must match); the build number is the workflow's run
-  number, which grows however the run started. `altool` remains the supported command-line upload for the App
+  number and attempt (`12.1`), which grow however the run started. `altool` remains the supported command-line upload for the App
   Store (only its notarization use ended, [TN3147 via fastlane](https://github.com/fastlane/fastlane/discussions/21347));
   notarization is not used for Store builds.
 
