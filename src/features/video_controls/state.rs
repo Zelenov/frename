@@ -198,7 +198,7 @@ mod tests {
             Some(Message::TakeScreenshot)
         ));
         assert!(key(Named::F12, shift).is_none());
-        assert!(key(Named::F2, keyboard::Modifiers::CTRL).is_none());
+        assert!(key(Named::F2, keyboard::Modifiers::COMMAND).is_none());
     }
 
     #[test]
