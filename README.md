@@ -14,11 +14,10 @@ This tool is for the hour *before* the edit begins.
 
 Open a folder of videos. Watch each clip. Tag what you see. When you move to the next clip, the one you leave is renamed with its tags.
 
-**File name format:** `tag1.tag2.name.in_HH_MM_SS.out_HH_MM_SS.mp4`
+**File name format:** `tag1.tag2.name.mp4`
 
 Tags become part of the file name, so your file manager, editing app and sync tools all see them.
 Nothing is locked inside frename.
-The in/out part is there only when you mark a segment.
 
 ---
 
@@ -149,8 +148,11 @@ The progress bar shows what you have noted about a clip:
 - **Frames:** `F12` or 📷 saves the current frame as a JPEG next to the video
   (`clip.mp4.snap.00-01-05-250.jpg`) and shows `Frame saved`.
 - **In and out points:** `[` and `]` mark the usable segment, highlighted on the progress bar.
-  They are saved in the file name (`in_00_01_05`, `out_00_02_10`, whole seconds) or, if you choose
-  in Settings, inside the video as a marker that Premiere Pro turns into a subclip.
+  By default they are saved inside the video as a marker that Premiere Pro turns into a subclip.
+  Settings can keep them in the comment instead, as its first line
+  (`In/Out: 00:01:05.250 – 00:02:10.000`), which the comment box does not show: change it with
+  `[` and `]`. Older versions could put them in the file name (`in_00_01_05`); frename no longer
+  reads them there, and the batch action **Move in/out points out of file names** moves them.
 - **Comments:** free text per clip. By default it is saved inside the video, where Premiere Pro
   shows it in the Description column and finds it by search. Settings can keep it in a
   `.comment.txt` next to the video instead. The file list shows the first line of each comment.
@@ -160,8 +162,8 @@ The progress bar shows what you have noted about a clip:
   and ⊡ brings the tags back.
 
 Some formats, such as mkv, cannot hold comments, in/out points or markers inside them; for those,
-frename keeps comments and in/out points in `.comment.txt` and the file name whatever Settings say,
-and 📍 is off. mp4 and mov hold everything.
+frename keeps the comment, with the in/out line, in `.comment.txt` whatever Settings say, and 📍 is
+off. mp4 and mov hold everything.
 
 `.comment.txt` files and subtitles are renamed together with their video.
 
@@ -191,7 +193,10 @@ Click ☑ to check files in the list (All / Invert) and run one action on all of
 and Cancel. Each file then shows a green or red check box. Actions:
 
 - move comments between the video and `.comment.txt` files;
-- move in/out points between the file name and the video;
+- move in/out points between the comment and the video;
+- move in/out points out of file names written by older versions into the comment or the video,
+  as set in Settings (a file that already has in/out points stored keeps them, and the report
+  lists it);
 - turn comment lines that start with a time (`03:24 — Take 3 — nice light`, `0:41-0:47 — Lion`)
   into markers, or copy the markers into the comment as such lines. What follows the name after
   a second ` — ` or ` -- ` (not a plain ` - `) goes into the marker's comment, which Premiere
@@ -246,7 +251,7 @@ The ⚙ button opens Settings:
 - put a space after each tag in file names (`Food. Goat. clip.mp4`);
 - where comments are kept (inside the video or `.comment.txt`), and the name of the "Commented"
   tag, or none;
-- where in/out points are kept (file name or inside the video);
+- where in/out points are kept (in the comment or inside the video);
 - updates: **Check for updates**, then **Update and restart** when a newer version is out.
   frename also checks once a day by itself (you can turn that off) and puts a dot on ⚙ when
   an update is ready; nothing is downloaded until you click;
