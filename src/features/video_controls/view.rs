@@ -8,6 +8,8 @@ use super::{Message, VideoControlsState};
 use crate::theme;
 
 const CONTROLS_HEIGHT: f32 = 32.0;
+/// ↺ and ↻ sit side by side as one pair, a little narrower than the other buttons.
+const ROTATE_BUTTON_WIDTH: f32 = 24.0;
 
 /// Render the video player controls.
 /// `position_secs` is the live playback position read from the video at view time.
@@ -182,7 +184,7 @@ pub fn view(
                         .center_y(iced::Length::Fill),
                 )
                 .on_press_maybe(can_rotate.then_some(Message::Rotate(quarter_turns)))
-                .width(CONTROLS_HEIGHT)
+                .width(ROTATE_BUTTON_WIDTH)
                 .height(iced::Length::Fill)
                 .padding(0)
                 .style(theme::icon_button_style(can_rotate)),
@@ -198,6 +200,12 @@ pub fn view(
     let rotate_left_btn = rotate_btn("↺", -1, fl!("video-controls-rotate-left"));
     let rotate_right_btn = rotate_btn("↻", 1, fl!("video-controls-rotate-right"));
 
+    // The two turns are one tight pair, and the row is packed a little closer than before
+    // they came, so the volume still fits the default player width.
+    let rotate_pair: Element<'_, Message> = row![rotate_left_btn, rotate_right_btn]
+        .height(iced::Length::Fill)
+        .into();
+
     let controls = row![
         back10_btn,
         play_pause_btn,
@@ -206,14 +214,12 @@ pub fn view(
         seg_out_btn,
         screenshot_btn,
         add_marker_btn,
-        rotate_left_btn,
-        rotate_right_btn,
+        rotate_pair,
         bar,
-        Space::new().width(8),
         volume_icon,
         volume_bar
     ]
-    .spacing(8)
+    .spacing(4)
     .height(iced::Length::Fill)
     .align_y(iced::Alignment::Center);
 

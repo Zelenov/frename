@@ -19,6 +19,12 @@ use crate::features::{batch, folder, folder_workspace, media_viewer, media_viewe
 /// with the scenario's few files, so 3 s leaves a wide margin even on a slow runner.
 const SETTLE: Duration = Duration::from_secs(3);
 
+/// [`SETTLE`] for a scenario that turns the clip: short enough to catch the turn's note.
+const ROTATE_SETTLE: Duration = Duration::from_millis(1300);
+
+/// How long a `batch_run` scenario waits before it runs the job: the checks land by then.
+const BATCH_RUN_DELAY: Duration = Duration::from_secs(1);
+
 /// A demo that has not produced its screenshot by then has failed.
 const TIMEOUT: Duration = Duration::from_secs(90);
 
@@ -29,6 +35,9 @@ pub enum Message {
     Captured(window::Screenshot),
     /// The demo took too long.
     TimedOut,
+    /// A step for the workspace that has to come after the others have landed: running a
+    /// batch job needs the checks that "check all" sends on its own way. Handled by the app.
+    Step(folder_workspace::Message),
 }
 
 /// A demo in progress.
@@ -77,9 +86,27 @@ impl DemoRun {
         // The screenshot re-renders what was last drawn. A message would rebuild the UI first,
         // and a text editor's rebuilt text is not in the last drawing, so the comment box would
         // come out empty: chain the screenshot straight onto the wait, with no message between.
-        let capture = Task::future(async { tokio::time::sleep(SETTLE).await })
+        // A turn shows a note in the controls bar for 2 s: take the shot while it is there (the
+        // reopened clip of a demo is small and ready well before).
+        // A batch job runs once the checks are in, and the shot waits for its report.
+        let run_batch = self.batch && self.scenario.batch_run;
+        let settle = if self.scenario.rotate != 0 {
+            ROTATE_SETTLE
+        } else if run_batch {
+            BATCH_RUN_DELAY + SETTLE
+        } else {
+            SETTLE
+        };
+        let capture = Task::future(async move { tokio::time::sleep(settle).await })
             .then(move |()| window::screenshot(main_window))
             .map(Message::Captured);
+        let capture = if run_batch {
+            let run = Task::future(async { tokio::time::sleep(BATCH_RUN_DELAY).await })
+                .map(|()| Message::Step(folder_workspace::Message::Batch(batch::Message::Run)));
+            Task::batch([run, capture])
+        } else {
+            capture
+        };
         Some((steps(&self.scenario, self.batch, self.ai), capture))
     }
 
@@ -97,6 +124,8 @@ impl DemoRun {
                 }
             }
             Message::TimedOut => self.fail("the video did not get ready in time"),
+            // The app hands it to the workspace before it gets here.
+            Message::Step(_) => Task::none(),
         }
     }
 
@@ -123,6 +152,9 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
     if scenario.marker_list {
         steps.push(video(video::Message::ShowMarkerList));
     }
+    if scenario.rotate != 0 {
+        steps.push(folder_workspace::Message::RotateVideo(scenario.rotate));
+    }
     if batch {
         steps.push(folder_workspace::Message::Folder(
             folder::Message::SetBatchMode(true),
@@ -130,9 +162,23 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
         steps.push(folder_workspace::Message::Folder(
             folder::Message::ToggleAllChecked,
         ));
-        if ai {
+        let named = scenario.batch_action.as_deref().and_then(|name| {
+            let found = batch::Action::ALL
+                .into_iter()
+                .find(|action| action.log_id() == name);
+            if found.is_none() {
+                log::warn!("demo: no batch action is named {name:?}");
+            }
+            found
+        });
+        let action = if ai {
+            Some(batch::Action::DescribeAi)
+        } else {
+            named
+        };
+        if let Some(action) = action {
             steps.push(folder_workspace::Message::Batch(
-                batch::Message::SelectAction(batch::Action::DescribeAi),
+                batch::Message::SelectAction(action),
             ));
         }
     }
@@ -312,6 +358,26 @@ mod tests {
              panels = [1, 1]\n[[files]]\nfrom = \"a.mp4\"\nname = \"a.mp4\"\n",
         )
         .unwrap()
+    }
+
+    #[test]
+    fn a_scenario_can_turn_the_clip_and_run_a_named_batch_action() {
+        let mut turned = scenario();
+        turned.rotate = 1;
+        assert!(matches!(
+            steps(&turned, false, false).last(),
+            Some(folder_workspace::Message::RotateVideo(1))
+        ));
+
+        let mut run = scenario();
+        run.batch_action = Some("Rotate videos".to_string());
+        let batch_steps = steps(&run, true, false);
+        assert!(matches!(
+            batch_steps.last(),
+            Some(folder_workspace::Message::Batch(
+                batch::Message::SelectAction(batch::Action::Rotate)
+            ))
+        ));
     }
 
     #[test]

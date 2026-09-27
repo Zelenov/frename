@@ -113,6 +113,27 @@ pub fn view<'a>(
                 .into(),
             None => video_area.into(),
         };
+        // A short note (`Frame saved`, `Rotated: 90° right`) over the bottom of the picture: the
+        // controls bar has no room left for one in a player of the default width.
+        let video_area: Element<'_, Message> = match state.notice() {
+            Some(notice) => stack![
+                video_area,
+                container(
+                    container(text(notice).size(13).color(theme::TEXT))
+                        .padding([4, 10])
+                        .style(theme::panel_container_style),
+                )
+                .padding(8)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .align_left(Length::Fill)
+                .align_bottom(Length::Fill),
+            ]
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into(),
+            None => video_area,
+        };
 
         let cue_list_btn: Option<Element<'_, Message>> =
             subtitles.map(|_| cue_list_button(state.show_cue_list()));
@@ -172,13 +193,6 @@ pub fn view<'a>(
         )
         .map(Message::Controls);
 
-        let notice: Option<Element<'_, Message>> = state.notice().map(|notice| {
-            container(text(notice).size(12).color(theme::TEXT_SOFT))
-                .padding([0, 8])
-                .center_y(Length::Fill)
-                .into()
-        });
-
         let fullscreen_icon = if is_fullscreen { "⊡" } else { "⛶" };
         let fullscreen_btn: Element<'_, Message> = tooltip(
             button(
@@ -198,7 +212,6 @@ pub fn view<'a>(
 
         let controls = container(
             row![controls_inner]
-                .push(notice)
                 // Same order as the tabs over the side list: Subtitles, Markers.
                 .push(cue_list_btn)
                 .push(marker_list_btn)

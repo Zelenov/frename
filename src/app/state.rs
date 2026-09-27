@@ -336,6 +336,10 @@ impl FrenameApp {
                 }
                 Task::batch([load, crate::demo::DemoRun::start().map(Message::Demo)])
             }
+            // A scenario step that has to wait for the others to land (see `demo::Message::Step`).
+            Message::Demo(crate::demo::Message::Step(step)) => {
+                self.update(Message::FolderWorkspace(step))
+            }
             Message::Demo(msg) => match &self.demo {
                 Some(demo) => demo.update(msg).map(Message::Demo),
                 None => Task::none(),

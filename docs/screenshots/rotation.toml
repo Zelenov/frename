@@ -1,0 +1,22 @@
+# Rotation (#66): the open clip turned 90° right, as Ctrl+Alt+→ does, with the controls bar's
+# note over the picture. Not a README image; for looking at the feature (`frename --demo`).
+# `--batch` shows the "Rotate videos" action selected; add `batch_run = true` for its report.
+source = "../../tests/folder"
+open = "pick.wide.MVI_0701.mp4"
+seek = 2.0
+window = [1280, 720]
+panels = [460, 320]
+rotate = 1
+batch_action = "Rotate videos"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_0701.mp4"
+
+[[files]]
+from = "rotated-90.mp4"
+name = "review.people.MVI_0702.mp4"
+
+[[files]]
+from = "Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm"
+name = "b-roll.city.MVI_0703.webm"
