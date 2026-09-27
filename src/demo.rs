@@ -41,20 +41,32 @@ pub struct DemoRun {
     batch: bool,
     /// Show the AI description: its segments, or in batch mode the "Describe with AI" action.
     ai: bool,
+    /// Capture the settings window instead of the main one.
+    settings: bool,
+    /// The captured window's size in pixels at scale 1, checked before saving.
+    capture_size: (u32, u32),
     video_ready: bool,
 }
 
 impl DemoRun {
     /// `work` is the throwaway folder; `main` removes it after the app has exited.
-    pub fn new(scenario: DemoScenario, out: PathBuf, work: PathBuf, batch: bool, ai: bool) -> Self {
+    pub fn new(scenario: DemoScenario, out: PathBuf, work: PathBuf, args: &DemoArgs) -> Self {
+        let [width, height] = scenario.window;
         Self {
             scenario,
             out,
             work,
-            batch,
-            ai,
+            batch: args.batch,
+            ai: args.ai,
+            settings: args.settings,
+            capture_size: (width, height),
             video_ready: false,
         }
+    }
+
+    /// Whether the demo captures the settings window (the app opens it when the video is ready).
+    pub fn captures_settings(&self) -> bool {
+        self.settings
     }
 
     /// Start the watchdog; call once the main window is open.
@@ -65,30 +77,34 @@ impl DemoRun {
         })
     }
 
-    /// The steps to take when the video is ready: the first time, set up the scenario's state
-    /// and schedule the screenshot of `main_window`; afterwards nothing.
-    pub fn video_ready(
-        &mut self,
-        main_window: window::Id,
-    ) -> Option<(Vec<folder_workspace::Message>, Task<Message>)> {
+    /// The steps to take when the video is ready: the first time, set up the scenario's state;
+    /// afterwards nothing. The app then opens the window to capture and calls [`Self::capture`].
+    pub fn video_ready(&mut self) -> Option<Vec<folder_workspace::Message>> {
         if std::mem::replace(&mut self.video_ready, true) {
             return None;
+        }
+        Some(steps(&self.scenario, self.batch, self.ai))
+    }
+
+    /// Schedule the screenshot of `window`. `size` is its size in logical pixels, checked at
+    /// scale 1; `None` for the main window, which has the scenario's size.
+    pub fn capture(&mut self, window: window::Id, size: Option<(u32, u32)>) -> Task<Message> {
+        if let Some(size) = size {
+            self.capture_size = size;
         }
         // The screenshot re-renders what was last drawn. A message would rebuild the UI first,
         // and a text editor's rebuilt text is not in the last drawing, so the comment box would
         // come out empty: chain the screenshot straight onto the wait, with no message between.
-        let capture = Task::future(async { tokio::time::sleep(SETTLE).await })
-            .then(move |()| window::screenshot(main_window))
-            .map(Message::Captured);
-        Some((steps(&self.scenario, self.batch, self.ai), capture))
+        Task::future(async { tokio::time::sleep(SETTLE).await })
+            .then(move |()| window::screenshot(window))
+            .map(Message::Captured)
     }
 
     /// Handle a demo message.
     pub fn update(&self, message: Message) -> Task<Message> {
         match message {
             Message::Captured(shot) => {
-                let [width, height] = self.scenario.window;
-                match save_png(&shot, (width, height), &self.out) {
+                match save_png(&shot, self.capture_size, &self.out) {
                     Ok(()) => {
                         log::info!("demo: saved {}", self.out.display());
                         iced::exit()
@@ -156,7 +172,8 @@ fn save_png(shot: &window::Screenshot, expected: (u32, u32), path: &Path) -> Res
         .map_err(|e| format!("cannot save {}: {e}", path.display()))
 }
 
-/// What `--demo <scenario> --out <png> [--batch] [--mono] [--ai] [--lang <code>]` asks for.
+/// What `--demo <scenario> --out <png> [--batch] [--mono] [--ai] [--settings] [--lang <code>]`
+/// asks for.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DemoArgs {
     pub scenario: PathBuf,
@@ -167,6 +184,8 @@ pub struct DemoArgs {
     pub mono: bool,
     /// Show the AI description (see [`DemoRun`]).
     pub ai: bool,
+    /// Capture the settings window instead of the main one.
+    pub settings: bool,
     /// The UI language setting: `en` unless given, so screenshots never follow the renderer's
     /// OS language; `--lang ""` follows it (System).
     pub lang: String,
@@ -197,6 +216,7 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
             batch: args.iter().any(|a| a == "--batch"),
             mono: args.iter().any(|a| a == "--mono"),
             ai: args.iter().any(|a| a == "--ai"),
+            settings: args.iter().any(|a| a == "--settings"),
             lang,
         })
     }))
@@ -247,8 +267,7 @@ pub fn prepare(args: &DemoArgs, work: &Path) -> Result<DemoRun, String> {
         scenario,
         args.out.clone(),
         work.to_path_buf(),
-        args.batch,
-        args.ai,
+        args,
     ))
 }
 
@@ -275,12 +294,21 @@ mod tests {
                 batch: false,
                 mono: false,
                 ai: false,
+                settings: false,
                 lang: "en".to_string(),
             }))
         );
         assert_eq!(
             demo_args(&args(&[
-                "frename", "--batch", "--out", "a.png", "--demo", "a.toml", "--mono", "--lang",
+                "frename",
+                "--batch",
+                "--out",
+                "a.png",
+                "--demo",
+                "a.toml",
+                "--mono",
+                "--settings",
+                "--lang",
                 "ru"
             ])),
             Some(Ok(DemoArgs {
@@ -289,6 +317,7 @@ mod tests {
                 batch: true,
                 mono: true,
                 ai: false,
+                settings: true,
                 lang: "ru".to_string(),
             }))
         );

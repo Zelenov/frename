@@ -14,7 +14,7 @@ use crate::features::{
     media_viewer::video as media_viewer_video, settings, tag_panel, updates,
 };
 use crate::tag_colors::TagPalette;
-use frename_core::ai::key::{self as api_key, ApiKey};
+use frename_core::ai::key::{self as api_key, ApiKey, KeyState};
 use frename_core::{AppDatabase, AppStateStore, WindowGeometry};
 
 use super::Message;
@@ -574,19 +574,18 @@ impl FrenameApp {
                     .folder_workspace
                     .update(msg)
                     .map(Message::FolderWorkspace);
-                let main_window = self.main_window;
                 let demo_steps = match self.demo.as_mut() {
-                    Some(demo) if video_ready => demo.video_ready(main_window),
+                    Some(demo) if video_ready => demo.video_ready(),
                     _ => None,
                 };
-                if let Some((steps, capture)) = demo_steps {
+                if let Some(steps) = demo_steps {
                     let steps = steps
                         .into_iter()
                         .map(|step| Task::done(Message::FolderWorkspace(step)));
                     return Task::batch(
                         std::iter::once(task)
                             .chain(steps)
-                            .chain([capture.map(Message::Demo)]),
+                            .chain([self.demo_capture()]),
                     );
                 }
                 // Closing waits for a batch job to stop; the file it reopens is unloaded then.
@@ -636,6 +635,23 @@ impl FrenameApp {
     }
 
     /// Open the settings window, or focus it when it is already open.
+    /// The demo's screenshot: of the main window, or of the settings window, opened for it.
+    fn demo_capture(&mut self) -> Task<Message> {
+        let captures_settings = self.demo.as_ref().is_some_and(|d| d.captures_settings());
+        let (open, window, size) = if captures_settings {
+            let open = self.open_settings_window();
+            let id = self.settings_window.unwrap_or(self.main_window);
+            let size = SETTINGS_WINDOW_SIZE;
+            (open, id, Some((size.width as u32, size.height as u32)))
+        } else {
+            (Task::none(), self.main_window, None)
+        };
+        match self.demo.as_mut() {
+            Some(demo) => Task::batch([open, demo.capture(window, size).map(Message::Demo)]),
+            None => open,
+        }
+    }
+
     fn open_settings_window(&mut self) -> Task<Message> {
         self.open_settings_window_then(Task::none())
     }
@@ -648,10 +664,29 @@ impl FrenameApp {
         }
         // Whether a key is saved is read each time the window opens, not at start-up: reading
         // may unlock a keyring, and a keyring locked before may be open now.
-        let read_key = Task::batch(
-            [ApiKey::Anthropic, ApiKey::Soniox]
-                .map(|which| key_task(which, self.settings.begin_key_request(which), || Ok(()))),
-        );
+        let read_key = if self.demo.is_some() {
+            // A demo never reads the renderer's own keys: Anthropic shows as saved, Soniox as
+            // missing, so one screenshot has both states (and asks no server for languages).
+            Task::batch([
+                (ApiKey::Anthropic, KeyState::Saved),
+                (ApiKey::Soniox, KeyState::Missing),
+            ]
+            .map(|(which, state)| {
+                Task::done(Message::Settings(settings::Message::Key(
+                    which,
+                    settings::KeyMessage::State {
+                        request: self.settings.begin_key_request(which),
+                        result: Ok(state),
+                    },
+                )))
+            }))
+        } else {
+            Task::batch(
+                [ApiKey::Anthropic, ApiKey::Soniox].map(|which| {
+                    key_task(which, self.settings.begin_key_request(which), || Ok(()))
+                }),
+            )
+        };
         let (id, open) = window::open(window::Settings {
             size: SETTINGS_WINDOW_SIZE,
             position: window::Position::Centered,
