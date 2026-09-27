@@ -3,9 +3,8 @@
 use frename_core::{File, FileKind};
 use iced::{Subscription, Task};
 
-use super::image::ImageViewerState;
 use super::video::VideoPlayerState;
-use super::{image, video, Message};
+use super::{video, Message};
 
 /// Which media type is currently active in the left panel.
 #[derive(Default)]
@@ -13,52 +12,41 @@ pub(super) enum ActiveMedia {
     #[default]
     None,
     Video,
-    Image,
     /// A file is selected but its type is not supported for preview.
     Unsupported,
 }
 
-/// Unified media viewer: routes video and image files to the correct sub-feature.
+/// Media viewer: opens videos in the video player, shows a placeholder for anything else.
 /// FolderWorkspace holds one `MediaViewerState` and calls `open()` for every file.
 #[derive(Default)]
 pub struct MediaViewerState {
     pub(super) active: ActiveMedia,
     pub(super) video: VideoPlayerState,
-    pub(super) image: ImageViewerState,
 }
 
 impl MediaViewerState {
-    /// Open a file. Routes internally to the video player or image viewer based on `file.kind()`.
+    /// Open a file. Videos go to the video player based on `file.kind()`.
     /// FolderWorkspace must ensure a video unload has completed before calling this for
     /// the next file (when `needs_unload_before_rename()` was true).
     pub fn open(&mut self, file: &File) -> Task<Message> {
         match file.kind() {
             FileKind::Video => {
                 self.active = ActiveMedia::Video;
-                self.image.unload();
                 self.video
                     .load_video(frename_core::FileTagger::disk_path(file.file_path()))
                     .map(Message::Video)
             }
-            FileKind::Image => {
-                self.active = ActiveMedia::Image;
-                // video is already idle — caller ensured this if needed
-                self.image
-                    .load_image(frename_core::FileTagger::disk_path(file.file_path()))
-                    .map(Message::Image)
-            }
             FileKind::Other => {
                 self.active = ActiveMedia::Unsupported;
-                self.image.unload();
                 Task::none()
             }
         }
     }
 
-    /// Returns `true` when a media file (video or image) is currently being shown.
+    /// Returns `true` when a video is currently being shown.
     /// Used to guard fullscreen toggle: no point going fullscreen with nothing to show.
     pub fn is_previewable(&self) -> bool {
-        matches!(self.active, ActiveMedia::Video | ActiveMedia::Image)
+        matches!(self.active, ActiveMedia::Video)
     }
 
     /// The playhead of the open video in milliseconds; `None` when no video is shown.
@@ -72,7 +60,7 @@ impl MediaViewerState {
     }
 
     /// Returns `true` when a GStreamer video is active and must be unloaded before the
-    /// previous file can be renamed. Images hold no file handle so no unload is needed.
+    /// previous file can be renamed.
     pub fn needs_unload_before_rename(&self) -> bool {
         matches!(self.active, ActiveMedia::Video) && self.video.is_active()
     }
@@ -100,11 +88,7 @@ impl MediaViewerState {
             Message::Video(video::Message::ScreenshotTaken(position_ms, jpeg)) => {
                 Task::done(Message::ScreenshotTaken(position_ms, jpeg))
             }
-            Message::Image(image::Message::ToggleFullscreen) => {
-                Task::done(Message::ToggleFullscreen)
-            }
             Message::Video(vm) => self.video.update(vm).map(Message::Video),
-            Message::Image(im) => self.image.update(im).map(Message::Image),
 
             Message::Unload => match self.active {
                 ActiveMedia::Video => {
@@ -113,9 +97,8 @@ impl MediaViewerState {
                         .update(video::Message::Unload)
                         .map(Message::Video)
                 }
-                // Images, unsupported, and idle state unload synchronously.
-                ActiveMedia::Image | ActiveMedia::Unsupported | ActiveMedia::None => {
-                    self.image.unload();
+                // Unsupported and idle state unload synchronously.
+                ActiveMedia::Unsupported | ActiveMedia::None => {
                     self.active = ActiveMedia::None;
                     Task::done(Message::Unloaded)
                 }
@@ -132,13 +115,10 @@ impl MediaViewerState {
     }
 
     /// Subscriptions: only the video player needs periodic ticks and keyboard shortcuts.
-    /// When an image is displayed subscriptions are suppressed automatically.
     pub fn subscription(&self) -> Subscription<Message> {
         match self.active {
             ActiveMedia::Video => self.video.subscription().map(Message::Video),
-            ActiveMedia::Image | ActiveMedia::Unsupported | ActiveMedia::None => {
-                Subscription::none()
-            }
+            ActiveMedia::Unsupported | ActiveMedia::None => Subscription::none(),
         }
     }
 }

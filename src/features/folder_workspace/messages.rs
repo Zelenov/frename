@@ -39,7 +39,7 @@ pub enum Message {
     FileUpdated { id: FileId, snapshot: FileSnapshot },
     /// User selected a file in the list (from folder view)
     Folder(folder::Message),
-    /// Media viewer messages (video + image)
+    /// Media viewer messages
     MediaViewer(media_viewer::Message),
     /// Tag panel messages
     TagPanel(tag_panel::Message),

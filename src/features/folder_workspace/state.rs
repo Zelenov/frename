@@ -254,7 +254,7 @@ impl FolderWorkspace {
             Message::Undo => self.perform_undo(),
             Message::Redo => self.perform_redo(),
             Message::ToggleMediaFullscreen => {
-                // Only toggle when media is active (video or image).
+                // Only toggle when a video is shown.
                 if self.media_viewer.is_previewable() {
                     self.media_fullscreen = !self.media_fullscreen;
                 }
