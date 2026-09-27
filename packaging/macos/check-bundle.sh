@@ -30,7 +30,7 @@ while IFS= read -r -d '' file; do
   done < <(otool -L "$file" | tail -n +2 | awk '{print $1}')
   while read -r rpath; do
     case "$rpath" in
-      @executable_path/* | @loader_path/*) ;;
+      @executable_path | @executable_path/* | @loader_path | @loader_path/*) ;;
       *)
         echo "RPATH $rpath (in ${file#"$app"/})"
         problems=$((problems + 1))
