@@ -105,11 +105,11 @@ mod sandbox {
     }
 }
 
-#[cfg(test)]
+// Outside the Store build only: in it `refused` asks the real sandbox.
+#[cfg(all(test, not(all(target_os = "macos", feature = "store"))))]
 mod tests {
     use super::*;
 
-    #[cfg(not(all(target_os = "macos", feature = "store")))]
     #[test]
     fn outside_the_sandbox_no_folder_is_refused() {
         assert!(!refused(Path::new("/no such folder")));
