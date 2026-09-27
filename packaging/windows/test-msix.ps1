@@ -164,7 +164,11 @@ db.close()
             $outcome = if ($node) { $node.InnerText.Trim() } else { $test.GetAttribute("RESULT") }
             Write-Host ("{0,-8} {1}" -f $outcome, $test.GetAttribute("NAME"))
             if ($outcome -ne "PASS") {
-                $test.SelectNodes(".//MESSAGE") | ForEach-Object { Write-Host "         $($_.InnerText)" }
+                # A message's text is its TEXT attribute or its content, depending on the kit.
+                $test.SelectNodes(".//MESSAGE") | ForEach-Object {
+                    $message = if ($_.GetAttribute("TEXT")) { $_.GetAttribute("TEXT") } else { $_.InnerText.Trim() }
+                    if ($message) { Write-Host "         $message" }
+                }
             }
         }
         Write-Host "Windows App Certification Kit: $overall"
