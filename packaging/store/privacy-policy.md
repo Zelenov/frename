@@ -20,12 +20,14 @@ send data off your computer, only to the service they use, and only with an API 
   (`.comment.txt`, `.srt`, `.frename`), in the folders you open.
 - **Settings and history**: the folders you opened recently, the last clip in each, window size,
   volume and your choices in Settings. They are kept in a local database (`frename.db`) in
-  `%LocalAppData%\frename-store` (Microsoft Store), `%LocalAppData%\frename` (installed version),
-  the portable folder, or `~/.local/share/frename` (Linux).
+  the Microsoft Store app's private storage (Windows keeps it under
+  `%LocalAppData%\Packages\`, in the app's `LocalCache\Local\frename-store` folder),
+  `%LocalAppData%\frename` (installed version), the portable folder, or
+  `~/.local/share/frename` (Linux).
 - **A log file** (`frename_debug.log`) next to that database, recreated at every start. It holds
   technical messages such as file paths and errors. It is never sent anywhere.
 - **API keys** you enter in Settings, kept in your operating system's password store (Windows
-  Credential Manager, macOS Keychain, or a keyring on Linux), never in files, logs or the database.
+  Credential Manager, or a keyring on Linux), never in files, logs or the database.
 
 ## What leaves your computer, and when
 
@@ -37,8 +39,9 @@ what it will send and about what it costs before you start:
 | **Describe with AI** | frames taken from each selected video (one every 2 seconds, at most 60 per clip) and its subtitles (`.srt`), if it has them | [Anthropic](https://www.anthropic.com) (the Claude API) | your own Anthropic API key |
 | **Generate subtitles** | the audio track of each selected video, under the video's file name (which holds its tags) | [Soniox](https://soniox.com) (speech-to-text API) | your own Soniox API key |
 
-One more request, without any video data: while a Soniox key is saved, opening Settings asks
-Soniox for its list of supported languages, sending only your key.
+Two more requests to Soniox, without any video data, while a Soniox key is saved: opening Settings
+asks for its list of supported languages, and the Generate subtitles panel asks for your account's
+usage of the last 30 days to show the price. Both send only your key.
 
 The request goes directly from your computer to that service over an encrypted connection (HTTPS),
 under your API key and your account with that service. The developer of frename never sees it.
@@ -67,9 +70,10 @@ from anyone.
 
 ## Removing your data
 
-Uninstalling the Microsoft Store app or the installed version removes its database and log (the
-Store app keeps its own copy, in `%LocalAppData%\frename-store`; on its first start it copies the
-settings of an installed version, if there is one, and leaves that version's data as it was). The
+Uninstalling the Microsoft Store app or the installed version removes its database and log. The
+Store app keeps its own copy: on its first start it copies the settings of an installed version, if
+there is one, and leaves that version's data as it was; settings of a portable version can be
+imported in Settings. The
 portable version keeps its data in its own folder, which you delete. API keys can be removed in
 Settings (or in Windows Credential Manager, the entries with `frename` in their name). Tags, comments, markers and subtitles are
 part of your files and stay with them.

@@ -6,7 +6,8 @@
 # 2. signs a copy with a throwaway certificate named like the package's publisher and trusts it
 #    on this machine (Windows installs only signed packages; the Store signs the real one);
 # 3. installs it, checks that every DLL in the package is bundled or part of Windows, and runs
-#    frename's self-test on tests/media inside the package, through its `frename.exe` alias;
+#    frename's self-test on tests/media inside the package, through its `frename.exe` alias,
+#    which must also copy the installed version's settings (a database made for the test);
 # 4. uninstalls it and runs the Windows App Certification Kit on it, writing its report to
 #    -Report; a FAIL fails the script. Where the kit is not installed, says so and skips it;
 # 5. removes the package and the throwaway certificate again, also after a failure.
@@ -35,10 +36,10 @@ Write-Host "== 2. Sign a copy for this machine"
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $Msix).Path)
 try {
-            $entry = $zip.Entries | Where-Object { $_.FullName -eq "AppxManifest.xml" }
-            $reader = New-Object System.IO.StreamReader($entry.Open())
-            [xml]$manifest = $reader.ReadToEnd()
-            $reader.Close()
+    $entry = $zip.Entries | Where-Object { $_.FullName -eq "AppxManifest.xml" }
+    $reader = New-Object System.IO.StreamReader($entry.Open())
+    [xml]$manifest = $reader.ReadToEnd()
+    $reader.Close()
 } finally {
     $zip.Dispose()
 }
@@ -52,28 +53,63 @@ $cert = New-SelfSignedCertificate -Type Custom -Subject $identity.Publisher `
     -KeyUsage DigitalSignature -FriendlyName "frename CI test signing" `
     -CertStoreLocation "Cert:\CurrentUser\My" `
     -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
-$password = ConvertTo-SecureString -String ([guid]::NewGuid().ToString()) -Force -AsPlainText
-$pfx = Join-Path $work "test-signing.pfx"
-Export-PfxCertificate -Cert $cert -FilePath $pfx -Password $password | Out-Null
-$cer = Join-Path $work "test-signing.cer"
-Export-Certificate -Cert $cert -FilePath $cer | Out-Null
-Import-Certificate -FilePath $cer -CertStoreLocation "Cert:\LocalMachine\TrustedPeople" | Out-Null
-
-$signtool = Get-SdkTool "signtool.exe"
-$plain = [System.Net.NetworkCredential]::new("", $password).Password
-& $signtool sign /fd SHA256 /f $pfx /p $plain $signed
-if ($LASTEXITCODE -ne 0) { throw "signtool sign failed" }
-
 # The throwaway certificate must not stay trusted on the machine, whatever happens below.
 $overall = $null
+$seededDir = $null
+$pfx = Join-Path $work "test-signing.pfx"
+$cer = Join-Path $work "test-signing.cer"
 try {
+    $password = ConvertTo-SecureString -String ([guid]::NewGuid().ToString()) -Force -AsPlainText
+    Export-PfxCertificate -Cert $cert -FilePath $pfx -Password $password | Out-Null
+    Export-Certificate -Cert $cert -FilePath $cer | Out-Null
+    Import-Certificate -FilePath $cer -CertStoreLocation "Cert:\LocalMachine\TrustedPeople" | Out-Null
+
+    $signtool = Get-SdkTool "signtool.exe"
+    $plain = [System.Net.NetworkCredential]::new("", $password).Password
+    & $signtool sign /fd SHA256 /f $pfx /p $plain $signed
+    if ($LASTEXITCODE -ne 0) { throw "signtool sign failed" }
+
     Write-Host "== 3. Install and self-test"
     Add-AppxPackage -Path $signed
     $installed = Get-AppxPackage -Name $identity.Name
     if (!$installed) { throw "Not installed: $($identity.Name)" }
     Write-Host "Installed to $($installed.InstallLocation)"
-    & (Join-Path $PSScriptRoot "check-bundle.ps1") -Dir $installed.InstallLocation
-    if ($LASTEXITCODE -ne 0) { throw "The installed package is missing DLLs" }
+    # Needs Visual Studio's dumpbin: always there on CI, maybe not where the owner tries it.
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+    if ($env:GITHUB_ACTIONS -or (Test-Path $vswhere)) {
+        & (Join-Path $PSScriptRoot "check-bundle.ps1") -Dir $installed.InstallLocation
+        if ($LASTEXITCODE -ne 0) { throw "The installed package is missing DLLs" }
+    } else {
+        Write-Host "No Visual Studio here: the check of the package's DLLs is skipped."
+    }
+
+    # The installed (Velopack) version's database, which the Store build copies on its first start,
+    # read from outside its package. Made here if this machine has none (CI runners never do).
+    $installedDir = Join-Path $env:LOCALAPPDATA "frename"
+    $installedDb = Join-Path $installedDir "frename.db"
+    if (!(Test-Path $installedDb)) {
+        $python = Get-Command python -ErrorAction SilentlyContinue
+        if ($python) {
+            New-Item -ItemType Directory -Path $installedDir -Force | Out-Null
+            $seed = Join-Path $work "seed.py"
+            Set-Content $seed @'
+import sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+db.execute("PRAGMA journal_mode=WAL")
+db.execute("CREATE TABLE ci_seed (v TEXT)")
+db.execute("INSERT INTO ci_seed VALUES ('from the installed version')")
+db.commit()
+db.close()
+'@
+            & $python.Source $seed $installedDb
+            if ($LASTEXITCODE -ne 0) { throw "Could not create $installedDb" }
+            $seededDir = $installedDir
+        } elseif ($env:GITHUB_ACTIONS) {
+            throw "No python on this runner to make an installed version's database"
+        } else {
+            Write-Host "No python: the first-start import of the installed version's settings is not tested."
+        }
+    }
 
     # Through the alias, so frename runs inside its package, as a Store install does. It is a GUI
     # exe, so the process is waited for explicitly.
@@ -95,6 +131,9 @@ try {
     if (!$log) { throw "No log at $($logs -join ' or '): the packaged frename is not the Store build" }
     if (!(Select-String -Path $log -Pattern "Microsoft Store" -Quiet)) {
         throw "The packaged frename is not the Store build (its log does not say 'Microsoft Store')"
+    }
+    if ((Test-Path $installedDb) -and !(Select-String -Path $log -Pattern "settings imported from" -Quiet)) {
+        throw "The Store build did not import the installed version's settings from $installedDb"
     }
     Remove-AppxPackage -Package $installed.PackageFullName
 
@@ -133,6 +172,7 @@ try {
     Remove-Item "Cert:\LocalMachine\TrustedPeople\$($cert.Thumbprint)" -ErrorAction SilentlyContinue
     Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)" -DeleteKey -ErrorAction SilentlyContinue
     Remove-Item $pfx, $cer -ErrorAction SilentlyContinue
+    if ($seededDir) { Remove-Item $seededDir -Recurse -Force -ErrorAction SilentlyContinue }
 }
 if ($overall -eq "FAIL") { throw "The Windows App Certification Kit failed the package" }
 Write-Host "All Store package tests passed."

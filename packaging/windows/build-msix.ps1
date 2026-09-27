@@ -32,34 +32,37 @@ if ($Version -notmatch '^\d+\.\d+\.\d+\.0$') {
 if (!(Test-Path (Join-Path $Bundle "frename.exe"))) { throw "No frename.exe in $Bundle" }
 
 $staging = Join-Path ([System.IO.Path]::GetTempPath()) "frename-msix-$([guid]::NewGuid())"
-Copy-Item $Bundle $staging -Recurse
-Copy-Item (Join-Path $PSScriptRoot "msix\Assets") (Join-Path $staging "Assets") -Recurse
-
-$escape = { param($value) [System.Security.SecurityElement]::Escape($value) }
-$manifest = Get-Content (Join-Path $PSScriptRoot "msix\AppxManifest.xml") -Raw
-$manifest = $manifest.Replace('$IDENTITY_NAME$', (& $escape $IdentityName)).
-    Replace('$PUBLISHER$', (& $escape $Publisher)).
-    Replace('$PUBLISHER_DISPLAY_NAME$', (& $escape $PublisherDisplayName)).
-    Replace('$VERSION$', $Version)
-if ($manifest -match '\$[A-Z_]+\$') { throw "Unfilled placeholder in the manifest: $($Matches[0])" }
-$utf8NoBom = New-Object System.Text.UTF8Encoding $false
-[System.IO.File]::WriteAllText((Join-Path $staging "AppxManifest.xml"), $manifest, $utf8NoBom)
-
-# The resource index Windows reads the logos through (the certification kit checks it).
-$makepri = Get-SdkTool "makepri.exe"
 $priConfig = Join-Path ([System.IO.Path]::GetTempPath()) "frename-priconfig-$([guid]::NewGuid()).xml"
-& $makepri createconfig /cf $priConfig /dq en-US /pv 10.0.0 /o
-if ($LASTEXITCODE -ne 0) { throw "makepri createconfig failed" }
-& $makepri new /pr $staging /cf $priConfig /mn (Join-Path $staging "AppxManifest.xml") /of (Join-Path $staging "resources.pri") /o
-if ($LASTEXITCODE -ne 0) { throw "makepri new failed" }
-Remove-Item $priConfig
+try {
+    Copy-Item $Bundle $staging -Recurse
+    Copy-Item (Join-Path $PSScriptRoot "msix\Assets") (Join-Path $staging "Assets") -Recurse
 
-$makeappx = Get-SdkTool "makeappx.exe"
-$outDir = Split-Path $Out -Parent
-if ($outDir) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
-& $makeappx pack /h SHA256 /d $staging /p $Out /o
-if ($LASTEXITCODE -ne 0) { throw "makeappx pack failed" }
-Remove-Item $staging -Recurse -Force
+    $escape = { param($value) [System.Security.SecurityElement]::Escape($value) }
+    $manifest = Get-Content (Join-Path $PSScriptRoot "msix\AppxManifest.xml") -Raw
+    $manifest = $manifest.Replace('$IDENTITY_NAME$', (& $escape $IdentityName)).
+        Replace('$PUBLISHER$', (& $escape $Publisher)).
+        Replace('$PUBLISHER_DISPLAY_NAME$', (& $escape $PublisherDisplayName)).
+        Replace('$VERSION$', $Version)
+    if ($manifest -match '\$[A-Z_]+\$') { throw "Unfilled placeholder in the manifest: $($Matches[0])" }
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText((Join-Path $staging "AppxManifest.xml"), $manifest, $utf8NoBom)
+
+    # The resource index Windows reads the logos through (the certification kit checks it).
+    $makepri = Get-SdkTool "makepri.exe"
+    & $makepri createconfig /cf $priConfig /dq en-US /pv 10.0.0 /o
+    if ($LASTEXITCODE -ne 0) { throw "makepri createconfig failed" }
+    & $makepri new /pr $staging /cf $priConfig /mn (Join-Path $staging "AppxManifest.xml") /of (Join-Path $staging "resources.pri") /o
+    if ($LASTEXITCODE -ne 0) { throw "makepri new failed" }
+
+    $makeappx = Get-SdkTool "makeappx.exe"
+    $outDir = Split-Path $Out -Parent
+    if ($outDir) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
+    & $makeappx pack /h SHA256 /d $staging /p $Out /o
+    if ($LASTEXITCODE -ne 0) { throw "makeappx pack failed" }
+} finally {
+    Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item $priConfig -ErrorAction SilentlyContinue
+}
 
 $size = [math]::Round((Get-Item $Out).Length / 1MB, 1)
 Write-Host "$Out`: $IdentityName $Version, $size MB (unsigned)"

@@ -1,131 +1,174 @@
 # Microsoft Store listing (English, United States)
 
-Paste each field into Partner Center → frename → Store listings → English (United States).
-Limits are Partner Center's. docs/store-setup.md says when to do this.
+Partner Center → frename → Store listings → English (United States). For each field below, copy
+the **contents of its code block** (the copy button on GitHub) and paste it as it is: one line per
+paragraph or bullet, because Partner Center keeps every line break. Limits are Partner Center's.
+`docs/store-setup.md` step 6 says when to do this.
 
 ## Product name
 
+```text
 frename
+```
 
-## Short description (up to 1,000 characters; shown at the top of the listing on Windows)
+## Description (required, up to 10,000 characters)
 
-Tag your footage before you edit it. Open a folder of videos, watch each clip, tag what you see,
-and frename renames the clip with its tags when you move to the next one. Mark in and out points
-and markers that show up in Premiere Pro, write a note per clip, and let AI describe or subtitle
-your clips with your own API key.
-
-## Description (up to 10,000 characters)
-
+```text
 frename is for the hour before the edit begins.
 
-You come back from a shoot with hundreds of files named MVI_0001.MP4 to MVI_2000.MP4. Before you
-can edit, you need to know what is in each one. frename lets you watch each clip, tag it in
-seconds and move on. By the time you open your editing app, the footage is already organized.
+You come back from a shoot with hundreds of files named MVI_0001.MP4 to MVI_2000.MP4. Before you can edit, you need to know what is in each one. frename lets you watch each clip, tag it in seconds and move on. By the time you open your editing app, the footage is already organized.
 
 HOW IT WORKS
-Open a folder of videos. The first clip plays. Click tags (or use the keyboard) for what you see:
-pick, skip, wide, drone, golden-hour, people... When you press PageDown for the next clip, the one
-you leave is renamed with its tags, for example pick.drone.landscape.MVI_0404.mp4. Tags live in
-the file name, so File Explorer, Premiere Pro and your sync tools all see them. Nothing is locked
-inside frename.
+Open a folder of videos. The first clip plays. Click tags (or use the keyboard) for what you see: pick, skip, wide, drone, golden-hour, people... When you press PageDown for the next clip, the one you leave is renamed with its tags, for example pick.drone.landscape.MVI_0404.mp4. Tags live in the file name, so File Explorer, Premiere Pro and your sync tools all see them. Nothing is locked inside frename.
 
 WHAT YOU CAN DO
-- Tag clips with one click or one key; copy the tags of one clip and paste them onto the next.
-- Mark the usable part of a clip with in and out points ([ and ]).
-- Press F2 to drop a marker at an interesting moment, name it, give it a color, or hold F2 to mark
-  a range. Markers are saved inside the video and Premiere Pro shows them on the clip.
-- Write a comment per clip; it is saved inside the video, where Premiere Pro shows it, or as a
-  text file next to it.
-- Save the current frame as a JPEG with F12.
-- Undo and redo tagging, markers, in/out points and renames.
-- Run batch actions over a whole folder: re-order tags in every name, tag commented clips, and
-  more.
-- Describe with AI (optional): Claude writes a one-line summary of each clip and what happens when,
-  as markers and comment text. Uses your own Anthropic API key; the panel shows the price first.
-- Generate subtitles (optional): Soniox turns the speech in each clip into an .srt file next to
-  it. Uses your own Soniox API key.
-- Every folder keeps its own tag list in a small .frename file that travels with the footage.
-- English and Russian interface.
+• Tag clips with one click or one key; copy the tags of one clip and paste them onto the next.
+• Mark the usable part of a clip with in and out points ([ and ]).
+• Press F2 to drop a marker at an interesting moment, name it, give it a color, or hold F2 to mark a range. Markers are saved inside the video and Premiere Pro shows them on the clip.
+• Write a comment per clip; it is saved inside the video, where Premiere Pro shows it, or as a text file next to it.
+• Save the current frame as a JPEG with F12.
+• Undo and redo tagging, markers, in/out points and renames.
+• Run batch actions over a whole folder: re-order tags in every name, tag commented clips, and more.
+• Describe with AI (optional, paid by you): Claude writes a one-line summary of each clip and what happens when, as markers and comment text. Uses your own Anthropic API key; the panel shows the price first.
+• Generate subtitles (optional, paid by you): the Soniox speech-to-text service turns the speech in each clip into an .srt file next to it. Uses your own Soniox API key. MKV, M2TS and AVI files need ffmpeg installed.
+• Every folder keeps its own tag list in a small .frename file that travels with the footage.
+• English and Russian interface.
 
 AI-GENERATED CONTENT
-Describe with AI writes text generated by Anthropic's Claude models (a summary and time-ranged
-descriptions of each clip) into the clip's comment and markers, on your computer only. Report
-inappropriate AI output at https://github.com/Zelenov/frename/issues.
+Describe with AI writes text generated by Anthropic's Claude models (a summary and time-ranged descriptions of each clip) into the clip's comment and markers, on your computer only. Report inappropriate AI output at https://github.com/Zelenov/frename/issues.
 
 PRIVACY
-No account, no ads, no analytics. Your videos stay on your computer. Only the two optional AI
-actions send data (frames of the clips you select to Anthropic, or their audio and file names to
-Soniox), directly from your computer, with your own key. Keys are kept in Windows Credential
-Manager.
+No account, no ads, no analytics. Your videos stay on your computer. Only the two optional AI actions send data (frames of the clips you select to Anthropic, or their audio and file names to Soniox), directly from your computer, with your own key. Keys are kept in Windows Credential Manager.
 
-Video playback is built in: MP4, MOV, MKV, WebM, AVI and more, with H.264, HEVC, VP9, AV1 and
-other common codecs. No codec packs to install.
+Video playback is built in: MP4, MOV, MKV, WebM, AVI and more, with H.264, HEVC, VP9, AV1 and other common codecs. No codec packs to install.
 
 frename is open source (MIT license): https://github.com/Zelenov/frename
+```
+
+## Short description (optional, up to 1,000 characters; keep under 270)
+
+```text
+Tag your footage before you edit it. Watch each clip, tag what you see, and frename renames the clip with its tags when you move on. In/out points, markers and comments for Premiere Pro.
+```
 
 ## What's new in this version
 
-Use the newest block of version.md (without its `# X.Y` heading).
+First submission:
 
-## Product features (up to 20, each up to 200 characters)
+```text
+First release in the Microsoft Store.
+```
 
-1. Tag video clips with one click or one key; tags go into the file name
-2. The clip you leave is renamed with its tags automatically
-3. In and out points and named, colored markers that Premiere Pro shows on the clip
-4. A comment per clip, saved inside the video or in a text file next to it
-5. Undo and redo for tagging, markers, in/out points and renames
-6. Batch actions over a whole folder
-7. Optional AI descriptions of each clip with your own Anthropic API key
-8. Optional subtitles from speech with your own Soniox API key
-9. Built-in playback of MP4, MOV, MKV, WebM, AVI and more
-10. Keyboard shortcuts for everything you do on each clip
-11. No account, no ads, no analytics
+Later submissions: the newest block of `version.md`, without its `# X.Y` heading and without
+anything about the installer or its updates (the Store version has neither).
 
-## Search terms (up to 7, each up to 30 characters; 21 words in total)
+## Product features (up to 20, each up to 200 characters; one per field)
 
-1. video tagging
-2. rename videos
-3. footage organizer
-4. clip logger
-5. Premiere Pro markers
-6. video notes
-7. batch rename
+```text
+Tag video clips with one click or one key; tags go into the file name
+```
+```text
+The clip you leave is renamed with its tags automatically
+```
+```text
+In and out points and named, colored markers that Premiere Pro shows on the clip
+```
+```text
+A comment per clip, saved inside the video or in a text file next to it
+```
+```text
+Undo and redo for tagging, markers, in/out points and renames
+```
+```text
+Batch actions over a whole folder
+```
+```text
+Optional AI descriptions of each clip with your own Anthropic API key
+```
+```text
+Optional subtitles from speech with your own Soniox API key
+```
+```text
+Built-in playback of MP4, MOV, MKV, WebM, AVI and more
+```
+```text
+Keyboard shortcuts for everything you do on each clip
+```
+```text
+No account, no ads, no analytics
+```
+
+## Search terms (up to 7, each up to 30 characters; 21 words in total; one per field)
+
+```text
+video tagging
+```
+```text
+rename videos
+```
+```text
+footage organizer
+```
+```text
+clip logger
+```
+```text
+Premiere Pro markers
+```
+```text
+video notes
+```
+```text
+batch rename
+```
 
 ## Copyright and trademark info
 
+```text
 © 2026 Eugene Zelenov. MIT License.
+```
 
 ## Additional license terms
 
-Leave empty (frename is under the MIT License; the bundled GStreamer and FFmpeg libraries are
-LGPL, their licenses and source links are in the licenses folder of the app).
+Leave empty. frename is under the MIT License; the bundled GStreamer and FFmpeg libraries are
+LGPL, and their licenses and source links are in the `licenses` folder of the app.
 
 ## Developed by
 
+```text
 Eugene Zelenov
+```
 
-## Privacy policy URL
+## Privacy policy URL (Properties page)
 
+```text
 https://github.com/Zelenov/frename/blob/main/packaging/store/privacy-policy.md
+```
 
-## Website
+## Website (Properties page)
 
+```text
 https://github.com/Zelenov/frename
+```
 
-## Support contact info
+## Support contact info (Properties page)
 
+```text
 https://github.com/Zelenov/frename/issues
+```
 
 ## Screenshots
 
-See screenshots.md.
+See `screenshots.md`.
 
-## Category
+## Category (Properties page)
 
-Primary: Photo & video. Subcategory: none.
+Primary: **Photo & video**. Subcategory: none.
 
 ## System requirements (Properties page)
 
-- Minimum: Windows 10 version 1809 (x64), 8 GB RAM, keyboard and mouse.
-- Recommended: Windows 11 (x64), 16 GB RAM.
-- Internet: only for the optional AI actions.
+Tick in the form:
+
+- Minimum: Windows 10 version 1809 (x64), 8 GB memory, keyboard, mouse.
+- Recommended: Windows 11 (x64), 16 GB memory.
+- Internet: needed only for the optional AI actions.
