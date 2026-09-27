@@ -1,3 +1,7 @@
+# NEXT
+## Changed
+- Images are no longer opened; frename works with video files only.
+
 # 0.74
 ## Added
 - A UI language, in Settings: follows the system by default, or pick English or Русский. More
