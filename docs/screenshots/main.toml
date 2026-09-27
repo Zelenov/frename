@@ -46,8 +46,8 @@ name = "MVI_0409.webm"
 [[files]]
 from = "file_example_MP4_480_1_5MG.mp4"
 name = "pick.wide.night.city.MVI_0410.mp4"
-comment = """In/Out: 00:00:03.000 – 00:00:21.000
-City lights over Europe, keep this one"""
+comment = """City lights over Europe, keep this one
+In/Out: 00:00:03.000 – 00:00:21.000"""
 subtitles = """1
 00:00:01,000 --> 00:00:04,000
 Night falls over the Atlantic

@@ -126,19 +126,19 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
         })
     };
     let in_out_options = column![radio(
-        fl!("settings-in-out-comment"),
-        InOutStorage::Comment,
-        selected_in_out,
-        Message::SetInOutStorage,
-    )]
-    .extend(in_out_offer(InOutStorage::Comment))
-    .push(radio(
         fl!("settings-in-out-in-video"),
         InOutStorage::InVideo,
         selected_in_out,
         Message::SetInOutStorage,
-    ))
+    )]
     .extend(in_out_offer(InOutStorage::InVideo))
+    .push(radio(
+        fl!("settings-in-out-comment"),
+        InOutStorage::Comment,
+        selected_in_out,
+        Message::SetInOutStorage,
+    ))
+    .extend(in_out_offer(InOutStorage::Comment))
     .spacing(8);
     let in_out = section(fl!("settings-in-out"), in_out_options.into());
 

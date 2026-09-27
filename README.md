@@ -149,7 +149,7 @@ The progress bar shows what you have noted about a clip:
   (`clip.mp4.snap.00-01-05-250.jpg`) and shows `Frame saved`.
 - **In and out points:** `[` and `]` mark the usable segment, highlighted on the progress bar.
   By default they are saved inside the video as a marker that Premiere Pro turns into a subclip.
-  Settings can keep them in the comment instead, as its first line
+  Settings can keep them in the comment instead, as a line after your own text
   (`In/Out: 00:01:05.250 – 00:02:10.000`), which the comment box does not show: change it with
   `[` and `]`. Older versions could put them in the file name (`in_00_01_05`); frename no longer
   reads them there, and the batch action **Move in/out points out of file names** moves them.

@@ -130,12 +130,14 @@ batch-action-move-in-out-into-comments = From the videos (XMP marker) into the c
 
 batch-action-in-out-from-names = Move in/out points out of file names
 batch-action-in-out-from-names-hint = Older versions could keep in/out points in the file name (clip.in_00_01_05.out_00_02_10.mp4). This takes them out of the name of each checked file and saves them where in/out points are kept now. A file that already has in/out points stored keeps those; the report lists it.
-batch-action-in-out-from-names-status-comment = Saved to: the comment
-batch-action-in-out-from-names-status-video = Saved to: inside the video (XMP)
+batch-action-in-out-from-names-status-comment = Goes to: the comment
+batch-action-in-out-from-names-status-video = Goes to: inside the video (XMP)
 batch-action-in-out-from-names-settings = In/out settings…
 batch-action-in-out-from-names-kept = kept the stored { $stored }, dropped the name's { $name }
 batch-action-in-out-from-names-not-renamed = could not be renamed (the log says why)
-batch-in-out-from-names-listed = Look at these files:
+batch-action-in-out-from-names-empty = left as it is: the name would be empty
+batch-action-in-out-from-names-taken = left as it is: { $name } already exists
+batch-in-out-from-names-listed = Files that failed or kept their stored in/out points:
 
 batch-action-markers-comment = Markers ⇄ comment
 batch-action-markers-comment-to-markers = Comment lines with a time into markers

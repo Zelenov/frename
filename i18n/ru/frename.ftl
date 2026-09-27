@@ -164,12 +164,14 @@ batch-action-move-in-out-into-comments = Из видео (маркер XMP) в �
 
 batch-action-in-out-from-names = Убрать точки входа и выхода из имён файлов
 batch-action-in-out-from-names-hint = Прежние версии могли хранить точки входа и выхода в имени файла (clip.in_00_01_05.out_00_02_10.mp4). Действие убирает их из имени каждого отмеченного файла и сохраняет туда, где точки входа и выхода хранятся теперь. Если у файла точки уже сохранены, остаются они; такой файл попадёт в отчёт.
-batch-action-in-out-from-names-status-comment = Куда: в комментарий
-batch-action-in-out-from-names-status-video = Куда: внутрь видео (XMP)
+batch-action-in-out-from-names-status-comment = Куда пойдут: в комментарий
+batch-action-in-out-from-names-status-video = Куда пойдут: внутрь видео (XMP)
 batch-action-in-out-from-names-settings = Настройки точек…
 batch-action-in-out-from-names-kept = оставлены сохранённые { $stored }, из имени убраны { $name }
 batch-action-in-out-from-names-not-renamed = не удалось переименовать (подробности в журнале)
-batch-in-out-from-names-listed = Обратите внимание:
+batch-action-in-out-from-names-empty = оставлен как есть: имя стало бы пустым
+batch-action-in-out-from-names-taken = оставлен как есть: { $name } уже существует
+batch-in-out-from-names-listed = Файлы с ошибкой или с оставленными сохранёнными точками:
 
 batch-action-markers-comment = Маркеры ⇄ комментарий
 batch-action-markers-comment-to-markers = Строки комментария с временем в маркеры

@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use frename_core::{FileTagger, InOutStorage, MoveOutcome, NameInOut};
+use frename_core::{format_in_out_range, FileTagger, InOutStorage, MoveOutcome, NameInOutProblem};
 use iced::widget::{button, row, text};
 use iced::{Element, Length};
 
@@ -47,30 +47,35 @@ pub fn view<'a>() -> Element<'a, ActionMessage> {
     )
 }
 
-/// The points as the comment line shows them.
-fn points(points: NameInOut) -> String {
-    frename_core::format_in_out_line(points.start, points.end).unwrap_or_default()
-}
-
 /// Move the in/out points in the name of the file at `path` to where they are kept now.
 pub fn run(path: &Path) -> ItemResult {
     let result = FileTagger::move_in_out_out_of_name(path);
     let failed = matches!(result.outcome, MoveOutcome::Failed(_));
     let mut item = super::item_result(result.outcome);
-    if failed {
-        log::warn!("{LOG_LABEL}: {path:?} could not be renamed");
-        item.reason = Some(fl!("batch-action-in-out-from-names-not-renamed"));
+    match result.problem {
+        Some(NameInOutProblem::NameWouldBeEmpty) => {
+            log::warn!("{LOG_LABEL}: {path:?} left alone: the name would be empty");
+            item.reason = Some(fl!("batch-action-in-out-from-names-empty"));
+        }
+        Some(NameInOutProblem::NameTaken(name)) => {
+            log::warn!("{LOG_LABEL}: {path:?} left alone: {name:?} already exists");
+            item.reason = Some(fl!("batch-action-in-out-from-names-taken", name = name));
+        }
+        None if failed => {
+            log::warn!("{LOG_LABEL}: {path:?} could not be renamed");
+            item.reason = Some(fl!("batch-action-in-out-from-names-not-renamed"));
+        }
+        None => {}
     }
     if let Some((from_name, stored)) = result.kept_stored {
+        let (stored, from_name) = (format_in_out_range(stored), format_in_out_range(from_name));
         log::info!(
-            "{LOG_LABEL}: {path:?} keeps its stored {} and drops the name's {}",
-            points(stored),
-            points(from_name)
+            "{LOG_LABEL}: {path:?} keeps its stored {stored} and drops the name's {from_name}"
         );
         let kept = fl!(
             "batch-action-in-out-from-names-kept",
-            stored = points(stored),
-            name = points(from_name)
+            stored = stored,
+            name = from_name
         );
         item.reason = Some(match item.reason {
             Some(reason) => format!("{reason}; {kept}"),
