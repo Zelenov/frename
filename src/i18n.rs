@@ -69,15 +69,18 @@ pub fn apply(stored: &str) {
     }
     let language = resolve(stored, &os);
     match language.parse::<LanguageIdentifier>() {
+        // Already shown: a reload would only open a moment in which text from another thread
+        // gets isolation marks (see below).
+        Ok(id) if loader().current_languages() == [id.clone()] => {}
         Ok(id) => {
             if let Err(e) = loader().load_languages(&Localizations, &[id]) {
                 log::error!("cannot load the UI language {language}: {e}");
             }
+            // A load builds new bundles, which isolate arguments again.
+            loader().set_use_isolating(false);
         }
         Err(e) => log::error!("bad UI language code {language}: {e}"),
     }
-    // A load builds new bundles, which isolate arguments again.
-    loader().set_use_isolating(false);
 }
 
 /// The language `System` currently stands for.
@@ -683,6 +686,28 @@ mod tests {
             .unwrap();
         loader.set_use_isolating(false);
         loader
+    }
+
+    /// Tests run in parallel with the app's start-up, which applies the UI language: applying
+    /// the language already shown must not open a moment in which the global loader's text has
+    /// isolation marks (it did on macOS CI).
+    #[test]
+    fn applying_the_shown_language_again_never_shows_isolation_marks() {
+        let language = super::resolve("en", &[]);
+        // Shown first, so the loop below only re-applies (another test may have shown Russian).
+        super::apply(language);
+        let applier = std::thread::spawn(move || {
+            for _ in 0..200 {
+                super::apply(language);
+            }
+        });
+        let mut args = fluent_bundle::FluentArgs::new();
+        args.set("count", 5);
+        while !applier.is_finished() {
+            let text = super::loader().get_args_fluent("batch-run", Some(&args));
+            assert!(!text.contains(['\u{2068}', '\u{2069}']), "{text:?}");
+        }
+        applier.join().expect("apply");
     }
 
     #[test]

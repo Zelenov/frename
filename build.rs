@@ -1,7 +1,10 @@
 fn main() {
     #[cfg(windows)]
     windows_resources();
+    macos_gstreamer_rpath();
 }
+
+include!("packaging/macos/gstreamer_rpath.rs");
 
 /// Embeds the icon and version into the Windows executable. `winres` is a Windows-only
 /// build dependency, so this only compiles when building on Windows.

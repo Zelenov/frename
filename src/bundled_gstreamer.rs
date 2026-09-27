@@ -1,16 +1,49 @@
-//! The Windows packages carry their own GStreamer next to `frename.exe`: its DLLs,
-//! `gst-plugin-scanner.exe`, and the plugins in `lib\gstreamer-1.0\`. The exe's folder comes first
-//! in the Windows DLL search order, so a GStreamer installed on the system is not loaded; its
-//! plugin environment variables would still be read, so they are replaced before `gst::init`.
-//! A developer build has no bundled plugins and uses the system GStreamer, as before.
+//! The Windows packages and the macOS app carry their own GStreamer. On Windows it sits next to
+//! `frename.exe`: its DLLs, `gst-plugin-scanner.exe`, and the plugins in `lib\gstreamer-1.0\`;
+//! the exe's folder comes first in the DLL search order, so a GStreamer installed on the system
+//! is not loaded. In `frename.app` the libraries are in `Contents/Frameworks/`, found through the
+//! executable's rpath, and the plugins in `Contents/PlugIns/gstreamer/`; there is no scanner
+//! executable to sign and ship, GStreamer scans the plugins in-process.
+//! A system GStreamer's plugin environment variables would still be read, so they are replaced
+//! before `gst::init`. A developer build has no bundled plugins and uses the system GStreamer.
 
-// Everything but the Windows caller is also built elsewhere, so its tests run on every OS.
-#![cfg_attr(not(windows), allow(dead_code))]
+// Everything but the Windows and macOS caller is also built elsewhere, so its tests run on every
+// OS.
+#![cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
 
-use std::path::{Path, PathBuf};
+use std::ffi::OsString;
+use std::path::Path;
 
-/// A plugin every bundle has; its presence marks the exe's folder as a bundle.
-const MARKER_PLUGIN: &str = "gstcoreelements.dll";
+/// Where a bundle keeps GStreamer, relative to the folder of the executable.
+#[derive(Debug, Clone, Copy)]
+pub struct BundleLayout {
+    /// The plugin folder.
+    plugins: &'static str,
+    /// A plugin every bundle has; its presence marks the folder as a bundle.
+    marker_plugin: &'static str,
+    /// The plugin scanner; `None` scans in-process.
+    scanner: Option<&'static str>,
+    /// The registry file's name, in the data folder.
+    registry: &'static str,
+}
+
+/// The Windows packages (`packaging/windows/bundle.ps1`).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub const WINDOWS: BundleLayout = BundleLayout {
+    plugins: "lib/gstreamer-1.0",
+    marker_plugin: "gstcoreelements.dll",
+    scanner: Some("gst-plugin-scanner.exe"),
+    registry: "gst-registry-x86_64.bin",
+};
+
+/// `frename.app` (`packaging/macos/build-app.sh`); the executable is in `Contents/MacOS/`.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub const MACOS: BundleLayout = BundleLayout {
+    plugins: "../PlugIns/gstreamer",
+    marker_plugin: "libgstcoreelements.dylib",
+    scanner: None,
+    registry: "gst-registry-arm64.bin",
+};
 
 /// Variables that point GStreamer at another installation's plugins or registry.
 const REMOVED: [&str; 5] = [
@@ -25,41 +58,55 @@ const REMOVED: [&str; 5] = [
 #[derive(Debug, PartialEq, Eq)]
 pub struct GstEnvironment {
     pub remove: Vec<&'static str>,
-    pub set: Vec<(&'static str, PathBuf)>,
+    pub set: Vec<(&'static str, OsString)>,
 }
 
-/// The changes for an exe in `exe_dir`, with the plugin registry kept in `data_dir` (the exe's
-/// folder may be replaced by an update); `None` when `exe_dir` has no bundled GStreamer.
-pub fn bundled_gstreamer_environment(exe_dir: &Path, data_dir: &Path) -> Option<GstEnvironment> {
-    let plugins = exe_dir.join("lib").join("gstreamer-1.0");
-    if !plugins.join(MARKER_PLUGIN).is_file() {
+/// The changes for an executable in `exe_dir` laid out as `layout`, with the plugin registry kept
+/// in `data_dir` (the executable's folder may be replaced by an update, or be read-only); `None`
+/// when `exe_dir` has no bundled GStreamer.
+pub fn bundled_gstreamer_environment(
+    layout: BundleLayout,
+    exe_dir: &Path,
+    data_dir: &Path,
+) -> Option<GstEnvironment> {
+    let plugins = exe_dir.join(layout.plugins);
+    if !plugins.join(layout.marker_plugin).is_file() {
         return None;
     }
+    let mut set = vec![("GST_PLUGIN_SYSTEM_PATH_1_0", plugins.into_os_string())];
+    match layout.scanner {
+        Some(scanner) => set.push((
+            "GST_PLUGIN_SCANNER_1_0",
+            exe_dir.join(scanner).into_os_string(),
+        )),
+        None => set.push(("GST_REGISTRY_FORK", OsString::from("no"))),
+    }
+    set.push((
+        "GST_REGISTRY_1_0",
+        data_dir.join(layout.registry).into_os_string(),
+    ));
     Some(GstEnvironment {
         remove: REMOVED.to_vec(),
-        set: vec![
-            ("GST_PLUGIN_SYSTEM_PATH_1_0", plugins),
-            (
-                "GST_PLUGIN_SCANNER_1_0",
-                exe_dir.join("gst-plugin-scanner.exe"),
-            ),
-            ("GST_REGISTRY_1_0", data_dir.join("gst-registry-x86_64.bin")),
-        ],
+        set,
     })
 }
 
-/// Point GStreamer at the bundle next to the running exe, if there is one. Call before any
+/// Point GStreamer at the bundle around the running executable, if there is one. Call before any
 /// thread starts (changing the environment is not thread-safe) and before `gst::init`.
 /// Returns whether a bundle was found.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 pub fn configure_bundled_gstreamer(data_dir: &Path) -> bool {
+    #[cfg(windows)]
+    let layout = WINDOWS;
+    #[cfg(target_os = "macos")]
+    let layout = MACOS;
     let Some(exe_dir) = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(Path::to_path_buf))
     else {
         return false;
     };
-    let Some(environment) = bundled_gstreamer_environment(&exe_dir, data_dir) else {
+    let Some(environment) = bundled_gstreamer_environment(layout, &exe_dir, data_dir) else {
         return false;
     };
     for name in environment.remove {
@@ -74,6 +121,7 @@ pub fn configure_bundled_gstreamer(data_dir: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     fn temp_folder(name: &str) -> PathBuf {
         let dir =
@@ -84,37 +132,74 @@ mod tests {
     }
 
     #[test]
-    fn a_bundle_gets_its_own_plugins_scanner_and_a_registry_in_the_data_folder() {
+    fn a_windows_bundle_gets_its_own_plugins_scanner_and_a_registry_in_the_data_folder() {
         let exe_dir = temp_folder("bundle");
-        let plugins = exe_dir.join("lib").join("gstreamer-1.0");
+        let plugins = exe_dir.join("lib/gstreamer-1.0");
         std::fs::create_dir_all(&plugins).expect("plugins");
         std::fs::write(plugins.join("gstcoreelements.dll"), b"MZ").expect("plugin");
         let data_dir = PathBuf::from("data");
 
-        let environment = bundled_gstreamer_environment(&exe_dir, &data_dir).expect("a bundle");
+        let environment =
+            bundled_gstreamer_environment(WINDOWS, &exe_dir, &data_dir).expect("a bundle");
 
         assert_eq!(environment.remove, REMOVED.to_vec());
         assert_eq!(
             environment.set,
             vec![
-                ("GST_PLUGIN_SYSTEM_PATH_1_0", plugins),
+                ("GST_PLUGIN_SYSTEM_PATH_1_0", plugins.into()),
                 (
                     "GST_PLUGIN_SCANNER_1_0",
-                    exe_dir.join("gst-plugin-scanner.exe")
+                    exe_dir.join("gst-plugin-scanner.exe").into()
                 ),
-                ("GST_REGISTRY_1_0", data_dir.join("gst-registry-x86_64.bin")),
+                (
+                    "GST_REGISTRY_1_0",
+                    data_dir.join("gst-registry-x86_64.bin").into()
+                ),
             ]
         );
         let _ = std::fs::remove_dir_all(&exe_dir);
     }
 
     #[test]
+    fn a_macos_app_gets_its_plugins_from_plugins_and_scans_them_in_process() {
+        let app = temp_folder("app").join("frename.app/Contents");
+        let exe_dir = app.join("MacOS");
+        let plugins = app.join("PlugIns/gstreamer");
+        std::fs::create_dir_all(&exe_dir).expect("MacOS");
+        std::fs::create_dir_all(&plugins).expect("plugins");
+        std::fs::write(plugins.join("libgstcoreelements.dylib"), b"\xcf\xfa").expect("plugin");
+        let data_dir = PathBuf::from("data");
+
+        let environment =
+            bundled_gstreamer_environment(MACOS, &exe_dir, &data_dir).expect("a bundle");
+
+        assert_eq!(environment.remove, REMOVED.to_vec());
+        assert_eq!(
+            environment.set,
+            vec![
+                (
+                    "GST_PLUGIN_SYSTEM_PATH_1_0",
+                    exe_dir.join("../PlugIns/gstreamer").into()
+                ),
+                ("GST_REGISTRY_FORK", "no".into()),
+                (
+                    "GST_REGISTRY_1_0",
+                    data_dir.join("gst-registry-arm64.bin").into()
+                ),
+            ]
+        );
+        let _ = std::fs::remove_dir_all(app.parent().and_then(Path::parent).expect("temp"));
+    }
+
+    #[test]
     fn without_bundled_plugins_nothing_changes() {
         let exe_dir = temp_folder("no-bundle");
-        assert_eq!(
-            bundled_gstreamer_environment(&exe_dir, Path::new("data")),
-            None
-        );
+        for layout in [WINDOWS, MACOS] {
+            assert_eq!(
+                bundled_gstreamer_environment(layout, &exe_dir, Path::new("data")),
+                None
+            );
+        }
         let _ = std::fs::remove_dir_all(&exe_dir);
     }
 }

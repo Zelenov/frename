@@ -13,9 +13,9 @@ use crate::features::media_viewer::video::check_decodes;
 /// How long an opened clip may take to deliver its first frame.
 const FRAME_TIMEOUT: Duration = Duration::from_secs(20);
 
-/// Elements the Windows bundle must have: a plugin that fails to load is dropped silently, and
-/// these cover the containers and codecs frename is expected to play.
-#[cfg(windows)]
+/// Elements the Windows and macOS bundles must have: a plugin that fails to load is dropped
+/// silently, and these cover the containers and codecs frename is expected to play.
+#[cfg(any(windows, target_os = "macos"))]
 const REQUIRED_ELEMENTS: [&str; 10] = [
     "playbin",
     "qtdemux",
@@ -34,9 +34,9 @@ const REQUIRED_ELEMENTS: [&str; 10] = [
 /// no videos at all. The report goes to the log, which prints on the terminal (CI reads it there)
 /// and to the log file (a release build on Windows has no console).
 pub fn run(paths: &[PathBuf]) -> i32 {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     let missing_elements = missing_elements();
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     let missing_elements = 0;
     let mut videos = Vec::new();
     for path in paths {
@@ -75,7 +75,7 @@ pub fn run(paths: &[PathBuf]) -> i32 {
 }
 
 /// Log each required element GStreamer does not have, and return how many there are.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 fn missing_elements() -> usize {
     if let Err(e) = gstreamer::init() {
         log::error!("self-test: GStreamer does not start: {e}");
@@ -163,8 +163,9 @@ mod tests {
         assert_eq!(run(&[repo().join("tests/folder/no such clip.mp4")]), 1);
     }
 
-    /// Linux and Windows, like the decoding tests below: both CI jobs have a full GStreamer.
-    #[cfg(any(target_os = "linux", windows))]
+    /// Linux, Windows and macOS, like the decoding tests below: their CI jobs have a full
+    /// GStreamer.
+    #[cfg(any(target_os = "linux", windows, target_os = "macos"))]
     #[test]
     fn the_ci_clips_decode_a_frame() {
         let clips = ci_clips();
@@ -180,7 +181,7 @@ mod tests {
         assert_eq!(run(&[repo().join("tests/media")]), 0);
     }
 
-    #[cfg(any(target_os = "linux", windows))]
+    #[cfg(any(target_os = "linux", windows, target_os = "macos"))]
     #[test]
     fn a_folder_of_good_clips_passes() {
         let folder = temp_folder("folder");
@@ -190,7 +191,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&folder);
     }
 
-    #[cfg(any(target_os = "linux", windows))]
+    #[cfg(any(target_os = "linux", windows, target_os = "macos"))]
     #[test]
     fn a_file_that_is_not_a_video_fails() {
         let folder = temp_folder("garbage");

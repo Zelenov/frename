@@ -9,8 +9,11 @@ static PACKAGE_DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 /// The folder for frename's own files: next to the executable, except when frename runs from an
 /// AppImage, whose folder is a read-only mount; then `$XDG_DATA_HOME/frename`, by default
-/// `~/.local/share/frename`. An installed or portable Windows package keeps them in the folder
-/// set with [`set_app_data_dir`], because the executable's folder is replaced on every update.
+/// `~/.local/share/frename`. A macOS app (`frename.app`) must not write inside its bundle (that
+/// breaks its signature, and the bundle may be read-only), so it uses
+/// `~/Library/Application Support/frename`. An installed or portable Windows package keeps them
+/// in the folder set with [`set_app_data_dir`], because the executable's folder is replaced on
+/// every update.
 /// An absolute `FRENAME_DATA_DIR` overrides all of these (demo mode uses it to keep the user's
 /// database untouched). The folder may not exist yet.
 pub fn app_data_dir() -> PathBuf {
@@ -52,6 +55,14 @@ fn data_dir_for(
     if let Some(dir) = package {
         return dir.to_path_buf();
     }
+    if runs_from_app_bundle(exe) {
+        return var("HOME")
+            .map(PathBuf::from)
+            .filter(|home| home.is_absolute())
+            .map_or_else(std::env::temp_dir, |home| {
+                home.join("Library/Application Support/frename")
+            });
+    }
     if runs_from_appimage(exe, &var) {
         let absolute = |name: &str| {
             var(name)
@@ -66,6 +77,22 @@ fn data_dir_for(
     exe.and_then(Path::parent)
         .map(Path::to_path_buf)
         .unwrap_or_else(std::env::temp_dir)
+}
+
+/// Whether `exe` is the executable of a macOS app bundle: `<name>.app/Contents/MacOS/<exe>`.
+fn runs_from_app_bundle(exe: Option<&Path>) -> bool {
+    let Some(macos) = exe.and_then(Path::parent) else {
+        return false;
+    };
+    let contents = macos.parent();
+    macos.file_name().is_some_and(|name| name == "MacOS")
+        && contents
+            .and_then(Path::file_name)
+            .is_some_and(|name| name == "Contents")
+        && contents
+            .and_then(Path::parent)
+            .and_then(Path::extension)
+            .is_some_and(|ext| ext == "app")
 }
 
 /// Whether `exe` is inside a mounted AppImage. The AppImage runtime sets `APPIMAGE` and `APPDIR`
@@ -232,6 +259,52 @@ mod tests {
                 Some(&package),
                 env(vec![("FRENAME_DATA_DIR", abs("/tmp/demo/data"))])
             ),
+            PathBuf::from(abs("/tmp/demo/data"))
+        );
+    }
+
+    fn app_exe() -> PathBuf {
+        PathBuf::from(abs("/Applications/frename.app/Contents/MacOS/frename"))
+    }
+
+    #[test]
+    fn in_application_support_inside_a_macos_app() {
+        assert_eq!(
+            data_dir_for(Some(&app_exe()), None, env(vec![home()])),
+            PathBuf::from(abs("/home/ed")).join("Library/Application Support/frename")
+        );
+    }
+
+    #[test]
+    fn a_macos_app_without_a_home_uses_the_temp_folder_not_its_bundle() {
+        assert_eq!(
+            data_dir_for(
+                Some(&app_exe()),
+                None,
+                env(vec![("HOME", "relative".into())])
+            ),
+            std::env::temp_dir()
+        );
+    }
+
+    #[test]
+    fn only_the_executable_of_an_app_bundle_counts_as_one() {
+        for exe in [
+            "/opt/MacOS/frename",
+            "/opt/Contents/MacOS/frename",
+            "/opt/frename.app/MacOS/frename",
+            "/opt/frename.app/Contents/Resources/frename",
+        ] {
+            assert!(!runs_from_app_bundle(Some(Path::new(&abs(exe)))), "{exe}");
+        }
+        assert!(runs_from_app_bundle(Some(&app_exe())));
+    }
+
+    #[test]
+    fn frename_data_dir_and_a_package_win_over_a_macos_app() {
+        let data = ("FRENAME_DATA_DIR", abs("/tmp/demo/data"));
+        assert_eq!(
+            data_dir_for(Some(&app_exe()), None, env(vec![data, home()])),
             PathBuf::from(abs("/tmp/demo/data"))
         );
     }

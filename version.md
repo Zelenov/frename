@@ -1,3 +1,7 @@
+# NEXT
+## Added
+- frename for Mac (Apple silicon): a Mac download in every release (`frename-macos-arm64-….zip`), with video playback built in. The README says how to open it the first time.
+
 # 0.76
 ## Added
 - Right-click 📂 to pick one clip: its whole folder opens with that clip selected.

@@ -1,7 +1,7 @@
 # GStreamer for building frename
 
 frename plays video with GStreamer. **Users do not need this page:** the Windows installer, the
-portable Windows zip and the Linux AppImage carry their own GStreamer. It is for building frename
+portable Windows zip, the Linux AppImage and the Mac app carry their own GStreamer. It is for building frename
 from source.
 
 ---
@@ -59,4 +59,7 @@ Other distributions: use `dnf`, `pacman`, or `zypper` with equivalent package na
 
 Download the runtime and development packages (`gstreamer-1.0-VERSION-universal.pkg` and
 `gstreamer-1.0-devel-VERSION-universal.pkg`) from https://gstreamer.freedesktop.org/download/ and
-add `/Library/Frameworks/GStreamer.framework/Versions/1.0/bin` to `PATH`.
+add `/Library/Frameworks/GStreamer.framework/Versions/1.0/bin` to `PATH` (it has its own
+`pkg-config`) and `/Library/Frameworks/GStreamer.framework/Versions/1.0/lib/pkgconfig` to
+`PKG_CONFIG_PATH`. `packaging/macos/install-gstreamer.sh` installs the version CI uses, and
+`packaging/macos/build-app.sh` then makes `frename.app` from a release build.

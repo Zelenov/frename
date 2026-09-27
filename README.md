@@ -36,7 +36,7 @@ The in/out part is there only when you mark a segment.
 ## The workflow
 
 1. Open a folder with the 📂 button, drag a folder onto the window, or right-click a folder in
-   Explorer and choose "Open in frename" (installed version; on Windows 11 under "Show more
+   Explorer and choose "Open in frename" (Windows installer; on Windows 11 under "Show more
    options"). To start at one clip, right-click 📂 to pick the file, or drag the file in: its
    whole folder opens with that clip selected.
 2. The video starts playing.
@@ -247,7 +247,7 @@ The ⚙ button opens Settings:
 - where comments are kept (inside the video or `.comment.txt`), and the name of the "Commented"
   tag, or none;
 - where in/out points are kept (file name or inside the video);
-- updates: **Check for updates**, then **Update and restart** when a newer version is out.
+- updates (Windows): **Check for updates**, then **Update and restart** when a newer version is out.
   frename also checks once a day by itself (you can turn that off) and puts a dot on ⚙ when
   an update is ready; nothing is downloaded until you click;
 - your Anthropic API key for Describe with AI, kept in the system's password store (Windows
@@ -286,6 +286,29 @@ delete the old folder, and uninstall GStreamer if you installed it only for fren
 it. Video playback is built in; nothing else to install. If it says FUSE is missing, run it with
 `--appimage-extract-and-run`. Your settings and the last opened folder are kept in
 `~/.local/share/frename`.
+
+**Mac (Apple silicon, M1 or newer; macOS 12 or newer):** download `frename-macos-arm64-*.zip`
+from the [latest release](https://github.com/Zelenov/frename/releases/latest), double-click it
+(Safari may have unzipped it already) and drag `frename.app` into **Applications**. frename is not
+signed with a paid Apple certificate, so the first time macOS refuses to open it ("Not Opened",
+"cannot be opened" or "is damaged"): click **Done** or **Cancel**, not Move to Trash. Open
+**Terminal** (`⌘Space`, type Terminal) once and run:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/frename.app
+```
+
+Then open frename as usual. If Terminal says "Operation not permitted", allow Terminal in System
+Settings → Privacy & Security → App Management and run it again. When macOS asks whether frename
+may use a folder or a drive, click **Allow**: frename renames and writes files there.
+
+On a Mac keyboard: `⌘` wherever this page says `Ctrl` (`⌘C`, `⌘V`, `⌘Z`, `⌘⇧Z`), `⌥ Option` for
+`Alt`, `fn`+`↓`/`↑` for `PageDown`/`PageUp`, `fn`+`delete` for `Delete`, and hold `fn` for
+`F1`–`F12` (or turn on System Settings → Keyboard → "Use F1, F2, etc. keys as standard function
+keys"). Video playback is built in. There is no Finder menu entry and no automatic updates
+(Settings says updates work in the installed version, meaning the Windows one): download the new
+zip and replace the app the same way. Your settings and the last opened folder are kept in
+`~/Library/Application Support/frename`.
 
 ---
 

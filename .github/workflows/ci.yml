@@ -16,6 +16,10 @@ env:
   GST_VERSION: 1.28.7
   GST_SHA256: 032fc6062b8539838fc8da22589cb9b24c5d820baa7f8cc160af9ea08395badf
   VPK_VERSION: 1.2.158
+  # The official GStreamer macOS framework bundled in frename.app (same version as Windows); also
+  # in release.yml (build-macos).
+  GST_MACOS_SHA256: 529fdf4a4027d942e59b5b3564f6400adaa008f63ce5f3fed4ffe35d73911994
+  GST_MACOS_DEVEL_SHA256: 72a44870cf02472cbf6e9a84bcc25ee6807dd1c26659a112066373544d365e7a
 
 jobs:
   linux:
@@ -214,3 +218,76 @@ jobs:
       - name: Install and self-test on a clean system
         shell: pwsh
         run: packaging/windows/test-package.ps1 -Setup packages\frename-win-Setup.exe -Portable packages\frename-win-Portable.zip
+
+  # The macOS app (Apple Silicon), made the same way release.yml makes it.
+  macos:
+    name: ci-macos
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      # The official framework, pinned; the packages are cached, not the install.
+      - uses: actions/cache@v5
+        with:
+          path: ~/gst-download
+          key: gstreamer-macos-universal-${{ env.GST_VERSION }}
+
+      - name: Install GStreamer
+        run: |
+          packaging/macos/install-gstreamer.sh "$GST_VERSION" "$GST_MACOS_SHA256" "$GST_MACOS_DEVEL_SHA256" ~/gst-download
+          echo "/Library/Frameworks/GStreamer.framework/Versions/1.0/bin" >> "$GITHUB_PATH"
+          echo "PKG_CONFIG_PATH=/Library/Frameworks/GStreamer.framework/Versions/1.0/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --locked
+
+      - name: Build release
+        run: cargo build --release --locked
+
+      - name: Build frename.app
+        run: |
+          packaging/macos/build-app.sh 0.0.1 target/release/frename dist/frename.app
+          packaging/macos/sign-app.sh dist/frename.app
+          packaging/macos/check-bundle.sh dist/frename.app
+          ditto -c -k --keepParent dist/frename.app dist/frename-macos-arm64-ci.zip
+          ls -la dist
+
+      # The zip, not the .app: an artifact would lose the executable bits and the signature.
+      - uses: actions/upload-artifact@v6
+        with:
+          name: frename-macos-arm64-${{ github.sha }}
+          path: dist/frename-macos-arm64-ci.zip
+          retention-days: 14
+
+  # Plays the test clips with the app and starts it, on a fresh runner that has no GStreamer.
+  macos-app-test:
+    name: ci-macos-app-test
+    needs: macos
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: frename-macos-arm64-${{ github.sha }}
+          path: dist
+
+      - name: Self-test and start on a clean system
+        run: packaging/macos/test-app.sh dist/frename-macos-arm64-ci.zip screenshot-macos.png
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: screenshot-macos-${{ github.sha }}
+          path: screenshot-macos.png
+          retention-days: 14
+          if-no-files-found: warn
