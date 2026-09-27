@@ -22,7 +22,7 @@ jobs:
     name: ci-linux
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install GStreamer
         run: |
@@ -72,7 +72,7 @@ jobs:
           pkill -x frename
           tail -n 20 app.log
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: screenshot-main-window-${{ github.sha }}
@@ -85,7 +85,7 @@ jobs:
     name: ci-linux-appimage
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install GStreamer and packaging tools
         run: |
@@ -116,14 +116,14 @@ jobs:
           pkill -f frename-0.0.0-ci
           tail -n 20 appimage.log
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: frename-linux-x86_64-${{ github.sha }}
           path: dist/frename-0.0.0-ci-x86_64.AppImage
           retention-days: 14
 
       # A separate artifact: sharing one with the AppImage would move the AppImage under dist/dist/.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: screenshot-appimage-${{ github.sha }}
           path: screenshot-appimage.png
@@ -136,9 +136,9 @@ jobs:
     runs-on: ubuntu-24.04
     container: ubuntu:24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: frename-linux-x86_64-${{ github.sha }}
           path: dist
@@ -150,7 +150,7 @@ jobs:
     name: ci-windows
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -159,7 +159,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       # The official package, pinned; the installer (~500 MB) is cached, not the install.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: C:\gst-download
           key: gstreamer-msvc-x86_64-${{ env.GST_VERSION }}
@@ -189,7 +189,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "vpk pack failed" }
           Get-ChildItem releases | Format-Table Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: frename-windows-packages-${{ github.sha }}
           path: |
@@ -204,9 +204,9 @@ jobs:
     needs: windows
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: frename-windows-packages-${{ github.sha }}
           path: packages
