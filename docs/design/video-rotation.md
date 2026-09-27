@@ -21,9 +21,11 @@ their side. Showing the flag is part of this change.
    `↻`). The flag in the file changes, the video opens again at the same moment in the same
    play/pause state, now upright; a note over the picture names the file's rotation flag now
    (`Rotation: 90° right`, `90° left`, `180°`, `none`). It names the flag, not the picture: a
-   phone's portrait clip plays upright with a 90° flag, and `none` would show it sideways.
-   `Ctrl+Alt+←` / `↺` turns it back. Four presses the same way bring the file back to exactly
-   the bytes it had. A held key turns once. With no video shown nothing happens.
+   phone's portrait clip plays upright with a 90° flag, and `none` would show it sideways. When
+   the clip was already turned the note says what was pressed and the result (`Turned 90° right
+   · rotation now 180°`). `Ctrl+Alt+←` / `↺` turns it back. Four presses the same way bring the
+   file back to exactly the bytes it had. A held key turns once. With no video shown, or while the
+   player is closing a file to save it, nothing happens.
 2. **Undo.** `Ctrl+Z` right after takes the turn back (the file is written again and the video
    reopens once, even when the turn's own reopen is still loading, with the same note); `Ctrl+Y`
    turns it again. Each press is one undo step. The step refreshes nothing else: a turn changes
@@ -62,7 +64,7 @@ subtitles. They used to sit in the controls bar, which has no room left for them
 Batch panel "Rotate videos": the title, a hint ("Changes the rotation flag of MP4 and MOV files;
 the picture is not re-encoded. Premiere Pro is expected to show the clip turned when it imports
 it. Running it again turns the files again; “Reset” removes any turn, including one a phone
-recorded."), four radio buttons.
+recorded, so a phone's portrait clip then plays on its side."), four radio buttons.
 
 ## Keyboard shortcuts
 

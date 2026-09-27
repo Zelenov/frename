@@ -8,13 +8,14 @@ use iced::Task;
 use super::FolderWorkspace;
 use crate::features::file_workspace::view::COMMENT_EDITOR_ID;
 use crate::features::folder_workspace::Message;
-use crate::features::rotation_text::{rotated, why_not_rotated};
+use crate::features::rotation_text::{not_rotated, rotated, turned};
 
 impl FolderWorkspace {
     /// Turn the open video by `quarter_turns` clockwise (negative: counter-clockwise). Nothing
-    /// happens when no video is shown: the note would go to a player that is not there.
+    /// happens when no video is shown (the note would go to a player that is not there), or
+    /// while the player is closing a file to save it (a reopen then would race that save).
     pub(super) fn rotate_video(&mut self, quarter_turns: i32) -> Task<Message> {
-        if !self.media_viewer.is_previewable() {
+        if !self.media_viewer.is_previewable() || self.pending_file_updated.is_some() {
             return Task::none();
         }
         let Some(file) = self.file_workspace.file() else {
@@ -30,17 +31,21 @@ impl FolderWorkspace {
                 }));
                 Task::batch([
                     self.media_viewer.reload_video().map(Message::MediaViewer),
-                    Self::notice(&rotated(rotation)),
+                    Self::notice(&turned(quarter_turns, rotation)),
                 ])
             }
-            Err(error) => Self::notice(&fl!("rotate-failed", reason = why_not_rotated(&error))),
+            Err(error) => Self::notice(&not_rotated(&error)),
         }
     }
 
     /// `Ctrl+Alt+←/→` pressed while a text field had the keys: turn the video, unless the field
     /// is the comment box, where the keys belong to the text (the search fields hold nothing
-    /// the keys would do, so there they still turn the video).
+    /// the keys would do, so there they still turn the video). In batch mode the comment box is
+    /// not shown, and asking about its focus would get no answer at all.
     pub(super) fn rotate_video_unless_writing(&self, quarter_turns: i32) -> Task<Message> {
+        if self.batch.is_active() {
+            return Task::done(Message::RotateVideo(quarter_turns));
+        }
         iced::widget::operation::is_focused(iced::widget::Id::new(COMMENT_EDITOR_ID)).map(
             move |writing| {
                 if writing {
@@ -56,7 +61,13 @@ impl FolderWorkspace {
     /// turned now. Always reopen, not only when its rotation looks different: a reopen still
     /// loading from the turn being undone would otherwise land and show the turn the file no
     /// longer has.
+    ///
+    /// The turned file is the open one: a turn is only made on the open file, and the steps
+    /// that switch files are undone and redone around it, so the file is open again by then.
     pub(super) fn follow_rotation(&mut self) -> Task<Message> {
+        if self.pending_file_updated.is_some() {
+            return Task::none();
+        }
         let note = self
             .file_workspace
             .file()
@@ -72,9 +83,7 @@ impl FolderWorkspace {
     /// a turn of a file that is read-only or open in another app.
     pub(super) fn undo_failed_notice(error: &UndoError) -> Task<Message> {
         match error {
-            UndoError::Rotation(_, error) => {
-                Self::notice(&fl!("rotate-failed", reason = why_not_rotated(error)))
-            }
+            UndoError::Rotation(_, error) => Self::notice(&not_rotated(error)),
             _ => Task::none(),
         }
     }

@@ -115,7 +115,7 @@ pub fn view<'a>(
                 .into(),
             None => video_area.into(),
         };
-        // A short note (`Frame saved`, `Rotated: 90° right`) over the bottom left of the picture:
+        // A short note (`Frame saved`, `Rotation: 90° right`) over the bottom left of the picture:
         // the controls bar has no room left for one in a player of the default width. In
         // fullscreen the subtitles sit at the bottom, so it goes to the top left. Its width is
         // capped so a long note wraps instead of running under the side list.
@@ -203,10 +203,8 @@ pub fn view<'a>(
                 .rotation()
                 .and_then(|read| read.as_ref().err())
                 .map(|error| {
-                    fl!(
-                        "rotate-cannot",
-                        reason = crate::features::rotation_text::why_not_rotated(error)
-                    )
+                    let reason = crate::features::rotation_text::why_not_rotated(error);
+                    fl!("rotate-cannot", reason = reason)
                 }),
         )
         .map(Message::Controls);

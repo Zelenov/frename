@@ -2867,6 +2867,38 @@ mod tests {
         assert_eq!(degrees(), Ok(90));
     }
 
+    /// In batch mode the comment box is not shown, so `Ctrl+Alt+→` after typing in the file
+    /// filter turns the video at once instead of asking about a focus nobody can answer.
+    #[test]
+    fn a_turn_while_typing_in_batch_mode_goes_straight_through() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        assert!(workspace.batch.is_active());
+        let task = workspace.update(Message::RotateVideoWhileTyping(1));
+        // `Task::done`: one message, known without running a widget operation.
+        assert_eq!(task.units(), 1);
+        let _ = workspace.update(Message::RotateVideo(1));
+        let rotation = frename_core::FileTagger::video_rotation(&test_dir.target_file());
+        assert_eq!(rotation.map(|r| r.degrees()), Ok(90));
+    }
+
+    #[test]
+    fn a_turn_note_says_what_was_pressed_when_the_clip_was_already_turned() {
+        use crate::features::rotation_text::turned;
+        use frename_core::Rotation;
+        let right = Rotation::UPRIGHT.turned(1);
+        assert_eq!(turned(1, right), "Rotation: 90° right");
+        assert_eq!(
+            turned(1, right.turned(1)),
+            "Turned 90° right · rotation now 180°"
+        );
+        assert_eq!(
+            turned(-1, Rotation::UPRIGHT),
+            "Turned 90° left · rotation now none"
+        );
+    }
+
     /// Typing `text` into the open marker row's name field.
     fn type_name(text: &str) -> crate::features::markers::Message {
         crate::features::markers::Message::NameAction(iced::widget::text_editor::Action::Edit(

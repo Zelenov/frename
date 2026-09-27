@@ -96,8 +96,8 @@ fn main_window_event(
             folder_workspace::Message::SetSegmentEnd,
         )),
         // Ctrl+Alt+← / → turn the open video, also after typing in a search field (like the
-        // F-keys), but not while writing a comment; plain arrows stay with the tag grid. A held key turns it once: each turn
-        // rewrites the file and reopens the video.
+        // F-keys), but not while writing a comment; plain arrows stay with the tag grid. A held
+        // key turns it once: each turn rewrites the file and reopens the video.
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
             key: keyboard::Key::Named(arrow),
             modifiers,
