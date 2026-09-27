@@ -5,6 +5,7 @@
 
 ## Changed
 - Clips a phone recorded in portrait now play upright instead of on their side.
+- Short notes such as "Frame saved" now appear over the picture instead of in the controls bar, and the controls bar is a little tighter.
 
 # 0.76
 ## Added

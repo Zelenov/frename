@@ -153,7 +153,7 @@ The progress bar shows what you have noted about a clip:
 - **Rotation:** ↺ / ↻ (`Ctrl+Alt+←` / `→`) turn a clip shot sideways 90° at a time. Only the
   rotation flag inside the mp4/mov changes, right away: the picture is not re-encoded. Premiere
   Pro reads the flag when it imports a clip; a clip it imported before the turn may keep its old
-  orientation. Other formats cannot be turned. If `Ctrl+Alt+`arrow turns your whole screen, switch
+  orientation. Other formats cannot be turned. If `Ctrl+Alt+←` / `→` turns your whole screen, switch
   off the graphics driver's rotation hotkeys or use ↺ / ↻.
 - **In and out points:** `[` and `]` mark the usable segment, highlighted on the progress bar.
   They are saved in the file name (`in_00_01_05`, `out_00_02_10`, whole seconds) or, if you choose

@@ -19,14 +19,15 @@ their side. Showing the flag is part of this change.
 
 1. **Turn the open clip.** The editor sees a sideways clip and presses `Ctrl+Alt+→` (or clicks
    `↻`). The flag in the file changes, the video opens again at the same moment in the same
-   play/pause state, now upright; the controls bar says how it is turned now (`Rotated: 90°
-   right`, `90° left`, `180°`, `upright`). `Ctrl+Alt+←` / `↺` turns it back. Four presses the
+   play/pause state, now upright; a note over the picture says how it is turned now (`Rotated:
+   90° right`, `90° left`, `180°`, `upright`). `Ctrl+Alt+←` / `↺` turns it back. Four presses the
    same way bring the file back to exactly the bytes it had. A held key turns once.
 2. **Undo.** `Ctrl+Z` right after takes the turn back (the file is written again and the video
-   reopens); `Ctrl+Y` turns it again. Each press is one undo step.
+   reopens, even when the turn's own reopen is still loading); `Ctrl+Y` turns it again. Each
+   press is one undo step.
 3. **A file that cannot turn.** An MKV, a read-only file, a file Premiere has open, a damaged
-   file: nothing changes and the controls bar says why, the same short note failed marker writes
-   use: `Not rotated: the file is read-only or in use`, `Not rotated: this format has no rotation
+   or moved file: nothing changes and a note over the picture says why, like the note for
+   failed marker writes: `Not rotated: the file is read-only or in use`, `Not rotated: this format has no rotation
    flag`, `Not rotated: the file is damaged`. The batch's failed list gives the same reasons.
 4. **Many files.** Batch mode ▸ "Rotate videos" with four choices: 90° right, 90° left, 180°,
    upright (reset to 0°). Run on the checked files. Files that already are upright count as
@@ -37,20 +38,26 @@ their side. Showing the flag is part of this change.
 
 ## UI sketch
 
-Video controls bar, after 📷 and 📍 (same 32 px icon buttons):
+Video controls bar, after 📷 and 📍: ↺ ↻ as one tight pair of 24 px buttons; the row's spacing
+is 4 px (was 8), so the volume still fits a player of the default width (460 px):
 
 ```
-⏪ ▶ ⏩  [ ]  📷 📍 ↺ ↻                         🔊 ━━━━
+⏪ ▶ ⏩ [ ] 📷 📍 ↺↻                    🔊 ━━━━
 ```
 
-Tooltips: `Rotate left (Ctrl+Alt+←)`, `Rotate right (Ctrl+Alt+→)`. For a file without a rotation
-flag the buttons are off with the tooltip `This format has no rotation flag`, like 📍 for a file
-that cannot hold markers; the keys still show the reason in the controls bar (a key press never
-does nothing silently).
+Tooltips: `Rotate left (Ctrl+Alt+←)`, `Rotate right (Ctrl+Alt+→)`. For a clip whose rotation
+cannot be read or changed the buttons are off with the reason as the tooltip (`Cannot rotate: this
+format has no rotation flag`, `… the file is damaged`), like 📍 for a file that cannot hold
+markers; while a clip loads they stay on. The keys still show the reason in a note (a key press
+never does nothing silently).
+
+Short notes (`Frame saved`, `Rotated: 90° right`, `Not rotated: …`) show over the bottom left
+of the picture, 260 px wide at most (they wrap); in fullscreen at the top left, clear of the
+subtitles. They used to sit in the controls bar, which has no room left for them.
 
 Batch panel "Rotate videos": the title, a hint ("Changes the rotation flag of MP4 and MOV files;
-the picture is not re-encoded. Premiere Pro shows the clip turned after import."), four radio
-buttons.
+the picture is not re-encoded. Premiere Pro shows the clip turned after import. Running it again
+turns the files again; “Upright” puts them back."), four radio buttons.
 
 ## Keyboard shortcuts
 
@@ -168,3 +175,8 @@ clip upright; `F12` saves an upright frame.
 7. **The player follows the flag for every clip**, which also turns existing phone portrait clips
    upright in frename. That is what every other reader does; release notes say so.
 8. **No context-menu entry** now (#48 is not merged).
+9. **Controls bar packed closer** (spacing 8 → 4 px, ↺ ↻ one 24 px pair): with two more buttons
+   the volume no longer fitted a player of the default width. Every button stays.
+10. **Short notes over the picture** instead of in the controls bar, for every note (`Frame
+    saved` too): the bar has no room left, and a long note there pushed buttons out. Bottom left
+    in the window, top left in fullscreen (the subtitles are at the bottom there).
