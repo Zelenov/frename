@@ -313,8 +313,78 @@ jobs:
       - name: Self-test on a clean system
         run: packaging/linux/test-appimage.sh dist/frename-linux-x86_64-v${{ needs.prepare.outputs.package_version }}.AppImage
 
+  build-macos:
+    needs: prepare
+    if: needs.prepare.outputs.should_build == 'true'
+    runs-on: macos-14
+    permissions:
+      contents: read
+    env:
+      # The GStreamer bundled in frename.app: as ci.yml.
+      GST_VERSION: 1.28.7
+      GST_MACOS_SHA256: 529fdf4a4027d942e59b5b3564f6400adaa008f63ce5f3fed4ffe35d73911994
+      GST_MACOS_DEVEL_SHA256: 72a44870cf02472cbf6e9a84bcc25ee6807dd1c26659a112066373544d365e7a
+      PACKAGE_VERSION: ${{ needs.prepare.outputs.package_version }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/gst-download
+          key: gstreamer-macos-universal-${{ env.GST_VERSION }}
+
+      - name: Install GStreamer
+        run: |
+          packaging/macos/install-gstreamer.sh "$GST_VERSION" "$GST_MACOS_SHA256" "$GST_MACOS_DEVEL_SHA256" ~/gst-download
+          echo "/Library/Frameworks/GStreamer.framework/Versions/1.0/bin" >> "$GITHUB_PATH"
+          echo "PKG_CONFIG_PATH=/Library/Frameworks/GStreamer.framework/Versions/1.0/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      - name: Build release binary
+        env:
+          APP_VERSION: ${{ needs.prepare.outputs.package_version }}
+        run: cargo build --release --locked
+
+      # Ad-hoc signed: no Apple Developer account (README says how to open it).
+      - name: Build frename.app
+        run: |
+          packaging/macos/build-app.sh "$PACKAGE_VERSION" target/release/frename dist/frename.app
+          packaging/macos/sign-app.sh dist/frename.app
+          packaging/macos/check-bundle.sh dist/frename.app
+          ditto -c -k --keepParent dist/frename.app "dist/frename-macos-arm64-v$PACKAGE_VERSION.zip"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: frename-macos-arm64-v${{ needs.prepare.outputs.package_version }}
+          path: dist/frename-macos-arm64-v${{ needs.prepare.outputs.package_version }}.zip
+
+  # A macOS build that does not play video and start on a Mac without GStreamer is never published.
+  test-macos:
+    needs: [prepare, build-macos]
+    if: needs.prepare.outputs.should_build == 'true'
+    runs-on: macos-14
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: frename-macos-arm64-v${{ needs.prepare.outputs.package_version }}
+          path: dist
+
+      - name: Self-test and start on a clean system
+        run: packaging/macos/test-app.sh dist/frename-macos-arm64-v${{ needs.prepare.outputs.package_version }}.zip
+
   release:
-    needs: [prepare, build-windows, test-windows, build-linux, test-linux]
+    needs: [prepare, build-windows, test-windows, build-linux, test-linux, build-macos, test-macos]
     if: needs.prepare.outputs.should_build == 'true'
     runs-on: ubuntu-22.04
     permissions:
@@ -351,5 +421,6 @@ jobs:
             artifacts/releases.win.json
             artifacts/assets.win.json
             artifacts/frename-linux-x86_64-v${{ needs.prepare.outputs.package_version }}.AppImage
+            artifacts/frename-macos-arm64-v${{ needs.prepare.outputs.package_version }}.zip
         env:
           GITHUB_TOKEN: ${{ github.token }}

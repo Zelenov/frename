@@ -287,6 +287,22 @@ it. Video playback is built in; nothing else to install. If it says FUSE is miss
 `--appimage-extract-and-run`. Your settings and the last opened folder are kept in
 `~/.local/share/frename`.
 
+**Mac (Apple silicon, M1 or newer; macOS 12 or newer):** download `frename-macos-arm64-*.zip`
+from the [latest release](https://github.com/Zelenov/frename/releases/latest), double-click it
+and drag `frename.app` into **Applications**. frename is not signed with a paid Apple certificate,
+so the first time macOS refuses to open it ("cannot be opened" or "is damaged"). Open **Terminal**
+once and run:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/frename.app
+```
+
+(`xattr -d com.apple.quarantine` removes the "downloaded from the internet" flag; `-r` does it for
+every file inside the app.) Then open frename as usual. Video playback is built in. Shortcuts use
+`Ctrl`, as on Windows, not `⌘`. There are no automatic updates: download the new zip and replace the
+app the same way. Your settings and the last opened folder are kept in
+`~/Library/Application Support/frename`.
+
 ---
 
 ## Building from source
