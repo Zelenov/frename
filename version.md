@@ -1,3 +1,7 @@
+# NEXT
+## Added
+- Drag clips from the file list into Premiere Pro, Explorer or other programs (Windows): the clip is saved first, and dropping on a folder copies it. In batch mode a checked file drags all checked files.
+
 # 0.76
 ## Added
 - Right-click 📂 to pick one clip: its whole folder opens with that clip selected.

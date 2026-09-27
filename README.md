@@ -47,6 +47,10 @@ The in/out part is there only when you mark a segment.
 6. Type a note for the whole clip in the comment box, press `Esc` to leave it, then `PageDown` to
    go to the next clip. The clip you leave is renamed and its markers are saved.
 7. Most clips share most tags with their neighbors: press `Ctrl+C` on one clip and `Ctrl+V` on the next, then adjust.
+8. Drag a clip from the file list straight into Premiere Pro (project panel, timeline or source
+   monitor), Explorer or any other program, as from Explorer. frename saves the clip first, so it
+   arrives with its tags, comment, in/out and markers. Dropping on a folder copies it; nothing is
+   moved. In batch mode, dragging a checked file drags all checked files. Windows only for now.
 
 Next time you start frename, it reopens the last folder and clip.
 
