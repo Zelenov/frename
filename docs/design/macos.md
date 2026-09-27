@@ -43,7 +43,8 @@ must link only macOS and itself, decode a frame of every test clip, and start an
   ([osxrelocator.py](https://github.com/GStreamer/cerbero/blob/main/cerbero/tools/osxrelocator.py)).
   What a binary linked against 1.28.7 records, seen on the CI runner: `@rpath/libgstvideo-1.0.0.dylib`
   (the name without `lib/`), and no rpath of its own, so nothing loads until one is added.
-  `build.rs` adds the framework's `lib` as rpath on macOS, for `cargo run` and `cargo test`.
+  The build scripts of frename and frename-core (`packaging/macos/gstreamer_rpath.rs`) add the
+  framework's `lib` as rpath on macOS, for `cargo run` and `cargo test`.
 - Plugins are `lib/gstreamer-1.0/libgst<name>.so` (cerbero's Darwin module extension is `.so`,
   [filesprovider.py](https://github.com/GStreamer/cerbero/blob/main/cerbero/build/filesprovider.py)).
 - GStreamer's own "Deploying on macOS" page predates relocation (copy the framework, run
