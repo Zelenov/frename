@@ -223,6 +223,8 @@ pub struct FrenameApp {
     monitor_size: (f32, f32),
     /// The demo being run (`--demo`), if any.
     demo: Option<crate::demo::DemoRun>,
+    /// A folder or file given on the command line, opened instead of the last session.
+    initial_path: Option<frename_core::FolderAndFile>,
     /// A downloaded update to apply once the main window has closed.
     pending_update: Option<updates::Release>,
 }
@@ -257,6 +259,7 @@ impl FrenameApp {
                 .map(|g| (g.monitor_width, g.monitor_height))
                 .unwrap_or((0.0, 0.0)),
             demo: None,
+            initial_path: None,
             pending_update: None,
         }
     }
@@ -264,6 +267,12 @@ impl FrenameApp {
     /// Run `demo` instead of a normal session.
     pub fn with_demo(mut self, demo: Option<crate::demo::DemoRun>) -> Self {
         self.demo = demo;
+        self
+    }
+
+    /// Open `path` (from the command line) instead of the last session.
+    pub fn with_initial_path(mut self, path: Option<frename_core::FolderAndFile>) -> Self {
+        self.initial_path = path;
         self
     }
 }
@@ -281,13 +290,15 @@ impl FrenameApp {
                 let model = Task::done(describe_ai_message(batch::describe_ai::Message::SetModel(
                     clipscribe::Model::from_id(&self.settings.settings().ai_model),
                 )));
+                let open = match self.initial_path.take() {
+                    Some(pair) => folder_workspace::Message::ScanFolder(pair),
+                    None => folder_workspace::Message::LoadLastSession,
+                };
                 let load = Task::batch([
                     language,
                     model,
                     self.subtitle_config(),
-                    Task::done(Message::FolderWorkspace(
-                        folder_workspace::Message::LoadLastSession,
-                    )),
+                    Task::done(Message::FolderWorkspace(open)),
                 ]);
                 if self.demo.is_none() {
                     // The daily background update check, when it is due.

@@ -108,7 +108,10 @@ mod tests {
     #[test]
     fn dropping_one_file_opens_that_file() {
         let (_, a, _) = drop_fixture("drop-one-file");
-        assert_eq!(choose_dropped_path(std::slice::from_ref(&a)), Some(a.as_path()));
+        assert_eq!(
+            choose_dropped_path(std::slice::from_ref(&a)),
+            Some(a.as_path())
+        );
     }
 
     #[test]
