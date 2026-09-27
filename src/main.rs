@@ -61,9 +61,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // An installed or portable package keeps the database and the log in its root: the folder
     // with the exe is replaced by every update. Set while the process is single-threaded.
+    // The Store build is not a Velopack package and keeps them in %LocalAppData%\frename.
     let package = package::Package::locate();
-    if let Some(package) = &package {
-        frename_core::set_app_data_dir(package.data_dir());
+    if let Some(dir) = package
+        .as_ref()
+        .map(package::Package::data_dir)
+        .or_else(package::store_data_dir)
+    {
+        frename_core::set_app_data_dir(dir);
     }
     package::set_current(package.clone());
     let self_test = self_test_paths(&args);
@@ -113,6 +118,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match &package {
             Some(p) if p.portable => "portable",
             Some(_) => "installed",
+            None if package::STORE_BUILD => "Microsoft Store",
             None => "not packaged",
         },
         data_dir.display()

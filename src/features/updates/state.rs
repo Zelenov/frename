@@ -47,6 +47,8 @@ enum Effect {
 pub struct UpdatesState {
     /// Updates work only in an installed or portable package.
     installed: bool,
+    /// The Microsoft Store build: the Store updates it, frename never checks.
+    from_store: bool,
     /// The running version, `0.67.0` (or `dev`).
     current_version: String,
     saved: UpdateCheckState,
@@ -58,14 +60,16 @@ pub struct UpdatesState {
 impl Default for UpdatesState {
     fn default() -> Self {
         let package = package::current();
-        Self::new(
+        let mut state = Self::new(
             package.is_some(),
             package.map_or_else(
                 || option_env!("APP_VERSION").unwrap_or("dev").to_string(),
                 |p| p.version.clone(),
             ),
             AppDatabase::new().get_update_check().unwrap_or_default(),
-        )
+        );
+        state.from_store = package::STORE_BUILD;
+        state
     }
 }
 
@@ -73,6 +77,7 @@ impl UpdatesState {
     fn new(installed: bool, current_version: String, saved: UpdateCheckState) -> Self {
         Self {
             installed,
+            from_store: false,
             current_version,
             saved,
             status: Status::Idle,
@@ -230,6 +235,11 @@ impl UpdatesState {
     /// Whether this frename can update itself (installed or portable package).
     pub fn installed(&self) -> bool {
         self.installed
+    }
+
+    /// Whether this is the Microsoft Store build, which the Store updates.
+    pub fn from_store(&self) -> bool {
+        self.from_store
     }
 
     /// The running version as the UI shows it, `0.67`.
@@ -468,5 +478,30 @@ mod tests {
             Effect::None
         ));
         assert_eq!(state.status(), &Status::Idle);
+    }
+
+    /// The Store build shares `%LocalAppData%\frename` with an installed Velopack version, whose
+    /// saved check (on at start-up, a newer version found) must not make the Store build check
+    /// GitHub or offer that version: the Store updates it.
+    #[test]
+    fn the_store_build_never_checks_even_with_a_saved_newer_version() {
+        let mut state = UpdatesState::new(
+            false,
+            "0.67.0".to_string(),
+            UpdateCheckState {
+                check_on_start: true,
+                last_check: 0,
+                newest_version: "0.68.0".to_string(),
+            },
+        );
+        state.from_store = true;
+        assert!(state.from_store());
+        assert!(matches!(state.apply(Message::Tick, 10 * DAY), Effect::None));
+        assert!(matches!(state.apply(Message::CheckNow, 10), Effect::None));
+        assert!(matches!(
+            state.apply(Message::UpdateAndRestart, 10),
+            Effect::None
+        ));
+        assert_eq!(state.available_version(), None);
     }
 }

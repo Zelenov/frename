@@ -370,6 +370,7 @@ file-workspace-comment-expand = Развернуть комментарий
 
 updates-check = Проверить обновления
 updates-not-installed = Обновления работают только в установленной версии
+updates-from-store = Обновления приходят из Microsoft Store
 updates-checking = Проверка…
 updates-downloading-named = Загрузка { $version }… { $percent }%
 updates-downloading = Загрузка… { $percent }%

@@ -11,6 +11,23 @@ use crate::theme;
 /// version is known, and the start-up check box. `batch_running` holds the update back: the
 /// batch job would be cut off by the restart.
 pub fn view(state: &UpdatesState, batch_running: bool) -> Element<'_, Message> {
+    let version = text(fl!(
+        "updates-current-version",
+        version = state.current_version()
+    ))
+    .size(13);
+    // The Store build has no updater of its own: nothing to check or to switch on.
+    if state.from_store() {
+        return column![
+            version,
+            text(fl!("updates-from-store"))
+                .size(13)
+                .color(theme::TEXT_MUTED),
+        ]
+        .spacing(8)
+        .into();
+    }
+
     let status = state.status();
     let busy = matches!(
         status,
@@ -63,11 +80,7 @@ pub fn view(state: &UpdatesState, batch_running: bool) -> Element<'_, Message> {
     }
 
     column![
-        text(fl!(
-            "updates-current-version",
-            version = state.current_version()
-        ))
-        .size(13),
+        version,
         actions,
         checkbox(state.check_on_start())
             .label(fl!("updates-check-on-start"))

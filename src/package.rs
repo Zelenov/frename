@@ -2,9 +2,16 @@
 //! zip, or neither (`cargo run`, a bare exe, Linux). Both packages are Velopack packages; they
 //! keep frename's own files in the package root, because the folder with the exe (`current\`)
 //! is replaced whole on every update.
+//!
+//! The Microsoft Store build (`--features store`, packed as MSIX) is not a Velopack package: the
+//! Store installs and updates it, so it never runs Velopack's hooks or updater, and keeps its
+//! files in `%LocalAppData%\frename` (docs/design/microsoft-store.md).
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
+
+/// Built for the Microsoft Store: the Store installs and updates frename, Velopack does nothing.
+pub const STORE_BUILD: bool = cfg!(feature = "store");
 
 /// The package this process runs from, found once at start-up.
 static CURRENT: OnceLock<Option<Package>> = OnceLock::new();
@@ -22,9 +29,12 @@ pub struct Package {
 
 impl Package {
     /// The package frename runs from, if any. Only Windows has Velopack packages; the Linux
-    /// AppImage is built without Velopack.
+    /// AppImage is built without Velopack, and the Store build is an MSIX package instead.
     #[cfg(windows)]
     pub fn locate() -> Option<Self> {
+        if STORE_BUILD {
+            return None;
+        }
         let locator = velopack::locator::auto_locate_app_manifest(
             velopack::locator::LocationContext::FromCurrentExe,
         )
@@ -66,7 +76,12 @@ pub fn current() -> Option<&'static Package> {
 ///
 /// Installing (and updating, so an install from before it gets it too) adds "Open in frename" to
 /// Explorer's context menu of folders and videos; uninstalling removes it.
+///
+/// The Store build skips all of it: the Store installs, updates and uninstalls it.
 pub fn run_velopack_hooks() {
+    if STORE_BUILD {
+        return;
+    }
     let mut app = velopack::VelopackApp::build().set_auto_apply_on_startup(false);
     #[cfg(windows)]
     {
@@ -123,6 +138,22 @@ mod explorer_menu {
     }
 }
 
+/// The data folder of the Store build: `%LocalAppData%\frename`, where the installed Velopack
+/// version keeps its data too. `None` for other builds, and when Windows has no local app data
+/// folder. Inside the MSIX package, Windows redirects new files there to the package's own
+/// storage, which the Store removes with the app.
+pub fn store_data_dir() -> Option<PathBuf> {
+    STORE_BUILD
+        .then(dirs::data_local_dir)
+        .flatten()
+        .map(|local| store_data_dir_in(&local))
+}
+
+/// The Store build's data folder inside a local app data folder.
+fn store_data_dir_in(local_app_data: &std::path::Path) -> PathBuf {
+    local_app_data.join("frename")
+}
+
 /// The running version as the UI shows it: `0.68`, not Velopack's `0.68.0`. Packaged builds know
 /// it from the package, release builds from `APP_VERSION` at build time; otherwise `dev`.
 pub fn display_version(package: Option<&Package>) -> String {
@@ -163,6 +194,16 @@ mod tests {
             version: "0.70.0".to_string(),
         };
         assert_eq!(display_version(Some(&package)), "0.70");
+    }
+
+    #[test]
+    fn the_store_build_keeps_its_data_where_the_installed_version_does() {
+        let local = PathBuf::from("C:/Users/me/AppData/Local");
+        assert_eq!(store_data_dir_in(&local), local.join("frename"));
+        assert_eq!(
+            store_data_dir().is_some(),
+            STORE_BUILD && dirs::data_local_dir().is_some()
+        );
     }
 
     #[test]
