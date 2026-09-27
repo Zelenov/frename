@@ -233,7 +233,7 @@ fn captured_span(caps: &regex::Captures<'_>) -> Option<(u64, u64)> {
 }
 
 /// Milliseconds of one time as [`line_re`] matches it; `None` when a field is out of range.
-fn parse_time(text: &str) -> Option<u64> {
+pub(crate) fn parse_time(text: &str) -> Option<u64> {
     let fields: Vec<&str> = text.split('-').collect();
     if let [h, m, s, ms] = fields.as_slice() {
         let (h, m, s, ms): (u64, u64, u64, u64) = (

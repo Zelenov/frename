@@ -221,6 +221,20 @@ mod tests {
     }
 
     #[test]
+    fn a_row_inserted_after_migration_15_with_the_old_column_default_reads_as_in_video() {
+        // Migration 15 cannot change the column's default ('file_name', from migration 5);
+        // the app always writes the column, and reading maps the stale value to the video.
+        let conn = Connection::open_in_memory().expect("open");
+        run(&conn).expect("migrate");
+        conn.execute("INSERT INTO app_settings (id) VALUES (1)", [])
+            .expect("settings row");
+        assert_eq!(
+            crate::InOutStorage::from_name(&in_out_storage(&conn)),
+            crate::InOutStorage::InVideo
+        );
+    }
+
+    #[test]
     fn a_default_row_from_migration_5_moves_to_the_video() {
         let conn = database_at_version_1();
         for m in MIGRATIONS.iter().filter(|m| (2..=14).contains(&m.version)) {

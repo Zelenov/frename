@@ -4,15 +4,16 @@
 //! `file_name()` builds `[tags.]name.ext`; `FileSnapshot::parse()` is the inverse. The in/out
 //! points are not part of the name: they live in the video or in the comment (see
 //! `crate::metadata`). Names written by older versions still carry `in_HH_MM_SS` /
-//! `out_HH_MM_SS` after the name; those parts are read as part of the name, never as tags,
-//! until [`FileSnapshot::take_name_in_out`] (the batch action that converts such files) takes
-//! them out.
+//! `out_HH_MM_SS` after the name; those parts are read as part of the name (wherever they
+//! are), never as tags, until [`FileSnapshot::take_name_in_out`] (the batch action that
+//! converts such files) takes them out.
 
 use regex::Regex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
 use crate::markers::Marker;
+use crate::metadata::Segment;
 
 // ---------------------------------------------------------------------------
 // In/out parts of names written by older versions
@@ -37,14 +38,6 @@ fn name_in_out_part(part: &str) -> Option<(bool, f32)> {
     }
     let secs = h as f32 * 3600.0 + m as f32 * 60.0 + s as f32;
     Some((&caps[1] == "in", secs))
-}
-
-/// The in and out points an older version wrote into a file name (see
-/// [`FileSnapshot::take_name_in_out`]).
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct NameInOut {
-    pub start: Option<f32>,
-    pub end: Option<f32>,
 }
 
 // Whether saved names put a space after the dot that ends each tag, process-wide like the
@@ -208,7 +201,9 @@ impl FileSnapshot {
     /// Parse a raw file-name string (not a full path) into a `FileSnapshot`: the dot-parts
     /// are tags, then the name, then the extension. In/out parts older versions wrote after
     /// the name (`clip.in_00_00_07.out_00_00_12.mp4`) stay part of the name, so they are
-    /// neither tags nor in/out points and the name round-trips unchanged.
+    /// neither tags nor in/out points and the name round-trips unchanged. Such a part placed
+    /// among the tags by hand is not a tag either: it joins the name, right after it, so that
+    /// file is renamed the next time it is saved.
     pub fn parse(raw_name: &str) -> Self {
         let parts: Vec<&str> = raw_name
             .split('.')
@@ -220,17 +215,25 @@ impl FileSnapshot {
             [] => (vec![], String::new(), String::new()),
             [only] => (vec![], only.to_string(), String::new()),
             [before @ .., ext] => {
-                // The name is the last part that is not an old in/out part, with the in/out
-                // parts after it.
-                let name_at = before
-                    .iter()
-                    .rposition(|part| name_in_out_part(part).is_none())
-                    .unwrap_or(0);
-                (
-                    before[..name_at].iter().map(|s| s.to_string()).collect(),
-                    before[name_at..].join("."),
-                    format!(".{ext}"),
-                )
+                let is_in_out = |part: &&str| name_in_out_part(part).is_some();
+                // The name is the last part that is not an old in/out part, with every in/out
+                // part: those among the tags first, then those after it.
+                match before.iter().rposition(|part| !is_in_out(part)) {
+                    None => (vec![], before.join("."), format!(".{ext}")),
+                    Some(name_at) => {
+                        let (tags, stray): (Vec<&str>, Vec<&str>) =
+                            before[..name_at].iter().partition(|part| !is_in_out(part));
+                        let name: Vec<&str> = std::iter::once(before[name_at])
+                            .chain(stray)
+                            .chain(before[name_at + 1..].iter().copied())
+                            .collect();
+                        (
+                            tags.into_iter().map(str::to_string).collect(),
+                            name.join("."),
+                            format!(".{ext}"),
+                        )
+                    }
+                }
             }
         };
 
@@ -239,9 +242,10 @@ impl FileSnapshot {
 
     /// Take the in/out parts an older version wrote into the name out of it (`clip.in_00_00_07`
     /// becomes `clip`), and return the points they held. `None` when the name has none; the
-    /// snapshot's own in/out points are left as they are.
-    pub fn take_name_in_out(&mut self) -> Option<NameInOut> {
-        let mut found = NameInOut::default();
+    /// snapshot's own in/out points are left as they are. A name made only of such parts is
+    /// empty afterwards: the caller must not save it.
+    pub fn take_name_in_out(&mut self) -> Option<Segment> {
+        let mut found = Segment::default();
         let mut any = false;
         let kept: Vec<&str> = self
             .name_without_extension
@@ -260,8 +264,7 @@ impl FileSnapshot {
                 None => true,
             })
             .collect();
-        // A name that is nothing but in/out parts keeps them: without them it would be empty.
-        if !any || kept.is_empty() {
+        if !any {
             return None;
         }
         self.name_without_extension = kept.join(".");
@@ -331,11 +334,25 @@ mod tests {
     }
 
     #[test]
+    fn old_in_out_parts_among_the_tags_join_the_name() {
+        let snapshot = FileSnapshot::parse("in_00_00_07.Food.out_00_00_09.Goat.clip.mp4");
+        assert_eq!(snapshot.tags(), ["Food", "Goat"]);
+        assert_eq!(
+            snapshot.name_without_extension(),
+            "clip.in_00_00_07.out_00_00_09"
+        );
+        assert_eq!(
+            (snapshot.segment_start(), snapshot.segment_end()),
+            (None, None)
+        );
+    }
+
+    #[test]
     fn taking_the_old_in_out_parts_leaves_the_bare_name() {
         let mut snapshot = FileSnapshot::parse("Food.clip.in_00_00_07.out_01_00_12.mp4");
         assert_eq!(
             snapshot.take_name_in_out(),
-            Some(NameInOut {
+            Some(Segment {
                 start: Some(7.0),
                 end: Some(3612.0)
             })
@@ -346,12 +363,16 @@ mod tests {
         let mut only_out = FileSnapshot::parse("clip.out_00_00_12.mov");
         assert_eq!(
             only_out.take_name_in_out(),
-            Some(NameInOut {
+            Some(Segment {
                 start: None,
                 end: Some(12.0)
             })
         );
         assert_eq!(only_out.file_name_with(false), "clip.mov");
         assert_eq!(FileSnapshot::parse("clip.mov").take_name_in_out(), None);
+
+        let mut only_points = FileSnapshot::parse("in_00_00_07.out_00_00_09.mp4");
+        assert!(only_points.take_name_in_out().is_some());
+        assert_eq!(only_points.name_without_extension(), "");
     }
 }

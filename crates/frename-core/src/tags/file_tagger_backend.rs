@@ -7,7 +7,7 @@ use super::file_snapshot::FileSnapshot;
 use super::folder_info::FolderInfo;
 use super::production_file_tagger::is_screenshot_sidecar;
 use crate::markers::Marker;
-use crate::metadata::{MarkersError, MetadataMove};
+use crate::metadata::{MarkersError, MetadataMove, Segment};
 
 /// The interface that both InMemoryFileTagger and ProductionFileTagger implement.
 pub trait FileTaggerBackend: Send + Sync {
@@ -55,6 +55,17 @@ pub trait FileTaggerBackend: Send + Sync {
     /// Returns the file's path afterwards.
     fn move_metadata(&self, path: &Path, _what: MetadataMove) -> PathBuf {
         path.to_path_buf()
+    }
+
+    /// The in/out points the file at `path` has stored in either home, the comment or the
+    /// video, whatever the storage chosen now. Backends that keep them only in memory answer
+    /// with the parsed ones.
+    fn stored_in_out(&self, path: &Path) -> Segment {
+        let snapshot = self.parse(path, &FolderInfo::default());
+        Segment {
+            start: snapshot.segment_start(),
+            end: snapshot.segment_end(),
+        }
     }
 
     /// Read the file's comment and in/out points again and replace the folder file list's line

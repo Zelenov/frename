@@ -26,7 +26,7 @@ use crate::tags::FileSnapshot;
 
 pub(crate) use conversion::{clear_moved_xmp, Inspection};
 pub use conversion::{MetadataMove, MoveOutcome};
-pub use in_out_line::format_in_out_line;
+pub use in_out_line::format_in_out_range;
 pub use xmp::Segment;
 
 /// Where comments are saved.
@@ -609,7 +609,7 @@ mod tests {
         save_comment_text_file(&file, &stored_comment(&note, saved.in_out), saved.comment);
         assert_eq!(
             crate::comment::load_comment(&file),
-            "In/Out: 00:00:00.050 – 00:00:00.150\nnote"
+            "note\nIn/Out: 00:00:00.050 – 00:00:00.150"
         );
         let back = loaded(&file, true, PLAIN);
         assert_eq!(back.comment(), "note");
@@ -634,7 +634,7 @@ mod tests {
                 in_out: false
             }
         );
-        assert_eq!(xmp::read(&file).comment, "In/Out: 00:00:00.050 – end\nnote");
+        assert_eq!(xmp::read(&file).comment, "note\nIn/Out: 00:00:00.050 – end");
         assert!(xmp::read(&file).segment.is_empty(), "no marker");
         let back = loaded(&file, false, in_comment);
         assert_eq!(back.comment(), "note");
@@ -760,7 +760,7 @@ mod tests {
                 in_out: false
             }
         );
-        assert_eq!(xmp::read(&file).comment, "In/Out: 00:00:01.000 – end\nnote");
+        assert_eq!(xmp::read(&file).comment, "note\nIn/Out: 00:00:01.000 – end");
         let back = loaded(&file, false, XMP_BOTH);
         assert_eq!(back.comment(), "note");
         assert_eq!(

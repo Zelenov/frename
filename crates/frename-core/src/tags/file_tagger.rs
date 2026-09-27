@@ -8,14 +8,14 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use super::file_snapshot::{FileSnapshot, NameInOut};
+use super::file_snapshot::FileSnapshot;
 use super::file_tagger_backend::FileTaggerBackend;
 use super::folder_info::FolderInfo;
 use super::folder_tag_store::FolderTagStore;
 use super::in_memory_file_tagger::InMemoryFileTagger;
 use super::tag_list::TagList;
 use crate::markers::Marker;
-use crate::metadata::{MarkersError, MetadataMove, MoveOutcome};
+use crate::metadata::{MarkersError, MetadataMove, MoveOutcome, Segment};
 
 static BACKEND: OnceLock<Box<dyn FileTaggerBackend>> = OnceLock::new();
 
@@ -153,11 +153,13 @@ impl FileTagger {
     /// an older version wrote into the name of the file at `path`, save the points where in/out
     /// points are kept now (the video or the comment, see [`crate::set_in_out_storage`]), and
     /// rename the file without those parts. When the file already has in/out points stored,
-    /// those stay and the name's are dropped; the result says so.
+    /// in either home, those stay and the name's are dropped; the result says so. A file whose
+    /// name would be empty or is taken is left as it is.
     pub fn move_in_out_out_of_name(path: &Path) -> NameInOutMove {
         move_name_in_out(
             path,
             |path| Self::parse(path, &FolderInfo::default()),
+            |path| backend().stored_in_out(path),
             Self::save,
         )
     }
@@ -290,39 +292,72 @@ impl FileTagger {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NameInOutMove {
     /// `Moved` to the new path, `NothingToMove` when the name held no in/out points, `Failed`
-    /// when the rename did not happen.
+    /// when the file was left as it was (see `problem`) or the rename did not happen.
     pub outcome: MoveOutcome,
-    /// The file already had in/out points stored: they were kept, and the name's (first)
-    /// were dropped. The second are the kept ones.
-    pub kept_stored: Option<(NameInOut, NameInOut)>,
+    /// The file already had in/out points stored, in the comment or in the video: they were
+    /// kept, and the name's (first) were dropped. The second are the kept ones.
+    pub kept_stored: Option<(Segment, Segment)>,
+    /// Why the file was left as it was, when it was.
+    pub problem: Option<NameInOutProblem>,
 }
 
-/// [`FileTagger::move_in_out_out_of_name`] with the parse and save to use.
+/// Why [`FileTagger::move_in_out_out_of_name`] left a file as it was.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NameInOutProblem {
+    /// The name is nothing but in/out parts: without them it would be empty.
+    NameWouldBeEmpty,
+    /// The name without the in/out parts is taken: a file (or a comment or subtitle file of
+    /// one) with this name is already in the folder, and renaming would replace it.
+    NameTaken(String),
+}
+
+/// [`FileTagger::move_in_out_out_of_name`] with the parse and save to use, and `stored`, which
+/// reads the in/out points a file has in either home (the comment or the video).
 pub(crate) fn move_name_in_out(
     path: &Path,
     parse: impl Fn(&Path) -> FileSnapshot,
+    stored: impl Fn(&Path) -> Segment,
     save: impl Fn(&FileSnapshot, &Path) -> PathBuf,
 ) -> NameInOutMove {
+    let left_alone = |problem: NameInOutProblem| NameInOutMove {
+        outcome: MoveOutcome::Failed(path.to_path_buf()),
+        kept_stored: None,
+        problem: Some(problem),
+    };
     let mut snapshot = parse(path);
     let Some(from_name) = snapshot.take_name_in_out() else {
         return NameInOutMove {
             outcome: MoveOutcome::NothingToMove,
             kept_stored: None,
+            problem: None,
         };
     };
-    let stored = NameInOut {
-        start: snapshot.segment_start(),
-        end: snapshot.segment_end(),
-    };
-    let has_stored = stored.start.is_some() || stored.end.is_some();
-    if !has_stored {
+    if snapshot.name_without_extension().is_empty() {
+        return left_alone(NameInOutProblem::NameWouldBeEmpty);
+    }
+    // Checked before anything is written: a rename onto an existing file would replace it.
+    let new_name = snapshot.file_name();
+    let new_path = path.with_file_name(&new_name);
+    let taken = [
+        new_path.clone(),
+        crate::comment::comment_path(&new_path),
+        crate::subtitles::subtitle_path(&new_path),
+    ]
+    .iter()
+    .any(|p| p.exists());
+    if taken {
+        return left_alone(NameInOutProblem::NameTaken(new_name));
+    }
+    let stored = stored(path);
+    if stored.is_empty() {
         snapshot.set_segment_start(from_name.start);
         snapshot.set_segment_end(from_name.end);
     }
-    let new_path = save(&snapshot, path);
+    let saved_path = save(&snapshot, path);
     NameInOutMove {
-        outcome: FileTagger::renamed(new_path, path),
-        kept_stored: has_stored.then_some((from_name, stored)),
+        outcome: FileTagger::renamed(saved_path, path),
+        kept_stored: (!stored.is_empty()).then_some((from_name, stored)),
+        problem: None,
     }
 }
 

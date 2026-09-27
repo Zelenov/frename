@@ -9,7 +9,8 @@ use super::screenshot::Screenshot;
 use super::FolderInfo;
 use crate::markers::Marker;
 use crate::metadata::{
-    self, CommentStorage, InOutStorage, MarkersError, MetadataMove, MetadataStorage, XmpSource,
+    self, CommentStorage, InOutStorage, MarkersError, MetadataMove, MetadataStorage, Segment,
+    XmpSource,
 };
 
 pub struct ProductionFileTagger;
@@ -134,6 +135,19 @@ impl FileTaggerBackend for ProductionFileTagger {
 
     fn metadata_move_needed(&self, path: &Path, what: MetadataMove) -> bool {
         metadata::Inspection::of(path).moved_by(what).is_needed()
+    }
+
+    fn stored_in_out(&self, path: &Path) -> Segment {
+        // As in `move_metadata`: both homes, the comment's line first.
+        let both_homes = MetadataStorage {
+            comment: CommentStorage::InVideo,
+            in_out: InOutStorage::InVideo,
+        };
+        let snapshot = self.parse_with(path, &FolderInfo::default(), both_homes);
+        Segment {
+            start: snapshot.segment_start(),
+            end: snapshot.segment_end(),
+        }
     }
 
     fn move_metadata(&self, path: &Path, what: MetadataMove) -> PathBuf {
@@ -266,7 +280,7 @@ mod tests {
         assert_eq!(file_name(&path), "goat.mov");
         assert_eq!(
             crate::comment::load_comment(&path),
-            "In/Out: start – 00:00:00.100\nnote"
+            "note\nIn/Out: start – 00:00:00.100"
         );
         let back = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
         assert_eq!(back.comment(), "note");
@@ -361,7 +375,7 @@ mod tests {
         assert!(!tagger.metadata_move_needed(&path, into_video));
         assert_eq!(
             crate::metadata::xmp_comment(&path),
-            "In/Out: 00:00:00.050 – end\nold comment",
+            "old comment\nIn/Out: 00:00:00.050 – end",
             "the in/out stays in the comment"
         );
         let snapshot = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
@@ -374,7 +388,7 @@ mod tests {
         let path = tagger.move_metadata(&path, into_text);
         assert_eq!(
             crate::comment::load_comment(&path),
-            "In/Out: 00:00:00.050 – end\nold comment"
+            "old comment\nIn/Out: 00:00:00.050 – end"
         );
         assert!(!tagger.metadata_move_needed(&path, into_text));
         std::fs::remove_file(crate::comment::comment_path(&path)).expect("remove text file");
@@ -408,7 +422,7 @@ mod tests {
         let path = tagger.move_metadata(&path, into_comment);
         assert_eq!(
             crate::comment::load_comment(&path),
-            "In/Out: 00:00:00.050 – end\nnote"
+            "note\nIn/Out: 00:00:00.050 – end"
         );
         assert!(!tagger.metadata_move_needed(&path, into_comment));
         // The marker in the video went: without the line nothing is left to move back.
@@ -471,6 +485,7 @@ mod tests {
         super::super::file_tagger::move_name_in_out(
             path,
             |p| tagger.parse_with(p, &FolderInfo::default(), storage),
+            |p| tagger.stored_in_out(p),
             |snapshot, p| tagger.save_with(snapshot, p, storage),
         )
     }
@@ -511,7 +526,7 @@ mod tests {
         assert_eq!(file_name(&path), "goat.mov");
         assert_eq!(
             crate::comment::load_comment(&path),
-            "In/Out: 00:01:05.000 – end\nnote"
+            "note\nIn/Out: 00:01:05.000 – end"
         );
     }
 
@@ -528,11 +543,11 @@ mod tests {
         assert_eq!(
             result.kept_stored,
             Some((
-                crate::NameInOut {
+                Segment {
                     start: Some(7.0),
                     end: None
                 },
-                crate::NameInOut {
+                Segment {
                     start: Some(0.05),
                     end: None
                 }
@@ -556,6 +571,78 @@ mod tests {
             crate::comment::load_comment(&path),
             "In/Out: 00:00:03.000 – end"
         );
+    }
+
+    #[test]
+    fn a_marker_in_the_video_counts_as_stored_with_comment_storage() {
+        // The marker is not where Settings keep in/out points now, but it is not lost either.
+        let path = clip_named("name-and-marker", "goat.mov");
+        let mut snapshot = ProductionFileTagger.parse_with(&path, &FolderInfo::default(), ADOBE);
+        snapshot.set_segment_start(Some(0.05));
+        let path = ProductionFileTagger.save_with(&snapshot, &path, ADOBE);
+        let old_name = path.with_file_name("goat.in_00_00_07.mov");
+        std::fs::rename(&path, &old_name).expect("rename");
+
+        let result = move_out_of_name(&old_name, TEXT);
+        assert_eq!(
+            result.kept_stored.map(|(_, kept)| kept),
+            Some(Segment {
+                start: Some(0.05),
+                end: None
+            })
+        );
+        let path = moved_path(&result);
+        assert!(
+            !crate::comment::comment_path(&path).exists(),
+            "no line with the name's points"
+        );
+        assert_eq!(
+            points(&ProductionFileTagger.parse_with(&path, &FolderInfo::default(), ADOBE)),
+            (Some(0.05), None)
+        );
+    }
+
+    #[test]
+    fn a_taken_name_leaves_the_file_and_the_other_one_alone() {
+        let old = clip_named("name-taken", "goat.in_00_00_00.mov");
+        let other = old.with_file_name("goat.mov");
+        std::fs::write(&other, b"another clip").expect("write");
+        crate::comment::save_comment(&old, "mine");
+
+        let result = move_out_of_name(&old, ADOBE);
+        assert_eq!(
+            result.problem,
+            Some(super::super::NameInOutProblem::NameTaken(
+                "goat.mov".to_string()
+            ))
+        );
+        assert_eq!(result.outcome, crate::MoveOutcome::Failed(old.clone()));
+        assert_eq!(std::fs::read(&other).expect("read"), b"another clip");
+        assert_eq!(crate::comment::load_comment(&old), "mine");
+        assert!(!crate::comment::comment_path(&other).exists());
+
+        // A comment file of a clip no longer there takes the name too.
+        std::fs::remove_file(&other).expect("remove");
+        crate::comment::save_comment(&other, "orphan");
+        assert_eq!(
+            move_out_of_name(&old, ADOBE).problem,
+            Some(super::super::NameInOutProblem::NameTaken(
+                "goat.mov".to_string()
+            ))
+        );
+        assert_eq!(crate::comment::load_comment(&other), "orphan");
+    }
+
+    #[test]
+    fn a_name_of_only_in_out_parts_is_left_alone() {
+        let path = clip_named("name-empty", "in_00_00_00.out_00_00_00.mov");
+        let result = move_out_of_name(&path, ADOBE);
+        assert_eq!(
+            result.problem,
+            Some(super::super::NameInOutProblem::NameWouldBeEmpty)
+        );
+        assert_eq!(result.outcome, crate::MoveOutcome::Failed(path.clone()));
+        assert!(path.exists());
     }
 
     /// Folder info as a scan builds it: the listing's sizes and times, and the tag file's list.

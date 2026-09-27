@@ -300,7 +300,7 @@ name = "pick.a.mp4"
         std::fs::copy(&tiny, clips.join("b.mov")).unwrap();
         let text = r#"
 source = "clips"
-open = "wide.b.in_00_00_03.mov"
+open = "wide.b.mov"
 window = [1920, 1009]
 panels = [800, 400]
 [[files]]
@@ -308,7 +308,7 @@ from = "a.mp4"
 name = "pick.a.mp4"
 [[files]]
 from = "b.mov"
-name = "wide.b.in_00_00_03.mov"
+name = "wide.b.mov"
 comment = "nice"
 subtitles = "1\n00:00:00,000 --> 00:00:02,000\nHello\n"
 markers = ["0:00.100 — Start — first frames"]
@@ -318,9 +318,9 @@ markers = ["0:00.100 — Start — first frames"]
 
         let open = stage(&scenario, &root, &into).unwrap();
 
-        assert_eq!(open, into.join("wide.b.in_00_00_03.mov"));
+        assert_eq!(open, into.join("wide.b.mov"));
         assert_eq!(crate::comment::load_comment(&open), "nice");
-        assert!(std::fs::read_to_string(into.join("wide.b.in_00_00_03.srt"))
+        assert!(std::fs::read_to_string(into.join("wide.b.srt"))
             .unwrap()
             .contains("Hello"));
         let markers = crate::metadata::load_markers(&open).unwrap();
@@ -330,7 +330,7 @@ markers = ["0:00.100 — Start — first frames"]
             (100, "Start")
         );
         let modified = |name: &str| into.join(name).metadata().unwrap().modified().unwrap();
-        assert!(modified("pick.a.mp4") < modified("wide.b.in_00_00_03.mov"));
+        assert!(modified("pick.a.mp4") < modified("wide.b.mov"));
         let mut left: Vec<_> = std::fs::read_dir(&clips)
             .unwrap()
             .map(|e| e.unwrap().file_name())
