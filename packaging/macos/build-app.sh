@@ -54,6 +54,16 @@ for size in 16 32 128 256 512; do
 done
 iconutil -c icns "$iconset" -o "$contents/Resources/frename.icns"
 
+# The framework is universal; the app is arm64 only, so the x86_64 half is dropped.
+copy_arm64() {
+  if lipo -archs "$1" | grep -q x86_64; then
+    lipo "$1" -thin arm64 -output "$2"
+  else
+    cp "$1" "$2"
+  fi
+  chmod u+w "$2"
+}
+
 plugins=0
 while read -r name; do
   plugin="$framework/lib/gstreamer-1.0/libgst$name.so"
@@ -62,7 +72,7 @@ while read -r name; do
     ls "$framework/lib/gstreamer-1.0" >&2
     exit 1
   fi
-  cp "$plugin" "$contents/PlugIns/gstreamer/"
+  copy_arm64 "$plugin" "$contents/PlugIns/gstreamer/$(basename "$plugin")"
   plugins=$((plugins + 1))
 done < <(sed 's/#.*//; s/[[:space:]]//g' "$here/gstreamer-plugins.txt" | grep .)
 
@@ -89,8 +99,7 @@ while [ "${#queue[@]}" -gt 0 ]; do
         source="$framework/lib/$relative"
         [ -f "$source" ] || { echo "$file links $dep, which is not in $framework/lib" >&2; exit 1; }
         mkdir -p "$(dirname "$contents/Frameworks/$relative")"
-        cp "$source" "$contents/Frameworks/$relative"
-        chmod u+w "$contents/Frameworks/$relative"
+        copy_arm64 "$source" "$contents/Frameworks/$relative"
         queue+=("$contents/Frameworks/$relative")
         ;;
       *)
