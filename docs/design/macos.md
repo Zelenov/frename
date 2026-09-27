@@ -39,8 +39,11 @@ must link only macOS and itself, decode a frame of every test clip, and start an
   mismatch, printing the real value.
 - Relocatable since 1.22: the libraries "use LC_RPATH entries"
   ([1.22 NEWS](https://github.com/GStreamer/gstreamer/blob/1.22.0/subprojects/gstreamer/NEWS)).
-  cerbero's `osxrelocator` replaces the install prefix with `@rpath`, so a library is named
-  `@rpath/lib/libgstreamer-1.0.0.dylib` ([osxrelocator.py](https://github.com/GStreamer/cerbero/blob/main/cerbero/tools/osxrelocator.py)).
+  cerbero's `osxrelocator` replaces the install prefix with `@rpath`
+  ([osxrelocator.py](https://github.com/GStreamer/cerbero/blob/main/cerbero/tools/osxrelocator.py)).
+  What a binary linked against 1.28.7 records, seen on the CI runner: `@rpath/libgstvideo-1.0.0.dylib`
+  (the name without `lib/`), and no rpath of its own, so nothing loads until one is added.
+  `build.rs` adds the framework's `lib` as rpath on macOS, for `cargo run` and `cargo test`.
 - Plugins are `lib/gstreamer-1.0/libgst<name>.so` (cerbero's Darwin module extension is `.so`,
   [filesprovider.py](https://github.com/GStreamer/cerbero/blob/main/cerbero/build/filesprovider.py)).
 - GStreamer's own "Deploying on macOS" page predates relocation (copy the framework, run
@@ -54,7 +57,7 @@ must link only macOS and itself, decode a frame of every test clip, and start an
 frename.app/Contents/
   Info.plist                       packaging/macos/Info.plist, version filled in
   MacOS/frename                    rpath @executable_path/../Frameworks
-  Frameworks/lib/*.dylib           only the libraries something links, keeping @rpath/lib/<name>
+  Frameworks/*.dylib               only the libraries something links (@rpath/<name>), rpath @loader_path
   PlugIns/gstreamer/libgst*.so     rpath @loader_path/../../Frameworks
   Resources/frename.icns           from packaging/macos/frename-512.png (sips + iconutil)
   Resources/licenses/              the framework's licenses + README with source links
@@ -67,7 +70,7 @@ frename.app/Contents/
   `gstreamer-1.0`): `codesign` takes a folder with an extension for a bundle.
 - `build-app.sh` walks `otool -L` from the binary and every plugin, copying each `@rpath/…`
   library from the framework; anything that is neither in macOS (`/usr/lib`, `/System`) nor in the
-  framework fails the build. Absolute rpaths (the binary gets the framework's at link time) are
+  framework fails the build. Absolute rpaths (the binary gets the framework's from `build.rs`) are
   deleted, so a Mac with the framework installed cannot hide a missing library.
   `check-bundle.sh` re-checks the finished app and `codesign --verify --strict --deep`.
 - **No `gst-plugin-scanner`.** GStreamer normally scans plugins in a child process; with
