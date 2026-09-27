@@ -93,9 +93,10 @@ writing it means rewriting the stream. **"Cannot rotate".**
   header. Premiere keeps per-file data (conformed audio, peak files, indexes) in its media cache
   database and checks files it has open for changes; it does not say which properties it compares.
   frename keeps the file's modified time on XMP writes, and a rotation keeps the file's size too,
-  so Premiere may not notice. Expect to **re-import** (or Media ▸ "Replace Footage", or delete the
-  clip's cache files) for a clip that was already imported; a clip imported after the rotation is
-  read fresh. This is the main thing to confirm by hand.
+  so Premiere may not notice. A clip that was already imported may need re-importing (or Media ▸
+  "Replace Footage", or deleting the clip's cache files); this is a guess until the hand test
+  below confirms it. A clip imported after the rotation is read fresh. This is the main thing to
+  confirm by hand.
 - 90° and 270° are the same kind of matrix for Premiere; nothing suggests one works and the other
   does not, but the hand test covers both.
 - XMP survives: the rotation touches only the matrix bytes, so the comment, in/out subclip marker

@@ -19,19 +19,21 @@ their side. Showing the flag is part of this change.
 
 1. **Turn the open clip.** The editor sees a sideways clip and presses `Ctrl+Alt+→` (or clicks
    `↻`). The flag in the file changes, the video opens again at the same moment in the same
-   play/pause state, now upright; the controls bar says `Rotated: 90°`. `Ctrl+Alt+←` / `↺` turns
-   it back. Four presses the same way bring the file back to exactly the bytes it had.
+   play/pause state, now upright; the controls bar says how it is turned now (`Rotated: 90°
+   right`, `90° left`, `180°`, `upright`). `Ctrl+Alt+←` / `↺` turns it back. Four presses the
+   same way bring the file back to exactly the bytes it had. A held key turns once.
 2. **Undo.** `Ctrl+Z` right after takes the turn back (the file is written again and the video
    reopens); `Ctrl+Y` turns it again. Each press is one undo step.
 3. **A file that cannot turn.** An MKV, a read-only file, a file Premiere has open, a damaged
    file: nothing changes and the controls bar says why, the same short note failed marker writes
    use: `Not rotated: the file is read-only or in use`, `Not rotated: this format has no rotation
-   flag`, `Not rotated: the file is damaged`.
+   flag`, `Not rotated: the file is damaged`. The batch's failed list gives the same reasons.
 4. **Many files.** Batch mode ▸ "Rotate videos" with four choices: 90° right, 90° left, 180°,
    upright (reset to 0°). Run on the checked files. Files that already are upright count as
    skipped for "upright"; MKVs and locked files count as failed with the reason.
-5. **Premiere.** The editor imports the clips: they come in portrait. A clip that was already in a
-   project may need re-importing (see the research; the owner confirms by hand).
+5. **Premiere.** The editor imports the clips: they come in portrait. Whether a clip that was
+   already in a project follows the change is not known yet (see the research; the owner checks by
+   hand).
 
 ## UI sketch
 
@@ -41,9 +43,10 @@ Video controls bar, after 📷 and 📍 (same 32 px icon buttons):
 ⏪ ▶ ⏩  [ ]  📷 📍 ↺ ↻                         🔊 ━━━━
 ```
 
-Tooltips: `Rotate left (Ctrl+Alt+←)`, `Rotate right (Ctrl+Alt+→)`. For a file that cannot turn
-the buttons stay enabled and a press shows the reason (a key press must never do nothing silently,
-as for markers).
+Tooltips: `Rotate left (Ctrl+Alt+←)`, `Rotate right (Ctrl+Alt+→)`. For a file without a rotation
+flag the buttons are off with the tooltip `This format has no rotation flag`, like 📍 for a file
+that cannot hold markers; the keys still show the reason in the controls bar (a key press never
+does nothing silently).
 
 Batch panel "Rotate videos": the title, a hint ("Changes the rotation flag of MP4 and MOV files;
 the picture is not re-encoded. Premiere Pro shows the clip turned after import."), four radio
@@ -53,12 +56,12 @@ buttons.
 
 | Key | Action | Context |
 |---|---|---|
-| `Ctrl+Alt+→` | rotate the open video 90° clockwise | no text field focused |
-| `Ctrl+Alt+←` | rotate the open video 90° counter-clockwise | no text field focused |
+| `Ctrl+Alt+→` | rotate the open video 90° clockwise | always, like the F-keys |
+| `Ctrl+Alt+←` | rotate the open video 90° counter-clockwise | always, like the F-keys |
 
-They follow the rules proposed in #62: a combination with Ctrl/Alt, never a plain character, and
-not acting while typing (arrows move the cursor in a text field). Plain `←`/`→` stay with the tag
-grid.
+They follow the rules proposed in #62: a combination with Ctrl/Alt, never a plain character. They
+act also after typing in a search field (like `[`, `]` and the F-keys), so they never do nothing
+silently; a held key turns once. Plain `←`/`→` stay with the tag grid.
 
 ## Data format
 
@@ -75,18 +78,22 @@ Only the 36-byte matrix in `tkhd` of every track whose `mdia/hdlr` is `vide` cha
   comes back with the phones' translation (same orientation in every reader). Keeping ffmpeg's
   style is not possible: at 0° both styles are the same bytes, so the style is lost there.
 - `u v w`, `mvhd`, `tapt`, `clap`, XMP, `udta`: untouched.
-- The file's modified and created times are restored after the write, as frename does for XMP.
+- The file's modified and created times are put back after the write, on the handle that wrote,
+  as frename does for XMP. A write that fails part way puts back the tracks already written.
+- A box that points past its parent or the end of the file makes the file "damaged"; the walk
+  stops after `moov`, so leftovers after it do not matter.
 - Formats: `.mp4`, `.m4v`, `.mov` whose content is MP4/MOV. Everything else: "cannot rotate".
 
 ## Where it lives
 
 - **Core** `crates/frename-core/src/metadata/rotation.rs`: box walk to the video `tkhd`s, matrix
-  maths, `read_rotation(path)` and `rotate(path, quarter_turns)`. `FileTagger::video_rotation` and
+  maths, `rotation::read(path)` and `rotation::rotate(path, quarter_turns)`. `FileTagger::video_rotation` and
   `FileTagger::rotate_video` go through the backend: `ProductionFileTagger` writes the file,
   `InMemoryFileTagger` (debug builds) keeps the turn in memory by disk path, like its markers.
-- **Undo**: `RotateVideoCommand { file: FileId, quarter_turns }`; undo turns the other way. The
-  file's current path comes from the directory by `FileId`, so a rename in between does not break
-  it.
+- **Undo**: `RotateVideoCommand { file: FileId, path: PathBuf, quarter_turns }`; undo turns the
+  other way. The file's current path comes from the directory by `FileId`, so a rename in between
+  does not break it; `path` is the fallback when the folder no longer lists it. The command says it
+  `turns_a_video`, so only such a step makes the player check whether to reopen.
 - **Player**: the pipeline gets `videoconvert ! videoflip video-direction=90r|180|90l` in front of
   the existing sink chain when the file is turned (`auto` for a mirrored one); an upright file keeps
   exactly today's pipeline. After a rotation the video reopens at its position and play state. The
@@ -132,18 +139,17 @@ Core unit tests on small MP4 and MOV fixtures (32×16 H.264 + AAC, a few KB each
 - an ffmpeg-style (no translation) turned matrix is read and turned;
 - a mirrored matrix keeps its mirror; a scaled matrix is refused; an MKV/text file is refused;
   a file of zeros is "damaged"; a read-only file fails with the write error and is unchanged;
+- a movie box that claims more than the file has is "damaged"; junk after the movie is ignored;
 - version-1 `tkhd` (64-bit times) is found at the right offset (synthetic boxes built in the
   test);
 - the in-memory backend keeps turns in memory and leaves the file alone.
 
-App: the undo command test (rotate, undo, redo against a temp copy), the batch action's run on a
-temp copy. By hand: the Premiere steps in the research note; the player shows a phone portrait
+App: turning, undoing and redoing the open clip in the workspace, a failed turn pushing no undo
+step, two quick reopens keeping the moment and dropping the older load, the batch action's run on a
+temp copy, and a turned clip reaching the player's sink with its sides swapped. By hand: the Premiere steps in the research note; the player shows a phone portrait
 clip upright; `F12` saves an upright frame.
 
-## Open questions (with recommended answers)
-
-Each is decided with the recommended answer, which the implementation follows; an owner comment
-overrides it.
+## Decisions made without the owner
 
 1. **Write at once, not on leaving the file.** The player must reopen the file to show the turn,
    and nothing else waits for the rotation, so it is written on the key press. Undo writes again.
@@ -152,7 +158,8 @@ overrides it.
    step 5 checks Premiere. If Premiere ignores the change, the follow-up is a setting-free change
    to bump the modified time for rotations only.
 3. **Shortcuts `Ctrl+Alt+←/→`** as the issue suggests. Old Intel graphics drivers used the same keys
-   to rotate the whole screen, but those hotkeys are off by default on current drivers.
+   to rotate the whole screen, but those hotkeys are off by default on current drivers; the README
+   says what to do if they are on.
 4. **Phone-style translation** on every write, because it is what iPhones and exiftool write and
    Premiere demonstrably imports; an ffmpeg-style file gets it on its first turn.
 5. **Mirrored matrices are turned too** (mirror kept); the player shows them with `auto`.
