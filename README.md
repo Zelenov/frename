@@ -92,6 +92,7 @@ Next time you start frename, it reopens the last folder and clip.
 | `Alt` + drag the progress bar (paused) | Mark a range |
 | `F12` | Save the current frame as a JPEG next to the video |
 | `F5` | Fullscreen on / off (or double-click the picture) |
+| `Ctrl+Alt+←` / `Ctrl+Alt+→` | Rotate the clip 90° left / right |
 | `Escape` | Leave fullscreen |
 
 While a text box (tag search, file search, comment) has the cursor, it takes the keys it needs:
@@ -100,7 +101,8 @@ Press `Esc` first to give the keys back to the app. `[` and `]` set in and out p
 you type in a marker's name. The F-keys always work.
 
 Undo (`Ctrl+Z`) covers tagging, adding, deleting, starring and reordering tags, pasting, in/out
-points, adding, deleting, coloring and resizing markers, and the rename when you leave a clip.
+points, adding, deleting, coloring and resizing markers, rotating a clip, and the rename when you
+leave a clip.
 It does not cover comment text or marker names, a rename by hand
 (double-click), untagging with 🗑, the 🔓↑ / 🔓↓ buttons, or batch actions; opening a folder or running a batch
 action clears the undo history.
@@ -148,6 +150,9 @@ The progress bar shows what you have noted about a clip:
   single moment again, and click a band to play just that stretch.
 - **Frames:** `F12` or 📷 saves the current frame as a JPEG next to the video
   (`clip.mp4.snap.00-01-05-250.jpg`) and shows `Frame saved`.
+- **Rotation:** ↺ / ↻ (`Ctrl+Alt+←` / `→`) turn a clip shot sideways 90° at a time. Only the
+  rotation flag inside the mp4/mov changes, right away: the picture is not re-encoded, and Premiere
+  Pro imports the clip turned (re-import a clip it already has). Other formats cannot be turned.
 - **In and out points:** `[` and `]` mark the usable segment, highlighted on the progress bar.
   They are saved in the file name (`in_00_01_05`, `out_00_02_10`, whole seconds) or, if you choose
   in Settings, inside the video as a marker that Premiere Pro turns into a subclip.
@@ -197,6 +202,7 @@ and Cancel. Each file then shows a green or red check box. Actions:
   a second ` — ` or ` -- ` (not a plain ` - `) goes into the marker's comment, which Premiere
   shows and frename keeps but does not show. The moments of an AI description become white
   markers too (with their length) and stay in the description;
+- rotate the videos 90° right or left, 180°, or back upright;
 - tag commented videos with "Commented" and untag the rest;
 - put the tags in every name in tag panel order;
 - add or remove the space after each tag, as set in Settings;

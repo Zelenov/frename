@@ -88,7 +88,8 @@ impl VideoControlsState {
             | Message::DeleteMarker
             | Message::PreviousMarker
             | Message::NextMarker
-            | Message::EditMarker(_) => {
+            | Message::EditMarker(_)
+            | Message::Rotate(_) => {
                 // Handled by video player (needs current position). No local state change.
             }
         }

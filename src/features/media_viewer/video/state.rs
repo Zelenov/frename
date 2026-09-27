@@ -14,7 +14,7 @@ use super::view::{CUE_LIST_SCROLLABLE_ID, CUE_ROW_PITCH};
 use super::Message;
 use crate::features::markers;
 use crate::features::video_controls::{self, VideoControlsState};
-use frename_core::{load_subtitles, AppDatabase, AppStateStore, Subtitles};
+use frename_core::{load_subtitles, AppDatabase, AppStateStore, FileTagger, Rotation, Subtitles};
 
 /// How long a note in the controls bar stays.
 const NOTICE_DURATION: Duration = Duration::from_secs(2);
@@ -88,6 +88,10 @@ pub struct VideoPlayerState {
     /// A clicked range is playing: pause when playback reaches its end. Any seek or pause by
     /// the user forgets it.
     play_until: Option<RangePlay>,
+    /// Where to seek once the video being loaded is open: it is the shown video, reopened.
+    resume_at: Option<Duration>,
+    /// The rotation the video was opened with; see [`Self::rotation`].
+    rotation: Option<Rotation>,
 }
 
 impl Default for VideoPlayerState {
@@ -111,6 +115,8 @@ impl Default for VideoPlayerState {
             position: Duration::ZERO,
             followed_cue: None,
             play_until: None,
+            resume_at: None,
+            rotation: None,
         }
     }
 }
@@ -118,6 +124,28 @@ impl Default for VideoPlayerState {
 impl VideoPlayerState {
     /// Load a video file asynchronously.
     pub fn load_video(&mut self, path: PathBuf) -> Task<Message> {
+        self.resume_at = None;
+        self.open(path, !self.autoplay)
+    }
+
+    /// Open the shown video again at the same moment and in the same play state, e.g. after
+    /// its rotation changed: the player takes the picture size only when a video opens.
+    pub fn reload_video(&mut self) -> Task<Message> {
+        let Some(path) = self.current_path.clone() else {
+            return Task::none();
+        };
+        let (position, paused) = (self.position, self.paused);
+        let task = self.open(path, paused);
+        self.resume_at = Some(position);
+        task
+    }
+
+    /// The rotation the shown video was opened with; `None` when it has none frename can read.
+    pub fn rotation(&self) -> Option<Rotation> {
+        self.rotation
+    }
+
+    fn open(&mut self, path: PathBuf, paused: bool) -> Task<Message> {
         log::info!("Starting video load: {}", path.display());
         self.loading = true;
         self.load_failed = false;
@@ -128,8 +156,7 @@ impl VideoPlayerState {
         self.position = Duration::ZERO;
         self.followed_cue = None;
         self.play_until = None;
-        let autoplay = self.autoplay;
-        self.paused = !autoplay;
+        self.paused = paused;
 
         let subtitles_task = Self::load_subtitles(path.clone());
         let video_task = Task::future(async move {
@@ -139,28 +166,31 @@ impl VideoPlayerState {
             let opened = tokio::task::spawn_blocking(move || {
                 let Ok(url) = url::Url::from_file_path(&path) else {
                     log::warn!("Failed to create URL from path: {}", path.display());
-                    return None;
+                    return (None, None);
                 };
                 log::debug!("File URL created: {url}");
-                match open_video(&url) {
+                // Read by frename rather than left to GStreamer's tag, so a debug build shows
+                // a turn it keeps in memory.
+                let rotation = FileTagger::video_rotation(&path).ok();
+                match open_video(&url, rotation) {
                     Ok(mut video) => {
                         log::info!("Video loaded successfully");
                         // Paused here, before the update thread sees it, so no audio slips out.
-                        if !autoplay {
+                        if paused {
                             video.set_paused(true);
                         }
-                        Some(video)
+                        (Some(video), rotation)
                     }
                     Err(e) => {
                         log::error!("Failed to load video: {e}");
-                        None
+                        (None, rotation)
                     }
                 }
             })
             .await
-            .unwrap_or(None);
+            .unwrap_or((None, None));
 
-            Message::VideoLoaded(Arc::new(Mutex::new(opened)))
+            Message::VideoLoaded(Arc::new(Mutex::new(opened.0)), opened.1)
         });
         Task::batch([video_task, subtitles_task])
     }
@@ -183,8 +213,10 @@ impl VideoPlayerState {
     /// Handle all video player messages.
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::VideoLoaded(slot) => {
+            Message::VideoLoaded(slot, rotation) => {
                 self.loading = false;
+                self.rotation = rotation;
+                let resume_at = self.resume_at.take();
                 // A poisoned lock is as unusable as a failed open, so both land in the
                 // error state rather than the neutral "nothing loaded" placeholder.
                 let video = slot.lock().ok().and_then(|mut slot| slot.take());
@@ -196,7 +228,12 @@ impl VideoPlayerState {
                 self.load_failed = false;
                 let duration_secs = video.duration().as_secs_f32();
                 self.current_video = Some(video);
-                Task::done(Message::VideoReady { duration_secs })
+                let ready = Task::done(Message::VideoReady { duration_secs });
+                match resume_at {
+                    // Reopened: back to the moment it showed.
+                    Some(position) => Task::batch([ready, self.seek_to(position, true)]),
+                    None => ready,
+                }
             }
             Message::VideoReady { duration_secs } => {
                 let ready = Task::done(Message::Controls(video_controls::Message::VideoReady {
@@ -613,8 +650,10 @@ const VFR_NOMINAL_FRAMERATE: &str = "30/1";
 /// Variable-framerate sources are rejected outright by the player, so a load that fails
 /// for that reason alone is retried once with the framerate relabelled. Everything else
 /// takes the first path, which builds exactly the graph `Video::new` builds.
-fn open_video(uri: &url::Url) -> Result<Video, VideoError> {
-    open_video_with(uri, None).map_err(|failure| {
+///
+/// `rotation` is how the file says the picture is turned; the player shows it turned.
+fn open_video(uri: &url::Url, rotation: Option<Rotation>) -> Result<Video, VideoError> {
+    open_video_with(uri, None, flip_direction(rotation)).map_err(|failure| {
         for problem in &failure.problems {
             log::warn!("GStreamer: {problem}");
         }
@@ -650,11 +689,16 @@ impl From<VideoError> for OpenFailure {
 }
 
 /// [`open_video`], with the sound sent to `audio_sink` (a `playbin` sink description) instead
-/// of the default device when one is given.
-fn open_video_with(uri: &url::Url, audio_sink: Option<&str>) -> Result<Video, OpenFailure> {
+/// of the default device when one is given, and the picture turned by `videoflip` in `flip`'s
+/// direction when one is given.
+fn open_video_with(
+    uri: &url::Url,
+    audio_sink: Option<&str>,
+    flip: Option<&str>,
+) -> Result<Video, OpenFailure> {
     gst::init().map_err(VideoError::from)?;
 
-    match open_pipeline(uri, false, audio_sink) {
+    match open_pipeline(uri, false, audio_sink, flip) {
         Err(OpenFailure {
             error: VideoError::Framerate(rate),
             ..
@@ -662,16 +706,39 @@ fn open_video_with(uri: &url::Url, audio_sink: Option<&str>) -> Result<Video, Op
             log::info!(
                 "Source reports framerate {rate} (variable); retrying as {VFR_NOMINAL_FRAMERATE}"
             );
-            open_pipeline(uri, true, audio_sink)
+            open_pipeline(uri, true, audio_sink, flip)
         }
         other => other,
     }
 }
 
+/// The `videoflip` direction that shows a picture stored with `rotation` upright: `None` for
+/// one shown as stored, or when GStreamer has no `videoflip` (the video then plays as stored).
+///
+/// The direction is set from frename's own reading of the file rather than left to `auto`
+/// (GStreamer's orientation tag), so a debug build shows a turn it keeps in memory. A mirrored
+/// picture is left to `auto`, which knows GStreamer's own naming of mirror and turn.
+fn flip_direction(rotation: Option<Rotation>) -> Option<&'static str> {
+    let rotation = rotation?;
+    let direction = match (rotation.mirrored(), rotation.degrees()) {
+        (true, _) => "auto",
+        (false, 90) => "90r",
+        (false, 180) => "180",
+        (false, 270) => "90l",
+        (false, _) => return None,
+    };
+    if gst::ElementFactory::find("videoflip").is_none() {
+        log::warn!("GStreamer has no videoflip: the video plays as stored, not turned");
+        return None;
+    }
+    Some(direction)
+}
+
 /// Open `uri` exactly as the player does, with the sound going nowhere, and wait until a
 /// decoded frame has reached the player's video sink. Used by `--self-test`.
 pub(crate) fn check_decodes(uri: &url::Url, timeout: Duration) -> Result<(), String> {
-    let video = open_video_with(uri, Some("fakesink")).map_err(|failure| failure.to_string())?;
+    let video =
+        open_video_with(uri, Some("fakesink"), None).map_err(|failure| failure.to_string())?;
     let sink = player_video_sink(&video.pipeline())
         .ok_or_else(|| VideoError::AppSink("iced_video".to_string()).to_string())?;
     let deadline = std::time::Instant::now() + timeout;
@@ -697,8 +764,9 @@ fn open_pipeline(
     uri: &url::Url,
     relabel_framerate: bool,
     audio_sink: Option<&str>,
+    flip: Option<&str>,
 ) -> Result<Video, OpenFailure> {
-    let pipeline = gst::parse::launch(&description(uri, relabel_framerate, audio_sink))
+    let pipeline = gst::parse::launch(&description(uri, relabel_framerate, audio_sink, flip))
         .map_err(VideoError::from)?
         .downcast::<gst::Pipeline>()
         .map_err(|_| VideoError::Cast)?;
@@ -747,22 +815,35 @@ fn bus_problems(pipeline: &gst::Pipeline) -> Vec<String> {
         .collect()
 }
 
-/// The `playbin` description, optionally rewriting the framerate on the way to the sink and
-/// sending the sound to `audio_sink` instead of the default device.
-fn description(uri: &url::Url, relabel_framerate: bool, audio_sink: Option<&str>) -> String {
+/// The `playbin` description, optionally rewriting the framerate on the way to the sink,
+/// sending the sound to `audio_sink` instead of the default device, and turning the picture
+/// with `videoflip` in the `flip` direction.
+fn description(
+    uri: &url::Url,
+    relabel_framerate: bool,
+    audio_sink: Option<&str>,
+    flip: Option<&str>,
+) -> String {
+    // videoflip takes raw frames in common formats only: the converter in front of it takes
+    // whatever the decoder gives (10-bit, hardware memory). An upright video keeps the chain
+    // it always had.
+    let flip = flip
+        .map(|direction| format!("videoconvert ! videoflip video-direction={direction} ! "))
+        .unwrap_or_default();
     // capssetter has to sit behind the NV12 filter, not in front of it: offering its own
     // framerate to a filter that then has to negotiate it upstream collapses the whole
     // graph with "internal data stream error" — including on files that were fine.
     let video_sink = if relabel_framerate {
         format!(
-            "videoscale ! videoconvert ! video/x-raw,format=NV12,pixel-aspect-ratio=1/1 \
+            "{flip}videoscale ! videoconvert ! video/x-raw,format=NV12,pixel-aspect-ratio=1/1 \
              ! capssetter caps=video/x-raw,framerate={VFR_NOMINAL_FRAMERATE} \
              ! appsink name=iced_video drop=true"
         )
     } else {
-        "videoscale ! videoconvert ! appsink name=iced_video drop=true \
-         caps=video/x-raw,format=NV12,pixel-aspect-ratio=1/1"
-            .to_string()
+        format!(
+            "{flip}videoscale ! videoconvert ! appsink name=iced_video drop=true \
+             caps=video/x-raw,format=NV12,pixel-aspect-ratio=1/1"
+        )
     };
 
     let audio_sink = audio_sink
@@ -904,5 +985,52 @@ mod tests {
         assert!(!range.done_at(secs(40)));
         assert!(!range.done_at(secs(12)));
         assert!(range.done_at(secs(20)));
+    }
+
+    #[test]
+    fn only_a_turned_picture_gets_a_flip() {
+        assert_eq!(flip_direction(None), None);
+        assert_eq!(flip_direction(Some(Rotation::UPRIGHT)), None);
+        let url = url::Url::parse("file:///C:/clip.mp4").expect("url");
+        assert!(!description(&url, false, None, None).contains("videoflip"));
+        let turned = description(&url, true, None, Some("90r"));
+        assert!(
+            turned.contains("videoconvert ! videoflip video-direction=90r ! videoscale"),
+            "{turned}"
+        );
+    }
+
+    /// The player's sink gets a phone-style portrait clip (stored landscape, flagged as turned)
+    /// upright, and every turn frename can set swaps or keeps its sides. Linux and Windows,
+    /// like the self-test's decoding tests: both CI jobs have GStreamer.
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn a_turned_clip_reaches_the_player_turned() {
+        let clip =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/folder/rotated-90.mp4");
+        let flagged = FileTagger::video_rotation(&clip).expect("rotation");
+        assert_eq!(flagged.degrees(), 270, "ffmpeg's 90 is counter-clockwise");
+        let url = url::Url::from_file_path(&clip).expect("url");
+        let size = |rotation: Rotation| {
+            gst::init().expect("gstreamer");
+            let flip = flip_direction(Some(rotation));
+            let video = open_video_with(&url, Some("fakesink"), flip)
+                .map_err(|failure| failure.to_string())
+                .expect("open");
+            let caps = player_video_sink(&video.pipeline())
+                .and_then(|sink| sink.static_pad("sink"))
+                .and_then(|pad| pad.current_caps())
+                .expect("caps");
+            let s = caps.structure(0).expect("structure");
+            (
+                s.get::<i32>("width").expect("width"),
+                s.get::<i32>("height").expect("height"),
+            )
+        };
+        let (width, height) = size(Rotation::UPRIGHT);
+        assert!(width > height, "stored landscape: {width}×{height}");
+        assert_eq!(size(flagged), (height, width));
+        assert_eq!(size(Rotation::clockwise(90)), (height, width));
+        assert_eq!(size(Rotation::clockwise(180)), (width, height));
     }
 }

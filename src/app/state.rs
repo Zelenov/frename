@@ -121,6 +121,17 @@ fn main_window_event(
         {
             if modifiers.command() {
                 return match key.as_ref() {
+                    // Ctrl+Alt+← / → turn the open video; plain arrows stay with the tag grid.
+                    keyboard::Key::Named(keyboard::key::Named::ArrowLeft) if modifiers.alt() => {
+                        Some(Message::FolderWorkspace(
+                            folder_workspace::Message::RotateVideo(-1),
+                        ))
+                    }
+                    keyboard::Key::Named(keyboard::key::Named::ArrowRight) if modifiers.alt() => {
+                        Some(Message::FolderWorkspace(
+                            folder_workspace::Message::RotateVideo(1),
+                        ))
+                    }
                     keyboard::Key::Character("c") => Some(Message::FolderWorkspace(
                         folder_workspace::Message::CopyTags,
                     )),

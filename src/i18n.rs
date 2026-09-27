@@ -407,7 +407,11 @@ mod tests {
     }
 
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
-    const NOT_UI_TEXT: [(&str, &str); 44] = [
+    const NOT_UI_TEXT: [(&str, &str); 45] = [
+        (
+            "Rotate videos",
+            "English-only log id and log label, see Action::log_id",
+        ),
         ("Page Up", "key name, as printed on the key"),
         ("Page Down", "key name, as printed on the key"),
         ("Space", "key name, as printed on the key"),

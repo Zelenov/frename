@@ -90,6 +90,9 @@ pub enum Message {
     CommentLayout(crate::features::file_workspace::CommentLayout),
     /// Screenshot captured at position (ms) with JPEG bytes.
     ScreenshotTaken(u64, Vec<u8>),
+    /// Turn the open video by this many quarter turns clockwise, -1 counter-clockwise
+    /// (Ctrl+Alt+→ / Ctrl+Alt+←, or the ↻ / ↺ buttons).
+    RotateVideo(i32),
     /// Open a native folder picker dialog so the user can choose a folder to open.
     OpenFolderPicker,
     /// Open a native file picker dialog so the user can choose a file to open.

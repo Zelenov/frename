@@ -171,6 +171,27 @@ pub fn view(
     )
     .into();
 
+    let rotate_btn =
+        |icon: &'static str, quarter_turns: i32, tip: String| -> Element<'_, Message> {
+            tooltip(
+                button(
+                    container(text(icon).size(16))
+                        .center_x(iced::Length::Fill)
+                        .center_y(iced::Length::Fill),
+                )
+                .on_press(Message::Rotate(quarter_turns))
+                .width(CONTROLS_HEIGHT)
+                .height(iced::Length::Fill)
+                .padding(0)
+                .style(theme::icon_button_style(true)),
+                text(tip),
+                tooltip::Position::Top,
+            )
+            .into()
+        };
+    let rotate_left_btn = rotate_btn("↺", -1, fl!("video-controls-rotate-left"));
+    let rotate_right_btn = rotate_btn("↻", 1, fl!("video-controls-rotate-right"));
+
     let controls = row![
         back10_btn,
         play_pause_btn,
@@ -179,6 +200,8 @@ pub fn view(
         seg_out_btn,
         screenshot_btn,
         add_marker_btn,
+        rotate_left_btn,
+        rotate_right_btn,
         bar,
         Space::new().width(8),
         volume_icon,

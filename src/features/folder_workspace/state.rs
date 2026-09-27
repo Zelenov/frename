@@ -31,12 +31,14 @@ use crate::features::markers::MarkersState;
 use crate::features::media_viewer::{self, video as media_viewer_video, MediaViewerState};
 use crate::features::sync_panel;
 use crate::features::tag_panel::{self, TagPanelState, TAG_LIST_SCROLLABLE_ID};
+use crate::features::video_controls;
 use crate::widgets::search_bar::SEARCH_BAR_INPUT_ID;
 use crate::widgets::splitter::HIT_WIDTH;
 
 use super::Message;
 
 mod marker_actions;
+mod rotation;
 
 const DEFAULT_LEFT_WIDTH: f32 = 460.0;
 const DEFAULT_FOLDER_WIDTH: f32 = 200.0;
@@ -205,6 +207,9 @@ impl FolderWorkspace {
                     let position_ms = self.media_viewer.video_position_ms().unwrap_or(0);
                     self.handle_marker(msg, position_ms)
                 }
+                media_viewer::Message::Video(media_viewer_video::Message::Controls(
+                    video_controls::Message::Rotate(quarter_turns),
+                )) => self.rotate_video(quarter_turns),
                 other => {
                     let task = self.media_viewer.update(other).map(Message::MediaViewer);
                     self.grow_held_marker();
@@ -253,6 +258,7 @@ impl FolderWorkspace {
             Message::PasteTags => self.paste_tags(),
             Message::Undo => self.perform_undo(),
             Message::Redo => self.perform_redo(),
+            Message::RotateVideo(quarter_turns) => self.rotate_video(quarter_turns),
             Message::ToggleMediaFullscreen => {
                 // Only toggle when a video is shown.
                 if self.media_viewer.is_previewable() {
@@ -680,7 +686,8 @@ impl FolderWorkspace {
             message,
             Message::MediaViewer(media_viewer::Message::Video(
                 media_viewer_video::Message::Markers(..)
-            ))
+                    | media_viewer_video::Message::Controls(video_controls::Message::Rotate(_))
+            )) | Message::RotateVideo(_)
         );
         if edits_markers && self.batch.is_running() {
             return true;
@@ -1623,10 +1630,13 @@ impl FolderWorkspace {
             self.history.undo(&mut ctx)
         };
         match result {
-            Ok(()) => self.refresh_after_undo_redo(),
+            Ok(()) => Task::batch([self.refresh_after_undo_redo(), self.follow_rotation()]),
             Err(e) => {
                 log::warn!("Undo failed: {}", e);
-                Task::none()
+                match e {
+                    UndoError::Rotation(_, error) => Self::rotation_undo_failed(&error),
+                    _ => Task::none(),
+                }
             }
         }
     }
@@ -1645,10 +1655,13 @@ impl FolderWorkspace {
             self.history.redo(&mut ctx)
         };
         match result {
-            Ok(()) => self.refresh_after_undo_redo(),
+            Ok(()) => Task::batch([self.refresh_after_undo_redo(), self.follow_rotation()]),
             Err(e) => {
                 log::warn!("Redo failed: {}", e);
-                Task::none()
+                match e {
+                    UndoError::Rotation(_, error) => Self::rotation_undo_failed(&error),
+                    _ => Task::none(),
+                }
             }
         }
     }
@@ -2781,6 +2794,39 @@ mod tests {
         flush_file_opened(&mut workspace);
         assert_eq!(workspace.file_workspace().markers(), Some(&[][..]));
         workspace
+    }
+
+    /// Ctrl+Alt+→ / ← turn the open video, each press one undo step; a file that has no
+    /// rotation flag is left alone and nothing goes into the history.
+    #[test]
+    fn rotating_the_open_video_undoes_and_redoes() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let file = test_dir.target_file();
+        let degrees = || {
+            frename_core::FileTagger::video_rotation(&file)
+                .expect("rotation")
+                .degrees()
+        };
+        assert_eq!(degrees(), 0);
+        let _ = workspace.update(Message::RotateVideo(1));
+        let _ = workspace.update(Message::RotateVideo(1));
+        let _ = workspace.update(Message::RotateVideo(-1));
+        assert_eq!(degrees(), 90);
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(degrees(), 180);
+        let _ = workspace.update(Message::Undo);
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(degrees(), 0);
+        let _ = workspace.update(Message::Redo);
+        assert_eq!(degrees(), 90);
+
+        // A turn that fails pushes nothing: the redo step is still there.
+        let _ = workspace.update(Message::Undo);
+        assert!(workspace.history.can_redo());
+        std::fs::write(&file, [0u8; 64]).expect("damage the file");
+        let _ = workspace.update(Message::RotateVideo(1));
+        assert!(workspace.history.can_redo());
     }
 
     /// Typing `text` into the open marker row's name field.

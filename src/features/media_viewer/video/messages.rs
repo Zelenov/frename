@@ -1,6 +1,6 @@
 //! Messages for the video player sub-feature.
 
-use frename_core::Subtitles;
+use frename_core::{Rotation, Subtitles};
 use iced_video_player::Video;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -17,8 +17,9 @@ pub type LoadedVideo = Arc<Mutex<Option<Video>>>;
 /// Messages handled by the video player.
 #[derive(Debug, Clone)]
 pub enum Message {
-    /// Video finished loading; carries the opened video, or `None` when the open failed.
-    VideoLoaded(LoadedVideo),
+    /// Video finished loading; carries the opened video, or `None` when the open failed, and
+    /// the rotation it was opened with.
+    VideoLoaded(LoadedVideo, Option<Rotation>),
     /// Video became available after loading
     VideoReady { duration_secs: f32 },
     /// New video frame rendered (triggers view refresh for progress bar)

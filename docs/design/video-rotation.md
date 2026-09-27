@@ -67,11 +67,13 @@ Only the 36-byte matrix in `tkhd` of every track whose `mdia/hdlr` is `vide` cha
 - Reading: the turn is taken from `a b c d`; accepted values are exact multiples of 90° with or
   without a mirror (entries 0 and ±1.0). Anything else (a scaled or skewed matrix) is "cannot
   rotate: unusual orientation matrix".
-- Writing: new `a b c d` = old × the 90° step, so a mirror is kept. The translation follows the
-  style the file had: a file with a zero translation on a turned matrix (ffmpeg's style) keeps
-  zeros; otherwise (phones, exiftool, and every file starting upright) the translation is the one
+- Writing: new `a b c d` = old × the 90° step, so a mirror is kept. The translation is the one
   that puts the turned picture at the origin (`x = height` for 90°, `width, height` for 180°,
-  `0, width` for 270°). Either way four turns give back the original bytes.
+  `0, width` for 270°), as phones and exiftool write it. Reading accepts that translation or none
+  (ffmpeg's style); any other translation is "unusual". Four turns give back the original bytes
+  for every file in the phones' style and every file that starts upright; an ffmpeg-style file
+  comes back with the phones' translation (same orientation in every reader). Keeping ffmpeg's
+  style is not possible: at 0° both styles are the same bytes, so the style is lost there.
 - `u v w`, `mvhd`, `tapt`, `clap`, XMP, `udta`: untouched.
 - The file's modified and created times are restored after the write, as frename does for XMP.
 - Formats: `.mp4`, `.m4v`, `.mov` whose content is MP4/MOV. Everything else: "cannot rotate".
@@ -127,7 +129,7 @@ Core unit tests on small MP4 and MOV fixtures (32×16 H.264 + AAC, a few KB each
 - only the matrix bytes change (every other byte equal), the audio track's matrix stays identity;
 - comment, in/out and markers written to XMP before the turn read back the same after it;
 - the file's modified time is kept;
-- ffmpeg-style (no translation) rotated matrix keeps zero translation through turns;
+- an ffmpeg-style (no translation) turned matrix is read and turned;
 - a mirrored matrix keeps its mirror; a scaled matrix is refused; an MKV/text file is refused;
   a file of zeros is "damaged"; a read-only file fails with the write error and is unchanged;
 - version-1 `tkhd` (64-bit times) is found at the right offset (synthetic boxes built in the
@@ -151,8 +153,8 @@ overrides it.
    to bump the modified time for rotations only.
 3. **Shortcuts `Ctrl+Alt+←/→`** as the issue suggests. Old Intel graphics drivers used the same keys
    to rotate the whole screen, but those hotkeys are off by default on current drivers.
-4. **Phone-style translation** for files without a style of their own, because it is what iPhones
-   and exiftool write and Premiere demonstrably imports; ffmpeg-style files keep theirs.
+4. **Phone-style translation** on every write, because it is what iPhones and exiftool write and
+   Premiere demonstrably imports; an ffmpeg-style file gets it on its first turn.
 5. **Mirrored matrices are turned too** (mirror kept); the player shows them with `auto`.
 6. **The batch action is not undoable**, like every other batch action; running the opposite
    direction undoes it.
