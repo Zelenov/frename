@@ -22,7 +22,7 @@ const MAX_PACKET: u64 = 16 * 1024 * 1024;
 
 /// Top-level box types a MOV/MP4 file can start with. Anything else is not one, whatever
 /// its extension says.
-pub(super) const FIRST_BOXES: [&[u8; 4]; 7] = [
+const FIRST_BOXES: [&[u8; 4]; 7] = [
     b"ftyp", b"moov", b"mdat", b"wide", b"free", b"skip", b"pnot",
 ];
 
@@ -171,7 +171,7 @@ pub(super) fn read_bytes(file: &mut File, pos: u64, len: usize) -> io::Result<Ve
     Ok(buf)
 }
 
-pub(super) fn invalid() -> io::Error {
+fn invalid() -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, "malformed MOV/MP4 box")
 }
 

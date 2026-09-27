@@ -99,6 +99,8 @@ pub enum RotationError {
     NoVideoTrack,
     /// The track's matrix scales, skews or turns by an odd angle: frename leaves it alone.
     UnusualMatrix,
+    /// The file is gone: moved or deleted outside frename.
+    Missing,
     /// Reading or writing the file failed: read-only, open in another app (Premiere), gone.
     /// The text says what the system reported.
     Io(String),
@@ -115,6 +117,7 @@ impl std::fmt::Display for RotationError {
             ),
             Self::NoVideoTrack => write!(f, "the file has no video track"),
             Self::UnusualMatrix => write!(f, "the video has an unusual display matrix"),
+            Self::Missing => write!(f, "the file is no longer there"),
             Self::Io(reason) => write!(f, "{reason}"),
         }
     }
@@ -125,6 +128,7 @@ impl From<io::Error> for RotationError {
         match e.kind() {
             // A box that points past its parent or the end of the file.
             io::ErrorKind::InvalidData | io::ErrorKind::UnexpectedEof => Self::Damaged,
+            io::ErrorKind::NotFound => Self::Missing,
             _ => Self::Io(e.to_string()),
         }
     }
@@ -159,7 +163,8 @@ pub(crate) fn rotate(path: &Path, quarter_turns: i32) -> Result<Rotation, Rotati
     for (done, track) in tracks.iter().enumerate() {
         let bytes = track.matrix_bytes(track.rotation.turned(quarter_turns));
         if let Err(e) = write(&mut file, track.matrix_at, &bytes) {
-            for written in &tracks[..done] {
+            // The failed write may have got part of its bytes in: put that track back too.
+            for written in &tracks[..=done] {
                 if let Err(undo) = write(&mut file, written.matrix_at, &written.matrix) {
                     log::error!("rotation: {path:?} left half turned: {undo}");
                 }
@@ -613,6 +618,11 @@ mod tests {
         std::fs::write(&mkv, b"\x1aE\xdf\xa3 not really matroska").expect("write");
         assert_eq!(read(&mkv), Err(RotationError::CannotRotate));
         assert_eq!(rotate(&mkv, 1), Err(RotationError::CannotRotate));
+
+        // Moved or deleted outside frename: gone, not "in use".
+        let gone = dir.with_file_name("gone.mp4");
+        assert_eq!(read(&gone), Err(RotationError::Missing));
+        assert_eq!(rotate(&gone, 1), Err(RotationError::Missing));
 
         let zeros = dir.with_file_name("zeros.mov");
         std::fs::write(&zeros, [0u8; 512]).expect("write");
