@@ -26,7 +26,7 @@ pub use db::{
 pub use directory::Directory;
 pub use file::{File, FileId};
 pub use file_kind::FileKind;
-pub use folder_file::FolderAndFile;
+pub use folder_file::{choose_dropped_path, FolderAndFile};
 pub use markers::{
     comment_to_markers, format_marker_line, format_marker_time, markers_from_comment,
     markers_into_comment, markers_to_comment, parse_ai_line, parse_marker_line, replace_ai_markers,
