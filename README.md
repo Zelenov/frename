@@ -36,8 +36,9 @@ The in/out part is there only when you mark a segment.
 ## The workflow
 
 1. Open a folder with the 📂 button, drag a folder onto the window, or right-click a folder in
-   Explorer and choose "Open in frename". To start at one clip, use **Open file…** next to 📂 or
-   drag the file in: its whole folder opens with that clip selected.
+   Explorer and choose "Open in frename" (installed version; on Windows 11 under "Show more
+   options"). To start at one clip, right-click 📂 to pick the file, or drag the file in: its
+   whole folder opens with that clip selected.
 2. The video starts playing.
 3. Tag what you see: click a tag, or move with the arrow keys and press `Shift+Space`.
 4. Press `[` and `]` to mark the usable segment of the clip (in and out points).

@@ -15,7 +15,7 @@ pub enum Message {
     ScrollToSelected,
     /// Open a native folder picker dialog (📂 in the controls bar).
     OpenFolder,
-    /// Open a native file picker dialog ("Open file…" next to 📂): its folder opens with it selected.
+    /// Open a native file picker dialog (right-click on 📂): its folder opens with it selected.
     OpenFile,
     /// Show only files without tags (true) or every file (false).
     SetUntaggedOnly(bool),
