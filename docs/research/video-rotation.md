@@ -2,7 +2,7 @@
 
 Research notes for issue #66. Verified on this machine with ffmpeg 7, exiftool 13 and GStreamer
 1.26.10 (Windows, MSVC build) where marked **tested**; Premiere Pro behaviour is from Adobe's
-forums and still needs the owner's hand test at the end of this note.
+forums and was confirmed by the owner's hand test (2026-09-28, see "Owner's result" below).
 
 ## How rotation is stored
 
@@ -89,7 +89,9 @@ writing it means rewriting the stream. **"Cannot rotate".**
   after renaming `IMG_E0001.MOV` to `IMG_0001.MOV` Premiere showed it in the old orientation. No
   explanation was given; the likely cause is Premiere's media cache matching the file by name
   (the unedited `IMG_0001.MOV` had been imported before), not the matrix. It matters for us:
-- **Footage already in a project.** No Adobe document says when Premiere re-reads a changed file
+- **Footage already in a project** (confirmed by the owner, 2026-09-28: Premiere does not pick up
+  a new rotation of a clip it has already imported until its media cache is cleared). No Adobe
+  document says when Premiere re-reads a changed file
   header. Premiere keeps per-file data (conformed audio, peak files, indexes) in its media cache
   database and checks files it has open for changes; it does not say which properties it compares.
   frename keeps the file's modified time on XMP writes, and a rotation keeps the file's size too,
@@ -157,6 +159,13 @@ VLC 3 applies the orientation of MP4/MOV (the "auto rotate" of phone clips has w
 6. Rotate the MOV while Premiere has it imported and open: frename should show
    "Not rotated: the file is read-only or in use" if Premiere locks it.
 7. Rotate a clip four times in frename: it is back to how it was, and plays the same in Premiere.
+
+### Owner's result (2026-09-28)
+
+Rotation works in frename and a turned clip imports turned into Premiere Pro. Premiere does **not**
+update the rotation of a clip it imported before the turn: the old orientation stays until the
+media cache is cleared (Media Cache ▸ Delete in its preferences) and the clip is imported again. This is
+Premiere's cache, not frename; the README says so next to the rotation keys.
 
 ## Sources
 

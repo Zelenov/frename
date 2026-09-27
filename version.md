@@ -1,6 +1,6 @@
 # NEXT
 ## Added
-- Rotate a clip shot sideways: ↺ / ↻ in the video controls or `Ctrl+Alt+←` / `Ctrl+Alt+→`. Only the MP4/MOV rotation flag changes (no re-encoding, comment and markers stay), Premiere Pro is expected to show the clip turned when it imports it, and `Ctrl+Z` turns it back.
+- Rotate a clip shot sideways: ↺ / ↻ in the video controls or `Ctrl+Alt+←` / `Ctrl+Alt+→`. Only the MP4/MOV rotation flag changes (no re-encoding, comment and markers stay), Premiere Pro shows the clip turned when it imports it (a clip it imported before needs its media cache cleared and a new import), and `Ctrl+Z` turns it back.
 - Batch action "Rotate videos": 90° right, 90° left, 180°, or reset to no rotation, for the checked files.
 
 ## Changed
