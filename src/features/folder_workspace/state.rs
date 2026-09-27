@@ -1619,6 +1619,7 @@ impl FolderWorkspace {
         if !self.history.can_undo() || self.directory.is_none() {
             return Task::none();
         }
+        let turns_a_video = self.history.undo_turns_a_video();
         // Inner block: limits the lifetime of dir/tl borrows so we can use self after.
         let result: Result<(), UndoError> = {
             let dir = self.directory.as_mut().expect("checked above");
@@ -1629,22 +1630,14 @@ impl FolderWorkspace {
             };
             self.history.undo(&mut ctx)
         };
-        match result {
-            Ok(()) => Task::batch([self.refresh_after_undo_redo(), self.follow_rotation()]),
-            Err(e) => {
-                log::warn!("Undo failed: {}", e);
-                match e {
-                    UndoError::Rotation(_, error) => Self::rotation_undo_failed(&error),
-                    _ => Task::none(),
-                }
-            }
-        }
+        self.after_undo_redo(result, turns_a_video)
     }
 
     fn perform_redo(&mut self) -> Task<Message> {
         if !self.history.can_redo() || self.directory.is_none() {
             return Task::none();
         }
+        let turns_a_video = self.history.redo_turns_a_video();
         let result: Result<(), UndoError> = {
             let dir = self.directory.as_mut().expect("checked above");
             let tl = self.file_workspace.tag_list_mut();
@@ -1654,14 +1647,24 @@ impl FolderWorkspace {
             };
             self.history.redo(&mut ctx)
         };
+        self.after_undo_redo(result, turns_a_video)
+    }
+
+    /// Refresh after an undo or redo step, or say why it failed. A step that turned a video
+    /// reopens it when it is the one shown.
+    fn after_undo_redo(
+        &mut self,
+        result: Result<(), UndoError>,
+        turns_a_video: bool,
+    ) -> Task<Message> {
         match result {
-            Ok(()) => Task::batch([self.refresh_after_undo_redo(), self.follow_rotation()]),
+            Ok(()) if turns_a_video => {
+                Task::batch([self.refresh_after_undo_redo(), self.follow_rotation()])
+            }
+            Ok(()) => self.refresh_after_undo_redo(),
             Err(e) => {
-                log::warn!("Redo failed: {}", e);
-                match e {
-                    UndoError::Rotation(_, error) => Self::rotation_undo_failed(&error),
-                    _ => Task::none(),
-                }
+                log::warn!("Undo/redo failed: {}", e);
+                Self::undo_failed_notice(&e)
             }
         }
     }

@@ -88,9 +88,11 @@ impl VideoControlsState {
             | Message::DeleteMarker
             | Message::PreviousMarker
             | Message::NextMarker
-            | Message::EditMarker(_)
-            | Message::Rotate(_) => {
+            | Message::EditMarker(_) => {
                 // Handled by video player (needs current position). No local state change.
+            }
+            Message::Rotate(_) => {
+                // Bubbles up to FolderWorkspace, which changes the file. No local state change.
             }
         }
     }

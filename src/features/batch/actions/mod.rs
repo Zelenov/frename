@@ -17,7 +17,7 @@ pub use markers_comment::Direction as MarkersDirection;
 mod move_comments;
 mod move_in_out;
 mod reload_files;
-mod rotate;
+pub mod rotate;
 mod tag_commented;
 mod tag_spacing;
 

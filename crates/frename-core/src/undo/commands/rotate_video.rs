@@ -50,4 +50,8 @@ where
     fn redo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
         self.turn(ctx, self.quarter_turns)
     }
+
+    fn turns_a_video(&self) -> bool {
+        true
+    }
 }

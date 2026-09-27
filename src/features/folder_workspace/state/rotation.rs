@@ -2,10 +2,11 @@
 //! at once (see [`FileTagger::rotate_video`]), the player reopens the video to show it, and the
 //! turn is one undo step.
 
-use frename_core::{FileTagger, RotateVideoCommand, RotationError};
+use frename_core::{FileTagger, RotateVideoCommand, Rotation, UndoError};
 use iced::Task;
 
 use super::FolderWorkspace;
+use crate::features::batch::rotate::why_not_rotated;
 use crate::features::folder_workspace::Message;
 
 impl FolderWorkspace {
@@ -24,15 +25,15 @@ impl FolderWorkspace {
                 }));
                 Task::batch([
                     self.media_viewer.reload_video().map(Message::MediaViewer),
-                    Self::notice(&fl!("rotate-done", degrees = i64::from(rotation.degrees()))),
+                    Self::notice(&rotated(rotation)),
                 ])
             }
-            Err(error) => Self::notice(&not_rotated(&error)),
+            Err(error) => Self::notice(&fl!("rotate-failed", reason = why_not_rotated(&error))),
         }
     }
 
-    /// After an undo or redo: reopen the video when the file's rotation is no longer the one it
-    /// was opened with (the step turned it).
+    /// After an undo or redo that turned a video: reopen the shown video when the file's
+    /// rotation is no longer the one it was opened with.
     pub(super) fn follow_rotation(&mut self) -> Task<Message> {
         let (Some(shown), Some(file)) = (
             self.media_viewer.video_rotation(),
@@ -46,19 +47,24 @@ impl FolderWorkspace {
         }
     }
 
-    /// Say why an undo or redo of a turn did not happen.
-    pub(super) fn rotation_undo_failed(error: &RotationError) -> Task<Message> {
-        Self::notice(&not_rotated(error))
+    /// Say why an undo or redo step did not happen, when the user can do something about it:
+    /// a turn of a file that is read-only or open in another app.
+    pub(super) fn undo_failed_notice(error: &UndoError) -> Task<Message> {
+        match error {
+            UndoError::Rotation(_, error) => {
+                Self::notice(&fl!("rotate-failed", reason = why_not_rotated(error)))
+            }
+            _ => Task::none(),
+        }
     }
 }
 
-/// The note for a turn that did not happen.
-fn not_rotated(error: &RotationError) -> String {
-    match error {
-        RotationError::CannotRotate => fl!("rotate-failed-format"),
-        RotationError::Damaged => fl!("rotate-failed-damaged"),
-        RotationError::NoVideoTrack => fl!("rotate-failed-no-video"),
-        RotationError::UnusualMatrix => fl!("rotate-failed-matrix"),
-        RotationError::Io(_) => fl!("rotate-failed-in-use"),
+/// The note after a turn: how the clip is turned now.
+fn rotated(rotation: Rotation) -> String {
+    match rotation.degrees() {
+        90 => fl!("rotate-now-right"),
+        180 => fl!("rotate-now-half"),
+        270 => fl!("rotate-now-left"),
+        _ => fl!("rotate-now-upright"),
     }
 }

@@ -128,6 +128,8 @@ impl VideoPlayerState {
     /// Load a video file asynchronously.
     pub fn load_video(&mut self, path: PathBuf) -> Task<Message> {
         self.resume_at = None;
+        // Another file: its rotation is unknown until it has loaded.
+        self.rotation = None;
         self.open(path, !self.autoplay)
     }
 
@@ -1075,7 +1077,7 @@ mod tests {
         let (width, height) = size(Rotation::UPRIGHT);
         assert!(width > height, "stored landscape: {width}×{height}");
         assert_eq!(size(flagged), (height, width));
-        assert_eq!(size(Rotation::clockwise(90)), (height, width));
-        assert_eq!(size(Rotation::clockwise(180)), (width, height));
+        assert_eq!(size(Rotation::UPRIGHT.turned(1)), (height, width));
+        assert_eq!(size(Rotation::UPRIGHT.turned(2)), (width, height));
     }
 }

@@ -1144,12 +1144,15 @@ mod tests {
         let degrees = || FileTagger::video_rotation(&path).map(Rotation::degrees);
         assert_eq!(degrees(), Ok(270));
 
+        assert!(history.undo_turns_a_video());
+        assert!(!history.redo_turns_a_video());
         let mut ctx = UndoContext {
             directory: &mut directory,
             tag_list: &mut tag_list,
         };
         history.undo(&mut ctx).expect("undo");
         assert_eq!(degrees(), Ok(0));
+        assert!(history.redo_turns_a_video());
         history.redo(&mut ctx).expect("redo");
         assert_eq!(degrees(), Ok(270));
     }

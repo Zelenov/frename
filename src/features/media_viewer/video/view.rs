@@ -168,6 +168,7 @@ pub fn view<'a>(
             state.controls(),
             markers.markers.is_some(),
             markers.state.recording().is_some(),
+            state.rotation().is_some(),
         )
         .map(Message::Controls);
 

@@ -11,7 +11,7 @@ mod state;
 pub mod view;
 
 pub use actions::{
-    describe_ai, generate_subtitles, Action, ActionMessage, MarkersDirection, Operation,
+    describe_ai, generate_subtitles, rotate, Action, ActionMessage, MarkersDirection, Operation,
 };
 pub use messages::Message;
 pub use state::{BatchState, ItemProgress, ItemResult, ItemStatus};
