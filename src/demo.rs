@@ -11,7 +11,9 @@ use std::time::Duration;
 use frename_core::demo::DemoScenario;
 use iced::{window, Task};
 
-use crate::features::{batch, folder, folder_workspace, media_viewer, media_viewer::video};
+use crate::features::{
+    batch, folder, folder_workspace, media_viewer, media_viewer::video, settings,
+};
 
 /// Time from the video being ready to the screenshot: covers the seek, the subtitles, and the
 /// comments that load in the background. A fixed wait, not a signal: the open file's comment is
@@ -41,8 +43,8 @@ pub struct DemoRun {
     batch: bool,
     /// Show the AI description: its segments, or in batch mode the "Describe with AI" action.
     ai: bool,
-    /// Capture the settings window instead of the main one.
-    settings: bool,
+    /// Capture the settings window, on this page, instead of the main one.
+    settings: Option<settings::Page>,
     /// The captured window's size in pixels at scale 1, checked before saving.
     capture_size: (u32, u32),
     video_ready: bool,
@@ -66,6 +68,11 @@ impl DemoRun {
 
     /// Whether the demo captures the settings window (the app opens it when the video is ready).
     pub fn captures_settings(&self) -> bool {
+        self.settings.is_some()
+    }
+
+    /// The settings page the demo captures.
+    pub fn settings_page(&self) -> Option<settings::Page> {
         self.settings
     }
 
@@ -103,15 +110,13 @@ impl DemoRun {
     /// Handle a demo message.
     pub fn update(&self, message: Message) -> Task<Message> {
         match message {
-            Message::Captured(shot) => {
-                match save_png(&shot, self.capture_size, &self.out) {
-                    Ok(()) => {
-                        log::info!("demo: saved {}", self.out.display());
-                        iced::exit()
-                    }
-                    Err(e) => self.fail(&e),
+            Message::Captured(shot) => match save_png(&shot, self.capture_size, &self.out) {
+                Ok(()) => {
+                    log::info!("demo: saved {}", self.out.display());
+                    iced::exit()
                 }
-            }
+                Err(e) => self.fail(&e),
+            },
             Message::TimedOut => self.fail("the video did not get ready in time"),
         }
     }
@@ -172,8 +177,8 @@ fn save_png(shot: &window::Screenshot, expected: (u32, u32), path: &Path) -> Res
         .map_err(|e| format!("cannot save {}: {e}", path.display()))
 }
 
-/// What `--demo <scenario> --out <png> [--batch] [--mono] [--ai] [--settings] [--lang <code>]`
-/// asks for.
+/// What `--demo <scenario> --out <png> [--batch] [--mono] [--ai] [--settings [page]]
+/// [--lang <code>]` asks for.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DemoArgs {
     pub scenario: PathBuf,
@@ -184,8 +189,9 @@ pub struct DemoArgs {
     pub mono: bool,
     /// Show the AI description (see [`DemoRun`]).
     pub ai: bool,
-    /// Capture the settings window instead of the main one.
-    pub settings: bool,
+    /// Capture the settings window, on this page (`--settings ai`; the first page when none is
+    /// named), instead of the main one.
+    pub settings: Option<settings::Page>,
     /// The UI language setting: `en` unless given, so screenshots never follow the renderer's
     /// OS language; `--lang ""` follows it (System).
     pub lang: String,
@@ -203,6 +209,7 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
     };
     let out_at = args.iter().position(|a| a == "--out");
     let lang_at = args.iter().position(|a| a == "--lang");
+    let settings_at = args.iter().position(|a| a == "--settings");
     Some(value("--demo", Some(at)).and_then(|scenario| {
         let out =
             value("--out", out_at).map_err(|_| "--demo needs --out <file.png>".to_string())?;
@@ -210,13 +217,23 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
             None => "en".to_string(),
             Some(_) => value("--lang", lang_at)?.to_string_lossy().into_owned(),
         };
+        let settings = match settings_at {
+            None => None,
+            Some(at) => match args.get(at + 1).filter(|v| !v.starts_with("--")) {
+                None => Some(settings::Page::default()),
+                Some(name) => Some(
+                    settings::Page::from_name(name)
+                        .ok_or(format!("--settings: no page called {name}"))?,
+                ),
+            },
+        };
         Ok(DemoArgs {
             scenario,
             out,
             batch: args.iter().any(|a| a == "--batch"),
             mono: args.iter().any(|a| a == "--mono"),
             ai: args.iter().any(|a| a == "--ai"),
-            settings: args.iter().any(|a| a == "--settings"),
+            settings,
             lang,
         })
     }))
@@ -294,7 +311,7 @@ mod tests {
                 batch: false,
                 mono: false,
                 ai: false,
-                settings: false,
+                settings: None,
                 lang: "en".to_string(),
             }))
         );
@@ -308,6 +325,7 @@ mod tests {
                 "a.toml",
                 "--mono",
                 "--settings",
+                "ai",
                 "--lang",
                 "ru"
             ])),
@@ -317,10 +335,41 @@ mod tests {
                 batch: true,
                 mono: true,
                 ai: false,
-                settings: true,
+                settings: Some(settings::Page::Ai),
                 lang: "ru".to_string(),
             }))
         );
+    }
+
+    #[test]
+    fn settings_alone_captures_the_first_page_and_an_unknown_page_is_an_error() {
+        let parsed = demo_args(&args(&[
+            "frename",
+            "--demo",
+            "a.toml",
+            "--out",
+            "a.png",
+            "--settings",
+        ]));
+        assert!(matches!(
+            parsed,
+            Some(Ok(DemoArgs {
+                settings: Some(settings::Page::Interface),
+                ..
+            }))
+        ));
+        assert!(matches!(
+            demo_args(&args(&[
+                "frename",
+                "--demo",
+                "a.toml",
+                "--out",
+                "a.png",
+                "--settings",
+                "general"
+            ])),
+            Some(Err(_))
+        ));
     }
 
     #[test]
@@ -396,10 +445,18 @@ mod tests {
 
     #[test]
     fn only_the_first_ready_video_sets_up_the_scenario() {
-        let mut run = DemoRun::new(scenario(), "o.png".into(), "w".into(), false, false);
-        let window = window::Id::unique();
-        assert!(run.video_ready(window).is_some());
-        assert!(run.video_ready(window).is_none());
+        let args = DemoArgs {
+            scenario: "a.toml".into(),
+            out: "o.png".into(),
+            batch: false,
+            mono: false,
+            ai: false,
+            settings: None,
+            lang: "en".to_string(),
+        };
+        let mut run = DemoRun::new(scenario(), "o.png".into(), "w".into(), &args);
+        assert!(run.video_ready().is_some());
+        assert!(run.video_ready().is_none());
     }
 
     #[test]

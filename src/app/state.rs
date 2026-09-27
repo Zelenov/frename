@@ -187,15 +187,44 @@ fn main_window_event(
 }
 
 /// Keeps a window-tagged event only when it came from the main window.
-fn only_from_main_window(
-    (main_window, (window_id, message)): (window::Id, (window::Id, Message)),
+fn only_from_window(
+    (window, (window_id, message)): (window::Id, (window::Id, Message)),
 ) -> Option<Message> {
-    (window_id == main_window).then_some(message)
+    (window_id == window).then_some(message)
 }
 
-/// Settings window size (logical px). The window is not resizable and its content scrolls; the
-/// height stays within what a 1080p screen at 150% scaling leaves (about 655).
-const SETTINGS_WINDOW_SIZE: iced::Size = iced::Size::new(560.0, 640.0);
+/// Keys of the settings window: Esc, and Ctrl+Tab / Ctrl+Shift+Tab between its pages. A focused
+/// field takes the first Esc itself (it leaves the field).
+fn settings_window_key(
+    ev: iced::Event,
+    status: event::Status,
+    window_id: window::Id,
+) -> Option<(window::Id, Message)> {
+    let iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. }) = ev else {
+        return None;
+    };
+    let message = match key {
+        keyboard::Key::Named(keyboard::key::Named::Escape) if status == event::Status::Ignored => {
+            settings::Message::Escape
+        }
+        keyboard::Key::Named(keyboard::key::Named::Tab) if modifiers.control() => {
+            if modifiers.shift() {
+                settings::Message::PreviousPage
+            } else {
+                settings::Message::NextPage
+            }
+        }
+        _ => return None,
+    };
+    Some((window_id, Message::Settings(message)))
+}
+
+/// Settings window size (logical px): within what a 1080p screen at 150% scaling leaves (about
+/// 1280x680). Its pages scroll when they do not fit.
+const SETTINGS_WINDOW_SIZE: iced::Size = iced::Size::new(800.0, 600.0);
+
+/// The smallest the settings window gets, so a long label never clips.
+const SETTINGS_MIN_SIZE: iced::Size = iced::Size::new(720.0, 520.0);
 
 /// How often a running frename looks whether the daily update check is due.
 const UPDATE_TICK: std::time::Duration = std::time::Duration::from_secs(60 * 60);
@@ -328,7 +357,16 @@ impl FrenameApp {
                 }
                 Task::none()
             }
-            Message::OpenSettings => self.open_settings_window(),
+            Message::OpenSettings(page) => self.open_settings_on(page),
+            Message::Settings(settings::Message::Close) => self.close_settings(),
+            // Esc cancels a pending key removal or replacement first.
+            Message::Settings(settings::Message::Escape) => {
+                if self.settings.escape() {
+                    Task::none()
+                } else {
+                    self.close_settings()
+                }
+            }
             // Downloaded: close the app the way the user would (the open file is saved), then
             // apply the update once the main window is gone.
             Message::Settings(settings::Message::Updates(updates::Message::ApplyAndRestart(
@@ -460,6 +498,11 @@ impl FrenameApp {
                     settings::Message::SetSubtitleLanguage(..)
                     | settings::Message::SetSubtitleCueLength(_) => self.subtitle_config(),
                     settings::Message::SetMonochromeTags(_)
+                    | settings::Message::ShowPage(_)
+                    | settings::Message::NextPage
+                    | settings::Message::PreviousPage
+                    | settings::Message::Close
+                    | settings::Message::Escape
                     | settings::Message::Updates(_)
                     | settings::Message::ImportOldSettings
                     | settings::Message::OldSettingsFolderPicked(_)
@@ -469,15 +512,10 @@ impl FrenameApp {
             }
             Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
                 batch::ActionMessage::OpenAiSettings,
-            ))) => self.open_settings_window_then(iced::widget::operation::snap_to_end(
-                iced::widget::Id::new(settings::view::SETTINGS_SCROLLABLE_ID),
-            )),
-            // The subtitle action's settings are the last section too.
+            ))) => self.open_settings_on(Some(settings::Page::Ai)),
             Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
                 batch::ActionMessage::OpenSubtitleSettings,
-            ))) => self.open_settings_window_then(iced::widget::operation::snap_to_end(
-                iced::widget::Id::new(settings::view::SETTINGS_SCROLLABLE_ID),
-            )),
+            ))) => self.open_settings_on(Some(settings::Page::Subtitles)),
             // One reader of a key's state: the settings, which pass it on to the batch panel.
             Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
                 batch::ActionMessage::ReadKeyState,
@@ -495,10 +533,11 @@ impl FrenameApp {
             ),
             Message::FolderWorkspace(folder_workspace::Message::Folder(
                 folder::Message::OpenSettings,
-            ))
-            | Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
+            )) => Task::done(Message::OpenSettings(None)),
+            // Tag commented and Apply tag spacing: their settings are on the Saving page.
+            Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
                 batch::ActionMessage::OpenSettings,
-            ))) => Task::done(Message::OpenSettings),
+            ))) => Task::done(Message::OpenSettings(Some(settings::Page::Saving))),
             Message::CloseRequested(id) => {
                 crate::crash_guard::mark_closing();
                 // A batch job may be writing a file: stop it after that file, then close.
@@ -639,7 +678,8 @@ impl FrenameApp {
     fn demo_capture(&mut self) -> Task<Message> {
         let captures_settings = self.demo.as_ref().is_some_and(|d| d.captures_settings());
         let (open, window, size) = if captures_settings {
-            let open = self.open_settings_window();
+            let page = self.demo.as_ref().and_then(|d| d.settings_page());
+            let open = self.open_settings_on(page);
             let id = self.settings_window.unwrap_or(self.main_window);
             let size = SETTINGS_WINDOW_SIZE;
             (open, id, Some((size.width as u32, size.height as u32)))
@@ -652,55 +692,68 @@ impl FrenameApp {
         }
     }
 
-    fn open_settings_window(&mut self) -> Task<Message> {
-        self.open_settings_window_then(Task::none())
-    }
-
-    /// Open the settings window (or bring it to the front), then run `after` in it once its
-    /// content exists.
-    fn open_settings_window_then(&mut self, after: Task<Message>) -> Task<Message> {
+    /// Open the settings window on `page`, or bring it to the front there. Without a page it
+    /// shows the page it showed last, or Updates when an update is ready (the dot on the
+    /// settings button leads there).
+    fn open_settings_on(&mut self, page: Option<settings::Page>) -> Task<Message> {
+        let update_ready = self.settings.updates().available_version().is_some();
+        let page = page.or(update_ready.then_some(settings::Page::Updates));
+        let show = page.map_or_else(Task::none, |page| {
+            self.settings.show_page(page).map(Message::Settings)
+        });
         if let Some(id) = self.settings_window {
-            return Task::batch([window::gain_focus(id), after]);
+            return Task::batch([window::gain_focus(id), show]);
         }
         // Whether a key is saved is read each time the window opens, not at start-up: reading
         // may unlock a keyring, and a keyring locked before may be open now.
-        let read_key = if self.demo.is_some() {
-            // A demo never reads the renderer's own keys: Anthropic shows as saved, Soniox as
-            // missing, so one screenshot has both states (and asks no server for languages).
-            Task::batch([
-                (ApiKey::Anthropic, KeyState::Saved),
-                (ApiKey::Soniox, KeyState::Missing),
-            ]
-            .map(|(which, state)| {
-                Task::done(Message::Settings(settings::Message::Key(
-                    which,
-                    settings::KeyMessage::State {
-                        request: self.settings.begin_key_request(which),
-                        result: Ok(state),
-                    },
-                )))
-            }))
-        } else {
-            Task::batch(
-                [ApiKey::Anthropic, ApiKey::Soniox].map(|which| {
+        let read_key =
+            if self.demo.is_some() {
+                // A demo never reads the renderer's own keys: Anthropic shows as saved, Soniox as
+                // missing, so one screenshot has both states (and asks no server for languages).
+                Task::batch(
+                    [
+                        (ApiKey::Anthropic, KeyState::Saved),
+                        (ApiKey::Soniox, KeyState::Missing),
+                    ]
+                    .map(|(which, state)| {
+                        Task::done(Message::Settings(settings::Message::Key(
+                            which,
+                            settings::KeyMessage::State {
+                                request: self.settings.begin_key_request(which),
+                                result: Ok(state),
+                            },
+                        )))
+                    }),
+                )
+            } else {
+                Task::batch([ApiKey::Anthropic, ApiKey::Soniox].map(|which| {
                     key_task(which, self.settings.begin_key_request(which), || Ok(()))
-                }),
-            )
-        };
+                }))
+            };
         let (id, open) = window::open(window::Settings {
             size: SETTINGS_WINDOW_SIZE,
+            min_size: Some(SETTINGS_MIN_SIZE),
             position: window::Position::Centered,
-            resizable: false,
+            resizable: true,
             icon: self.window_icon.clone(),
             ..window::Settings::default()
         });
         self.settings_window = Some(id);
-        // `then` takes a closure that could run again; the window opens once.
-        let mut after = Some(after);
-        Task::batch([
-            open.then(move |_| after.take().unwrap_or_else(Task::none)),
-            read_key,
-        ])
+        Task::batch([open.discard(), read_key, show])
+    }
+
+    fn close_settings(&mut self) -> Task<Message> {
+        self.settings_window.map_or_else(Task::none, window::close)
+    }
+
+    /// The theme of a window: the design system's in Settings; the main window keeps iced's dark
+    /// theme until it moves onto the system (#59).
+    pub fn theme(&self, window_id: window::Id) -> iced::Theme {
+        if self.settings_window == Some(window_id) {
+            crate::ui::theme()
+        } else {
+            iced::Theme::Dark
+        }
     }
 
     /// Feature subscriptions (file drop, window opened, global keyboard to search bar).
@@ -712,9 +765,15 @@ impl FrenameApp {
                 ctrl_v_paste_tags_handler(ev, status, window_id).map(|m| (window_id, m))
             })
             .with(self.main_window)
-            .filter_map(only_from_main_window)
+            .filter_map(only_from_window)
         } else {
             Subscription::none()
+        };
+        let settings_keys = match self.settings_window {
+            Some(id) => event::listen_with(settings_window_key)
+                .with(id)
+                .filter_map(only_from_window),
+            None => Subscription::none(),
         };
         Subscription::batch([
             self.drag_drop_state.subscription().map(Message::DragDrop),
@@ -727,7 +786,8 @@ impl FrenameApp {
                 main_window_event(ev, status, window_id).map(|m| (window_id, m))
             })
             .with(self.main_window)
-            .filter_map(only_from_main_window),
+            .filter_map(only_from_window),
+            settings_keys,
             window::close_events().map(Message::WindowClosed),
             iced::time::every(UPDATE_TICK)
                 .map(|_| Message::Settings(settings::Message::Updates(updates::Message::Tick))),
