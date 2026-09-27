@@ -565,14 +565,12 @@ impl FrenameApp {
                 window::run(self.main_window, move |window| {
                     drag_out::start(window, &paths)
                 })
-                .map(|outcome| {
-                    Message::FolderWorkspace(folder_workspace::Message::DragOutFinished(outcome))
-                })
+                .map(|()| Message::FolderWorkspace(folder_workspace::Message::DragOutFinished))
             }
-            Message::FolderWorkspace(folder_workspace::Message::DragOutFinished(outcome)) => {
+            Message::FolderWorkspace(folder_workspace::Message::DragOutFinished) => {
                 self.drag_drop_state.end_own_drag(std::time::Instant::now());
                 self.folder_workspace
-                    .update(folder_workspace::Message::DragOutFinished(outcome))
+                    .update(folder_workspace::Message::DragOutFinished)
                     .map(Message::FolderWorkspace)
             }
             Message::FolderWorkspace(msg) => {

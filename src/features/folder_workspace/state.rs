@@ -192,7 +192,7 @@ impl FolderWorkspace {
             Message::DragOut(msg) => self.handle_drag_out(msg),
             // Intercepted by the app, which owns the window; no-op here.
             Message::StartDragOut(_) => Task::none(),
-            Message::DragOutFinished(outcome) => self.drag_out_finished(outcome),
+            Message::DragOutFinished => self.drag_out_finished(),
             Message::Folder(folder_msg) => self.handle_folder_message(folder_msg),
             Message::MediaViewer(msg) => match msg {
                 media_viewer::Message::Unloaded => self.on_media_unloaded(),
@@ -995,8 +995,6 @@ impl FolderWorkspace {
         id: FileId,
         snapshot: frename_core::FileSnapshot,
     ) -> Task<Message> {
-        // A drag out of the window waiting for this save may decide now.
-        self.drag_out.saved(id);
         // Resolve the current on-disk path via the stable file ID.
         let Some(current_path) = self
             .directory
@@ -1024,6 +1022,8 @@ impl FolderWorkspace {
         };
         let path_before = current_path.clone();
         let (new_path, snapshot_after_save) = snapshot.save_and_reparse(&current_path);
+        // A drag out of the window waiting for this save learns whether it worked.
+        self.drag_out_saved(id, &snapshot, &snapshot_after_save);
 
         let _ = self
             .directory
@@ -1139,6 +1139,8 @@ impl FolderWorkspace {
     /// Open the in-place rename editor on the row at `index` (selecting that file first when
     /// needed), with the name before the extension selected, as Windows Explorer does.
     fn start_rename(&mut self, index: usize) -> Task<Message> {
+        // The double-click's held button now belongs to the editor's text, not to a drag.
+        self.drag_out.release();
         let Some(dir) = self.directory.as_ref() else {
             return Task::none();
         };
@@ -3100,7 +3102,11 @@ mod tests {
         let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
         drag_move(&mut workspace, 0.0);
         drag_move(&mut workspace, 10.0);
-        assert!(workspace.drag_out.save_pending(), "a save is asked for");
+        assert_eq!(
+            workspace.drag_out.save_state(),
+            crate::features::drag_out::SaveState::Pending,
+            "a save is asked for"
+        );
         // No task delivered yet: the save has not run.
         drag_move(&mut workspace, 11.0);
         assert!(workspace.drag_out.is_pressed(), "waits, not refused");
@@ -3139,6 +3145,23 @@ mod tests {
             !workspace.drag_out.is_pressed() && !workspace.drag_out.is_dragging(),
             "refused: idle again"
         );
+    }
+
+    /// A double-click opens the rename editor: the held button then selects its text, it does
+    /// not drag the file.
+    #[test]
+    fn opening_the_rename_editor_disarms_the_drag() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = workspace_with_unsaved_tag(&test_dir);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        assert!(workspace.drag_out.is_pressed());
+        let _ = workspace.update(Message::Folder(folder::Message::StartRename(0)));
+        assert!(!workspace.drag_out.is_pressed());
+        // A second press of the double-click arms again; its moves still do not drag.
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        drag_move(&mut workspace, 0.0);
+        drag_move(&mut workspace, 10.0);
+        assert!(!workspace.drag_out.is_pressed() && !workspace.drag_out.is_dragging());
     }
 
     #[test]

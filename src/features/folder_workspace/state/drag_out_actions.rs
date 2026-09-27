@@ -4,18 +4,19 @@
 
 use std::path::PathBuf;
 
-use frename_core::FileId;
+use frename_core::{FileId, FileSnapshot};
 use iced::Task;
 
 use super::FolderWorkspace;
-use crate::features::drag_out::{self, Readiness};
+use crate::features::drag_out::{self, DragCheck, Readiness};
 use crate::features::folder_workspace::Message;
 
 impl FolderWorkspace {
     /// The row at `index` of the file list was pressed (and is being selected): holding the
-    /// button and moving may drag its file out of the window.
+    /// button and moving may drag its file out of the window. A press whose button is already
+    /// up again (a tap) arms nothing, so a later drag elsewhere cannot pick this file up.
     pub(super) fn arm_drag_out(&mut self, index: usize) {
-        if !drag_out::SUPPORTED {
+        if !drag_out::SUPPORTED || !drag_out::primary_button_down() {
             return;
         }
         let pressed = self
@@ -43,17 +44,31 @@ impl FolderWorkspace {
     }
 
     /// The drag loop returned (the platform code logged how): a new press may start another.
-    pub(super) fn drag_out_finished(&mut self, _outcome: drag_out::Outcome) -> Task<Message> {
+    pub(super) fn drag_out_finished(&mut self) -> Task<Message> {
         self.drag_out.finish();
         Task::none()
     }
 
+    /// A file was saved to `saved` (reparsed after the save) while `wanted` was asked for: a
+    /// drag waiting for that save learns whether it worked. It failed when the rename did not
+    /// happen or the markers could not be written.
+    pub(super) fn drag_out_saved(
+        &mut self,
+        id: FileId,
+        wanted: &FileSnapshot,
+        saved: &FileSnapshot,
+    ) {
+        let failed = drag_out::save_failed(wanted, saved) || self.unsaved_markers.contains_key(&id);
+        self.drag_out.saved(id, failed);
+    }
+
     /// The pointer went past the threshold: start the drag when the files are ready, save the
-    /// open file first when its edits are not on disk, or wait for a save under way.
+    /// open file first when its edits may not be on disk, or wait for a save under way.
     fn ask_drag_out(&mut self, pressed: FileId) -> Task<Message> {
         // The release may have come in the same batch as the press (a touchpad tap), before
         // anything listened for it: with the button up there is no drag, and no save for one.
-        if !drag_out::primary_button_down() {
+        // A double-click opened the rename editor: the held button is for its text now.
+        if !drag_out::primary_button_down() || self.inline_rename.is_some() {
             self.drag_out.release();
             return Task::none();
         }
@@ -70,11 +85,12 @@ impl FolderWorkspace {
             .file()
             .map(|file| file.id())
             .filter(|id| ids.contains(id));
-        let unsaved = open.is_some_and(|id| self.open_file_unsaved(id));
-        // A save counts once it ran, not when it was asked for: its message may still be
-        // queued, or its video still unloading.
-        let in_flight = self.pending_file_updated.is_some() || self.drag_out.save_pending();
-        match drag_out::readiness(in_flight, unsaved, self.drag_out.save_ran()) {
+        let check = DragCheck {
+            unloading: self.pending_file_updated.is_some(),
+            unsaved: open.is_some_and(|id| self.open_file_unsaved(id)),
+            save: self.drag_out.save_state(),
+        };
+        match drag_out::readiness(check) {
             Readiness::Wait => Task::none(),
             Readiness::SaveFirst => {
                 // Saved as a click on its row saves it: a same-file refresh, which unloads
@@ -107,8 +123,9 @@ impl FolderWorkspace {
         }
     }
 
-    /// Whether the open file `id` has edits that are not on disk: its name on disk is not the
-    /// one its tags, name and in/out make, or its markers could not be written.
+    /// Whether the open file `id` may have edits that are not on disk: its name on disk is not
+    /// the one its edits make, or its markers could not be written. Only decides whether to
+    /// save before the drag; whether that save worked is the save's own outcome.
     pub(super) fn open_file_unsaved(&self, id: FileId) -> bool {
         if self.unsaved_markers.contains_key(&id) {
             return true;

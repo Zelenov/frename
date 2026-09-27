@@ -122,5 +122,5 @@ pub enum Message {
     /// Drag these files out of the window. Handled by the app, which owns the window.
     StartDragOut(Vec<PathBuf>),
     /// The drag out of the window ended (the app sends it when the drag loop returns).
-    DragOutFinished(drag_out::Outcome),
+    DragOutFinished,
 }

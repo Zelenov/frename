@@ -26,7 +26,8 @@ pub struct DragDropState {
     pending: Vec<PathBuf>,
     /// When the last item arrived.
     last_drop: Option<Instant>,
-    /// Files frename itself drags out of the window: dropped back on it, they are ignored.
+    /// Files frename itself drags out of the window, in canonical form: dropped back on it,
+    /// they are ignored.
     own_drag: Vec<PathBuf>,
     /// When frename's own drag started.
     own_drag_started: Option<Instant>,
@@ -51,7 +52,7 @@ impl DragDropState {
 
     /// frename starts dragging `paths` out of the window.
     pub fn begin_own_drag(&mut self, paths: Vec<PathBuf>, now: Instant) {
-        self.own_drag = paths;
+        self.own_drag = paths.iter().map(|path| canonical(path)).collect();
         self.own_drag_started = Some(now);
         self.own_drag_until = None;
     }
@@ -73,15 +74,8 @@ impl DragDropState {
             return false;
         }
         // The path comes back from the shell, maybe spelled differently (case, 8.3 names).
-        let same = |own: &PathBuf| {
-            own.to_string_lossy()
-                .eq_ignore_ascii_case(&path.to_string_lossy())
-                || matches!(
-                    (std::fs::canonicalize(own), std::fs::canonicalize(path)),
-                    (Ok(a), Ok(b)) if a == b
-                )
-        };
-        self.own_drag.iter().any(same)
+        let dropped = canonical(path);
+        self.own_drag.contains(&dropped)
     }
 
     /// On a timer tick: when the drop is complete, the path to open (the first folder, or else
@@ -113,6 +107,11 @@ impl DragDropState {
         }
         Subscription::batch([drops, iced::time::every(DROP_QUIET).map(Message::Tick)])
     }
+}
+
+/// `path` in canonical form (one spelling per file), or as given when it cannot be resolved.
+fn canonical(path: &std::path::Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 #[cfg(test)]

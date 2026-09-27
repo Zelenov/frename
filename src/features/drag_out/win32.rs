@@ -18,15 +18,13 @@ use windows::Win32::UI::Shell::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_SWAPBUTTON};
 
-use super::Outcome;
-
 /// Run the drag loop for `paths` from `window`.
-pub fn start(window: &dyn HasWindowHandle, paths: &[PathBuf]) -> Outcome {
+pub fn start(window: &dyn HasWindowHandle, paths: &[PathBuf]) {
     // The drop source drops when the button is up: started after a release, the files would
     // land wherever the pointer is.
     if !primary_button_down() {
         log::info!("drag out: the button is already up, no drag");
-        return Outcome::NotStarted;
+        return;
     }
     let hwnd = match window.window_handle().map(|handle| handle.as_raw()) {
         Ok(RawWindowHandle::Win32(handle)) => Some(HWND(handle.hwnd.get() as *mut _)),
@@ -36,7 +34,7 @@ pub fn start(window: &dyn HasWindowHandle, paths: &[PathBuf]) -> Outcome {
         Ok(data) => data,
         Err(error) => {
             log::error!("drag out: no data object for {paths:?}: {error}");
-            return Outcome::Failed(error.to_string());
+            return;
         }
     };
     log::info!("drag out: {paths:?}");
@@ -54,16 +52,9 @@ pub fn start(window: &dyn HasWindowHandle, paths: &[PathBuf]) -> Outcome {
     match result {
         Ok(effect) if effect != DROPEFFECT_NONE => {
             log::info!("drag out: dropped ({:#x})", effect.0);
-            Outcome::Dropped
         }
-        Ok(_) => {
-            log::info!("drag out: cancelled");
-            Outcome::Cancelled
-        }
-        Err(error) => {
-            log::error!("drag out: drag loop failed: {error}");
-            Outcome::Failed(error.to_string())
-        }
+        Ok(_) => log::info!("drag out: cancelled"),
+        Err(error) => log::error!("drag out: drag loop failed: {error}"),
     }
 }
 
