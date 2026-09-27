@@ -948,6 +948,13 @@ the Anthropic key as saved and the Soniox key as missing):
 |---|---|---|
 | ![](design-system/built-subtitles.png) | ![](design-system/built-updates.png) | ![](design-system/built-ru-saving.png) ![](design-system/built-ru-ai.png) |
 
+| Comments inside the video, after a change | Removing the key | Keyring unavailable |
+|---|---|---|
+| ![](design-system/built-saving-commented.png) | ![](design-system/built-ai-remove.png) | ![](design-system/built-subtitles-keyring.png) |
+
+The last row was taken with a local, uncommitted patch that puts the demo into those states; an
+update that is ready cannot be shown by a development build (it never finds one), see the mockup.
+
 Differences from the mockups: *Remove…* gained a 1 px `error` edge after review, so it reads as a
 button (§8.1); the dropdown keeps iced's own arrow instead of a `chevron-down`
 (iced 0.14 draws the pick list's handle itself); a navigation item whose label wraps (Russian)
