@@ -20,7 +20,7 @@ jobs:
       draft: ${{ steps.vars.outputs.draft }}
       should_build: ${{ steps.vars.outputs.should_build }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Compute variables
         id: vars
@@ -66,7 +66,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: steps.vars.outputs.should_build == 'true'
         with:
           name: release-notes
@@ -85,7 +85,7 @@ jobs:
       VPK_VERSION: 1.2.158
       PACKAGE_VERSION: ${{ needs.prepare.outputs.package_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -95,7 +95,7 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: C:\gst-download
           key: gstreamer-msvc-x86_64-${{ env.GST_VERSION }}
@@ -139,7 +139,7 @@ jobs:
 
       # What the updater reads, the installer and the portable zip; not the previous release's
       # package, nor the legacy RELEASES file (only for Squirrel migrations).
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: frename-windows-x64-v${{ needs.prepare.outputs.package_version }}
           path: |
@@ -157,9 +157,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: frename-windows-x64-v${{ needs.prepare.outputs.package_version }}
           path: packages
@@ -175,7 +175,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install GStreamer and packaging tools
         run: |
@@ -200,7 +200,7 @@ jobs:
           version="${{ needs.prepare.outputs.package_version }}"
           packaging/linux/build-appimage.sh "$version" target/release/frename "dist/frename-linux-x86_64-v$version.AppImage"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: frename-linux-x86_64-v${{ needs.prepare.outputs.package_version }}
           path: dist/frename-linux-x86_64-v${{ needs.prepare.outputs.package_version }}.AppImage
@@ -214,9 +214,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: frename-linux-x86_64-v${{ needs.prepare.outputs.package_version }}
           path: dist
@@ -231,14 +231,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           path: artifacts
           merge-multiple: true
 
       - name: Remove existing draft and tag
         if: needs.prepare.outputs.draft == 'true'
-        uses: ClementTsang/delete-tag-and-release@v0.3.1
+        uses: ClementTsang/delete-tag-and-release@v0.4.0
         continue-on-error: true
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
@@ -248,7 +248,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
           target_commitish: ${{ github.sha }}
