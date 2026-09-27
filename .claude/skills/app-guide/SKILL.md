@@ -82,7 +82,7 @@ C:\Work\my\frename\
 | `features/folder_controls/` | Folder navigation controls |
 | `features/video_player/` | GStreamer video playback state |
 | `features/video_controls/` | Progress bar, play/pause |
-| `features/drag_drop/` | OS file drag-drop → `OpenFile(path)` |
+| `features/drag_drop/` | OS file drag-drop → `OpenPath(path)` |
 | `widgets/` | 5 reusable widgets (search_bar, tag_chip, splitter, etc.) |
 | `theme.rs` | Color constants + style functions |
 | `tag_colors.rs` | 16-color tag palette |
@@ -164,7 +164,7 @@ picker: write a scenario for it and run it (under Xvfb on a headless Linux).
 
 ## Common patterns
 
-**Open a folder/file from outside:** emit `Message::FolderWorkspace(OpenFile(path))` or drop a file on the window (handled by `drag_drop` feature).
+**Open a folder/file from outside:** emit `Message::FolderWorkspace(OpenPath(path))` or drop a folder/file on the window (handled by `drag_drop` feature).
 
 **The `LoggingAppStateStore<AppDatabase>` wrapper:** used in production to log all store operations. Passed to `Directory::open()`. The underlying `AppDatabase` is used directly in `FileWorkspace`.
 
