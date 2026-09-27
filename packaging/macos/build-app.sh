@@ -5,15 +5,15 @@
 #
 #   frename.app/Contents/Info.plist
 #   frename.app/Contents/MacOS/frename
-#   frename.app/Contents/Frameworks/lib/*.dylib      GStreamer, GLib, FFmpeg, ... that are used
+#   frename.app/Contents/Frameworks/*.dylib          GStreamer, GLib, FFmpeg, ... that are used
 #   frename.app/Contents/PlugIns/gstreamer/*.so     the plugins in gstreamer-plugins.txt
 #   frename.app/Contents/Resources/frename.icns
 #   frename.app/Contents/Resources/licenses/        licenses of the bundled parts, with sources
 #
 # Libraries are not hand-listed: every library the binary or a plugin links, directly or not, is
-# copied from the framework. The framework's libraries name each other `@rpath/lib/<name>`, so
-# they keep that layout under Contents/Frameworks and the binary and the plugins get an rpath to
-# it. There is no gst-plugin-scanner: the app scans its plugins in-process (GST_REGISTRY_FORK=no,
+# copied from the framework's lib/. The framework names its libraries `@rpath/<name>.dylib`, so
+# they go flat into Contents/Frameworks, and the binary, the plugins and the libraries themselves
+# get an rpath to it. There is no gst-plugin-scanner: the app scans its plugins in-process (GST_REGISTRY_FORK=no,
 # src/bundled_gstreamer.rs). The result is not signed: packaging/macos/sign-app.sh does that.
 #
 # Needs: the framework (packaging/macos/install-gstreamer.sh), Xcode's command line tools (otool,
@@ -83,8 +83,8 @@ while [ "${#queue[@]}" -gt 0 ]; do
       @rpath/*)
         relative="${dep#@rpath/}"
         [ -e "$contents/Frameworks/$relative" ] && continue
-        source="$framework/$relative"
-        [ -f "$source" ] || { echo "$file links $dep, which is not in $framework" >&2; exit 1; }
+        source="$framework/lib/$relative"
+        [ -f "$source" ] || { echo "$file links $dep, which is not in $framework/lib" >&2; exit 1; }
         mkdir -p "$(dirname "$contents/Frameworks/$relative")"
         cp "$source" "$contents/Frameworks/$relative"
         chmod u+w "$contents/Frameworks/$relative"
@@ -106,14 +106,20 @@ rpaths() {
 while IFS= read -r -d '' file; do
   while read -r rpath; do
     case "$rpath" in
-      /*) install_name_tool -delete_rpath "$rpath" "$file" 2> /dev/null ;;
+      /*) install_name_tool -delete_rpath "$rpath" "$file" ;;
     esac
   done < <(rpaths "$file")
 done < <(find "$contents/MacOS" "$contents/Frameworks" "$contents/PlugIns" -type f -print0)
-install_name_tool -add_rpath "@executable_path/../Frameworks" "$contents/MacOS/frename" 2> /dev/null
+add_rpath() {
+  rpaths "$1" | grep -xF -- "$2" > /dev/null || install_name_tool -add_rpath "$2" "$1"
+}
+add_rpath "$contents/MacOS/frename" "@executable_path/../Frameworks"
 for plugin in "$contents"/PlugIns/gstreamer/*.so; do
-  install_name_tool -add_rpath "@loader_path/../../Frameworks" "$plugin" 2> /dev/null
+  add_rpath "$plugin" "@loader_path/../../Frameworks"
 done
+while IFS= read -r -d '' library; do
+  add_rpath "$library" "@loader_path"
+done < <(find "$contents/Frameworks" -type f -name '*.dylib' -print0)
 
 # Licenses: the framework keeps one folder per component, as the Windows package does.
 licenses="$contents/Resources/licenses"
