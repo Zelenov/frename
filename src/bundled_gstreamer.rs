@@ -3,7 +3,7 @@
 //! the exe's folder comes first in the DLL search order, so a GStreamer installed on the system
 //! is not loaded. In `frename.app` the libraries are in `Contents/Frameworks/`, found through the
 //! executable's rpath, and the plugins in `Contents/PlugIns/gstreamer/`; there is no scanner
-//! process (a sandboxed app could not start one), GStreamer scans the plugins in-process.
+//! executable to sign and ship, GStreamer scans the plugins in-process.
 //! A system GStreamer's plugin environment variables would still be read, so they are replaced
 //! before `gst::init`. A developer build has no bundled plugins and uses the system GStreamer.
 
@@ -12,7 +12,7 @@
 #![cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
 
 use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Where a bundle keeps GStreamer, relative to the folder of the executable.
 #[derive(Debug, Clone, Copy)]
@@ -69,7 +69,7 @@ pub fn bundled_gstreamer_environment(
     exe_dir: &Path,
     data_dir: &Path,
 ) -> Option<GstEnvironment> {
-    let plugins = normalize(&exe_dir.join(layout.plugins));
+    let plugins = exe_dir.join(layout.plugins);
     if !plugins.join(layout.marker_plugin).is_file() {
         return None;
     }
@@ -89,22 +89,6 @@ pub fn bundled_gstreamer_environment(
         remove: REMOVED.to_vec(),
         set,
     })
-}
-
-/// `path` without `..` steps (lexically: the bundle has no symlinks to follow), so the logged
-/// plugin folder reads as a real place.
-fn normalize(path: &Path) -> PathBuf {
-    let mut out = PathBuf::new();
-    for component in path.components() {
-        match component {
-            std::path::Component::ParentDir => {
-                out.pop();
-            }
-            std::path::Component::CurDir => {}
-            other => out.push(other),
-        }
-    }
-    out
 }
 
 /// Point GStreamer at the bundle around the running executable, if there is one. Call before any
@@ -137,6 +121,7 @@ pub fn configure_bundled_gstreamer(data_dir: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     fn temp_folder(name: &str) -> PathBuf {
         let dir =
@@ -161,7 +146,7 @@ mod tests {
         assert_eq!(
             environment.set,
             vec![
-                ("GST_PLUGIN_SYSTEM_PATH_1_0", normalize(&plugins).into()),
+                ("GST_PLUGIN_SYSTEM_PATH_1_0", plugins.into()),
                 (
                     "GST_PLUGIN_SCANNER_1_0",
                     exe_dir.join("gst-plugin-scanner.exe").into()
@@ -192,7 +177,10 @@ mod tests {
         assert_eq!(
             environment.set,
             vec![
-                ("GST_PLUGIN_SYSTEM_PATH_1_0", normalize(&plugins).into()),
+                (
+                    "GST_PLUGIN_SYSTEM_PATH_1_0",
+                    exe_dir.join("../PlugIns/gstreamer").into()
+                ),
                 ("GST_REGISTRY_FORK", "no".into()),
                 (
                     "GST_REGISTRY_1_0",
@@ -213,15 +201,5 @@ mod tests {
             );
         }
         let _ = std::fs::remove_dir_all(&exe_dir);
-    }
-
-    #[test]
-    fn parent_steps_are_resolved() {
-        assert_eq!(
-            normalize(Path::new(
-                "/a/frename.app/Contents/MacOS/../PlugIns/gstreamer"
-            )),
-            PathBuf::from("/a/frename.app/Contents/PlugIns/gstreamer")
-        );
     }
 }

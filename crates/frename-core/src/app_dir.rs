@@ -11,9 +11,9 @@ static PACKAGE_DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 /// AppImage, whose folder is a read-only mount; then `$XDG_DATA_HOME/frename`, by default
 /// `~/.local/share/frename`. A macOS app (`frename.app`) must not write inside its bundle (that
 /// breaks its signature, and the bundle may be read-only), so it uses
-/// `~/Library/Application Support/frename`; in the App Store's sandbox `HOME` is the app's
-/// container, so the same path lands there. An installed or portable Windows package keeps them in the folder
-/// set with [`set_app_data_dir`], because the executable's folder is replaced on every update.
+/// `~/Library/Application Support/frename`. An installed or portable Windows package keeps them
+/// in the folder set with [`set_app_data_dir`], because the executable's folder is replaced on
+/// every update.
 /// An absolute `FRENAME_DATA_DIR` overrides all of these (demo mode uses it to keep the user's
 /// database untouched). The folder may not exist yet.
 pub fn app_data_dir() -> PathBuf {
@@ -272,16 +272,6 @@ mod tests {
         assert_eq!(
             data_dir_for(Some(&app_exe()), None, env(vec![home()])),
             PathBuf::from(abs("/home/ed")).join("Library/Application Support/frename")
-        );
-        // The App Store's sandbox points HOME at the app's container.
-        let container = abs("/Users/ed/Library/Containers/com.example.frename/Data");
-        assert_eq!(
-            data_dir_for(
-                Some(&app_exe()),
-                None,
-                env(vec![("HOME", container.clone())])
-            ),
-            PathBuf::from(container).join("Library/Application Support/frename")
         );
     }
 

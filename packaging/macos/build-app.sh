@@ -17,13 +17,13 @@
 # src/bundled_gstreamer.rs). The result is not signed: packaging/macos/sign-app.sh does that.
 #
 # Needs: the framework (packaging/macos/install-gstreamer.sh), Xcode's command line tools (otool,
-# install_name_tool), sips and iconutil. BUNDLE_ID overrides the bundle identifier.
+# install_name_tool), sips and iconutil.
 set -euo pipefail
 
 version="$1"
 binary="$2"
 app="$3"
-bundle_id="${BUNDLE_ID:-io.github.zelenov.frename}"
+bundle_id="io.github.zelenov.frename"
 framework="${GST_FRAMEWORK:-/Library/Frameworks/GStreamer.framework/Versions/1.0}"
 here="$(cd "$(dirname "$0")" && pwd)"
 
@@ -39,7 +39,9 @@ sed -e "s/@VERSION@/$version/g" -e "s/@BUNDLE_ID@/$bundle_id/g" "$here/Info.plis
   > "$contents/Info.plist"
 plutil -lint "$contents/Info.plist"
 
-# The icon: every size of an .icns from the 512 px PNG (1024 px for 512@2x is scaled up).
+# The icon: every size of an .icns from frename-512.png, the 512 px image of frename-icon.ico
+# (`convert 'frename-icon.ico[5]' PNG32:frename-512.png`; macOS has no ImageMagick). 1024 px for
+# 512@2x is scaled up.
 iconset="$(mktemp -d)/frename.iconset"
 mkdir -p "$iconset"
 for size in 16 32 128 256 512; do

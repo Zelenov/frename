@@ -1,29 +1,21 @@
 #!/usr/bin/env bash
-# Sign frename.app from the inside out: every bundled library and plugin, then the app.
+# Sign frename.app ad hoc, from the inside out: every bundled library and plugin, then the app.
 #
-#   packaging/macos/sign-app.sh <frename.app> [identity] [entitlements.plist]
+#   packaging/macos/sign-app.sh <frename.app>
 #
-# The identity defaults to `-`, an ad-hoc signature: no Apple account, and enough for Apple
-# Silicon, which runs only signed code. Gatekeeper still blocks an ad-hoc app downloaded from the
-# web until its quarantine flag is removed (README). The App Store build passes its
-# "Apple Distribution" identity and its entitlements (packaging/macos-store/).
+# An ad-hoc signature needs no Apple account and is enough for Apple silicon, which runs only
+# signed code. Gatekeeper still blocks an ad-hoc app downloaded from the web until its
+# quarantine flag is removed (README).
 set -euo pipefail
 
 app="$1"
-identity="${2:--}"
-entitlements="${3:-}"
-
-timestamp=()
-[ "$identity" = "-" ] && timestamp=(--timestamp=none)
 
 # install_name_tool left the libraries' signatures invalid: replace them all.
 while IFS= read -r -d '' file; do
-  codesign --force --sign "$identity" ${timestamp[@]+"${timestamp[@]}"} "$file"
+  codesign --force --sign - --timestamp=none "$file"
 done < <(find "$app/Contents/Frameworks" "$app/Contents/PlugIns" -type f \( -name '*.dylib' -o -name '*.so' \) -print0)
 
-main=(--force --sign "$identity" ${timestamp[@]+"${timestamp[@]}"})
-[ -n "$entitlements" ] && main+=(--entitlements "$entitlements")
-codesign "${main[@]}" "$app"
+codesign --force --sign - --timestamp=none "$app"
 
 codesign --verify --strict --deep --verbose=2 "$app"
 codesign --display --verbose=2 "$app" 2>&1 | grep -E '^(Identifier|Format|Signature|Authority|TeamIdentifier)'
