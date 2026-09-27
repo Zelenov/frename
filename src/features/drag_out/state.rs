@@ -25,34 +25,22 @@ enum Phase {
         /// The pointer went past the threshold: the drag is asked for on every move until it
         /// starts (it may wait for the file to be saved).
         crossed: bool,
-        /// Where the save of the open file for this drag is.
-        save: Save,
+        /// Saves of files since the press (the pressed row's own save, the file it left, the
+        /// save the drag asked for), by file.
+        saves: Vec<(FileId, Save)>,
     },
     /// The operating system's drag loop runs.
     Dragging,
 }
 
-/// The save of the open file that a drag asked for.
+/// A save of one file while a row is pressed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Save {
-    /// None asked for.
-    NotAsked,
-    /// Asked for this file; it has not run yet (its message or its video unload is pending).
-    Asked(FileId),
-    /// It ran, and failed or not (judged by the save itself, see [`save_failed`]).
-    Ran { failed: bool },
-}
-
-/// Where the save a drag asked for is, as [`readiness`] needs it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SaveState {
-    /// No save was asked for.
-    NotAsked,
-    /// Asked for, not run yet.
+pub enum Save {
+    /// Asked for by the drag; it has not run yet (its message or its video unload is pending).
     Pending,
-    /// Ran and left the file as edited.
-    Succeeded,
-    /// Ran and did not (the rename or the markers failed).
+    /// It ran and left the file as edited.
+    Worked,
+    /// It ran and did not (the rename or the markers failed; see [`save_failed`]).
     Failed,
 }
 
@@ -70,7 +58,7 @@ impl DragOutState {
             file,
             origin: None,
             crossed: false,
-            save: Save::NotAsked,
+            saves: Vec::new(),
         };
     }
 
@@ -107,33 +95,36 @@ impl DragOutState {
         Some(*file)
     }
 
-    /// Where the save this drag asked for is.
-    pub fn save_state(&self) -> SaveState {
-        match self.phase {
-            Phase::Pressed { save, .. } => match save {
-                Save::NotAsked => SaveState::NotAsked,
-                Save::Asked(_) => SaveState::Pending,
-                Save::Ran { failed: false } => SaveState::Succeeded,
-                Save::Ran { failed: true } => SaveState::Failed,
-            },
-            Phase::Idle | Phase::Dragging => SaveState::NotAsked,
+    /// The last save of `file` since the press, if any.
+    pub fn save_of(&self, file: FileId) -> Option<Save> {
+        let Phase::Pressed { saves, .. } = &self.phase else {
+            return None;
+        };
+        saves
+            .iter()
+            .find(|(id, _)| *id == file)
+            .map(|(_, save)| *save)
+    }
+
+    fn set_save(&mut self, file: FileId, save: Save) {
+        if let Phase::Pressed { saves, .. } = &mut self.phase {
+            match saves.iter_mut().find(|(id, _)| *id == file) {
+                Some(entry) => entry.1 = save,
+                None => saves.push((file, save)),
+            }
         }
     }
 
     /// This drag asks for a save of `file` (the open file).
     pub fn ask_save(&mut self, file: FileId) {
-        if let Phase::Pressed { save, .. } = &mut self.phase {
-            *save = Save::Asked(file);
-        }
+        self.set_save(file, Save::Pending);
     }
 
-    /// `file` was saved, `failed` or not: if this drag waited for that, the save has run.
+    /// `file` was saved, `failed` or not, while a row is pressed: whatever the file, a drag
+    /// that carries it must know (the press itself saves the file it leaves).
     pub fn saved(&mut self, file: FileId, failed: bool) {
-        if let Phase::Pressed { save, .. } = &mut self.phase {
-            if *save == Save::Asked(file) {
-                *save = Save::Ran { failed };
-            }
-        }
+        let save = if failed { Save::Failed } else { Save::Worked };
+        self.set_save(file, save);
     }
 
     /// Whether a file row is pressed (armed, not yet dragging).
@@ -153,9 +144,12 @@ impl DragOutState {
         self.phase = Phase::Dragging;
     }
 
-    /// The drag loop returned (dropped, cancelled or not started).
+    /// The drag loop returned (dropped, cancelled or not started). Only a running drag ends:
+    /// a late end must not clear a newer press.
     pub fn finish(&mut self) {
-        self.phase = Phase::Idle;
+        if matches!(self.phase, Phase::Dragging) {
+            self.phase = Phase::Idle;
+        }
     }
 
     /// Cursor moves and the button release, only while a file row is pressed.
@@ -200,16 +194,18 @@ pub fn save_failed(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
         || !wanted.extension().eq_ignore_ascii_case(saved.extension())
 }
 
-/// What the drag decision looks at.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// What the drag decision looks at, over all the dragged files.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct DragCheck {
-    /// A save of the open file waits for its video to unload.
-    pub unloading: bool,
-    /// The open file is among the dragged ones and its name on disk is not the one its edits
-    /// make (maybe only because reading back normalises; a save settles it).
-    pub unsaved: bool,
-    /// The save this drag asked for.
-    pub save: SaveState,
+    /// A save waits for the video to unload, or a save the drag asked for has not run yet.
+    pub waiting: bool,
+    /// A dragged file's save failed since the press, or its markers are not written.
+    pub failed: bool,
+    /// The open file is dragged and its name on disk is not the one its edits make (maybe only
+    /// because reading back normalises; a save settles it).
+    pub open_unsaved: bool,
+    /// The open file was saved since the press and that worked.
+    pub open_saved: bool,
 }
 
 /// What to do when the drag is asked for.
@@ -222,20 +218,21 @@ pub enum Readiness {
     Wait,
     /// The open file has edits not on disk: save it, then ask again.
     SaveFirst,
-    /// The save this drag asked for failed, so the drag does not start.
+    /// A dragged file's save failed, so the drag does not start.
     Refuse,
 }
 
 /// Whether a drag may start. A save counts once it ran, not when it was asked for (its message
 /// may be queued, or its video unloading); its own outcome decides, not a comparison of names.
 pub fn readiness(check: DragCheck) -> Readiness {
-    match check.save {
-        SaveState::Pending => Readiness::Wait,
-        _ if check.unloading => Readiness::Wait,
-        SaveState::Failed => Readiness::Refuse,
-        SaveState::Succeeded => Readiness::Start,
-        SaveState::NotAsked if check.unsaved => Readiness::SaveFirst,
-        SaveState::NotAsked => Readiness::Start,
+    if check.waiting {
+        Readiness::Wait
+    } else if check.failed {
+        Readiness::Refuse
+    } else if check.open_unsaved && !check.open_saved {
+        Readiness::SaveFirst
+    } else {
+        Readiness::Start
     }
 }
 
@@ -279,26 +276,33 @@ mod tests {
     }
 
     #[test]
-    fn the_save_counts_once_it_ran_for_the_file_asked_and_belongs_to_one_press() {
-        let (open, other) = (id(), id());
+    fn saves_are_kept_per_file_and_belong_to_one_press() {
+        let (open, left) = (id(), id());
         let mut state = DragOutState::default();
+        state.saved(left, true);
+        assert_eq!(state.save_of(left), None, "nothing pressed");
         state.press(open);
-        assert_eq!(state.save_state(), SaveState::NotAsked);
+        // The press saves the file it leaves: kept, whether the drag asked or not.
+        state.saved(left, true);
+        assert_eq!(state.save_of(left), Some(Save::Failed));
         state.ask_save(open);
-        assert_eq!(state.save_state(), SaveState::Pending);
-        state.saved(other, false);
-        assert_eq!(
-            state.save_state(),
-            SaveState::Pending,
-            "another file's save does not count"
-        );
-        state.saved(open, true);
-        assert_eq!(state.save_state(), SaveState::Failed);
-        state.press(open);
-        assert_eq!(state.save_state(), SaveState::NotAsked);
-        state.ask_save(open);
+        assert_eq!(state.save_of(open), Some(Save::Pending));
         state.saved(open, false);
-        assert_eq!(state.save_state(), SaveState::Succeeded);
+        assert_eq!(state.save_of(open), Some(Save::Worked));
+        state.press(open);
+        assert_eq!((state.save_of(open), state.save_of(left)), (None, None));
+    }
+
+    #[test]
+    fn a_late_end_does_not_clear_a_newer_press() {
+        let file = id();
+        let mut state = DragOutState::default();
+        state.press(file);
+        state.finish();
+        assert!(state.is_pressed());
+        state.start();
+        state.finish();
+        assert!(!state.is_pressed() && !state.is_dragging());
     }
 
     /// A save that worked is not taken for a failed one because the file reads back a little
@@ -343,24 +347,21 @@ mod tests {
     }
 
     #[test]
-    fn a_drag_waits_for_a_save_saves_once_and_refuses_only_when_the_save_failed() {
-        let check = |unloading, unsaved, save| {
+    fn a_drag_waits_for_saves_saves_once_and_refuses_only_when_a_save_failed() {
+        let check = |waiting, failed, open_unsaved, open_saved| {
             readiness(DragCheck {
-                unloading,
-                unsaved,
-                save,
+                waiting,
+                failed,
+                open_unsaved,
+                open_saved,
             })
         };
-        assert_eq!(check(true, true, SaveState::NotAsked), Readiness::Wait);
-        assert_eq!(check(false, true, SaveState::Pending), Readiness::Wait);
-        assert_eq!(check(true, false, SaveState::Succeeded), Readiness::Wait);
-        assert_eq!(check(false, false, SaveState::NotAsked), Readiness::Start);
-        assert_eq!(
-            check(false, true, SaveState::NotAsked),
-            Readiness::SaveFirst
-        );
+        assert_eq!(check(true, true, true, false), Readiness::Wait);
+        assert_eq!(check(false, false, false, false), Readiness::Start);
+        assert_eq!(check(false, false, true, false), Readiness::SaveFirst);
         // Names still differ after a save that worked (reading back normalised): start.
-        assert_eq!(check(false, true, SaveState::Succeeded), Readiness::Start);
-        assert_eq!(check(false, false, SaveState::Failed), Readiness::Refuse);
+        assert_eq!(check(false, false, true, true), Readiness::Start);
+        // Any dragged file's failed save refuses, the open one's or another's.
+        assert_eq!(check(false, true, false, true), Readiness::Refuse);
     }
 }

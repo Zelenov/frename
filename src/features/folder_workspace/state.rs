@@ -1013,6 +1013,8 @@ impl FolderWorkspace {
             (Some(markers), frename_core::MarkerStorage::Comment) => {
                 let comment = frename_core::markers_into_comment(snapshot.comment(), markers);
                 snapshot.set_comment(comment);
+                // Kept in the comment now: a failed write into the video no longer holds them.
+                self.unsaved_markers.remove(&id);
                 Task::none()
             }
             (Some(markers), frename_core::MarkerStorage::InVideo) => {
@@ -3103,8 +3105,8 @@ mod tests {
         drag_move(&mut workspace, 0.0);
         drag_move(&mut workspace, 10.0);
         assert_eq!(
-            workspace.drag_out.save_state(),
-            crate::features::drag_out::SaveState::Pending,
+            workspace.drag_out.save_of(file_id_at(&workspace, 0)),
+            Some(crate::features::drag_out::Save::Pending),
             "a save is asked for"
         );
         // No task delivered yet: the save has not run.
@@ -3127,6 +3129,32 @@ mod tests {
 
     /// When the save the drag asked for ran and the file still is not on disk as edited (here:
     /// its markers could not be written), the drag is refused and nothing stays armed.
+    /// Batch mode: pressing checked row B opens B and saves A, which is checked too. A's save
+    /// failing (here its markers could not be written) refuses the drag of both, instead of
+    /// dragging A under its old name.
+    #[test]
+    fn a_batch_drag_is_refused_when_the_file_the_press_left_failed_to_save() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = workspace_with_unsaved_tag(&test_dir);
+        let (a, b) = (file_id_at(&workspace, 0), file_id_at(&workspace, 1));
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        let _ = workspace.update(Message::Batch(batch::Message::CheckAll(vec![a])));
+        let _ = workspace.update(Message::Batch(batch::Message::Toggle(b)));
+        assert!(workspace.batch().is_checked(a) && workspace.batch().is_checked(b));
+        workspace.unsaved_markers.insert(a, Vec::new());
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        drag_move(&mut workspace, 0.0);
+        drag_move(&mut workspace, 10.0);
+        assert!(
+            !workspace.drag_out.is_dragging(),
+            "A did not save: no drag of it under its old name"
+        );
+    }
+
     #[test]
     fn a_drag_is_refused_when_its_save_failed() {
         let test_dir = TestDirectory::new(2);

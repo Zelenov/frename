@@ -4,11 +4,11 @@
 
 use std::path::PathBuf;
 
-use frename_core::{FileId, FileSnapshot};
+use frename_core::{FileId, FileSnapshot, FileTagger};
 use iced::Task;
 
 use super::FolderWorkspace;
-use crate::features::drag_out::{self, DragCheck, Readiness};
+use crate::features::drag_out::{self, DragCheck, Readiness, Save};
 use crate::features::folder_workspace::Message;
 
 impl FolderWorkspace {
@@ -85,10 +85,20 @@ impl FolderWorkspace {
             .file()
             .map(|file| file.id())
             .filter(|id| ids.contains(id));
+        // Every dragged file counts: in batch mode the press saved the file it left, which may
+        // be among the checked ones too.
+        let save_of = |id: FileId| self.drag_out.save_of(id);
         let check = DragCheck {
-            unloading: self.pending_file_updated.is_some(),
-            unsaved: open.is_some_and(|id| self.open_file_unsaved(id)),
-            save: self.drag_out.save_state(),
+            waiting: self.pending_file_updated.is_some()
+                || ids.iter().any(|id| save_of(*id) == Some(Save::Pending)),
+            failed: ids.iter().any(|id| {
+                save_of(*id) == Some(Save::Failed)
+                    // The open file's markers are retried by a save first; another file's
+                    // wait for that file to be opened again.
+                    || (Some(*id) != open && self.unsaved_markers.contains_key(id))
+            }),
+            open_unsaved: open.is_some_and(|id| self.open_file_unsaved(id)),
+            open_saved: open.is_some_and(|id| save_of(id) == Some(Save::Worked)),
         };
         match drag_out::readiness(check) {
             Readiness::Wait => Task::none(),
@@ -111,7 +121,8 @@ impl FolderWorkspace {
                 let paths: Vec<PathBuf> = ids
                     .iter()
                     .filter_map(|id| dir.file_by_id(*id))
-                    .map(|file| file.file_path().to_path_buf())
+                    // Where the file really is (debug builds rename only in memory).
+                    .map(|file| FileTagger::disk_path(file.file_path()))
                     .collect();
                 if paths.is_empty() {
                     self.drag_out.release();
