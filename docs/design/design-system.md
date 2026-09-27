@@ -949,11 +949,15 @@ the Anthropic key as saved and the Soniox key as missing):
 |---|---|---|
 | ![](design-system/built-subtitles.png) | ![](design-system/built-updates.png) | ![](design-system/built-ru-saving.png) ![](design-system/built-ru-ai.png) |
 
-| Comments inside the video, after a change | Removing the key | Keyring unavailable |
+| Comments inside the video, after a change | Removing the key | Replacing the key |
 |---|---|---|
-| ![](design-system/built-saving-commented.png) | ![](design-system/built-ai-remove.png) | ![](design-system/built-subtitles-keyring.png) |
+| ![](design-system/built-saving-commented.png) | ![](design-system/built-ai-remove.png) | ![](design-system/built-ai-replace.png) |
 
-The last row was taken with a local, uncommitted patch that puts the demo into those states; an
+| Keyring unavailable |
+|---|
+| ![](design-system/built-subtitles-keyring.png) |
+
+The state screenshots were taken with a local, uncommitted patch that puts the demo into those states; an
 update that is ready cannot be shown by a development build (it never finds one), see the mockup.
 
 Differences from the mockups: *Remove…* gained a 1 px `error` edge after review, so it reads as a
@@ -1018,11 +1022,13 @@ A unit test (`src/ui/lint.rs`) reads every `.rs` file under `src/` outside `src/
   too), `.center_x(` / `.center_y(`, `rounded(`, `Length::Fixed(`, `Padding::new(`, `Vector::new(`,
   `padding::…(`; a number inside `Padding {`, `Border {` or `Shadow {`, or after `radius:`;
 - a size moved into a constant of the file (`const GAP: f32 = 6.0`): a size of its own is still
-  not a token.
+  not a token. Only constants named as sizes count (`…WIDTH`, `…HEIGHT`, `…SIZE`, `…SPACING`,
+  `…PADDING`, `…GAP`, `…RADIUS`, `…MARGIN`, `…INDENT`, `…SIDE`, `…PX`), so an alpha or a count is
+  not pushed into the tokens.
 
 `0` alone is allowed (it means "none"), and so is `FillPortion(n)` (a ratio, not a size).
-Colors also include `Color::new(`, `Color {` and `Color::from_linear…`; `Size::new(` and
-`border::…(` count as sizes too. The test cannot see a size kept in a local `let` (`let gap =
+Colors also include `Color::new(`, `Color {`, `Color::parse(` and `Color::from_linear…`;
+`Size::new(`, `radius(` and `border::…(` count as sizes too. The test cannot see a size kept in a local `let` (`let gap =
 6.0;`): reviewers of #58 and #59 check that by eye.
 
 Files not yet on the system are in an **allow-list inside the test**, each with the issue that moves

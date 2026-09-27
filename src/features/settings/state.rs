@@ -163,7 +163,9 @@ impl SettingsState {
             _ => return false,
         };
         let key = self.key(which);
-        let cancel = if key.confirm_remove {
+        // The question shows only while a key is saved; a stale one (the key went away) is not
+        // on screen and does not take the Esc.
+        let cancel = if key.confirm_remove && key.state == Some(KeyState::Saved) {
             KeyMessage::CancelRemove
         } else if key.replacing {
             KeyMessage::CancelReplace
@@ -540,6 +542,14 @@ mod tests {
     #[test]
     fn esc_cancels_a_pending_removal_on_the_page_shown_before_it_closes_the_window() {
         let mut state = test_state();
+        let read = state.begin_key_request(ApiKey::Soniox);
+        state.apply(Message::Key(
+            ApiKey::Soniox,
+            KeyMessage::State {
+                request: read,
+                result: Ok(KeyState::Saved),
+            },
+        ));
         state.apply(Message::Key(ApiKey::Soniox, KeyMessage::AskRemove));
         assert!(
             !state.escape(),
@@ -570,6 +580,22 @@ mod tests {
         );
         let key = state.key(ApiKey::Anthropic);
         assert!(!key.replacing && key.input.is_empty() && key.error.is_none());
+    }
+
+    #[test]
+    fn a_removal_question_left_for_a_key_that_is_gone_does_not_take_the_esc() {
+        let mut state = test_state();
+        state.page = Page::Subtitles;
+        state.apply(Message::Key(ApiKey::Soniox, KeyMessage::AskRemove));
+        let read = state.begin_key_request(ApiKey::Soniox);
+        state.apply(Message::Key(
+            ApiKey::Soniox,
+            KeyMessage::State {
+                request: read,
+                result: Ok(KeyState::Missing),
+            },
+        ));
+        assert!(!state.escape(), "nothing on screen to cancel: Esc closes");
     }
 
     #[test]

@@ -62,8 +62,9 @@ const SIZE_METHOD_ENDINGS: [&str; 7] = [
 const SIZE_METHODS: [&str; 2] = ["center_x", "center_y"];
 
 /// Functions whose arguments are sizes, offsets or radii.
-const SIZE_FUNCTIONS: [&str; 5] = [
+const SIZE_FUNCTIONS: [&str; 6] = [
     "rounded(",
+    "radius(",
     "Length::Fixed(",
     "Padding::new(",
     "Vector::new(",
@@ -73,8 +74,9 @@ const SIZE_FUNCTIONS: [&str; 5] = [
 /// Style structs whose fields are sizes.
 const SIZE_STRUCTS: [&str; 3] = ["Padding {", "Border {", "Shadow {"];
 
-const COLOR_LITERALS: [&str; 7] = [
+const COLOR_LITERALS: [&str; 8] = [
     "Color::from_rgb",
+    "Color::parse(",
     "Color::from_linear",
     "Color::new(",
     "Color {",
@@ -85,6 +87,12 @@ const COLOR_LITERALS: [&str; 7] = [
 
 /// The types a size constant has.
 const SIZE_TYPES: [&str; 3] = ["f32", "u16", "u32"];
+
+/// Words in a constant's name that make it a size (a ratio, an alpha or a count is not one).
+const SIZE_NAMES: [&str; 11] = [
+    "WIDTH", "HEIGHT", "SIZE", "SPACING", "PADDING", "GAP", "RADIUS", "MARGIN", "INDENT", "SIDE",
+    "PX",
+];
 
 /// The code of a file without comments and without its `#[cfg(test)]` items.
 fn code(text: &str) -> String {
@@ -220,7 +228,9 @@ fn violations(code: &str) -> Vec<String> {
         let size_type = SIZE_TYPES
             .iter()
             .any(|t| name_and_type.trim_end().ends_with(&format!(": {t}")));
-        if size_type && has_number(value) {
+        let name = name_and_type.split(':').next().unwrap_or_default();
+        let size_name = SIZE_NAMES.iter().any(|word| name.contains(word));
+        if size_type && size_name && has_number(value) {
             found.push(declaration.trim().to_string());
         }
     }
@@ -292,6 +302,7 @@ fn every_file_not_yet_on_the_system_exists() {
 fn the_scan_finds_literals_and_lets_tokens_and_zero_through() {
     let code = code(
         "const GAP: f32 = 6.0; const NONE: f32 = 0.0; const ID: &str = \"x-1\";
+         const IDLE_ALPHA: f32 = 0.6; const RETRIES: u32 = 3;
          fn v() { text(\"a\").size(13); row![].spacing(SPACE_S).padding(0).spacing(GAP);
          container(x).padding([4, 8]).width(Length::Fixed(260.0)).center_y(56);
          row![].vertical_spacing(6); let p = Padding { top: 0.0, left: 26.0, ..Padding::ZERO };
