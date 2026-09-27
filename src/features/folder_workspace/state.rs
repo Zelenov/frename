@@ -157,6 +157,7 @@ impl FolderWorkspace {
             | Message::Redo
             | Message::CopyTags
             | Message::PasteTags
+            | Message::RotateVideoWhileTyping(_)
                 if self.markers.is_editing() =>
             {
                 Task::none()
@@ -259,6 +260,9 @@ impl FolderWorkspace {
             Message::Undo => self.perform_undo(),
             Message::Redo => self.perform_redo(),
             Message::RotateVideo(quarter_turns) => self.rotate_video(quarter_turns),
+            Message::RotateVideoWhileTyping(quarter_turns) => {
+                self.rotate_video_unless_writing(quarter_turns)
+            }
             Message::ToggleMediaFullscreen => {
                 // Only toggle when a video is shown.
                 if self.media_viewer.is_previewable() {
@@ -680,16 +684,17 @@ impl FolderWorkspace {
         if edits_open_file && self.batch.is_active() {
             return true;
         }
-        // The video and its marker list stay in batch mode, unlike the tags: markers are off
-        // only while a job runs (the job has closed the file then).
-        let edits_markers = matches!(
+        // The video and its marker list stay in batch mode, unlike the tags: markers and turns of
+        // the open video are off only while a job runs (the job has closed the file then).
+        let edits_open_media = matches!(
             message,
             Message::MediaViewer(media_viewer::Message::Video(
                 media_viewer_video::Message::Markers(..)
                     | media_viewer_video::Message::Controls(video_controls::Message::Rotate(_))
             )) | Message::RotateVideo(_)
+                | Message::RotateVideoWhileTyping(_)
         );
-        if edits_markers && self.batch.is_running() {
+        if edits_open_media && self.batch.is_running() {
             return true;
         }
         let changes_files = matches!(
@@ -1658,9 +1663,9 @@ impl FolderWorkspace {
         turns_a_video: bool,
     ) -> Task<Message> {
         match result {
-            Ok(()) if turns_a_video => {
-                Task::batch([self.refresh_after_undo_redo(), self.follow_rotation()])
-            }
+            // A turn changes no tags, name or selection, so the open file needs no refresh; one
+            // would unload the video to save it while the reopen below is still opening it.
+            Ok(()) if turns_a_video => self.follow_rotation(),
             Ok(()) => self.refresh_after_undo_redo(),
             Err(e) => {
                 log::warn!("Undo/redo failed: {}", e);
@@ -2844,9 +2849,22 @@ mod tests {
         let _ = workspace.update(Message::RotateVideo(1));
         assert_eq!(loads(&workspace), before + 1, "the turn reopens the video");
         let _ = workspace.update(Message::Undo);
-        assert_eq!(loads(&workspace), before + 2, "the undo reopens it again");
-        let rotation = frename_core::FileTagger::video_rotation(&test_dir.target_file());
-        assert_eq!(rotation.map(|r| r.degrees()), Ok(0));
+        assert_eq!(
+            loads(&workspace),
+            before + 2,
+            "the undo reopens it again, once"
+        );
+        // No refresh of the open file: it would unload the video to save the file while the
+        // reopen is still opening it.
+        assert!(workspace.pending_file_updated.is_none());
+        let degrees = || {
+            frename_core::FileTagger::video_rotation(&test_dir.target_file()).map(|r| r.degrees())
+        };
+        assert_eq!(degrees(), Ok(0));
+        let _ = workspace.update(Message::Redo);
+        assert_eq!(loads(&workspace), before + 3, "the redo reopens it once");
+        assert!(workspace.pending_file_updated.is_none());
+        assert_eq!(degrees(), Ok(90));
     }
 
     /// Typing `text` into the open marker row's name field.

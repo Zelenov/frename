@@ -96,7 +96,7 @@ fn main_window_event(
             folder_workspace::Message::SetSegmentEnd,
         )),
         // Ctrl+Alt+← / → turn the open video, also after typing in a search field (like the
-        // F-keys); plain arrows stay with the tag grid. A held key turns it once: each turn
+        // F-keys), but not while writing a comment; plain arrows stay with the tag grid. A held key turns it once: each turn
         // rewrites the file and reopens the video.
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
             key: keyboard::Key::Named(arrow),
@@ -118,9 +118,14 @@ fn main_window_event(
             } else {
                 1
             };
-            Some(Message::FolderWorkspace(
-                folder_workspace::Message::RotateVideo(quarter_turns),
-            ))
+            // A text field took the key: the workspace checks it is not the comment box, where
+            // the keys belong to the text.
+            let turn = if matches!(status, event::Status::Ignored) {
+                folder_workspace::Message::RotateVideo(quarter_turns)
+            } else {
+                folder_workspace::Message::RotateVideoWhileTyping(quarter_turns)
+            };
+            Some(Message::FolderWorkspace(turn))
         }
         // Escape: handled by FolderWorkspace (exits fullscreen or clears search filter).
         iced::Event::Keyboard(keyboard::Event::KeyPressed {

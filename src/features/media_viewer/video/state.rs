@@ -18,7 +18,7 @@ use frename_core::{
     load_subtitles, AppDatabase, AppStateStore, FileTagger, Rotation, RotationError, Subtitles,
 };
 
-/// How long a note in the controls bar stays.
+/// How long a note over the picture stays.
 const NOTICE_DURATION: Duration = Duration::from_secs(2);
 
 /// What the list over the right of the picture shows. One list at a time, so a windowed
@@ -73,7 +73,7 @@ pub struct VideoPlayerState {
     subtitles: Option<Arc<Subtitles>>,
     /// The list shown over the picture; see [`Overlay`].
     overlay: Overlay,
-    /// Note shown in the controls bar and its number, so an older timer does not hide a newer
+    /// Note shown over the picture and its number, so an older timer does not hide a newer
     /// note.
     notice: Option<(String, u64)>,
     notice_count: u64,
@@ -463,6 +463,9 @@ impl VideoPlayerState {
                 self.seek_to(start, true)
             }
             Message::Unload => {
+                // A load still under way belongs to the video being closed: drop it when it lands.
+                self.load_generation = self.load_generation.wrapping_add(1);
+                self.resume_at = None;
                 self.current_video = None;
                 self.loading = false;
                 self.current_path = None;
@@ -504,7 +507,7 @@ impl VideoPlayerState {
         self.overlay == Overlay::Markers
     }
 
-    /// The note to show in the controls bar, if any.
+    /// The note to show over the picture, if any.
     pub fn notice(&self) -> Option<&str> {
         self.notice.as_ref().map(|(text, _)| text.as_str())
     }

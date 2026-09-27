@@ -66,7 +66,7 @@ pub enum Message {
     ShowOverlay(Overlay),
     /// Seek exactly to this time (ms), e.g. a marker.
     SeekExact(u64),
-    /// Show a short note in the controls bar (e.g. `Frame saved`) for a moment.
+    /// Show a short note over the picture (e.g. `Frame saved`) for a moment.
     ShowNotice(String),
     /// Hide the note with this number, unless a newer one replaced it (internal).
     ClearNotice(u64),
