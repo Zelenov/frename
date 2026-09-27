@@ -69,6 +69,10 @@ pub fn apply(stored: &str) {
     }
     let language = resolve(stored, &os);
     match language.parse::<LanguageIdentifier>() {
+        // Already shown: loading again would only swap in equal bundles, and until the
+        // isolation is turned off below, text read meanwhile (on other threads, as tests do)
+        // would get isolation marks around its arguments.
+        Ok(id) if loader().current_languages() == [id.clone()] => {}
         Ok(id) => {
             if let Err(e) = loader().load_languages(&Localizations, &[id]) {
                 log::error!("cannot load the UI language {language}: {e}");
