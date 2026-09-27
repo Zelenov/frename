@@ -7,8 +7,8 @@
 use std::path::Path;
 
 use frename_core::{format_in_out_range, FileTagger, InOutStorage, MoveOutcome, NameInOutProblem};
-use iced::widget::{button, row, text};
-use iced::{Element, Length};
+use iced::widget::{button, column, text};
+use iced::Element;
 
 use super::super::ItemResult;
 use super::ActionMessage;
@@ -26,20 +26,15 @@ pub fn view<'a>() -> Element<'a, ActionMessage> {
         InOutStorage::Comment => fl!("batch-action-in-out-from-names-status-comment"),
         InOutStorage::InVideo => fl!("batch-action-in-out-from-names-status-video"),
     };
-    // The status wraps when the panel is narrow; the button keeps its label on one line.
-    let settings = row![
-        text(status).size(13).width(Length::Fill),
-        button(
-            text(fl!("batch-action-in-out-from-names-settings"))
-                .size(12)
-                .wrapping(iced::widget::text::Wrapping::None),
-        )
-        .on_press(ActionMessage::OpenSettings)
-        .padding([3, 10])
-        .style(theme::icon_button_style(true)),
+    // One above the other: side by side, the panel is too narrow for the status.
+    let settings = column![
+        text(status).size(13),
+        button(text(fl!("batch-action-in-out-from-names-settings")).size(12))
+            .on_press(ActionMessage::OpenSettings)
+            .padding([3, 10])
+            .style(theme::icon_button_style(true)),
     ]
-    .spacing(12)
-    .align_y(iced::Alignment::Center);
+    .spacing(8);
     super::panel(
         label(),
         fl!("batch-action-in-out-from-names-hint"),

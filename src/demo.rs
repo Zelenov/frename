@@ -19,6 +19,9 @@ use crate::features::{batch, folder, folder_workspace, media_viewer, media_viewe
 /// with the scenario's few files, so 3 s leaves a wide margin even on a slow runner.
 const SETTLE: Duration = Duration::from_secs(3);
 
+/// Time to the screenshot when the demo runs a batch action: the action and its report.
+const RUN_SETTLE: Duration = Duration::from_secs(8);
+
 /// A demo that has not produced its screenshot by then has failed.
 const TIMEOUT: Duration = Duration::from_secs(90);
 
@@ -29,6 +32,9 @@ pub enum Message {
     Captured(window::Screenshot),
     /// The demo took too long.
     TimedOut,
+    /// A step for the workspace that has to wait until the ones before it are done (the app
+    /// passes it on): running the batch action once every file is checked.
+    Later(Box<folder_workspace::Message>),
 }
 
 /// A demo in progress.
@@ -41,6 +47,10 @@ pub struct DemoRun {
     batch: bool,
     /// Show the AI description: its segments, or in batch mode the "Describe with AI" action.
     ai: bool,
+    /// In batch mode, show the "Move in/out points out of file names" action.
+    in_out_names: bool,
+    /// In batch mode, run the selected action and show its report.
+    run: bool,
     video_ready: bool,
 }
 
@@ -53,8 +63,18 @@ impl DemoRun {
             work,
             batch,
             ai,
+            in_out_names: false,
+            run: false,
             video_ready: false,
         }
+    }
+
+    /// In batch mode, show the "Move in/out points out of file names" action, and with `run`
+    /// run it (on the throwaway copies) and show its report.
+    pub fn with_in_out_names(mut self, in_out_names: bool, run: bool) -> Self {
+        self.in_out_names = in_out_names;
+        self.run = run;
+        self
     }
 
     /// Start the watchdog; call once the main window is open.
@@ -80,7 +100,26 @@ impl DemoRun {
         let capture = Task::future(async { tokio::time::sleep(SETTLE).await })
             .then(move |()| window::screenshot(main_window))
             .map(Message::Captured);
-        Some((steps(&self.scenario, self.batch, self.ai), capture))
+        let mut steps = steps(&self.scenario, self.batch, self.ai);
+        if self.batch && self.in_out_names {
+            steps.push(folder_workspace::Message::Batch(
+                batch::Message::SelectAction(batch::Action::InOutFromNames),
+            ));
+            if self.run {
+                // The job needs every file checked first, and its report time to fill in.
+                let run = Task::future(async { tokio::time::sleep(Duration::from_secs(1)).await })
+                    .map(|()| {
+                        Message::Later(Box::new(folder_workspace::Message::Batch(
+                            batch::Message::Run,
+                        )))
+                    });
+                let capture = Task::future(async { tokio::time::sleep(RUN_SETTLE).await })
+                    .then(move |()| window::screenshot(main_window))
+                    .map(Message::Captured);
+                return Some((steps, Task::batch([run, capture])));
+            }
+        }
+        Some((steps, capture))
     }
 
     /// Handle a demo message.
@@ -97,6 +136,8 @@ impl DemoRun {
                 }
             }
             Message::TimedOut => self.fail("the video did not get ready in time"),
+            // Passed on by the app.
+            Message::Later(_) => Task::none(),
         }
     }
 
@@ -156,7 +197,8 @@ fn save_png(shot: &window::Screenshot, expected: (u32, u32), path: &Path) -> Res
         .map_err(|e| format!("cannot save {}: {e}", path.display()))
 }
 
-/// What `--demo <scenario> --out <png> [--batch] [--mono] [--ai] [--lang <code>]` asks for.
+/// What `--demo <scenario> --out <png> [--batch] [--mono] [--ai] [--in-out-names [--run]]
+/// [--lang <code>]` asks for.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DemoArgs {
     pub scenario: PathBuf,
@@ -167,6 +209,10 @@ pub struct DemoArgs {
     pub mono: bool,
     /// Show the AI description (see [`DemoRun`]).
     pub ai: bool,
+    /// In batch mode, show "Move in/out points out of file names".
+    pub in_out_names: bool,
+    /// With `in_out_names`, run it and show the report.
+    pub run: bool,
     /// The UI language setting: `en` unless given, so screenshots never follow the renderer's
     /// OS language; `--lang ""` follows it (System).
     pub lang: String,
@@ -197,6 +243,8 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
             batch: args.iter().any(|a| a == "--batch"),
             mono: args.iter().any(|a| a == "--mono"),
             ai: args.iter().any(|a| a == "--ai"),
+            in_out_names: args.iter().any(|a| a == "--in-out-names"),
+            run: args.iter().any(|a| a == "--run"),
             lang,
         })
     }))
@@ -249,7 +297,8 @@ pub fn prepare(args: &DemoArgs, work: &Path) -> Result<DemoRun, String> {
         work.to_path_buf(),
         args.batch,
         args.ai,
-    ))
+    )
+    .with_in_out_names(args.in_out_names, args.run))
 }
 
 #[cfg(test)]
@@ -275,6 +324,8 @@ mod tests {
                 batch: false,
                 mono: false,
                 ai: false,
+                in_out_names: false,
+                run: false,
                 lang: "en".to_string(),
             }))
         );
@@ -289,6 +340,8 @@ mod tests {
                 batch: true,
                 mono: true,
                 ai: false,
+                in_out_names: false,
+                run: false,
                 lang: "ru".to_string(),
             }))
         );

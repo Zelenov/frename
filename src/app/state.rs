@@ -309,6 +309,9 @@ impl FrenameApp {
                 }
                 Task::batch([load, crate::demo::DemoRun::start().map(Message::Demo)])
             }
+            Message::Demo(crate::demo::Message::Later(step)) => {
+                Task::done(Message::FolderWorkspace(*step))
+            }
             Message::Demo(msg) => match &self.demo {
                 Some(demo) => demo.update(msg).map(Message::Demo),
                 None => Task::none(),

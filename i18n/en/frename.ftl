@@ -129,7 +129,7 @@ batch-action-move-in-out-into-videos = From the comments into the videos (Adobe 
 batch-action-move-in-out-into-comments = From the videos (XMP marker) into the comments
 
 batch-action-in-out-from-names = Move in/out points out of file names
-batch-action-in-out-from-names-hint = Older versions could keep in/out points in the file name (clip.in_00_01_05.out_00_02_10.mp4). This takes them out of the name of each checked file and saves them where in/out points are kept now. A file that already has in/out points stored keeps those; the report lists it.
+batch-action-in-out-from-names-hint = Older versions could keep in/out points in the file name (clip.in_00_01_05.mp4). This takes them out of the name of each checked file and saves them where in/out points are kept now. A file that already has in/out points stored keeps those; the report lists it.
 batch-action-in-out-from-names-status-comment = Goes to: the comment
 batch-action-in-out-from-names-status-video = Goes to: inside the video (XMP)
 batch-action-in-out-from-names-settings = In/out settings…
