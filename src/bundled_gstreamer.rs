@@ -28,6 +28,7 @@ pub struct BundleLayout {
 }
 
 /// The Windows packages (`packaging/windows/bundle.ps1`).
+#[cfg_attr(not(windows), allow(dead_code))]
 pub const WINDOWS: BundleLayout = BundleLayout {
     plugins: "lib/gstreamer-1.0",
     marker_plugin: "gstcoreelements.dll",
@@ -36,6 +37,7 @@ pub const WINDOWS: BundleLayout = BundleLayout {
 };
 
 /// `frename.app` (`packaging/macos/build-app.sh`); the executable is in `Contents/MacOS/`.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub const MACOS: BundleLayout = BundleLayout {
     plugins: "../PlugIns/gstreamer",
     marker_plugin: "libgstcoreelements.so",
