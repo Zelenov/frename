@@ -1,3 +1,13 @@
+# NEXT
+## Added
+- **Open file…** next to 📂 opens one clip, with its whole folder.
+- `frename <folder>` or `frename <file>` opens it: "Open with", dropping onto frename.exe or its shortcut.
+- The installer adds "Open in frename" to the Explorer menu of folders and videos; uninstalling removes it.
+
+## Changed
+- 📂 chooses a folder instead of a file.
+- Dropping a folder on the window opens that folder, not the one around it. Dropping several items opens the first folder among them, or else the first file.
+
 # 0.75
 ## Changed
 - Images are no longer opened; frename works with video files only.
