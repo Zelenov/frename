@@ -36,11 +36,6 @@ pub fn secondary<'a, M>(label: impl IntoFragment<'a>) -> Button<'a, M> {
     make(label, ButtonKind::Secondary)
 }
 
-/// A minor action inside a row.
-pub fn ghost<'a, M>(label: impl IntoFragment<'a>) -> Button<'a, M> {
-    make(label, ButtonKind::Ghost)
-}
-
 /// The first step of a destructive action.
 pub fn danger_ghost<'a, M>(label: impl IntoFragment<'a>) -> Button<'a, M> {
     make(label, ButtonKind::DangerGhost)

@@ -11,7 +11,6 @@ use super::tokens::*;
 pub enum ButtonKind {
     Primary,
     Secondary,
-    Ghost,
     Danger,
     DangerGhost,
     /// A navigation item; `true` when it is the page shown.
@@ -67,15 +66,6 @@ pub fn button(
                 },
                 TEXT,
                 BORDER_CONTROL,
-            ),
-            ButtonKind::Ghost => (
-                match status {
-                    Hovered => HOVER,
-                    Pressed => PRESSED,
-                    _ => Color::TRANSPARENT,
-                },
-                TEXT,
-                Color::TRANSPARENT,
             ),
             ButtonKind::DangerGhost => (
                 match status {

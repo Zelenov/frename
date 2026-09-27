@@ -701,7 +701,7 @@ impl FrenameApp {
     /// settings button leads there).
     fn open_settings_on(&mut self, page: Option<settings::Page>) -> Task<Message> {
         let update_ready = self.settings.updates().available_version().is_some();
-        let page = page.or(update_ready.then_some(settings::Page::Updates));
+        let page = settings::Page::to_open(page, update_ready);
         let show = page.map_or_else(Task::none, |page| {
             self.settings.show_page(page).map(Message::Settings)
         });

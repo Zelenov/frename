@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 /// Files not on the design system yet, each with the issue that moves it. The list only shrinks:
 /// a file here with nothing left to allow fails the test too.
-const NOT_YET: [(&str, &str); 38] = [
+const NOT_YET: &[(&str, &str)] = &[
     ("features/batch/actions/describe_ai/mod.rs", "#58"),
     ("features/batch/actions/generate_subtitles.rs", "#58"),
     ("features/batch/actions/markers_comment.rs", "#58"),
@@ -58,12 +58,20 @@ const SIZE_METHOD_ENDINGS: [&str; 7] = [
     "line_height",
 ];
 
+/// Methods whose names end like a size but are not UI sizes.
+const NOT_SIZE_METHODS: [&str; 2] = ["resize", "stack_size"];
+
+/// The old theme: a file on the design system does not use it.
+const LEGACY_THEME: [&str; 2] = ["theme::", "ui::legacy"];
+
 /// Methods that take a size under another name.
 const SIZE_METHODS: [&str; 2] = ["center_x", "center_y"];
 
 /// Functions whose arguments are sizes, offsets or radii.
-const SIZE_FUNCTIONS: [&str; 6] = [
+const SIZE_FUNCTIONS: [&str; 8] = [
     "rounded(",
+    "Radius::",
+    "Pixels(",
     "radius(",
     "Length::Fixed(",
     "Padding::new(",
@@ -72,10 +80,11 @@ const SIZE_FUNCTIONS: [&str; 6] = [
 ];
 
 /// Style structs whose fields are sizes.
-const SIZE_STRUCTS: [&str; 3] = ["Padding {", "Border {", "Shadow {"];
+const SIZE_STRUCTS: [&str; 4] = ["Padding {", "Border {", "Shadow {", "Size {"];
 
-const COLOR_LITERALS: [&str; 8] = [
+const COLOR_LITERALS: [&str; 9] = [
     "Color::from_rgb",
+    ".scale_alpha(",
     "Color::parse(",
     "Color::from_linear",
     "Color::new(",
@@ -175,9 +184,10 @@ fn violations(code: &str) -> Vec<String> {
     }
     for (name, start) in method_calls(code) {
         let takes_size = SIZE_METHODS.contains(&name)
-            || SIZE_METHOD_ENDINGS
-                .iter()
-                .any(|ending| name.ends_with(ending));
+            || (!NOT_SIZE_METHODS.contains(&name)
+                && SIZE_METHOD_ENDINGS
+                    .iter()
+                    .any(|ending| name.ends_with(ending)));
         let argument = enclosed(code, start, '(', ')');
         if takes_size && has_number(argument) {
             found.push(format!(".{name}({argument})"));
@@ -219,8 +229,16 @@ fn violations(code: &str) -> Vec<String> {
             found.push(format!("radius:{value}"));
         }
     }
+    for legacy in LEGACY_THEME {
+        if code.contains(legacy) {
+            found.push(format!("the old theme ({legacy})"));
+        }
+    }
     // A size moved into a constant of the view is still a size of its own.
-    for (at, _) in code.match_indices("const ") {
+    for (at, _) in code
+        .match_indices("const ")
+        .chain(code.match_indices("static "))
+    {
         let declaration = code[at..].split(';').next().unwrap_or_default();
         let Some((name_and_type, value)) = declaration.split_once('=') else {
             continue;
@@ -309,6 +327,8 @@ fn the_scan_finds_literals_and_lets_tokens_and_zero_through() {
          let c = Color::from_rgb(1.0, 0.8, 0.0); let q = padding::all(SPACE_M);
          let r = border::rounded(RADIUS_S); // .size(99) in a comment
          row![].width(Length::FillPortion(3)); let s = iced::Size::new(800.0, 600.0);
+         let l = LineHeight::Absolute(Pixels(22.0)); let t = ACCENT.scale_alpha(0.25);
+         static PAD_WIDTH: f32 = 3.0; buf.resize(4096, 0); let u = theme::ACCENT;
 }
          #[cfg(test)]
 mod tests { fn t() { let _ = x.size(16); } }
@@ -316,7 +336,7 @@ mod tests { fn t() { let _ = x.size(16); } }
     );
     let mut found = violations(&code);
     found.sort();
-    let expected = [
+    let mut expected = [
         ".center_y(56)",
         ".padding([4, 8])",
         ".size(13)",
@@ -327,8 +347,13 @@ mod tests { fn t() { let _ = x.size(16); } }
         "Length::Fixed(260.0)",
         "Padding { top: 0.0, left: 26.0, ..Padding::ZERO }",
         "Size::new(800.0, 600.0)",
+        "Pixels(22.0)",
+        ".scale_alpha(",
+        "static PAD_WIDTH: f32 = 3.0",
+        "the old theme (theme::)",
         "const GAP: f32 = 6.0",
         "radius: 3.0.into()",
     ];
+    expected.sort();
     assert_eq!(found, expected);
 }

@@ -22,6 +22,12 @@ impl Page {
         Page::Updates,
     ];
 
+    /// The page Settings opens on: the one asked for, else Updates when an update is ready (the
+    /// dot on the settings button leads there); `None` keeps the page shown last.
+    pub fn to_open(requested: Option<Page>, update_ready: bool) -> Option<Page> {
+        requested.or(update_ready.then_some(Page::Updates))
+    }
+
     /// The page's name on the command line (`--settings <name>`).
     pub fn name(self) -> &'static str {
         match self {
@@ -59,9 +65,17 @@ impl Page {
         match self {
             Page::Interface => fl!("settings-page-interface"),
             Page::Saving => fl!("settings-page-saving"),
-            Page::Ai => fl!("settings-ai"),
+            Page::Ai => fl!("settings-page-ai"),
             Page::Subtitles => fl!("settings-subtitles"),
             Page::Updates => fl!("settings-updates"),
+        }
+    }
+
+    /// The page's heading: its name in the list, or a longer one where the list needs it short.
+    pub fn heading(self) -> String {
+        match self {
+            Page::Ai => fl!("settings-ai"),
+            page => page.label(),
         }
     }
 }
@@ -76,6 +90,13 @@ mod tests {
             assert_eq!(Page::from_name(page.name()), Some(page));
         }
         assert_eq!(Page::from_name("general"), None);
+    }
+
+    #[test]
+    fn settings_open_on_the_page_asked_for_then_on_a_ready_update() {
+        assert_eq!(Page::to_open(Some(Page::Ai), true), Some(Page::Ai));
+        assert_eq!(Page::to_open(None, true), Some(Page::Updates));
+        assert_eq!(Page::to_open(None, false), None, "the page shown last");
     }
 
     #[test]

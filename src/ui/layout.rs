@@ -34,7 +34,7 @@ pub fn page<'a, M: 'a>(
 
 /// A window on the system (§9.2): navigation on the left, the scrolling page on the right, the
 /// button bar at the bottom.
-pub fn window<'a, M: 'a>(
+pub fn window_with_navigation<'a, M: 'a>(
     navigation: impl Into<Element<'a, M>>,
     page: impl Into<Element<'a, M>>,
     buttons: impl Into<Element<'a, M>>,

@@ -230,6 +230,10 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
             None => "en".to_string(),
             Some(_) => value("--lang", lang_at)?.to_string_lossy().into_owned(),
         };
+        if settings_at.is_some() && args.iter().any(|a| a == "--batch") {
+            // The batch panel reads the real keys, which a settings screenshot must not show.
+            return Err("--settings and --batch go in separate demos".to_string());
+        }
         let settings = match settings_at {
             None => None,
             Some(at) => match args.get(at + 1).filter(|v| !v.starts_with("--")) {
@@ -330,16 +334,7 @@ mod tests {
         );
         assert_eq!(
             demo_args(&args(&[
-                "frename",
-                "--batch",
-                "--out",
-                "a.png",
-                "--demo",
-                "a.toml",
-                "--mono",
-                "--settings",
-                "ai",
-                "--lang",
+                "frename", "--batch", "--out", "a.png", "--demo", "a.toml", "--mono", "--lang",
                 "ru"
             ])),
             Some(Ok(DemoArgs {
@@ -348,7 +343,7 @@ mod tests {
                 batch: true,
                 mono: true,
                 ai: false,
-                settings: Some(settings::Page::Ai),
+                settings: None,
                 lang: "ru".to_string(),
             }))
         );
@@ -383,6 +378,39 @@ mod tests {
             ])),
             Some(Err(_))
         ));
+        let parsed = demo_args(&args(&[
+            "frename",
+            "--demo",
+            "a.toml",
+            "--out",
+            "a.png",
+            "--settings",
+            "ai",
+            "--lang",
+            "ru",
+        ]));
+        assert!(matches!(
+            parsed,
+            Some(Ok(DemoArgs {
+                settings: Some(settings::Page::Ai),
+                ..
+            }))
+        ));
+        assert!(
+            matches!(
+                demo_args(&args(&[
+                    "frename",
+                    "--demo",
+                    "a.toml",
+                    "--out",
+                    "a.png",
+                    "--settings",
+                    "--batch"
+                ])),
+                Some(Err(_))
+            ),
+            "batch mode reads the real keys"
+        );
     }
 
     #[test]

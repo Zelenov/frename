@@ -38,7 +38,7 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
         Page::Subtitles => subtitles(state),
         Page::Updates => updates_page(state, batch_running),
     };
-    layout::window(
+    layout::window_with_navigation(
         layout::sidebar(navigation),
         layout::scroll(SETTINGS_SCROLLABLE_ID, page),
         layout::button_bar(
@@ -53,7 +53,7 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
 fn interface(state: &SettingsState) -> Element<'_, Message> {
     let settings = state.settings();
     layout::page(
-        Page::Interface.label(),
+        Page::Interface.heading(),
         [
             layout::setting_row(
                 fl!("settings-language"),
@@ -222,7 +222,7 @@ fn saving(state: &SettingsState) -> Element<'_, Message> {
     );
 
     layout::page(
-        Page::Saving.label(),
+        Page::Saving.heading(),
         [
             layout::setting_row(fl!("settings-file-names"), file_names),
             layout::setting_row(fl!("settings-comments"), comments),
@@ -244,7 +244,7 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
         },
     );
     layout::page(
-        Page::Ai.label(),
+        Page::Ai.heading(),
         [
             layout::setting_row_with_info(
                 fl!("settings-ai-key-label"),
@@ -322,18 +322,11 @@ fn subtitles(state: &SettingsState) -> Element<'_, Message> {
     };
     let cue_length = Some(settings.subtitle_cue_length);
     layout::page(
-        Page::Subtitles.label(),
+        Page::Subtitles.heading(),
         [
             layout::setting_row_with_info(
                 fl!("settings-subtitles-key-label"),
-                key_help(
-                    key_section,
-                    format!(
-                        "{} {}",
-                        fl!("settings-subtitles-key-sent"),
-                        fl!("settings-subtitles-hint")
-                    ),
-                ),
+                key_help(key_section, fl!("settings-subtitles-hint")),
                 key,
             ),
             layout::setting_row(
@@ -380,7 +373,7 @@ fn updates_page(state: &SettingsState, batch_running: bool) -> Element<'_, Messa
             old_settings_import(state.old_settings_import()),
         ));
     }
-    layout::page(Page::Updates.label(), rows)
+    layout::page(Page::Updates.heading(), rows)
 }
 
 /// The words of a key row that differ between the services.
@@ -477,7 +470,7 @@ fn key_block(which: ApiKey, key: &KeySection, texts: KeyTexts) -> Element<'_, Me
                         .on_input(move |input| message(KeyMessage::Input(input)))
                         .on_submit_maybe(save.clone())
                         .width(Length::Fill),
-                    button::ghost(show).on_press(message(KeyMessage::ToggleShow)),
+                    button::secondary(show).on_press(message(KeyMessage::ToggleShow)),
                 ]
                 .spacing(SPACE_S)
                 .align_y(Alignment::Center)

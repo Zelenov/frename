@@ -542,7 +542,7 @@ No direct `update()` calls across components. One message chain; each layer only
 
 To avoid layout/alignment bugs and disappearing content when adding hover/delete to list rows:
 
-- **One parent container** owns the row background. Use a **single style** on that container (e.g. `theme::row_background_style(theme, is_selected)`). Child cells (checkbox, main content, delete slot, right margin) have **no** background style so they inherit the parent’s look.
+- **One parent container** owns the row background. Use a **single style** on that container (today the old theme's `theme::row_background_style(theme, is_selected)`; new lists use the design system's list row, `docs/design/design-system.md` §8.9, which arrives in `src/ui` with #59). Child cells (checkbox, main content, delete slot, right margin) have **no** background style so they inherit the parent’s look.
 - **Fixed row height**: define a constant (e.g. `TAG_ROW_HEIGHT`) and use it for the parent row and all inner columns so height is consistent and scroll-into-view works.
 - **Layout**: parent = row with: `container(main_cell).height(row_height).width(Length::Fill)`, `container(delete_slot).width(24).height(row_height)`, and a fixed-width right-margin column. Only the parent gets `.style(...)` for background.
 - **Hover**: store `hovered_id: Option<TagId>` in state. Main cell uses `on_enter(Message::TagHovered(Some(id)))` and `on_exit(Message::TagHovered(None))`. Show delete control when `is_selected || hovered_id == Some(id)`. When not shown, use an empty `Space` in the delete slot so layout does not shift.

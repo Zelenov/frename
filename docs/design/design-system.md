@@ -853,7 +853,8 @@ these rules.
   itself) and first cancels an open remove confirmation (= *Keep*), per §9.4.
 - **Keys:** `Ctrl`+`Tab` / `Ctrl`+`Shift`+`Tab` move to the next / previous page (plain arrows would
   switch pages while typing: iced fields do not take Up/Down). No window-level Enter (§9.2).
-  Main-window keys do not act here except the video F-keys, whose leak #62 fixes.
+  Main-window keys do not act here except the video F-keys, whose leak #62 fixes. With a dropdown
+  open, Esc closes the window rather than the list (iced 0.14 limit, §9.4).
 - **Opened on a page:** ⚙ opens the last page shown in this session (*Interface* the first time), or
   *Updates* when an update is ready (the dot on ⚙ leads to it, and the *Updates* item shows the
   same dot). *Describe with AI* and *Generate subtitles* in batch mode open their pages (they used to
@@ -866,7 +867,7 @@ these rules.
 |---|---|
 | **Interface** (`languages`) | Language · Tag colors (*Monochrome*) · Video (*Play videos automatically when opened*) |
 | **Saving** (`folder`) | File names (*Space after each tag*) · Comments · Markers and ranges · In/out points |
-| **Describe with AI** (`sparkles`) | Anthropic API key · Model · Description language |
+| **Describe with AI** (`sparkles`; Russian list label «Описание от AI», heading «Описать с помощью AI») | Anthropic API key · Model · Description language |
 | **Subtitles** (`captions`) | Soniox API key · Languages · Cue length |
 | **Updates** (`refresh-cw`) | Version (version, status, *Check for updates*, *Update and restart*, *Check for updates when frename starts*) · Settings from an older frename (installed only) |
 
@@ -907,10 +908,12 @@ No "General" (BIR). The version is on *Updates* ("About" would hold only it).
 - **API key rows** (Anthropic, Soniox), one component:
   - *Saved:* inline status `circle-check` "Saved in Windows Credential Manager on this computer"
     (the store's name per OS); buttons *Replace…* (secondary) and *Remove…* (danger-ghost).
-  - *Missing, or replacing:* secret field (fills the column) + *Show* / *Hide* (ghost); under it
+  - *Missing, or replacing:* secret field (fills the column) + *Show* / *Hide* (secondary: a ghost
+    button there read as plain text in review); under it
     *Save key* (primary, disabled while the field is empty) and, when replacing, *Cancel*
-    (secondary); one help line: where to get a key; the rest (where Save key keeps it, what is sent)
-    behind the row's ⓘ, which says only what the service is used for once a key is saved.
+    (secondary); one help line: where to get a key, and for Soniox that the audio is sent to it (it
+    matters before saving); where Save key keeps the key goes behind the row's ⓘ, which says only
+    what the service is used for once a key is saved.
   - *Confirm remove:* in place of the buttons, an error notice "Remove the saved Anthropic key?" /
     "You will need to paste it again." with *Remove key* (danger) and *Keep* (secondary, the last
     button). Esc = Keep. The other rows stay where they are.
@@ -953,12 +956,12 @@ the Anthropic key as saved and the Soniox key as missing):
 |---|---|---|
 | ![](design-system/built-saving-commented.png) | ![](design-system/built-ai-remove.png) | ![](design-system/built-ai-replace.png) |
 
-| Keyring unavailable |
-|---|
-| ![](design-system/built-subtitles-keyring.png) |
+| Keyring unavailable | Update ready (installed build) | Update ready, Russian |
+|---|---|---|
+| ![](design-system/built-subtitles-keyring.png) | ![](design-system/built-updates-ready.png) | ![](design-system/built-ru-updates-ready.png) |
 
-The state screenshots were taken with a local, uncommitted patch that puts the demo into those states; an
-update that is ready cannot be shown by a development build (it never finds one), see the mockup.
+The state screenshots were taken with a local, uncommitted patch that puts the demo into those
+states (for "update ready" it also makes the development build act as an installed 0.77).
 
 Differences from the mockups: *Remove…* gained a 1 px `error` edge after review, so it reads as a
 button (§8.1); the dropdown keeps iced's own arrow instead of a `chevron-down`
@@ -986,10 +989,10 @@ src/ui/
   text.rs       text styles: heading(), body(), strong(), secondary(), error(), mono(), tooltip(),
                 and label() (a button's text, which takes the button's color); title() and
                 caption() come with their first user (#58)
-  button.rs     primary(), secondary(), ghost(), danger(), danger_ghost()
+  button.rs     primary(), secondary(), danger(), danger_ghost(); ghost() comes with its first user
   form.rs       checkbox(), checkbox_with_hint(), radio_option() with description() or
                 example() under it, text_field(), dropdown()
-  layout.rs     window(), sidebar(), scroll(), page(), setting_row(), setting_row_with_info(),
+  layout.rs     window_with_navigation(), sidebar(), scroll(), page(), setting_row(), setting_row_with_info(),
                 aligned(), controls(), indented(), buttons(), nav_item(), update_dot(),
                 button_bar(), vertical_line(), notice(), inline_status(), info(), with_tooltip()
   style.rs      the style functions behind them
@@ -1028,7 +1031,9 @@ A unit test (`src/ui/lint.rs`) reads every `.rs` file under `src/` outside `src/
 
 `0` alone is allowed (it means "none"), and so is `FillPortion(n)` (a ratio, not a size).
 Colors also include `Color::new(`, `Color {`, `Color::parse(` and `Color::from_linear…`;
-`Size::new(`, `radius(` and `border::…(` count as sizes too. The test cannot see a size kept in a local `let` (`let gap =
+`Size::new(`, `radius(`, `Pixels(` and `border::…(` count as sizes too, `.scale_alpha(` counts as a
+color (a tint off the tokens), `static` counts like `const`, and `resize` / `stack_size` do not
+count. A file on the system also may not use the old theme (`theme::`, `ui::legacy`). The test cannot see a size kept in a local `let` (`let gap =
 6.0;`): reviewers of #58 and #59 check that by eye.
 
 Files not yet on the system are in an **allow-list inside the test**, each with the issue that moves

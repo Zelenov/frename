@@ -163,9 +163,7 @@ impl SettingsState {
             _ => return false,
         };
         let key = self.key(which);
-        // The question shows only while a key is saved; a stale one (the key went away) is not
-        // on screen and does not take the Esc.
-        let cancel = if key.confirm_remove && key.state == Some(KeyState::Saved) {
+        let cancel = if key.confirm_remove {
             KeyMessage::CancelRemove
         } else if key.replacing {
             KeyMessage::CancelReplace
@@ -288,6 +286,9 @@ impl SettingsState {
                 if state == KeyState::Saved {
                     key.input.clear();
                     key.shown = false;
+                } else {
+                    // No saved key: a question about removing one is gone with it.
+                    key.confirm_remove = false;
                 }
                 key.replacing = false;
                 key.state = Some(state);
@@ -595,6 +596,10 @@ mod tests {
                 result: Ok(KeyState::Missing),
             },
         ));
+        assert!(
+            !state.key(ApiKey::Soniox).confirm_remove,
+            "the question went with the key"
+        );
         assert!(!state.escape(), "nothing on screen to cancel: Esc closes");
     }
 
