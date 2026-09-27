@@ -112,6 +112,8 @@ pub const CHOICE_WIDTH: f32 = 120.0;
 /// The scrollbar's rail and scroller, and the gap between it and the content.
 pub const SCROLLBAR_WIDTH: f32 = 6.0;
 pub const SCROLLBAR_GAP: f32 = 8.0;
+/// The widest a page of settings or options gets: longer lines are hard to read (§13.9).
+pub const PAGE_MAX_WIDTH: f32 = 640.0;
 /// Widest tooltip.
 pub const TOOLTIP_MAX_WIDTH: f32 = 280.0;
 /// The dot that says "an update is ready".

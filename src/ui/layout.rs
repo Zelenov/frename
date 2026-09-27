@@ -29,6 +29,7 @@ pub fn page<'a, M: 'a>(
             right: SPACE_XL,
         })
         .width(Length::Fill)
+        .max_width(PAGE_MAX_WIDTH + 2.0 * SPACE_XL)
         .into()
 }
 
