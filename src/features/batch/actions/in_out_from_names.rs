@@ -6,7 +6,9 @@
 
 use std::path::Path;
 
-use frename_core::{format_in_out_range, FileTagger, InOutStorage, MoveOutcome, NameInOutProblem};
+use frename_core::{
+    format_in_out_range, FileTagger, InOutStorage, MoveOutcome, NameInOutMove, NameInOutProblem,
+};
 use iced::widget::{button, column, text};
 use iced::Element;
 
@@ -43,41 +45,44 @@ pub fn view<'a>() -> Element<'a, ActionMessage> {
 pub fn run(path: &Path) -> ItemResult {
     // The log is always English, unlike the UI text `label()` returns.
     let log_label = super::Action::InOutFromNames.log_id();
-    let result = FileTagger::move_in_out_out_of_name(path);
-    let failed = matches!(result.outcome, MoveOutcome::Failed(_));
-    let mut item = super::item_result(result.outcome);
-    match result.problem {
-        Some(NameInOutProblem::NameWouldBeEmpty) => {
-            log::warn!("{log_label}: {path:?} left alone: the name would be empty");
-            item.reason = Some(fl!("batch-action-in-out-from-names-empty"));
+    match FileTagger::move_in_out_out_of_name(path) {
+        NameInOutMove::NothingToMove => super::item_result(MoveOutcome::NothingToMove),
+        NameInOutMove::Moved { path, kept_stored } => {
+            let mut item = super::item_result(MoveOutcome::Moved(path.clone()));
+            if let Some(kept) = kept_stored {
+                let (stored, from_name) = (
+                    format_in_out_range(kept.stored),
+                    format_in_out_range(kept.from_name),
+                );
+                log::info!(
+                    "{log_label}: {path:?} keeps its stored {stored} and drops the name's {from_name}"
+                );
+                item.reason = Some(fl!(
+                    "batch-action-in-out-from-names-kept",
+                    stored = stored,
+                    name = from_name
+                ));
+            }
+            item
         }
-        Some(NameInOutProblem::NameTaken(name)) => {
-            log::warn!("{log_label}: {path:?} left alone: {name:?} already exists");
-            item.reason = Some(fl!("batch-action-in-out-from-names-taken", name = name));
+        NameInOutMove::Failed { path, problem } => {
+            let reason = match problem {
+                NameInOutProblem::NameWouldBeEmpty => {
+                    log::warn!("{log_label}: {path:?} left alone: the name would be empty");
+                    fl!("batch-action-in-out-from-names-empty")
+                }
+                NameInOutProblem::NameTaken(name) => {
+                    log::warn!("{log_label}: {path:?} left alone: {name:?} already exists");
+                    fl!("batch-action-in-out-from-names-taken", name = name)
+                }
+                NameInOutProblem::NotRenamed => {
+                    log::warn!("{log_label}: {path:?} could not be renamed");
+                    fl!("batch-action-in-out-from-names-not-renamed")
+                }
+            };
+            let mut item = super::item_result(MoveOutcome::Failed(path));
+            item.reason = Some(reason);
+            item
         }
-        None if failed => {
-            log::warn!("{log_label}: {path:?} could not be renamed");
-            item.reason = Some(fl!("batch-action-in-out-from-names-not-renamed"));
-        }
-        None => {}
     }
-    if let Some(kept) = result.kept_stored {
-        let (stored, from_name) = (
-            format_in_out_range(kept.stored),
-            format_in_out_range(kept.from_name),
-        );
-        log::info!(
-            "{log_label}: {path:?} keeps its stored {stored} and drops the name's {from_name}"
-        );
-        let kept = fl!(
-            "batch-action-in-out-from-names-kept",
-            stored = stored,
-            name = from_name
-        );
-        item.reason = Some(match item.reason {
-            Some(reason) => format!("{reason}; {kept}"),
-            None => kept,
-        });
-    }
-    item
 }

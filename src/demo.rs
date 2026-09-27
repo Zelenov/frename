@@ -47,9 +47,9 @@ pub struct DemoRun {
     batch: bool,
     /// Show the AI description: its segments, or in batch mode the "Describe with AI" action.
     ai: bool,
-    /// In batch mode, show the "Move in/out points out of file names" action.
-    in_out_names: bool,
-    /// In batch mode, run the selected action and show its report.
+    /// In batch mode, select this action.
+    action: Option<batch::Action>,
+    /// With `action`, run it and show its report.
     run: bool,
     video_ready: bool,
 }
@@ -63,16 +63,16 @@ impl DemoRun {
             work,
             batch,
             ai,
-            in_out_names: false,
+            action: None,
             run: false,
             video_ready: false,
         }
     }
 
-    /// In batch mode, show the "Move in/out points out of file names" action, and with `run`
-    /// run it (on the throwaway copies) and show its report.
-    pub fn with_in_out_names(mut self, in_out_names: bool, run: bool) -> Self {
-        self.in_out_names = in_out_names;
+    /// In batch mode, select `action`, and with `run` run it (on the throwaway copies) and
+    /// show its report.
+    pub fn with_action(mut self, action: Option<batch::Action>, run: bool) -> Self {
+        self.action = action;
         self.run = run;
         self
     }
@@ -101,9 +101,9 @@ impl DemoRun {
             .then(move |()| window::screenshot(main_window))
             .map(Message::Captured);
         let mut steps = steps(&self.scenario, self.batch, self.ai);
-        if self.batch && self.in_out_names {
+        if let Some(action) = self.action.filter(|_| self.batch) {
             steps.push(folder_workspace::Message::Batch(
-                batch::Message::SelectAction(batch::Action::InOutFromNames),
+                batch::Message::SelectAction(action),
             ));
             if self.run {
                 // Checking every file takes one more message after the steps, and iced does
@@ -199,8 +199,8 @@ fn save_png(shot: &window::Screenshot, expected: (u32, u32), path: &Path) -> Res
         .map_err(|e| format!("cannot save {}: {e}", path.display()))
 }
 
-/// What `--demo <scenario> --out <png> [--batch] [--mono] [--ai] [--in-out-names [--run]]
-/// [--lang <code>]` asks for.
+/// What `--demo <scenario> --out <png> [--batch] [--mono] [--ai] [--action <log id> [--run]]
+/// [--in-out-comment] [--lang <code>]` asks for.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DemoArgs {
     pub scenario: PathBuf,
@@ -211,10 +211,13 @@ pub struct DemoArgs {
     pub mono: bool,
     /// Show the AI description (see [`DemoRun`]).
     pub ai: bool,
-    /// In batch mode, show "Move in/out points out of file names".
-    pub in_out_names: bool,
-    /// With `in_out_names`, run it and show the report.
+    /// In batch mode, select the action with this English name (`Action::log_id`, e.g.
+    /// "Move comments").
+    pub action: Option<String>,
+    /// With `action`, run it and show the report.
     pub run: bool,
+    /// Keep in/out points in the comment (Settings), as right after switching to it.
+    pub in_out_comment: bool,
     /// The UI language setting: `en` unless given, so screenshots never follow the renderer's
     /// OS language; `--lang ""` follows it (System).
     pub lang: String,
@@ -232,6 +235,7 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
     };
     let out_at = args.iter().position(|a| a == "--out");
     let lang_at = args.iter().position(|a| a == "--lang");
+    let action_at = args.iter().position(|a| a == "--action");
     Some(value("--demo", Some(at)).and_then(|scenario| {
         let out =
             value("--out", out_at).map_err(|_| "--demo needs --out <file.png>".to_string())?;
@@ -245,8 +249,12 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
             batch: args.iter().any(|a| a == "--batch"),
             mono: args.iter().any(|a| a == "--mono"),
             ai: args.iter().any(|a| a == "--ai"),
-            in_out_names: args.iter().any(|a| a == "--in-out-names"),
+            action: match action_at {
+                None => None,
+                Some(_) => Some(value("--action", action_at)?.to_string_lossy().into_owned()),
+            },
             run: args.iter().any(|a| a == "--run"),
+            in_out_comment: args.iter().any(|a| a == "--in-out-comment"),
             lang,
         })
     }))
@@ -293,6 +301,22 @@ pub fn prepare(args: &DemoArgs, work: &Path) -> Result<DemoRun, String> {
         args.mono,
         &args.lang,
     );
+    if args.in_out_comment {
+        use frename_core::AppStateStore;
+        let store = frename_core::AppDatabase::new();
+        let mut settings = store.get_app_settings().unwrap_or_default();
+        settings.in_out_storage = frename_core::InOutStorage::Comment;
+        store.set_app_settings(settings);
+    }
+    let action = match &args.action {
+        None => None,
+        Some(name) => Some(
+            batch::Action::ALL
+                .into_iter()
+                .find(|a| a.log_id() == name)
+                .ok_or(format!("--action: no batch action is named {name:?}"))?,
+        ),
+    };
     Ok(DemoRun::new(
         scenario,
         args.out.clone(),
@@ -300,7 +324,7 @@ pub fn prepare(args: &DemoArgs, work: &Path) -> Result<DemoRun, String> {
         args.batch,
         args.ai,
     )
-    .with_in_out_names(args.in_out_names, args.run))
+    .with_action(action, args.run))
 }
 
 #[cfg(test)]
@@ -326,8 +350,9 @@ mod tests {
                 batch: false,
                 mono: false,
                 ai: false,
-                in_out_names: false,
+                action: None,
                 run: false,
+                in_out_comment: false,
                 lang: "en".to_string(),
             }))
         );
@@ -342,8 +367,9 @@ mod tests {
                 batch: true,
                 mono: true,
                 ai: false,
-                in_out_names: false,
+                action: None,
                 run: false,
+                in_out_comment: false,
                 lang: "ru".to_string(),
             }))
         );
