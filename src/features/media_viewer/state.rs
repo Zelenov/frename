@@ -1,4 +1,4 @@
-//! State for the unified media_viewer feature.
+//! State for the media_viewer feature: video, or a placeholder for anything else.
 
 use frename_core::{File, FileKind};
 use iced::{Subscription, Task};

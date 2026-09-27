@@ -1,4 +1,4 @@
-//! View for the unified media viewer feature.
+//! View for the media_viewer feature: video, or a placeholder for anything else.
 
 use iced::widget::{container, text};
 use iced::{Element, Length};
