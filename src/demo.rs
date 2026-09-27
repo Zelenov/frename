@@ -19,6 +19,10 @@ use crate::features::{batch, folder, folder_workspace, media_viewer, media_viewe
 /// with the scenario's few files, so 3 s leaves a wide margin even on a slow runner.
 const SETTLE: Duration = Duration::from_secs(3);
 
+/// When a scenario's notice is shown, after the video is ready: shortly before the screenshot,
+/// since a notice goes away after 2 s, and early enough that the window is drawn again with it.
+const NOTICE_AT: Duration = Duration::from_millis(1500);
+
 /// A demo that has not produced its screenshot by then has failed.
 const TIMEOUT: Duration = Duration::from_secs(90);
 
@@ -65,12 +69,17 @@ impl DemoRun {
         })
     }
 
-    /// The steps to take when the video is ready: the first time, set up the scenario's state
-    /// and schedule the screenshot of `main_window`; afterwards nothing.
+    /// The steps to take when the video is ready: the first time, set up the scenario's state,
+    /// show its notice a little later, and schedule the screenshot of `main_window`; afterwards
+    /// nothing.
     pub fn video_ready(
         &mut self,
         main_window: window::Id,
-    ) -> Option<(Vec<folder_workspace::Message>, Task<Message>)> {
+    ) -> Option<(
+        Vec<folder_workspace::Message>,
+        Task<folder_workspace::Message>,
+        Task<Message>,
+    )> {
         if std::mem::replace(&mut self.video_ready, true) {
             return None;
         }
@@ -80,7 +89,16 @@ impl DemoRun {
         let capture = Task::future(async { tokio::time::sleep(SETTLE).await })
             .then(move |()| window::screenshot(main_window))
             .map(Message::Captured);
-        Some((steps(&self.scenario, self.batch, self.ai), capture))
+        let notice = match self.scenario.notice.clone() {
+            Some(id) => Task::future(async move {
+                tokio::time::sleep(NOTICE_AT).await;
+                folder_workspace::Message::MediaViewer(media_viewer::Message::Video(
+                    video::Message::ShowNotice(crate::i18n::loader().get(&id)),
+                ))
+            }),
+            None => Task::none(),
+        };
+        Some((steps(&self.scenario, self.batch, self.ai), notice, capture))
     }
 
     /// Handle a demo message.

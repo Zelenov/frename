@@ -596,15 +596,14 @@ impl FrenameApp {
                     Some(demo) if video_ready => demo.video_ready(main_window),
                     _ => None,
                 };
-                if let Some((steps, capture)) = demo_steps {
+                if let Some((steps, notice, capture)) = demo_steps {
                     let steps = steps
                         .into_iter()
                         .map(|step| Task::done(Message::FolderWorkspace(step)));
-                    return Task::batch(
-                        std::iter::once(task)
-                            .chain(steps)
-                            .chain([capture.map(Message::Demo)]),
-                    );
+                    return Task::batch(std::iter::once(task).chain(steps).chain([
+                        notice.map(Message::FolderWorkspace),
+                        capture.map(Message::Demo),
+                    ]));
                 }
                 // Closing waits for a batch job to stop; the file it reopens is unloaded then.
                 if batch_finished && self.pending_close.is_some() {

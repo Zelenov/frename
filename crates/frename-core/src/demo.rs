@@ -35,6 +35,10 @@ pub struct DemoScenario {
     /// Open the marker list over the picture (the ◆ button).
     #[serde(default)]
     pub marker_list: bool,
+    /// A UI message id (`i18n/<lang>/frename.ftl`) shown as a notice in the video controls bar
+    /// just before the screenshot, e.g. `drag-out-not-saved`.
+    #[serde(default)]
+    pub notice: Option<String>,
     /// The staged files, oldest first: the file list shows them in this order.
     pub files: Vec<DemoFile>,
 }
