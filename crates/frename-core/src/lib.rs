@@ -47,8 +47,8 @@ pub use subtitles::{
 pub use tags::{
     install_file_tagger, set_space_after_tags, space_after_tags, CachedFile, DefaultTag,
     FileSnapshot, FileTagger, FileTaggerBackend, FolderInfo, FolderTagStore, InMemoryFileTagger,
-    LoggingFileTagger, NameInOutMove, NameInOutProblem, ProductionFileTagger, SaveAndReparse,
-    Screenshot, StoredTag, Tag, TagColorMapping, TagId, TagList, DEFAULT_TAGS,
+    KeptStored, LoggingFileTagger, NameInOutMove, NameInOutProblem, ProductionFileTagger,
+    SaveAndReparse, Screenshot, StoredTag, Tag, TagColorMapping, TagId, TagList, DEFAULT_TAGS,
 };
 pub use undo::{
     AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,

@@ -19,6 +19,12 @@
 //! While a file is loaded the line is taken out of its comment into the snapshot's in/out
 //! points, so the comment box never shows it and only the in/out controls change it; saving
 //! puts it back.
+//!
+//! The line is read whatever the storage, and it wins over the XMP marker: with video storage
+//! it is where frename puts points the marker cannot hold, or that a failed XMP write left in
+//! `.comment.txt`, so it is the newer value. Deliberately, then, a line typed in this exact
+//! form (in Premiere's Description, or a text file) sets the in/out points even while they
+//! are kept in the video; the next save moves them into the marker and drops the line.
 
 use std::sync::OnceLock;
 

@@ -278,8 +278,7 @@ pub(crate) fn load(
         comment_has_in_out = take_in_out_line(snapshot);
     }
     if storage.in_out == InOutStorage::InVideo && !comment_has_in_out {
-        snapshot.set_segment_start(fields.segment.start);
-        snapshot.set_segment_end(fields.segment.end);
+        snapshot.set_segment(fields.segment);
     }
 }
 
@@ -291,8 +290,7 @@ fn take_in_out_line(snapshot: &mut FileSnapshot) -> bool {
         return false;
     }
     snapshot.set_comment(comment);
-    snapshot.set_segment_start(segment.start);
-    snapshot.set_segment_end(segment.end);
+    snapshot.set_segment(segment);
     true
 }
 
@@ -302,21 +300,14 @@ pub(crate) fn xmp_comment(path: &Path) -> String {
     xmp::read(path).comment
 }
 
-/// The snapshot's in/out points.
-fn segment_of(snapshot: &FileSnapshot) -> Segment {
-    Segment {
-        start: snapshot.segment_start(),
-        end: snapshot.segment_end(),
-    }
-}
-
-/// The comment as it is stored: the snapshot's comment, with the in/out line first unless
-/// the points are kept in the XMP marker (`in_out_in_xmp`).
+/// The comment as it is stored: the snapshot's comment, with the in/out line as the last line
+/// of the editor's part (see [`in_out_line`]) unless the points are kept in the XMP marker
+/// (`in_out_in_xmp`).
 pub(crate) fn stored_comment(snapshot: &FileSnapshot, in_out_in_xmp: bool) -> String {
     if in_out_in_xmp {
         snapshot.comment().to_string()
     } else {
-        in_out_line::with_in_out_line(snapshot.comment(), segment_of(snapshot))
+        in_out_line::with_in_out_line(snapshot.comment(), snapshot.segment())
     }
 }
 
@@ -426,7 +417,7 @@ pub(crate) fn save_to_xmp(
         return SavedToXmp::default();
     }
     let comment = comment_to_xmp.then(|| stored_comment(snapshot, in_out_to_xmp));
-    let segment = in_out_to_xmp.then(|| segment_of(snapshot));
+    let segment = in_out_to_xmp.then(|| snapshot.segment());
     let segment_stored = match xmp::write(path, comment.as_deref().map(str::trim), segment) {
         Ok(stored) => stored,
         Err(xmp::XmpWriteError::Unsupported) => return SavedToXmp::default(),

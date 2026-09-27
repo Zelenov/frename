@@ -143,11 +143,8 @@ impl FileTaggerBackend for ProductionFileTagger {
             comment: CommentStorage::InVideo,
             in_out: InOutStorage::InVideo,
         };
-        let snapshot = self.parse_with(path, &FolderInfo::default(), both_homes);
-        Segment {
-            start: snapshot.segment_start(),
-            end: snapshot.segment_end(),
-        }
+        self.parse_with(path, &FolderInfo::default(), both_homes)
+            .segment()
     }
 
     fn move_metadata(&self, path: &Path, what: MetadataMove) -> PathBuf {
@@ -542,16 +539,16 @@ mod tests {
         let result = move_out_of_name(&old_name, ADOBE);
         assert_eq!(
             result.kept_stored,
-            Some((
-                Segment {
+            Some(super::super::KeptStored {
+                from_name: Segment {
                     start: Some(7.0),
                     end: None
                 },
-                Segment {
+                stored: Segment {
                     start: Some(0.05),
                     end: None
                 }
-            ))
+            })
         );
         let path = moved_path(&result);
         assert_eq!(file_name(&path), "goat.mov");
@@ -585,19 +582,21 @@ mod tests {
 
         let result = move_out_of_name(&old_name, TEXT);
         assert_eq!(
-            result.kept_stored.map(|(_, kept)| kept),
+            result.kept_stored.map(|kept| kept.stored),
             Some(Segment {
                 start: Some(0.05),
                 end: None
             })
         );
         let path = moved_path(&result);
-        assert!(
-            !crate::comment::comment_path(&path).exists(),
-            "no line with the name's points"
+        // The kept points land where Settings keep them now, the comment, so the app shows
+        // them; the name's never do.
+        assert_eq!(
+            crate::comment::load_comment(&path),
+            "In/Out: 00:00:00.050 – end"
         );
         assert_eq!(
-            points(&ProductionFileTagger.parse_with(&path, &FolderInfo::default(), ADOBE)),
+            points(&ProductionFileTagger.parse_with(&path, &FolderInfo::default(), TEXT)),
             (Some(0.05), None)
         );
     }

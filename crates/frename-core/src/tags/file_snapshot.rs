@@ -133,6 +133,17 @@ impl FileSnapshot {
     pub fn set_segment_end(&mut self, v: Option<f32>) {
         self.segment_end = v;
     }
+    /// Both in/out points.
+    pub fn segment(&self) -> Segment {
+        Segment {
+            start: self.segment_start,
+            end: self.segment_end,
+        }
+    }
+    pub fn set_segment(&mut self, segment: Segment) {
+        self.segment_start = segment.start;
+        self.segment_end = segment.end;
+    }
     pub fn has_tag(&self, value: &str) -> bool {
         self.tags.iter().any(|t| t == value)
     }

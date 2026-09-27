@@ -295,10 +295,19 @@ pub struct NameInOutMove {
     /// when the file was left as it was (see `problem`) or the rename did not happen.
     pub outcome: MoveOutcome,
     /// The file already had in/out points stored, in the comment or in the video: they were
-    /// kept, and the name's (first) were dropped. The second are the kept ones.
-    pub kept_stored: Option<(Segment, Segment)>,
+    /// kept (and saved where Settings keep in/out points now), and the name's were dropped.
+    pub kept_stored: Option<KeptStored>,
     /// Why the file was left as it was, when it was.
     pub problem: Option<NameInOutProblem>,
+}
+
+/// In/out points a file had both in its name and stored; see [`NameInOutMove::kept_stored`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct KeptStored {
+    /// The name's, dropped.
+    pub from_name: Segment,
+    /// The stored ones, kept.
+    pub stored: Segment,
 }
 
 /// Why [`FileTagger::move_in_out_out_of_name`] left a file as it was.
@@ -348,15 +357,15 @@ pub(crate) fn move_name_in_out(
     if taken {
         return left_alone(NameInOutProblem::NameTaken(new_name));
     }
+    // Points stored in either home win over the name's, and are saved where Settings keep
+    // in/out points now: a marker in the video is read only with video storage.
     let stored = stored(path);
-    if stored.is_empty() {
-        snapshot.set_segment_start(from_name.start);
-        snapshot.set_segment_end(from_name.end);
-    }
+    let kept = if stored.is_empty() { from_name } else { stored };
+    snapshot.set_segment(kept);
     let saved_path = save(&snapshot, path);
     NameInOutMove {
         outcome: FileTagger::renamed(saved_path, path),
-        kept_stored: (!stored.is_empty()).then_some((from_name, stored)),
+        kept_stored: (!stored.is_empty()).then_some(KeptStored { from_name, stored }),
         problem: None,
     }
 }

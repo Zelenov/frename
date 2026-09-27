@@ -61,11 +61,7 @@ pub trait FileTaggerBackend: Send + Sync {
     /// video, whatever the storage chosen now. Backends that keep them only in memory answer
     /// with the parsed ones.
     fn stored_in_out(&self, path: &Path) -> Segment {
-        let snapshot = self.parse(path, &FolderInfo::default());
-        Segment {
-            start: snapshot.segment_start(),
-            end: snapshot.segment_end(),
-        }
+        self.parse(path, &FolderInfo::default()).segment()
     }
 
     /// Read the file's comment and in/out points again and replace the folder file list's line
