@@ -1,4 +1,4 @@
-# NEXT
+# 0.74
 ## Added
 - A UI language, in Settings: follows the system by default, or pick English or Русский. More
   languages ship as they are ready.
