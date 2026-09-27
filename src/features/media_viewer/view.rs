@@ -1,15 +1,15 @@
-//! View for the unified media viewer feature.
+//! View for the media_viewer feature: video, or a placeholder for anything else.
 
 use iced::widget::{container, text};
 use iced::{Element, Length};
 
 use super::state::ActiveMedia;
-use super::{image, video, MediaViewerState, Message};
+use super::{video, MediaViewerState, Message};
 use crate::theme;
 
-/// Render the appropriate sub-view based on which media type is active.
-/// `is_fullscreen` is forwarded to sub-views so they can show the correct button icon.
-/// `segment_start` and `segment_end` are only used for video (progress bar highlight).
+/// Render the video player, or a placeholder when no video is open.
+/// `is_fullscreen` is forwarded to the video view so it can show the correct button icon.
+/// `segment_start` and `segment_end` highlight the segment on the progress bar.
 pub fn view<'a>(
     state: &'a MediaViewerState,
     is_fullscreen: bool,
@@ -26,7 +26,6 @@ pub fn view<'a>(
             markers,
         )
         .map(Message::Video),
-        ActiveMedia::Image => image::view::view(&state.image, is_fullscreen).map(Message::Image),
         ActiveMedia::Unsupported => unsupported_file_view(),
         ActiveMedia::None => container(text("🎬").size(48).color(theme::TEXT_MUTED))
             .center(Length::Fill)

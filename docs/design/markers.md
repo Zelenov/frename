@@ -344,7 +344,6 @@ actions leave it alone.
   the open file like in/out. Typing in name and comment is not undoable, like the comment box.
 - **Leaving the file with an open row** (e.g. a click on another file): the typed text is in state
   already (every keystroke is a message), so it is saved and the row closes.
-- **Image files**: no markers (no video timeline); the controls are not shown.
 
 ## Out of scope
 

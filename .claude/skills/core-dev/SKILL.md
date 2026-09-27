@@ -19,7 +19,6 @@ disable-model-invocation: false
 - Adding database tables, columns, or migrations
 
 For undo/redo infrastructure (`crates/frename-core/src/undo/`), use the **`undo-dev`** skill instead.
-For `FileKind` classification or directory file-type filtering, use the **`image-preview`** skill instead.
 
 ---
 

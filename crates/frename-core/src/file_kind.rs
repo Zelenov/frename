@@ -5,9 +5,7 @@
 pub enum FileKind {
     /// Video file (.mp4, .mkv, .avi, …)
     Video,
-    /// Static image file (.jpg, .jpeg, .heic, .heif, .png, …)
-    Image,
-    /// Everything else — not shown in the file list
+    /// Everything else, images included — not shown in the file list
     Other,
 }
 
@@ -18,12 +16,11 @@ impl FileKind {
         match ext.to_ascii_lowercase().as_str() {
             "mp4" | "mkv" | "avi" | "mov" | "wmv" | "m4v" | "flv" | "webm" | "ts" | "m2ts"
             | "mpg" | "mpeg" | "3gp" => Self::Video,
-            "jpg" | "jpeg" | "heic" | "heif" | "png" | "webp" | "bmp" => Self::Image,
             _ => Self::Other,
         }
     }
 
-    /// Returns `true` for `Video` and `Image`; `false` for `Other`.
+    /// Returns `true` for `Video`; `false` for `Other`.
     pub fn is_media(self) -> bool {
         !matches!(self, Self::Other)
     }
@@ -34,28 +31,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn jpeg_is_image() {
-        assert_eq!(FileKind::from_extension("jpg"), FileKind::Image);
+    fn images_are_other() {
+        for ext in [
+            "jpg", "jpeg", "JPEG", "heic", "HEIC", "heif", "png", "webp", "bmp",
+        ] {
+            assert_eq!(FileKind::from_extension(ext), FileKind::Other, "{ext}");
+        }
     }
 
     #[test]
-    fn jpeg_uppercase_is_image() {
-        assert_eq!(FileKind::from_extension("JPEG"), FileKind::Image);
-    }
-
-    #[test]
-    fn heic_is_image() {
-        assert_eq!(FileKind::from_extension("heic"), FileKind::Image);
-    }
-
-    #[test]
-    fn heif_is_image() {
-        assert_eq!(FileKind::from_extension("heif"), FileKind::Image);
-    }
-
-    #[test]
-    fn png_is_image() {
-        assert_eq!(FileKind::from_extension("png"), FileKind::Image);
+    fn images_are_not_media() {
+        assert!(!FileKind::from_extension("jpg").is_media());
+        assert!(!FileKind::from_extension("heic").is_media());
     }
 
     #[test]
@@ -81,11 +68,6 @@ mod tests {
     #[test]
     fn is_media_video() {
         assert!(FileKind::Video.is_media());
-    }
-
-    #[test]
-    fn is_media_image() {
-        assert!(FileKind::Image.is_media());
     }
 
     #[test]

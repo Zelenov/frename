@@ -1,9 +1,7 @@
-//! Unified media viewer feature: routes video and image files internally.
+//! Media viewer feature: shows the selected video, or a placeholder for anything else.
 //!
 //! FolderWorkspace holds one `MediaViewerState` and calls `open(file)` for every file.
-//! Routing between video and image is hidden inside this module.
 
-pub mod image;
 mod messages;
 mod state;
 pub mod video;
