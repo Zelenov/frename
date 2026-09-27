@@ -67,6 +67,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 14,
         sql: schema::M14_UI_LANGUAGE,
     },
+    Migration {
+        version: 15,
+        sql: schema::M15_IN_OUT_OUT_OF_NAMES,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
@@ -150,7 +154,7 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 14);
+        assert_eq!(current_version(&conn).expect("version"), 15);
     }
 
     #[test]
@@ -172,5 +176,62 @@ mod tests {
             )
             .expect("ui_language column");
         assert_eq!(language, "");
+    }
+
+    /// A database at `version` with a settings row whose in/out storage is `in_out`.
+    fn database_with_in_out_storage(version: u32, in_out: &str) -> Connection {
+        let conn = database_at_version_1();
+        for m in MIGRATIONS
+            .iter()
+            .filter(|m| (2..=version).contains(&m.version))
+        {
+            conn.execute_batch(m.sql).expect("migration");
+        }
+        conn.execute("UPDATE schema_version SET version = ?1", [version])
+            .expect("set version");
+        conn.execute(
+            "INSERT INTO app_settings (id, in_out_storage) VALUES (1, ?1)",
+            [in_out],
+        )
+        .expect("settings row");
+        conn
+    }
+
+    fn in_out_storage(conn: &Connection) -> String {
+        conn.query_row(
+            "SELECT in_out_storage FROM app_settings WHERE id = 1",
+            [],
+            |row| row.get(0),
+        )
+        .expect("in_out_storage")
+    }
+
+    #[test]
+    fn in_out_points_kept_in_file_names_move_to_the_video() {
+        let conn = database_with_in_out_storage(14, "file_name");
+        run(&conn).expect("migrate");
+        assert_eq!(in_out_storage(&conn), "xmp");
+    }
+
+    #[test]
+    fn in_out_points_kept_in_the_video_stay_there() {
+        let conn = database_with_in_out_storage(14, "xmp");
+        run(&conn).expect("migrate");
+        assert_eq!(in_out_storage(&conn), "xmp");
+    }
+
+    #[test]
+    fn a_default_row_from_migration_5_moves_to_the_video() {
+        let conn = database_at_version_1();
+        for m in MIGRATIONS.iter().filter(|m| (2..=14).contains(&m.version)) {
+            conn.execute_batch(m.sql).expect("migration");
+        }
+        conn.execute("UPDATE schema_version SET version = 14", [])
+            .expect("set version");
+        conn.execute("INSERT INTO app_settings (id) VALUES (1)", [])
+            .expect("settings row");
+        assert_eq!(in_out_storage(&conn), "file_name", "precondition");
+        run(&conn).expect("migrate");
+        assert_eq!(in_out_storage(&conn), "xmp");
     }
 }

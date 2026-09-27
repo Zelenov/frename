@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use super::file_snapshot::FileSnapshot;
+use super::file_snapshot::{FileSnapshot, NameInOut};
 use super::file_tagger_backend::FileTaggerBackend;
 use super::folder_info::FolderInfo;
 use super::folder_tag_store::FolderTagStore;
@@ -149,6 +149,19 @@ impl FileTagger {
         Ok(MoveOutcome::Moved(Self::save(&snapshot, path)))
     }
 
+    /// "Move in/out points out of file names": take the `in_HH_MM_SS` / `out_HH_MM_SS` parts
+    /// an older version wrote into the name of the file at `path`, save the points where in/out
+    /// points are kept now (the video or the comment, see [`crate::set_in_out_storage`]), and
+    /// rename the file without those parts. When the file already has in/out points stored,
+    /// those stay and the name's are dropped; the result says so.
+    pub fn move_in_out_out_of_name(path: &Path) -> NameInOutMove {
+        move_name_in_out(
+            path,
+            |path| Self::parse(path, &FolderInfo::default()),
+            Self::save,
+        )
+    }
+
     /// The commented tag follows a comment that appeared or went, as it does when the comment
     /// is typed (see [`crate::active_commented_tag`]).
     fn follow_commented_tag(snapshot: &mut FileSnapshot, was_commented: bool) {
@@ -270,6 +283,46 @@ impl FileTagger {
     #[allow(dead_code)]
     pub fn load_screenshot_image(file_path: &Path, position_ms: u64) -> Option<Vec<u8>> {
         backend().load_screenshot_image(file_path, position_ms)
+    }
+}
+
+/// What [`FileTagger::move_in_out_out_of_name`] did to one file.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NameInOutMove {
+    /// `Moved` to the new path, `NothingToMove` when the name held no in/out points, `Failed`
+    /// when the rename did not happen.
+    pub outcome: MoveOutcome,
+    /// The file already had in/out points stored: they were kept, and the name's (first)
+    /// were dropped. The second are the kept ones.
+    pub kept_stored: Option<(NameInOut, NameInOut)>,
+}
+
+/// [`FileTagger::move_in_out_out_of_name`] with the parse and save to use.
+pub(crate) fn move_name_in_out(
+    path: &Path,
+    parse: impl Fn(&Path) -> FileSnapshot,
+    save: impl Fn(&FileSnapshot, &Path) -> PathBuf,
+) -> NameInOutMove {
+    let mut snapshot = parse(path);
+    let Some(from_name) = snapshot.take_name_in_out() else {
+        return NameInOutMove {
+            outcome: MoveOutcome::NothingToMove,
+            kept_stored: None,
+        };
+    };
+    let stored = NameInOut {
+        start: snapshot.segment_start(),
+        end: snapshot.segment_end(),
+    };
+    let has_stored = stored.start.is_some() || stored.end.is_some();
+    if !has_stored {
+        snapshot.set_segment_start(from_name.start);
+        snapshot.set_segment_end(from_name.end);
+    }
+    let new_path = save(&snapshot, path);
+    NameInOutMove {
+        outcome: FileTagger::renamed(new_path, path),
+        kept_stored: has_stored.then_some((from_name, stored)),
     }
 }
 

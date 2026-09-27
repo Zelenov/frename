@@ -45,7 +45,7 @@ pub struct DemoScenario {
 pub struct DemoFile {
     /// Clip in `source` to copy.
     pub from: String,
-    /// Name of the copy, tags and in/out included.
+    /// Name of the copy, tags included.
     pub name: String,
     /// Comment, saved as `.comment.txt`.
     #[serde(default)]

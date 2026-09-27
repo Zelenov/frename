@@ -52,8 +52,7 @@ pub trait FileTaggerBackend: Send + Sync {
     }
 
     /// Move the file's comment or in/out points as `what` says, reading both of their homes.
-    /// Returns the file's path afterwards, which changes when in/out points move in or out
-    /// of the name.
+    /// Returns the file's path afterwards.
     fn move_metadata(&self, path: &Path, _what: MetadataMove) -> PathBuf {
         path.to_path_buf()
     }

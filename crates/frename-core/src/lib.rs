@@ -34,10 +34,10 @@ pub use markers::{
     MARKER_SNAP_MS,
 };
 pub use metadata::{
-    active_commented_tag, cache::modified_ms, clean_commented_tag, commented_tag, marker_storage,
-    metadata_storage, set_comment_storage, set_commented_tag, set_in_out_storage,
-    set_marker_storage, CommentStorage, InOutStorage, MarkerStorage, MarkersError, MetadataMove,
-    MetadataStorage, MoveOutcome, DEFAULT_COMMENTED_TAG,
+    active_commented_tag, cache::modified_ms, clean_commented_tag, commented_tag,
+    format_in_out_line, marker_storage, metadata_storage, set_comment_storage, set_commented_tag,
+    set_in_out_storage, set_marker_storage, CommentStorage, InOutStorage, MarkerStorage,
+    MarkersError, MetadataMove, MetadataStorage, MoveOutcome, DEFAULT_COMMENTED_TAG,
 };
 pub use ordered::{OrderKey, OrderableEntry, OrderedCollection, OrderedThing};
 pub use subtitles::{
@@ -47,8 +47,8 @@ pub use subtitles::{
 pub use tags::{
     install_file_tagger, set_space_after_tags, space_after_tags, CachedFile, DefaultTag,
     FileSnapshot, FileTagger, FileTaggerBackend, FolderInfo, FolderTagStore, InMemoryFileTagger,
-    LoggingFileTagger, ProductionFileTagger, SaveAndReparse, Screenshot, StoredTag, Tag,
-    TagColorMapping, TagId, TagList, DEFAULT_TAGS,
+    LoggingFileTagger, NameInOut, NameInOutMove, ProductionFileTagger, SaveAndReparse, Screenshot,
+    StoredTag, Tag, TagColorMapping, TagId, TagList, DEFAULT_TAGS,
 };
 pub use undo::{
     AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,
