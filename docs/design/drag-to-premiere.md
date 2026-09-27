@@ -44,8 +44,9 @@ No new controls. The only visible parts are the operating system's drag pointer 
 ```
 
 If the open file cannot be saved before the drag (read-only, locked by another program), the drag
-does not start and the video controls bar shows `Not dragged: the file could not be saved`, the
-place other save problems are shown.
+does not start and the video controls bar shows `Not dragged: the file could not be saved
+(read-only, or open in another program such as Premiere; close it there and try again)`, the place
+other save problems are shown.
 
 ## Data format
 
@@ -69,8 +70,8 @@ place other save problems are shown.
 
 Crate: `windows` 0.62 (already in `Cargo.lock` through other dependencies, so nothing new is
 downloaded), features `Win32_UI_Shell`, `Win32_UI_Shell_Common`, `Win32_System_Com`,
-`Win32_System_Ole`, `Win32_UI_Input_KeyboardAndMouse`, `Win32_UI_WindowsAndMessaging`. About 80
-lines in `src/features/drag_out/windows.rs`, behind `#[cfg(windows)]`.
+`Win32_System_Ole`, `Win32_UI_Input_KeyboardAndMouse`, `Win32_UI_WindowsAndMessaging`, in
+`src/features/drag_out/win32.rs`, behind `#[cfg(windows)]`.
 
 Why not the `drag` crate (CrabNebula): on Windows it builds its own data object with `CF_HDROP`
 only; the shell's object is exactly what Explorer gives Premiere. Its Linux side needs a GTK window,
@@ -99,7 +100,13 @@ The button release is eaten by the drag loop, so frename resets its own drag sta
 **Button already up.** If the button is released before the drag begins (the save took a moment),
 starting the drag loop would drop at once wherever the pointer is. Before starting, the code checks
 `GetAsyncKeyState` for the left button (the right one when buttons are swapped, since it reads
-physical buttons) and does nothing when it is up.
+physical buttons) and does nothing when it is up. The same check runs each time the drag is asked
+for: a touchpad tap can deliver the press and its release in one batch, before the release
+listener exists, and a later move must not start a drag (or a save for one) then.
+
+**A lost end.** If the result of `window::run` never came back, the drag would stay "running".
+Since no press reaches the window while the drag loop runs, a new press on a row re-arms, and the
+drop feature stops ignoring the dragged paths 10 minutes after a drag that never ended.
 
 ### Linux
 
@@ -125,8 +132,8 @@ State `DragOutState` in the workspace:
   user sees the drag pointer from the start, and a drop back on frename is ignored.
 
 **Which files.** Pure function: in batch mode with the pressed file checked, every checked file
-that is listed, in list order; otherwise the pressed file. Files whose path no longer exists are
-left out; none left → no drag.
+that is listed, in list order; otherwise the pressed file. A file deleted behind frename's back makes
+the shell refuse the data object: no drag, and the log says why.
 
 **Save before drag.** Pressing the open file's row already saves its pending edits (tags in the
 name, comment, in/out, markers), unloading the video first when one plays, as a re-click does
@@ -134,8 +141,10 @@ today. Pressing another row saves the previous file and opens a clean one. So at
 workspace decides (pure function):
 - a save is still in flight (the video is unloading) → wait; the next cursor move asks again;
 - the open file is among the dragged ones and its name on disk differs from the name frename wants
-  for it, or its markers are in the not-saved list → save it now (as a re-click) and wait, once;
-  after that one attempt → refuse with the notice above;
+  for it, or its markers are in the not-saved list → save it now (as a re-click) and wait, once.
+  The save counts when it has run for that file (`apply_file_updated`), not when it is asked for:
+  until then (its message queued, or its video unloading) the drag waits. Still unsaved after it
+  ran → refuse with the notice above;
 - otherwise → start, with the paths read from the directory after the save (the new names).
 
 **A drop on frename itself.** winit's drop target accepts files, so dropping the dragged files back
@@ -199,7 +208,10 @@ drag: the notice shows and no drag starts.
    selection: dragging a checked row drags all checked listed files.
 4. **Drop back on frename?** Ignored, so dragging and changing one's mind changes nothing.
 5. **Allowed effects?** Copy and link only; Explorer copies, Premiere imports.
-6. **Save failure?** No drag, the notice `Not dragged: the file could not be saved`.
+6. **Save failure?** No drag, the notice above naming the remedy. Detected: the name on disk is
+   not the wanted one, or the markers could not be written. A failed comment or XMP in/out write
+   alone is not detected (the tagger reports no result for it); Premiere holding the file also
+   blocks the rename, which is detected.
 7. **Drag from the preview or the name panel?** No (out of scope above); can be added later.
 8. **Linux?** Not supported yet, documented in the README and the PR.
 9. **Frozen video during the drag?** Accepted: the modal drag loop owns the thread, as in other

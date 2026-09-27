@@ -47,10 +47,9 @@ The in/out part is there only when you mark a segment.
 6. Type a note for the whole clip in the comment box, press `Esc` to leave it, then `PageDown` to
    go to the next clip. The clip you leave is renamed and its markers are saved.
 7. Most clips share most tags with their neighbors: press `Ctrl+C` on one clip and `Ctrl+V` on the next, then adjust.
-8. Drag a clip from the file list straight into Premiere Pro (project panel, timeline or source
-   monitor), Explorer or any other program, as from Explorer. frename saves the clip first, so it
-   arrives with its tags, comment, in/out and markers. Dropping on a folder copies it; nothing is
-   moved. In batch mode, dragging a checked file drags all checked files. Windows only for now.
+8. Drag a clip from the file list into Premiere Pro, Explorer or any other program: frename saves
+   it first, so it arrives under its new name with its tags, comment, in/out and markers. Nothing
+   is moved. Windows only for now.
 
 Next time you start frename, it reopens the last folder and clip.
 
@@ -192,7 +191,8 @@ No subtitles yet? Check the videos in batch mode and run **Generate subtitles** 
 ![Batch mode](docs/frename-screenshot-batch.jpg)
 
 Click ☑ to check files in the list (All / Invert) and run one action on all of them, with progress
-and Cancel. Each file then shows a green or red check box. Actions:
+and Cancel. Each file then shows a green or red check box. Drag any checked file to drag all
+checked files into Premiere or Explorer. Actions:
 
 - move comments between the video and `.comment.txt` files;
 - move in/out points between the file name and the video;
