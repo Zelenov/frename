@@ -5,11 +5,12 @@ use std::borrow::Borrow;
 
 use iced::widget::text::{IntoFragment, LineHeight};
 use iced::widget::{
-    checkbox as iced_checkbox, column, container, mouse_area, pick_list, radio, text_input,
-    Checkbox, PickList, TextInput,
+    checkbox as iced_checkbox, column, mouse_area, pick_list, radio, text_input, Checkbox,
+    PickList, TextInput,
 };
 use iced::{Element, Padding, Pixels};
 
+use super::layout;
 use super::style;
 use super::text;
 use super::tokens::*;
@@ -19,8 +20,8 @@ const LINE: LineHeight = LineHeight::Absolute(Pixels(LINE_BODY));
 
 /// 28 px high with a 20-px line of text.
 const FIELD_PADDING: Padding = Padding {
-    top: (CONTROL_HEIGHT - LINE_BODY) / 2.0,
-    bottom: (CONTROL_HEIGHT - LINE_BODY) / 2.0,
+    top: CONTROL_PADDING_Y,
+    bottom: CONTROL_PADDING_Y,
     left: SPACE_S,
     right: SPACE_S,
 };
@@ -42,14 +43,7 @@ pub fn checkbox_with_hint<'a, M: 'a>(
     checkbox: impl Into<Element<'a, M>>,
     hint: impl Into<Element<'a, M>>,
 ) -> Element<'a, M> {
-    column![
-        checkbox.into(),
-        container(hint).padding(Padding {
-            left: CHECK_SIZE + SPACE_S,
-            ..Padding::ZERO
-        })
-    ]
-    .into()
+    column![checkbox.into(), layout::indented(hint)].into()
 }
 
 /// One option of a radio group, with an optional description under its name (§8.3). A click on
@@ -78,11 +72,7 @@ where
     };
     column![
         choice,
-        mouse_area(container(description).padding(Padding {
-            left: CHECK_SIZE + SPACE_S,
-            ..Padding::ZERO
-        }))
-        .on_press(message.clone()),
+        mouse_area(layout::indented(description)).on_press(message.clone()),
     ]
     .into()
 }

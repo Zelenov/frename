@@ -99,7 +99,7 @@ Next time you start frename, it reopens the last folder and clip.
 | Key | Action |
 |---|---|
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous page |
-| `Escape` | Close Settings (while it asks whether to remove a key: keep the key) |
+| `Escape` | Close Settings (while you remove or replace a key, Esc cancels that first) |
 
 While a text box (tag search, file search, comment) has the cursor, it takes the keys it needs:
 arrows, `Delete`, `Space`, `Enter`, `Ctrl+C`, and in the comment box also `PageUp` / `PageDown`.

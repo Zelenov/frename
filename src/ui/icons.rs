@@ -21,44 +21,32 @@ pub enum Icon {
 }
 
 impl Icon {
-    const ALL: [Icon; 9] = [
-        Icon::Info,
-        Icon::CircleCheck,
-        Icon::CircleAlert,
-        Icon::TriangleAlert,
-        Icon::Languages,
-        Icon::Folder,
-        Icon::Sparkles,
-        Icon::Captions,
-        Icon::RefreshCw,
-    ];
-
-    /// The icon's SVG file; the match makes a new icon without a file a compile error.
-    fn bytes(self) -> &'static [u8] {
-        match self {
-            Icon::Info => include_bytes!("../../assets/icons/info.svg"),
-            Icon::CircleCheck => include_bytes!("../../assets/icons/circle-check.svg"),
-            Icon::CircleAlert => include_bytes!("../../assets/icons/circle-alert.svg"),
-            Icon::TriangleAlert => include_bytes!("../../assets/icons/triangle-alert.svg"),
-            Icon::Languages => include_bytes!("../../assets/icons/languages.svg"),
-            Icon::Folder => include_bytes!("../../assets/icons/folder.svg"),
-            Icon::Sparkles => include_bytes!("../../assets/icons/sparkles.svg"),
-            Icon::Captions => include_bytes!("../../assets/icons/captions.svg"),
-            Icon::RefreshCw => include_bytes!("../../assets/icons/refresh-cw.svg"),
-        }
-    }
-
-    /// One handle per icon, made once: a handle made from the same bytes each frame would be
-    /// hashed each frame.
+    /// The icon's handle, made once per icon: a handle made from the same bytes each frame would
+    /// be hashed each frame. The match makes a new icon without its file a compile error.
     fn handle(self) -> svg::Handle {
-        static HANDLES: OnceLock<Vec<svg::Handle>> = OnceLock::new();
-        HANDLES.get_or_init(|| {
-            Icon::ALL
-                .iter()
-                .map(|icon| svg::Handle::from_memory(icon.bytes()))
-                .collect()
-        })[self as usize]
-            .clone()
+        macro_rules! file {
+            ($name:literal) => {{
+                static HANDLE: OnceLock<svg::Handle> = OnceLock::new();
+                HANDLE
+                    .get_or_init(|| {
+                        svg::Handle::from_memory(
+                            include_bytes!(concat!("../../assets/icons/", $name)).as_slice(),
+                        )
+                    })
+                    .clone()
+            }};
+        }
+        match self {
+            Icon::Info => file!("info.svg"),
+            Icon::CircleCheck => file!("circle-check.svg"),
+            Icon::CircleAlert => file!("circle-alert.svg"),
+            Icon::TriangleAlert => file!("triangle-alert.svg"),
+            Icon::Languages => file!("languages.svg"),
+            Icon::Folder => file!("folder.svg"),
+            Icon::Sparkles => file!("sparkles.svg"),
+            Icon::Captions => file!("captions.svg"),
+            Icon::RefreshCw => file!("refresh-cw.svg"),
+        }
     }
 }
 
@@ -72,14 +60,20 @@ pub fn icon<'a>(icon: Icon, size: f32, color: Color) -> Svg<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
-    fn every_icon_is_an_svg_listed_in_its_own_place() {
-        for (index, icon) in Icon::ALL.into_iter().enumerate() {
-            assert_eq!(icon as usize, index, "{icon:?} is out of order in ALL");
-            let text = std::str::from_utf8(icon.bytes()).unwrap();
-            assert!(text.contains("<svg"), "{icon:?}");
+    fn every_icon_file_is_an_svg() {
+        let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/icons");
+        let source = include_str!("icons.rs");
+        let names: Vec<&str> = source
+            .split("file!(\"")
+            .skip(1)
+            .filter_map(|rest| rest.split('"').next())
+            .filter(|name| name.ends_with(".svg"))
+            .collect();
+        assert!(names.len() >= 9, "{names:?}");
+        for name in names {
+            let text = std::fs::read_to_string(folder.join(name)).unwrap();
+            assert!(text.contains("<svg"), "{name}");
         }
     }
 }

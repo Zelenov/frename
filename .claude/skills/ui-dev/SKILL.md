@@ -64,13 +64,16 @@ The design system is the rule: `docs/design/design-system.md` (tokens, text styl
 windows, patterns, every screen). Its code is `src/ui/`:
 
 ```rust
+use crate::ui::layout::{self, NoticeKind};
 use crate::ui::tokens::*;                 // colors, SPACE_*, sizes, radii, fonts
-use crate::ui::{button, form, layout, text};
+use crate::ui::{button, form, text};
 
-text::body("…"); text::secondary("…"); text::mono("clip.mp4");
-button::primary("Save key").on_press(msg); button::secondary("Close");
-form::checkbox(label, on).on_toggle(Msg::Set); form::radio_option(label, desc, value, selected, Msg::Set);
-layout::setting_row(label, content); layout::notice(NoticeKind::Info, content);
+text::body(fl!("…")); text::secondary(fl!("…")); text::mono(name);
+button::primary(fl!("…")).on_press(msg); button::secondary(fl!("…"));
+form::checkbox(label, on).on_toggle(Msg::Set);
+form::radio_option(label, Some(form::description(hint)), value, selected, Msg::Set);
+layout::setting_row(label, layout::aligned([..]));
+layout::notice(NoticeKind::Info, headline, None, [button::secondary(label).on_press(msg).into()]);
 ```
 
 - A view on the system never writes a color, a size, a padding, a spacing or a radius as a number:

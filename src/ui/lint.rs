@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 /// Files not on the design system yet, each with the issue that moves it. The list only shrinks:
 /// a file here with nothing left to allow fails the test too.
-const NOT_YET: [(&str, &str); 37] = [
+const NOT_YET: [(&str, &str); 38] = [
     ("features/batch/actions/describe_ai/mod.rs", "#58"),
     ("features/batch/actions/generate_subtitles.rs", "#58"),
     ("features/batch/actions/markers_comment.rs", "#58"),
@@ -36,6 +36,7 @@ const NOT_YET: [(&str, &str); 37] = [
     ("features/tag_panel/view.rs", "#59"),
     ("features/video_controls/progress_bar.rs", "#59"),
     ("features/video_controls/view.rs", "#59"),
+    ("main.rs", "#59"),
     ("tag_colors.rs", "#53, #59"),
     ("widgets/file_name_display.rs", "#59"),
     ("widgets/height_handle.rs", "#59"),
@@ -61,18 +62,20 @@ const SIZE_METHOD_ENDINGS: [&str; 7] = [
 const SIZE_METHODS: [&str; 2] = ["center_x", "center_y"];
 
 /// Functions whose arguments are sizes, offsets or radii.
-const SIZE_FUNCTIONS: [&str; 4] = [
+const SIZE_FUNCTIONS: [&str; 5] = [
     "rounded(",
     "Length::Fixed(",
     "Padding::new(",
     "Vector::new(",
+    "Size::new(",
 ];
 
 /// Style structs whose fields are sizes.
 const SIZE_STRUCTS: [&str; 3] = ["Padding {", "Border {", "Shadow {"];
 
-const COLOR_LITERALS: [&str; 6] = [
+const COLOR_LITERALS: [&str; 7] = [
     "Color::from_rgb",
+    "Color::from_linear",
     "Color::new(",
     "Color {",
     "Color::WHITE",
@@ -129,8 +132,16 @@ fn enclosed(code: &str, start: usize, open: char, close: char) -> &str {
     &code[start..]
 }
 
-/// Whether `text` holds a number other than a bare zero.
+/// Whether `text` holds a number other than a bare zero. `FillPortion(n)` is a ratio, not a
+/// size.
 fn has_number(text: &str) -> bool {
+    let mut text = text.to_string();
+    while let Some(at) = text.find("FillPortion(") {
+        let end = text[at..]
+            .find(')')
+            .map_or(text.len(), |close| at + close + 1);
+        text.replace_range(at..end, "");
+    }
     text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '.'))
         .filter(|token| token.starts_with(|c: char| c.is_ascii_digit()))
         .any(|token| !matches!(token.trim_end_matches(".into"), "0" | "0.0"))
@@ -172,12 +183,14 @@ fn violations(code: &str) -> Vec<String> {
             }
         }
     }
-    // `padding::all(…)`: the argument starts after the function's name.
-    for (at, _) in code.match_indices("padding::") {
-        if let Some(open) = code[at..].find('(') {
-            let argument = enclosed(code, at + open + 1, '(', ')');
-            if has_number(argument) {
-                found.push(format!("padding::…({argument})"));
+    // `padding::all(…)`, `border::width(…)`: the argument starts after the function's name.
+    for module in ["padding::", "border::"] {
+        for (at, _) in code.match_indices(module) {
+            if let Some(open) = code[at..].find('(') {
+                let argument = enclosed(code, at + open + 1, '(', ')');
+                if has_number(argument) {
+                    found.push(format!("{module}…({argument})"));
+                }
             }
         }
     }
@@ -284,6 +297,7 @@ fn the_scan_finds_literals_and_lets_tokens_and_zero_through() {
          row![].vertical_spacing(6); let p = Padding { top: 0.0, left: 26.0, ..Padding::ZERO };
          let c = Color::from_rgb(1.0, 0.8, 0.0); let q = padding::all(SPACE_M);
          let r = border::rounded(RADIUS_S); // .size(99) in a comment
+         row![].width(Length::FillPortion(3)); let s = iced::Size::new(800.0, 600.0);
 }
          #[cfg(test)]
 mod tests { fn t() { let _ = x.size(16); } }
@@ -301,6 +315,7 @@ mod tests { fn t() { let _ = x.size(16); } }
         "Color::from_rgb",
         "Length::Fixed(260.0)",
         "Padding { top: 0.0, left: 26.0, ..Padding::ZERO }",
+        "Size::new(800.0, 600.0)",
         "const GAP: f32 = 6.0",
         "radius: 3.0.into()",
     ];

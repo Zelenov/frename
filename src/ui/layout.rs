@@ -12,7 +12,7 @@ use super::tokens::*;
 
 /// Where the first line of a control sits below the top of a 28-px control: labels and choice
 /// groups move down by it so their text lines up with a field's text.
-const CONTROL_TEXT_OFFSET: f32 = (CONTROL_HEIGHT - LINE_BODY) / 2.0;
+const CONTROL_TEXT_OFFSET: f32 = CONTROL_PADDING_Y;
 
 /// A page: its heading, then its rows 24 px apart, padded from the window's edges.
 pub fn page<'a, M: 'a>(
@@ -126,7 +126,7 @@ pub fn aligned<'a, M: 'a>(items: impl IntoIterator<Item = Element<'a, M>>) -> Co
 pub fn indented<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Element<'a, M> {
     container(content)
         .padding(Padding {
-            left: CHECK_SIZE + SPACE_S,
+            left: CHOICE_INDENT,
             ..Padding::ZERO
         })
         .into()
@@ -168,8 +168,8 @@ pub fn nav_item<'a, M: Clone + 'a>(
     button(content)
         .width(Length::Fill)
         .padding(Padding {
-            top: (ROW_HEIGHT - LINE_BODY) / 2.0,
-            bottom: (ROW_HEIGHT - LINE_BODY) / 2.0,
+            top: ROW_PADDING_Y,
+            bottom: ROW_PADDING_Y,
             left: SPACE_XS,
             right: SPACE_M,
         })

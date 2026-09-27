@@ -79,14 +79,26 @@ pub const CONTROL_HEIGHT: f32 = 28.0;
 pub const BUTTON_BAR_HEIGHT: f32 = 56.0;
 /// A navigation item or a one-line list row.
 pub const ROW_HEIGHT: f32 = 32.0;
+/// Above and below a line of text in a control, so the control is `CONTROL_HEIGHT` high.
+pub const CONTROL_PADDING_Y: f32 = (CONTROL_HEIGHT - LINE_BODY) / 2.0;
+/// Above and below a line of text in a row, so the row is `ROW_HEIGHT` high.
+pub const ROW_PADDING_Y: f32 = (ROW_HEIGHT - LINE_BODY) / 2.0;
 /// Checkbox and radio.
 pub const CHECK_SIZE: f32 = 16.0;
+/// Content under a checkbox or radio starts level with its label.
+pub const CHOICE_INDENT: f32 = CHECK_SIZE + SPACE_S;
 /// Width of the notice's colored edge.
 pub const NOTICE_BAR: f32 = 3.0;
 /// Width of the selected navigation item's bar.
 pub const SELECTION_BAR: f32 = 2.0;
 /// A line: dividers, borders.
 pub const LINE: f32 = 1.0;
+/// The settings window: its size at first, within what a 1080p screen at 150 % leaves (about
+/// 1280x680), and the smallest it gets, so a long label never clips.
+pub const SETTINGS_WINDOW_WIDTH: f32 = 800.0;
+pub const SETTINGS_WINDOW_HEIGHT: f32 = 600.0;
+pub const SETTINGS_MIN_WIDTH: f32 = 720.0;
+pub const SETTINGS_MIN_HEIGHT: f32 = 520.0;
 /// Settings navigation column.
 pub const NAV_WIDTH: f32 = 188.0;
 /// Settings label column.

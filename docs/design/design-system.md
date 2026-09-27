@@ -897,7 +897,8 @@ No "General" (BIR). The version is on *Updates* ("About" would hold only it).
   today, the part is hidden otherwise), under the first option, indented 24: checkbox *Tag videos with
   a comment*, and under it, indented again, the label *Tag* with a 160-px field and an ⓘ that holds
   today's explanation with the example name. After a change of storage: info notice + *Move comments
-  into the videos… / into text files…*.
+  into the videos…* / *Move comments into text files…* (and the same short labels for markers, in/out
+  points and the tag space).
 - **Markers and ranges:** radios *Inside the video file* — "XMP, shown on the clip in Premiere
   Pro"; *In the comment, one line each* — `0:41–0:47 — Lion`; one help line under them: "Points and
   ranges alike, the moments AI finds too." Move notice after a change.
@@ -978,12 +979,15 @@ src/ui/
   mod.rs        the theme for windows on the system; re-exports
   tokens.rs     colors, spacing, sizes, radii, text sizes, fonts, durations — consts only
   icons.rs      the bundled Lucide icons and `icon(name, size, color)`
-  text.rs       text styles: heading(), body(), strong(), secondary(), error(), mono(), tooltip();
-                title() and caption() come with their first user (#58)
+  text.rs       text styles: heading(), body(), strong(), secondary(), error(), mono(), tooltip(),
+                and label() (a button's text, which takes the button's color); title() and
+                caption() come with their first user (#58)
   button.rs     primary(), secondary(), ghost(), danger(), danger_ghost()
-  form.rs       checkbox(), checkbox_with_hint(), radio_option(), text_field(), dropdown()
-  layout.rs     window(), sidebar(), page(), setting_row(), aligned(), buttons(), nav_item(),
-                button_bar(), notice(), inline_status(), info(), with_tooltip(), scroll()
+  form.rs       checkbox(), checkbox_with_hint(), radio_option() with description() or
+                example() under it, text_field(), dropdown()
+  layout.rs     window(), sidebar(), scroll(), page(), setting_row(), setting_row_with_info(),
+                aligned(), controls(), indented(), buttons(), nav_item(), update_dot(),
+                button_bar(), vertical_line(), notice(), inline_status(), info(), with_tooltip()
   style.rs      the style functions behind them
   legacy.rs     today's src/theme.rs, moved: the styles of views not yet on the system
 ```
@@ -1016,7 +1020,10 @@ A unit test (`src/ui/lint.rs`) reads every `.rs` file under `src/` outside `src/
 - a size moved into a constant of the file (`const GAP: f32 = 6.0`): a size of its own is still
   not a token.
 
-`0` alone is allowed (it means "none"). Colors also include `Color::new(` and `Color {`.
+`0` alone is allowed (it means "none"), and so is `FillPortion(n)` (a ratio, not a size).
+Colors also include `Color::new(`, `Color {` and `Color::from_linear…`; `Size::new(` and
+`border::…(` count as sizes too. The test cannot see a size kept in a local `let` (`let gap =
+6.0;`): reviewers of #58 and #59 check that by eye.
 
 Files not yet on the system are in an **allow-list inside the test**, each with the issue that moves
 it (#58 batch, #59 the rest). The test also fails when an allow-listed file has nothing left to

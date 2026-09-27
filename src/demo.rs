@@ -8,6 +8,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::demo::DemoScenario;
 use iced::{window, Task};
 
@@ -27,8 +28,8 @@ const TIMEOUT: Duration = Duration::from_secs(90);
 /// Demo mode messages.
 #[derive(Debug, Clone)]
 pub enum Message {
-    /// The main window's screenshot.
-    Captured(window::Screenshot),
+    /// A window's screenshot, and the size in pixels it must have (at scale 1) to be saved.
+    Captured(window::Screenshot, (u32, u32)),
     /// The demo took too long.
     TimedOut,
 }
@@ -45,15 +46,12 @@ pub struct DemoRun {
     ai: bool,
     /// Capture the settings window, on this page, instead of the main one.
     settings: Option<settings::Page>,
-    /// The captured window's size in pixels at scale 1, checked before saving.
-    capture_size: (u32, u32),
     video_ready: bool,
 }
 
 impl DemoRun {
     /// `work` is the throwaway folder; `main` removes it after the app has exited.
     pub fn new(scenario: DemoScenario, out: PathBuf, work: PathBuf, args: &DemoArgs) -> Self {
-        let [width, height] = scenario.window;
         Self {
             scenario,
             out,
@@ -61,7 +59,6 @@ impl DemoRun {
             batch: args.batch,
             ai: args.ai,
             settings: args.settings,
-            capture_size: (width, height),
             video_ready: false,
         }
     }
@@ -70,6 +67,27 @@ impl DemoRun {
     /// it when the video is ready) instead of the main one.
     pub fn settings_page(&self) -> Option<settings::Page> {
         self.settings
+    }
+
+    /// What a demo reads instead of the renderer's own API keys: Anthropic saved, Soniox missing,
+    /// so one screenshot has both states and no server is asked for languages. `request`
+    /// numbers each answer the way a real read would be numbered.
+    pub fn key_states(
+        mut request: impl FnMut(ApiKey) -> u64,
+    ) -> Vec<(ApiKey, settings::KeyMessage)> {
+        [
+            (ApiKey::Anthropic, KeyState::Saved),
+            (ApiKey::Soniox, KeyState::Missing),
+        ]
+        .into_iter()
+        .map(|(which, state)| {
+            let message = settings::KeyMessage::State {
+                request: request(which),
+                result: Ok(state),
+            };
+            (which, message)
+        })
+        .collect()
     }
 
     /// Start the watchdog; call once the main window is open.
@@ -91,22 +109,21 @@ impl DemoRun {
 
     /// Schedule the screenshot of `window`. `size` is its size in logical pixels, checked at
     /// scale 1; `None` for the main window, which has the scenario's size.
-    pub fn capture(&mut self, window: window::Id, size: Option<(u32, u32)>) -> Task<Message> {
-        if let Some(size) = size {
-            self.capture_size = size;
-        }
+    pub fn capture(&self, window: window::Id, size: Option<(u32, u32)>) -> Task<Message> {
+        let [width, height] = self.scenario.window;
+        let expected = size.unwrap_or((width, height));
         // The screenshot re-renders what was last drawn. A message would rebuild the UI first,
         // and a text editor's rebuilt text is not in the last drawing, so the comment box would
         // come out empty: chain the screenshot straight onto the wait, with no message between.
         Task::future(async { tokio::time::sleep(SETTLE).await })
             .then(move |()| window::screenshot(window))
-            .map(Message::Captured)
+            .map(move |shot| Message::Captured(shot, expected))
     }
 
     /// Handle a demo message.
     pub fn update(&self, message: Message) -> Task<Message> {
         match message {
-            Message::Captured(shot) => match save_png(&shot, self.capture_size, &self.out) {
+            Message::Captured(shot, expected) => match save_png(&shot, expected, &self.out) {
                 Ok(()) => {
                     log::info!("demo: saved {}", self.out.display());
                     iced::exit()

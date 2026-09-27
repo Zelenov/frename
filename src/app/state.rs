@@ -14,7 +14,7 @@ use crate::features::{
     media_viewer::video as media_viewer_video, settings, tag_panel, updates,
 };
 use crate::tag_colors::TagPalette;
-use frename_core::ai::key::{self as api_key, ApiKey, KeyState};
+use frename_core::ai::key::{self as api_key, ApiKey};
 use frename_core::{AppDatabase, AppStateStore, WindowGeometry};
 
 use super::Message;
@@ -219,12 +219,17 @@ fn settings_window_key(
     Some((window_id, Message::Settings(message)))
 }
 
-/// Settings window size (logical px): within what a 1080p screen at 150% scaling leaves (about
-/// 1280x680). Its pages scroll when they do not fit.
-const SETTINGS_WINDOW_SIZE: iced::Size = iced::Size::new(800.0, 600.0);
+/// Settings window size (logical px); its pages scroll when they do not fit.
+const SETTINGS_WINDOW_SIZE: iced::Size = iced::Size::new(
+    crate::ui::tokens::SETTINGS_WINDOW_WIDTH,
+    crate::ui::tokens::SETTINGS_WINDOW_HEIGHT,
+);
 
-/// The smallest the settings window gets, so a long label never clips.
-const SETTINGS_MIN_SIZE: iced::Size = iced::Size::new(720.0, 520.0);
+/// The smallest the settings window gets.
+const SETTINGS_MIN_SIZE: iced::Size = iced::Size::new(
+    crate::ui::tokens::SETTINGS_MIN_WIDTH,
+    crate::ui::tokens::SETTINGS_MIN_HEIGHT,
+);
 
 /// How often a running frename looks whether the daily update check is due.
 const UPDATE_TICK: std::time::Duration = std::time::Duration::from_secs(60 * 60);
@@ -673,7 +678,6 @@ impl FrenameApp {
         ))
     }
 
-    /// Open the settings window, or focus it when it is already open.
     /// The demo's screenshot: of the main window, or of the settings window, opened for it.
     fn demo_capture(&mut self) -> Task<Message> {
         let settings_page = self.demo.as_ref().and_then(|d| d.settings_page());
@@ -686,7 +690,7 @@ impl FrenameApp {
             }
             None => (Task::none(), self.main_window, None),
         };
-        match self.demo.as_mut() {
+        match self.demo.as_ref() {
             Some(demo) => Task::batch([open, demo.capture(window, size).map(Message::Demo)]),
             None => open,
         }
@@ -706,30 +710,19 @@ impl FrenameApp {
         }
         // Whether a key is saved is read each time the window opens, not at start-up: reading
         // may unlock a keyring, and a keyring locked before may be open now.
-        let read_key =
-            if self.demo.is_some() {
-                // A demo never reads the renderer's own keys: Anthropic shows as saved, Soniox as
-                // missing, so one screenshot has both states (and asks no server for languages).
-                Task::batch(
-                    [
-                        (ApiKey::Anthropic, KeyState::Saved),
-                        (ApiKey::Soniox, KeyState::Missing),
-                    ]
-                    .map(|(which, state)| {
-                        Task::done(Message::Settings(settings::Message::Key(
-                            which,
-                            settings::KeyMessage::State {
-                                request: self.settings.begin_key_request(which),
-                                result: Ok(state),
-                            },
-                        )))
-                    }),
-                )
-            } else {
-                Task::batch([ApiKey::Anthropic, ApiKey::Soniox].map(|which| {
+        let read_key = if self.demo.is_some() {
+            let states =
+                crate::demo::DemoRun::key_states(|which| self.settings.begin_key_request(which));
+            Task::batch(states.into_iter().map(|(which, message)| {
+                Task::done(Message::Settings(settings::Message::Key(which, message)))
+            }))
+        } else {
+            Task::batch(
+                [ApiKey::Anthropic, ApiKey::Soniox].map(|which| {
                     key_task(which, self.settings.begin_key_request(which), || Ok(()))
-                }))
-            };
+                }),
+            )
+        };
         let (id, open) = window::open(window::Settings {
             size: SETTINGS_WINDOW_SIZE,
             min_size: Some(SETTINGS_MIN_SIZE),

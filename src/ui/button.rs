@@ -11,8 +11,8 @@ use super::tokens::*;
 
 /// 28 px high with a 20-px line of text: 4 px above and below, 12 px at the sides.
 const PADDING: Padding = Padding {
-    top: (CONTROL_HEIGHT - LINE_BODY) / 2.0,
-    bottom: (CONTROL_HEIGHT - LINE_BODY) / 2.0,
+    top: CONTROL_PADDING_Y,
+    bottom: CONTROL_PADDING_Y,
     left: SPACE_M,
     right: SPACE_M,
 };
