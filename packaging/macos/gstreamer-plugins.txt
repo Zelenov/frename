@@ -1,0 +1,40 @@
+# GStreamer plugins bundled in frename.app, one per line: `name` is
+# lib/gstreamer-1.0/libgst<name>.so of the official macOS framework. The libraries they need are
+# found by packaging/macos/build-app.sh, not listed here. Same set as the Windows bundle
+# (packaging/windows/gstreamer-plugins.txt) with macOS sound and hardware decoding in place of
+# the Windows ones. No GPL parts (no x264/x265, no ugly).
+
+# Core and base: playbin, file source, type finding, appsink, conversion, volume
+coreelements
+playback
+typefindfunctions
+app
+videoconvertscale
+audioconvert
+audioresample
+volume
+pbtypes
+
+# Sound out (autoaudiosink picks osxaudiosink)
+autodetect
+osxaudio
+
+# Containers and parsers: MP4/MOV, MKV/WebM, AVI
+isomp4
+matroska
+avi
+audioparsers
+videoparsersbad
+
+# capssetter, for clips without a fixed frame rate (the player's retry pipeline)
+debug
+
+# Decoders: FFmpeg (H.264, HEVC, VP8, VP9, MPEG-4, AAC, ...), hardware VideoToolbox
+# (applemedia), AV1, Opus, Vorbis, MP3, JPEG
+libav
+applemedia
+dav1d
+opus
+vorbis
+mpg123
+jpeg
