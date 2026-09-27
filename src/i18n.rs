@@ -694,6 +694,8 @@ mod tests {
     #[test]
     fn applying_the_shown_language_again_never_shows_isolation_marks() {
         let language = super::resolve("en", &[]);
+        // Shown first, so the loop below only re-applies (another test may have shown Russian).
+        super::apply(language);
         let applier = std::thread::spawn(move || {
             for _ in 0..200 {
                 super::apply(language);

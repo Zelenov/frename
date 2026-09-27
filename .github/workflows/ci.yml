@@ -16,7 +16,8 @@ env:
   GST_VERSION: 1.28.7
   GST_SHA256: 032fc6062b8539838fc8da22589cb9b24c5d820baa7f8cc160af9ea08395badf
   VPK_VERSION: 1.2.158
-  # The official GStreamer macOS framework bundled in frename.app (same version as Windows).
+  # The official GStreamer macOS framework bundled in frename.app (same version as Windows); also
+  # in release.yml (build-macos).
   GST_MACOS_SHA256: 529fdf4a4027d942e59b5b3564f6400adaa008f63ce5f3fed4ffe35d73911994
   GST_MACOS_DEVEL_SHA256: 72a44870cf02472cbf6e9a84bcc25ee6807dd1c26659a112066373544d365e7a
 

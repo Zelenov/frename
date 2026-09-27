@@ -289,19 +289,26 @@ it. Video playback is built in; nothing else to install. If it says FUSE is miss
 
 **Mac (Apple silicon, M1 or newer; macOS 12 or newer):** download `frename-macos-arm64-*.zip`
 from the [latest release](https://github.com/Zelenov/frename/releases/latest), double-click it
-and drag `frename.app` into **Applications**. frename is not signed with a paid Apple certificate,
-so the first time macOS refuses to open it ("cannot be opened" or "is damaged"). Open **Terminal**
-(`⌘Space`, type Terminal) once and run:
+(Safari may have unzipped it already) and drag `frename.app` into **Applications**. frename is not
+signed with a paid Apple certificate, so the first time macOS refuses to open it ("Not Opened",
+"cannot be opened" or "is damaged"): click **Done** or **Cancel**, not Move to Trash. Open
+**Terminal** (`⌘Space`, type Terminal) once and run:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/frename.app
 ```
 
 Then open frename as usual. If Terminal says "Operation not permitted", allow Terminal in System
-Settings → Privacy & Security → App Management and run it again. Video playback is built in. On a
-Mac press `⌘` wherever this page says `Ctrl` (`⌘C`, `⌘V`, `⌘Z`, `⌘⇧Z`). There is no Finder menu
-entry and no automatic updates: download the new zip and replace the app the same way. Your
-settings and the last opened folder are kept in `~/Library/Application Support/frename`.
+Settings → Privacy & Security → App Management and run it again. When macOS asks whether frename
+may use a folder or a drive, click **Allow**: frename renames and writes files there.
+
+On a Mac keyboard: `⌘` wherever this page says `Ctrl` (`⌘C`, `⌘V`, `⌘Z`, `⌘⇧Z`), `⌥ Option` for
+`Alt`, `fn`+`↓`/`↑` for `PageDown`/`PageUp`, `fn`+`delete` for `Delete`, and hold `fn` for
+`F1`–`F12` (or turn on System Settings → Keyboard → "Use F1, F2, etc. keys as standard function
+keys"). Video playback is built in. There is no Finder menu entry and no automatic updates
+(Settings says updates work in the installed version, meaning the Windows one): download the new
+zip and replace the app the same way. Your settings and the last opened folder are kept in
+`~/Library/Application Support/frename`.
 
 ---
 

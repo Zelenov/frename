@@ -143,12 +143,12 @@ being `<name>.app/Contents/MacOS/<exe>`).
 - **Official framework, not Homebrew.** Pinned and hashed like the Windows package, relocatable,
   LGPL-only plugin choice; Homebrew bottles are built for the runner's macOS and pull in far more.
 - **Zip, not DMG.** `ditto` keeps signatures and permissions; one download, drag to Applications.
-- **arm64 only, macOS 12 minimum** (`LSMinimumSystemVersion`). Below what the parts need
-  (the GStreamer framework: macOS 10.13, [download page source](https://github.com/GStreamer/www/blob/main/src/htdocs/download/download.md);
-  Rust's `aarch64-apple-darwin`: macOS 11, [platform support](https://doc.rust-lang.org/rustc/platform-support/apple-darwin.html));
-  12 is the oldest arm64-only minimum the App Store accepts
-  ([Apple forums](https://developer.apple.com/forums/thread/810409)), which keeps one binary for
-  both. CI runs macOS 14 only.
+- **arm64 only, macOS 12 minimum** (`LSMinimumSystemVersion`): a choice. The technical floor
+  is macOS 11 (Rust's `aarch64-apple-darwin`,
+  [platform support](https://doc.rust-lang.org/rustc/platform-support/apple-darwin.html); the
+  GStreamer framework goes back to 10.13,
+  [download page source](https://github.com/GStreamer/www/blob/main/src/htdocs/download/download.md)),
+  and 12 leaves room for the Store build (#85). CI runs macOS 14 only.
 - **Bundle id `io.github.zelenov.frename`**.
 - **No self-update on macOS.** Velopack is not used for the Mac app (as for the AppImage);
   Settings → Updates says updates work in the installed version. A new release is a new zip.
