@@ -24,6 +24,7 @@ use iced::widget::operation;
 use iced::{Subscription, Task};
 
 use crate::features::batch::{self, BatchState, ItemResult, ItemStatus};
+use crate::features::drag_out::DragOutState;
 use crate::features::file_name_panel::{self, FileNamePanelState};
 use crate::features::file_workspace::FileWorkspace;
 use crate::features::folder;
@@ -36,6 +37,7 @@ use crate::widgets::splitter::HIT_WIDTH;
 
 use super::Message;
 
+mod drag_out_actions;
 mod marker_actions;
 
 const DEFAULT_LEFT_WIDTH: f32 = 460.0;
@@ -98,6 +100,8 @@ pub struct FolderWorkspace {
     /// Markers whose write into their file failed (the file read-only or open in Premiere),
     /// kept until the file is saved again. By `FileId`, which the next folder scan renews.
     unsaved_markers: HashMap<FileId, Vec<Marker>>,
+    /// A press on a file row that may become a drag out of the window.
+    drag_out: DragOutState,
 }
 
 impl FolderWorkspace {
@@ -138,6 +142,7 @@ impl FolderWorkspace {
             markers: MarkersState::default(),
             known_marker_guids: HashSet::new(),
             unsaved_markers: HashMap::new(),
+            drag_out: DragOutState::default(),
         }
     }
 
@@ -184,6 +189,10 @@ impl FolderWorkspace {
                 self.spinner_frame = self.spinner_frame.wrapping_add(1);
                 Task::none()
             }
+            Message::DragOut(msg) => self.handle_drag_out(msg),
+            // Intercepted by the app, which owns the window; no-op here.
+            Message::StartDragOut(_) => Task::none(),
+            Message::DragOutFinished => self.drag_out_finished(),
             Message::Folder(folder_msg) => self.handle_folder_message(folder_msg),
             Message::MediaViewer(msg) => match msg {
                 media_viewer::Message::Unloaded => self.on_media_unloaded(),
@@ -1004,6 +1013,8 @@ impl FolderWorkspace {
             (Some(markers), frename_core::MarkerStorage::Comment) => {
                 let comment = frename_core::markers_into_comment(snapshot.comment(), markers);
                 snapshot.set_comment(comment);
+                // Kept in the comment now: a failed write into the video no longer holds them.
+                self.unsaved_markers.remove(&id);
                 Task::none()
             }
             (Some(markers), frename_core::MarkerStorage::InVideo) => {
@@ -1013,6 +1024,8 @@ impl FolderWorkspace {
         };
         let path_before = current_path.clone();
         let (new_path, snapshot_after_save) = snapshot.save_and_reparse(&current_path);
+        // A drag out of the window waiting for this save learns whether it worked.
+        self.drag_out_saved(id, &snapshot, &snapshot_after_save);
 
         let _ = self
             .directory
@@ -1048,7 +1061,10 @@ impl FolderWorkspace {
 
     fn handle_folder_message(&mut self, msg: folder::Message) -> Task<Message> {
         match msg {
-            folder::Message::SelectFile(index) => self.select_file_at(index),
+            folder::Message::SelectFile(index) => {
+                self.arm_drag_out(index);
+                self.select_file_at(index)
+            }
             folder::Message::PreviousFile => self.select_previous(),
             folder::Message::NextFile => self.select_next(),
             folder::Message::Scrolled {
@@ -1125,6 +1141,8 @@ impl FolderWorkspace {
     /// Open the in-place rename editor on the row at `index` (selecting that file first when
     /// needed), with the name before the extension selected, as Windows Explorer does.
     fn start_rename(&mut self, index: usize) -> Task<Message> {
+        // The double-click's held button now belongs to the editor's text, not to a drag.
+        self.drag_out.release();
         let Some(dir) = self.directory.as_ref() else {
             return Task::none();
         };
@@ -1905,6 +1923,7 @@ impl FolderWorkspace {
                 .map(Message::FileNamePanel),
             self.tag_panel.subscription().map(Message::TagPanel),
             spinner,
+            self.drag_out.subscription().map(Message::DragOut),
         ])
     }
 
@@ -3016,6 +3035,161 @@ mod tests {
         assert!(marker_names(&workspace).is_empty());
         let _ = workspace.update(Message::Undo);
         assert_eq!(marker_names(&workspace), [(1_000, String::new())]);
+    }
+
+    /// A drag out of the window waits for the open file's edits to be on disk: a toggled tag is
+    /// not, until the file is saved.
+    #[test]
+    fn the_open_file_is_unsaved_for_a_drag_until_its_edits_are_on_disk() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let id = file_id_at(&workspace, 0);
+        assert!(!workspace.open_file_unsaved(id), "just opened");
+
+        let tag_list = workspace.file_workspace().tag_list();
+        let tag_id = tag_list
+            .filtered_display_tag_ids()
+            .iter()
+            .find(|t| tag_list.get_tag(**t).is_some_and(|t| t.tag() == "pick"))
+            .copied()
+            .expect("pick is a built-in tag");
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
+        assert!(workspace.open_file_unsaved(id), "tag toggled");
+
+        let (_, snapshot) = workspace
+            .file_workspace()
+            .get_snapshot()
+            .expect("a file is open");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        assert!(!workspace.open_file_unsaved(id), "saved");
+    }
+
+    /// A folder with the open file's tags changed (not saved yet), for the drag-out tests.
+    fn workspace_with_unsaved_tag(test_dir: &TestDirectory) -> FolderWorkspace {
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let tag_list = workspace.file_workspace().tag_list();
+        let tag_id = tag_list
+            .filtered_display_tag_ids()
+            .iter()
+            .find(|t| tag_list.get_tag(**t).is_some_and(|t| t.tag() == "pick"))
+            .copied()
+            .expect("pick is a built-in tag");
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
+        workspace
+    }
+
+    fn drag_move(workspace: &mut FolderWorkspace, x: f32) {
+        let _ = workspace.update(Message::DragOut(crate::features::drag_out::Message::Moved(
+            iced::Point::new(x, 0.0),
+        )));
+    }
+
+    /// The save a drag asks for counts once it ran, not when it was asked for: a move while its
+    /// message is still queued (or its video unloads) waits instead of refusing the drag, and
+    /// the drag starts once the file is on disk.
+    #[test]
+    fn a_drag_waits_for_the_save_it_asked_for_then_starts() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = workspace_with_unsaved_tag(&test_dir);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        drag_move(&mut workspace, 0.0);
+        drag_move(&mut workspace, 10.0);
+        assert_eq!(
+            workspace.drag_out.save_of(file_id_at(&workspace, 0)),
+            Some(crate::features::drag_out::Save::Pending),
+            "a save is asked for"
+        );
+        // No task delivered yet: the save has not run.
+        drag_move(&mut workspace, 11.0);
+        assert!(workspace.drag_out.is_pressed(), "waits, not refused");
+
+        // The save runs: the same-file refresh unloads the video, then saves.
+        flush_file_opened(&mut workspace);
+        drag_move(&mut workspace, 12.0);
+        assert!(workspace.drag_out.is_pressed(), "waits for the unload");
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        drag_move(&mut workspace, 13.0);
+        assert!(
+            workspace.drag_out.is_dragging(),
+            "saved, so the drag starts"
+        );
+    }
+
+    /// When the save the drag asked for ran and the file still is not on disk as edited (here:
+    /// its markers could not be written), the drag is refused and nothing stays armed.
+    /// Batch mode: pressing checked row B opens B and saves A, which is checked too. A's save
+    /// failing (here its markers could not be written) refuses the drag of both, instead of
+    /// dragging A under its old name.
+    #[test]
+    fn a_batch_drag_is_refused_when_the_file_the_press_left_failed_to_save() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = workspace_with_unsaved_tag(&test_dir);
+        let (a, b) = (file_id_at(&workspace, 0), file_id_at(&workspace, 1));
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        let _ = workspace.update(Message::Batch(batch::Message::CheckAll(vec![a])));
+        let _ = workspace.update(Message::Batch(batch::Message::Toggle(b)));
+        assert!(workspace.batch().is_checked(a) && workspace.batch().is_checked(b));
+        workspace.unsaved_markers.insert(a, Vec::new());
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        drag_move(&mut workspace, 0.0);
+        drag_move(&mut workspace, 10.0);
+        assert!(
+            !workspace.drag_out.is_dragging(),
+            "A did not save: no drag of it under its old name"
+        );
+    }
+
+    #[test]
+    fn a_drag_is_refused_when_its_save_failed() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = workspace_with_unsaved_tag(&test_dir);
+        let id = file_id_at(&workspace, 0);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        workspace.unsaved_markers.insert(id, Vec::new());
+        drag_move(&mut workspace, 0.0);
+        drag_move(&mut workspace, 10.0);
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        drag_move(&mut workspace, 11.0);
+        assert!(
+            !workspace.drag_out.is_pressed() && !workspace.drag_out.is_dragging(),
+            "refused: idle again"
+        );
+    }
+
+    /// A double-click opens the rename editor: the held button then selects its text, it does
+    /// not drag the file.
+    #[test]
+    fn opening_the_rename_editor_disarms_the_drag() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = workspace_with_unsaved_tag(&test_dir);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        assert!(workspace.drag_out.is_pressed());
+        let _ = workspace.update(Message::Folder(folder::Message::StartRename(0)));
+        assert!(!workspace.drag_out.is_pressed());
+        // A second press of the double-click arms again; its moves still do not drag.
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        drag_move(&mut workspace, 0.0);
+        drag_move(&mut workspace, 10.0);
+        assert!(!workspace.drag_out.is_pressed() && !workspace.drag_out.is_dragging());
     }
 
     #[test]

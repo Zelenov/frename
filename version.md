@@ -1,4 +1,6 @@
-# NEXT
+# 0.77
+## Added
+- Drag clips from the file list into Premiere Pro, Explorer or other programs (Windows): the clip is saved first, and dropping on a folder copies it. In batch mode a checked file drags all checked files.
 ## Changed
 - Settings is rebuilt: five pages (Interface, Saving, Describe with AI, Subtitles, Updates) instead of one long list, one option per line with a short note, and clear buttons for the API keys.
 - Settings closes with its Close button or `Esc`, and `Ctrl+Tab` moves between its pages. It opens on the page that is needed: on Updates when an update is ready, on Describe with AI or Subtitles from those batch actions.

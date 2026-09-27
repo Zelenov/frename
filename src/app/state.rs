@@ -10,7 +10,7 @@
 use iced::{event, keyboard, window, Element, Subscription, Task};
 
 use crate::features::{
-    batch, drag_drop, folder, folder_workspace, media_viewer,
+    batch, drag_drop, drag_out, folder, folder_workspace, media_viewer,
     media_viewer::video as media_viewer_video, settings, tag_panel, updates,
 };
 use crate::tag_colors::TagPalette;
@@ -602,6 +602,21 @@ impl FrenameApp {
                 }
             }
             Message::Noop => Task::none(),
+            // The drag out of the window runs the system's drag loop on the window's thread.
+            Message::FolderWorkspace(folder_workspace::Message::StartDragOut(paths)) => {
+                self.drag_drop_state
+                    .begin_own_drag(paths.clone(), std::time::Instant::now());
+                window::run(self.main_window, move |window| {
+                    drag_out::start(window, &paths)
+                })
+                .map(|()| Message::FolderWorkspace(folder_workspace::Message::DragOutFinished))
+            }
+            Message::FolderWorkspace(folder_workspace::Message::DragOutFinished) => {
+                self.drag_drop_state.end_own_drag(std::time::Instant::now());
+                self.folder_workspace
+                    .update(folder_workspace::Message::DragOutFinished)
+                    .map(Message::FolderWorkspace)
+            }
             Message::FolderWorkspace(msg) => {
                 let is_unloaded = matches!(
                     &msg,
