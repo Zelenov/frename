@@ -25,11 +25,22 @@ enum Phase {
         /// The pointer went past the threshold: the drag is asked for on every move until it
         /// starts (it may wait for the file to be saved).
         crossed: bool,
-        /// The open file was saved once for this drag; unsaved after that means the save failed.
-        save_attempted: bool,
+        /// Where the save of the open file for this drag is.
+        save: Save,
     },
     /// The operating system's drag loop runs.
     Dragging,
+}
+
+/// The save of the open file that a drag asked for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Save {
+    /// None asked for.
+    NotAsked,
+    /// Asked for this file; it has not run yet (its message or its video unload is pending).
+    Asked(FileId),
+    /// It ran: edits still not on disk after it mean it failed.
+    Ran,
 }
 
 /// A press on a file row that may become a drag out of the window.
@@ -39,16 +50,14 @@ pub struct DragOutState {
 }
 
 impl DragOutState {
-    /// A file row was pressed.
+    /// A file row was pressed. Also after a drag whose end never came back: no press reaches
+    /// the window while the system's drag loop runs, so a press means that drag is over.
     pub fn press(&mut self, file: FileId) {
-        if matches!(self.phase, Phase::Dragging) {
-            return;
-        }
         self.phase = Phase::Pressed {
             file,
             origin: None,
             crossed: false,
-            save_attempted: false,
+            save: Save::NotAsked,
         };
     }
 
@@ -85,22 +94,54 @@ impl DragOutState {
         Some(*file)
     }
 
-    /// Whether the open file was already saved once for this drag.
-    pub fn save_attempted(&self) -> bool {
+    /// Whether this drag asked for a save that has not run yet.
+    pub fn save_pending(&self) -> bool {
         matches!(
             self.phase,
             Phase::Pressed {
-                save_attempted: true,
+                save: Save::Asked(_),
                 ..
             }
         )
     }
 
-    /// Remember that the open file is being saved for this drag.
-    pub fn mark_save_attempted(&mut self) {
-        if let Phase::Pressed { save_attempted, .. } = &mut self.phase {
-            *save_attempted = true;
+    /// Whether the save this drag asked for has run.
+    pub fn save_ran(&self) -> bool {
+        matches!(
+            self.phase,
+            Phase::Pressed {
+                save: Save::Ran,
+                ..
+            }
+        )
+    }
+
+    /// This drag asks for a save of `file` (the open file).
+    pub fn ask_save(&mut self, file: FileId) {
+        if let Phase::Pressed { save, .. } = &mut self.phase {
+            *save = Save::Asked(file);
         }
+    }
+
+    /// `file` was saved: if this drag waited for that, the save has run.
+    pub fn saved(&mut self, file: FileId) {
+        if let Phase::Pressed { save, .. } = &mut self.phase {
+            if *save == Save::Asked(file) {
+                *save = Save::Ran;
+            }
+        }
+    }
+
+    /// Whether a file row is pressed (armed, not yet dragging).
+    #[cfg(test)]
+    pub fn is_pressed(&self) -> bool {
+        matches!(self.phase, Phase::Pressed { .. })
+    }
+
+    /// Whether the system's drag loop was started.
+    #[cfg(test)]
+    pub fn is_dragging(&self) -> bool {
+        matches!(self.phase, Phase::Dragging)
     }
 
     /// The operating system's drag starts.
@@ -132,18 +173,15 @@ impl DragOutState {
 
 /// The files a drag from the row of `pressed` carries. In batch mode a checked row carries every
 /// checked file of the list, in list order; any other row carries only its own file.
+/// `listed` is only walked in that case.
 pub fn files_to_drag(
     pressed: FileId,
-    listed: &[FileId],
+    listed: impl IntoIterator<Item = FileId>,
     batch_mode: bool,
     is_checked: impl Fn(FileId) -> bool,
 ) -> Vec<FileId> {
     if batch_mode && is_checked(pressed) {
-        return listed
-            .iter()
-            .copied()
-            .filter(|id| is_checked(*id))
-            .collect();
+        return listed.into_iter().filter(|id| is_checked(*id)).collect();
     }
     vec![pressed]
 }
@@ -163,11 +201,12 @@ pub enum Readiness {
     Refuse,
 }
 
-/// Whether a drag may start. `save_in_flight`: a save of the open file waits for its video to
-/// unload. `unsaved`: the open file is among the dragged ones and its edits are not all on disk.
-/// `save_attempted`: the open file was already saved once for this drag.
-pub fn readiness(save_in_flight: bool, unsaved: bool, save_attempted: bool) -> Readiness {
-    match (save_in_flight, unsaved, save_attempted) {
+/// Whether a drag may start. `save_in_flight`: a save of the open file is asked for and has not
+/// run yet (its message is queued, or it waits for the video to unload). `unsaved`: the open file
+/// is among the dragged ones and its edits are not all on disk. `save_ran`: the save this drag
+/// asked for has run.
+pub fn readiness(save_in_flight: bool, unsaved: bool, save_ran: bool) -> Readiness {
+    match (save_in_flight, unsaved, save_ran) {
         (true, _, _) => Readiness::Wait,
         (false, false, _) => Readiness::Start,
         (false, true, false) => Readiness::SaveFirst,
@@ -215,14 +254,30 @@ mod tests {
     }
 
     #[test]
-    fn the_save_attempt_belongs_to_one_press() {
+    fn the_save_counts_once_it_ran_for_the_file_asked_and_belongs_to_one_press() {
+        let (open, other) = (id(), id());
         let mut state = DragOutState::default();
-        state.press(id());
-        assert!(!state.save_attempted());
-        state.mark_save_attempted();
-        assert!(state.save_attempted());
-        state.press(id());
-        assert!(!state.save_attempted());
+        state.press(open);
+        assert!(!state.save_pending() && !state.save_ran());
+        state.ask_save(open);
+        assert!(state.save_pending() && !state.save_ran());
+        state.saved(other);
+        assert!(state.save_pending(), "another file's save does not count");
+        state.saved(open);
+        assert!(!state.save_pending() && state.save_ran());
+        state.press(open);
+        assert!(!state.save_pending() && !state.save_ran());
+    }
+
+    #[test]
+    fn a_press_after_a_drag_whose_end_never_came_arms_again() {
+        let file = id();
+        let mut state = DragOutState::default();
+        state.press(file);
+        state.start();
+        assert!(state.is_dragging());
+        state.press(file);
+        assert!(state.is_pressed());
     }
 
     #[test]
@@ -230,11 +285,11 @@ mod tests {
         let (a, b, c, d) = (id(), id(), id(), id());
         let listed = [a, b, c, d];
         let checked = |f: FileId| f == d || f == b;
-        assert_eq!(files_to_drag(d, &listed, true, checked), vec![b, d]);
+        assert_eq!(files_to_drag(d, listed, true, checked), vec![b, d]);
         // An unchecked row drags only itself.
-        assert_eq!(files_to_drag(a, &listed, true, checked), vec![a]);
+        assert_eq!(files_to_drag(a, listed, true, checked), vec![a]);
         // Outside batch mode checks do not count.
-        assert_eq!(files_to_drag(b, &listed, false, checked), vec![b]);
+        assert_eq!(files_to_drag(b, listed, false, checked), vec![b]);
     }
 
     #[test]

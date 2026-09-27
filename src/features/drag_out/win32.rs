@@ -69,7 +69,7 @@ pub fn start(window: &dyn HasWindowHandle, paths: &[PathBuf]) -> Outcome {
 
 /// Whether the primary mouse button is held. `GetAsyncKeyState` reads the physical buttons, so
 /// with swapped buttons the primary one is the right one.
-fn primary_button_down() -> bool {
+pub(super) fn primary_button_down() -> bool {
     // SAFETY: plain Win32 queries without pointers.
     unsafe {
         let key = if GetSystemMetrics(SM_SWAPBUTTON) != 0 {

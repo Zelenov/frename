@@ -995,6 +995,8 @@ impl FolderWorkspace {
         id: FileId,
         snapshot: frename_core::FileSnapshot,
     ) -> Task<Message> {
+        // A drag out of the window waiting for this save may decide now.
+        self.drag_out.saved(id);
         // Resolve the current on-disk path via the stable file ID.
         let Some(current_path) = self
             .directory
@@ -3061,6 +3063,82 @@ mod tests {
             .expect("a file is open");
         let _ = workspace.update(Message::FileUpdated { id, snapshot });
         assert!(!workspace.open_file_unsaved(id), "saved");
+    }
+
+    /// A folder with the open file's tags changed (not saved yet), for the drag-out tests.
+    fn workspace_with_unsaved_tag(test_dir: &TestDirectory) -> FolderWorkspace {
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let tag_list = workspace.file_workspace().tag_list();
+        let tag_id = tag_list
+            .filtered_display_tag_ids()
+            .iter()
+            .find(|t| tag_list.get_tag(**t).is_some_and(|t| t.tag() == "pick"))
+            .copied()
+            .expect("pick is a built-in tag");
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
+        workspace
+    }
+
+    fn drag_move(workspace: &mut FolderWorkspace, x: f32) {
+        let _ = workspace.update(Message::DragOut(crate::features::drag_out::Message::Moved(
+            iced::Point::new(x, 0.0),
+        )));
+    }
+
+    /// The save a drag asks for counts once it ran, not when it was asked for: a move while its
+    /// message is still queued (or its video unloads) waits instead of refusing the drag, and
+    /// the drag starts once the file is on disk.
+    #[test]
+    fn a_drag_waits_for_the_save_it_asked_for_then_starts() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = workspace_with_unsaved_tag(&test_dir);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        drag_move(&mut workspace, 0.0);
+        drag_move(&mut workspace, 10.0);
+        assert!(workspace.drag_out.save_pending(), "a save is asked for");
+        // No task delivered yet: the save has not run.
+        drag_move(&mut workspace, 11.0);
+        assert!(workspace.drag_out.is_pressed(), "waits, not refused");
+
+        // The save runs: the same-file refresh unloads the video, then saves.
+        flush_file_opened(&mut workspace);
+        drag_move(&mut workspace, 12.0);
+        assert!(workspace.drag_out.is_pressed(), "waits for the unload");
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        drag_move(&mut workspace, 13.0);
+        assert!(
+            workspace.drag_out.is_dragging(),
+            "saved, so the drag starts"
+        );
+    }
+
+    /// When the save the drag asked for ran and the file still is not on disk as edited (here:
+    /// its markers could not be written), the drag is refused and nothing stays armed.
+    #[test]
+    fn a_drag_is_refused_when_its_save_failed() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = workspace_with_unsaved_tag(&test_dir);
+        let id = file_id_at(&workspace, 0);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        workspace.unsaved_markers.insert(id, Vec::new());
+        drag_move(&mut workspace, 0.0);
+        drag_move(&mut workspace, 10.0);
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        drag_move(&mut workspace, 11.0);
+        assert!(
+            !workspace.drag_out.is_pressed() && !workspace.drag_out.is_dragging(),
+            "refused: idle again"
+        );
     }
 
     #[test]

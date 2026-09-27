@@ -15,6 +15,10 @@ const DROP_QUIET: Duration = Duration::from_millis(50);
 /// fixed order with the drag's result.
 const OWN_DRAG_GRACE: Duration = Duration::from_secs(1);
 
+/// The longest a drag of frename's own can have its drops ignored when its end never comes back
+/// (the window closed under it): after this, drops open as usual again.
+const OWN_DRAG_LIMIT: Duration = Duration::from_secs(10 * 60);
+
 /// Collects the items of one drop, so a drop of several items opens only one of them.
 #[derive(Default)]
 pub struct DragDropState {
@@ -24,6 +28,8 @@ pub struct DragDropState {
     last_drop: Option<Instant>,
     /// Files frename itself drags out of the window: dropped back on it, they are ignored.
     own_drag: Vec<PathBuf>,
+    /// When frename's own drag started.
+    own_drag_started: Option<Instant>,
     /// While frename's own drag runs this is `None`; after it, until when its drops are ignored.
     own_drag_until: Option<Instant>,
 }
@@ -44,8 +50,9 @@ impl DragDropState {
     }
 
     /// frename starts dragging `paths` out of the window.
-    pub fn begin_own_drag(&mut self, paths: Vec<PathBuf>) {
+    pub fn begin_own_drag(&mut self, paths: Vec<PathBuf>, now: Instant) {
         self.own_drag = paths;
+        self.own_drag_started = Some(now);
         self.own_drag_until = None;
     }
 
@@ -57,7 +64,11 @@ impl DragDropState {
     /// Whether `path` is one of the files of frename's own drag, dropped while it runs or just
     /// after.
     fn is_own_drop(&self, path: &std::path::Path, now: Instant) -> bool {
-        let recent = self.own_drag_until.map_or(true, |until| now < until);
+        let recent = match (self.own_drag_until, self.own_drag_started) {
+            (Some(until), _) => now < until,
+            (None, Some(started)) => now < started + OWN_DRAG_LIMIT,
+            (None, None) => false,
+        };
         if !recent {
             return false;
         }
@@ -150,7 +161,7 @@ mod tests {
         std::fs::write(&own, b"a").unwrap();
         let start = Instant::now();
         let mut state = DragDropState::default();
-        state.begin_own_drag(vec![own.clone()]);
+        state.begin_own_drag(vec![own.clone()], start);
         state.handle_file_dropped(own.clone(), start);
         assert_eq!(
             state.handle_tick(start + DROP_QUIET),
@@ -168,6 +179,19 @@ mod tests {
         state.handle_file_dropped(dir.clone(), start + OWN_DRAG_GRACE / 2);
         assert_eq!(state.handle_tick(start + OWN_DRAG_GRACE), Some(dir.clone()));
         let later = start + OWN_DRAG_GRACE * 2;
+        state.handle_file_dropped(own.clone(), later);
+        assert_eq!(state.handle_tick(later + DROP_QUIET), Some(own));
+    }
+
+    #[test]
+    fn a_drag_whose_end_never_came_stops_hiding_its_files_after_a_while() {
+        let dir = temp_dir("own-limit");
+        let own = dir.join("clip.mp4");
+        std::fs::write(&own, b"a").unwrap();
+        let start = Instant::now();
+        let mut state = DragDropState::default();
+        state.begin_own_drag(vec![own.clone()], start);
+        let later = start + OWN_DRAG_LIMIT;
         state.handle_file_dropped(own.clone(), later);
         assert_eq!(state.handle_tick(later + DROP_QUIET), Some(own));
     }

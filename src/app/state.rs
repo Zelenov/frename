@@ -560,7 +560,8 @@ impl FrenameApp {
             Message::Noop => Task::none(),
             // The drag out of the window runs the system's drag loop on the window's thread.
             Message::FolderWorkspace(folder_workspace::Message::StartDragOut(paths)) => {
-                self.drag_drop_state.begin_own_drag(paths.clone());
+                self.drag_drop_state
+                    .begin_own_drag(paths.clone(), std::time::Instant::now());
                 window::run(self.main_window, move |window| {
                     drag_out::start(window, &paths)
                 })
