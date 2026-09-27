@@ -63,25 +63,33 @@ package version `0.74.0.0`; the Store needs every new upload to have a higher ve
 
 1. After step 3, wait for the next release (a `version.md` change merged to `main`), or run the
    release workflow by hand: **Actions** → **Release** → **Run workflow** on `main` (it rebuilds
-   only if that version's GitHub release does not exist yet; if it exists, wait for the next one).
+   only if that version's GitHub release does not exist yet; if it exists, wait for the next one,
+   or ask in #51 for a release and the agent bumps `version.md`).
 2. Open that run → the `test-store` job must be green (it installed the package on a clean
-   Windows, played the test clips and ran the Windows App Certification Kit; its summary says
-   **PASS**).
+   Windows and played the test clips). Its summary then says one of:
+   - Windows App Certification Kit: **PASS** (or **WARNING**) → go on;
+   - the kit was not available on the runner, skipped → go on: Partner Center validates the
+     package when you upload it (step 6.4); if that validation fails, post its message in #51.
 3. At the bottom of the run's page, under **Artifacts**, download
    `frename-store-msix-vX.Y.0` and unzip it: `frename-X.Y.0.0-x64.msix`.
    Artifacts are kept for 90 days.
 
-## 5. Try the package on your Windows machine (15 min, optional but recommended)
+## 5. Try the package on Windows (30 min, optional)
 
-The CI package is unsigned; Windows installs only signed packages. The quickest check is the one
-CI does, on your own machine, in an **administrator** PowerShell in the repository folder:
+CI already did this on a clean Windows; skipping this step is fine, step 9 checks the Store's own
+install. To see it yourself, use **Windows Sandbox** (Start → "Turn Windows features on or off" →
+tick **Windows Sandbox**, restart; Windows Pro or Enterprise): it has no GStreamer, no frename, and
+everything in it is gone when you close it. Inside the sandbox, install the
+[Windows SDK](https://developer.microsoft.com/windows/downloads/windows-sdk/) (for `signtool`),
+copy in the repository folder and the `.msix`, and in an **administrator** PowerShell in the
+repository folder run:
 
 ```powershell
 packaging/windows/test-msix.ps1 -Msix <path>\frename-X.Y.0.0-x64.msix -Report wack.xml
 ```
 
-It refuses to run if GStreamer is installed on the machine (it proves a clean install); in that
-case skip this step and test the Store's own install after step 7 instead (step 9).
+On your own machine the script refuses to run while GStreamer is installed (it proves a clean
+install). It removes its test certificate and the package when it ends.
 
 ## 6. Fill in the first submission (60 min)
 
@@ -186,7 +194,9 @@ On a Windows 10/11 machine, ideally one where frename was never installed:
 
 1. Install frename from its Store page (the link is on Product identity: "View in the Store").
    It installs without any warning.
-2. Start it, open a folder of videos: a clip plays (MP4 and MOV at least).
+2. Start it. If the GitHub-installed frename was on this machine, its recent folders and Settings
+   are there (copied once; the two versions are independent afterwards). Open a folder of
+   videos: a clip plays (MP4 and MOV at least).
 3. Tag a clip and press PageDown: the file is renamed in that folder.
 4. Settings → Updates says **Updates come from the Microsoft Store**, with no Check button.
 5. Settings → enter an Anthropic API key, run **Describe with AI** on one short clip; restart

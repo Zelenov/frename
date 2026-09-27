@@ -122,15 +122,31 @@ Packaged desktop apps get their writes virtualized (`desktop-to-uwp-behind-the-s
 - Turning virtualization off needs the `unvirtualizedResources` capability, which "is designed for
   certain types of desktop PC games" (`MSIX desktop/flexible-virtualization.md`): not asked for.
 
-So the Store build keeps its data folder at **`%LocalAppData%\frename`**, the same path the
-installed Velopack version uses (`installer.md`, "Data folder"):
+So the Store build keeps its own data folder, **`%LocalAppData%\frename-store`**, not the installed
+Velopack version's `%LocalAppData%\frename` (`installer.md`, "Data folder"). Sharing that folder was
+the first plan; review round 1 showed why it fails:
 
-- a new Store user: the folder is created in the package's private storage and removed on
-  uninstall (clean uninstall, policy 10.2.7);
-- a user who had the installed version: the Store build sees and uses the same `frename.db`
-  (folder history, settings), so settings carry over without an import. Both versions then share
-  it; uninstalling the Store app leaves it, as it belongs to the other install.
-- the GStreamer registry cache goes to the same folder (`bundled_gstreamer.rs`).
+- the database runs in WAL mode (`app_database.rs`). `frename.db` exists, so the Store build would
+  change it in place, but its new `-wal` and `-shm` files would go to the package's private
+  storage: two builds on one database with different WAL files, no locking between them, and a
+  stale WAL replayed over changes the other build made;
+- the Store version lags GitHub by the certification time, so the newer installed version may
+  migrate the schema under the older Store build;
+- uninstalling the installed version (the obvious last step after moving to the Store) deletes
+  `%LocalAppData%\frename` with the database the Store build was using.
+
+With its own folder, which is new and therefore lives in the package's private storage:
+
+- **migration**: on its first start (no `frename.db` in `frename-store` yet) the Store build copies
+  the installed version's `%LocalAppData%\frename\frename.db`, if there is one, with the same
+  `VACUUM INTO` import the installer uses for zip versions (`old_settings::import_once_from`; it
+  reads changes still in the WAL and leaves the old files as they were). Settings and folder
+  history carry over; afterwards the two builds are independent. Not done for `--self-test` or a
+  demo;
+- uninstalling the Store app removes its folder (clean uninstall, policy 10.2.7) and leaves the
+  installed version's data alone;
+- the GStreamer registry cache goes to the same folder (`bundled_gstreamer.rs`), so the two builds
+  no longer rescan each other's plugins.
 
 **API keys** stay in Windows Credential Manager through `keyring`'s `CredWriteW`. Microsoft
 documents nothing about the Win32 credential API from a package; the documented packaged-app
@@ -146,11 +162,13 @@ on a real machine: step 9 of the owner's guide checks it.
 
 - **No Velopack**: `run_velopack_hooks` returns at once, `Package::locate` returns `None` (an MSIX
   is not a Velopack package), so no update source is ever created.
-- **Data folder** `%LocalAppData%\frename` (`package::store_data_dir`, set before anything reads
-  it). The start-up log says `(Microsoft Store)`; CI's package test checks for it.
+- **Data folder** `%LocalAppData%\frename-store` (`package::store_data_dir`, set before anything
+  reads it), filled from the installed version's database on the first start (above). The
+  start-up log says `(Microsoft Store)`; CI's package test fails without it.
 - **Settings → Updates** shows only the version and "Updates come from the Microsoft Store": no
-  **Check for updates**, no start-up check, no update dot. A shared database from the installed
-  version (start-up check on, a newer version saved) changes nothing (unit test).
+  **Check for updates**, no start-up check, no update dot. `UpdatesState` treats the Store build as
+  not installed whatever else it is told, so the installed version's imported update state (start-up
+  check on, a newer version saved) changes nothing (unit test).
 - **No old-settings search** (the first-start offer to import a zip version's database): it only
   runs for a Velopack package.
 - **No "Open in frename" in Explorer's menu.** The installer adds it through `HKCU`, which is
@@ -161,9 +179,14 @@ on a real machine: step 9 of the owner's guide checks it.
   idea if the owner wants it.
 - Everything else (playback, batch actions, AI, subtitles) is the same code.
 
-A compile-time feature rather than detecting the package at run time: the Store build must not
-contain a way to update outside the Store, and a feature makes that a property of the binary that
-CI checks (`Update.exe` must not be in the package; the log must say `Microsoft Store`).
+A compile-time feature, because the owner asked for "a Store build flag or variant" and because it
+cannot be switched off by where the exe happens to run. What it guarantees, exactly: the Store exe
+never locates a Velopack package, so no update source is ever created and every update path is
+off; the `velopack` crate itself is still linked in (making it an optional dependency would put
+`cfg` on the whole updates feature for no change in behaviour). The price is a second
+`cargo build --release` of the frename crate and a second GStreamer bundle in CI; the dependencies
+are shared from the cache. Detecting the package at run time (`GetCurrentPackageFullName`) would
+let one exe serve both packages and is the alternative if that build time starts to matter.
 
 ## The package
 
@@ -201,15 +224,15 @@ the runners does the same with one less tool.
 
 - `ci.yml`, job `ci-windows`: after the Velopack packages, builds the `store` variant, bundles
   GStreamer into it (`bundle.ps1`), packs `frename.msix` (version `0.0.1.0`) and uploads it.
-  `ci-linux` runs Clippy on the `store` build too.
+  `ci-linux` and `ci-windows` run Clippy on the `store` build too, and `ci-linux` its unit tests.
 - `ci.yml`, new job `ci-windows-store` on a fresh runner (`packaging/windows/test-msix.ps1`):
   1. fails if the runner has a GStreamer;
   2. signs a copy with a throwaway self-signed certificate whose subject is the package's
      publisher, and trusts it in `LocalMachine\TrustedPeople` (Windows installs only signed
      packages; `MSIX package/create-certificate-package-signing.md`);
-  3. installs it, checks every DLL import with `check-bundle.ps1`, checks there is no
-     `Update.exe`, and runs `frename.exe --self-test tests/media` through the alias, inside the
-     package; the log must say `Microsoft Store`;
+  3. installs it, checks every DLL import with `check-bundle.ps1`, and runs
+     `frename.exe --self-test tests/media` through the alias, inside the package; the log must
+     exist and say `Microsoft Store`;
   4. uninstalls it and runs the **Windows App Certification Kit**
      (`appcert.exe reset`, `appcert.exe test -appxpackagepath … -reportoutputpath …`,
      `WDD uwp/debug-test-perf/windows-app-certification-kit.md`); `OVERALL_RESULT="FAIL"` fails
@@ -231,8 +254,9 @@ the runners does the same with one less tool.
 1. **MSIX, not the EXE installer**, for the reasons in the table above. The EXE route stays
    possible once #50's certificate exists.
 2. **A `store` cargo feature**, not run-time detection (see "What the `store` build changes").
-3. **Same data folder as the installed version** (`%LocalAppData%\frename`), so moving from the
-   installer to the Store keeps settings with no import step.
+3. **Its own data folder** (`%LocalAppData%\frename-store`) with a one-time copy of the installed
+   version's database, so moving from the installer to the Store keeps settings, and the two
+   builds never share a live database.
 4. **No Explorer context menu in the Store build** for now (see above).
 5. **Identity in repository variables** with a placeholder default, so CI builds and tests the
    package before the owner has an account.
@@ -249,8 +273,10 @@ the runners does the same with one less tool.
 
 ## Test plan
 
-- Unit tests: the Store build's data folder; the Updates state never checks and offers nothing in
-  the Store build, even with a saved newer version (`src/features/updates/state.rs`).
+- Unit tests: the Store build's data folder and where it imports from (`src/package.rs`); the
+  first-start import copies once, including changes still in the WAL, and never again
+  (`old_settings.rs`); the Updates state never checks and offers nothing in the Store build, even
+  when told it is installed and with a saved newer version (`src/features/updates/state.rs`).
 - CI: `ci-windows-store` (install, DLL walk, packaged self-test, certification kit) on every PR.
 - By the owner, on Windows (`store-setup.md` step 9): install the CI package with its test
   certificate, play a clip, rename a file in a normal folder, save an Anthropic key and run
@@ -262,3 +288,11 @@ the runners does the same with one less tool.
   <https://learn.microsoft.com/windows/apps/publish/store-policies> before submitting.
 - Whether an individual account can associate an Entra ID tenant for the submission API: the docs
   do not restrict it; `store-setup.md` says what to do if Partner Center does not offer it.
+
+## Review notes not taken
+
+- *Render plain window screenshots for the Store instead of the annotated README ones* (product,
+  round 1): the issue asks for "screenshots (the README ones)", and they meet the Store's size
+  rule. Plain demo-mode captures at 1920×1080 can replace them later without a new package.
+- *Make `velopack` an optional dependency* (design, round 1): see "What the `store` build
+  changes"; the rationale now says what the flag does and does not guarantee.
