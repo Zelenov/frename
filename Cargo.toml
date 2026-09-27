@@ -18,7 +18,7 @@ frename-core = { path = "crates/frename-core" }
 clipscribe = { git = "https://github.com/Zelenov/clipscribe", rev = "57623d2022dc44639367722296db98f2b0382a02", default-features = false, features = ["frames"] }
 
 # GUI framework - Iced for cross-platform GUI
-iced = { version = "0.14", features = ["tokio", "image"] }
+iced = { version = "0.14", features = ["tokio", "image", "svg"] }
 
 # Video playback - GStreamer-based (requires GStreamer installation on Windows)
 # See GSTREAMER_SETUP.md for installation instructions

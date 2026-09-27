@@ -13,8 +13,9 @@ pub enum Message {
     CloseRequested(window::Id),
     /// A window has closed: the main one ends the app, the settings one just goes away.
     WindowClosed(window::Id),
-    /// Open the settings window, or bring it to the front if it is already open.
-    OpenSettings,
+    /// Open the settings window on a page, or bring it to the front there. `None`: on the page
+    /// shown last, or on Updates when an update is ready.
+    OpenSettings(Option<settings::Page>),
     /// Window was moved; persist the new position.
     WindowMoved(f32, f32),
     /// Window was resized; persist the new size.

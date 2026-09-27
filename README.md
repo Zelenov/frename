@@ -96,6 +96,13 @@ Next time you start frename, it reopens the last folder and clip.
 | `F5` | Fullscreen on / off (or double-click the picture) |
 | `Escape` | Leave fullscreen |
 
+### Settings
+
+| Key | Action |
+|---|---|
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous page |
+| `Escape` | Close Settings (while you remove or replace a key, Esc cancels that first) |
+
 While a text box (tag search, file search, comment) has the cursor, it takes the keys it needs:
 arrows, `Delete`, `Space`, `Enter`, `Ctrl+C`, and in the comment box also `PageUp` / `PageDown`.
 Press `Esc` first to give the keys back to the app. `[` and `]` set in and out points, except while
@@ -142,7 +149,7 @@ The progress bar shows what you have noted about a clip:
   Premiere wrote are shown too and kept. If a clip is open in Premiere, its markers may not save:
   the file gets a red ✕ in the list, and frename tries again when you next leave it.
   While the playhead is on a marker, its name becomes the pin's head; click it to rename the
-  marker. Settings → Markers and ranges can keep them in the comment instead, one line each
+  marker. Settings → Saving → Markers and ranges can keep them in the comment instead, one line each
   (`0:41–0:47 — Lion`): in frename they still work as markers.
 - **Ranges:** hold `F2` (or 📍) while the clip plays to mark a stretch (`0:41–0:47 — Lion`); a
   band just above the bar shows it, and overlapping bands stack. Drag the handles at the ends of the current
@@ -222,7 +229,7 @@ there like any other text. It starts at a line beginning with `AI: ` and runs to
 comment; a new run replaces only that part and never touches the text above it. Premiere Pro and
 `.comment.txt` get the whole comment.
 
-While markers are kept inside the video (Settings → Markers and ranges, the default), the
+While markers are kept inside the video (Settings → Saving → Markers and ranges, the default), the
 segments become white "AI" markers Premiere Pro shows on the clip, and the comment keeps only the
 summary. A new run replaces the AI markers and leaves the others alone, so give one a color to
 keep it. With markers kept in the comment, or a format that cannot hold markers, the segments
@@ -240,27 +247,24 @@ Subtitles. Formats such as mkv, m2ts and avi need [ffmpeg](https://ffmpeg.org) o
 
 ## Settings
 
-The ⚙ button opens Settings:
+The ⚙ button opens Settings. Changes apply right away; **Close** or `Esc` closes it. It has five
+pages:
 
-- the UI language: follows your system by default, or pick English or Russian (more languages
-  are on the way);
-- play videos automatically when opened;
-- draw all tags in one neutral color;
-- put a space after each tag in file names (`Food. Goat. clip.mp4`);
-- where comments are kept (inside the video or `.comment.txt`), and the name of the "Commented"
-  tag, or none;
-- where in/out points are kept (file name or inside the video);
-- updates: **Check for updates**, then **Update and restart** when a newer version is out.
-  frename also checks once a day by itself (you can turn that off) and puts a dot on ⚙ when
-  an update is ready; nothing is downloaded until you click;
-- your Anthropic API key for Describe with AI, kept in the system's password store (Windows
+- **Interface:** the UI language (follows your system by default, or pick English or Russian;
+  more languages are on the way), monochrome tags, and playing videos as soon as they open.
+- **Saving:** a space after each tag in file names (`Food. Goat. clip.mp4`), and where comments,
+  markers and in/out points are kept: inside the video or in a text file / the comment / the file
+  name. While comments are inside the video, frename can tag the videos you comment ("Commented",
+  or a tag you name). After a change here, Settings offers the batch action that updates the files
+  you already have.
+- **Describe with AI:** your Anthropic API key, kept in the system's password store (Windows
   Credential Manager, macOS Keychain, or a keyring such as GNOME Keyring on Linux), the model
-  (Claude Haiku 4.5, Sonnet 5 or Opus 5, with their prices) and the language of the descriptions;
-- for Generate subtitles: your Soniox API key (kept the same way), the languages spoken in your
-  footage (any of the languages Soniox knows), and whether a subtitle is a short line or a whole sentence.
-
-After you change where comments or in/out points are kept, or the tag spacing, Settings offer the
-batch action that updates the existing files.
+  (Claude Haiku 4.5, Sonnet 5 or Opus 5, with their prices) and the language of the descriptions.
+- **Subtitles:** your Soniox API key (kept the same way), the languages spoken in your footage, and
+  whether a subtitle is a short line or a whole sentence.
+- **Updates:** **Check for updates**, then **Update and restart** when a newer version is out.
+  frename also checks once a day by itself (you can turn that off) and puts a dot on ⚙ when an
+  update is ready; ⚙ then opens this page. Nothing is downloaded until you click.
 
 ![Monochrome tags](docs/frename-screenshot-mono.jpg)
 
@@ -281,7 +285,7 @@ updates itself too.
 
 **Coming from the zip of version 0.66 or older?** On its first start the new frename finds the old
 folder in Downloads, Desktop or Documents and offers to import your settings and recent folders.
-If it was somewhere else, use **Settings → Import from an old frename folder…**. Then you can
+If it was somewhere else, use **Settings → Updates → Import from an old frename folder…**. Then you can
 delete the old folder, and uninstall GStreamer if you installed it only for frename.
 
 **Linux (64-bit; Ubuntu 24.04, Linux Mint 22, Fedora 40, Debian 13 or newer):** download the

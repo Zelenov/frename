@@ -7,6 +7,7 @@ use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::ai::SummaryLanguage;
 use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage};
 
+use super::Page;
 use crate::features::batch::Operation;
 use crate::features::updates;
 
@@ -14,6 +15,16 @@ use crate::features::updates;
 /// Save.
 #[derive(Debug, Clone)]
 pub enum Message {
+    /// Show a page of the window.
+    ShowPage(Page),
+    /// Ctrl+Tab / Ctrl+Shift+Tab: the next / previous page, wrapping around.
+    NextPage,
+    PreviousPage,
+    /// **Close**: close the window. Handled by the app, which owns the windows.
+    Close,
+    /// Esc in the window: cancels an inline confirmation or key replacement first, else closes
+    /// the window. Handled by the app.
+    Escape,
     /// The UI language code (`en`, `ru`); empty follows the OS language.
     SetUiLanguage(String),
     /// Start playing videos as soon as they are opened.
