@@ -64,6 +64,11 @@ pub trait FileTaggerBackend: Send + Sync {
         self.parse(path, &FolderInfo::default()).segment()
     }
 
+    /// After in/out points were saved as the comment's line (in/out kept in the comment),
+    /// remove the video's marker, which would otherwise keep showing stale points in
+    /// Premiere. Backends that never touch the disk have none.
+    fn drop_marker_behind_line(&self, _path: &Path) {}
+
     /// Read the file's comment and in/out points again and replace the folder file list's line
     /// for it. Returns whether the line was missing or stale. Backends that never touch the
     /// disk keep no file list.

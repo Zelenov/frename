@@ -2210,6 +2210,27 @@ mod tests {
         );
     }
 
+    #[test]
+    fn pasting_tags_keeps_the_in_out_points() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::SegmentStartMarked(3.0),
+        ));
+        let _ = workspace.update(Message::CopyTags);
+        let _ = workspace.update(Message::PasteTags);
+        assert_eq!(
+            workspace.file_workspace().segment_start_secs(),
+            Some(3.0),
+            "in/out points are not tags: a paste keeps them"
+        );
+    }
+
     /// When a video file is "loading" its GStreamer pipeline holds a file handle, so rename
     /// must be deferred.  Opening an .mp4 sets `video.loading = true`, which makes
     /// `needs_unload_before_rename()` return true on the next file switch — the rename is

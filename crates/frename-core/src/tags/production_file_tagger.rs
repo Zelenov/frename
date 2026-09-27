@@ -15,6 +15,13 @@ use crate::metadata::{
 
 pub struct ProductionFileTagger;
 
+/// Parsing with XMP storage for both reads both homes: the text file and the in/out line
+/// first, XMP where they are empty.
+const BOTH_HOMES: MetadataStorage = MetadataStorage {
+    comment: CommentStorage::InVideo,
+    in_out: InOutStorage::InVideo,
+};
+
 // ---------------------------------------------------------------------------
 // Sidecar path helpers (private)
 // ---------------------------------------------------------------------------
@@ -85,6 +92,20 @@ impl ProductionFileTagger {
         snapshot
     }
 
+    /// [`FileTaggerBackend::drop_marker_behind_line`] with the storage given explicitly.
+    fn drop_marker_behind_line_with(&self, path: &Path, storage: MetadataStorage) {
+        if storage.in_out == InOutStorage::Comment {
+            metadata::clear_moved_xmp(
+                path,
+                metadata::FileConversion {
+                    comment: false,
+                    in_out: true,
+                },
+                storage,
+            );
+        }
+    }
+
     /// [`FileTaggerBackend::save`] with the comment and in/out storage given explicitly.
     fn save_with(&self, snapshot: &FileSnapshot, path: &Path, storage: MetadataStorage) -> PathBuf {
         // XMP goes in before the rename: the metadata then travels with the file.
@@ -140,13 +161,12 @@ impl FileTaggerBackend for ProductionFileTagger {
     }
 
     fn stored_in_out(&self, path: &Path) -> Segment {
-        // As in `move_metadata`: both homes, the comment's line first.
-        let both_homes = MetadataStorage {
-            comment: CommentStorage::InVideo,
-            in_out: InOutStorage::InVideo,
-        };
-        self.parse_with(path, &FolderInfo::default(), both_homes)
+        self.parse_with(path, &FolderInfo::default(), BOTH_HOMES)
             .segment()
+    }
+
+    fn drop_marker_behind_line(&self, path: &Path) {
+        self.drop_marker_behind_line_with(path, metadata::metadata_storage());
     }
 
     fn move_metadata(&self, path: &Path, what: MetadataMove) -> PathBuf {
@@ -156,13 +176,7 @@ impl FileTaggerBackend for ProductionFileTagger {
             return path.to_path_buf();
         }
         let storage = inspection.storage_after(what);
-        // Parsing with XMP storage for both reads both homes: the text file and the in/out
-        // line first, XMP where they are empty.
-        let both_homes = MetadataStorage {
-            comment: CommentStorage::InVideo,
-            in_out: InOutStorage::InVideo,
-        };
-        let snapshot = self.parse_with(path, &FolderInfo::default(), both_homes);
+        let snapshot = self.parse_with(path, &FolderInfo::default(), BOTH_HOMES);
         let new_path = self.save_with(&snapshot, path, storage);
         metadata::clear_moved_xmp(&new_path, moved, storage);
         log::info!(
@@ -209,6 +223,8 @@ impl FileTaggerBackend for ProductionFileTagger {
 
 #[cfg(test)]
 mod tests {
+    use super::super::file_tagger::move_name_in_out;
+    use super::super::{KeptStored, NameInOutMove, NameInOutProblem};
     use super::*;
 
     const ADOBE: MetadataStorage = MetadataStorage {
@@ -493,34 +509,33 @@ mod tests {
     }
 
     /// "Move in/out points out of file names" on the file at `path`, with `storage`.
-    fn move_out_of_name(path: &Path, storage: MetadataStorage) -> super::super::NameInOutMove {
+    fn move_out_of_name(path: &Path, storage: MetadataStorage) -> NameInOutMove {
         let tagger = ProductionFileTagger;
-        super::super::file_tagger::move_name_in_out(
+        move_name_in_out(
             path,
             |p| tagger.parse_with(p, &FolderInfo::default(), storage),
             |p| tagger.stored_in_out(p),
             |snapshot, p| tagger.save_with(snapshot, p, storage),
+            |p| tagger.drop_marker_behind_line_with(p, storage),
         )
     }
 
-    fn moved_path(result: &super::super::NameInOutMove) -> PathBuf {
+    fn moved_path(result: &NameInOutMove) -> PathBuf {
         match result {
-            super::super::NameInOutMove::Moved { path, .. } => path.clone(),
+            NameInOutMove::Moved { path, .. } => path.clone(),
             other => panic!("not moved: {other:?}"),
         }
     }
 
-    fn kept_stored(result: &super::super::NameInOutMove) -> Option<super::super::KeptStored> {
+    fn kept_stored(result: &NameInOutMove) -> Option<KeptStored> {
         match result {
-            super::super::NameInOutMove::Moved { kept_stored, .. } => *kept_stored,
+            NameInOutMove::Moved { kept_stored, .. } => *kept_stored,
             _ => None,
         }
     }
 
-    use super::super::NameInOutProblem;
-
-    fn failed(path: &Path, problem: NameInOutProblem) -> super::super::NameInOutMove {
-        super::super::NameInOutMove::Failed {
+    fn failed(path: &Path, problem: NameInOutProblem) -> NameInOutMove {
+        NameInOutMove::Failed {
             path: path.to_path_buf(),
             problem,
         }
@@ -542,7 +557,7 @@ mod tests {
         );
         assert_eq!(
             move_out_of_name(&path, ADOBE),
-            super::super::NameInOutMove::NothingToMove,
+            NameInOutMove::NothingToMove,
             "a rerun changes nothing"
         );
     }
@@ -571,7 +586,7 @@ mod tests {
         let result = move_out_of_name(&old_name, ADOBE);
         assert_eq!(
             kept_stored(&result),
-            Some(super::super::KeptStored {
+            Some(KeptStored {
                 from_name: Segment {
                     start: Some(7.0),
                     end: None
@@ -631,6 +646,79 @@ mod tests {
             points(&ProductionFileTagger.parse_with(&path, &FolderInfo::default(), TEXT)),
             (Some(0.05), None)
         );
+        // The marker went: Premiere shows no stale subclip next to the line.
+        assert!(crate::metadata::xmp_segment(&path).is_empty());
+    }
+
+    #[test]
+    fn the_same_points_in_the_name_and_stored_are_no_conflict() {
+        // A rerun after a rename that failed: the points are stored already, the same ones.
+        let path = clip_named("name-same", "goat.mov");
+        let mut snapshot = ProductionFileTagger.parse_with(&path, &FolderInfo::default(), ADOBE);
+        snapshot.set_segment_start(Some(0.0));
+        let path = ProductionFileTagger.save_with(&snapshot, &path, ADOBE);
+        let old_name = path.with_file_name("goat.in_00_00_00.mov");
+        std::fs::rename(&path, &old_name).expect("rename");
+
+        let result = move_out_of_name(&old_name, ADOBE);
+        assert_eq!(kept_stored(&result), None);
+        assert_eq!(file_name(&moved_path(&result)), "goat.mov");
+    }
+
+    #[test]
+    fn a_text_file_with_only_the_in_out_line_never_replaces_the_videos_comment() {
+        // The Premiere description is in the video; comments are then kept in text files and
+        // an in point is set, which writes a text file holding only the line.
+        let tagger = ProductionFileTagger;
+        let path = clip_named("line-only-text", "goat.mov");
+        let mut snapshot = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
+        snapshot.set_comment("Premiere note".to_string());
+        let path = tagger.save_with(&snapshot, &path, ADOBE);
+        let mut snapshot = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        snapshot.set_segment_start(Some(0.05));
+        let path = tagger.save_with(&snapshot, &path, TEXT);
+        assert_eq!(
+            crate::comment::load_comment(&path),
+            "In/Out: 00:00:00.050 – end"
+        );
+
+        // Read with comments in the video, the video's comment is still the comment.
+        let in_video = MetadataStorage {
+            comment: CommentStorage::InVideo,
+            in_out: InOutStorage::Comment,
+        };
+        let back = tagger.parse_with(&path, &FolderInfo::default(), in_video);
+        assert_eq!(back.comment(), "Premiere note");
+        assert_eq!(points(&back), (Some(0.05), None));
+
+        // Moving comments into the video merges the line in; the description stays.
+        let into_video = MetadataMove::Comments(CommentStorage::InVideo);
+        assert!(tagger.metadata_move_needed(&path, into_video));
+        let path = tagger.move_metadata(&path, into_video);
+        assert_eq!(
+            crate::metadata::xmp_comment(&path),
+            "Premiere note\nIn/Out: 00:00:00.050 – end"
+        );
+        assert!(!crate::comment::comment_path(&path).exists());
+    }
+
+    #[test]
+    fn moving_comments_to_text_files_takes_the_videos_comment_past_a_line_only_text_file() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("line-only-text-out", "goat.mov");
+        let mut snapshot = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
+        snapshot.set_comment("Premiere note".to_string());
+        let path = tagger.save_with(&snapshot, &path, ADOBE);
+        crate::comment::save_comment(&path, "In/Out: 00:00:00.050 – end");
+
+        let into_text = MetadataMove::Comments(CommentStorage::TextFile);
+        assert!(tagger.metadata_move_needed(&path, into_text));
+        let path = tagger.move_metadata(&path, into_text);
+        assert_eq!(
+            crate::comment::load_comment(&path),
+            "Premiere note\nIn/Out: 00:00:00.050 – end"
+        );
+        assert_eq!(crate::metadata::xmp_comment(&path), "");
     }
 
     #[test]
@@ -673,7 +761,7 @@ mod tests {
         std::fs::create_dir(&block).expect("folder");
         std::fs::remove_dir(&block).expect("remove");
         let tagger = ProductionFileTagger;
-        let result = super::super::file_tagger::move_name_in_out(
+        let result = move_name_in_out(
             &path,
             |p| tagger.parse_with(p, &FolderInfo::default(), TEXT),
             |p| tagger.stored_in_out(p),
@@ -681,6 +769,7 @@ mod tests {
                 std::fs::create_dir(&block).expect("folder");
                 tagger.save_with(snapshot, p, TEXT)
             },
+            |p| tagger.drop_marker_behind_line_with(p, TEXT),
         );
         assert_eq!(result, failed(&path, NameInOutProblem::NotRenamed));
         assert!(crate::comment::load_comment(&path).ends_with("mine"));

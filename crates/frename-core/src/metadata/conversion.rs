@@ -59,6 +59,8 @@ impl FileConversion {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Inspection {
     has_text_file: bool,
+    /// The text file holds a comment, not just an in/out line.
+    text_has_comment: bool,
     /// The comment (the text file's, or else the XMP one) has an in/out line.
     comment_has_in_out: bool,
     /// `None` when the file cannot hold XMP (or is a cloud placeholder).
@@ -70,14 +72,23 @@ impl Inspection {
     pub(crate) fn of(path: &Path) -> Self {
         let has_text_file = crate::comment::comment_path(path).is_file();
         let xmp = xmp::probe(path);
-        let comment = if has_text_file {
-            crate::comment::load_comment(path)
+        let (text, text_line) = if has_text_file {
+            in_out_line::split_in_out_line(&crate::comment::load_comment(path))
         } else {
-            xmp.as_ref().map(|x| x.comment.clone()).unwrap_or_default()
+            Default::default()
         };
+        let text_has_comment = !text.trim().is_empty();
+        // As in parsing: the text file's line wins, else the XMP comment's (unless the text
+        // file holds a comment, which then is the comment).
+        let xmp_line = xmp
+            .as_ref()
+            .filter(|_| !text_has_comment)
+            .map(|x| in_out_line::split_in_out_line(&x.comment).1)
+            .unwrap_or_default();
         Self {
             has_text_file,
-            comment_has_in_out: !in_out_line::split_in_out_line(&comment).1.is_empty(),
+            text_has_comment,
+            comment_has_in_out: !text_line.is_empty() || !xmp_line.is_empty(),
             xmp,
         }
     }
@@ -87,7 +98,7 @@ impl Inspection {
     fn current_storage(&self) -> MetadataStorage {
         let can_hold_xmp = self.xmp.is_some();
         MetadataStorage {
-            comment: if self.has_text_file || !can_hold_xmp {
+            comment: if self.text_has_comment || !can_hold_xmp {
                 CommentStorage::TextFile
             } else {
                 CommentStorage::InVideo
@@ -124,14 +135,16 @@ impl Inspection {
 
     /// What converting the file to `storage` would move. A text file or an in/out line wins
     /// over XMP, as in parsing, so XMP is only moved out when the other home is empty;
-    /// otherwise the XMP copy is left alone rather than lost.
+    /// otherwise the XMP copy is left alone rather than lost. A text file holding only an
+    /// in/out line is no comment: moving comments into the video merges its line into the
+    /// video's comment, and moving them out takes the video's comment along.
     fn needed(&self, storage: MetadataStorage) -> FileConversion {
         let can_hold_xmp = self.xmp.is_some();
         let xmp = self.xmp.clone().unwrap_or_default();
         FileConversion {
             comment: match storage.comment {
                 CommentStorage::InVideo => self.has_text_file && can_hold_xmp,
-                CommentStorage::TextFile => !self.has_text_file && !xmp.comment.is_empty(),
+                CommentStorage::TextFile => !self.text_has_comment && !xmp.comment.is_empty(),
             },
             in_out: match storage.in_out {
                 InOutStorage::InVideo => self.comment_has_in_out && can_hold_xmp,

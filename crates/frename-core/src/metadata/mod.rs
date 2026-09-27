@@ -24,7 +24,7 @@ use std::sync::RwLock;
 use crate::markers::Marker;
 use crate::tags::FileSnapshot;
 
-pub(crate) use conversion::{clear_moved_xmp, Inspection};
+pub(crate) use conversion::{clear_moved_xmp, FileConversion, Inspection};
 pub use conversion::{MetadataMove, MoveOutcome};
 pub use in_out_line::format_in_out_range;
 pub use xmp::Segment;
@@ -238,7 +238,8 @@ pub fn metadata_storage() -> MetadataStorage {
 ///
 /// `has_text_file` says whether the folder listing shows a `.comment.txt` for this file.
 /// A text file wins over XMP: in XMP storage one only exists as a legacy comment or as the
-/// fallback for a failed XMP write, and either way it holds the newest text. An in/out line
+/// fallback for a failed XMP write, and either way it holds the newest text. A text file that
+/// holds only an in/out line wins for the in/out points, not for the comment. An in/out line
 /// in the comment wins over the XMP marker the same way: it is where in/out points go when the
 /// marker cannot hold them. The line is taken out of the comment into the snapshot's in/out
 /// points whatever the storage. The XMP is read whatever the storage, for the marker count; a
@@ -250,12 +251,16 @@ pub(crate) fn load(
     storage: MetadataStorage,
     source: XmpSource<'_>,
 ) {
-    let comment_from_xmp = storage.comment == CommentStorage::InVideo && !has_text_file;
     let mut comment_has_in_out = false;
+    let mut text_has_comment = false;
     if has_text_file {
         snapshot.set_comment(crate::comment::load_comment(path));
         comment_has_in_out = take_in_out_line(snapshot);
+        text_has_comment = !snapshot.comment().trim().is_empty();
     }
+    // A text file holding nothing but the in/out line (written while comments were kept in
+    // text files) has no comment to win with: the one in the video stays the comment.
+    let comment_from_xmp = storage.comment == CommentStorage::InVideo && !text_has_comment;
     // Read whatever the storage: the marker count always comes from the video.
     let fields = match source {
         XmpSource::Read => xmp::read(path),
@@ -274,8 +279,12 @@ pub(crate) fn load(
     };
     snapshot.set_marker_count(fields.markers);
     if comment_from_xmp {
-        snapshot.set_comment(fields.comment);
-        comment_has_in_out = take_in_out_line(snapshot);
+        let (comment, segment) = in_out_line::split_in_out_line(&fields.comment);
+        snapshot.set_comment(comment);
+        if !comment_has_in_out && !segment.is_empty() {
+            snapshot.set_segment(segment);
+            comment_has_in_out = true;
+        }
     }
     if storage.in_out == InOutStorage::InVideo && !comment_has_in_out {
         snapshot.set_segment(fields.segment);
@@ -298,6 +307,12 @@ fn take_in_out_line(snapshot: &mut FileSnapshot) -> bool {
 #[cfg(test)]
 pub(crate) fn xmp_comment(path: &Path) -> String {
     xmp::read(path).comment
+}
+
+/// The in/out marker in the file's XMP.
+#[cfg(test)]
+pub(crate) fn xmp_segment(path: &Path) -> Segment {
+    xmp::read(path).segment
 }
 
 /// The comment as it is stored: the snapshot's comment, with the in/out line as the last line

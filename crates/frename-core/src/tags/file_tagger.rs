@@ -161,6 +161,7 @@ impl FileTagger {
             |path| Self::parse(path, &FolderInfo::default()),
             |path| backend().stored_in_out(path),
             Self::save,
+            |path| backend().drop_marker_behind_line(path),
         )
     }
 
@@ -335,6 +336,7 @@ pub(crate) fn move_name_in_out(
     parse: impl Fn(&Path) -> FileSnapshot,
     stored: impl Fn(&Path) -> Segment,
     save: impl Fn(&FileSnapshot, &Path) -> PathBuf,
+    drop_marker_behind_line: impl Fn(&Path),
 ) -> NameInOutMove {
     let left_alone = |problem: NameInOutProblem| NameInOutMove::Failed {
         path: path.to_path_buf(),
@@ -369,9 +371,14 @@ pub(crate) fn move_name_in_out(
     if saved_path == path {
         return left_alone(NameInOutProblem::NotRenamed);
     }
+    // Kept from the video's marker while in/out points are kept in the comment: the line has
+    // them now, and the marker would go on showing them in Premiere.
+    drop_marker_behind_line(&saved_path);
+    // The same points in both places are no conflict (a retry after a failed rename, say).
+    let conflict = !stored.is_empty() && stored != from_name;
     NameInOutMove::Moved {
         path: saved_path,
-        kept_stored: (!stored.is_empty()).then_some(KeptStored { from_name, stored }),
+        kept_stored: conflict.then_some(KeptStored { from_name, stored }),
     }
 }
 
