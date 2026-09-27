@@ -40,7 +40,7 @@ pub const WINDOWS: BundleLayout = BundleLayout {
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub const MACOS: BundleLayout = BundleLayout {
     plugins: "../PlugIns/gstreamer",
-    marker_plugin: "libgstcoreelements.so",
+    marker_plugin: "libgstcoreelements.dylib",
     scanner: None,
     registry: "gst-registry-arm64.bin",
 };
@@ -167,7 +167,7 @@ mod tests {
         let plugins = app.join("PlugIns/gstreamer");
         std::fs::create_dir_all(&exe_dir).expect("MacOS");
         std::fs::create_dir_all(&plugins).expect("plugins");
-        std::fs::write(plugins.join("libgstcoreelements.so"), b"\xcf\xfa").expect("plugin");
+        std::fs::write(plugins.join("libgstcoreelements.dylib"), b"\xcf\xfa").expect("plugin");
         let data_dir = PathBuf::from("data");
 
         let environment =

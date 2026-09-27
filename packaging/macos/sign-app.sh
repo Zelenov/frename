@@ -19,7 +19,7 @@ timestamp=()
 # install_name_tool left the libraries' signatures invalid: replace them all.
 while IFS= read -r -d '' file; do
   codesign --force --sign "$identity" ${timestamp[@]+"${timestamp[@]}"} "$file"
-done < <(find "$app/Contents/Frameworks" "$app/Contents/PlugIns" -type f \( -name '*.dylib' -o -name '*.so' \) -print0)
+done < <(find "$app/Contents/Frameworks" "$app/Contents/PlugIns" -type f -name '*.dylib' -print0)
 
 main=(--force --sign "$identity" ${timestamp[@]+"${timestamp[@]}"})
 [ -n "$entitlements" ] && main+=(--entitlements "$entitlements")
