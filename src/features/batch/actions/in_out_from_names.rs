@@ -9,12 +9,12 @@ use std::path::Path;
 use frename_core::{
     format_in_out_range, FileTagger, InOutStorage, MoveOutcome, NameInOutMove, NameInOutProblem,
 };
-use iced::widget::{button, column, text};
+use iced::widget::column;
 use iced::Element;
 
 use super::super::ItemResult;
 use super::ActionMessage;
-use crate::theme;
+use crate::ui;
 
 pub fn label() -> String {
     fl!("batch-action-in-out-from-names")
@@ -27,13 +27,11 @@ pub fn view<'a>() -> Element<'a, ActionMessage> {
     };
     // One above the other: side by side, the panel is too narrow for the status.
     let settings = column![
-        text(status).size(13),
-        button(text(fl!("batch-action-in-out-from-names-settings")).size(12))
-            .on_press(ActionMessage::OpenSettings)
-            .padding([3, 10])
-            .style(theme::icon_button_style(true)),
+        ui::text::body(status),
+        ui::button::secondary(fl!("batch-action-in-out-from-names-settings"))
+            .on_press(ActionMessage::OpenSettings),
     ]
-    .spacing(8);
+    .spacing(ui::tokens::SPACE_S);
     super::panel(
         label(),
         fl!("batch-action-in-out-from-names-hint"),

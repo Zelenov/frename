@@ -8,10 +8,13 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::demo::DemoScenario;
 use iced::{window, Task};
 
-use crate::features::{batch, folder, folder_workspace, media_viewer, media_viewer::video};
+use crate::features::{
+    batch, folder, folder_workspace, media_viewer, media_viewer::video, settings,
+};
 
 /// Time from the video being ready to the screenshot: covers the seek, the subtitles, and the
 /// comments that load in the background. A fixed wait, not a signal: the open file's comment is
@@ -19,22 +22,16 @@ use crate::features::{batch, folder, folder_workspace, media_viewer, media_viewe
 /// with the scenario's few files, so 3 s leaves a wide margin even on a slow runner.
 const SETTLE: Duration = Duration::from_secs(3);
 
-/// Time to the screenshot when the demo runs a batch action: the action and its report.
-const RUN_SETTLE: Duration = Duration::from_secs(8);
-
 /// A demo that has not produced its screenshot by then has failed.
 const TIMEOUT: Duration = Duration::from_secs(90);
 
 /// Demo mode messages.
 #[derive(Debug, Clone)]
 pub enum Message {
-    /// The main window's screenshot.
-    Captured(window::Screenshot),
+    /// A window's screenshot, and the size in pixels it must have (at scale 1) to be saved.
+    Captured(window::Screenshot, (u32, u32)),
     /// The demo took too long.
     TimedOut,
-    /// A step for the workspace that has to wait until the ones before it are done (the app
-    /// passes it on): running the batch action once every file is checked.
-    Later(Box<folder_workspace::Message>),
 }
 
 /// A demo in progress.
@@ -47,34 +44,53 @@ pub struct DemoRun {
     batch: bool,
     /// Show the AI description: its segments, or in batch mode the "Describe with AI" action.
     ai: bool,
+    /// Capture the settings window, on this page, instead of the main one.
+    settings: Option<settings::Page>,
     /// In batch mode, select this action.
     action: Option<batch::Action>,
-    /// With `action`, run it and show its report.
-    run: bool,
     video_ready: bool,
 }
 
 impl DemoRun {
     /// `work` is the throwaway folder; `main` removes it after the app has exited.
-    pub fn new(scenario: DemoScenario, out: PathBuf, work: PathBuf, batch: bool, ai: bool) -> Self {
+    pub fn new(scenario: DemoScenario, out: PathBuf, work: PathBuf, args: &DemoArgs) -> Self {
         Self {
             scenario,
             out,
             work,
-            batch,
-            ai,
-            action: None,
-            run: false,
+            batch: args.batch,
+            ai: args.ai,
+            settings: args.settings,
+            action: args.action,
             video_ready: false,
         }
     }
 
-    /// In batch mode, select `action`, and with `run` run it (on the throwaway copies) and
-    /// show its report.
-    pub fn with_action(mut self, action: Option<batch::Action>, run: bool) -> Self {
-        self.action = action;
-        self.run = run;
-        self
+    /// The settings page the demo captures, when it captures the settings window (the app opens
+    /// it when the video is ready) instead of the main one.
+    pub fn settings_page(&self) -> Option<settings::Page> {
+        self.settings
+    }
+
+    /// What a demo reads instead of the renderer's own API keys: Anthropic saved, Soniox missing,
+    /// so one screenshot has both states and no server is asked for languages. `request`
+    /// numbers each answer the way a real read would be numbered.
+    pub fn key_states(
+        mut request: impl FnMut(ApiKey) -> u64,
+    ) -> Vec<(ApiKey, settings::KeyMessage)> {
+        [
+            (ApiKey::Anthropic, KeyState::Saved),
+            (ApiKey::Soniox, KeyState::Missing),
+        ]
+        .into_iter()
+        .map(|(which, state)| {
+            let message = settings::KeyMessage::State {
+                request: request(which),
+                result: Ok(state),
+            };
+            (which, message)
+        })
+        .collect()
     }
 
     /// Start the watchdog; call once the main window is open.
@@ -85,61 +101,45 @@ impl DemoRun {
         })
     }
 
-    /// The steps to take when the video is ready: the first time, set up the scenario's state
-    /// and schedule the screenshot of `main_window`; afterwards nothing.
-    pub fn video_ready(
-        &mut self,
-        main_window: window::Id,
-    ) -> Option<(Vec<folder_workspace::Message>, Task<Message>)> {
+    /// The steps to take when the video is ready: the first time, set up the scenario's state;
+    /// afterwards nothing. The app then opens the window to capture and calls [`Self::capture`].
+    pub fn video_ready(&mut self) -> Option<Vec<folder_workspace::Message>> {
         if std::mem::replace(&mut self.video_ready, true) {
             return None;
         }
-        // The screenshot re-renders what was last drawn. A message would rebuild the UI first,
-        // and a text editor's rebuilt text is not in the last drawing, so the comment box would
-        // come out empty: chain the screenshot straight onto the wait, with no message between.
-        let capture = Task::future(async { tokio::time::sleep(SETTLE).await })
-            .then(move |()| window::screenshot(main_window))
-            .map(Message::Captured);
         let mut steps = steps(&self.scenario, self.batch, self.ai);
         if let Some(action) = self.action.filter(|_| self.batch) {
             steps.push(folder_workspace::Message::Batch(
                 batch::Message::SelectAction(action),
             ));
-            if self.run {
-                // Checking every file takes one more message after the steps, and iced does
-                // not promise the order of messages sent together (sending Run right after them
-                // ran the job on the open file alone): wait a moment instead.
-                let run = Task::future(async { tokio::time::sleep(Duration::from_secs(1)).await })
-                    .map(|()| {
-                        Message::Later(Box::new(folder_workspace::Message::Batch(
-                            batch::Message::Run,
-                        )))
-                    });
-                let capture = Task::future(async { tokio::time::sleep(RUN_SETTLE).await })
-                    .then(move |()| window::screenshot(main_window))
-                    .map(Message::Captured);
-                return Some((steps, Task::batch([run, capture])));
-            }
         }
-        Some((steps, capture))
+        Some(steps)
+    }
+
+    /// Schedule the screenshot of `window`. `size` is its size in logical pixels, checked at
+    /// scale 1; `None` for the main window, which has the scenario's size.
+    pub fn capture(&self, window: window::Id, size: Option<(u32, u32)>) -> Task<Message> {
+        let [width, height] = self.scenario.window;
+        let expected = size.unwrap_or((width, height));
+        // The screenshot re-renders what was last drawn. A message would rebuild the UI first,
+        // and a text editor's rebuilt text is not in the last drawing, so the comment box would
+        // come out empty: chain the screenshot straight onto the wait, with no message between.
+        Task::future(async { tokio::time::sleep(SETTLE).await })
+            .then(move |()| window::screenshot(window))
+            .map(move |shot| Message::Captured(shot, expected))
     }
 
     /// Handle a demo message.
     pub fn update(&self, message: Message) -> Task<Message> {
         match message {
-            Message::Captured(shot) => {
-                let [width, height] = self.scenario.window;
-                match save_png(&shot, (width, height), &self.out) {
-                    Ok(()) => {
-                        log::info!("demo: saved {}", self.out.display());
-                        iced::exit()
-                    }
-                    Err(e) => self.fail(&e),
+            Message::Captured(shot, expected) => match save_png(&shot, expected, &self.out) {
+                Ok(()) => {
+                    log::info!("demo: saved {}", self.out.display());
+                    iced::exit()
                 }
-            }
+                Err(e) => self.fail(&e),
+            },
             Message::TimedOut => self.fail("the video did not get ready in time"),
-            // The app passes it on to the workspace before it gets here; see its update.
-            Message::Later(_) => Task::none(),
         }
     }
 
@@ -199,8 +199,8 @@ fn save_png(shot: &window::Screenshot, expected: (u32, u32), path: &Path) -> Res
         .map_err(|e| format!("cannot save {}: {e}", path.display()))
 }
 
-/// What `--demo <scenario> --out <png> [--batch] [--mono] [--ai] [--action <log id> [--run]]
-/// [--in-out-comment] [--lang <code>]` asks for.
+/// What `--demo <scenario> --out <png> [--batch] [--mono] [--ai] [--action <name>]
+/// [--settings [page]] [--lang <code>]` asks for.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DemoArgs {
     pub scenario: PathBuf,
@@ -211,13 +211,12 @@ pub struct DemoArgs {
     pub mono: bool,
     /// Show the AI description (see [`DemoRun`]).
     pub ai: bool,
+    /// Capture the settings window, on this page (`--settings ai`; the first page when none is
+    /// named), instead of the main one.
+    pub settings: Option<settings::Page>,
     /// In batch mode, select the action with this English name (`Action::log_id`, e.g.
-    /// "Move comments").
-    pub action: Option<String>,
-    /// With `action`, run it and show the report.
-    pub run: bool,
-    /// Keep in/out points in the comment (Settings), as right after switching to it.
-    pub in_out_comment: bool,
+    /// `--action "Move comments"`).
+    pub action: Option<batch::Action>,
     /// The UI language setting: `en` unless given, so screenshots never follow the renderer's
     /// OS language; `--lang ""` follows it (System).
     pub lang: String,
@@ -235,6 +234,7 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
     };
     let out_at = args.iter().position(|a| a == "--out");
     let lang_at = args.iter().position(|a| a == "--lang");
+    let settings_at = args.iter().position(|a| a == "--settings");
     let action_at = args.iter().position(|a| a == "--action");
     Some(value("--demo", Some(at)).and_then(|scenario| {
         let out =
@@ -243,18 +243,41 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
             None => "en".to_string(),
             Some(_) => value("--lang", lang_at)?.to_string_lossy().into_owned(),
         };
+        if settings_at.is_some() && args.iter().any(|a| a == "--batch") {
+            // The batch panel reads the real keys, which a settings screenshot must not show.
+            return Err("--settings and --batch go in separate demos".to_string());
+        }
+        let settings = match settings_at {
+            None => None,
+            Some(at) => match args.get(at + 1).filter(|v| !v.starts_with("--")) {
+                None => Some(settings::Page::default()),
+                Some(name) => Some(
+                    settings::Page::from_name(name)
+                        .ok_or(format!("--settings: no page called {name}"))?,
+                ),
+            },
+        };
+        let action = match action_at {
+            None => None,
+            Some(_) => {
+                let name = value("--action", action_at)?;
+                let name = name.to_string_lossy();
+                Some(
+                    batch::Action::ALL
+                        .into_iter()
+                        .find(|a| a.log_id() == name)
+                        .ok_or(format!("--action: no batch action is named {name:?}"))?,
+                )
+            }
+        };
         Ok(DemoArgs {
             scenario,
             out,
             batch: args.iter().any(|a| a == "--batch"),
             mono: args.iter().any(|a| a == "--mono"),
             ai: args.iter().any(|a| a == "--ai"),
-            action: match action_at {
-                None => None,
-                Some(_) => Some(value("--action", action_at)?.to_string_lossy().into_owned()),
-            },
-            run: args.iter().any(|a| a == "--run"),
-            in_out_comment: args.iter().any(|a| a == "--in-out-comment"),
+            settings,
+            action,
             lang,
         })
     }))
@@ -301,30 +324,12 @@ pub fn prepare(args: &DemoArgs, work: &Path) -> Result<DemoRun, String> {
         args.mono,
         &args.lang,
     );
-    if args.in_out_comment {
-        use frename_core::AppStateStore;
-        let store = frename_core::AppDatabase::new();
-        let mut settings = store.get_app_settings().unwrap_or_default();
-        settings.in_out_storage = frename_core::InOutStorage::Comment;
-        store.set_app_settings(settings);
-    }
-    let action = match &args.action {
-        None => None,
-        Some(name) => Some(
-            batch::Action::ALL
-                .into_iter()
-                .find(|a| a.log_id() == name)
-                .ok_or(format!("--action: no batch action is named {name:?}"))?,
-        ),
-    };
     Ok(DemoRun::new(
         scenario,
         args.out.clone(),
         work.to_path_buf(),
-        args.batch,
-        args.ai,
-    )
-    .with_action(action, args.run))
+        args,
+    ))
 }
 
 #[cfg(test)]
@@ -350,9 +355,8 @@ mod tests {
                 batch: false,
                 mono: false,
                 ai: false,
+                settings: None,
                 action: None,
-                run: false,
-                in_out_comment: false,
                 lang: "en".to_string(),
             }))
         );
@@ -367,11 +371,76 @@ mod tests {
                 batch: true,
                 mono: true,
                 ai: false,
+                settings: None,
                 action: None,
-                run: false,
-                in_out_comment: false,
                 lang: "ru".to_string(),
             }))
+        );
+    }
+
+    #[test]
+    fn settings_alone_captures_the_first_page_and_an_unknown_page_is_an_error() {
+        let parsed = demo_args(&args(&[
+            "frename",
+            "--demo",
+            "a.toml",
+            "--out",
+            "a.png",
+            "--settings",
+        ]));
+        assert!(matches!(
+            parsed,
+            Some(Ok(DemoArgs {
+                settings: Some(settings::Page::Interface),
+                action: None,
+                ..
+            }))
+        ));
+        assert!(matches!(
+            demo_args(&args(&[
+                "frename",
+                "--demo",
+                "a.toml",
+                "--out",
+                "a.png",
+                "--settings",
+                "general"
+            ])),
+            Some(Err(_))
+        ));
+        let parsed = demo_args(&args(&[
+            "frename",
+            "--demo",
+            "a.toml",
+            "--out",
+            "a.png",
+            "--settings",
+            "ai",
+            "--lang",
+            "ru",
+        ]));
+        assert!(matches!(
+            parsed,
+            Some(Ok(DemoArgs {
+                settings: Some(settings::Page::Ai),
+                action: None,
+                ..
+            }))
+        ));
+        assert!(
+            matches!(
+                demo_args(&args(&[
+                    "frename",
+                    "--demo",
+                    "a.toml",
+                    "--out",
+                    "a.png",
+                    "--settings",
+                    "--batch"
+                ])),
+                Some(Err(_))
+            ),
+            "batch mode reads the real keys"
         );
     }
 
@@ -448,10 +517,19 @@ mod tests {
 
     #[test]
     fn only_the_first_ready_video_sets_up_the_scenario() {
-        let mut run = DemoRun::new(scenario(), "o.png".into(), "w".into(), false, false);
-        let window = window::Id::unique();
-        assert!(run.video_ready(window).is_some());
-        assert!(run.video_ready(window).is_none());
+        let args = DemoArgs {
+            scenario: "a.toml".into(),
+            out: "o.png".into(),
+            batch: false,
+            mono: false,
+            ai: false,
+            settings: None,
+            action: None,
+            lang: "en".to_string(),
+        };
+        let mut run = DemoRun::new(scenario(), "o.png".into(), "w".into(), &args);
+        assert!(run.video_ready().is_some());
+        assert!(run.video_ready().is_none());
     }
 
     #[test]
