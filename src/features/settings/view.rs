@@ -14,7 +14,7 @@ use crate::theme;
 use super::state::{KeySection, LanguageList, OldSettingsImport};
 use super::{KeyMessage, Message, SettingsState};
 
-use crate::features::batch::{MarkersDirection, Operation};
+use crate::features::batch::{describe_ai, MarkersDirection, Operation};
 use crate::features::updates;
 
 /// The settings' scrollable content, which "Describe with AI" and "Generate subtitles" open
@@ -254,9 +254,9 @@ fn ai_options(key: &KeySection, language: SummaryLanguage, model: Model) -> Elem
         row![
             text(fl!("settings-ai-language-label")).size(13),
             pick_list(
-                SummaryLanguage::ALL,
-                Some(language),
-                Message::SetSummaryLanguage
+                SummaryLanguage::ALL.map(SummaryLanguageOption),
+                Some(SummaryLanguageOption(language)),
+                |opt| Message::SetSummaryLanguage(opt.0)
             )
             .text_size(13)
             .padding([3, 8]),
@@ -571,4 +571,16 @@ fn language_options() -> Vec<LanguageOption> {
         .chain(crate::i18n::LANGUAGES.iter().map(|l| l.to_string()))
         .map(LanguageOption)
         .collect()
+}
+
+/// One item of the description-language pick list: `SummaryLanguage`'s own `Display` is
+/// English only (it is the value stored in the settings), so this wrapper renders it translated
+/// via [`describe_ai::language_name`], the same name used in the batch panel's plan line.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct SummaryLanguageOption(SummaryLanguage);
+
+impl std::fmt::Display for SummaryLanguageOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", describe_ai::language_name(self.0))
+    }
 }

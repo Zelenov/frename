@@ -202,6 +202,16 @@ batch-ai-key-missing = Укажите ключ API Anthropic в настройк
 batch-ai-key-unavailable = Не удалось открыть системное хранилище паролей: оно может быть заблокировано или отсутствовать (например, GNOME Keyring или KWallet).
 batch-ai-language-same-as-subtitles = Описания на языке субтитров (на английском, если субтитров нет)
 batch-ai-language = Описания на языке: { $language }
+
+## AI description language names: the Settings picker and { $language } above.
+
+ai-language-same-as-subtitles = Как в субтитрах
+ai-language-english = Английский
+ai-language-russian = Русский
+ai-language-ukrainian = Украинский
+ai-language-german = Немецкий
+ai-language-spanish = Испанский
+ai-language-french = Французский
 batch-videos-count = { $n ->
     [one] { $n } видео
     [few] { $n } видео
@@ -322,7 +332,6 @@ folder-controls-filter-comments = С комментарием
 folder-controls-filter-markers = С маркерами
 folder-controls-scroll = Прокрутить к файлу
 folder-controls-open = Открыть файл
-folder-controls-settings = Настройки
 folder-controls-batch = Пакетные действия с отмеченными файлами
 folder-controls-batch-back = Назад к открытому файлу
 folder-controls-update-available = Доступно обновление: { $version }

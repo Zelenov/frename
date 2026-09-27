@@ -407,7 +407,7 @@ mod tests {
     }
 
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
-    const NOT_UI_TEXT: [(&str, &str); 34] = [
+    const NOT_UI_TEXT: [(&str, &str); 44] = [
         ("Page Up", "key name, as printed on the key"),
         ("Page Down", "key name, as printed on the key"),
         ("Space", "key name, as printed on the key"),
@@ -471,6 +471,43 @@ mod tests {
         (
             "budget_exhausted",
             "Soniox API error_type value, matched against the API's own response",
+        ),
+        ("Move comments", "English-only log id, see Action::log_id"),
+        (
+            "Move in/out points",
+            "English-only log id, see Action::log_id",
+        ),
+        (
+            "Tag commented videos",
+            "English-only log id, see Action::log_id",
+        ),
+        (
+            "Fix tags by priority",
+            "English-only log id, see Action::log_id",
+        ),
+        (
+            "Apply tag spacing",
+            "English-only log id, see Action::log_id",
+        ),
+        (
+            "Reset cache and reload",
+            "English-only log id, see Action::log_id",
+        ),
+        (
+            "Describe with AI",
+            "English-only log id, see Action::log_id",
+        ),
+        (
+            "Generate subtitles",
+            "English-only log id, see Action::log_id",
+        ),
+        (
+            "spent {seconds:.0}s (${usd:.2})",
+            "English-only log text, see SubtitleJob::log_report",
+        ),
+        (
+            "{failed_deletes} upload(s) not deleted from Soniox",
+            "English-only log text, see SubtitleJob::log_report",
         ),
     ];
 

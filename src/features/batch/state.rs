@@ -312,14 +312,16 @@ impl BatchState {
             // The job may have written subtitles: the plan is made again.
             self.actions.generate_subtitles_mut().invalidate_plan();
             let job = self.job.as_mut()?;
-            if let Some(report) = job.operation.report() {
-                log::info!("batch: {}: {report}", job.operation.action().label());
+            if let Some(report) = job.operation.log_report() {
+                log::info!("batch: {}: {report}", job.operation.action().log_id());
             }
             if let Some(usage) = job.usage {
+                let model = job.operation.ai_model();
                 log::info!(
-                    "batch: {} spent {}",
-                    job.operation.action().label(),
-                    super::actions::spend_line(job.operation.ai_model(), usage)
+                    "batch: {} spent ${:.2} ({})",
+                    job.operation.action().log_id(),
+                    model.cost_usd(usage),
+                    model.label
                 );
             }
             return None;

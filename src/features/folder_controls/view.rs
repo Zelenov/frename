@@ -100,7 +100,7 @@ pub fn view(
                 iced::widget::stack![settings_button, update_dot()].into(),
                 fl!("folder-controls-update-available", version = version),
             ),
-            None => (settings_button.into(), fl!("folder-controls-settings")),
+            None => (settings_button.into(), fl!("settings-window-title")),
         };
     let settings_btn: Element<'_, folder::Message> = tooltip(
         settings_face,

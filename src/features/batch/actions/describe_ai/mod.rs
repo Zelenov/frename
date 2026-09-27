@@ -368,7 +368,22 @@ fn minutes(seconds: f64) -> String {
 fn language_line(language: SummaryLanguage) -> String {
     match language {
         SummaryLanguage::SameAsSubtitles => fl!("batch-ai-language-same-as-subtitles"),
-        language => fl!("batch-ai-language", language = language.to_string()),
+        language => fl!("batch-ai-language", language = language_name(language)),
+    }
+}
+
+/// `language`'s name, translated: used here and in the Settings picker. `SummaryLanguage`'s own
+/// `Display` is English only (it is the value stored in the settings), so every place that shows
+/// the name to the user goes through this instead.
+pub fn language_name(language: SummaryLanguage) -> String {
+    match language {
+        SummaryLanguage::SameAsSubtitles => fl!("ai-language-same-as-subtitles"),
+        SummaryLanguage::English => fl!("ai-language-english"),
+        SummaryLanguage::Russian => fl!("ai-language-russian"),
+        SummaryLanguage::Ukrainian => fl!("ai-language-ukrainian"),
+        SummaryLanguage::German => fl!("ai-language-german"),
+        SummaryLanguage::Spanish => fl!("ai-language-spanish"),
+        SummaryLanguage::French => fl!("ai-language-french"),
     }
 }
 

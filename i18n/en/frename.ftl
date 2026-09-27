@@ -168,6 +168,16 @@ batch-ai-key-missing = Set an Anthropic API key in Settings
 batch-ai-key-unavailable = The system keyring could not be opened: it may be locked, or there is none (such as GNOME Keyring or KWallet).
 batch-ai-language-same-as-subtitles = Descriptions in the subtitles' language (English if none)
 batch-ai-language = Descriptions in { $language }
+
+## AI description language names: the Settings picker and { $language } above.
+
+ai-language-same-as-subtitles = Same as subtitles
+ai-language-english = English
+ai-language-russian = Russian
+ai-language-ukrainian = Ukrainian
+ai-language-german = German
+ai-language-spanish = Spanish
+ai-language-french = French
 batch-videos-count = { $n ->
     [one] { $n } video
    *[other] { $n } videos
@@ -281,7 +291,6 @@ folder-controls-filter-comments = Comments
 folder-controls-filter-markers = Markers
 folder-controls-scroll = Scroll to file
 folder-controls-open = Open file
-folder-controls-settings = Settings
 folder-controls-batch = Batch actions on checked files
 folder-controls-batch-back = Back to the open file
 folder-controls-update-available = Update available: { $version }

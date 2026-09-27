@@ -605,6 +605,11 @@ impl Run {
     pub fn report(&self) -> Option<String> {
         self.0.report()
     }
+
+    /// [`Self::report`] in English only, for logs.
+    pub fn log_report(&self) -> Option<String> {
+        self.0.log_report()
+    }
 }
 
 /// One run of the action.
@@ -646,6 +651,24 @@ impl SubtitleJob {
             parts.push(fl!(
                 "batch-subtitles-report-failed-deletes",
                 n = (failed_deletes as i64)
+            ));
+        }
+        (!parts.is_empty()).then(|| parts.join(". "))
+    }
+
+    /// [`Self::report`] in English only: the log this feeds must stay grep-able regardless of
+    /// the UI language.
+    fn log_report(&self) -> Option<String> {
+        let seconds = self.uploaded_ms.load(Ordering::Relaxed) as f64 / 1000.0;
+        let failed_deletes = self.failed_deletes.load(Ordering::Relaxed);
+        let mut parts = Vec::new();
+        if seconds > 0.0 {
+            let usd = self.usd_per_hour * seconds / 3600.0;
+            parts.push(format!("spent {seconds:.0}s (${usd:.2})"));
+        }
+        if failed_deletes > 0 {
+            parts.push(format!(
+                "{failed_deletes} upload(s) not deleted from Soniox"
             ));
         }
         (!parts.is_empty()).then(|| parts.join(". "))

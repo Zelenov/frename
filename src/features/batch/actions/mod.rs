@@ -76,6 +76,21 @@ impl Action {
         }
     }
 
+    /// The action's name in English only: logs never switch language.
+    pub fn log_id(self) -> &'static str {
+        match self {
+            Self::MoveComments => "Move comments",
+            Self::MoveInOut => "Move in/out points",
+            Self::MarkersComment => "Markers <-> comment",
+            Self::TagCommented => "Tag commented videos",
+            Self::FixTags => "Fix tags by priority",
+            Self::RespaceTags => "Apply tag spacing",
+            Self::ReloadFiles => "Reset cache and reload",
+            Self::DescribeAi => "Describe with AI",
+            Self::GenerateSubtitles => "Generate subtitles",
+        }
+    }
+
     /// The counts line's word for a file the action did its work on.
     pub fn done_label(self) -> String {
         match self {
@@ -123,6 +138,14 @@ impl Operation {
     pub fn report(&self) -> Option<String> {
         match self {
             Self::GenerateSubtitles(run) => run.report(),
+            _ => None,
+        }
+    }
+
+    /// [`Self::report`] in English only, for logs.
+    pub fn log_report(&self) -> Option<String> {
+        match self {
+            Self::GenerateSubtitles(run) => run.log_report(),
             _ => None,
         }
     }
