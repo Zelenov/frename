@@ -15,6 +15,9 @@ impl FolderWorkspace {
     /// The row at `index` of the file list was pressed (and is being selected): holding the
     /// button and moving may drag its file out of the window.
     pub(super) fn arm_drag_out(&mut self, index: usize) {
+        if !drag_out::SUPPORTED {
+            return;
+        }
         let pressed = self
             .directory
             .as_ref()

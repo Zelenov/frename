@@ -16,6 +16,10 @@ use iced::window::raw_window_handle::HasWindowHandle;
 pub use messages::Message;
 pub use state::{files_to_drag, readiness, DragOutState, Readiness};
 
+/// Whether this platform can drag files out of the window. Elsewhere a press on a row stays a
+/// click, with no save or other work done for a drag that cannot start.
+pub const SUPPORTED: bool = cfg!(windows);
+
 /// How a drag out of the window ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
 // Each platform ends a drag in only some of these ways.
