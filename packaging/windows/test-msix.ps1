@@ -11,14 +11,19 @@
 # 4. uninstalls it and runs the Windows App Certification Kit on it, writing its report to
 #    -Report; a FAIL fails the script. Where the kit is not installed, says so and skips it;
 # 5. removes the package and the throwaway certificate again, also after a failure.
-# Run from the repository root (for tests/media), as administrator. Exits non-zero on the first
-# failure.
+# Run from the repository root (for tests/media), as administrator, in Windows PowerShell
+# (powershell.exe, not pwsh). Exits non-zero on the first failure.
 param(
     [Parameter(Mandatory)] [string]$Msix,
     [Parameter(Mandatory)] [string]$Report
 )
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
+# The Appx cmdlets (Add-AppxPackage, Get-AppxPackage) do not load in PowerShell 7 on every Windows,
+# Windows Server 2022 among them ("Operation is not supported on this platform").
+if ($PSVersionTable.PSEdition -eq "Core") {
+    throw "Run this script with Windows PowerShell (powershell.exe), not PowerShell 7 (pwsh)"
+}
 . (Join-Path $PSScriptRoot "windows-sdk.ps1")
 
 $clips = (Resolve-Path "tests\media").Path

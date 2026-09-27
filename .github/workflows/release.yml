@@ -330,8 +330,9 @@ jobs:
           name: frename-store-msix-v${{ needs.prepare.outputs.package_version }}
           path: store
 
+      # Windows PowerShell: the Appx cmdlets do not load in PowerShell 7 on Windows Server 2022.
       - name: Install, self-test and certify the Store package
-        shell: pwsh
+        shell: powershell
         run: packaging/windows/test-msix.ps1 -Msix "store\frename-${{ needs.prepare.outputs.package_version }}.0-x64.msix" -Report store\wack-report.xml
 
       - uses: actions/upload-artifact@v6

@@ -95,7 +95,8 @@ install. To see it yourself, use **Windows Sandbox** (Start → "Turn Windows fe
 tick **Windows Sandbox**, restart; Windows Pro or Enterprise): it has no GStreamer, no frename, and
 everything in it is gone when you close it. Inside the sandbox, install the
 [Windows SDK](https://developer.microsoft.com/windows/downloads/windows-sdk/) (for `signtool`),
-copy in the repository folder and the `.msix`, and in an **administrator** PowerShell in the
+copy in the repository folder and the `.msix`, and in an **administrator** Windows PowerShell
+(Start → "Windows PowerShell" → Run as administrator; not PowerShell 7) in the
 repository folder run (the first line allows scripts in this window only):
 
 ```powershell
