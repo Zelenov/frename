@@ -172,7 +172,11 @@ pub(crate) fn rotate(path: &Path, quarter_turns: i32) -> Result<Rotation, Rotati
             return Err(e.into());
         }
     }
-    file.sync_all()?;
+    // Every matrix is written: the file is turned whatever the flush says, so a failed flush is
+    // only noted (the system writes the data out later).
+    if let Err(e) = file.sync_all() {
+        log::warn!("rotation: {path:?} turned, but flushing it to disk failed: {e}");
+    }
     // On the handle that wrote: reopening the file could fail while another app holds it. The
     // turn is done either way; a changed time is only noted.
     if let Err(e) = times.apply(&file) {
