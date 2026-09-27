@@ -94,6 +94,13 @@ Next time you start frename, it reopens the last folder and clip.
 | `F5` | Fullscreen on / off (or double-click the picture) |
 | `Escape` | Leave fullscreen |
 
+### Settings
+
+| Key | Action |
+|---|---|
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous page |
+| `Escape` | Close Settings (while it asks whether to remove a key: keep the key) |
+
 While a text box (tag search, file search, comment) has the cursor, it takes the keys it needs:
 arrows, `Delete`, `Space`, `Enter`, `Ctrl+C`, and in the comment box also `PageUp` / `PageDown`.
 Press `Esc` first to give the keys back to the app. `[` and `]` set in and out points, except while
@@ -237,27 +244,24 @@ Subtitles. Formats such as mkv, m2ts and avi need [ffmpeg](https://ffmpeg.org) o
 
 ## Settings
 
-The ⚙ button opens Settings:
+The ⚙ button opens Settings. Changes apply right away; **Close** or `Esc` closes it. It has five
+pages:
 
-- the UI language: follows your system by default, or pick English or Russian (more languages
-  are on the way);
-- play videos automatically when opened;
-- draw all tags in one neutral color;
-- put a space after each tag in file names (`Food. Goat. clip.mp4`);
-- where comments are kept (inside the video or `.comment.txt`), and the name of the "Commented"
-  tag, or none;
-- where in/out points are kept (file name or inside the video);
-- updates: **Check for updates**, then **Update and restart** when a newer version is out.
-  frename also checks once a day by itself (you can turn that off) and puts a dot on ⚙ when
-  an update is ready; nothing is downloaded until you click;
-- your Anthropic API key for Describe with AI, kept in the system's password store (Windows
+- **Interface:** the UI language (follows your system by default, or pick English or Russian;
+  more languages are on the way), monochrome tags, and playing videos as soon as they open.
+- **Saving:** a space after each tag in file names (`Food. Goat. clip.mp4`), and where comments,
+  markers and in/out points are kept: inside the video or in a text file / the comment / the file
+  name. While comments are inside the video, frename can tag the videos you comment ("Commented",
+  or a tag you name). After a change here, Settings offer the batch action that updates the files
+  you already have.
+- **Describe with AI:** your Anthropic API key, kept in the system's password store (Windows
   Credential Manager, macOS Keychain, or a keyring such as GNOME Keyring on Linux), the model
-  (Claude Haiku 4.5, Sonnet 5 or Opus 5, with their prices) and the language of the descriptions;
-- for Generate subtitles: your Soniox API key (kept the same way), the languages spoken in your
-  footage (any of the languages Soniox knows), and whether a subtitle is a short line or a whole sentence.
-
-After you change where comments or in/out points are kept, or the tag spacing, Settings offer the
-batch action that updates the existing files.
+  (Claude Haiku 4.5, Sonnet 5 or Opus 5, with their prices) and the language of the descriptions.
+- **Subtitles:** your Soniox API key (kept the same way), the languages spoken in your footage, and
+  whether a subtitle is a short line or a whole sentence.
+- **Updates:** **Check for updates**, then **Update and restart** when a newer version is out.
+  frename also checks once a day by itself (you can turn that off) and puts a dot on ⚙ when an
+  update is ready; ⚙ then opens this page. Nothing is downloaded until you click.
 
 ![Monochrome tags](docs/frename-screenshot-mono.jpg)
 

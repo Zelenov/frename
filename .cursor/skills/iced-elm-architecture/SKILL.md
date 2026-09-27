@@ -1,6 +1,6 @@
 ---
 name: iced-elm-architecture
-description: Iced GUI framework Elm architecture patterns for Rust. Feature-based code organization, message flow, Task::done dispatch, core/UI separation, snapshots, deferred side effects, subscriptions, component independence. Persistence and app state: database initialization only in main.rs; transient store (no singleton, no factory); Directory generic over store; store only in constructor; call store.get_last_session from workspace; on folder load failure keep previous state. Solved patterns: keyboard→app→workspace→feature message chain, selectable rows with one parent background (hover/delete without breaking layout), consolidated styles in theme.rs, delete+hover list UX, selection styling (widget outline + row background, same accent family, vertical centering in cells). Use when building iced UI features, adding messages, creating views, wiring components, organizing iced code, implementing persistence/session, row layout, or selection styling.
+description: Iced GUI framework Elm architecture patterns for Rust. Feature-based code organization, message flow, Task::done dispatch, core/UI separation, snapshots, deferred side effects, subscriptions, component independence. Persistence and app state: database initialization only in main.rs; transient store (no singleton, no factory); Directory generic over store; store only in constructor; call store.get_last_session from workspace; on folder load failure keep previous state. Solved patterns: keyboard→app→workspace→feature message chain, selectable rows with one parent background (hover/delete without breaking layout), consolidated styles in the design system (src/ui), delete+hover list UX, selection styling (widget outline + row background, same accent family, vertical centering in cells). Use when building iced UI features, adding messages, creating views, wiring components, organizing iced code, implementing persistence/session, row layout, or selection styling.
 ---
 
 # Iced Elm Architecture Patterns
@@ -548,13 +548,13 @@ To avoid layout/alignment bugs and disappearing content when adding hover/delete
 - **Hover**: store `hovered_id: Option<TagId>` in state. Main cell uses `on_enter(Message::TagHovered(Some(id)))` and `on_exit(Message::TagHovered(None))`. Show delete control when `is_selected || hovered_id == Some(id)`. When not shown, use an empty `Space` in the delete slot so layout does not shift.
 - **Color stripe** (e.g. tag color bar on the left) can keep its own small styled container; the rest of the row inherits from the parent.
 
-### Consolidated Styles in theme.rs
+### Consolidated Styles in the design system
 
 Avoid duplicated inline `container::Style { background: Some(Background::Color(...)), ... }` across views.
 
-- **Centralize in `theme.rs`**: add helpers such as `panel_container_style()`, `row_background_style(selected)`, `selectable_row_style(selected)` (transparent vs selected for lists), `elevated_container_style()`, `elevated_container_bordered_style()` (e.g. search bar), `main_container_style()`, `icon_button_style(enabled)`.
-- **Views** call these (e.g. `.style(theme::panel_container_style)`) instead of repeating style structs. One place defines panel/row/elevated/button look; changing the theme updates all usages.
-- **Widget-specific styling** (e.g. tag color chip, progress bar) can stay inline where the value is dynamic (e.g. per-tag color).
+- **One place:** frename's design system (`docs/design/design-system.md`) lives in `src/ui/`: tokens, text styles, and components (`ui::button`, `ui::form`, `ui::layout`). Views build from them instead of repeating style structs; a test (`ui::lint`) fails on color and size literals outside `src/ui/`.
+- **Older views** still call `theme::…` helpers (`src/ui/legacy.rs`) until they move onto the system.
+- **Widget-specific styling** whose value is dynamic (a tag's color, a marker's color) comes from a function in `src/ui/` that takes the value, not from a literal in the view.
 
 ### Delete + Hover Without Breaking the List
 

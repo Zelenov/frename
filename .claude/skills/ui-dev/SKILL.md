@@ -60,26 +60,28 @@ Reusable components not tied to any feature go in `src/widgets/`:
 
 ## Styling
 
-Always use constants and functions from `src/theme.rs`:
+The design system is the rule: `docs/design/design-system.md` (tokens, text styles, components,
+windows, patterns, every screen). Its code is `src/ui/`:
 
 ```rust
-// Colors
-theme::BG_MAIN          // dark background
-theme::BG_PANEL         // panel background
-theme::BG_ELEVATED      // elevated card background
-theme::TRACK            // unchecked/inactive fill
-theme::ACCENT           // selected, progress, focus
-theme::TEXT             // primary text
-theme::TEXT_MUTED       // secondary / placeholder text
-theme::SPLITTER         // splitter line (inactive)
-theme::SPLITTER_ACTIVE  // splitter line (hovered/dragged)
+use crate::ui::tokens::*;                 // colors, SPACE_*, sizes, radii, fonts
+use crate::ui::{button, form, layout, text};
 
-// Style functions (pass to .style())
-theme::panel_container_style        // standard panel container
-theme::elevated_container_style     // raised card (file name panel)
-theme::dark_scrollable_style        // dark-themed scrollable
-theme::tag_row_background_style(theme, is_selected)  // tag row highlight
+text::body("…"); text::secondary("…"); text::mono("clip.mp4");
+button::primary("Save key").on_press(msg); button::secondary("Close");
+form::checkbox(label, on).on_toggle(Msg::Set); form::radio_option(label, desc, value, selected, Msg::Set);
+layout::setting_row(label, content); layout::notice(NoticeKind::Info, content);
 ```
+
+- A view on the system never writes a color, a size, a padding, a spacing or a radius as a number:
+  `ui::lint` fails the tests if it does. `0` alone is allowed.
+- Views not moved yet still use `crate::theme` (now `src/ui/legacy.rs`) and are listed in
+  `ui::lint::NOT_YET` with the issue that moves them (#58 batch, #59 the rest). The list only
+  shrinks: moving a file means removing its entry.
+- Something the system lacks is added to `docs/design/design-system.md` first, then to `src/ui/`.
+- `ui` holds tokens, styles and stateless constructors of standard controls; `src/widgets/` keeps
+  frename's own stateful or custom-drawn widgets, which take their values from `ui::tokens`.
+- The Settings window uses `ui::theme()`; the main window keeps `iced::Theme::Dark` until #59.
 
 Tag chip colors: always use `tag_colors::TagColors::color(tag.color_index())`.
 Palette has 16 entries; index wraps modulo 16.
