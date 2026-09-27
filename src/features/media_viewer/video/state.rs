@@ -92,6 +92,8 @@ pub struct VideoPlayerState {
     resume_at: Option<Duration>,
     /// The rotation the video was opened with; see [`Self::rotation`].
     rotation: Option<Rotation>,
+    /// Number of the latest load; a `VideoLoaded` of an older one is dropped.
+    load_generation: u64,
 }
 
 impl Default for VideoPlayerState {
@@ -117,6 +119,7 @@ impl Default for VideoPlayerState {
             play_until: None,
             resume_at: None,
             rotation: None,
+            load_generation: 0,
         }
     }
 }
@@ -134,8 +137,10 @@ impl VideoPlayerState {
         let Some(path) = self.current_path.clone() else {
             return Task::none();
         };
-        let (position, paused) = (self.position, self.paused);
-        let task = self.open(path, paused);
+        // Reopened again before the last reopen landed: its moment is still the one to go back
+        // to (the position was reset when it started loading).
+        let position = self.resume_at.unwrap_or(self.position);
+        let task = self.open(path, self.paused);
         self.resume_at = Some(position);
         task
     }
@@ -157,6 +162,8 @@ impl VideoPlayerState {
         self.followed_cue = None;
         self.play_until = None;
         self.paused = paused;
+        self.load_generation = self.load_generation.wrapping_add(1);
+        let generation = self.load_generation;
 
         let subtitles_task = Self::load_subtitles(path.clone());
         let video_task = Task::future(async move {
@@ -190,7 +197,11 @@ impl VideoPlayerState {
             .await
             .unwrap_or((None, None));
 
-            Message::VideoLoaded(Arc::new(Mutex::new(opened.0)), opened.1)
+            Message::VideoLoaded {
+                video: Arc::new(Mutex::new(opened.0)),
+                rotation: opened.1,
+                generation,
+            }
         });
         Task::batch([video_task, subtitles_task])
     }
@@ -213,7 +224,17 @@ impl VideoPlayerState {
     /// Handle all video player messages.
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::VideoLoaded(slot, rotation) => {
+            // A load started before the latest one (the video was reopened meanwhile): its
+            // video, dropped here, may show an older rotation.
+            Message::VideoLoaded { generation, .. } if generation != self.load_generation => {
+                log::debug!("Dropping a video load that a newer one replaced");
+                Task::none()
+            }
+            Message::VideoLoaded {
+                video: slot,
+                rotation,
+                ..
+            } => {
                 self.loading = false;
                 self.rotation = rotation;
                 let resume_at = self.resume_at.take();
@@ -985,6 +1006,30 @@ mod tests {
         assert!(!range.done_at(secs(40)));
         assert!(!range.done_at(secs(12)));
         assert!(range.done_at(secs(20)));
+    }
+
+    /// Two turns in a row: the second reopen starts before the first one landed, and both go
+    /// back to the moment shown before the first; only the latest load is taken.
+    #[test]
+    fn reopening_twice_keeps_the_moment_and_takes_only_the_latest_load() {
+        let mut player = VideoPlayerState {
+            current_path: Some(PathBuf::from("C:/no/such/clip.mp4")),
+            position: Duration::from_secs(42),
+            ..VideoPlayerState::default()
+        };
+        let _ = player.reload_video();
+        let _ = player.reload_video();
+        assert_eq!(player.resume_at, Some(Duration::from_secs(42)));
+
+        let stale = Message::VideoLoaded {
+            video: Arc::new(Mutex::new(None)),
+            rotation: None,
+            generation: player.load_generation - 1,
+        };
+        let _ = player.update(stale);
+        assert!(player.loading, "a stale load does not end the latest one");
+        assert!(!player.load_failed);
+        assert_eq!(player.resume_at, Some(Duration::from_secs(42)));
     }
 
     #[test]

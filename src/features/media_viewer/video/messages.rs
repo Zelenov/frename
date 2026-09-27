@@ -17,9 +17,15 @@ pub type LoadedVideo = Arc<Mutex<Option<Video>>>;
 /// Messages handled by the video player.
 #[derive(Debug, Clone)]
 pub enum Message {
-    /// Video finished loading; carries the opened video, or `None` when the open failed, and
-    /// the rotation it was opened with.
-    VideoLoaded(LoadedVideo, Option<Rotation>),
+    /// Video finished loading.
+    VideoLoaded {
+        /// The opened video, or `None` when the open failed.
+        video: LoadedVideo,
+        /// The rotation it was opened with.
+        rotation: Option<Rotation>,
+        /// Which load this is; see `VideoPlayerState::load_generation`.
+        generation: u64,
+    },
     /// Video became available after loading
     VideoReady { duration_secs: f32 },
     /// New video frame rendered (triggers view refresh for progress bar)
