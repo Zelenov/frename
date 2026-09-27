@@ -1,3 +1,9 @@
+# NEXT
+## Changed
+- Settings is rebuilt: five pages (Interface, Saving, Describe with AI, Subtitles, Updates) instead of one long list, one option per line with a short note, and clear buttons for the API keys.
+- Settings closes with its Close button or `Esc`, and `Ctrl+Tab` moves between its pages. It opens on the page that is needed: on Updates when an update is ready, on Describe with AI or Subtitles from those batch actions.
+- Settings uses frename's own fonts, so it looks the same on Windows and Linux.
+
 # 0.76
 ## Added
 - Right-click 📂 to pick one clip: its whole folder opens with that clip selected.
