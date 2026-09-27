@@ -54,6 +54,10 @@ jobs:
         env:
           SONIOX_API_KEY: ${{ secrets.SONIOX_API_KEY }}
 
+      # The app's own tests again as the Store build (the core crate has no Store feature).
+      - name: Test (Store build)
+        run: cargo test --locked -p frename --features store
+
       - name: Build app
         run: cargo build --locked
 
@@ -174,6 +178,9 @@ jobs:
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Clippy (Store build)
+        run: cargo clippy --workspace --all-targets --locked --features store -- -D warnings
 
       - name: Test
         run: cargo test --workspace --locked

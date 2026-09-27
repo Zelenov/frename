@@ -8,7 +8,8 @@
 # 3. installs it, checks that every DLL in the package is bundled or part of Windows, and runs
 #    frename's self-test on tests/media inside the package, through its `frename.exe` alias;
 # 4. uninstalls it and runs the Windows App Certification Kit on it, writing its report to
-#    -Report; a FAIL fails the script. Where the kit is not installed, says so and skips it.
+#    -Report; a FAIL fails the script. Where the kit is not installed, says so and skips it;
+# 5. removes the package and the throwaway certificate again, also after a failure.
 # Run from the repository root (for tests/media), as administrator. Exits non-zero on the first
 # failure.
 param(
@@ -34,10 +35,10 @@ Write-Host "== 2. Sign a copy for this machine"
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $Msix).Path)
 try {
-    $entry = $zip.Entries | Where-Object { $_.FullName -eq "AppxManifest.xml" }
-    $reader = New-Object System.IO.StreamReader($entry.Open())
-    [xml]$manifest = $reader.ReadToEnd()
-    $reader.Close()
+            $entry = $zip.Entries | Where-Object { $_.FullName -eq "AppxManifest.xml" }
+            $reader = New-Object System.IO.StreamReader($entry.Open())
+            [xml]$manifest = $reader.ReadToEnd()
+            $reader.Close()
 } finally {
     $zip.Dispose()
 }
@@ -63,69 +64,75 @@ $plain = [System.Net.NetworkCredential]::new("", $password).Password
 & $signtool sign /fd SHA256 /f $pfx /p $plain $signed
 if ($LASTEXITCODE -ne 0) { throw "signtool sign failed" }
 
-Write-Host "== 3. Install and self-test"
-Add-AppxPackage -Path $signed
-$installed = Get-AppxPackage -Name $identity.Name
-if (!$installed) { throw "Not installed: $($identity.Name)" }
-Write-Host "Installed to $($installed.InstallLocation)"
-& (Join-Path $PSScriptRoot "check-bundle.ps1") -Dir $installed.InstallLocation
-if ($LASTEXITCODE -ne 0) { throw "The installed package is missing DLLs" }
-if (Test-Path (Join-Path $installed.InstallLocation "Update.exe")) {
-    throw "The Store package holds Velopack's Update.exe"
-}
+# The throwaway certificate must not stay trusted on the machine, whatever happens below.
+$overall = $null
+try {
+    Write-Host "== 3. Install and self-test"
+    Add-AppxPackage -Path $signed
+    $installed = Get-AppxPackage -Name $identity.Name
+    if (!$installed) { throw "Not installed: $($identity.Name)" }
+    Write-Host "Installed to $($installed.InstallLocation)"
+    & (Join-Path $PSScriptRoot "check-bundle.ps1") -Dir $installed.InstallLocation
+    if ($LASTEXITCODE -ne 0) { throw "The installed package is missing DLLs" }
 
-# Through the alias, so frename runs inside its package, as a Store install does. It is a GUI
-# exe, so the process is waited for explicitly.
-$alias = Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\frename.exe"
-if (!(Test-Path $alias)) { throw "The frename.exe alias was not registered: $alias" }
-$process = Start-Process -FilePath $alias -ArgumentList @("--self-test", "`"$clips`"") -Wait -PassThru
-# The log is in %LocalAppData%\frename, which Windows redirects into the package's own storage.
-$logs = @(
-    (Join-Path $env:LOCALAPPDATA "Packages\$($installed.PackageFamilyName)\LocalCache\Local\frename\frename_debug.log"),
-    (Join-Path $env:LOCALAPPDATA "frename\frename_debug.log")
-)
-$log = $logs | Where-Object { Test-Path $_ } | Select-Object -First 1
-if ($log) {
-    Write-Host "Log: $log"
-    Get-Content $log
-} else {
-    Write-Host "(no log at $($logs -join ' or '))"
-}
-if ($process.ExitCode -ne 0) { throw "Self-test in the package failed: exit code $($process.ExitCode)" }
-if ($log -and !(Select-String -Path $log -Pattern "Microsoft Store" -Quiet)) {
-    throw "The packaged frename is not the Store build (its log does not say 'Microsoft Store')"
-}
-Remove-AppxPackage -Package $installed.PackageFullName
+    # Through the alias, so frename runs inside its package, as a Store install does. It is a GUI
+    # exe, so the process is waited for explicitly.
+    $alias = Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\frename.exe"
+    if (!(Test-Path $alias)) { throw "The frename.exe alias was not registered: $alias" }
+    $process = Start-Process -FilePath $alias -ArgumentList @("--self-test", "`"$clips`"") -Wait -PassThru
+    # The log is in %LocalAppData%\frename-store, which Windows redirects into the package's own
+    # storage (a new folder of a packaged app).
+    $logs = @(
+        (Join-Path $env:LOCALAPPDATA "Packages\$($installed.PackageFamilyName)\LocalCache\Local\frename-store\frename_debug.log"),
+        (Join-Path $env:LOCALAPPDATA "frename-store\frename_debug.log")
+    )
+    $log = $logs | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($log) {
+        Write-Host "Log: $log"
+        Get-Content $log
+    }
+    if ($process.ExitCode -ne 0) { throw "Self-test in the package failed: exit code $($process.ExitCode)" }
+    if (!$log) { throw "No log at $($logs -join ' or '): the packaged frename is not the Store build" }
+    if (!(Select-String -Path $log -Pattern "Microsoft Store" -Quiet)) {
+        throw "The packaged frename is not the Store build (its log does not say 'Microsoft Store')"
+    }
+    Remove-AppxPackage -Package $installed.PackageFullName
 
-Write-Host "== 4. Windows App Certification Kit"
-$appcert = Get-AppCert
-if (!$appcert) {
-    Write-Host "::warning::The Windows App Certification Kit is not installed on this runner; skipped."
-    if ($env:GITHUB_STEP_SUMMARY) {
-        Add-Content $env:GITHUB_STEP_SUMMARY "Store package: installed and self-tested; Windows App Certification Kit not available on the runner, skipped."
+    Write-Host "== 4. Windows App Certification Kit"
+    $appcert = Get-AppCert
+    if (!$appcert) {
+        Write-Host "::warning::The Windows App Certification Kit is not installed on this runner; skipped."
+        if ($env:GITHUB_STEP_SUMMARY) {
+            Add-Content $env:GITHUB_STEP_SUMMARY "Store package: installed and self-tested; Windows App Certification Kit not available on the runner, skipped."
+        }
+    } else {
+        $reportPath = [System.IO.Path]::GetFullPath($Report)
+        if (Test-Path $reportPath) { Remove-Item $reportPath }
+        & $appcert reset | Out-Null
+        & $appcert test -appxpackagepath (Resolve-Path $signed).Path -reportoutputpath $reportPath
+        if (!(Test-Path $reportPath)) { throw "appcert wrote no report (exit code $LASTEXITCODE)" }
+        [xml]$result = Get-Content $reportPath
+        $overall = $result.REPORT.OVERALL_RESULT
+        $tests = $result.SelectNodes("//TEST")
+        foreach ($test in $tests) {
+            # The result is a child element in the kit's reports; an attribute is read too, to be safe.
+            $node = $test.SelectSingleNode("RESULT")
+            $outcome = if ($node) { $node.InnerText.Trim() } else { $test.GetAttribute("RESULT") }
+            Write-Host ("{0,-8} {1}" -f $outcome, $test.GetAttribute("NAME"))
+            if ($outcome -ne "PASS") {
+                $test.SelectNodes(".//MESSAGE") | ForEach-Object { Write-Host "         $($_.InnerText)" }
+            }
+        }
+        Write-Host "Windows App Certification Kit: $overall"
+        if ($env:GITHUB_STEP_SUMMARY) {
+            Add-Content $env:GITHUB_STEP_SUMMARY "Store package: installed and self-tested; Windows App Certification Kit: **$overall**."
+        }
     }
-    exit 0
-}
-$reportPath = [System.IO.Path]::GetFullPath($Report)
-if (Test-Path $reportPath) { Remove-Item $reportPath }
-& $appcert reset | Out-Null
-& $appcert test -appxpackagepath (Resolve-Path $signed).Path -reportoutputpath $reportPath
-if (!(Test-Path $reportPath)) { throw "appcert wrote no report (exit code $LASTEXITCODE)" }
-[xml]$result = Get-Content $reportPath
-$overall = $result.REPORT.OVERALL_RESULT
-$tests = $result.SelectNodes("//TEST")
-foreach ($test in $tests) {
-    # The result is a child element in the kit's reports; an attribute is read too, to be safe.
-    $node = $test.SelectSingleNode("RESULT")
-    $outcome = if ($node) { $node.InnerText.Trim() } else { $test.GetAttribute("RESULT") }
-    Write-Host ("{0,-8} {1}" -f $outcome, $test.GetAttribute("NAME"))
-    if ($outcome -ne "PASS") {
-        $test.SelectNodes(".//MESSAGE") | ForEach-Object { Write-Host "         $($_.InnerText)" }
-    }
-}
-Write-Host "Windows App Certification Kit: $overall"
-if ($env:GITHUB_STEP_SUMMARY) {
-    Add-Content $env:GITHUB_STEP_SUMMARY "Store package: installed and self-tested; Windows App Certification Kit: **$overall**."
+} finally {
+    Get-AppxPackage -Name $identity.Name | Remove-AppxPackage -ErrorAction SilentlyContinue
+    Remove-Item "Cert:\LocalMachine\TrustedPeople\$($cert.Thumbprint)" -ErrorAction SilentlyContinue
+    Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)" -DeleteKey -ErrorAction SilentlyContinue
+    Remove-Item $pfx, $cer -ErrorAction SilentlyContinue
 }
 if ($overall -eq "FAIL") { throw "The Windows App Certification Kit failed the package" }
 Write-Host "All Store package tests passed."

@@ -7,6 +7,11 @@ on:
     branches: [main]
     paths: ["version.md"]
 
+# The GStreamer bundled with frename, in the installer and the Store package alike: as ci.yml.
+env:
+  GST_VERSION: 1.28.7
+  GST_SHA256: 032fc6062b8539838fc8da22589cb9b24c5d820baa7f8cc160af9ea08395badf
+
 jobs:
   prepare:
     runs-on: ubuntu-22.04
@@ -81,9 +86,7 @@ jobs:
       # Only used when the AZURE_* secrets below are set, for OIDC login to Azure Artifact Signing.
       id-token: write
     env:
-      # The GStreamer bundled with frename, and Velopack's packer (matches the crate): as ci.yml.
-      GST_VERSION: 1.28.7
-      GST_SHA256: 032fc6062b8539838fc8da22589cb9b24c5d820baa7f8cc160af9ea08395badf
+      # Velopack's packer (matches the crate): as ci.yml.
       VPK_VERSION: 1.2.158
       PACKAGE_VERSION: ${{ needs.prepare.outputs.package_version }}
       # Code signing (docs/signing-setup.md). Empty when not configured: `if: env.AZURE_CLIENT_ID
@@ -266,9 +269,6 @@ jobs:
     runs-on: windows-2022
     permissions:
       contents: read
-    env:
-      GST_VERSION: 1.28.7
-      GST_SHA256: 032fc6062b8539838fc8da22589cb9b24c5d820baa7f8cc160af9ea08395badf
     steps:
       - uses: actions/checkout@v5
 
@@ -314,7 +314,8 @@ jobs:
           path: store/frename-${{ needs.prepare.outputs.package_version }}.0-x64.msix
 
   # A Store package that does not install, play video and pass the certification kit on a clean
-  # machine is never submitted.
+  # machine is never submitted. Its failure is a Store problem, not a failed GitHub release: the
+  # release does not wait for it.
   test-store:
     needs: [prepare, build-store]
     if: needs.prepare.outputs.should_build == 'true'
@@ -403,9 +404,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Only what the release publishes: not the Store package, which may be there already.
       - uses: actions/download-artifact@v7
         with:
           path: artifacts
+          pattern: "{release-notes,frename-windows-x64-v*,frename-linux-x86_64-v*}"
           merge-multiple: true
 
       - name: Remove existing draft and tag

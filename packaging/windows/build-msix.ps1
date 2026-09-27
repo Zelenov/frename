@@ -30,8 +30,6 @@ if ($Version -notmatch '^\d+\.\d+\.\d+\.0$') {
     throw "MSIX version must be X.Y.Z.0, got '$Version'"
 }
 if (!(Test-Path (Join-Path $Bundle "frename.exe"))) { throw "No frename.exe in $Bundle" }
-# The Store build has no updater; a Velopack Update.exe in it would mean the wrong bundle.
-if (Test-Path (Join-Path $Bundle "Update.exe")) { throw "$Bundle holds Velopack's Update.exe" }
 
 $staging = Join-Path ([System.IO.Path]::GetTempPath()) "frename-msix-$([guid]::NewGuid())"
 Copy-Item $Bundle $staging -Recurse

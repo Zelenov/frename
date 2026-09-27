@@ -54,8 +54,9 @@ inappropriate AI output at https://github.com/Zelenov/frename/issues.
 
 PRIVACY
 No account, no ads, no analytics. Your videos stay on your computer. Only the two optional AI
-actions send data (frames or audio of the clips you select), directly to the service you choose,
-with your own key. Keys are kept in Windows Credential Manager.
+actions send data (frames of the clips you select to Anthropic, or their audio and file names to
+Soniox), directly from your computer, with your own key. Keys are kept in Windows Credential
+Manager.
 
 Video playback is built in: MP4, MOV, MKV, WebM, AVI and more, with H.264, HEVC, VP9, AV1 and
 other common codecs. No codec packs to install.
