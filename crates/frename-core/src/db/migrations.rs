@@ -63,6 +63,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 13,
         sql: schema::M13_MARKER_STORAGE,
     },
+    Migration {
+        version: 14,
+        sql: schema::M14_UI_LANGUAGE,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
@@ -146,6 +150,27 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 13);
+        assert_eq!(current_version(&conn).expect("version"), 14);
+    }
+
+    #[test]
+    fn a_version_13_database_gains_an_empty_ui_language() {
+        let conn = database_at_version_1();
+        for m in MIGRATIONS.iter().filter(|m| (2..=13).contains(&m.version)) {
+            conn.execute_batch(m.sql).expect("migration");
+        }
+        conn.execute("UPDATE schema_version SET version = 13", [])
+            .expect("set version");
+        conn.execute("INSERT INTO app_settings (id) VALUES (1)", [])
+            .expect("settings row");
+        run(&conn).expect("migrate");
+        let language: String = conn
+            .query_row(
+                "SELECT ui_language FROM app_settings WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("ui_language column");
+        assert_eq!(language, "");
     }
 }

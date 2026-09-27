@@ -75,7 +75,7 @@ pub fn view<'a>(
     position_ms: u64,
 ) -> Element<'a, Message> {
     let Some(markers) = markers else {
-        return note("This file cannot hold markers");
+        return note(fl!("video-controls-cannot-hold-markers"));
     };
     if markers.is_empty() {
         return empty_list();
@@ -96,7 +96,7 @@ pub fn view<'a>(
     .into()
 }
 
-fn note<'a>(message: &'a str) -> Element<'a, Message> {
+fn note<'a>(message: String) -> Element<'a, Message> {
     container(text(message).size(13).color(theme::TEXT_MUTED))
         .padding([8, 16])
         .width(Length::Fill)
@@ -106,8 +106,8 @@ fn note<'a>(message: &'a str) -> Element<'a, Message> {
 /// An empty list: a note and a button that adds the first marker.
 fn empty_list<'a>() -> Element<'a, Message> {
     column![
-        text("No markers yet").size(13).color(theme::TEXT_MUTED),
-        button(text("📍 Add a marker (F2)").size(13))
+        text(fl!("markers-empty")).size(13).color(theme::TEXT_MUTED),
+        button(text(fl!("markers-add")).size(13))
             .on_press(Message::Add)
             .padding([4, 10])
             .style(theme::overlay_tab_style(false)),
@@ -128,7 +128,7 @@ fn time_label(marker: &Marker) -> String {
     }
 }
 
-fn icon_button<'a>(icon: &'a str, tip: &'a str, message: Option<Message>) -> Element<'a, Message> {
+fn icon_button<'a>(icon: &'a str, tip: String, message: Option<Message>) -> Element<'a, Message> {
     tooltip(
         button(
             container(text(icon).size(13))
@@ -194,7 +194,7 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
                 .on_press(Message::SetColor(guid.to_string(), AI_MARKER_COLOR))
                 .padding(0)
                 .style(theme::icon_button_style(true)),
-                text("AI marker: replaced when the AI describes this clip again").size(12),
+                text(fl!("markers-ai-hint")).size(12),
                 tooltip::Position::Top,
             );
             let ai = stack![ai, container(pick(AI_MARKER_COLOR)).center_y(Length::Fill)];
@@ -207,7 +207,7 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
                 .push(Space::new().width(Length::Fill))
                 .push(icon_button(
                     "✕",
-                    "Keep the color",
+                    fl!("markers-keep-color"),
                     Some(Message::ToggleColorPicker(guid.to_string())),
                 ))
                 .spacing(4)
@@ -218,7 +218,7 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
             // A click on the row opens it for renaming: no ✎. The open row closes with ✓.
             let edit: Option<Element<'a, Message>> = open
                 .is_some()
-                .then(|| icon_button("✓", "Done (Enter)", Some(Message::Close)));
+                .then(|| icon_button("✓", fl!("markers-done-enter"), Some(Message::Close)));
             row![
                 dot(
                     marker.color,
@@ -230,7 +230,7 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
                 edit,
                 icon_button(
                     "✕",
-                    "Delete the marker",
+                    fl!("markers-delete"),
                     Some(Message::Delete(guid.to_string()))
                 ),
             ]
@@ -242,7 +242,9 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
             dot(marker.color, false, None),
             time,
             Space::new().width(Length::Fill),
-            text("read-only").size(11).color(theme::TEXT_MUTED),
+            text(fl!("markers-read-only"))
+                .size(11)
+                .color(theme::TEXT_MUTED),
         ]
         .spacing(4)
         .align_y(Alignment::Center)
@@ -252,7 +254,7 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
     let name: Element<'a, Message> = match open {
         Some(edit) => text_editor(&edit.name)
             .id(iced::widget::Id::new(MARKER_NAME_INPUT_ID))
-            .placeholder("Name")
+            .placeholder(fl!("markers-name-placeholder"))
             .on_action(Message::NameAction)
             // `Enter` closes the row: a name is one line, wrapped to fit.
             .key_binding(|press| {

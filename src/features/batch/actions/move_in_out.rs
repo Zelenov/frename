@@ -9,7 +9,9 @@ use iced::Element;
 
 use super::super::ItemResult;
 
-pub const LABEL: &str = "Move in/out points";
+pub fn label() -> String {
+    fl!("batch-action-move-in-out")
+}
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -49,14 +51,14 @@ impl Options {
     pub fn view(&self) -> Element<'_, Message> {
         let choices = column![
             radio(
-                "From file names into the videos (Adobe XMP marker)",
+                fl!("batch-action-move-in-out-into-videos"),
                 InOutStorage::InVideo,
                 Some(self.to),
                 Message::SetTo,
             )
             .text_size(13),
             radio(
-                "From the videos (XMP marker) into file names",
+                fl!("batch-action-move-in-out-into-file-names"),
                 InOutStorage::FileName,
                 Some(self.to),
                 Message::SetTo
@@ -65,10 +67,8 @@ impl Options {
         ]
         .spacing(8);
         super::panel(
-            LABEL,
-            "Moves the in/out points of each checked file to the chosen place, renaming the files whose \
-             name gains or loses them. Comments stay where they are."
-                .to_string(),
+            label(),
+            fl!("batch-action-move-in-out-hint"),
             choices.into(),
         )
     }

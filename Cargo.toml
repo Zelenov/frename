@@ -53,6 +53,11 @@ arboard = "3"
 # Native file/folder picker dialogs
 rfd = "0.17"
 
+# UI translations: Fluent files in i18n/, embedded; fl! checks message ids at compile time
+i18n-embed = { version = "0.16", features = ["fluent-system", "desktop-requester"] }
+i18n-embed-fl = "0.10"
+rust-embed = "8"
+
 # Installer, portable package and self-update (Windows); versions match `vpk` in the workflows
 velopack = "1.2.158"
 # Comparing the running version with the newest release
@@ -67,6 +72,12 @@ sonisub = { version = "0.3", default-features = false }
 # sonisub's errors, and its progress bars: frename hands it a hidden one (same version as sonisub).
 anyhow = "1"
 indicatif = "0.18"
+
+[dev-dependencies]
+# Parse the .ftl files in the translation tests
+fluent-syntax = "0.12"
+fluent-bundle = "0.16"
+proc-macro2 = "1"
 
 [profile.dev.package."*"]
 # Dependencies are rebuilt rarely but run on every frame (text layout, image decode, SQLite,

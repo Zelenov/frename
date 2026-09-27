@@ -31,6 +31,19 @@ Every feature lives in `src/features/<name>/` with these files:
 | `view.rs` | Pure `fn view(state, ...) -> Element<'_, Message>` — no state mutation |
 | extra files | Sub-view files (`chips_panel.rs`, `file_name_line.rs`, `trash_zone.rs`) or sub-state |
 
+## UI text
+
+Every string a user sees (labels, tooltips, hints, error/status text) is a key in
+`i18n/en/frename.ftl`, read with `fl!("key-id", arg = value)` (see `src/i18n.rs`), never a Rust
+string literal. Keys: `<feature>-<element>[-<detail>]`, the feature being the folder under
+`src/features/`. A plural gets a Fluent `{ $n -> [one] … *[other] … }` selector; reuse an existing
+key when the exact same phrase already exists rather than adding a near-duplicate. A helper that
+used to take `&'static str` (a button label, a tooltip) takes an owned `String` instead, since
+`fl!` returns one. Exceptions (key names printed on a physical key, badges like `IN`/`OUT`/`CC`,
+widget ids, log messages) are listed with their reason in `NOT_UI_TEXT` in `src/i18n.rs`; a test
+there fails the build on any other English word left in a view, a widget, a batch action or
+`folder_controls`. Every new language is its own small PR once the English key exists.
+
 ## Widgets
 
 Reusable components not tied to any feature go in `src/widgets/`:

@@ -184,13 +184,14 @@ pub fn stage(
 /// Store the app state the scenario shows: window at the top left with its size and panel
 /// widths, videos paused when opened, comments in `.comment.txt` (a staged comment is one), and
 /// `file` in `folder` as the last session, so the app opens it on start. `monochrome_tags` turns
-/// on that setting.
+/// on that setting; `ui_language` is the UI language setting (empty: the OS language).
 pub fn seed(
     store: &dyn AppStateStore,
     scenario: &DemoScenario,
     folder: &Path,
     file: &Path,
     monochrome_tags: bool,
+    ui_language: &str,
 ) {
     let [width, height] = scenario.window;
     store.set_window_state(WindowGeometry {
@@ -208,6 +209,7 @@ pub fn seed(
         autoplay_video: false,
         monochrome_tags,
         comment_storage: CommentStorage::TextFile,
+        ui_language: ui_language.to_string(),
         ..AppSettings::default()
     });
     store.set_last_folder_and_file(&FolderAndFile::new(folder, Some(file)));
@@ -375,6 +377,7 @@ markers = ["0:00.100 — Start — first frames"]
             Path::new("/f"),
             Path::new("/f/pick.a.mp4"),
             true,
+            "ru",
         );
 
         let window = store.window.lock().unwrap().unwrap();
@@ -391,6 +394,7 @@ markers = ["0:00.100 — Start — first frames"]
         assert!(!settings.autoplay_video);
         assert!(settings.monochrome_tags);
         assert_eq!(settings.comment_storage, CommentStorage::TextFile);
+        assert_eq!(settings.ui_language, "ru");
         assert_eq!(
             store.get_last_session(),
             Some(FolderAndFile::new("/f", Some("/f/pick.a.mp4")))

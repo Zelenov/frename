@@ -26,15 +26,14 @@ use super::super::{ItemProgress, ItemResult, ItemStatus};
 use super::ActionMessage;
 use crate::theme;
 
-pub const LABEL: &str = "Generate subtitles";
+pub fn label() -> String {
+    fl!("batch-action-generate-subtitles")
+}
 
 /// Read when no key is saved: agent sessions and CI.
 const KEY_VAR: &str = "SONIOX_API_KEY";
 /// How long the price lookup may take before the typical price is used.
 const PRICE_TIMEOUT: Duration = Duration::from_secs(10);
-/// What the plan says about files the built-in decoder cannot read while ffmpeg is missing.
-const INSTALL_FFMPEG: &str =
-    "to read .mkv, .m2ts, .avi …, install ffmpeg from ffmpeg.org, add it to PATH, restart frename";
 /// How often a job's file checks whether the batch was cancelled.
 const CANCEL_POLL: Duration = Duration::from_millis(100);
 
@@ -112,7 +111,7 @@ pub struct Plan {
     /// Videos the built-in decoder cannot read while ffmpeg is not installed.
     pub unreadable: usize,
     /// Files the job must not send, with the reason shown for them.
-    pub excluded: HashMap<PathBuf, &'static str>,
+    pub excluded: HashMap<PathBuf, String>,
 }
 
 impl Plan {
@@ -283,28 +282,31 @@ impl Options {
     pub fn panel(&self, checked: &[&File]) -> (Element<'_, ActionMessage>, String, bool) {
         let plan = self.plan_for(checked);
         let (label, ready) = match plan {
-            None => ("Transcribe".to_string(), false),
+            None => (fl!("batch-subtitles-transcribe"), false),
             Some(plan) if plan.transcribe > 0 => (
-                format!("Transcribe {}", count(plan.transcribe, "video", "videos")),
-                self.operation().is_some(),
-            ),
-            Some(plan) if plan.rebuilt_free > 0 => (
-                format!(
-                    "Build {} (free)",
-                    count(plan.rebuilt_free, "subtitle", "subtitles")
+                fl!(
+                    "batch-subtitles-transcribe-count",
+                    videos = videos(plan.transcribe)
                 ),
                 self.operation().is_some(),
             ),
-            Some(_) => ("Nothing to transcribe".to_string(), false),
+            Some(plan) if plan.rebuilt_free > 0 => (
+                fl!(
+                    "batch-subtitles-build-free",
+                    count = subtitles_count(plan.rebuilt_free)
+                ),
+                self.operation().is_some(),
+            ),
+            Some(_) => (fl!("batch-subtitles-nothing"), false),
         };
         (self.view(plan), label, ready)
     }
 
     fn view(&self, plan: Option<&Plan>) -> Element<'_, ActionMessage> {
-        let muted = |line: &'static str| text(line).size(12).color(theme::TEXT_MUTED);
+        let muted = |line: String| text(line).size(12).color(theme::TEXT_MUTED);
         let mut lines = column![].spacing(4);
         match plan {
-            None => lines = lines.push(text("Estimating…").size(13)),
+            None => lines = lines.push(text(fl!("batch-subtitles-estimating")).size(13)),
             Some(plan) => {
                 // Without a saved key there is no account to learn the price from.
                 let price = match self.key {
@@ -320,27 +322,22 @@ impl Options {
             lines,
             column![
                 checkbox(self.replace)
-                    .label("Replace existing subtitles")
+                    .label(fl!("batch-action-generate-subtitles-replace"))
                     .text_size(13)
                     .on_toggle(|on| ActionMessage::GenerateSubtitles(Message::SetReplace(on))),
-                muted("Transcribes again; costs as shown."),
+                muted(fl!("batch-action-generate-subtitles-replace-hint")),
             ]
             .spacing(4),
             column![
-                muted("The audio of these videos is sent to Soniox and deleted there afterwards."),
-                muted(
-                    "Takes a few minutes per hour of audio; the folder is locked until it ends. \
-                     Closing frename stops the run; finished subtitles are kept."
-                ),
+                muted(fl!("batch-action-generate-subtitles-privacy")),
+                muted(fl!("batch-action-generate-subtitles-duration-hint")),
             ]
             .spacing(4),
         ]
         .spacing(12);
         super::panel(
-            LABEL,
-            "Transcribes the speech of each checked video with Soniox and saves the subtitles \
-             next to it (clip.srt), where frename shows them."
-                .to_string(),
+            label(),
+            fl!("batch-action-generate-subtitles-hint"),
             options.into(),
         )
     }
@@ -348,18 +345,15 @@ impl Options {
     /// Why the key keeps the run button off, shown next to it so it is never scrolled away.
     pub fn footer(&self) -> Option<Element<'_, ActionMessage>> {
         let line = match (self.key, self.price()) {
-            (Some(KeyState::Missing), _) => "Set a Soniox API key in Settings",
-            (Some(KeyState::Unavailable), _) => {
-                "The system keyring could not be opened: it may be locked, or there is none \
-                 (such as GNOME Keyring or KWallet)."
-            }
-            (Some(KeyState::Saved), Some(Price::Rejected)) => "Soniox rejected the key",
+            (Some(KeyState::Missing), _) => fl!("batch-subtitles-key-missing"),
+            (Some(KeyState::Unavailable), _) => fl!("batch-ai-key-unavailable"),
+            (Some(KeyState::Saved), Some(Price::Rejected)) => fl!("batch-subtitles-key-rejected"),
             _ => return None,
         };
         Some(
             row![
                 text(line).size(13).color(theme::ERROR).width(Length::Fill),
-                button(text("Open Settings").size(12))
+                button(text(fl!("batch-ai-open-settings")).size(12))
                     .on_press(ActionMessage::OpenSubtitleSettings)
                     .padding([3, 10])
                     .style(theme::icon_button_style(true)),
@@ -377,65 +371,70 @@ fn plan_lines(plan: &Plan, price: Option<Price>) -> Vec<String> {
     let mut lines = Vec::new();
     if plan.transcribe > 0 {
         let cost = match price {
-            _ if plan.audio_s == 0.0 => "cost unknown".to_string(),
-            None => "Estimating…".to_string(),
+            _ if plan.audio_s == 0.0 => fl!("batch-subtitles-cost-unknown"),
+            None => fl!("batch-subtitles-estimating"),
             Some(price) => {
                 let usd = price.usd_per_hour() * plan.audio_s / 3600.0;
                 match price {
                     Price::Learned(_) => usd_text(usd),
                     Price::Typical | Price::Rejected => {
-                        format!("{} (typical price)", usd_text(usd))
+                        fl!("batch-subtitles-typical-price", usd = usd_text(usd))
                     }
                 }
             }
         };
         let unknown = if plan.unknown_length > 0 {
-            format!(" + {} of unknown length", plan.unknown_length)
+            format!(
+                " {}",
+                fl!(
+                    "batch-subtitles-unknown-length",
+                    n = (plan.unknown_length as i64)
+                )
+            )
         } else {
             String::new()
         };
-        lines.push(format!(
-            "{} to transcribe, {} of audio{unknown} · {cost}",
-            count(plan.transcribe, "video", "videos"),
-            duration_text(plan.audio_s),
+        lines.push(fl!(
+            "batch-subtitles-plan-line",
+            videos = videos(plan.transcribe),
+            duration = duration_text(plan.audio_s),
+            unknown = unknown,
+            cost = cost,
         ));
     }
-    let not_sent = [
-        (
-            plan.already_subtitled,
-            "already has subtitles",
-            "already have subtitles",
-        ),
-        (
-            plan.rebuilt_free,
-            "rebuilt free from a saved transcript",
-            "rebuilt free from a saved transcript",
-        ),
-        (
-            plan.no_speech_before,
-            "had no speech last time",
-            "had no speech last time",
-        ),
-        (plan.no_audio, "has no audio", "have no audio"),
-        (
-            plan.shared_name,
-            "shares its subtitle name with another video",
-            "share their subtitle name with another video",
-        ),
+    let not_sent: Vec<Option<String>> = vec![
+        (plan.already_subtitled > 0).then(|| {
+            fl!(
+                "batch-subtitles-already",
+                n = (plan.already_subtitled as i64)
+            )
+        }),
+        (plan.rebuilt_free > 0).then(|| {
+            fl!(
+                "batch-subtitles-rebuilt-free",
+                n = (plan.rebuilt_free as i64)
+            )
+        }),
+        (plan.no_speech_before > 0).then(|| {
+            fl!(
+                "batch-subtitles-no-speech-before",
+                n = (plan.no_speech_before as i64)
+            )
+        }),
+        (plan.no_audio > 0).then(|| fl!("batch-subtitles-no-audio", n = (plan.no_audio as i64))),
+        (plan.shared_name > 0)
+            .then(|| fl!("batch-subtitles-shared-name", n = (plan.shared_name as i64))),
     ];
-    for (n, one, many) in not_sent {
-        if n > 0 {
-            lines.push(format!("{n} {}", if n == 1 { one } else { many }));
-        }
-    }
+    lines.extend(not_sent.into_iter().flatten());
     if plan.unreadable > 0 {
-        lines.push(format!(
-            "{} cannot be read ({INSTALL_FFMPEG})",
-            plan.unreadable
+        lines.push(fl!(
+            "batch-subtitles-unreadable",
+            n = (plan.unreadable as i64),
+            how_to = fl!("batch-action-generate-subtitles-install-ffmpeg")
         ));
     }
     if !plan.has_work() {
-        lines.push("Nothing to transcribe".to_string());
+        lines.push(fl!("batch-subtitles-nothing"));
     }
     lines
 }
@@ -456,7 +455,7 @@ fn plan_with(files: &[PathBuf], replace: bool, ffmpeg: bool) -> Plan {
         if !names.insert(output.to_string_lossy().to_lowercase()) {
             plan.shared_name += 1;
             plan.excluded
-                .insert(file.clone(), "shares its subtitle name with another video");
+                .insert(file.clone(), fl!("batch-subtitles-shared-name-reason"));
             continue;
         }
         items.push(plan_batch::Item {
@@ -476,8 +475,10 @@ fn plan_with(files: &[PathBuf], replace: bool, ffmpeg: bool) -> Plan {
             && audio::probe(&planned.item.input).is_err();
         if unreadable {
             plan.unreadable += 1;
-            plan.excluded
-                .insert(planned.item.input.clone(), "audio format not supported");
+            plan.excluded.insert(
+                planned.item.input.clone(),
+                fl!("batch-subtitles-unsupported-reason"),
+            );
         } else {
             to_send.push(planned);
         }
@@ -556,7 +557,7 @@ pub fn price() -> Price {
 /// [`PRICE_TIMEOUT`]). `Err` says in plain words why there is no list.
 pub fn supported_languages() -> Result<Vec<(String, String)>, String> {
     let Some(key) = soniox_key() else {
-        return Err("Save a Soniox key to choose from all its languages.".to_string());
+        return Err(fl!("batch-subtitles-languages-need-key"));
     };
     let (sender, receiver) = std::sync::mpsc::channel();
     // Its own thread for the same reasons as the price lookup.
@@ -573,15 +574,15 @@ pub fn supported_languages() -> Result<Vec<(String, String)>, String> {
         }
         Ok(Err(e)) if api_error(&e).is_some_and(|a| a.status == Some(401)) => {
             log::warn!("subtitles: Soniox rejected the key: {e:#}");
-            Err("Soniox rejected the key.".to_string())
+            Err(fl!("batch-subtitles-languages-rejected"))
         }
         Ok(Err(e)) => {
             log::warn!("subtitles: listing Soniox languages failed: {e:#}");
-            Err("Could not get the languages from Soniox.".to_string())
+            Err(fl!("batch-subtitles-languages-failed"))
         }
         Err(_) => {
             log::warn!("subtitles: listing Soniox languages took too long");
-            Err("Could not get the languages from Soniox.".to_string())
+            Err(fl!("batch-subtitles-languages-failed"))
         }
     }
 }
@@ -604,13 +605,18 @@ impl Run {
     pub fn report(&self) -> Option<String> {
         self.0.report()
     }
+
+    /// [`Self::report`] in English only, for logs.
+    pub fn log_report(&self) -> Option<String> {
+        self.0.log_report()
+    }
 }
 
 /// One run of the action.
 pub struct SubtitleJob {
     options: job::Options,
     /// Files the plan excluded, with their reason.
-    excluded: HashMap<PathBuf, &'static str>,
+    excluded: HashMap<PathBuf, String>,
     /// The price the estimate used, for what the run spent.
     usd_per_hour: f64,
     /// Audio sent to Soniox by the files that finished.
@@ -621,10 +627,10 @@ pub struct SubtitleJob {
 
 impl std::fmt::Debug for SubtitleJob {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SubtitleJob")
-            .field("languages", &self.options.languages)
-            .field("force", &self.options.force)
-            .field("excluded", &self.excluded.len())
+        f.debug_struct(stringify!(SubtitleJob))
+            .field(stringify!(languages), &self.options.languages)
+            .field(stringify!(force), &self.options.force)
+            .field(stringify!(excluded), &self.excluded.len())
             .finish_non_exhaustive()
     }
 }
@@ -635,16 +641,34 @@ impl SubtitleJob {
         let failed_deletes = self.failed_deletes.load(Ordering::Relaxed);
         let mut parts = Vec::new();
         if seconds > 0.0 {
-            parts.push(format!(
-                "Soniox: at least {} · {}",
-                duration_text(seconds),
-                usd_text(self.usd_per_hour * seconds / 3600.0)
+            parts.push(fl!(
+                "batch-subtitles-report-spend",
+                duration = duration_text(seconds),
+                usd = usd_text(self.usd_per_hour * seconds / 3600.0)
             ));
         }
         if failed_deletes > 0 {
+            parts.push(fl!(
+                "batch-subtitles-report-failed-deletes",
+                n = (failed_deletes as i64)
+            ));
+        }
+        (!parts.is_empty()).then(|| parts.join(". "))
+    }
+
+    /// [`Self::report`] in English only: the log this feeds must stay grep-able regardless of
+    /// the UI language.
+    fn log_report(&self) -> Option<String> {
+        let seconds = self.uploaded_ms.load(Ordering::Relaxed) as f64 / 1000.0;
+        let failed_deletes = self.failed_deletes.load(Ordering::Relaxed);
+        let mut parts = Vec::new();
+        if seconds > 0.0 {
+            let usd = self.usd_per_hour * seconds / 3600.0;
+            parts.push(format!("spent {seconds:.0}s (${usd:.2})"));
+        }
+        if failed_deletes > 0 {
             parts.push(format!(
-                "{} could not be deleted on Soniox (see the log)",
-                count(failed_deletes, "upload", "uploads")
+                "{failed_deletes} upload(s) not deleted from Soniox"
             ));
         }
         (!parts.is_empty()).then(|| parts.join(". "))
@@ -665,7 +689,7 @@ pub fn run(job: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress)
     if cancel.load(Ordering::Relaxed) {
         return ItemResult::new(ItemStatus::Pending, None);
     }
-    progress.set(0.0, "transcribing");
+    progress.set(0.0, fl!("batch-subtitles-progress-transcribing"));
     let token = CancelToken::new();
     let options = job::Options {
         cancel: token.clone(),
@@ -720,10 +744,15 @@ fn item_result(path: &Path, result: anyhow::Result<Outcome>, cancelled: bool) ->
             return match outcome {
                 Outcome::Written { .. } => ItemResult::new(ItemStatus::Done, None),
                 Outcome::Skipped { .. } => {
-                    with_reason(ItemStatus::Skipped, "already had subtitles")
+                    with_reason(ItemStatus::Skipped, &fl!("batch-subtitles-reason-already"))
                 }
-                Outcome::NoAudio { .. } => with_reason(ItemStatus::Skipped, "no audio"),
-                Outcome::NoSpeech { .. } => with_reason(ItemStatus::Skipped, "no speech"),
+                Outcome::NoAudio { .. } => {
+                    with_reason(ItemStatus::Skipped, &fl!("batch-subtitles-reason-no-audio"))
+                }
+                Outcome::NoSpeech { .. } => with_reason(
+                    ItemStatus::Skipped,
+                    &fl!("batch-subtitles-reason-no-speech"),
+                ),
             };
         }
         Err(e) => e,
@@ -740,36 +769,29 @@ fn item_result(path: &Path, result: anyhow::Result<Outcome>, cancelled: bool) ->
             || api.error_type == "unauthenticated"
             || api.error_type == "permission_denied";
         result.stop_job = Some(match api.error_type.as_str() {
-            _ if key_rejected => {
-                "Stopped: Soniox rejected the key. Check it in Settings → Subtitles.".to_string()
-            }
-            "organization_balance_exhausted" => {
-                "Stopped: the Soniox balance is empty. Top it up at console.soniox.com.".to_string()
-            }
-            t if t.ends_with("budget_exhausted") => {
-                "Stopped: the Soniox monthly budget is used up. Raise it at console.soniox.com."
-                    .to_string()
-            }
-            t => format!("Stopped: Soniox refused to go on ({t})."),
+            _ if key_rejected => fl!("batch-subtitles-stop-key-rejected"),
+            "organization_balance_exhausted" => fl!("batch-subtitles-stop-balance-empty"),
+            t if t.ends_with("budget_exhausted") => fl!("batch-subtitles-stop-budget-used"),
+            t => fl!("batch-subtitles-stop-other", error_type = t.to_string()),
         });
-    } else if reason == CANNOT_REACH {
-        result.stop_if_repeated =
-            Some("Stopped: Soniox cannot be reached. Check the internet connection.".to_string());
+    } else if reason == fl!("batch-subtitles-reason-unreachable") {
+        result.stop_if_repeated = Some(fl!("batch-subtitles-stop-unreachable"));
     }
     result
 }
 
-const CANNOT_REACH: &str = "cannot reach Soniox";
-
 /// Why a file failed, short enough for the result list; the log has the whole error.
 fn failure_reason(e: &anyhow::Error) -> String {
     if let Some(api) = api_error(e) {
-        return format!("Soniox: {}", api.message);
+        return fl!(
+            "batch-subtitles-reason-soniox",
+            message = api.message.clone()
+        );
     }
     let chain = format!("{e:#}");
     // sonisub's context for a request that got no answer (network, proxy, timeout).
     if chain.contains("request to Soniox failed") {
-        return CANNOT_REACH.to_string();
+        return fl!("batch-subtitles-reason-unreachable");
     }
     if [
         "unsupported container",
@@ -779,7 +801,7 @@ fn failure_reason(e: &anyhow::Error) -> String {
     .iter()
     .any(|m| chain.contains(m))
     {
-        return "audio format not supported".to_string();
+        return fl!("batch-subtitles-unsupported-reason");
     }
     e.root_cause().to_string().chars().take(120).collect()
 }
@@ -792,26 +814,35 @@ fn with_reason(status: ItemStatus, reason: &str) -> ItemResult {
 }
 
 /// "1 video" / "8 videos".
-fn count(n: usize, one: &str, many: &str) -> String {
-    format!("{n} {}", if n == 1 { one } else { many })
+fn videos(n: usize) -> String {
+    fl!("batch-videos-count", n = (n as i64))
+}
+
+/// "1 subtitle" / "8 subtitles".
+fn subtitles_count(n: usize) -> String {
+    fl!("batch-subtitles-count", n = (n as i64))
 }
 
 /// "41 min", "1 h 5 min", "20 s".
 fn duration_text(seconds: f64) -> String {
     let s = seconds.round() as u64;
     match s {
-        0..60 => format!("{s} s"),
-        60..3600 => format!("{} min", (s + 30) / 60),
-        _ => format!("{} h {} min", s / 3600, s / 60 % 60),
+        0..60 => fl!("batch-subtitles-duration-seconds", s = (s as i64)),
+        60..3600 => fl!("batch-minutes", n = (((s + 30) / 60) as i64)),
+        _ => fl!(
+            "batch-ai-duration-hours-minutes",
+            h = ((s / 3600) as i64),
+            m = ((s / 60 % 60) as i64)
+        ),
     }
 }
 
 /// "about $0.07"; small amounts are not shown as zero.
 fn usd_text(usd: f64) -> String {
     if usd > 0.0 && usd < 0.005 {
-        "less than $0.01".to_string()
+        fl!("batch-subtitles-usd-under")
     } else {
-        format!("about ${usd:.2}")
+        fl!("batch-subtitles-usd-about", amount = format!("{usd:.2}"))
     }
 }
 
@@ -859,7 +890,7 @@ mod tests {
         }
     }
 
-    fn job(excluded: HashMap<PathBuf, &'static str>, force: bool) -> Run {
+    fn job(excluded: HashMap<PathBuf, String>, force: bool) -> Run {
         Run(Arc::new(SubtitleJob {
             options: job::Options {
                 force,
@@ -912,7 +943,7 @@ mod tests {
         assert_eq!(plan.shared_name, 1, "pair.mov maps to pair.srt too");
         assert_eq!(
             plan.excluded.get(&second),
-            Some(&"shares its subtitle name with another video")
+            Some(&fl!("batch-subtitles-shared-name-reason"))
         );
         assert_eq!(plan.unreadable, 1, "pair.MP4 has no header and no ffmpeg");
         assert_eq!(plan.transcribe, 0);
@@ -936,13 +967,12 @@ mod tests {
     fn excluded_files_are_skipped_with_their_reason_even_with_replace() {
         let folder = Folder::new("excluded");
         let video = folder.file("clip.mov", "x");
-        let excluded =
-            HashMap::from([(video.clone(), "shares its subtitle name with another video")]);
+        let excluded = HashMap::from([(video.clone(), fl!("batch-subtitles-shared-name-reason"))]);
         let result = run_now(&job(excluded, true), &video);
         assert_eq!(result.status, ItemStatus::Skipped);
         assert_eq!(
-            result.reason.as_deref(),
-            Some("shares its subtitle name with another video")
+            result.reason,
+            Some(fl!("batch-subtitles-shared-name-reason"))
         );
     }
 
@@ -959,13 +989,19 @@ mod tests {
                 cached: false,
                 uploaded_s: Some(3.0)
             }),
-            (ItemStatus::Skipped, Some("no speech".to_string()))
+            (
+                ItemStatus::Skipped,
+                Some(fl!("batch-subtitles-reason-no-speech"))
+            )
         );
         assert_eq!(
             status(Outcome::NoAudio {
                 reason: "no audio track".into()
             }),
-            (ItemStatus::Skipped, Some("no audio".to_string()))
+            (
+                ItemStatus::Skipped,
+                Some(fl!("batch-subtitles-reason-no-audio"))
+            )
         );
         assert_eq!(
             status(Outcome::Skipped {
@@ -973,7 +1009,7 @@ mod tests {
             }),
             (
                 ItemStatus::Skipped,
-                Some("already had subtitles".to_string())
+                Some(fl!("batch-subtitles-reason-already"))
             )
         );
     }
@@ -1011,8 +1047,11 @@ mod tests {
         let ordinary = item_result(path, Err(soniox_error(400, "invalid_audio_file")), false);
         assert!(ordinary.stop_job.is_none());
         assert_eq!(
-            ordinary.reason.as_deref(),
-            Some("Soniox: message from Soniox")
+            ordinary.reason,
+            Some(fl!(
+                "batch-subtitles-reason-soniox",
+                message = "message from Soniox"
+            ))
         );
     }
 
@@ -1020,12 +1059,15 @@ mod tests {
     fn network_failures_stop_the_job_once_they_repeat() {
         let e = anyhow::anyhow!("error sending request").context("request to Soniox failed");
         let result = item_result(Path::new("clip.mp4"), Err(e), false);
-        assert_eq!(result.reason.as_deref(), Some(CANNOT_REACH));
+        assert_eq!(
+            result.reason,
+            Some(fl!("batch-subtitles-reason-unreachable"))
+        );
         assert!(result.stop_job.is_none());
         assert!(result.stop_if_repeated.is_some());
         assert_eq!(
             failure_reason(&anyhow::anyhow!("unsupported container")),
-            "audio format not supported"
+            fl!("batch-subtitles-unsupported-reason")
         );
     }
 
@@ -1064,11 +1106,16 @@ mod tests {
         job.0.uploaded_ms.store(41 * 60 * 1000, Ordering::Relaxed);
         job.0.failed_deletes.store(1, Ordering::Relaxed);
         assert_eq!(
-            job.report().as_deref(),
-            Some(
-                "Soniox: at least 41 min · about $0.08. 1 upload could not be deleted on Soniox \
-                 (see the log)"
-            )
+            job.report(),
+            Some(format!(
+                "{}. {}",
+                fl!(
+                    "batch-subtitles-report-spend",
+                    duration = fl!("batch-minutes", n = 41),
+                    usd = fl!("batch-subtitles-usd-about", amount = "0.08")
+                ),
+                fl!("batch-subtitles-report-failed-deletes", n = 1)
+            ))
         );
     }
 
@@ -1086,15 +1133,24 @@ mod tests {
         assert_eq!(
             plan_lines(&plan, Some(Price::Typical)),
             [
-                "8 videos to transcribe, 41 min of audio + 2 of unknown length · about $0.07 (typical price)",
-                "3 already have subtitles",
-                "2 rebuilt free from a saved transcript",
-                "1 shares its subtitle name with another video",
+                fl!(
+                    "batch-subtitles-plan-line",
+                    videos = videos(8),
+                    duration = fl!("batch-minutes", n = 41),
+                    unknown = format!(" {}", fl!("batch-subtitles-unknown-length", n = 2)),
+                    cost = fl!(
+                        "batch-subtitles-typical-price",
+                        usd = fl!("batch-subtitles-usd-about", amount = "0.07")
+                    ),
+                ),
+                fl!("batch-subtitles-already", n = 3),
+                fl!("batch-subtitles-rebuilt-free", n = 2),
+                fl!("batch-subtitles-shared-name", n = 1),
             ]
         );
         assert_eq!(
             plan_lines(&Plan::default(), None),
-            ["Nothing to transcribe"]
+            [fl!("batch-subtitles-nothing")]
         );
         let unknown = Plan {
             transcribe: 2,
@@ -1105,9 +1161,18 @@ mod tests {
         assert_eq!(
             plan_lines(&unknown, Some(Price::Typical)),
             [
-                "2 videos to transcribe, 0 s of audio + 2 of unknown length · cost unknown",
-                "1 cannot be read (to read .mkv, .m2ts, .avi …, install ffmpeg from ffmpeg.org, \
-                 add it to PATH, restart frename)",
+                fl!(
+                    "batch-subtitles-plan-line",
+                    videos = videos(2),
+                    duration = fl!("batch-subtitles-duration-seconds", s = 0),
+                    unknown = format!(" {}", fl!("batch-subtitles-unknown-length", n = 2)),
+                    cost = fl!("batch-subtitles-cost-unknown"),
+                ),
+                fl!(
+                    "batch-subtitles-unreadable",
+                    n = 1,
+                    how_to = fl!("batch-action-generate-subtitles-install-ffmpeg")
+                ),
             ]
         );
     }
@@ -1158,7 +1223,13 @@ mod tests {
         options.update(Message::PriceReady(Price::Learned(0.1)));
         assert!(options.operation().is_some());
         let (_, label, ready) = options.panel(&[&a]);
-        assert_eq!((label.as_str(), ready), ("Transcribe 1 video", true));
+        assert_eq!(
+            (label, ready),
+            (
+                fl!("batch-subtitles-transcribe-count", videos = videos(1)),
+                true
+            )
+        );
 
         options.update(Message::PriceReady(Price::Rejected));
         assert!(options.operation().is_none(), "key rejected");

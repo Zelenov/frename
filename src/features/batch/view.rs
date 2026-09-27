@@ -10,7 +10,7 @@ use iced::{Element, Length};
 use crate::features::folder_workspace::Directory;
 use crate::theme;
 
-use super::actions::{files, spend_line};
+use super::actions::spend_line;
 use super::state::Progress;
 use super::{Action, BatchState, Message};
 
@@ -35,10 +35,13 @@ pub fn view<'a>(state: &'a BatchState, directory: Option<&'a Directory>) -> Elem
     // The panel's title: without it the list reads as loose buttons, not as actions on the
     // checked files.
     let heading = row![
-        text("Batch actions").size(18),
-        text(format!("on {} checked", files(state.checked_count())))
-            .size(13)
-            .color(theme::TEXT_MUTED),
+        text(fl!("batch-title")).size(18),
+        text(fl!(
+            "batch-on-checked",
+            count = (state.checked_count() as i64)
+        ))
+        .size(13)
+        .color(theme::TEXT_MUTED),
     ]
     .spacing(10)
     .align_y(iced::Alignment::End);
@@ -48,7 +51,7 @@ pub fn view<'a>(state: &'a BatchState, directory: Option<&'a Directory>) -> Elem
             .on_press_maybe((!state.is_running()).then_some(Message::SetActive(false)))
             .padding([2, 8])
             .style(theme::icon_button_style(!state.is_running())),
-        container(text("Back to the open file"))
+        container(text(fl!("folder-controls-batch-back")))
             .padding([2, 6])
             .style(theme::elevated_container_style),
         tooltip::Position::Left,
@@ -132,12 +135,12 @@ fn job_panel<'a>(
             .unwrap_or_default()
     };
     let action = state.job_action().unwrap_or(state.action());
-    let counts = text(format!(
-        "✓ {} {}   – {} unchanged   ✗ {} failed",
-        progress.done,
-        action.done_label(),
-        progress.skipped,
-        progress.failed
+    let counts = text(fl!(
+        "batch-counts",
+        done = (progress.done as i64),
+        done_label = action.done_label(),
+        skipped = (progress.skipped as i64),
+        failed = (progress.failed as i64)
     ))
     .size(12)
     .color(theme::TEXT_SOFT);
@@ -153,9 +156,9 @@ fn job_panel<'a>(
             (name, false) => format!("{name} — {step}"),
         };
         let (label, cancel) = if progress.cancelled {
-            ("Stopping…", None)
+            (fl!("batch-stopping"), None)
         } else {
-            ("Cancel", Some(Message::Cancel))
+            (fl!("batch-cancel"), Some(Message::Cancel))
         };
         panel = panel
             .push(
@@ -194,24 +197,22 @@ fn job_panel<'a>(
         let mut summary = if let Some(stopped) = state.stopped() {
             stopped.to_string()
         } else if progress.finished < progress.total {
-            format!(
-                "Stopped after {} of {}.",
-                progress.finished,
-                files(progress.total)
+            fl!(
+                "batch-stopped",
+                finished = (progress.finished as i64),
+                total = (progress.total as i64)
             )
         } else {
-            format!("Finished {}.", files(progress.total))
+            fl!("batch-finished", total = (progress.total as i64))
         };
         if let Some(usage) = progress.usage {
-            let at_least = if progress.usage_unknown {
-                "at least "
+            let spend = spend_line(state.job_ai_model(), usage);
+            let spend = if progress.usage_unknown {
+                format!("{} {spend}", fl!("batch-ai-at-least"))
             } else {
-                ""
+                spend
             };
-            summary.push_str(&format!(
-                "   AI: {at_least}{}",
-                spend_line(state.job_ai_model(), usage)
-            ));
+            summary.push_str(&format!("   {}", fl!("batch-ai-spend-line", spend = spend)));
         }
         if let Some(report) = state.report() {
             summary.push_str(&format!("   {report}"));
@@ -219,11 +220,11 @@ fn job_panel<'a>(
         panel = panel.push(text(summary).size(13)).push(
             row![counts, Space::new().width(Length::Fill),]
                 .extend((!state.retryable().is_empty()).then(|| {
-                    button(text("Retry").size(13))
+                    button(text(fl!("batch-retry")).size(13))
                         .on_press(Message::Retry)
                         .into()
                 }))
-                .push(button(text("Close").size(13)).on_press(Message::CloseReport))
+                .push(button(text(fl!("batch-close")).size(13)).on_press(Message::CloseReport))
                 .spacing(6)
                 .align_y(iced::Alignment::Center),
         );
@@ -236,11 +237,11 @@ fn job_panel<'a>(
         };
         if !failed.is_empty() || !skipped.is_empty() {
             let heading = if action == Action::GenerateSubtitles {
-                "Not subtitled:"
+                fl!("batch-failed-subtitles")
             } else if failed.iter().all(|(_, reason)| reason.is_some()) {
-                "Failed:"
+                fl!("batch-failed-plain")
             } else {
-                "Failed (the log says why):"
+                fl!("batch-failed-with-log")
             };
             let failed_lines = failed.into_iter().map(|(id, reason)| {
                 let line = match reason {
@@ -263,13 +264,13 @@ fn job_panel<'a>(
                         Space::new().width(Length::Fill),
                     ]
                     .extend(state.out_of_credit().then(|| {
-                        button(text("Add credit").size(12))
+                        button(text(fl!("batch-add-credit")).size(12))
                             .on_press(Message::OpenBilling)
                             .padding([2, 8])
                             .into()
                     }))
                     .push(
-                        button(text("Open log").size(12))
+                        button(text(fl!("batch-open-log")).size(12))
                             .on_press(Message::OpenLog)
                             .padding([2, 8]),
                     )

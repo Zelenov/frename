@@ -18,21 +18,29 @@ pub fn view(state: &UpdatesState, batch_running: bool) -> Element<'_, Message> {
     );
     let available = state.available_version();
 
-    let check = button(text("Check for updates").size(13))
+    let check = button(text(fl!("updates-check")).size(13))
         .on_press_maybe((state.installed() && !busy).then_some(Message::CheckNow));
 
     let note = match (status, &available) {
-        _ if !state.installed() => "Updates work in the installed version".to_string(),
-        (Status::Checking { .. }, _) => "Checking…".to_string(),
-        (Status::Downloading(percent), Some(version)) => {
-            format!("Downloading {version}… {percent}%")
+        _ if !state.installed() => fl!("updates-not-installed"),
+        (Status::Checking { .. }, _) => fl!("updates-checking"),
+        (Status::Downloading(percent), Some(version)) => fl!(
+            "updates-downloading-named",
+            version = version.clone(),
+            percent = (*percent as i64)
+        ),
+        (Status::Downloading(percent), None) => {
+            fl!("updates-downloading", percent = (*percent as i64))
         }
-        (Status::Downloading(percent), None) => format!("Downloading… {percent}%"),
-        (Status::Restarting, _) => "Restarting…".to_string(),
-        (Status::CheckFailed(reason), _) => format!("Could not check for updates: {reason}"),
-        (Status::UpdateFailed(reason), _) => format!("Could not update: {reason}"),
-        (_, Some(version)) => format!("Version {version} is available"),
-        (Status::UpToDate, None) => "frename is up to date".to_string(),
+        (Status::Restarting, _) => fl!("updates-restarting"),
+        (Status::CheckFailed(reason), _) => {
+            fl!("updates-check-failed", reason = reason.clone())
+        }
+        (Status::UpdateFailed(reason), _) => {
+            fl!("updates-update-failed", reason = reason.clone())
+        }
+        (_, Some(version)) => fl!("updates-version-available", version = version.clone()),
+        (Status::UpToDate, None) => fl!("updates-up-to-date"),
         (Status::Idle, None) => String::new(),
     };
 
@@ -40,12 +48,12 @@ pub fn view(state: &UpdatesState, batch_running: bool) -> Element<'_, Message> {
         .spacing(10)
         .align_y(Alignment::Center);
     if available.is_some() {
-        let update = button(text("Update and restart").size(13))
+        let update = button(text(fl!("updates-update-and-restart")).size(13))
             .on_press_maybe((!busy && !batch_running).then_some(Message::UpdateAndRestart));
         actions = actions.push(if batch_running {
             tooltip(
                 update,
-                text("Wait for the batch to finish"),
+                text(fl!("updates-wait-for-batch")),
                 tooltip::Position::Top,
             )
             .into()
@@ -55,10 +63,14 @@ pub fn view(state: &UpdatesState, batch_running: bool) -> Element<'_, Message> {
     }
 
     column![
-        text(format!("frename {}", state.current_version())).size(13),
+        text(fl!(
+            "updates-current-version",
+            version = state.current_version()
+        ))
+        .size(13),
         actions,
         checkbox(state.check_on_start())
-            .label("Check for updates when frename starts")
+            .label(fl!("updates-check-on-start"))
             .on_toggle_maybe(state.installed().then_some(Message::SetCheckOnStart)),
     ]
     .spacing(8)

@@ -14,7 +14,7 @@ use crate::theme;
 use super::state::{KeySection, LanguageList, OldSettingsImport};
 use super::{KeyMessage, Message, SettingsState};
 
-use crate::features::batch::{MarkersDirection, Operation};
+use crate::features::batch::{describe_ai, MarkersDirection, Operation};
 use crate::features::updates;
 
 /// The settings' scrollable content, which "Describe with AI" and "Generate subtitles" open
@@ -26,52 +26,64 @@ pub const SETTINGS_SCROLLABLE_ID: &str = "settings-content";
 pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> {
     let settings = state.settings();
 
+    let language = section(
+        fl!("settings-language"),
+        row![pick_list(
+            language_options(),
+            Some(LanguageOption(settings.ui_language.clone())),
+            |opt| Message::SetUiLanguage(opt.0),
+        )
+        .text_size(13)
+        .padding([3, 8])]
+        .into(),
+    );
+
     let video = section(
-        "Video",
+        fl!("settings-video"),
         checkbox(settings.autoplay_video)
-            .label("Play videos automatically when opened")
+            .label(fl!("settings-video-autoplay"))
             .on_toggle(Message::SetAutoplayVideo)
             .into(),
     );
     let mut tag_options = column![
         checkbox(settings.monochrome_tags)
-            .label("Monochrome tags")
+            .label(fl!("settings-tags-monochrome"))
             .on_toggle(Message::SetMonochromeTags),
         checkbox(settings.space_after_tags)
-            .label("Space after each tag in file names (Food. Goat. clip.mp4)")
+            .label(fl!("settings-tags-space-after"))
             .on_toggle(Message::SetSpaceAfterTags),
     ]
     .spacing(8);
     if state.tag_spacing_changed() {
         let label = if settings.space_after_tags {
-            "Add the space to existing file names…"
+            fl!("settings-tags-space-add")
         } else {
-            "Remove the space from existing file names…"
+            fl!("settings-tags-space-remove")
         };
         tag_options = tag_options.push(move_offer(
-            "Files keep their names until renamed or saved.",
+            fl!("settings-tags-space-note"),
             label,
             Operation::RespaceTags,
         ));
     }
-    let tags = section("Tags", tag_options.into());
+    let tags = section(fl!("settings-tags"), tag_options.into());
 
     // Each option's own settings sit right under it: the tag under "inside the video", and the
     // offer to move existing files under whichever option was just chosen.
     let selected_storage = Some(settings.comment_storage);
     let comment_offer = state.comment_storage_changed().then(|| {
         let label = match settings.comment_storage {
-            CommentStorage::InVideo => "Move existing comments from text files into the videos…",
-            CommentStorage::TextFile => "Move existing comments from the videos into text files…",
+            CommentStorage::InVideo => fl!("settings-comments-move-into-videos"),
+            CommentStorage::TextFile => fl!("settings-comments-move-into-text-files"),
         };
         move_offer(
-            "Files keep their comments where they are until moved.",
+            fl!("settings-comments-note"),
             label,
             Operation::MoveComments(settings.comment_storage),
         )
     });
     let mut comment_options = column![radio(
-        "Inside the video file (XMP, Premiere Pro's Description column)",
+        fl!("settings-comments-in-video"),
         CommentStorage::InVideo,
         selected_storage,
         Message::SetCommentStorage,
@@ -91,103 +103,97 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
     }
     let comment_options = comment_options
         .push(radio(
-            "In a .comment.txt file next to the video",
+            fl!("settings-comments-text-file"),
             CommentStorage::TextFile,
             selected_storage,
             Message::SetCommentStorage,
         ))
         .extend(text_file_offer);
-    let comments = section("Comments", comment_options.into());
+    let comments = section(fl!("settings-comments"), comment_options.into());
 
     let selected_in_out = Some(settings.in_out_storage);
     let in_out_offer = |storage: InOutStorage| {
         (state.in_out_storage_changed() && settings.in_out_storage == storage).then(|| {
             let label = match storage {
-                InOutStorage::InVideo => {
-                    "Move existing in/out points from file names into the videos…"
-                }
-                InOutStorage::FileName => {
-                    "Move existing in/out points from the videos into file names…"
-                }
+                InOutStorage::InVideo => fl!("settings-in-out-move-into-videos"),
+                InOutStorage::FileName => fl!("settings-in-out-move-into-file-names"),
             };
             move_offer(
-                "Files keep their in/out points where they are until moved.",
+                fl!("settings-in-out-note"),
                 label,
                 Operation::MoveInOut(storage),
             )
         })
     };
     let in_out_options = column![radio(
-        "Adobe: a marker inside the video file (XMP, a subclip in Premiere Pro)",
+        fl!("settings-in-out-in-video"),
         InOutStorage::InVideo,
         selected_in_out,
         Message::SetInOutStorage,
     ),]
     .extend(in_out_offer(InOutStorage::InVideo))
     .push(radio(
-        "In the file name (in_HH_MM_SS / out_HH_MM_SS)",
+        fl!("settings-in-out-file-name"),
         InOutStorage::FileName,
         selected_in_out,
         Message::SetInOutStorage,
     ))
     .extend(in_out_offer(InOutStorage::FileName))
     .spacing(8);
-    let in_out = section("In/out points", in_out_options.into());
+    let in_out = section(fl!("settings-in-out"), in_out_options.into());
 
     let selected_markers = Some(settings.marker_storage);
     let marker_offer = |storage: MarkerStorage| {
         (state.marker_storage_changed() && settings.marker_storage == storage).then(|| {
             let (label, direction) = match storage {
                 MarkerStorage::InVideo => (
-                    "Move existing markers from comments into the videos…",
+                    fl!("settings-markers-move-into-videos"),
                     MarkersDirection::CommentToMarkers,
                 ),
                 MarkerStorage::Comment => (
-                    "Copy existing markers from the videos into comments…",
+                    fl!("settings-markers-copy-into-comment"),
                     MarkersDirection::MarkersToComment,
                 ),
             };
             move_offer(
-                "Files keep their markers where they are until moved.",
+                fl!("settings-markers-note"),
                 label,
                 Operation::MarkersComment(direction),
             )
         })
     };
     let marker_options = column![radio(
-        "Inside the video file (XMP, Premiere Pro shows them on the clip)",
+        fl!("settings-markers-in-video"),
         MarkerStorage::InVideo,
         selected_markers,
         Message::SetMarkerStorage,
     )]
     .extend(marker_offer(MarkerStorage::InVideo))
     .push(radio(
-        "In the comment, one line each (0:41–0:47 — Lion)",
+        fl!("settings-markers-comment"),
         MarkerStorage::Comment,
         selected_markers,
         Message::SetMarkerStorage,
     ))
     .extend(marker_offer(MarkerStorage::Comment))
     .push(
-        text(
-            "Points and ranges alike. The moments Describe with AI finds go the same way: \
-             white markers, or the lines of its description.",
-        )
-        .size(12)
-        .color(theme::TEXT_MUTED),
+        text(fl!("settings-markers-hint"))
+            .size(12)
+            .color(theme::TEXT_MUTED),
     )
     .spacing(8);
-    let markers = section("Markers and ranges", marker_options.into());
+    let markers = section(fl!("settings-markers"), marker_options.into());
 
     let updates = section(
-        "Updates",
+        fl!("settings-updates"),
         updates::view::view(state.updates(), batch_running).map(Message::Updates),
     );
-    let mut sections = column![video, tags, comments, markers, in_out, updates].spacing(20);
+    let mut sections =
+        column![language, video, tags, comments, markers, in_out, updates].spacing(20);
     // Only a package keeps its settings away from the exe; elsewhere they are next to it.
     if state.updates().installed() {
         sections = sections.push(section(
-            "Settings from an older frename",
+            fl!("settings-old-title"),
             old_settings_import(state.old_settings_import()),
         ));
     }
@@ -195,7 +201,7 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
     // end, at these sections.
     sections = sections
         .push(section(
-            "AI",
+            fl!("settings-ai"),
             ai_options(
                 state.key(ApiKey::Anthropic),
                 settings.summary_language,
@@ -203,7 +209,7 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
             ),
         ))
         .push(section(
-            "Subtitles",
+            fl!("settings-subtitles"),
             subtitle_options(
                 state.key(ApiKey::Soniox),
                 state.subtitle_languages(),
@@ -226,17 +232,17 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
 
 /// The AI section: the Anthropic API key, and the model and language of descriptions.
 fn ai_options(key: &KeySection, language: SummaryLanguage, model: Model) -> Element<'_, Message> {
-    let muted = |line: &'static str| text(line).size(12).color(theme::TEXT_MUTED);
+    let muted = |line: String| text(line).size(12).color(theme::TEXT_MUTED);
     key_block(
         ApiKey::Anthropic,
         key,
-        "Anthropic API key",
-        "sk-ant-…",
-        "Get a key at console.anthropic.com → API keys.",
+        fl!("settings-ai-key-label"),
+        fl!("settings-ai-key-placeholder"),
+        fl!("settings-ai-key-get"),
     )
     .push(
         row![
-            text("Model").size(13),
+            text(fl!("settings-ai-model-label")).size(13),
             pick_list(MODELS, Some(model), Message::SetAiModel)
                 .text_size(13)
                 .padding([3, 8]),
@@ -246,11 +252,11 @@ fn ai_options(key: &KeySection, language: SummaryLanguage, model: Model) -> Elem
     )
     .push(
         row![
-            text("Description language").size(13),
+            text(fl!("settings-ai-language-label")).size(13),
             pick_list(
-                SummaryLanguage::ALL,
-                Some(language),
-                Message::SetSummaryLanguage
+                SummaryLanguage::ALL.map(SummaryLanguageOption),
+                Some(SummaryLanguageOption(language)),
+                |opt| Message::SetSummaryLanguage(opt.0)
             )
             .text_size(13)
             .padding([3, 8]),
@@ -258,10 +264,7 @@ fn ai_options(key: &KeySection, language: SummaryLanguage, model: Model) -> Elem
         .spacing(12)
         .align_y(iced::Alignment::Center),
     )
-    .push(muted(
-        "Used by Describe with AI in batch mode. Haiku is the cheapest and fine for most \
-         clips; Sonnet and Opus notice more and cost more.",
-    ))
+    .push(muted(fl!("settings-ai-hint")))
     .into()
 }
 
@@ -273,7 +276,7 @@ fn subtitle_options<'a>(
     languages: &'a [String],
     cue_length: CueLength,
 ) -> Element<'a, Message> {
-    let muted = |line: &'static str| text(line).size(12).color(theme::TEXT_MUTED);
+    let muted = |line: String| text(line).size(12).color(theme::TEXT_MUTED);
     let checked = |code: &str| languages.iter().any(|l| l == code);
     // Soniox's own list; until it comes (or without a key) the checked codes stay uncheckable.
     let offered: Vec<(String, String)> = match list {
@@ -298,41 +301,41 @@ fn subtitle_options<'a>(
         .collect();
     let status = match list {
         LanguageList::NotAsked if key.state == Some(KeyState::Missing) => {
-            Some("Save the key to choose from all the languages Soniox knows.".to_string())
+            Some(fl!("settings-subtitles-languages-locked"))
         }
         LanguageList::NotAsked | LanguageList::Listed(_) => None,
-        LanguageList::Loading => Some("Getting the languages from Soniox…".to_string()),
+        LanguageList::Loading => Some(fl!("settings-subtitles-languages-loading")),
         LanguageList::Failed(why) => Some(why.clone()),
     };
     let hint = if languages.is_empty() {
-        "None checked: detected automatically."
+        fl!("settings-subtitles-languages-none")
     } else {
-        "The languages spoken in the footage, as hints."
+        fl!("settings-subtitles-languages-hint")
     };
     let selected = Some(cue_length);
     key_block(
         ApiKey::Soniox,
         key,
-        "Soniox API key",
-        "Paste the key",
-        "Get a key at console.soniox.com. The audio is sent to Soniox to transcribe it.",
+        fl!("settings-subtitles-key-label"),
+        fl!("settings-subtitles-key-placeholder"),
+        fl!("settings-subtitles-key-get"),
     )
-    .push(text("Languages").size(13))
+    .push(text(fl!("settings-subtitles-languages-label")).size(13))
     .extend(language_rows)
     .extend(status.map(|s| text(s).size(12).color(theme::TEXT_MUTED).into()))
     .push(muted(hint))
     .push(
         row![
-            text("Cue length").size(13),
+            text(fl!("settings-subtitles-cue-length-label")).size(13),
             radio(
-                "Short (one line, up to 8 s)",
+                fl!("settings-subtitles-cue-short"),
                 CueLength::Short,
                 selected,
                 Message::SetSubtitleCueLength,
             )
             .text_size(13),
             radio(
-                "One sentence",
+                fl!("settings-subtitles-cue-sentence"),
                 CueLength::Sentence,
                 selected,
                 Message::SetSubtitleCueLength,
@@ -342,9 +345,7 @@ fn subtitle_options<'a>(
         .spacing(12)
         .align_y(iced::Alignment::Center),
     )
-    .push(muted(
-        "Used by Generate subtitles in batch mode. The cue length applies to new subtitles.",
-    ))
+    .push(muted(fl!("settings-subtitles-hint")))
     .into()
 }
 
@@ -353,39 +354,39 @@ fn subtitle_options<'a>(
 fn key_block<'a>(
     which: ApiKey,
     key: &'a KeySection,
-    label: &'static str,
-    placeholder: &'static str,
-    get_one: &'static str,
+    label: String,
+    placeholder: String,
+    get_one: String,
 ) -> iced::widget::Column<'a, Message> {
-    let muted = |line: &'static str| text(line).size(12).color(theme::TEXT_MUTED);
+    let muted = |line: String| text(line).size(12).color(theme::TEXT_MUTED);
     let message = move |m: KeyMessage| Message::Key(which, m);
     let store = if cfg!(windows) {
-        "Windows Credential Manager"
+        fl!("settings-key-store-windows")
     } else if cfg!(target_os = "macos") {
-        "the macOS Keychain"
+        fl!("settings-key-store-macos")
     } else {
-        "the system keyring"
+        fl!("settings-key-store-other")
     };
     let key_row: Element<'_, Message> = match key.state {
-        Some(KeyState::Unavailable) => text("The system keyring could not be opened")
+        Some(KeyState::Unavailable) => text(fl!("settings-key-unavailable"))
             .size(13)
             .color(theme::ERROR)
             .into(),
         // The question and its buttons on lines of their own, so they fit the window.
         Some(KeyState::Saved) if key.confirm_remove => column![
-            text("Remove the saved key? You will need to paste it again.").size(12),
+            text(fl!("settings-key-remove-confirm")).size(12),
             row![
-                small_button("Remove", message(KeyMessage::Remove)),
-                small_button("Keep", message(KeyMessage::CancelRemove)),
+                small_button(fl!("settings-key-remove"), message(KeyMessage::Remove)),
+                small_button(fl!("settings-key-keep"), message(KeyMessage::CancelRemove)),
             ]
             .spacing(8),
         ]
         .spacing(6)
         .into(),
         Some(KeyState::Saved) if !key.replacing => row![
-            text("Key saved").size(13),
-            small_button("Replace", message(KeyMessage::Replace)),
-            small_button("Remove", message(KeyMessage::AskRemove)),
+            text(fl!("settings-key-saved")).size(13),
+            small_button(fl!("settings-key-replace"), message(KeyMessage::Replace)),
+            small_button(fl!("settings-key-remove"), message(KeyMessage::AskRemove)),
         ]
         .spacing(8)
         .align_y(iced::Alignment::Center)
@@ -395,10 +396,10 @@ fn key_block<'a>(
             let save = can_save.then_some(message(KeyMessage::Save));
             let cancel = key
                 .replacing
-                .then(|| small_button("Cancel", message(KeyMessage::CancelReplace)));
+                .then(|| small_button(fl!("batch-cancel"), message(KeyMessage::CancelReplace)));
             // The buttons go under the field, so the row fits the window with Cancel too.
             column![
-                text_input(placeholder, &key.input)
+                text_input(&placeholder, &key.input)
                     .secure(!key.shown)
                     .on_input(move |input| message(KeyMessage::Input(input)))
                     .on_submit_maybe(save.clone())
@@ -407,10 +408,14 @@ fn key_block<'a>(
                     .width(Length::Fixed(260.0)),
                 row![
                     small_button(
-                        if key.shown { "Hide" } else { "Show" },
+                        if key.shown {
+                            fl!("settings-key-hide")
+                        } else {
+                            fl!("settings-key-show")
+                        },
                         message(KeyMessage::ToggleShow)
                     ),
-                    button(text("Save").size(12))
+                    button(text(fl!("settings-key-save")).size(12))
                         .on_press_maybe(save)
                         .padding([3, 10]),
                 ]
@@ -426,17 +431,15 @@ fn key_block<'a>(
         .align_y(iced::Alignment::Center)]
     .spacing(6);
     options = match key.state {
-        Some(KeyState::Unavailable) => options.push(muted(
-            "It may be locked, or there is none (such as GNOME Keyring or KWallet). Settings checks again each time it opens.",
-        )),
+        Some(KeyState::Unavailable) => options.push(muted(fl!("settings-key-unavailable-hint"))),
         Some(KeyState::Saved) if !key.replacing => options.push(
-            text(format!("Saved in {store} on this computer."))
+            text(fl!("settings-key-saved-in", store = store))
                 .size(12)
                 .color(theme::TEXT_MUTED),
         ),
         _ => options
             .push(
-                text(format!("Save keeps it in {store} on this computer."))
+                text(fl!("settings-key-save-into", store = store))
                     .size(12)
                     .color(theme::TEXT_MUTED),
             )
@@ -448,7 +451,7 @@ fn key_block<'a>(
     options
 }
 
-fn small_button(label: &str, message: Message) -> Element<'_, Message> {
+fn small_button(label: String, message: Message) -> Element<'static, Message> {
     button(text(label).size(12))
         .on_press(message)
         .padding([3, 10])
@@ -460,16 +463,19 @@ fn small_button(label: &str, message: Message) -> Element<'_, Message> {
 fn old_settings_import(import: &OldSettingsImport) -> Element<'_, Message> {
     let note = match import {
         OldSettingsImport::None => String::new(),
-        OldSettingsImport::Scheduled(_) => {
-            "Settings will be imported when frename restarts".to_string()
-        }
+        OldSettingsImport::Scheduled(_) => fl!("settings-old-scheduled"),
         OldSettingsImport::NotFound(folder) => {
-            format!("No frename.exe with a frename.db in {}", folder.display())
+            fl!(
+                "settings-old-not-found",
+                folder = folder.display().to_string()
+            )
         }
-        OldSettingsImport::Failed(reason) => format!("Could not import: {reason}"),
+        OldSettingsImport::Failed(reason) => {
+            fl!("settings-old-failed", reason = reason.clone())
+        }
     };
     row![
-        button(text("Import from an old frename folder…").size(13))
+        button(text(fl!("settings-old-import-button")).size(13))
             .on_press(Message::ImportOldSettings),
         text(note).size(13).color(theme::TEXT_MUTED),
     ]
@@ -490,15 +496,13 @@ fn commented_tag(enabled: bool, tag: &str) -> Element<'_, Message> {
         input = input.on_input(Message::SetCommentedTag);
     }
     let hint = match frename_core::clean_commented_tag(tag).filter(|_| enabled) {
-        Some(tag) => format!(
-            "Checked when you write a comment on a video, e.g. {tag}.IMG_0424.MOV, and unchecked when you clear it (AI descriptions do not count). Otherwise it is yours to change."
-        ),
-        None => "Videos with a comment get no tag.".to_string(),
+        Some(tag) => fl!("settings-commented-tag-hint", tag = tag),
+        None => fl!("settings-commented-tag-off"),
     };
     column![
         row![
             checkbox(enabled)
-                .label("Tag videos with a comment")
+                .label(fl!("settings-commented-tag"))
                 .text_size(13)
                 .on_toggle(Message::SetCommentedTagEnabled),
             input,
@@ -517,7 +521,7 @@ fn commented_tag(enabled: bool, tag: &str) -> Element<'_, Message> {
     .into()
 }
 
-fn section<'a>(title: &'a str, content: Element<'a, Message>) -> Element<'a, Message> {
+fn section<'a>(title: String, content: Element<'a, Message>) -> Element<'a, Message> {
     column![text(title).size(14).color(theme::TEXT_MUTED), content]
         .spacing(8)
         .into()
@@ -525,11 +529,7 @@ fn section<'a>(title: &'a str, content: Element<'a, Message>) -> Element<'a, Mes
 
 /// Shown after a storage change: the setting only decides where things are saved from now
 /// on, so moving what the files already have is a separate batch action, one click away.
-fn move_offer(
-    note: &'static str,
-    label: &'static str,
-    operation: Operation,
-) -> Element<'static, Message> {
+fn move_offer(note: String, label: String, operation: Operation) -> Element<'static, Message> {
     column![
         text(note).size(12).color(theme::TEXT_MUTED),
         button(text(label).size(13)).on_press(Message::OpenBatchAction(operation)),
@@ -542,4 +542,45 @@ fn move_offer(
         left: 26.0,
     })
     .into()
+}
+
+/// One item of the Language pick list: an empty code stands for `System`.
+#[derive(Clone, PartialEq, Eq)]
+struct LanguageOption(String);
+
+impl std::fmt::Display for LanguageOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.0.is_empty() {
+            write!(
+                f,
+                "{}",
+                fl!(
+                    "settings-language-system",
+                    language = crate::i18n::language_name(crate::i18n::system_language())
+                )
+            )
+        } else {
+            write!(f, "{}", crate::i18n::language_name(&self.0))
+        }
+    }
+}
+
+/// `System`, then every UI language, in the order Settings lists them.
+fn language_options() -> Vec<LanguageOption> {
+    std::iter::once(String::new())
+        .chain(crate::i18n::LANGUAGES.iter().map(|l| l.to_string()))
+        .map(LanguageOption)
+        .collect()
+}
+
+/// One item of the description-language pick list: `SummaryLanguage`'s own `Display` is
+/// English only (it is the value stored in the settings), so this wrapper renders it translated
+/// via [`describe_ai::language_name`], the same name used in the batch panel's plan line.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct SummaryLanguageOption(SummaryLanguage);
+
+impl std::fmt::Display for SummaryLanguageOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", describe_ai::language_name(self.0))
+    }
 }

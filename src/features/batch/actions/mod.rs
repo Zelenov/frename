@@ -3,7 +3,7 @@
 //! file. This module only lists them and dispatches to them; the checked files and the job
 //! that runs an action over them are shared (see [`super::state`]).
 //!
-//! Adding an action: a module with `LABEL`, `view` and `run` (plus `Options` with `Message`
+//! Adding an action: a module with `label()`, `view` and `run` (plus `Options` with `Message`
 //! and `update` when it has settings), then one line in each match below. An action that needs
 //! more than "Run on N files" can also give the run button its own label and readiness
 //! ([`Actions::panel`]), a line pinned next to it ([`Actions::footer`]), and the files its job
@@ -62,25 +62,40 @@ impl Action {
         Action::GenerateSubtitles,
     ];
 
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            Self::MoveComments => move_comments::LABEL,
-            Self::MoveInOut => move_in_out::LABEL,
-            Self::MarkersComment => markers_comment::LABEL,
-            Self::TagCommented => tag_commented::LABEL,
-            Self::FixTags => fix_tags::LABEL,
-            Self::RespaceTags => tag_spacing::LABEL,
-            Self::ReloadFiles => reload_files::LABEL,
-            Self::DescribeAi => describe_ai::LABEL,
-            Self::GenerateSubtitles => generate_subtitles::LABEL,
+            Self::MoveComments => move_comments::label(),
+            Self::MoveInOut => move_in_out::label(),
+            Self::MarkersComment => markers_comment::label(),
+            Self::TagCommented => tag_commented::label(),
+            Self::FixTags => fix_tags::label(),
+            Self::RespaceTags => tag_spacing::label(),
+            Self::ReloadFiles => reload_files::label(),
+            Self::DescribeAi => describe_ai::label(),
+            Self::GenerateSubtitles => generate_subtitles::label(),
+        }
+    }
+
+    /// The action's name in English only: logs never switch language.
+    pub fn log_id(self) -> &'static str {
+        match self {
+            Self::MoveComments => "Move comments",
+            Self::MoveInOut => "Move in/out points",
+            Self::MarkersComment => "Markers <-> comment",
+            Self::TagCommented => "Tag commented videos",
+            Self::FixTags => "Fix tags by priority",
+            Self::RespaceTags => "Apply tag spacing",
+            Self::ReloadFiles => "Reset cache and reload",
+            Self::DescribeAi => "Describe with AI",
+            Self::GenerateSubtitles => "Generate subtitles",
         }
     }
 
     /// The counts line's word for a file the action did its work on.
-    pub fn done_label(self) -> &'static str {
+    pub fn done_label(self) -> String {
         match self {
-            Self::GenerateSubtitles => "subtitled",
-            _ => "changed",
+            Self::GenerateSubtitles => fl!("batch-done-label-subtitled"),
+            _ => fl!("batch-done-label-changed"),
         }
     }
 }
@@ -123,6 +138,14 @@ impl Operation {
     pub fn report(&self) -> Option<String> {
         match self {
             Self::GenerateSubtitles(run) => run.report(),
+            _ => None,
+        }
+    }
+
+    /// [`Self::report`] in English only, for logs.
+    pub fn log_report(&self) -> Option<String> {
+        match self {
+            Self::GenerateSubtitles(run) => run.log_report(),
             _ => None,
         }
     }
@@ -300,14 +323,14 @@ impl Actions {
             Action::RespaceTags => tag_spacing::view(),
             Action::ReloadFiles => reload_files::view(),
         };
-        let label = format!("Run on {}", files(checked.len()));
+        let label = fl!("batch-run", count = (checked.len() as i64));
         let ready = !checked.is_empty() && self.operation(action).is_some();
         (view, label, ready)
     }
 }
 
 /// An action's panel as every action shows it: title, what it does, then its options.
-fn panel<'a, M: 'a>(title: &'a str, hint: String, options: Element<'a, M>) -> Element<'a, M> {
+fn panel<'a, M: 'a>(title: String, hint: String, options: Element<'a, M>) -> Element<'a, M> {
     column![
         text(title).size(15),
         text(hint).size(12).color(theme::TEXT_MUTED),
@@ -315,11 +338,6 @@ fn panel<'a, M: 'a>(title: &'a str, hint: String, options: Element<'a, M>) -> El
     ]
     .spacing(12)
     .into()
-}
-
-/// "5 files" / "1 file".
-pub fn files(n: usize) -> String {
-    format!("{n} {}", if n == 1 { "file" } else { "files" })
 }
 
 /// What a job's AI requests to `model` cost: `$0.31 (Claude Haiku 4.5)`.
