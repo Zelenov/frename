@@ -401,8 +401,7 @@ impl FolderWorkspace {
             snapshot_before.initial_file_name(),
         );
         // Pasting changes the tags only; the in/out points are not in the name any more.
-        snapshot_after.set_segment_start(snapshot_before.segment_start());
-        snapshot_after.set_segment_end(snapshot_before.segment_end());
+        snapshot_after.set_segment(snapshot_before.segment());
         self.file_workspace
             .reinitialize_tags_from_snapshot(snapshot_after.clone());
         self.file_workspace.set_tag_filter(String::new());
@@ -1204,8 +1203,7 @@ impl FolderWorkspace {
         let mut snapshot = FileSnapshot::parse(typed);
         snapshot.set_comment(current.comment().to_string());
         // In/out points are never part of the name: renaming keeps them.
-        snapshot.set_segment_start(current.segment_start());
-        snapshot.set_segment_end(current.segment_end());
+        snapshot.set_segment(current.segment());
         let folder = file
             .file_path()
             .parent()

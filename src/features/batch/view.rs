@@ -231,12 +231,12 @@ fn job_panel<'a>(
         let failed = state.failed();
         // Generating subtitles also says why each video it left alone got none, and moving in/out
         // points out of names which files kept the points they had stored.
-        let skipped = match action {
+        let listed = match action {
             Action::GenerateSubtitles => state.skipped_with_reason(),
             Action::InOutFromNames => state.done_with_reason(),
             _ => Vec::new(),
         };
-        if !failed.is_empty() || !skipped.is_empty() {
+        if !failed.is_empty() || !listed.is_empty() {
             let heading = if action == Action::GenerateSubtitles {
                 fl!("batch-failed-subtitles")
             } else if action == Action::InOutFromNames {
@@ -253,13 +253,13 @@ fn job_panel<'a>(
                 };
                 text(line).size(12).color(theme::ERROR).into()
             });
-            let skipped_lines = skipped.into_iter().map(|(id, reason)| {
+            let listed_lines = listed.into_iter().map(|(id, reason)| {
                 text(format!("{} — {reason}", name(id)))
                     .size(12)
                     .color(theme::TEXT_SOFT)
                     .into()
             });
-            let names = column(failed_lines.chain(skipped_lines));
+            let names = column(failed_lines.chain(listed_lines));
             panel = panel
                 .push(
                     row![

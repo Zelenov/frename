@@ -106,7 +106,9 @@ impl DemoRun {
                 batch::Message::SelectAction(batch::Action::InOutFromNames),
             ));
             if self.run {
-                // The job needs every file checked first, and its report time to fill in.
+                // Checking every file takes one more message after the steps, and iced does
+                // not promise the order of messages sent together (sending Run right after them
+                // ran the job on the open file alone): wait a moment instead.
                 let run = Task::future(async { tokio::time::sleep(Duration::from_secs(1)).await })
                     .map(|()| {
                         Message::Later(Box::new(folder_workspace::Message::Batch(
@@ -136,7 +138,7 @@ impl DemoRun {
                 }
             }
             Message::TimedOut => self.fail("the video did not get ready in time"),
-            // Passed on by the app.
+            // The app passes it on to the workspace before it gets here; see its update.
             Message::Later(_) => Task::none(),
         }
     }

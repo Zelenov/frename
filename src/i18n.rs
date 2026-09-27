@@ -479,7 +479,7 @@ mod tests {
         ),
         (
             "Move in/out points out of file names",
-            "English-only log id (Action::log_id) and log label (LOG_LABEL)",
+            "English-only log id, see Action::log_id",
         ),
         (
             "Tag commented videos",
