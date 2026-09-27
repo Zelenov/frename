@@ -13,8 +13,10 @@ pub enum Message {
     Scrolled { scroll_y: f32, viewport_height: f32 },
     /// Scroll the folder list to the currently selected file.
     ScrollToSelected,
-    /// Open a native file picker dialog (from the controls bar).
+    /// Open a native folder picker dialog (📂 in the controls bar).
     OpenFolder,
+    /// Open a native file picker dialog (right-click on 📂): its folder opens with it selected.
+    OpenFile,
     /// Show only files without tags (true) or every file (false).
     SetUntaggedOnly(bool),
     /// Show only files with a subtitle file (true) or every file (false).

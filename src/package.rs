@@ -63,10 +63,64 @@ pub fn current() -> Option<&'static Package> {
 ///
 /// A downloaded update is not applied at start-up (Velopack's default): it would update without
 /// the **Update and restart** button and could close another running frename with unsaved edits.
+///
+/// Installing (and updating, so an install from before it gets it too) adds "Open in frename" to
+/// Explorer's context menu of folders and videos; uninstalling removes it.
 pub fn run_velopack_hooks() {
-    velopack::VelopackApp::build()
-        .set_auto_apply_on_startup(false)
-        .run();
+    let mut app = velopack::VelopackApp::build().set_auto_apply_on_startup(false);
+    #[cfg(windows)]
+    {
+        app = app
+            .on_after_install_fast_callback(|_| explorer_menu::register())
+            .on_after_update_fast_callback(|_| explorer_menu::register())
+            .on_before_uninstall_fast_callback(|_| explorer_menu::unregister());
+    }
+    app.run();
+}
+
+/// "Open in frename" in Explorer's context menu, for the current user only (`HKCU`, so no admin
+/// rights are needed, like the install itself). Explorer runs `frename.exe "<path>"`, which
+/// opens the folder, or the video's folder with the video selected.
+#[cfg(windows)]
+mod explorer_menu {
+    use winreg::enums::HKEY_CURRENT_USER;
+    use winreg::RegKey;
+
+    /// The menu entries: on folders, and on every file Windows counts as a video.
+    const MENU_KEYS: [&str; 2] = [
+        r"Software\Classes\Directory\shell\frename",
+        r"Software\Classes\SystemFileAssociations\video\shell\frename",
+    ];
+
+    /// Add the entries, pointing at this exe (in the package's `current` folder, whose path
+    /// stays the same across updates). Failures are ignored: the menu is a convenience and must
+    /// not fail the install.
+    pub fn register() {
+        let Ok(exe) = std::env::current_exe() else {
+            return;
+        };
+        let exe = exe.display().to_string();
+        let classes = RegKey::predef(HKEY_CURRENT_USER);
+        for key in MENU_KEYS {
+            let _ = add_entry(&classes, key, &exe);
+        }
+    }
+
+    fn add_entry(root: &RegKey, key: &str, exe: &str) -> std::io::Result<()> {
+        let (entry, _) = root.create_subkey(key)?;
+        entry.set_value("", &"Open in frename")?;
+        entry.set_value("Icon", &exe)?;
+        let (command, _) = entry.create_subkey("command")?;
+        command.set_value("", &format!("\"{exe}\" \"%1\""))
+    }
+
+    /// Remove the entries (and their `command` subkeys).
+    pub fn unregister() {
+        let root = RegKey::predef(HKEY_CURRENT_USER);
+        for key in MENU_KEYS {
+            let _ = root.delete_subkey_all(key);
+        }
+    }
 }
 
 /// The running version as the UI shows it: `0.68`, not Velopack's `0.68.0`. Packaged builds know

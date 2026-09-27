@@ -44,7 +44,10 @@ pub fn view(
         return if state.is_loading() {
             inner.into()
         } else {
-            mouse_area(inner).on_press(Message::OpenFilePicker).into()
+            mouse_area(inner)
+                .on_press(Message::OpenFolderPicker)
+                .on_right_press(Message::OpenFilePicker)
+                .into()
         };
     }
 

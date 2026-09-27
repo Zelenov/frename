@@ -121,6 +121,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         log::info!("using the GStreamer bundled with frename");
     }
 
+    // A folder or file given on the command line ("Open with", a drop onto the exe) opens
+    // instead of the last session; one that does not exist is ignored.
+    let initial_path = path_arg(&args).and_then(|path| {
+        let pair = frename_core::FolderAndFile::from_path(&path);
+        if pair.is_none() {
+            log::warn!(
+                "Path on the command line does not exist, not opening: {}",
+                path.display()
+            );
+        }
+        pair
+    });
+
     // Settings of an older zip version: a scheduled import, or the first-start offer. Only a
     // package has its data away from the exe, and a self-test or demo never asks anything.
     if package.is_some() && self_test.is_none() && demo.is_none() {
@@ -198,7 +211,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     iced::daemon(
         move || {
             let (id, open) = window::open(main_window.clone());
-            let app = FrenameApp::new(id, window_icon.clone()).with_demo(demo.clone());
+            let app = FrenameApp::new(id, window_icon.clone())
+                .with_demo(demo.clone())
+                .with_initial_path(initial_path.clone());
             (app, open.discard())
         },
         FrenameApp::update,
@@ -226,6 +241,18 @@ fn self_test_paths(args: &[String]) -> Option<Vec<std::path::PathBuf>> {
             .map(Into::into)
             .collect(),
     )
+}
+
+/// The folder or file to open, given as a plain argument (`frename <path>`): the first argument
+/// that is not a flag. None with `--self-test` or `--demo`, whose arguments are their own.
+fn path_arg(args: &[String]) -> Option<std::path::PathBuf> {
+    if args.iter().any(|a| a == "--self-test" || a == "--demo") {
+        return None;
+    }
+    args.iter()
+        .skip(1)
+        .find(|a| !a.starts_with("--"))
+        .map(Into::into)
 }
 
 #[cfg(test)]
@@ -261,6 +288,24 @@ mod tests {
         assert_eq!(
             self_test_paths(&args(&["frename", "--self-test"])),
             Some(Vec::new())
+        );
+    }
+
+    #[test]
+    fn a_plain_argument_is_the_path_to_open() {
+        assert_eq!(
+            path_arg(&args(&["frename", "--debug", "D:\\clips\\day 1"])),
+            Some(PathBuf::from("D:\\clips\\day 1"))
+        );
+        assert_eq!(path_arg(&args(&["frename", "--debug"])), None);
+    }
+
+    #[test]
+    fn self_test_and_demo_arguments_are_not_a_path_to_open() {
+        assert_eq!(path_arg(&args(&["frename", "--self-test", "a.mp4"])), None);
+        assert_eq!(
+            path_arg(&args(&["frename", "--demo", "s.toml", "--out", "o.png"])),
+            None
         );
     }
 }

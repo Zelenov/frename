@@ -1,6 +1,6 @@
 //! UI for folder controls (prev/next). Only this module knows they are buttons; receives only booleans.
 
-use iced::widget::{button, container, row, text, tooltip};
+use iced::widget::{button, container, mouse_area, row, text, tooltip};
 use iced::Element;
 
 use crate::features::folder;
@@ -8,10 +8,10 @@ use crate::theme;
 
 const CONTROLS_HEIGHT: f32 = 32.0;
 
-/// Render the folder controls: Previous File, Next File, Scroll-to-Selected, Open, Settings and
-/// Batch mode buttons. Buttons are enabled only when applicable. `batch_mode` highlights the
-/// batch button; `batch_running` locks it while a job runs. `update_available`, a newer frename
-/// version, puts a dot on the Settings button, where the update is.
+/// Render the folder controls: Previous File, Next File, Scroll-to-Selected, Open (a folder, or a
+/// file on right-click), Settings and Batch mode buttons. Buttons are enabled only when applicable. `batch_mode`
+/// highlights the batch button; `batch_running` locks it while a job runs. `update_available`, a
+/// newer frename version, puts a dot on the Settings button, where the update is.
 pub fn view(
     has_previous: bool,
     has_next: bool,
@@ -68,17 +68,21 @@ pub fn view(
     )
     .into();
 
+    // Click picks a folder; right-click picks one file, which takes no room in a narrow bar.
     let open_btn: Element<'_, folder::Message> = tooltip(
-        button(
-            container(text("📂").size(16))
-                .center_x(iced::Length::Fill)
-                .center_y(iced::Length::Fill),
+        mouse_area(
+            button(
+                container(text("📂").size(16))
+                    .center_x(iced::Length::Fill)
+                    .center_y(iced::Length::Fill),
+            )
+            .on_press(folder::Message::OpenFolder)
+            .width(CONTROLS_HEIGHT)
+            .height(iced::Length::Fill)
+            .padding(0)
+            .style(theme::icon_button_style(true)),
         )
-        .on_press(folder::Message::OpenFolder)
-        .width(CONTROLS_HEIGHT)
-        .height(iced::Length::Fill)
-        .padding(0)
-        .style(theme::icon_button_style(true)),
+        .on_right_press(folder::Message::OpenFile),
         text(fl!("folder-controls-open")),
         iced::widget::tooltip::Position::Top,
     )
