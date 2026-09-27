@@ -1,5 +1,5 @@
 # GStreamer plugins bundled in frename.app, one per line: `name` is
-# lib/gstreamer-1.0/libgst<name>.so of the official macOS framework. The libraries they need are
+# lib/gstreamer-1.0/libgst<name>.dylib of the official macOS framework. The libraries they need are
 # found by packaging/macos/build-app.sh, not listed here. Same set as the Windows bundle
 # (packaging/windows/gstreamer-plugins.txt) with macOS sound and hardware decoding in place of
 # the Windows ones. No GPL parts (no x264/x265, no ugly).

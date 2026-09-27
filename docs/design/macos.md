@@ -45,8 +45,9 @@ must link only macOS and itself, decode a frame of every test clip, and start an
   (the name without `lib/`), and no rpath of its own, so nothing loads until one is added.
   The build scripts of frename and frename-core (`packaging/macos/gstreamer_rpath.rs`) add the
   framework's `lib` as rpath on macOS, for `cargo run` and `cargo test`.
-- Plugins are `lib/gstreamer-1.0/libgst<name>.so` (cerbero's Darwin module extension is `.so`,
-  [filesprovider.py](https://github.com/GStreamer/cerbero/blob/main/cerbero/build/filesprovider.py)).
+- Plugins are `lib/gstreamer-1.0/libgst<name>.dylib` (seen on the runner; cerbero's table says
+  `.so`, [filesprovider.py](https://github.com/GStreamer/cerbero/blob/main/cerbero/build/filesprovider.py),
+  but the 1.28.7 package ships `.dylib`, next to static `.a` files).
 - GStreamer's own "Deploying on macOS" page predates relocation (copy the framework, run
   `osxrelocator`, set `GST_PLUGIN_SYSTEM_PATH` and `GST_PLUGIN_SCANNER`)
   ([mac-osx.md](https://github.com/GStreamer/gstreamer/blob/main/subprojects/gst-docs/markdown/deploying/mac-osx.md)).
@@ -59,7 +60,7 @@ frename.app/Contents/
   Info.plist                       packaging/macos/Info.plist, version filled in
   MacOS/frename                    rpath @executable_path/../Frameworks
   Frameworks/*.dylib               only the libraries something links (@rpath/<name>), rpath @loader_path
-  PlugIns/gstreamer/libgst*.so     rpath @loader_path/../../Frameworks
+  PlugIns/gstreamer/libgst*.dylib  rpath @loader_path/../../Frameworks
   Resources/frename.icns           from packaging/macos/frename-512.png (sips + iconutil)
   Resources/licenses/              the framework's licenses + README with source links
 ```

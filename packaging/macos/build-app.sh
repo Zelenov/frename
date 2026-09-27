@@ -6,7 +6,7 @@
 #   frename.app/Contents/Info.plist
 #   frename.app/Contents/MacOS/frename
 #   frename.app/Contents/Frameworks/*.dylib          GStreamer, GLib, FFmpeg, ... that are used
-#   frename.app/Contents/PlugIns/gstreamer/*.so     the plugins in gstreamer-plugins.txt
+#   frename.app/Contents/PlugIns/gstreamer/*.dylib  the plugins in gstreamer-plugins.txt
 #   frename.app/Contents/Resources/frename.icns
 #   frename.app/Contents/Resources/licenses/        licenses of the bundled parts, with sources
 #
@@ -63,7 +63,7 @@ copy_arm64() {
 
 plugins=0
 while read -r name; do
-  plugin="$framework/lib/gstreamer-1.0/libgst$name.so"
+  plugin="$framework/lib/gstreamer-1.0/libgst$name.dylib"
   if [ ! -f "$plugin" ]; then
     echo "Plugin not in this GStreamer: $plugin. It has:" >&2
     ls "$framework/lib/gstreamer-1.0" >&2
@@ -82,7 +82,7 @@ linked() {
 
 # Walk the links from the binary and the plugins, copying each library the framework provides.
 # (macOS's own bash is 3.2: no associative arrays, so the copied ones are the files themselves.)
-queue=("$contents/MacOS/frename" "$contents"/PlugIns/gstreamer/*.so)
+queue=("$contents/MacOS/frename" "$contents"/PlugIns/gstreamer/*.dylib)
 while [ "${#queue[@]}" -gt 0 ]; do
   file="${queue[0]}"
   queue=("${queue[@]:1}")
@@ -123,7 +123,7 @@ add_rpath() {
   rpaths "$1" | grep -xF -- "$2" > /dev/null || install_name_tool -add_rpath "$2" "$1"
 }
 add_rpath "$contents/MacOS/frename" "@executable_path/../Frameworks"
-for plugin in "$contents"/PlugIns/gstreamer/*.so; do
+for plugin in "$contents"/PlugIns/gstreamer/*.dylib; do
   add_rpath "$plugin" "@loader_path/../../Frameworks"
 done
 while IFS= read -r -d '' library; do
