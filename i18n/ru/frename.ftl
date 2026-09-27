@@ -61,10 +61,10 @@ settings-commented-tag-hint = Тег ставится, когда вы пише�
 settings-commented-tag-off = Видео с комментарием не получают тег.
 settings-in-out = Точки входа и выхода
 settings-in-out-in-video = Adobe: маркер внутри видеофайла (XMP; в Premiere Pro — subclip / «подклип»)
-settings-in-out-file-name = В имени файла (in_HH_MM_SS / out_HH_MM_SS)
+settings-in-out-comment = В комментарии (одна строка: In/Out: 00:01:05.250 – 00:02:10.000)
 settings-in-out-note = Точки входа и выхода остаются там, где были, пока их не перенесут.
-settings-in-out-move-into-videos = Перенести имеющиеся точки входа и выхода из имён файлов в видео…
-settings-in-out-move-into-file-names = Перенести имеющиеся точки входа и выхода из видео в имена файлов…
+settings-in-out-move-into-videos = Перенести имеющиеся точки входа и выхода из комментариев в видео…
+settings-in-out-move-into-comments = Перенести имеющиеся точки входа и выхода из видео в комментарии…
 settings-markers = Маркеры и диапазоны
 settings-markers-in-video = Внутри видеофайла (XMP; Premiere Pro показывает их на клипе)
 settings-markers-comment = В комментарии, по одной строке (0:41–0:47 — Lion)
@@ -153,14 +153,23 @@ batch-add-credit = Пополнить счёт
 batch-open-log = Открыть журнал
 
 batch-action-move-comments = Перенести комментарии
-batch-action-move-comments-hint = Переносит комментарий каждого отмеченного файла в выбранное место. Теги и точки входа и выхода остаются на месте.
+batch-action-move-comments-hint = Переносит комментарий каждого отмеченного файла в выбранное место вместе с точками входа и выхода в нём. Теги и точки входа и выхода внутри видео остаются на месте.
 batch-action-move-comments-into-videos = Из текстовых файлов в видео (XMP)
 batch-action-move-comments-into-text-files = Из видео (XMP) в текстовые файлы
 
-batch-action-move-in-out = Перенести точки входа и выхода
-batch-action-move-in-out-hint = Переносит точки входа и выхода каждого отмеченного файла в выбранное место и переименовывает файлы, в имени которых они появляются или исчезают. Комментарии остаются на месте.
-batch-action-move-in-out-into-videos = Из имён файлов в видео (маркер Adobe XMP)
-batch-action-move-in-out-into-file-names = Из видео (маркер XMP) в имена файлов
+batch-action-move-in-out = Точки входа и выхода: комментарий ⇄ видео (XMP)
+batch-action-move-in-out-hint = Переносит точки входа и выхода каждого отмеченного файла в выбранное место. Остальной комментарий остаётся на месте.
+batch-action-move-in-out-into-videos = Из комментариев в видео (маркер Adobe XMP)
+batch-action-move-in-out-into-comments = Из видео (маркер XMP) в комментарии
+
+batch-action-in-out-from-names = Убрать точки входа и выхода из имён файлов
+batch-action-in-out-from-names-hint = Прежние версии могли хранить точки входа и выхода в имени файла (clip.in_00_01_05.out_00_02_10.mp4). Действие убирает их из имени каждого отмеченного файла и сохраняет туда, где точки входа и выхода хранятся теперь. Если у файла точки уже сохранены, остаются они; такой файл попадёт в отчёт.
+batch-action-in-out-from-names-status-comment = Куда: в комментарий
+batch-action-in-out-from-names-status-video = Куда: внутрь видео (XMP)
+batch-action-in-out-from-names-settings = Настройки точек…
+batch-action-in-out-from-names-kept = оставлены сохранённые { $stored }, из имени убраны { $name }
+batch-action-in-out-from-names-not-renamed = не удалось переименовать (подробности в журнале)
+batch-in-out-from-names-listed = Обратите внимание:
 
 batch-action-markers-comment = Маркеры ⇄ комментарий
 batch-action-markers-comment-to-markers = Строки комментария с временем в маркеры

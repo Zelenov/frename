@@ -394,12 +394,15 @@ impl FolderWorkspace {
         let Some((_, snapshot_before)) = self.file_workspace.get_snapshot() else {
             return Task::none();
         };
-        let snapshot_after = FileSnapshot::new(
+        let mut snapshot_after = FileSnapshot::new(
             names,
             snapshot_before.name_without_extension(),
             snapshot_before.extension(),
             snapshot_before.initial_file_name(),
         );
+        // Pasting changes the tags only; the in/out points are not in the name any more.
+        snapshot_after.set_segment_start(snapshot_before.segment_start());
+        snapshot_after.set_segment_end(snapshot_before.segment_end());
         self.file_workspace
             .reinitialize_tags_from_snapshot(snapshot_after.clone());
         self.file_workspace.set_tag_filter(String::new());
@@ -1200,16 +1203,9 @@ impl FolderWorkspace {
         // The markers stay in the tag list: `reinitialize_tags_from_snapshot` keeps them.
         let mut snapshot = FileSnapshot::parse(typed);
         snapshot.set_comment(current.comment().to_string());
-        // With in/out stored inside the video the name never shows them, so a typed name without them
-        // does not mean "remove them".
-        let name_has_in_out =
-            snapshot.segment_start().is_some() || snapshot.segment_end().is_some();
-        if !name_has_in_out
-            && frename_core::metadata_storage().in_out == frename_core::InOutStorage::InVideo
-        {
-            snapshot.set_segment_start(current.segment_start());
-            snapshot.set_segment_end(current.segment_end());
-        }
+        // In/out points are never part of the name: renaming keeps them.
+        snapshot.set_segment_start(current.segment_start());
+        snapshot.set_segment_end(current.segment_end());
         let folder = file
             .file_path()
             .parent()

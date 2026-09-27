@@ -116,7 +116,7 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
         (state.in_out_storage_changed() && settings.in_out_storage == storage).then(|| {
             let label = match storage {
                 InOutStorage::InVideo => fl!("settings-in-out-move-into-videos"),
-                InOutStorage::FileName => fl!("settings-in-out-move-into-file-names"),
+                InOutStorage::Comment => fl!("settings-in-out-move-into-comments"),
             };
             move_offer(
                 fl!("settings-in-out-note"),
@@ -126,19 +126,19 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
         })
     };
     let in_out_options = column![radio(
+        fl!("settings-in-out-comment"),
+        InOutStorage::Comment,
+        selected_in_out,
+        Message::SetInOutStorage,
+    )]
+    .extend(in_out_offer(InOutStorage::Comment))
+    .push(radio(
         fl!("settings-in-out-in-video"),
         InOutStorage::InVideo,
         selected_in_out,
         Message::SetInOutStorage,
-    ),]
-    .extend(in_out_offer(InOutStorage::InVideo))
-    .push(radio(
-        fl!("settings-in-out-file-name"),
-        InOutStorage::FileName,
-        selected_in_out,
-        Message::SetInOutStorage,
     ))
-    .extend(in_out_offer(InOutStorage::FileName))
+    .extend(in_out_offer(InOutStorage::InVideo))
     .spacing(8);
     let in_out = section(fl!("settings-in-out"), in_out_options.into());
 

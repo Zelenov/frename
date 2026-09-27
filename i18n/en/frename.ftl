@@ -31,10 +31,10 @@ settings-commented-tag-hint = Checked when you write a comment on a video, e.g. 
 settings-commented-tag-off = Videos with a comment get no tag.
 settings-in-out = In/out points
 settings-in-out-in-video = Adobe: a marker inside the video file (XMP, a subclip in Premiere Pro)
-settings-in-out-file-name = In the file name (in_HH_MM_SS / out_HH_MM_SS)
+settings-in-out-comment = In the comment (one line: In/Out: 00:01:05.250 – 00:02:10.000)
 settings-in-out-note = Files keep their in/out points where they are until moved.
-settings-in-out-move-into-videos = Move existing in/out points from file names into the videos…
-settings-in-out-move-into-file-names = Move existing in/out points from the videos into file names…
+settings-in-out-move-into-videos = Move existing in/out points from the comments into the videos…
+settings-in-out-move-into-comments = Move existing in/out points from the videos into the comments…
 settings-markers = Markers and ranges
 settings-markers-in-video = Inside the video file (XMP, Premiere Pro shows them on the clip)
 settings-markers-comment = In the comment, one line each (0:41–0:47 — Lion)
@@ -119,14 +119,23 @@ batch-add-credit = Add credit
 batch-open-log = Open log
 
 batch-action-move-comments = Move comments
-batch-action-move-comments-hint = Moves the comment of each checked file to the chosen place. Tags and in/out points stay where they are.
+batch-action-move-comments-hint = Moves the comment of each checked file to the chosen place, with the in/out points it holds. Tags and in/out points kept in the video stay where they are.
 batch-action-move-comments-into-videos = From text files into the videos (XMP)
 batch-action-move-comments-into-text-files = From the videos (XMP) into text files
 
-batch-action-move-in-out = Move in/out points
-batch-action-move-in-out-hint = Moves the in/out points of each checked file to the chosen place, renaming the files whose name gains or loses them. Comments stay where they are.
-batch-action-move-in-out-into-videos = From file names into the videos (Adobe XMP marker)
-batch-action-move-in-out-into-file-names = From the videos (XMP marker) into file names
+batch-action-move-in-out = In/out points: comment ⇄ video (XMP)
+batch-action-move-in-out-hint = Moves the in/out points of each checked file to the chosen place. The rest of the comment stays where it is.
+batch-action-move-in-out-into-videos = From the comments into the videos (Adobe XMP marker)
+batch-action-move-in-out-into-comments = From the videos (XMP marker) into the comments
+
+batch-action-in-out-from-names = Move in/out points out of file names
+batch-action-in-out-from-names-hint = Older versions could keep in/out points in the file name (clip.in_00_01_05.out_00_02_10.mp4). This takes them out of the name of each checked file and saves them where in/out points are kept now. A file that already has in/out points stored keeps those; the report lists it.
+batch-action-in-out-from-names-status-comment = Saved to: the comment
+batch-action-in-out-from-names-status-video = Saved to: inside the video (XMP)
+batch-action-in-out-from-names-settings = In/out settings…
+batch-action-in-out-from-names-kept = kept the stored { $stored }, dropped the name's { $name }
+batch-action-in-out-from-names-not-renamed = could not be renamed (the log says why)
+batch-in-out-from-names-listed = Look at these files:
 
 batch-action-markers-comment = Markers ⇄ comment
 batch-action-markers-comment-to-markers = Comment lines with a time into markers
