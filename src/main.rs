@@ -22,7 +22,8 @@ mod old_settings_prompt;
 mod package;
 mod self_test;
 mod tag_colors;
-mod theme;
+mod ui;
+use ui::legacy as theme;
 mod widgets;
 
 use app::FrenameApp;
@@ -237,7 +238,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // A daemon rather than an application: the app opens more than one window (settings), and
     // the app itself decides that closing the main window ends it.
-    iced::daemon(
+    let daemon = iced::daemon(
         move || {
             let (id, open) = window::open(main_window.clone());
             let app = FrenameApp::new(id, window_icon.clone())
@@ -248,11 +249,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         FrenameApp::update,
         FrenameApp::view,
     )
-    .theme(iced::Theme::Dark)
+    .theme(FrenameApp::theme)
     .title(FrenameApp::title)
     .antialiasing(false)
-    .subscription(FrenameApp::subscription)
-    .run()?;
+    .subscription(FrenameApp::subscription);
+    // The design system's fonts, drawn the same on every OS; only its components use them yet.
+    let daemon = ui::tokens::FONT_FILES
+        .into_iter()
+        .fold(daemon, |daemon, font| daemon.font(font));
+    daemon.run()?;
 
     // Only after the app is gone: it still saves the open file's folder while closing.
     drop(demo_work);

@@ -6,7 +6,7 @@ use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::{old_settings, AppDatabase, AppSettings, AppStateStore};
 use iced::Task;
 
-use super::{KeyMessage, Message};
+use super::{KeyMessage, Message, Page, SETTINGS_SCROLLABLE_ID};
 use crate::features::batch::Operation;
 use crate::features::updates;
 
@@ -24,6 +24,8 @@ pub enum OldSettingsImport {
 /// Current app settings, loaded from the app database and saved back on every change.
 pub struct SettingsState {
     settings: AppSettings,
+    /// The page shown; kept while the app runs, so the window reopens where it was.
+    page: Page,
     /// The comment storage changed since the window last offered moving the files' comments.
     comment_storage_changed: bool,
     /// The in/out storage changed since the window last offered moving the files' points.
@@ -83,6 +85,7 @@ impl Default for SettingsState {
             .map_or(OldSettingsImport::None, OldSettingsImport::Scheduled);
         Self {
             settings: AppDatabase::new().get_app_settings().unwrap_or_default(),
+            page: Page::default(),
             comment_storage_changed: false,
             in_out_storage_changed: false,
             marker_storage_changed: false,
@@ -99,6 +102,11 @@ impl SettingsState {
     /// Apply a change and persist the result.
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::ShowPage(page) => self.show_page(page),
+            Message::NextPage => self.show_page(self.page.step(1)),
+            Message::PreviousPage => self.show_page(self.page.step(-1)),
+            // Handled by the app.
+            Message::Close | Message::Escape => Task::none(),
             Message::Updates(msg) => self.updates.update(msg).map(Message::Updates),
             Message::ImportOldSettings => Task::perform(
                 rfd::AsyncFileDialog::new()
@@ -130,6 +138,40 @@ impl SettingsState {
                 Task::none()
             }
         }
+    }
+
+    /// The page shown.
+    pub fn page(&self) -> Page {
+        self.page
+    }
+
+    /// Show `page`, from its top.
+    pub fn show_page(&mut self, page: Page) -> Task<Message> {
+        self.page = page;
+        iced::widget::operation::snap_to(
+            iced::widget::Id::new(SETTINGS_SCROLLABLE_ID),
+            iced::widget::scrollable::RelativeOffset::START,
+        )
+    }
+
+    /// Esc: cancel a pending key removal or replacement on the page shown, as its Keep or Cancel
+    /// button would. `false` when there was none, and Esc closes the window instead.
+    pub fn escape(&mut self) -> bool {
+        let which = match self.page {
+            Page::Ai => ApiKey::Anthropic,
+            Page::Subtitles => ApiKey::Soniox,
+            _ => return false,
+        };
+        let key = self.key(which);
+        let cancel = if key.confirm_remove {
+            KeyMessage::CancelRemove
+        } else if key.replacing {
+            KeyMessage::CancelReplace
+        } else {
+            return false;
+        };
+        self.apply_key(which, cancel);
+        true
     }
 
     /// The Updates section.
@@ -244,6 +286,9 @@ impl SettingsState {
                 if state == KeyState::Saved {
                     key.input.clear();
                     key.shown = false;
+                } else {
+                    // No saved key: a question about removing one is gone with it.
+                    key.confirm_remove = false;
                 }
                 key.replacing = false;
                 key.state = Some(state);
@@ -319,8 +364,13 @@ impl SettingsState {
                 | Operation::DescribeAi(_)
                 | Operation::GenerateSubtitles(_),
             ) => {}
-            // Handled by `update`.
-            Message::Updates(_)
+            // Handled by `update`, or by the app.
+            Message::ShowPage(_)
+            | Message::NextPage
+            | Message::PreviousPage
+            | Message::Close
+            | Message::Escape
+            | Message::Updates(_)
             | Message::ImportOldSettings
             | Message::OldSettingsFolderPicked(_)
             | Message::SubtitleLanguagesListed(_) => {}
@@ -344,10 +394,11 @@ mod tests {
     use super::*;
     use frename_core::{CommentStorage, InOutStorage};
 
-    #[test]
-    fn apply_changes_only_the_named_setting() {
-        let mut state = SettingsState {
+    /// Settings as a fresh install has them, not read from any database.
+    fn test_state() -> SettingsState {
+        SettingsState {
             settings: AppSettings::default(),
+            page: Page::default(),
             comment_storage_changed: false,
             in_out_storage_changed: false,
             marker_storage_changed: false,
@@ -356,7 +407,12 @@ mod tests {
             import: OldSettingsImport::None,
             keys: Keys::default(),
             subtitle_languages: LanguageList::default(),
-        };
+        }
+    }
+
+    #[test]
+    fn apply_changes_only_the_named_setting() {
+        let mut state = test_state();
         state.apply(Message::SetMonochromeTags(true));
         assert!(state.settings().monochrome_tags);
         assert!(state.settings().autoplay_video);
@@ -380,17 +436,7 @@ mod tests {
 
     #[test]
     fn a_storage_change_offers_moving_the_files_until_taken() {
-        let mut state = SettingsState {
-            settings: AppSettings::default(),
-            comment_storage_changed: false,
-            in_out_storage_changed: false,
-            marker_storage_changed: false,
-            tag_spacing_changed: false,
-            updates: updates::UpdatesState::default(),
-            import: OldSettingsImport::None,
-            keys: Keys::default(),
-            subtitle_languages: LanguageList::default(),
-        };
+        let mut state = test_state();
         state.apply(Message::SetCommentStorage(state.settings().comment_storage));
         assert!(
             !state.comment_storage_changed(),
@@ -413,34 +459,14 @@ mod tests {
 
     #[test]
     fn the_commented_tag_field_drops_characters_a_tag_cannot_hold() {
-        let mut state = SettingsState {
-            settings: AppSettings::default(),
-            comment_storage_changed: false,
-            in_out_storage_changed: false,
-            marker_storage_changed: false,
-            tag_spacing_changed: false,
-            updates: updates::UpdatesState::default(),
-            import: OldSettingsImport::None,
-            keys: Keys::default(),
-            subtitle_languages: LanguageList::default(),
-        };
+        let mut state = test_state();
         state.apply(Message::SetCommentedTag("Has comment.v2:".to_string()));
         assert_eq!(state.settings().commented_tag, "Has commentv2");
     }
 
     #[test]
     fn a_saved_key_clears_the_field_and_is_never_persisted() {
-        let mut state = SettingsState {
-            settings: AppSettings::default(),
-            comment_storage_changed: false,
-            in_out_storage_changed: false,
-            marker_storage_changed: false,
-            tag_spacing_changed: false,
-            updates: updates::UpdatesState::default(),
-            import: OldSettingsImport::None,
-            keys: Keys::default(),
-            subtitle_languages: LanguageList::default(),
-        };
+        let mut state = test_state();
         state.apply(Message::Key(
             ApiKey::Anthropic,
             KeyMessage::Input(" sk-ant-123 ".to_string()),
@@ -515,18 +541,71 @@ mod tests {
     }
 
     #[test]
+    fn esc_cancels_a_pending_removal_on_the_page_shown_before_it_closes_the_window() {
+        let mut state = test_state();
+        let read = state.begin_key_request(ApiKey::Soniox);
+        state.apply(Message::Key(
+            ApiKey::Soniox,
+            KeyMessage::State {
+                request: read,
+                result: Ok(KeyState::Saved),
+            },
+        ));
+        state.apply(Message::Key(ApiKey::Soniox, KeyMessage::AskRemove));
+        assert!(
+            !state.escape(),
+            "a removal asked on a page not shown: Esc closes the window"
+        );
+        state.page = Page::Subtitles;
+        assert!(state.escape(), "the first Esc keeps the key");
+        assert!(!state.key(ApiKey::Soniox).confirm_remove);
+        assert!(!state.escape(), "nothing pending: Esc closes the window");
+
+        state.page = Page::Ai;
+        state.apply(Message::Key(ApiKey::Anthropic, KeyMessage::Replace));
+        state.apply(Message::Key(
+            ApiKey::Anthropic,
+            KeyMessage::Input("half a key".to_string()),
+        ));
+        let save = state.begin_key_request(ApiKey::Anthropic);
+        state.apply(Message::Key(
+            ApiKey::Anthropic,
+            KeyMessage::State {
+                request: save,
+                result: Err("locked".to_string()),
+            },
+        ));
+        assert!(
+            state.escape(),
+            "Esc gives up replacing the key, as Cancel does"
+        );
+        let key = state.key(ApiKey::Anthropic);
+        assert!(!key.replacing && key.input.is_empty() && key.error.is_none());
+    }
+
+    #[test]
+    fn a_removal_question_left_for_a_key_that_is_gone_does_not_take_the_esc() {
+        let mut state = test_state();
+        state.page = Page::Subtitles;
+        state.apply(Message::Key(ApiKey::Soniox, KeyMessage::AskRemove));
+        let read = state.begin_key_request(ApiKey::Soniox);
+        state.apply(Message::Key(
+            ApiKey::Soniox,
+            KeyMessage::State {
+                request: read,
+                result: Ok(KeyState::Missing),
+            },
+        ));
+        assert!(
+            !state.key(ApiKey::Soniox).confirm_remove,
+            "the question went with the key"
+        );
+        assert!(!state.escape(), "nothing on screen to cancel: Esc closes");
+    }
+
+    #[test]
     fn the_two_keys_have_sections_of_their_own() {
-        let mut state = SettingsState {
-            settings: AppSettings::default(),
-            comment_storage_changed: false,
-            in_out_storage_changed: false,
-            marker_storage_changed: false,
-            tag_spacing_changed: false,
-            updates: updates::UpdatesState::default(),
-            import: OldSettingsImport::None,
-            keys: Keys::default(),
-            subtitle_languages: LanguageList::default(),
-        };
+        let mut state = test_state();
         state.apply(Message::Key(
             ApiKey::Soniox,
             KeyMessage::Input("soniox-key".to_string()),
@@ -550,17 +629,7 @@ mod tests {
 
     #[test]
     fn subtitle_languages_are_sorted_and_none_means_detect() {
-        let mut state = SettingsState {
-            settings: AppSettings::default(),
-            comment_storage_changed: false,
-            in_out_storage_changed: false,
-            marker_storage_changed: false,
-            tag_spacing_changed: false,
-            updates: updates::UpdatesState::default(),
-            import: OldSettingsImport::None,
-            keys: Keys::default(),
-            subtitle_languages: LanguageList::default(),
-        };
+        let mut state = test_state();
         state.apply(Message::SetSubtitleLanguage("de".to_string(), true));
         state.apply(Message::SetSubtitleLanguage("en".to_string(), false));
         assert_eq!(state.settings().subtitle_languages, ["de", "ru"]);
