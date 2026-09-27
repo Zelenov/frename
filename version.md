@@ -1,4 +1,4 @@
-# NEXT
+# 0.76
 ## Added
 - Right-click 📂 to pick one clip: its whole folder opens with that clip selected.
 - `frename <folder>` or `frename <file>` opens it: "Open with", dropping onto frename.exe or its shortcut.
