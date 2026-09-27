@@ -211,6 +211,7 @@ Only these styles exist. Sizes are logical pixels.
 | `secondary` | Inter Regular, `text.secondary` | 13 / 20 | help, descriptions under options, meta |
 | `caption` | Inter Regular | 11 / 16 | badges, counters, key caps, second line of a dense row |
 | `tooltip` | Inter Regular | 12 / 16 | tooltip text only (a tooltip is small and dense by nature) |
+| `error` | Inter Regular, `error` | 13 / 20 | what went wrong, next to where it did (§10.3) |
 | `mono` | JetBrains Mono NL | 12 / 20 | file names, paths, timecodes, examples of names |
 | `video.caption` | Inter Regular | 28 / 36 | subtitle caption over fullscreen video only |
 
@@ -354,7 +355,7 @@ selected where it has one). iced 0.14 gives buttons, checkboxes and radios no ke
 | **primary** | `accent` fill, white SemiBold text | The one commit action of a window or panel: *Describe 12 files*, *Save key*. At most one per window (PUI; MiM ch. 7). |
 | **secondary** | `bg.raised` fill, `border.control` edge, `text.primary` | Every other command: *Close*, *Cancel*, *Replace…*, *Check for updates*, *Move comments…*. |
 | **ghost** | no fill, `text.primary`; hover shows `state.hover` | Minor actions inside a row: *Show*, *Open the log*, *Change*. |
-| **danger-ghost** | no fill, `error` text | The first step of a destructive action: *Remove…*. Quiet until confirmed (PUI "friction"; RUI "Semantics are secondary"). |
+| **danger-ghost** | no fill, `error` text and a 1 px `error` edge | The first step of a destructive action: *Remove…*. Clearly a button, but quieter than a filled one until confirmed (PUI "friction"; RUI "Semantics are secondary"). |
 | **danger** | `danger` fill, white SemiBold | Only inside the confirmation of a destructive action: *Remove key*. |
 | **icon** | 32×32 (toolbar) or 24×24 (row), transparent | Frequent toolbar actions with a known picture. Always a tooltip. |
 | **icon, latched** | `state.selected` fill, icon `accent.text` | A toggle that shows its state: subtitle list, marker list, fullscreen, batch mode today. |
@@ -743,8 +744,9 @@ registry and every surface follow:
   never shortcuts (#62's proposed rule 1, kept here as a design rule).
 - **Esc** closes or cancels the frontmost thing (§9.4). **Enter** commits: the primary button of a
   window or dialog, the selected item of a list or menu.
-- **Arrows** move in lists, grids, menus and the Settings navigation; **Tab / Shift+Tab** move
-  between fields in visual order.
+- **Arrows** move in lists, grids and menus; **Tab / Shift+Tab** move between fields in visual
+  order where iced allows it (§11 focus). Settings changes pages with `Ctrl`+`Tab` instead of
+  arrows, which fields do not take (§14.1).
 - **Standard keys keep their standard meaning** (Ctrl+C/V/Z/Y, Ctrl+O) (AF ch. 18; DI p. 18).
 - **Every shortcut is shown** in its control's tooltip and in the cheat sheet; a menu item shows
   its key on the right.
@@ -906,8 +908,8 @@ No "General" (BIR). The version is on *Updates* ("About" would hold only it).
     (the store's name per OS); buttons *Replace…* (secondary) and *Remove…* (danger-ghost).
   - *Missing, or replacing:* secret field (fills the column) + *Show* / *Hide* (ghost); under it
     *Save key* (primary, disabled while the field is empty) and, when replacing, *Cancel*
-    (secondary); one help line: where to get a key; the rest (where it is kept, what is sent) behind
-    ⓘ.
+    (secondary); one help line: where to get a key; the rest (where Save key keeps it, what is sent)
+    behind the row's ⓘ, which says only what the service is used for once a key is saved.
   - *Confirm remove:* in place of the buttons, an error notice "Remove the saved Anthropic key?" /
     "You will need to paste it again." with *Remove key* (danger) and *Keep* (secondary, the last
     button). Esc = Keep. The other rows stay where they are.
@@ -930,7 +932,8 @@ No "General" (BIR). The version is on *Updates* ("About" would hold only it).
 - **Settings from an older frename** (installed only): *Import from an old frename folder…*
   (secondary), help "Bring the settings of a frename you ran from a zip folder.", and the import's
   status line.
-- **Button bar:** "Changes apply right away." on the left; *Close* (secondary) on the right.
+- **Button bar:** "Changes apply right away. Ctrl+Tab moves between pages." on the left, so the
+  page key is visible (§11: every shortcut is shown); *Close* (secondary) on the right.
 
 ### As built
 
@@ -945,7 +948,8 @@ the Anthropic key as saved and the Soniox key as missing):
 |---|---|---|
 | ![](design-system/built-subtitles.png) | ![](design-system/built-updates.png) | ![](design-system/built-ru-saving.png) ![](design-system/built-ru-ai.png) |
 
-Differences from the mockups: the dropdown keeps iced's own arrow instead of a `chevron-down`
+Differences from the mockups: *Remove…* gained a 1 px `error` edge after review, so it reads as a
+button (§8.1); the dropdown keeps iced's own arrow instead of a `chevron-down`
 (iced 0.14 draws the pick list's handle itself); a navigation item whose label wraps (Russian)
 grows taller instead of clipping.
 
@@ -967,10 +971,12 @@ src/ui/
   mod.rs        the theme for windows on the system; re-exports
   tokens.rs     colors, spacing, sizes, radii, text sizes, fonts, durations — consts only
   icons.rs      the bundled Lucide icons and `icon(name, size, color)`
-  text.rs       text styles: heading(), title(), body(), strong(), secondary(), caption(), mono()
+  text.rs       text styles: heading(), body(), strong(), secondary(), error(), mono(), tooltip();
+                title() and caption() come with their first user (#58)
   button.rs     primary(), secondary(), ghost(), danger(), danger_ghost()
-  form.rs       checkbox(), radio_option(), text_field(), dropdown()
-  layout.rs     page(), setting_row(), nav_item(), button_bar(), notice(), inline_status(), info()
+  form.rs       checkbox(), checkbox_with_hint(), radio_option(), text_field(), dropdown()
+  layout.rs     window(), sidebar(), page(), setting_row(), aligned(), buttons(), nav_item(),
+                button_bar(), notice(), inline_status(), info(), with_tooltip(), scroll()
   style.rs      the style functions behind them
   legacy.rs     today's src/theme.rs, moved: the styles of views not yet on the system
 ```
@@ -996,10 +1002,14 @@ A unit test (`src/ui/lint.rs`) reads every `.rs` file under `src/` outside `src/
 `#[cfg(test)]` code, and fails on:
 - a color literal: `Color::from_rgb`, `Color::from_rgba`, `Color::from_rgb8`, `Color::from_rgba8`,
   `color!(`, `Color::WHITE`, `Color::BLACK`;
-- a number passed as a size: `.padding(`, `.spacing(`, `.size(`, `.text_size(`, `.gap(`, `.width(`,
-  `.height(`, `.max_width(`, `.line_height(`, `rounded(`, `Length::Fixed(`, `Padding::new(`, `padding::…(`
-  followed by a digit or `[`; and `Padding {` or `radius:` with a number in it. `0` alone is allowed
-  (it means "none").
+- a number passed as a size: any method whose name ends in `size`, `spacing`, `padding`, `width`,
+  `height`, `gap` or `line_height` (so `.vertical_spacing(`, `.max_height(`, `.text_line_height(`
+  too), `.center_x(` / `.center_y(`, `rounded(`, `Length::Fixed(`, `Padding::new(`, `Vector::new(`,
+  `padding::…(`; a number inside `Padding {`, `Border {` or `Shadow {`, or after `radius:`;
+- a size moved into a constant of the file (`const GAP: f32 = 6.0`): a size of its own is still
+  not a token.
+
+`0` alone is allowed (it means "none"). Colors also include `Color::new(` and `Color {`.
 
 Files not yet on the system are in an **allow-list inside the test**, each with the issue that moves
 it (#58 batch, #59 the rest). The test also fails when an allow-listed file has nothing left to

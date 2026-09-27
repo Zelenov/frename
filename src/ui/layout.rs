@@ -61,7 +61,12 @@ pub fn sidebar<'a, M: 'a>(items: impl IntoIterator<Item = Element<'a, M>>) -> El
 
 /// `content` scrolling vertically; `id` lets a task scroll it.
 pub fn scroll<'a, M: 'a>(id: &'static str, content: impl Into<Element<'a, M>>) -> Element<'a, M> {
+    let bar = scrollable::Scrollbar::new()
+        .width(SCROLLBAR_WIDTH)
+        .scroller_width(SCROLLBAR_WIDTH)
+        .spacing(SCROLLBAR_GAP);
     scrollable(content)
+        .direction(scrollable::Direction::Vertical(bar))
         .id(iced::widget::Id::new(id))
         .width(Length::Fill)
         .height(Length::Fill)
@@ -106,9 +111,9 @@ pub fn controls<'a, M: 'a>(items: impl IntoIterator<Item = Element<'a, M>>) -> C
     Column::with_children(items).spacing(SPACE_S)
 }
 
-/// Checkboxes or radio options: moved down so their first line meets the label's, 12 px apart
-/// when they carry descriptions.
-pub fn choices<'a, M: 'a>(items: impl IntoIterator<Item = Element<'a, M>>) -> Column<'a, M> {
+/// A column of controls whose first line of text meets the row label's (checkboxes, radio
+/// options, a line of text over buttons), 12 px apart.
+pub fn aligned<'a, M: 'a>(items: impl IntoIterator<Item = Element<'a, M>>) -> Column<'a, M> {
     Column::with_children(items)
         .spacing(SPACE_M)
         .padding(Padding {
@@ -243,16 +248,41 @@ impl NoticeKind {
     }
 }
 
-/// A notice in the flow of a page: a colored edge and icon, what happened, what to do, and at
-/// most two buttons.
-pub fn notice<'a, M: 'a>(kind: NoticeKind, content: impl Into<Element<'a, M>>) -> Element<'a, M> {
+/// Buttons side by side, 8 px apart.
+pub fn buttons<'a, M: 'a>(items: impl IntoIterator<Item = Element<'a, M>>) -> Element<'a, M> {
+    iced::widget::Row::with_children(items)
+        .spacing(SPACE_S)
+        .into()
+}
+
+/// A notice in the flow of a page (§8.12): a colored edge and icon, what happened (bold when a
+/// second line follows), what to do, and at most two buttons.
+pub fn notice<'a, M: 'a>(
+    kind: NoticeKind,
+    headline: impl IntoFragment<'a>,
+    detail: Option<String>,
+    actions: impl IntoIterator<Item = Element<'a, M>>,
+) -> Element<'a, M> {
     let (glyph, color) = kind.look();
+    let headline = if detail.is_some() {
+        text::strong(headline)
+    } else {
+        text::body(headline)
+    };
+    let actions: Vec<Element<'a, M>> = actions.into_iter().collect();
+    let mut lines = column![headline].extend(detail.map(|d| text::secondary(d).into()));
+    if !actions.is_empty() {
+        lines = lines.push(container(buttons(actions)).padding(Padding {
+            top: SPACE_S,
+            ..Padding::ZERO
+        }));
+    }
     let body = row![
         container(icon(glyph, ICON_M, color)).padding(Padding {
             top: SPACE_XXS,
             ..Padding::ZERO
         }),
-        container(content).width(Length::Fill),
+        container(lines).width(Length::Fill),
     ]
     .spacing(SPACE_S)
     .padding(Padding {

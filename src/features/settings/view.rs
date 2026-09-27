@@ -13,13 +13,10 @@ use crate::ui::tokens::*;
 use crate::ui::{button, form, text};
 
 use super::state::{KeySection, LanguageList, OldSettingsImport};
-use super::{KeyMessage, Message, Page, SettingsState};
+use super::{KeyMessage, Message, Page, SettingsState, SETTINGS_SCROLLABLE_ID};
 
 use crate::features::batch::{describe_ai, MarkersDirection, Operation};
 use crate::features::updates;
-
-/// The page's scrollable content; showing a page scrolls it to its top.
-pub const SETTINGS_SCROLLABLE_ID: &str = "settings-content";
 
 /// Render the settings window. `batch_running` holds back **Update and restart** while a batch
 /// job writes files.
@@ -69,7 +66,7 @@ fn interface(state: &SettingsState) -> Element<'_, Message> {
             ),
             layout::setting_row(
                 fl!("settings-tags"),
-                layout::choices([checkbox_with_hint(
+                layout::aligned([form::checkbox_with_hint(
                     form::checkbox(fl!("settings-tags-monochrome"), settings.monochrome_tags)
                         .on_toggle(Message::SetMonochromeTags),
                     text::secondary(fl!("settings-tags-monochrome-hint")),
@@ -77,7 +74,7 @@ fn interface(state: &SettingsState) -> Element<'_, Message> {
             ),
             layout::setting_row(
                 fl!("settings-video"),
-                layout::choices([form::checkbox(
+                layout::aligned([form::checkbox(
                     fl!("settings-video-autoplay"),
                     settings.autoplay_video,
                 )
@@ -103,8 +100,8 @@ fn saving(state: &SettingsState) -> Element<'_, Message> {
             Operation::RespaceTags,
         )
     });
-    let file_names = layout::choices(
-        std::iter::once(checkbox_with_hint(
+    let file_names = layout::aligned(
+        std::iter::once(form::checkbox_with_hint(
             form::checkbox(fl!("settings-tags-space-after"), settings.space_after_tags)
                 .on_toggle(Message::SetSpaceAfterTags),
             text::mono(fl!("settings-tags-space-example")),
@@ -131,7 +128,7 @@ fn saving(state: &SettingsState) -> Element<'_, Message> {
             &settings.commented_tag,
         ))
     });
-    let comments = layout::choices(
+    let comments = layout::aligned(
         [form::radio_option(
             fl!("settings-comments-in-video"),
             Some(form::description(fl!("settings-comments-in-video-hint"))),
@@ -169,7 +166,7 @@ fn saving(state: &SettingsState) -> Element<'_, Message> {
             Operation::MarkersComment(direction),
         )
     });
-    let markers = layout::choices(
+    let markers = layout::aligned(
         [
             form::radio_option(
                 fl!("settings-markers-in-video"),
@@ -203,7 +200,7 @@ fn saving(state: &SettingsState) -> Element<'_, Message> {
             Operation::MoveInOut(settings.in_out_storage),
         )
     });
-    let in_out = layout::choices(
+    let in_out = layout::aligned(
         [
             form::radio_option(
                 fl!("settings-in-out-in-video"),
@@ -251,11 +248,7 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
         [
             layout::setting_row_with_info(
                 fl!("settings-ai-key-label"),
-                format!(
-                    "{} {}",
-                    fl!("settings-key-save-into", store = key_store()),
-                    fl!("settings-ai-used-by")
-                ),
+                key_help(state.key(ApiKey::Anthropic), fl!("settings-ai-used-by")),
                 key,
             ),
             layout::setting_row(
@@ -333,17 +326,19 @@ fn subtitles(state: &SettingsState) -> Element<'_, Message> {
         [
             layout::setting_row_with_info(
                 fl!("settings-subtitles-key-label"),
-                format!(
-                    "{} {} {}",
-                    fl!("settings-key-save-into", store = key_store()),
-                    fl!("settings-subtitles-key-sent"),
-                    fl!("settings-subtitles-hint")
+                key_help(
+                    key_section,
+                    format!(
+                        "{} {}",
+                        fl!("settings-subtitles-key-sent"),
+                        fl!("settings-subtitles-hint")
+                    ),
                 ),
                 key,
             ),
             layout::setting_row(
                 fl!("settings-subtitles-languages-label"),
-                layout::choices(
+                layout::aligned(
                     [grid.into()]
                         .into_iter()
                         .chain(status.map(|s| text::secondary(s).into()))
@@ -352,7 +347,7 @@ fn subtitles(state: &SettingsState) -> Element<'_, Message> {
             ),
             layout::setting_row(
                 fl!("settings-subtitles-cue-length-label"),
-                layout::choices([
+                layout::aligned([
                     form::radio_option(
                         fl!("settings-subtitles-cue-short"),
                         Some(form::description(fl!("settings-subtitles-cue-short-hint"))),
@@ -395,6 +390,19 @@ struct KeyTexts {
     remove_question: String,
 }
 
+/// The ⓘ of a key row: where Save key keeps a key (while there is one to save), then what the
+/// service is used for.
+fn key_help(key: &KeySection, used_for: String) -> String {
+    if key.state == Some(KeyState::Saved) && !key.replacing {
+        used_for
+    } else {
+        format!(
+            "{} {used_for}",
+            fl!("settings-key-save-into", store = key_store())
+        )
+    }
+}
+
 /// Where the keys are kept on this OS.
 fn key_store() -> String {
     if cfg!(windows) {
@@ -419,42 +427,36 @@ fn key_block(which: ApiKey, key: &KeySection, texts: KeyTexts) -> Element<'_, Me
     let mut items: Vec<Element<'_, Message>> = match key.state {
         Some(KeyState::Unavailable) => vec![layout::notice(
             NoticeKind::Warning,
-            column![
-                text::body(fl!("settings-key-unavailable")),
-                text::secondary(fl!("settings-key-unavailable-hint")),
-            ],
+            fl!("settings-key-unavailable"),
+            Some(fl!("settings-key-unavailable-hint")),
+            [],
         )],
         Some(KeyState::Saved) if key.confirm_remove => vec![
             saved(),
             layout::notice(
                 NoticeKind::Error,
-                column![
-                    text::strong(texts.remove_question),
-                    text::secondary(fl!("settings-key-remove-confirm-hint")),
-                    row![
-                        button::danger(fl!("settings-key-remove"))
-                            .on_press(message(KeyMessage::Remove)),
-                        button::secondary(fl!("settings-key-keep"))
-                            .on_press(message(KeyMessage::CancelRemove)),
-                    ]
-                    .spacing(SPACE_S)
-                    .padding(iced::Padding {
-                        top: SPACE_S,
-                        ..iced::Padding::ZERO
-                    }),
+                texts.remove_question,
+                Some(fl!("settings-key-remove-confirm-hint")),
+                [
+                    button::danger(fl!("settings-key-remove"))
+                        .on_press(message(KeyMessage::Remove))
+                        .into(),
+                    button::secondary(fl!("settings-key-keep"))
+                        .on_press(message(KeyMessage::CancelRemove))
+                        .into(),
                 ],
             ),
         ],
         Some(KeyState::Saved) if !key.replacing => vec![
             saved(),
-            row![
+            layout::buttons([
                 button::secondary(fl!("settings-key-replace"))
-                    .on_press(message(KeyMessage::Replace)),
+                    .on_press(message(KeyMessage::Replace))
+                    .into(),
                 button::danger_ghost(fl!("settings-key-remove-ask"))
-                    .on_press(message(KeyMessage::AskRemove)),
-            ]
-            .spacing(SPACE_S)
-            .into(),
+                    .on_press(message(KeyMessage::AskRemove))
+                    .into(),
+            ]),
         ],
         _ => {
             let save = (!key.input.trim().is_empty()).then_some(message(KeyMessage::Save));
@@ -480,16 +482,14 @@ fn key_block(which: ApiKey, key: &KeySection, texts: KeyTexts) -> Element<'_, Me
                 .spacing(SPACE_S)
                 .align_y(Alignment::Center)
                 .into(),
-                Row::with_children(
+                layout::buttons(
                     std::iter::once(
                         button::primary(fl!("settings-key-save"))
                             .on_press_maybe(save)
                             .into(),
                     )
                     .chain(cancel),
-                )
-                .spacing(SPACE_S)
-                .into(),
+                ),
                 text::secondary(texts.get_one).into(),
             ]
         }
@@ -515,9 +515,9 @@ fn old_settings_import(import: &OldSettingsImport) -> Element<'_, Message> {
     };
     layout::controls(
         [
-            row![button::secondary(fl!("settings-old-import-button"))
-                .on_press(Message::ImportOldSettings)]
-            .into(),
+            layout::buttons([button::secondary(fl!("settings-old-import-button"))
+                .on_press(Message::ImportOldSettings)
+                .into()]),
             text::secondary(fl!("settings-old-hint")).into(),
         ]
         .into_iter()
@@ -530,8 +530,10 @@ fn old_settings_import(import: &OldSettingsImport) -> Element<'_, Message> {
 /// the file is not visible in Explorer or in the name, the tag is. The checkbox turns tagging off
 /// altogether; the name is kept for when it is turned back on.
 fn commented_tag(enabled: bool, tag: &str) -> Element<'_, Message> {
-    let example = frename_core::clean_commented_tag(tag)
-        .unwrap_or_else(|| frename_core::DEFAULT_COMMENTED_TAG.to_string());
+    let help = match frename_core::clean_commented_tag(tag).filter(|_| enabled) {
+        Some(tag) => fl!("settings-commented-tag-hint", tag = tag),
+        None => fl!("settings-commented-tag-off"),
+    };
     column![
         form::checkbox(fl!("settings-commented-tag"), enabled)
             .on_toggle(Message::SetCommentedTagEnabled),
@@ -541,7 +543,7 @@ fn commented_tag(enabled: bool, tag: &str) -> Element<'_, Message> {
                 form::text_field(frename_core::DEFAULT_COMMENTED_TAG, tag)
                     .on_input_maybe(enabled.then_some(Message::SetCommentedTag))
                     .width(FIELD_WIDTH_S),
-                layout::info(fl!("settings-commented-tag-hint", tag = example)),
+                layout::info(help),
             ]
             .spacing(SPACE_S)
             .align_y(Alignment::Center),
@@ -551,24 +553,16 @@ fn commented_tag(enabled: bool, tag: &str) -> Element<'_, Message> {
     .into()
 }
 
-/// A checkbox with one line under it, level with its label.
-fn checkbox_with_hint<'a>(
-    checkbox: impl Into<Element<'a, Message>>,
-    hint: impl Into<Element<'a, Message>>,
-) -> Element<'a, Message> {
-    column![checkbox.into(), layout::indented(hint)].into()
-}
-
 /// Shown after a storage change: the setting only decides where things are saved from now
 /// on, so moving what the files already have is a separate batch action, one click away.
 fn move_offer(note: String, label: String, operation: Operation) -> Element<'static, Message> {
     layout::notice(
         NoticeKind::Info,
-        column![
-            text::body(note),
-            row![button::secondary(label).on_press(Message::OpenBatchAction(operation))],
-        ]
-        .spacing(SPACE_S),
+        note,
+        None,
+        [button::secondary(label)
+            .on_press(Message::OpenBatchAction(operation))
+            .into()],
     )
 }
 

@@ -54,6 +54,11 @@ pub const DANGER_HOVER: Color = Color::from_rgb8(0xD2, 0x3B, 0x3B);
 /// Tint behind a danger-ghost button on hover.
 pub const DANGER_TINT: Color = Color::from_rgba(1.0, 0.478, 0.478, 0.10);
 
+/// The one shadow: under popups (menus, tooltips, dialogs) only.
+pub const SHADOW: Color = Color::from_rgba(0.0, 0.0, 0.0, 0.5);
+pub const SHADOW_OFFSET_Y: f32 = 8.0;
+pub const SHADOW_BLUR: f32 = 24.0;
+
 /// A disabled filled button keeps its colors at this opacity.
 pub const DISABLED_ALPHA: f32 = 0.4;
 
@@ -92,6 +97,9 @@ pub const FIELD_WIDTH_M: f32 = 240.0;
 pub const FIELD_WIDTH_L: f32 = 300.0;
 /// One checkbox of a wrapping grid of short choices (languages).
 pub const CHOICE_WIDTH: f32 = 120.0;
+/// The scrollbar's rail and scroller, and the gap between it and the content.
+pub const SCROLLBAR_WIDTH: f32 = 6.0;
+pub const SCROLLBAR_GAP: f32 = 8.0;
 /// Widest tooltip.
 pub const TOOLTIP_MAX_WIDTH: f32 = 280.0;
 /// The dot that says "an update is ready".

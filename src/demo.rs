@@ -66,12 +66,8 @@ impl DemoRun {
         }
     }
 
-    /// Whether the demo captures the settings window (the app opens it when the video is ready).
-    pub fn captures_settings(&self) -> bool {
-        self.settings.is_some()
-    }
-
-    /// The settings page the demo captures.
+    /// The settings page the demo captures, when it captures the settings window (the app opens
+    /// it when the video is ready) instead of the main one.
     pub fn settings_page(&self) -> Option<settings::Page> {
         self.settings
     }

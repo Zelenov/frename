@@ -147,7 +147,7 @@ The progress bar shows what you have noted about a clip:
   Premiere wrote are shown too and kept. If a clip is open in Premiere, its markers may not save:
   the file gets a red ✕ in the list, and frename tries again when you next leave it.
   While the playhead is on a marker, its name becomes the pin's head; click it to rename the
-  marker. Settings → Markers and ranges can keep them in the comment instead, one line each
+  marker. Settings → Saving → Markers and ranges can keep them in the comment instead, one line each
   (`0:41–0:47 — Lion`): in frename they still work as markers.
 - **Ranges:** hold `F2` (or 📍) while the clip plays to mark a stretch (`0:41–0:47 — Lion`); a
   band just above the bar shows it, and overlapping bands stack. Drag the handles at the ends of the current
@@ -226,7 +226,7 @@ there like any other text. It starts at a line beginning with `AI: ` and runs to
 comment; a new run replaces only that part and never touches the text above it. Premiere Pro and
 `.comment.txt` get the whole comment.
 
-While markers are kept inside the video (Settings → Markers and ranges, the default), the
+While markers are kept inside the video (Settings → Saving → Markers and ranges, the default), the
 segments become white "AI" markers Premiere Pro shows on the clip, and the comment keeps only the
 summary. A new run replaces the AI markers and leaves the others alone, so give one a color to
 keep it. With markers kept in the comment, or a format that cannot hold markers, the segments
@@ -252,7 +252,7 @@ pages:
 - **Saving:** a space after each tag in file names (`Food. Goat. clip.mp4`), and where comments,
   markers and in/out points are kept: inside the video or in a text file / the comment / the file
   name. While comments are inside the video, frename can tag the videos you comment ("Commented",
-  or a tag you name). After a change here, Settings offer the batch action that updates the files
+  or a tag you name). After a change here, Settings offers the batch action that updates the files
   you already have.
 - **Describe with AI:** your Anthropic API key, kept in the system's password store (Windows
   Credential Manager, macOS Keychain, or a keyring such as GNOME Keyring on Linux), the model
@@ -282,7 +282,7 @@ updates itself too.
 
 **Coming from the zip of version 0.66 or older?** On its first start the new frename finds the old
 folder in Downloads, Desktop or Documents and offers to import your settings and recent folders.
-If it was somewhere else, use **Settings → Import from an old frename folder…**. Then you can
+If it was somewhere else, use **Settings → Updates → Import from an old frename folder…**. Then you can
 delete the old folder, and uninstall GStreamer if you installed it only for frename.
 
 **Linux (64-bit; Ubuntu 24.04, Linux Mint 22, Fedora 40, Debian 13 or newer):** download the

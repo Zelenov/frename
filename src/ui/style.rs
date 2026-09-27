@@ -83,7 +83,7 @@ pub fn button(
                     _ => Color::TRANSPARENT,
                 },
                 ERROR,
-                Color::TRANSPARENT,
+                ERROR,
             ),
             ButtonKind::Nav(selected) => (
                 match status {
@@ -222,9 +222,9 @@ pub fn menu(_theme: &Theme) -> menu::Style {
 
 fn popup_shadow() -> Shadow {
     Shadow {
-        color: Color::from_rgba(0.0, 0.0, 0.0, 0.5),
-        offset: Vector::new(0.0, SPACE_S),
-        blur_radius: SPACE_XL,
+        color: SHADOW,
+        offset: Vector::new(0.0, SHADOW_OFFSET_Y),
+        blur_radius: SHADOW_BLUR,
     }
 }
 

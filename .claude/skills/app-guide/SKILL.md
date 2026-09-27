@@ -84,7 +84,7 @@ C:\Work\my\frename\
 | `features/video_controls/` | Progress bar, play/pause |
 | `features/drag_drop/` | OS file drag-drop → `OpenPath(path)` |
 | `widgets/` | 5 reusable widgets (search_bar, tag_chip, splitter, etc.) |
-| `theme.rs` | Color constants + style functions |
+| `ui/` | The design system (`docs/design/design-system.md`): tokens, fonts, icons, components; `ui/legacy.rs` holds the old `theme.rs` styles of views not moved yet |
 | `tag_colors.rs` | 16-color tag palette |
 
 ---

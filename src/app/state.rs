@@ -676,15 +676,15 @@ impl FrenameApp {
     /// Open the settings window, or focus it when it is already open.
     /// The demo's screenshot: of the main window, or of the settings window, opened for it.
     fn demo_capture(&mut self) -> Task<Message> {
-        let captures_settings = self.demo.as_ref().is_some_and(|d| d.captures_settings());
-        let (open, window, size) = if captures_settings {
-            let page = self.demo.as_ref().and_then(|d| d.settings_page());
-            let open = self.open_settings_on(page);
-            let id = self.settings_window.unwrap_or(self.main_window);
-            let size = SETTINGS_WINDOW_SIZE;
-            (open, id, Some((size.width as u32, size.height as u32)))
-        } else {
-            (Task::none(), self.main_window, None)
+        let settings_page = self.demo.as_ref().and_then(|d| d.settings_page());
+        let (open, window, size) = match settings_page {
+            Some(page) => {
+                let open = self.open_settings_on(Some(page));
+                let id = self.settings_window.unwrap_or(self.main_window);
+                let size = SETTINGS_WINDOW_SIZE;
+                (open, id, Some((size.width as u32, size.height as u32)))
+            }
+            None => (Task::none(), self.main_window, None),
         };
         match self.demo.as_mut() {
             Some(demo) => Task::batch([open, demo.capture(window, size).map(Message::Demo)]),

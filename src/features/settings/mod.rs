@@ -7,4 +7,7 @@ pub mod view;
 
 pub use messages::{KeyMessage, Message};
 pub use page::Page;
+
+/// The page's scrollable content; showing a page scrolls it to its top.
+pub const SETTINGS_SCROLLABLE_ID: &str = "settings-content";
 pub use state::SettingsState;

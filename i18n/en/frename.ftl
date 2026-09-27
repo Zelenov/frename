@@ -13,7 +13,7 @@ settings-window-title = Settings
 settings-page-interface = Interface
 settings-page-saving = Saving
 settings-close = Close
-settings-apply-note = Changes apply right away.
+settings-apply-note = Changes apply right away. Ctrl+Tab moves between pages.
 settings-language = Language
 settings-language-system = System ({ $language })
 settings-video = Video
@@ -38,6 +38,7 @@ settings-comments-move-into-text-files = Move existing comments from the videos 
 settings-commented-tag = Tag videos with a comment
 settings-commented-tag-name = Tag
 settings-commented-tag-hint = Checked when you write a comment on a video, e.g. { $tag }.IMG_0424.MOV, and unchecked when you clear it (AI descriptions do not count). Otherwise it is yours to change.
+settings-commented-tag-off = Videos with a comment get no tag.
 settings-in-out = In/out points
 settings-in-out-in-video = Inside the video file
 settings-in-out-in-video-hint = A subclip marker in Premiere Pro
@@ -103,7 +104,7 @@ settings-key-show = Show
 settings-key-save = Save key
 settings-key-cancel = Cancel
 settings-key-saved-in = Saved in { $store } on this computer
-settings-key-save-into = Save keeps it in { $store } on this computer.
+settings-key-save-into = Save key keeps it in { $store } on this computer.
 
 ## Batch mode
 

@@ -37,6 +37,21 @@ pub fn checkbox<'a, M>(label: impl IntoFragment<'a>, checked: bool) -> Checkbox<
         .style(style::checkbox)
 }
 
+/// A checkbox with one line under it, level with its label.
+pub fn checkbox_with_hint<'a, M: 'a>(
+    checkbox: impl Into<Element<'a, M>>,
+    hint: impl Into<Element<'a, M>>,
+) -> Element<'a, M> {
+    column![
+        checkbox.into(),
+        container(hint).padding(Padding {
+            left: CHECK_SIZE + SPACE_S,
+            ..Padding::ZERO
+        })
+    ]
+    .into()
+}
+
 /// One option of a radio group, with an optional description under its name (§8.3). A click on
 /// the description picks the option too.
 pub fn radio_option<'a, V, M>(

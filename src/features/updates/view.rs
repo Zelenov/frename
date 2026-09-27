@@ -1,12 +1,11 @@
 //! The Version row of the settings window's Updates page.
 
-use iced::widget::{tooltip, Row};
+use iced::widget::tooltip;
 use iced::Element;
 
 use super::state::Status;
 use super::{Message, UpdatesState};
 use crate::ui::layout;
-use crate::ui::tokens::SPACE_S;
 use crate::ui::{button, form, text};
 
 /// The running version, one status line, **Check for updates** and, when a newer version is known,
@@ -64,9 +63,9 @@ pub fn view(state: &UpdatesState, batch_running: bool) -> Element<'_, Message> {
             update.into()
         }
     });
-    let actions = Row::with_children(std::iter::once(check.into()).chain(update)).spacing(SPACE_S);
+    let actions = layout::buttons(std::iter::once(check.into()).chain(update));
 
-    layout::choices(
+    layout::aligned(
         [text::strong(fl!(
             "updates-current-version",
             version = state.current_version()
@@ -75,7 +74,7 @@ pub fn view(state: &UpdatesState, batch_running: bool) -> Element<'_, Message> {
         .into_iter()
         .chain(note.map(Element::from))
         .chain([
-            actions.into(),
+            actions,
             form::checkbox(fl!("updates-check-on-start"), state.check_on_start())
                 .on_toggle_maybe(state.installed().then_some(Message::SetCheckOnStart))
                 .into(),
