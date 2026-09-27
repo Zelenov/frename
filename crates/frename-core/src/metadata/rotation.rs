@@ -35,14 +35,6 @@ impl Rotation {
         mirrored: false,
     };
 
-    /// Turned `degrees` clockwise (a multiple of 90; anything else is rounded down to one).
-    pub fn clockwise(degrees: u16) -> Self {
-        Self {
-            quarter_turns: ((degrees / 90) % 4) as u8,
-            mirrored: false,
-        }
-    }
-
     /// The clockwise turn in degrees: 0, 90, 180 or 270.
     pub fn degrees(self) -> u16 {
         u16::from(self.quarter_turns) * 90
@@ -130,7 +122,11 @@ impl std::fmt::Display for RotationError {
 
 impl From<io::Error> for RotationError {
     fn from(e: io::Error) -> Self {
-        Self::Io(e.to_string())
+        match e.kind() {
+            // A box that points past its parent or the end of the file.
+            io::ErrorKind::InvalidData | io::ErrorKind::UnexpectedEof => Self::Damaged,
+            _ => Self::Io(e.to_string()),
+        }
     }
 }
 
@@ -145,7 +141,8 @@ pub(crate) fn read(path: &Path) -> Result<Rotation, RotationError> {
 /// Turn the video at `path` by `quarter_turns` clockwise (negative: counter-clockwise), in place,
 /// keeping the file's modified and created times. Returns the new rotation of its first video
 /// track. Nothing is written when any video track's matrix is one frename leaves alone, or when
-/// the turn is a whole number of full turns.
+/// the turn is a whole number of full turns; a write that fails part way puts back the tracks
+/// already written, so the file is either turned or as it was.
 pub(crate) fn rotate(path: &Path, quarter_turns: i32) -> Result<Rotation, RotationError> {
     check_format(path)?;
     let mut file = OpenOptions::new().read(true).write(true).open(path)?;
@@ -154,28 +151,36 @@ pub(crate) fn rotate(path: &Path, quarter_turns: i32) -> Result<Rotation, Rotati
     if quarter_turns.rem_euclid(4) == 0 {
         return Ok(first);
     }
-    let times = FileTimes::read(path)?;
-    for track in &tracks {
-        let turned = track.rotation.turned(quarter_turns);
-        let bytes = track.matrix_bytes(turned);
-        file.seek(SeekFrom::Start(track.matrix_at))?;
-        file.write_all(&bytes)?;
+    let times = FileTimes::of(&file)?;
+    let write = |file: &mut File, at: u64, bytes: &[u8]| -> io::Result<()> {
+        file.seek(SeekFrom::Start(at))?;
+        file.write_all(bytes)
+    };
+    for (done, track) in tracks.iter().enumerate() {
+        let bytes = track.matrix_bytes(track.rotation.turned(quarter_turns));
+        if let Err(e) = write(&mut file, track.matrix_at, &bytes) {
+            for written in &tracks[..done] {
+                if let Err(undo) = write(&mut file, written.matrix_at, &written.matrix) {
+                    log::error!("rotation: {path:?} left half turned: {undo}");
+                }
+            }
+            return Err(e.into());
+        }
     }
     file.sync_all()?;
-    drop(file);
-    times.restore(path)?;
+    // On the handle that wrote: reopening the file could fail while another app holds it. The
+    // turn is done either way; a changed time is only noted.
+    if let Err(e) = times.apply(&file) {
+        log::warn!("rotation: {path:?} turned, but its times were not kept: {e}");
+    }
     Ok(first)
 }
 
 fn check_format(path: &Path) -> Result<(), RotationError> {
-    let is_movie = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "mov" | "mp4" | "m4v"));
-    if !is_movie {
+    if !bmff::is_movie(path) {
         return Err(RotationError::CannotRotate);
     }
-    if bmff::is_damaged(path) {
+    if bmff::content_is_not_a_movie(path) {
         return Err(RotationError::Damaged);
     }
     Ok(())
@@ -268,8 +273,16 @@ impl VideoTrack {
     }
 }
 
-/// Every video track of the movie, in file order. At least one, or an error.
-fn video_tracks(file: &mut File, path: &Path) -> Result<Vec<VideoTrack>, RotationError> {
+/// A track of the movie: whether it is video, and where its `tkhd` payload is.
+#[derive(Debug)]
+struct Track {
+    is_video: bool,
+    tkhd: BoxHeader,
+}
+
+/// Every track with a track header, in file order. The walk ends after the movie box, so
+/// whatever follows it (a download's leftovers) does not matter.
+fn tracks(file: &mut File) -> io::Result<Vec<Track>> {
     let len = file.metadata()?.len();
     let mut tracks = Vec::new();
     let mut pos = 0;
@@ -278,50 +291,63 @@ fn video_tracks(file: &mut File, path: &Path) -> Result<Vec<VideoTrack>, Rotatio
             let mut child_pos = b.payload;
             while let Some(child) = bmff::read_header(file, child_pos, b.end)? {
                 if &child.kind == b"trak" {
-                    if let Some(track) = video_track(file, &child)? {
-                        tracks.push(track);
-                    }
+                    tracks.extend(track(file, &child)?);
                 }
                 child_pos = child.end;
             }
+            break;
         }
         pos = b.end;
-    }
-    if tracks.is_empty() {
-        log::info!("rotation: no video track in {path:?}");
-        return Err(RotationError::NoVideoTrack);
     }
     Ok(tracks)
 }
 
-/// The track in `trak`, when it is a video track (`mdia/hdlr` says `vide`).
-fn video_track(file: &mut File, trak: &BoxHeader) -> Result<Option<VideoTrack>, RotationError> {
+/// The track in `trak`, when it has a header; video when `mdia/hdlr` says `vide`.
+fn track(file: &mut File, trak: &BoxHeader) -> io::Result<Option<Track>> {
     let mut tkhd = None;
     let mut is_video = false;
     let mut pos = trak.payload;
     while let Some(b) = bmff::read_header(file, pos, trak.end)? {
+        pos = b.end;
         match &b.kind {
-            b"tkhd" => tkhd = Some((b.payload, b.end)),
+            b"tkhd" => tkhd = Some(b),
             b"mdia" => is_video = media_is_video(file, &b)?,
             _ => {}
         }
-        pos = b.end;
     }
-    let (Some((payload, end)), true) = (tkhd, is_video) else {
-        return Ok(None);
-    };
-    let version = bmff::read_bytes(file, payload, 1)?[0];
-    // Version, flags, times, track id, reserved, duration, then 8 reserved bytes, layer,
-    // alternate group, volume and 2 reserved bytes before the matrix.
-    let matrix_offset = match version {
-        0 => 40,
-        1 => 52,
-        _ => return Err(RotationError::UnusualMatrix),
-    };
-    let matrix_at = payload + matrix_offset;
+    Ok(tkhd.map(|tkhd| Track { is_video, tkhd }))
+}
+
+/// Where the matrix starts in a `tkhd` payload of `version`: after version, flags, times, track
+/// id, reserved, duration, 8 reserved bytes, layer, alternate group, volume and 2 reserved bytes.
+fn matrix_offset(version: u8) -> Option<u64> {
+    match version {
+        0 => Some(40),
+        1 => Some(52),
+        _ => None,
+    }
+}
+
+/// Every video track of the movie, in file order. At least one, or an error.
+fn video_tracks(file: &mut File, path: &Path) -> Result<Vec<VideoTrack>, RotationError> {
+    let mut video = Vec::new();
+    for track in tracks(file)?.into_iter().filter(|t| t.is_video) {
+        video.push(video_track(file, &track.tkhd)?);
+    }
+    if video.is_empty() {
+        log::info!("rotation: no video track in {path:?}");
+        return Err(RotationError::NoVideoTrack);
+    }
+    Ok(video)
+}
+
+/// The rotation of the video track whose header is `tkhd`.
+fn video_track(file: &mut File, tkhd: &BoxHeader) -> Result<VideoTrack, RotationError> {
+    let version = bmff::read_bytes(file, tkhd.payload, 1)?[0];
+    let matrix_at = tkhd.payload + matrix_offset(version).ok_or(RotationError::UnusualMatrix)?;
     // Matrix, then width and height.
-    if matrix_at + MATRIX_LEN as u64 + 8 > end {
-        return Err(bmff::invalid().into());
+    if matrix_at + MATRIX_LEN as u64 + 8 > tkhd.end {
+        return Err(RotationError::Damaged);
     }
     let bytes = bmff::read_bytes(file, matrix_at, MATRIX_LEN + 8)?;
     let value = |index: usize| {
@@ -362,13 +388,13 @@ fn video_track(file: &mut File, trak: &BoxHeader) -> Result<Option<VideoTrack>, 
     }
     let mut matrix = [0; MATRIX_LEN];
     matrix.copy_from_slice(&bytes[..MATRIX_LEN]);
-    Ok(Some(VideoTrack {
+    Ok(VideoTrack {
         matrix_at,
         matrix,
         rotation,
         width,
         height,
-    }))
+    })
 }
 
 /// Whether the media in `mdia` is video: its handler (`mdia/hdlr`, not the data handler in
@@ -411,39 +437,20 @@ mod tests {
     /// The matrices of every track (audio included), as `[a, b, u, c, d, v, x, y, w]`.
     fn all_matrices(path: &Path) -> Vec<[i32; 9]> {
         let mut file = File::open(path).expect("open");
-        let len = file.metadata().expect("meta").len();
-        let mut found = Vec::new();
-        let mut pos = 0;
-        while let Some(b) = bmff::read_header(&mut file, pos, len).expect("box") {
-            if &b.kind == b"moov" {
-                let mut child_pos = b.payload;
-                while let Some(trak) = bmff::read_header(&mut file, child_pos, b.end).expect("box")
-                {
-                    if &trak.kind == b"trak" {
-                        let mut inner = trak.payload;
-                        while let Some(t) =
-                            bmff::read_header(&mut file, inner, trak.end).expect("box")
-                        {
-                            if &t.kind == b"tkhd" {
-                                let bytes =
-                                    bmff::read_bytes(&mut file, t.payload + 40, 36).expect("read");
-                                let mut m = [0; 9];
-                                for (i, v) in m.iter_mut().enumerate() {
-                                    *v = i32::from_be_bytes(
-                                        bytes[i * 4..i * 4 + 4].try_into().expect("4 bytes"),
-                                    );
-                                }
-                                found.push(m);
-                            }
-                            inner = t.end;
-                        }
-                    }
-                    child_pos = trak.end;
+        tracks(&mut file)
+            .expect("tracks")
+            .iter()
+            .map(|track| {
+                let version = bmff::read_bytes(&mut file, track.tkhd.payload, 1).expect("read")[0];
+                let at = track.tkhd.payload + matrix_offset(version).expect("version");
+                let bytes = bmff::read_bytes(&mut file, at, MATRIX_LEN).expect("read");
+                let mut m = [0; 9];
+                for (i, v) in m.iter_mut().enumerate() {
+                    *v = i32::from_be_bytes(bytes[i * 4..i * 4 + 4].try_into().expect("4 bytes"));
                 }
-            }
-            pos = b.end;
-        }
-        found
+                m
+            })
+            .collect()
     }
 
     const W: i32 = 32 * ONE;
@@ -623,6 +630,34 @@ mod tests {
     }
 
     #[test]
+    fn a_broken_movie_box_is_damaged_and_junk_after_it_does_not_matter() {
+        for fixture in FIXTURES {
+            let file = copy_of(fixture, "broken");
+            let original = std::fs::read(&file).expect("read");
+            let moov = original
+                .windows(4)
+                .position(|w| w == b"moov")
+                .expect("moov")
+                - 4;
+
+            // Leftovers after the movie: a box header pointing far past the end.
+            let mut junk = original.clone();
+            junk.extend_from_slice(&1_000_000u32.to_be_bytes());
+            junk.extend_from_slice(b"junk");
+            std::fs::write(&file, &junk).expect("write");
+            assert_eq!(rotate(&file, 1).map(Rotation::degrees), Ok(90), "{fixture}");
+
+            // The movie box itself claims more than the file has.
+            let mut broken = original;
+            broken[moov..moov + 4].copy_from_slice(&u32::MAX.to_be_bytes());
+            std::fs::write(&file, &broken).expect("write");
+            assert_eq!(read(&file), Err(RotationError::Damaged), "{fixture}");
+            assert_eq!(rotate(&file, 1), Err(RotationError::Damaged), "{fixture}");
+            assert_eq!(std::fs::read(&file).expect("read"), broken);
+        }
+    }
+
+    #[test]
     fn a_read_only_file_fails_and_stays_as_it_was() {
         let file = copy_of("wide.mov", "read-only");
         let before = std::fs::read(&file).expect("read");
@@ -677,12 +712,17 @@ mod tests {
     #[test]
     fn rotations_turn_and_come_back() {
         assert_eq!(Rotation::UPRIGHT.turned(-1).degrees(), 270);
-        assert_eq!(Rotation::clockwise(90).turned(3), Rotation::UPRIGHT);
-        assert_eq!(Rotation::clockwise(270).turns_to_upright(), 1);
+        assert_eq!(Rotation::UPRIGHT.turned(1).turned(3), Rotation::UPRIGHT);
+        assert_eq!(Rotation::UPRIGHT.turned(3).turns_to_upright(), 1);
         assert_eq!(Rotation::UPRIGHT.turns_to_upright(), 0);
-        for r in [0, 90, 180, 270] {
-            let rotation = Rotation::clockwise(r);
-            assert_eq!(Rotation::of(rotation.matrix()), Some(rotation));
+        for turns in 0..4 {
+            for mirrored in [false, true] {
+                let rotation = Rotation {
+                    quarter_turns: turns,
+                    mirrored,
+                };
+                assert_eq!(Rotation::of(rotation.matrix()), Some(rotation));
+            }
         }
     }
 }

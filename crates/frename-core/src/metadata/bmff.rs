@@ -30,29 +30,33 @@ pub(super) const FIRST_BOXES: [&[u8; 4]; 7] = [
 /// reader cannot tell (not a MOV/MP4, or a layout it does not understand), in which case
 /// the caller asks the toolkit.
 pub(super) fn find_xmp_packet(path: &Path) -> Option<Option<String>> {
-    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
-    if !matches!(ext.as_str(), "mov" | "mp4" | "m4v") {
+    if !is_movie(path) {
         return None;
     }
     scan(path).ok().flatten()
+}
+
+/// Whether the file is named as a MOV/MP4 (`.mov`, `.mp4`, `.m4v`, any case).
+pub(super) fn is_movie(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "mov" | "mp4" | "m4v"))
 }
 
 /// Whether the file is named MOV/MP4 but does not start with a box one can start with: its
 /// content is not a movie (all zeros after a download that did not finish, for one). The
 /// toolkit then reports no handler, as for a format that cannot hold XMP at all.
 pub(super) fn is_damaged(path: &Path) -> bool {
-    let is_movie = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "mov" | "mp4" | "m4v"));
-    if !is_movie {
-        return false;
-    }
+    is_movie(path) && content_is_not_a_movie(path)
+}
+
+/// Whether the file does not start with a box a MOV/MP4 can start with, whatever its name.
+/// A file that cannot be opened is not damaged, just unavailable.
+pub(super) fn content_is_not_a_movie(path: &Path) -> bool {
     let first = File::open(path).and_then(|mut file| {
         let len = file.metadata()?.len();
         read_header(&mut file, 0, len)
     });
-    // A file that cannot be opened is not damaged, just unavailable.
     matches!(first, Ok(None)) || matches!(first, Ok(Some(b)) if !FIRST_BOXES.contains(&&b.kind))
 }
 
@@ -112,6 +116,7 @@ fn find_in_moov(file: &mut File, moov: &BoxHeader) -> io::Result<Option<String>>
 }
 
 /// A box: its type, where its payload starts and where it ends (absolute offsets).
+#[derive(Debug)]
 pub(super) struct BoxHeader {
     pub(super) kind: [u8; 4],
     pub(super) payload: u64,
