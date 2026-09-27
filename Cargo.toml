@@ -9,10 +9,6 @@ description = "File renaming utility for Windows"
 [workspace]
 members = [".", "crates/frename-core"]
 
-[features]
-# HEIC/HEIF decoding (requires cmake; install cmake then `cargo build --features heic`)
-heic = ["dep:libheif-rs"]
-
 [dependencies]
 # Core logic crate
 frename-core = { path = "crates/frename-core" }
@@ -29,11 +25,8 @@ iced = { version = "0.14", features = ["tokio", "image"] }
 iced_video_player = { git = "https://github.com/jazzfool/iced_video_player", branch = "master" }
 url = "2.5"
 
-# Image decoding (JPEG, PNG, WebP, BMP)
+# Image encoding/decoding: F12 frame screenshots (JPEG), the window icon, demo screenshots
 image = "0.25"
-
-# HEIC/HEIF decoding (optional; requires cmake at build time)
-libheif-rs = { version = "3", features = ["embedded-libheif"], optional = true }
 
 # Logging - simple file logging for debugging
 log = "0.4"
