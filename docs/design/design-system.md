@@ -31,7 +31,7 @@ Contents:
 15. [Implementation](#15-implementation)
 16. [Out of scope](#16-out-of-scope)
 17. [Test plan](#17-test-plan)
-18. [Open questions (with recommended answers)](#18-open-questions-with-recommended-answers)
+18. [Decisions](#18-decisions-answered-by-the-owner-2026-09-28)
 19. [Sources](#19-sources)
 
 Book references are short: **AF** About Face (Cooper et al., 2014), **DI** Designing Interfaces
@@ -1994,21 +1994,48 @@ main window does not change in #57 and the README has no Settings screenshot.
   still changes what it did; key Save / Replace / Remove / Keep; move offers open the batch action;
   resize down to 720×520 in Russian: nothing clips.
 
-## 18. Open questions (with recommended answers)
+## 18. Decisions (answered by the owner, 2026-09-28)
 
-1. **Inter or the system font?** Recommended: Inter, bundled. The issue asks for one font on every
-   OS; Segoe UI cannot be shipped on Linux.
-2. **Should Settings stay a separate window once #64 adds an app bar?** Recommended: yes (§2).
-3. **Toggle switches for settings that apply at once (Windows 11 style)?** Recommended: no, one
-   checkbox look (§8.5).
-4. **Remember the last Settings page across restarts?** Recommended: no, only within a session;
-   it is a small convenience and one more stored value.
-5. **Tooltip delay 500 ms** instead of the books' ~1 s? Recommended: yes for this app (§8.13); easy
-   to change as one token.
-6. **Chip height?** Decided: 28 in the grid and card (the checkbox, label, star and action need it), 20
-   in file list rows (§13.4.2).
-7. **Keyboard focus for Settings' checkboxes and buttons?** Recommended: not in #57 (§11); filed as
-   an idea: a focus ring owned by Settings' state.
+1. **Inter or the system font?** Inter, bundled. The issue asks for one font on every OS; Segoe UI
+   cannot be shipped on Linux.
+2. **Should Settings stay a separate window once #64 adds an app bar?** Yes (§2). Settings is
+   visited rarely and works next to the main window.
+3. **Should ⚙ and the mode switch move to an app bar (#64)?** Yes, and it follows the books better
+   than today's place:
+   - *Related things together, unrelated apart.* Today ⚙ and ☑ sit in the file-list toolbar
+     between ◀ ▶ ⊙ 📂, which act on files; they act on the whole app. Proximity is what tells the
+     user what belongs together (AF ch. 17 "Items in proximity to one another generally are
+     related"; DI ch. 4, Gestalt proximity).
+   - *App-level tools have one fixed place.* Settings is "utility navigation": on every main screen,
+     in the upper-right corner, smaller and quieter than the content (DI ch. 3 "Utility
+     Navigation", "Clear Entry Points"). The app bar gives it that place; the file list's toolbar
+     keeps only file controls.
+   - *The mode must always be visible* (MiM ch. 15: "Mode slips: clearly indicate the current
+     system mode"). A lone ☑ icon among file buttons does not say which mode is on; a segmented
+     control "Single file | Batch" at the top does (§8.4).
+   - *But the switch is not the cure for the mode.* BIR («Модальность — признак плохого
+     интерфейса»; «Хороший сценарий побеждает модальность») warns that a louder mode indicator is a
+     compromise; better that the same gesture does the same thing in both modes. So batch mode keeps
+     clicks on rows opening the file for preview, the video pane works the same, and #60 lets
+     Ctrl/Shift+click enter batch mode as part of the task instead of by a separate switch.
+   - *Custom title bar or a bar under it* (#64's two options): a custom title bar saves the 40 px
+     of a second bar, which a sovereign app should spend on content (AF ch. 9), and puts ⚙ at the
+     screen's top edge when maximised, where it is easiest to hit (BIR on Fitts's law: targets
+     pressed to the edge). It must keep what makes a window movable and sizeable (AF ch. 9;
+     #64's list: drag, double-click, resize edges, snap layouts). iced 0.14 draws undecorated
+     windows through winit, which does not offer Windows 11 snap layouts on a custom maximise
+     button, so unless #64's prototype proves otherwise the result is option 2: a thin app bar
+     under the OS title bar (as drawn in §13.1). The design is the same either way: folder name on
+     the left, the mode switch in the middle-left, ⚙ with its update dot at the right.
+4. **Toggle switches for settings that apply at once (Windows 11 style)?** No, one checkbox look
+   (§8.5).
+5. **Remember the last Settings page across restarts?** No, only within a session; it is a small
+   convenience and one more stored value.
+6. **Tooltip delay 500 ms** instead of the books' ~1 s? Yes for this app (§8.13); one token.
+7. **Chip height:** 28 in the grid and card (the checkbox, label, star and action need it), 20 in
+   file list rows (§13.4.2).
+8. **Keyboard focus for Settings' checkboxes and buttons?** Not in #57 (§11); filed as #92: a
+   focus ring owned by Settings' state.
 
 ## 19. Sources
 
