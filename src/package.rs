@@ -144,21 +144,28 @@ mod explorer_menu {
 /// database, and Windows puts a packaged app's new files in the package's own storage, where the
 /// other build cannot see them. The Store removes it with the app.
 pub fn store_data_dir() -> Option<PathBuf> {
-    STORE_BUILD
-        .then(dirs::data_local_dir)
-        .flatten()
-        .map(|local| local.join(STORE_DATA_FOLDER))
+    local_app_data_folder(STORE_DATA_FOLDER)
 }
-
-const STORE_DATA_FOLDER: &str = "frename-store";
 
 /// The installed version's data folder, `%LocalAppData%\frename`, whose settings the Store build
 /// takes on its first start. `None` for other builds.
 pub fn installed_data_dir() -> Option<PathBuf> {
+    local_app_data_folder(INSTALLED_DATA_FOLDER)
+}
+
+const STORE_DATA_FOLDER: &str = "frename-store";
+
+/// The installed version's package root in `%LocalAppData%`: Velopack names it after the pack id,
+/// `vpk pack -u frename` in the workflows. Renaming one without the other would make the Store
+/// build's first start miss the installed version's settings.
+const INSTALLED_DATA_FOLDER: &str = "frename";
+
+/// `%LocalAppData%\<name>` in the Store build; `None` otherwise.
+fn local_app_data_folder(name: &str) -> Option<PathBuf> {
     STORE_BUILD
         .then(dirs::data_local_dir)
         .flatten()
-        .map(|local| local.join("frename"))
+        .map(|local| local.join(name))
 }
 
 /// Whether frename keeps its data away from the exe (a Velopack package or the Store build), so
@@ -211,6 +218,8 @@ mod tests {
 
     #[test]
     fn the_store_build_keeps_its_own_folder_next_to_the_installed_versions() {
+        assert_eq!(STORE_DATA_FOLDER, "frename-store");
+        assert_eq!(INSTALLED_DATA_FOLDER, "frename");
         let local = dirs::data_local_dir().filter(|_| STORE_BUILD);
         assert_eq!(
             store_data_dir(),

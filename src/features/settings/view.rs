@@ -192,7 +192,7 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
         column![language, video, tags, comments, markers, in_out, updates].spacing(20);
     // Only a package or the Store build keeps its settings away from the exe; elsewhere they are
     // next to it.
-    if crate::package::keeps_data_away_from_exe(crate::package::current()) {
+    if state.updates().installed() || state.updates().is_store_build() {
         sections = sections.push(section(
             fl!("settings-old-title"),
             old_settings_import(state.old_settings_import()),
