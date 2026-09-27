@@ -814,7 +814,7 @@ Today, for comparison (screenshots of the app):
 │ picture                   ║ search · filter       ║ tag search                           │
 │   side list (overlay)     ║ rows                  ║ starred strip                        │
 │ subtitle strip (48)       ║                       ║ tag grid                             │
-│ timeline (24–32)          ║                       ║ order strip (32)                     │
+│ timeline (24–34)          ║                       ║ order strip (32)                     │
 │ controls bar (32)         ║ toolbar (32)          ║ file name card · comment             │
 └───────────────────────────╨───────────────────────╨──────────────────────────────────────┘
 ```
@@ -823,8 +823,8 @@ Today, for comparison (screenshots of the app):
   overlaps the neighbours by 6 px on each side, so a splitter takes 1 px of width, not 12; hover
   and drag show `border.control` and the resize cursor. Widths are the user's, remembered; the
   defaults and minimums are in §13.9 (video 320, file list 200, tags 320). Today the video pane has
-  a fixed width with no minimum and the right splitter keeps only 200 for the list and the tags
-  together: too narrow for the controls bar and a row of chips.
+  a fixed width with a minimum of 150 while dragging, the file list a minimum of 120, and the tags
+  area 200: too narrow for the controls bar and a row of chips.
 - The **video pane** is the column that grows and shrinks with the window (center stage, DI
   p. 232). Today the video pane keeps its width and the tags area takes the change
   (**behaviour**, #59).
@@ -879,6 +879,12 @@ at the top of the file list says why ("Locked while Describe with AI runs").
 | the action list and every control of the action page | Cancel, and the job's own progress |
 | Open a folder, the batch toggle, Settings' *Update and restart* | the rest of Settings |
 | the video pane (no file is open: its empty state) and F5 | – |
+| the batch panel's `x` (disabled, tooltip "Cancel the action first"; Esc cancels, §13.2) | – |
+
+The **lock line** is a 28 px row at the top of the file list, above the search field, `bg.raised`,
+padding 0×8: `lock` 14 and the sentence in `secondary`. It pushes the list down (the rows keep
+their scroll position) and goes when the job ends. The batch page's button bar says the same on
+its left: "The folder is locked until it ends".
 
 Working on the folder while a job runs (at least previewing files) is #29, not this spec.
 
@@ -892,15 +898,15 @@ until the next action. All their texts are translated (today five are English-on
 |---|---|---|
 | 1 | a menu, dropdown list or popover is open | closes it |
 | 2 | a field has focus | a search field with text is cleared; any other field loses focus (its text is kept) |
-| 3 | a file is being renamed | cancels the rename |
-| 4 | a marker row is open | closes it (the name typed so far is kept) |
+| 3 | a marker row is open | closes it (the name typed so far is kept) |
+| 4 | a file is being renamed | cancels the rename |
 | 5 | fullscreen | leaves it |
 | 6 | the file search or the tag search has text | clears both (today's Esc, also in batch mode) |
 | 7 | a batch result is shown | Close |
 | 8 | a batch job runs | Cancel (the job stops after the current file; nothing asks) |
 | 9 | batch mode | leaves it |
 
-Today Esc stops at step 6 (in the order rename → marker row → fullscreen → searches) and never
+Today Esc does steps 3–6 in this order and never
 touches batch mode; steps 7–9 are **behaviour** for #58.
 
 ### 13.3 Video pane
@@ -995,8 +1001,8 @@ click on a pin seeks there.
 playhead, counting from 500 ms before its start to 2 s after it (or its end, if later); among
 several, one already started wins over one coming up, then the latest start.
 
-**Marker keys** (they work even while a field has focus, except while a marker row is open; they
-are ignored with Ctrl or Alt held; F2's auto-repeat is ignored):
+**Marker keys** (they work even while a field has focus; they are ignored with Ctrl or Alt held;
+F2's auto-repeat is ignored; what an open marker row blocks is listed under the table):
 
 | Key | What it does |
 |---|---|
@@ -1019,17 +1025,18 @@ Renaming a marker is written live and is not undoable (today; #62 may change it)
 ![Controls bar](design-system/controls-bar.png)
 
 32 px, `bg.panel`, padding 0×8. Icon buttons 32×32 (§8.1) with the Lucide icons of §7, in
-**groups** separated by 12 px; buttons within a group 0 px apart (the 32 px squares touch):
+**groups** separated by 12 px; buttons within a group 0 px apart (the 32 px squares touch). From
+left to right, with the widths §13.9 folds by:
 
-| Group | Buttons (icon, tooltip with keys) |
+| Group (width) | Buttons (icon, tooltip with keys) |
 |---|---|
-| Transport | `rewind` "Back 10 s `F1`" · `play`/`pause` "Play `Space`" / "Pause `Space`" · `fast-forward` "Forward 10 s `F3`" |
-| In/out | text `[` "Set the in point `[`" · text `]` "Set the out point `]`" (text, as #44 says) |
-| Mark | `camera` "Save this frame `F12`" · `map-pin` "Add a marker `F2` (hold for a range)"; disabled with the reason "This file cannot hold markers" |
-| Time (#59) | `00:10 / 00:30` in `mono` `text.secondary`; a fixed width so it never moves |
-| Volume | `volume-2` icon 16 in `text.secondary` (not a button) · a 72 px slider (§8.8) |
-| Notice slot | flexible: takes the space left between Mark and Time; notices (§13.2) show here, cut with "…" and the full text in the tooltip |
-| Views | `captions` "Subtitle list" (only with subtitles) · `map-pin` "Marker list" with "`Shift`+`F1` / `Shift`+`F3` jump between markers" on its second line · `maximize-2`/`minimize-2` "Full screen `F5`" |
+| Transport (96) | `rewind` "Back 10 s `F1`" · `play`/`pause` "Play `Space`" / "Pause `Space`" · `fast-forward` "Forward 10 s `F3`" |
+| In/out (64) | text `[` "Set the in point `[`" · text `]` "Set the out point `]`" (text, as #44 says) |
+| Mark (64) | `camera` "Save this frame `F12`" · `map-pin` "Add a marker `F2` (hold for a range)"; disabled with the reason "This file cannot hold markers" |
+| Free space (flexible) | empty; notices (§13.2) show here when it is at least 120 wide, cut with "…" and the full text in the tooltip |
+| Time (104, #59) | `00:10 / 00:30` in `mono` `text.secondary`; a fixed width so it never moves |
+| Volume (96) | `volume-2` icon 16 in `text.secondary` (not a button), 8 px, a 72 px slider (§8.8); folded: a 32 px icon button `volume-2` that opens the slider in a popover |
+| Views (96) | `captions` "Subtitle list" (only with subtitles) · `map-pin` "Marker list" with "`Shift`+`F1` / `Shift`+`F3` jump between markers" on its second line · **More** `ellipsis` (only when something is folded) · `maximize-2`/`minimize-2` "Full screen `F5`" |
 
 - **Latched** (list shown, fullscreen): `state.selected` fill and the icon in `accent.text`
   (§8.1), not only a blue glyph.
@@ -1038,11 +1045,11 @@ Renaming a marker is written live and is not undoable (today; #62 may change it)
 - **Play/pause** shows the action the button will do (the media exception of §8.1), and must
   always match the player: today Space and a click on the picture can leave it showing the wrong
   symbol (**behaviour** bug, #59).
-- **Notice** (§13.2): an inline status in the notice slot, `text.secondary`, with an icon of its
+- **Notice** (§13.2): an inline status in the free space, `text.secondary`, with an icon of its
   kind: `camera` "Frame saved", `trash` "Marker deleted", `circle-alert` in `error` "Markers not
-  saved: the file is read-only or in use". It never pushes a button. When the slot is narrower than
-  120 (pane under 488, §13.9), the notice shows instead as a pill over the bottom-left of the
-  picture (`bg.overlay`, radius 6, padding 4×8), with the same lifetime.
+  saved: the file is read-only or in use". It never pushes a button. When the free space is under
+  120 (the pane is under about 716 with every group shown), the notice shows instead as a pill over
+  the bottom-left of the picture (`bg.overlay`, radius 6, padding 4×8), with the same lifetime.
 - **Narrow pane:** what gives way and when is in §13.9. The **More** button (`ellipsis`) sits just
   before fullscreen; its menu opens upward, lists each moved control with its icon, name and key,
   and marks a latched one with a `check`.
@@ -1132,9 +1139,10 @@ Renaming a marker is written live and is not undoable (today; #62 may change it)
 ![File list](design-system/file-list.png)
 
 #### 13.4.1 Search and filter
-- A search field (§8.6) across the column with the placeholder "Find a file" and `search` inside on
-  the left; `x` "Clear `Esc`" when not empty. It searches the whole file name, tags included.
-- Next to it the **Filter** button: a secondary icon button `list-filter`; when filters are on, the
+- A 40 px bar, padding 6×8: a search field (§8.6, 28 high) across the column with the placeholder
+  "Find a file" and `search` inside on the left; `x` "Clear `Esc`" when not empty. It searches the
+  whole file name, tags included. The tag search above the grid is the same bar.
+- 6 px after it the **Filter** button: a 28×28 secondary icon button `list-filter`; when filters are on, the
   count sits inside the button after the icon (`badge.accent`, "2"); pressed look while its menu is
   open; tooltip "Show only…". Today it is a dropdown whose label changes.
 - The filter **menu** (§8.14) lists: Untagged, With subtitles, With a comment, With markers. Each
@@ -1151,7 +1159,7 @@ Renaming a marker is written live and is not undoable (today; #62 may change it)
 ```
  ┃ [✓] SRT  pick · wide · night · 00:03 · 00:21 · MVI_0410.mp4          ⌖2
  ┃          City lights over Europe, keep this one
-   └check (batch only, 28)  └status (24)  └tags · in/out · name (mono)   └marker count
+   └check (batch only, 28)  └status (32)  └tags · in/out · name (mono)   └marker count
 ```
 
 Row: 52 px (two lines), padding 4×8, full width up to the gutter.
@@ -1253,7 +1261,8 @@ handle, comment. Columns are separated by the gaps of §5.
 - **Order = priority.** The grid lists the folder's tags in their order, left to right, top to
   bottom; the same order is the order of the tags in file names. Unsaved tags come first, under a
   `caption` "Not in the folder's tags"; then the folder's tags under "Folder tags" — the two
-  groups separated by 8 px, so the split is visible without a line. The grid itself is not
+  groups separated by 8 px, so the split is visible without a line. With no unsaved tags there is
+  one group and neither caption is shown. The grid itself is not
   reordered by dragging; the order changes in the file name card (§13.5.6).
 - **Columns:** every column is as wide as the widest chip of the **whole** tag list, not of the
   filtered one, so the grid does not reflow while typing a search (today it does); the limits are in
@@ -1482,7 +1491,8 @@ The job's page stays until Close:
    - stopped by an error: error notice "Stopped: the Anthropic account has no credit left" with the
      fix (*Add credit* for billing, *Open Settings* for a key) — the reason is not repeated below;
    - finished with some failures: warning notice "Done with problems: 3 of 12 files not done".
-2. **Figures:** three figures in a row — changed, unchanged, not done — each a `heading` number over
+2. **Figures:** three figures in a row — changed, unchanged, not done — and a fourth, "not reached"
+   (`text.secondary`), when the job stopped early; each a `heading` number over
    a `secondary` word; "not done" in `error` only when above 0.
 3. **Spend** (paid actions): a key-value row "Cost: $0.31 with Claude Haiku 4.5" ("at least" when a
    timeout may have been billed).
@@ -1576,7 +1586,7 @@ Colors that belong to the content, not to the chrome, and are tokens too (§3.3)
 | | Width | Height | Notes |
 |---|---|---|---|
 | Minimum | 900 | 560 | 320 + 200 + 320 of columns + 2 splitters of 1 px = 842; the other 58 go to the video pane (378) |
-| Default | 1440 × 800, but at most 90 % of the work area (1152 × 612 on the reference screen) | | columns: at 1440 or more 600 / 360 / the rest; narrower, about 440 / 300 / the rest (≈ 516 at 1280) |
+| Default | 1440 × 800, but at most 90 % of the work area (1152 × 612 on the reference screen) | | columns: at 1440 or more 600 / 360 / the rest; narrower, 440 / 300 / the rest (410 at 1152, the default on the reference screen) |
 | Maximum | none | none | extra width goes to the video pane first |
 | Today | 1200 × 600 | | video 460, file list 200, no minimum window size (**behaviour**, #59) |
 
@@ -1590,21 +1600,28 @@ minimum.
 
 **Video pane** (min 320, no max)
 
-The bar folds by its **measured** content (buttons 32, group gaps 12, padding 8 each side,
-the time readout 96 with the subtitle list button; the notice slot needs at least 120). The
-thresholds, with every button present:
+The controls bar folds by the widths of §13.3.5: padding 16 + Transport 96 + In/out 64 + Mark 64
++ Time 104 + Volume 96 + Views 96 + five gaps of 12 = **596** with everything shown. Each step
+below takes away what the previous width no longer fits:
 
-| Pane width | Controls bar | Timeline, lists |
+| Pane width | Controls bar | Needs |
 |---|---|---|
-| ≥ 592 | all groups (§13.3.5) | side list 2/5 of the pane, max 360 |
-| 488–591 | the time readout hides (the timeline's hover tooltip still shows times) | side list 2/5 from 600; below 600 it covers the picture with its own `x` |
-| 416–487 | the volume slider folds into its icon (a click opens the slider in a popover); notices show as the pill over the picture | same |
-| 372–415 | the Mark group (`camera`, `map-pin`) moves into **More** | same |
-| 320–371 | the Views group (subtitle list, marker list) moves into **More**; transport, in/out and fullscreen stay | the marker label is cut to fit, at least 12 characters |
-| Height | the picture keeps at least 180; below that, the subtitle strip goes first (subtitles move to the side list) | |
+| ≥ 596 | all groups (§13.3.5) | 596 |
+| 480–595 | the time readout hides (the timeline's hover tooltip still shows times) | 596 − 104 − 12 = 480 |
+| 416–479 | also the volume slider folds into its icon button | 480 − 64 = 416 |
+| 372–415 | also the Mark group (`camera`, `map-pin`) moves into **More** (More appears just before fullscreen) | 416 − 64 − 12 + 32 = 372 |
+| 320–371 | also the subtitle and marker list buttons move into **More**; transport, in/out, the volume icon, More and fullscreen stay | 372 − 64 = 308 |
 
-Without subtitles (no subtitle list button) each threshold is 32 lower. The mockups show the pane at
-640, 520, 440 and 340.
+Without subtitles (no subtitle list button) each threshold is 32 lower. Notices use the free space
+when it is at least 120, otherwise the pill over the picture (§13.3.5).
+
+- **Side list:** 2/5 of the pane, at most 360, when the pane is 600 or wider; narrower, it covers
+  the whole picture with its own `x`.
+- **Marker label:** cut to fit the pane, at least 12 characters.
+- **Height:** the picture keeps at least 180; below that, the subtitle strip goes first (subtitles
+  move to the side list).
+
+The mockups show the pane at 640, 520, 440 and 340; the controls bar picture adds 740 and 390.
 
 Never hidden: play/pause, back/forward 10 s, `[` `]`, fullscreen, the timeline.
 
@@ -1623,9 +1640,9 @@ Never hidden: play/pause, back/forward 10 s, `[` `]`, fullscreen, the timeline.
 
 **Tags area** (min 320, no max)
 - **Grid:** column width = the widest chip of the tag list, but at most 240 (longer names are cut
-  with "…" inside the chip, full name in the tooltip) and at least 120. Columns = as many as fit,
-  and never fewer than **2**: under about 480 the width becomes min(widest, 240, (area − gutter −
-  4) / 2), so at 320 two columns of 149. On a wide area many. Cells never stretch: extra width stays
+  with "…" inside the chip, full name in the tooltip). Columns = as many as fit,
+  and never fewer than **2**: when two would not fit, the width becomes min(widest, 240, (area − 24
+  padding − 14 gutter − 8 gap) / 2), so at 320 two columns of 137. On a wide area many. Cells never stretch: extra width stays
   at the right end of each row.
 - **Starred strip:** wraps like the grid; at most 3 rows, then "+N more" (§13.5.3).
 - **Order strip** (32 px): below 420 the two buttons become icon buttons (`arrow-up`, `arrow-down`)
