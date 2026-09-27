@@ -44,9 +44,9 @@ No new controls. The only visible parts are the operating system's drag pointer 
 ```
 
 If the open file cannot be saved before the drag (read-only, locked by another program), the drag
-does not start and the video controls bar shows `Not dragged: the file could not be saved
-(read-only, or open in another program such as Premiere; close it there and try again)`, the place
-other save problems are shown.
+does not start and the video controls bar shows `Not dragged: can't save the file (read-only, or
+open in Premiere)`, the place other save problems are shown. It is short enough to read in the 2 s
+a notice stays.
 
 ## Data format
 
@@ -143,9 +143,16 @@ workspace decides (pure function):
 - the open file is among the dragged ones and its name on disk differs from the name frename wants
   for it, or its markers are in the not-saved list → save it now (as a re-click) and wait, once.
   The save counts when it has run for that file (`apply_file_updated`), not when it is asked for:
-  until then (its message queued, or its video unloading) the drag waits. Still unsaved after it
-  ran → refuse with the notice above;
-- otherwise → start, with the paths read from the directory after the save (the new names).
+  until then (its message queued, or its video unloading) the drag waits;
+- that save ran: its own outcome decides. It failed when the tags, the name or the extension did
+  not make it into the file's name (the rename failed) or the markers could not be written →
+  refuse with the notice above; otherwise → start. Names are not compared again after the save:
+  reading a file back normalises it (an in point at 0 s kept in XMP reads back as none), and
+  in/out may not be in names at all;
+- no save needed → start, with the paths read from the directory (the new names).
+
+A press arms only while the button is still down (a tap arms nothing), and opening the rename
+editor (double-click) disarms: its held button selects text.
 
 **A drop on frename itself.** winit's drop target accepts files, so dropping the dragged files back
 on frename's window would open them. The app tells the drop feature which paths it is dragging;
@@ -208,10 +215,10 @@ drag: the notice shows and no drag starts.
    selection: dragging a checked row drags all checked listed files.
 4. **Drop back on frename?** Ignored, so dragging and changing one's mind changes nothing.
 5. **Allowed effects?** Copy and link only; Explorer copies, Premiere imports.
-6. **Save failure?** No drag, the notice above naming the remedy. Detected: the name on disk is
-   not the wanted one, or the markers could not be written. A failed comment or XMP in/out write
-   alone is not detected (the tagger reports no result for it); Premiere holding the file also
-   blocks the rename, which is detected.
+6. **Save failure?** No drag, the notice above naming the remedy. Detected from the save itself:
+   the rename did not happen, or the markers could not be written. A failed comment or XMP in/out
+   write alone is not detected (the tagger reports no result for it); Premiere holding the file
+   also blocks a rename, which is detected.
 7. **Drag from the preview or the name panel?** No (out of scope above); can be added later.
 8. **Linux?** Not supported yet, documented in the README and the PR.
 9. **Frozen video during the drag?** Accepted: the modal drag loop owns the thread, as in other
