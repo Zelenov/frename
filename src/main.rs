@@ -79,9 +79,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = app_data_dir();
     std::fs::create_dir_all(&data_dir)?;
     // Before any thread starts (the environment is not thread-safe) and before gst::init.
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     let bundled_gstreamer = bundled_gstreamer::configure_bundled_gstreamer(&data_dir);
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     let bundled_gstreamer = false;
     let log_file = File::create(frename_core::log_path())?;
 

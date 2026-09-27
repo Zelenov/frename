@@ -2051,7 +2051,9 @@ fn open_in_default_app(target: impl AsRef<std::ffi::OsStr>) {
     let target = target.as_ref();
     #[cfg(windows)]
     let result = std::process::Command::new("explorer").arg(target).spawn();
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    let result = std::process::Command::new("open").arg(target).spawn();
+    #[cfg(not(any(windows, target_os = "macos")))]
     let result = std::process::Command::new("xdg-open").arg(target).spawn();
     if let Err(e) = result {
         log::warn!("could not open {target:?}: {e}");
