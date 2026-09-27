@@ -62,7 +62,7 @@ keyboard, next to Premiere Pro. The rules below come from that.
 7. **Words for commands, icons for recognition.** A command in a window's button bar is a text
    button; icons are for frequent, well-known toolbar actions and always have a tooltip
    (BIR «Пиктограммы»; DI p. 396).
-8. **Built for 1080p at 150 %** (1280×720 logical, about 680 px of it under the taskbar): every
+8. **Built for 1080p at 150 %** (1280×720 logical, a 1280×680 work area under the taskbar): every
    window and default layout fits there.
 
 ## 2. Approaches considered
@@ -304,8 +304,9 @@ destructive (BIR: "separate dangerous buttons with extra distance").
 - **Set:** [Lucide](https://lucide.dev) (ISC licence), outline icons on a 24 grid with 2 px strokes
   and round joins. One family, one stroke weight (PUI; AF ch. 17 "If some of your icons use bold
   black lines … the visual style won't hold together").
-- **Sizes:** 16 in buttons, menus and rows; 12 inside chips and badges; 20 only for the trash drop
-  zone; 48 for empty states. Icons are drawn at those sizes, never scaled from another (RUI
+- **Sizes:** 16 in buttons, menus and rows; 14 for small marks inside chips and rows (star, chip
+  action, status column); 12 inside badges and row meta; 20 only for the trash drop zone; 24 for
+  spinners and the empty states of small panels; 48 for the empty states of panes and windows. Icons are drawn at those sizes, never scaled from another (RUI
   "Everything has an intended size").
 - **Color:** an icon takes its control's text color (`svg::Style { color }`), so it follows hover,
   disabled and selected states. A latched toggle (subtitle list shown) draws its icon in
@@ -325,7 +326,7 @@ destructive (BIR: "separate dangerous buttons with extra distance").
 | 📂 | `folder-open` | | 📷 | `camera` |
 | ⚙ | `settings` | | 📍 | `map-pin` |
 | ☑ (batch) | `list-checks` (segmented control in #64) | | 🔊 | `volume-2` |
-| ⛶ ⊡ | `maximize-2` `minimize-2` | | ◆ (marker list) | `diamond` |
+| ⛶ ⊡ | `maximize-2` `minimize-2` | | ◆ (marker list) | `map-pin` (one symbol for markers everywhere) |
 | ✎ | `pencil` | | ✕ × (close, delete) | `x` |
 | ✓ | `check` | | ○ (save tag) | `plus` |
 | ★ ☆ | `star` (filled / outline) | | 🔍 | `search` |
@@ -446,9 +447,10 @@ in Settings apply at once either way; the button bar says so.
 
 ### 8.8 Slider
 
-The seek bar and the volume bar are frename's own `ProgressBar` widget. Track `bg.raised` 6 px
-(seek 8 px), fill `accent` (volume: `text.secondary`), hit height 24. Hover brightens the fill;
-dragging shows the value. #59 moves their colors to tokens; no stock slider is used.
+The seek bar and the volume bar are frename's own `ProgressBar` widget. Track `video.track` 6 px,
+radius 3 (today 8 px, radius 4); fill `accent` for the seek bar, `text.secondary` for volume; hit
+height 24. Hover brightens the track to `border.control`; dragging shows the value. The seek bar's
+full look is §13.3.4. #59 moves their colors to tokens; no stock slider is used.
 
 ### 8.9 List row
 
@@ -493,10 +495,14 @@ what is inside ("Comments", "Markers and ranges"); never "General", "Advanced", 
   (`circle-alert`, `error`).
 - First line = what happened (SemiBold if there is a second line); second line = what to do; then
   at most two buttons (secondary / ghost). §10.3 for the wording.
-- It stays until the situation changes. No toasts that vanish (AF ch. 21 "Bulletin dialogs").
+- A notice block stays until the situation changes. No toasts that vanish (AF ch. 21 "Bulletin
+  dialogs").
 - **Inline status** (one line, no box): an icon + text, e.g. "✓ Saved in Windows Credential
-  Manager" in the API key row. Transient notes in the video controls bar ("Frame saved") are
-  inline status in `text.secondary`, cleared by the next action (#59).
+  Manager" in the API key row.
+- **Lifetime of short feedback** (one rule for the whole app): a *confirmation* of something the
+  user just did and can see ("Frame saved", "Marker deleted") is inline status for 2 s; an *error*
+  stays until the user's next action. Neither ever covers content or asks for a click. The video
+  pane's slot for them is §13.3.5.
 
 ### 8.13 Tooltip
 
@@ -541,9 +547,10 @@ what is inside ("Comments", "Markers and ranges"); never "General", "Advanced", 
 - **Badge:** `caption` SemiBold, padding 0×6, radius 4, `bg.raised` + `text.secondary`, or tinted
   (`accent.text` 16 % + `accent.text` text; `error` 16 % + `error`). For facts: `SRT`, "3 markers",
   "Not saved".
-- **Tag chip:** 28 high in the tag grid and the file name card, 20 in file list rows (`chip.mini`), padding 0×8, radius 4, tag color, black `body` text.
-  Selected: 2 px `accent.text` ring 1 px outside. Chip actions (✕, ★) are 16-px icons inside the
-  chip in black at 70 %.
+- **Tag chip:** 28 high, padding 0×8, `body` 13 text in the tag grid and the file name card; 20 high,
+  padding 0×6, 12/16 text in file list rows (`chip.mini`); radius 4, tag color, black text.
+  Cursor: 2 px `accent.text` ring 1 px outside. Chip marks (★, the action) are 14-px icons inside
+  the chip in black at 70 %; mini chips have none.
 - **Key cap:** `caption` in `text.secondary`, `border.control` edge, radius 3, padding 0×4, on
   `bg.raised`. One cap per key, no "+" between them.
 - **Timecode:** `mono` on `bg.raised`, radius 4, padding 0×6, optional 12-px `x` to clear. IN/OUT
@@ -571,7 +578,8 @@ rail.
 ### 8.20 Empty state
 
 In the middle of the empty area — centered in a pane or panel; the whole-window empty screen is a left-aligned block max 420 wide —: a 48-px icon in
-`text.secondary`, a `heading` that names the next step ("Open a folder of clips"), one line of
+`text.secondary`, a `heading` (whole-window screens) or a `title` (panes and panels) that names
+the next step ("Open a folder of clips"), one line of
 `secondary` with the other ways, and the action as a button (primary if it is *the* thing to do)
 (RUI "Don't overlook empty states"; DI "Instant Gratification"; BIR «Взгляд новичка»). Smaller
 empty areas (an empty filter result, no markers yet) get one line of `secondary` and, if there is
@@ -623,7 +631,9 @@ has only *Close*, and also closes on its own key (`Ctrl`+`/`) and Esc.
   the right**; the primary action stands immediately to its left; other actions further left.
   `[ Run again ] [ Describe 12 files ] [ Cancel ]`. This is the Windows order (confirm left of
   Cancel), which BIR insists on keeping ("like swapping gas and brake"), and it keeps Close/Cancel
-  in one place in every window, as #57 asks. A window with nothing to commit has Close only.
+  in one place in every window, as #57 asks. A window with nothing to commit has Close only. One
+  exception: a batch action page (§13.6.4) has no Cancel, because the panel's `x` and Esc already
+  leave it and there is nothing to cancel before Run.
 - **Enter** runs the primary button only in a dialog or a panel whose primary is safe and can be
   undone or cancelled (*Describe 12 files* can be cancelled; its cost is shown first), and only when
   focus is not in a field. Never for *Update and restart* or a destructive button. Settings has no
@@ -809,12 +819,15 @@ Today, for comparison (screenshots of the app):
 └───────────────────────────╨───────────────────────╨──────────────────────────────────────┘
 ```
 
-- **Three columns** separated by splitters (a 1 px `border.subtle` line in a 12 px hit area;
-  hover and drag show `border.control` and the resize cursor). Widths are the user's, remembered
-  (default 600 / 360 / the rest, so a 1440 window leaves the tags area 456);
-  minimums: video 320, file list 200, tags 320 (today 150 / 120 / 200: too narrow for the
-  controls bar and a row of chips). The video pane is the only column that grows with the
-  window by default (center stage, DI p. 232).
+- **Three columns** separated by splitters: a 1 px `border.subtle` line whose 12 px hit area
+  overlaps the neighbours by 6 px on each side, so a splitter takes 1 px of width, not 12; hover
+  and drag show `border.control` and the resize cursor. Widths are the user's, remembered; the
+  defaults and minimums are in §13.9 (video 320, file list 200, tags 320). Today the video pane has
+  a fixed width with no minimum and the right splitter keeps only 200 for the list and the tags
+  together: too narrow for the controls bar and a row of chips.
+- The **video pane** is the column that grows and shrinks with the window (center stage, DI
+  p. 232). Today the video pane keeps its width and the tags area takes the change
+  (**behaviour**, #59).
 - **Surfaces:** every column is `bg.panel`; bars inside a column (search, toolbars, timeline,
   controls) are `bg.panel` too and are separated by space, not lines, except the toolbar under the
   file list, which has a 1 px `border.subtle` line on top because the rows above it scroll.
@@ -856,14 +869,39 @@ Today, for comparison (screenshots of the app):
 **Empty, loading and error states** of every region are listed in §13.7; each one says what is
 missing in words and offers the next step (§8.20). No region is ever blank or shows a lone glyph.
 
-**Locks.** While a batch job runs (§13.6.5) the file list, the tags area and the parts of the
-video pane that edit the file are locked. Locked controls keep their place and are drawn
-disabled; a one-line status at the top of the file list says why ("Locked while Describe with AI
-runs").
+**Locks.** While a batch job runs (§13.6.5) the open file is closed (its media unloads) and comes
+back when the job ends. Locked controls keep their place and are drawn disabled; a one-line status
+at the top of the file list says why ("Locked while Describe with AI runs").
 
-**Notices** (short feedback such as "Frame saved") appear as inline status (§8.12) in the controls
-bar of the video pane, never as popups, for 2 s; errors stay until the next action. All their
-texts are translated (today five are English-only).
+| Locked while a job runs | Still works |
+|---|---|
+| file rows (select, open, check, rename), All, Invert, PageUp/PageDown | scrolling the list, the file search and the filter menu (they only hide rows) |
+| the action list and every control of the action page | Cancel, and the job's own progress |
+| Open a folder, the batch toggle, Settings' *Update and restart* | the rest of Settings |
+| the video pane (no file is open: its empty state) and F5 | – |
+
+Working on the folder while a job runs (at least previewing files) is #29, not this spec.
+
+**Notices** (short feedback such as "Frame saved") appear as inline status (§8.12) in their own
+slot of the video pane's controls bar (§13.3.5), never as popups: confirmations for 2 s, errors
+until the next action. All their texts are translated (today five are English-only).
+
+**Esc** does one thing per press: the first of these that applies.
+
+| # | When | Esc |
+|---|---|---|
+| 1 | a menu, dropdown list or popover is open | closes it |
+| 2 | a field has focus | a search field with text is cleared; any other field loses focus (its text is kept) |
+| 3 | a file is being renamed | cancels the rename |
+| 4 | a marker row is open | closes it (the name typed so far is kept) |
+| 5 | fullscreen | leaves it |
+| 6 | the file search or the tag search has text | clears both (today's Esc, also in batch mode) |
+| 7 | a batch result is shown | Close |
+| 8 | a batch job runs | Cancel (the job stops after the current file; nothing asks) |
+| 9 | batch mode | leaves it |
+
+Today Esc stops at step 6 (in the order rename → marker row → fullscreen → searches) and never
+touches batch mode; steps 7–9 are **behaviour** for #58.
 
 ### 13.3 Video pane
 
@@ -876,7 +914,7 @@ texts are translated (today five are English-only).
 | No file open | `bg.panel`, centered: `clapperboard` 48 in `text.secondary`, "No clip open" (`title`), "Pick a file in the list." (`secondary`); the timeline and controls bar stay, disabled, so nothing jumps when a clip opens | 🎬 alone |
 | Loading | picture area black; centered `loader-circle` 24 turning, the file name in `mono` under it; after 3 s also "Waiting for the file… (a cloud file may take a while)" | ⏳ alone |
 | Failed | `bg.panel`, centered: `circle-x` 48 in `error`, "This clip cannot be played" (`title`), the reason in one line (`secondary`), link *Open the log*; the controls bar stays but its buttons are disabled | red ✕ 80, no reason |
-| Not a video | cannot happen (the list shows videos only); if it does, the "Failed" look with "frename plays video files only" | 📄 |
+| No picture | a file with sound only: the "Failed" look with the reason "This file has no video picture" | 📄 |
 | Ready | picture, subtitle strip (when the clip has subtitles), timeline, controls bar | – |
 | Fullscreen | §13.3.8 | – |
 
@@ -933,13 +971,48 @@ part over the segment, because the yellow over the blue would hide where the pla
   `tooltip` 12/16 in `text.primary`, then a 12 px `pencil` in `text.secondary`; an unnamed marker
   shows "Add a name" in `text.secondary`.
 - Centered over a pin or the middle of a range; kept 4 px inside the pane; the name is cut with "…"
-  to fit (windowed) and never in fullscreen.
+  to fit the pane (windowed; §13.9) and never in fullscreen.
 - Hover: `state.hover`; click: opens the marker's row for renaming. A read-only marker's label has
   no pencil and is not a button.
 
-Gestures (unchanged): click = seek; drag = scrub; click a band = play that range; Alt+click a
-band = make it a point; Alt+drag while paused = draw a range; drag a handle = change the range;
-Shift = snap.
+**Gestures on the timeline** (unchanged unless marked):
+
+| Gesture | What it does |
+|---|---|
+| click, drag | seek; dragging keeps seeking and the picture follows |
+| click a band | play that range from its start and pause at its end (any seek or pause cancels this) |
+| Alt+click an editable band | make it a point at its start |
+| Alt+drag while paused | draw a new range (white band); under 100 ms it becomes a point; while playing, Alt+press seeks |
+| drag a handle | move that end of the active editable range; crossing the other end swaps them; ends closer than 100 ms make it a point; one undo step |
+| Shift while seeking or drawing | snap to the nearest marker start within 8 px (a 1 px guide shows it) |
+| Shift while dragging a handle | snap to the start or end of any other marker, or to in/out, within 8 px |
+| click a cluster head | opens the marker list scrolled to those markers (**behaviour**, #59) |
+
+Handles are shown only on the active editable range. Pin heads have no hit area of their own: a
+click on a pin seeks there.
+
+**Which marker is active** (has the label and the handles): the one whose span contains the
+playhead, counting from 500 ms before its start to 2 s after it (or its end, if later); among
+several, one already started wins over one coming up, then the latest start.
+
+**Marker keys** (they work even while a field has focus, except while a marker row is open; they
+are ignored with Ctrl or Alt held; F2's auto-repeat is ignored):
+
+| Key | What it does |
+|---|---|
+| `F2` | no marker within 0.5 s: add a Green point at the playhead. A marker within 0.5 s: open its row to rename it |
+| `F2` `F2` (within 1.5 s) | add a point and open its row: mark and name in one go |
+| hold `F2` > 400 ms | draw a range: its end follows the playhead; released while paused (no movement), it stays a point |
+| `F2` with a row open | close the row (text kept) and add a marker if none is within 0.5 s |
+| `F2` on a read-only marker | notice "That marker is read-only" and the marker list opens |
+| `F2` on a file that cannot hold markers | the marker list opens to say so |
+| `Shift`+`F2` | delete the nearest editable marker within 0.5 s; notice "Marker deleted" or "No marker here" |
+| `Shift`+`F1` / `Shift`+`F3` | jump to the previous / next marker start; "previous" skips a marker passed less than 750 ms ago |
+| the `map-pin` button | a click is `F2`; holding it draws a range like holding `F2` |
+
+While a marker row is open, `[` `]`, `Shift`+`Space`, `Ctrl`+`Z`/`Y`, `Ctrl`+`C`/`V` and
+`Shift`+`F2` are ignored so typing a name cannot change the clip; `F1` `F3` `F12` keep working.
+Renaming a marker is written live and is not undoable (today; #62 may change it).
 
 #### 13.3.5 Controls bar
 
@@ -953,10 +1026,10 @@ Shift = snap.
 | Transport | `rewind` "Back 10 s `F1`" · `play`/`pause` "Play `Space`" / "Pause `Space`" · `fast-forward` "Forward 10 s `F3`" |
 | In/out | text `[` "Set the in point `[`" · text `]` "Set the out point `]`" (text, as #44 says) |
 | Mark | `camera` "Save this frame `F12`" · `map-pin` "Add a marker `F2` (hold for a range)"; disabled with the reason "This file cannot hold markers" |
-| — | flexible space |
 | Time (#59) | `00:10 / 00:30` in `mono` `text.secondary`; a fixed width so it never moves |
 | Volume | `volume-2` icon 16 in `text.secondary` (not a button) · a 72 px slider (§8.8) |
-| Views | `captions` "Subtitle list" (only with subtitles) · `diamond` "Marker list `Shift+F1`/`Shift+F3` jump" · `maximize-2`/`minimize-2` "Full screen `F5`" |
+| Notice slot | flexible: takes the space left between Mark and Time; notices (§13.2) show here, cut with "…" and the full text in the tooltip |
+| Views | `captions` "Subtitle list" (only with subtitles) · `map-pin` "Marker list" with "`Shift`+`F1` / `Shift`+`F3` jump between markers" on its second line · `maximize-2`/`minimize-2` "Full screen `F5`" |
 
 - **Latched** (list shown, fullscreen): `state.selected` fill and the icon in `accent.text`
   (§8.1), not only a blue glyph.
@@ -965,10 +1038,11 @@ Shift = snap.
 - **Play/pause** shows the action the button will do (the media exception of §8.1), and must
   always match the player: today Space and a click on the picture can leave it showing the wrong
   symbol (**behaviour** bug, #59).
-- **Notice** (§13.2): an inline status that takes the place of the time readout for 2 s (so it
-  never pushes a button), `text.secondary`, with an icon of its kind: `camera` "Frame saved", `trash-2` "Marker deleted", `circle-alert` in `error`
-  "Markers not saved: the file is read-only or in use". It never pushes the buttons: when the pane
-  is narrow the notice is cut with "…".
+- **Notice** (§13.2): an inline status in the notice slot, `text.secondary`, with an icon of its
+  kind: `camera` "Frame saved", `trash` "Marker deleted", `circle-alert` in `error` "Markers not
+  saved: the file is read-only or in use". It never pushes a button. When the slot is narrower than
+  120 (pane under 488, §13.9), the notice shows instead as a pill over the bottom-left of the
+  picture (`bg.overlay`, radius 6, padding 4×8), with the same lifetime.
 - **Narrow pane:** what gives way and when is in §13.9. The **More** button (`ellipsis`) sits just
   before fullscreen; its menu opens upward, lists each moved control with its icon, name and key,
   and marks a latched one with a `check`.
@@ -977,11 +1051,12 @@ Shift = snap.
 
 ![Side lists](design-system/side-lists.png)
 
-- A panel over the right of the picture: 2/5 of its width, at most 360, full picture height (when
-  2/5 is under 240 the list covers the whole picture and gets its own `x`);
+- A panel over the right of the picture, full picture height: on a pane of 600 or more, 2/5 of the
+  pane's width, at most 360 (today at most 340); on a narrower pane it covers the whole picture and
+  gets its own `x` "Close the list";
   `overlay.list` (black 72 %), so the picture stays visible. It covers the picture only, never the
   strip or the bars.
-- **Header** 36 px: two tabs as a segmented control (§8.4) — `captions` "Subtitles", `diamond`
+- **Header** 36 px: two tabs as a segmented control (§8.4) — `captions` "Subtitles", `map-pin`
   "Markers" — shown when both lists apply, or when the chosen list is empty and the other is not (so
   the way back is there); otherwise the list's name as a `title`. A tab shows its count in
   `caption` ("Markers 3"), none when the list is empty.
@@ -1009,6 +1084,8 @@ Shift = snap.
  ● ● ● ● ● ● ● ●  |  ○ AI                      ✕     ← color picker replaces the first line
 ```
 
+- A click on the row (outside the dot and the time) opens it for renaming (the open row below); a click on
+  the time jumps there.
 - First line: the **color dot** (14 px, a button; ring `text.secondary` on hover, `text.primary`
   when its picker is open), the **time** (`mono`, a ghost button that jumps there), a flexible
   space, then row actions: `check` "Done `Enter`" (open row only) and `x` "Delete the marker" as
@@ -1031,7 +1108,7 @@ Shift = snap.
   (`body`) and "Generate them in batch mode." (`secondary`).
 
 #### 13.3.7 In and out points
-- Set with `[` / `]` (in rounds down to a whole second, out up). Shown on the timeline (§13.3.4),
+- Set with `[` / `]` (in rounds down to a whole second, out up); blocked in batch mode. Shown on the timeline (§13.3.4),
   in the file name card (§13.5.6) and in the file list row (§13.4.2).
 - Cleared with the `x` of their badge in the file name card, or undone.
 
@@ -1082,7 +1159,8 @@ Row: 52 px (two lines), padding 4×8, full width up to the gutter.
 | Part | Look | Today |
 |---|---|---|
 | Check (batch mode) | 28 px column, 16 px checkbox (§8.2); after a job the column shows the file's status icon (§13.6.6) | default iced style |
-| Status column | 32 px (padding 0×4): `SRT` badge (`badge`, `caption` SemiBold, `bg.raised` + `text.secondary`) when a `.srt` is next to the video; replaced by `circle-alert` 14 in `error` with the tooltip "Markers not saved: the file is read-only or in use" when a marker write failed | `SRT` 9 px blue text, red ✕ |
+| Status column | 32 px (padding 0×4): `SRT` badge (`badge`, `caption` SemiBold, `bg.raised` + `text.secondary`) when a `.srt` is next to the video | `SRT` 9 px blue text |
+| Not saved | `circle-alert` 14 in `error` at the right end of the first line, after the marker count, with the tooltip "Markers not saved: the file is read-only or in use"; the `SRT` badge stays | red ✕ |
 | Tags | mini chips: 20 px high, radius 4, padding 0×6, 12/16 Inter (`chip.mini`) in black on the tag color, 4 px apart. They are separated by a `text.secondary` "·" only where the file name has a dot, so the row still reads as the name | 28 px chips with " . " |
 | In/out | `mono` `text.secondary` `00:03 · 00:21` when the points are in the name | same, 12 px Inter |
 | Name | `mono` 12 `text.primary`, the rest of the file name with its extension | 14 px Inter |
@@ -1103,7 +1181,7 @@ chips are clipped mid-letter.
 | Hover | `state.hover` (today no hover at all) |
 | Selected = open | `state.selected`, a 2 px `accent.text` bar on the left edge |
 | Selected, file closed by a running job | `state.selected` without the bar, `lock` 12 in the status column |
-| Renaming | the row becomes a text field (§8.6) with the whole file name, the part before the extension selected; an error goes on the second line in `error` with `circle-alert` 12 (Name is empty · Not allowed: \ / : * ? " < > \| · Cannot end with a dot or space · A file with this name exists); Enter renames, Esc cancels |
+| Renaming | started by a double-click on the row (off in batch mode); the row becomes a text field (§8.6) with the whole file name, the part before the extension selected; an error goes on the second line in `error` with `circle-alert` 12 (Name is empty · Not allowed: \ / : * ? " < > \| · Cannot end with a dot or space · A file with this name exists; today it shares the field's line); Enter renames, Esc cancels. A rename re-reads the tags and in/out points from the new name; it is not undoable (today) |
 | Checked (batch) | the checkbox; no other change |
 | Locked (batch job running) | rows unchanged, pointer cursor off, checkboxes disabled (§13.2 "Locks") |
 
@@ -1112,8 +1190,8 @@ The list is sorted by date modified, oldest first (unchanged); there is no sort 
 #### 13.4.3 Toolbar
 32 px under the list, `bg.panel` with a 1 px `border.subtle` line on top; icon buttons:
 `chevron-left` "Previous file `PgUp`", `chevron-right` "Next file `PgDn`", `locate-fixed` "Show the
-open file in the list" — then 12 px — `folder-open` "Open a folder `Ctrl+O`" with the recent-folders
-▾ of #63 — and at the right end, until #64 moves them to the app bar, `settings` "Settings" with the
+open file in the list" — then 12 px — `folder-open` "Open a folder" (`Ctrl`+`O` is proposed for #62; today it has no key) with the
+recent-folders ▾ of #63 — and at the right end, until #64 moves them to the app bar, `settings` "Settings" with the
 update dot and the batch toggle `list-checks` "Batch actions" (latched in batch mode). At the
 minimum width the gaps become 4 px and the least used buttons go into **More** (§13.9).
 Disabled buttons are truly disabled (today ◀ ▶ ⊙ look disabled but still take clicks).
@@ -1157,8 +1235,10 @@ handle, comment. Columns are separated by the gaps of §5.
   alone. The chip color never changes with checking.
 - **Star:** `star` 14 in black 70 %, filled when starred, outline when not, on saved tags only;
   tooltip "Star: keep it at the top" / "Unstar".
-- **Action slot:** on the cursor cell, `x` "Delete from the folder's tags `Delete`"; on an unsaved
-  tag, always `plus` "Add to the folder's tags `Enter`". Icons black 70 %.
+- **Action slot:** on the cursor cell, `trash` with the tooltip "Delete “wide” from the folder's
+  tags `Delete`"; on an unsaved tag, always `plus` "Add to the folder's tags `Enter`". Icons 14,
+  black 70 %. Deleting a tag removes it from the folder's tags and from the open clip; other clips
+  keep it in their names and show it as unsaved when opened.
 - **States:**
 
 | State | Look | Today |
@@ -1176,33 +1256,55 @@ handle, comment. Columns are separated by the gaps of §5.
   groups separated by 8 px, so the split is visible without a line. The grid itself is not
   reordered by dragging; the order changes in the file name card (§13.5.6).
 - **Columns:** every column is as wide as the widest chip of the **whole** tag list, not of the
-  filtered one, so the grid does not reflow while typing a search (today it does).
-- **Keys:** arrows move the cursor (wrapping), Shift+Space checks the cursor tag (or the first match
-  of the search), Enter adds an unsaved tag, Delete deletes the cursor tag (undoable).
+  filtered one, so the grid does not reflow while typing a search (today it does); the limits are in
+  §13.9.
+- **Mouse:** a click on a chip moves the cursor there **and** checks or unchecks it.
+- **Search order:** within each group, exact matches first, then names that start with the text,
+  then names that contain it. Typing in the Russian keyboard layout also matches the Latin name
+  typed on the same keys (and back).
+
+| Key | What it does (tags area; all blocked in batch mode) |
+|---|---|
+| arrows | move the cursor (wrapping); proposed for #62: `Alt`+`←`/`→` moves the cursor tag in the folder order |
+| `Shift`+`Space` | check or uncheck the cursor tag (or the first match of the search) |
+| `Enter` | add an unsaved tag to the folder's tags; on a text that is no tag, create it |
+| `Delete` | delete the cursor tag from the folder (undoable) |
+| `Backspace` | anywhere in the window: removes the last letter of the tag search and focuses it (like typing) |
+| `Ctrl`+`C` | copy the open clip's tags |
+| `Ctrl`+`V` | in the search field, paste text; elsewhere, paste copied tags onto the open clip (undoable) |
+| `Ctrl`+`Z` / `Ctrl`+`Y` or `Ctrl`+`Shift`+`Z` | undo / redo |
+
+Known bug (#97): `Enter` on a tag that is already saved pushes a save step whose undo
+removes the tag from the folder.
 
 #### 13.5.3 Starred strip
 - Starred tags, again, in one strip above the grid, so the few tags used on almost every clip are
   always in the same place (BIR «Всему своё место»): cells as in the grid, in the folder's order
   (today alphabetical, while the grid is in folder order: two orders for the same tags).
-- It follows the search like the grid; it takes no space when empty; it never scrolls (it wraps).
+- It follows the search like the grid; it takes no space when empty. It wraps, at most 3 rows;
+  what does not fit ends in a `caption` button "+N more" that scrolls the grid to the first hidden
+  one. It never scrolls itself.
+- It is for the **mouse**: the keyboard cursor never enters it. When the cursor tag is also
+  starred, both copies show the cursor ring.
 - A thin `border.subtle` line separates it from the grid. The starred tags also stay in the grid.
 
 #### 13.5.4 Empty states of the tags area
 | Situation | Shown |
 |---|---|
-| No file open | the grid area: `tag` 48 in `text.secondary`, "Open a clip to tag it" (`title`), centered (today a 📄 in the corner); the tag search is disabled and the starred strip, order strip, file name card and comment are hidden |
+| No file open | the grid area: `tag` 48 in `text.secondary`, "Open a clip to tag it" (`title`), centered (today a 📄 in the corner); the tag search is disabled and the starred strip, order strip, file name card and comment are hidden (today the order strip still shows) |
 | The folder has no tags | "No tags yet" (`title`), "Type a name and press Enter to create the first one." (`secondary`); the order strip is hidden (nothing to order) |
 | Search matches nothing | only the "Create “<text>”" cell |
 | All tags filtered away but the file has tags | the same, the file name card still shows its tags |
 
 #### 13.5.5 Order strip (today the sync panel)
-Between the grid and the file name card, 32 px, `bg.panel`, words instead of lock glyphs:
+Between the grid and the file name card, 32 px (today 36), `bg.panel`, words instead of lock
+glyphs:
 
 | Situation | Shown |
 |---|---|
-| The file's tags are in the folder's order, lock on | `lock` 14 "This clip follows the folder order" (`secondary`) and a ghost toggle "Unlock" (tooltip: "While locked, reordering the tags below also reorders the folder") |
-| Same, lock off | `lock-open` "The folder order will not change" and "Lock" |
-| The orders differ | `triangle-alert` in `warning` "This clip's tag order differs from the folder" and two secondary buttons: `arrow-up` "Use for the folder" and `arrow-down` "Sort like the folder" |
+| The file's tags are in the folder's order, lock on | `lock` 14 "Reordering below reorders the folder" (`secondary`) and a ghost toggle "Unlock" |
+| Same, lock off | `lock-open` "Reordering below changes this clip only" and "Lock" |
+| The orders differ | `triangle-alert` in `warning` "Order differs from the folder" and two secondary buttons: `arrow-up` "Use for the folder" and `arrow-down` "Sort like the folder" |
 
 Neither button can be undone today: each has a tooltip that says so, until undo covers them.
 
@@ -1229,8 +1331,10 @@ Neither button can be undone today: each has a tooltip that says so, until undo 
   panel" / `minimize-2` "Back to the tags" as a 24 px icon button inside its top-right corner; the
   field's own scrollbar keeps the gutter.
 - The **height handle** above it: an 8 px hit area with a 2 px `border.subtle` line, `border.control`
-  and the resize cursor on hover; the height is remembered (today it resets for every file:
-  **behaviour**, #59).
+  and the resize cursor on hover; the height stays while the folder is open (today too) and is
+  not saved.
+- Typing a comment checks the "Commented" tag when Settings turns that on; the text is saved when
+  the field is left.
 - The AI description is part of the text (settings rule: it starts at the `AI:` line).
 
 ### 13.6 Batch mode
@@ -1253,10 +1357,18 @@ Neither button can be undone today: each has a tooltip that says so, until undo 
 #### 13.6.2 File list in batch mode
 - Header under the search field, 32 px: checkbox "All" (lined up with the row checkboxes), a ghost
   button "Invert", a flexible space, and "12 checked" in `secondary`; when some checked files are
-  hidden by the search or a filter, "12 checked, 3 hidden" (today hidden checked files are counted
-  without saying so, and the job runs on them).
+  hidden by the search or a filter, "12 checked · 3 hidden" with the tooltip "3 checked files are
+  hidden by the search or a filter; the action runs on them too". Below 260 Invert moves into a
+  **More** button.
+- **All** and **Invert** act on the listed files only; unchecking All clears every check, hidden
+  ones too. Hidden checked files are included in the job: the Run label's count and the plan say
+  so ("12 files, 3 of them hidden").
+- **Entering batch mode** from the toolbar checks the open file (if none is checked); from a Settings
+  link it checks every listed file and selects the linked action. Leaving keeps the checks and the
+  last result.
 - Rows get the 28 px check column (§13.4.2). A click on the row still opens the file for preview;
-  the checkbox checks it.
+  the checkbox checks it. Markers stay editable in batch mode; `[` `]`, rename and every tag key are
+  blocked (they would change the open file behind the batch).
 
 #### 13.6.3 Action list
 Every action has an icon (Lucide, 16), its name, and — for the two paid ones — a `caption` badge
@@ -1265,12 +1377,12 @@ in `text.secondary`:
 
 | Group | Icon | Action | Badge |
 |---|---|---|---|
-| Move where things are kept | `message-square-text` | Move comments | |
+| Move between places | `message-square-text` | Move comments | |
 | | `scissors` | Move in/out points | |
-| | `diamond` | Markers ⇄ comment | |
+| | `map-pin` | Markers ⇄ comment | |
 | Fix names | `tag` | Tag commented videos | |
 | | `list-ordered` | Fix tags by priority | |
-| | `space` | Apply tag spacing | |
+| | `text-cursor-input` | Apply tag spacing | |
 | | `rotate-ccw` | Reset cache and reload | |
 | Paid services | `sparkles` | Describe with AI | Anthropic |
 | | `captions` | Generate subtitles | Soniox |
@@ -1282,6 +1394,7 @@ in `text.secondary`:
   finds "Describe with AI" by its sparkles without reading. One action with an icon and eight
   without (the mockup of §2) was inconsistent; the rule is all or none, and the list is long enough
   to earn them.
+- `Ctrl`+`Tab` / `Ctrl`+`Shift`+`Tab` move to the next / previous action (as between Settings pages).
 - While a job runs, the list is disabled (`text.disabled`, no hover) and the running action keeps
   its selection.
 
@@ -1309,18 +1422,20 @@ Every page has the same parts, in this order:
 
 | Action | Changes | Options | Run label | Run is off when (the reason shown) |
 |---|---|---|---|---|
-| Move comments | writes into the videos / text files | radio: "From text files into the videos" (description "XMP, the Description column in Premiere Pro") · "From the videos into text files" (`clip.comment.txt`) | Move 12 comments | nothing checked: "Check the files in the list" |
+| Move comments | writes into the videos / text files | radio: "From text files into the videos" (description "XMP, the Description column in Premiere Pro") · "From the videos into text files" (`clip.comment.txt`) | Move 12 comments | nothing checked: "Check the files in the list"; a job runs: "Another action is running" |
 | Move in/out points | renames files; writes into the videos | radio: "From file names into the videos" · "From the videos into file names" | Move in/out of 12 files | nothing checked |
 | Markers ⇄ comment | writes into the videos; may rename | radio: "Comment lines into markers" (example `0:41–0:47 — Lion`) · "Markers into the comment (a copy)"; ⓘ with the line format | Convert 12 files | nothing checked |
-| Tag commented videos | renames files | row "Tag" with the tag name and a link *Change in Settings*; when the tag is off, a warning notice "Tagging commented videos is off" with *Open Settings* | Tag 12 files | the tag is off (the notice says why) |
+| Tag commented videos | renames files; also removes the tag from files without a comment | row "Tag" with the tag name and a link *Change in Settings*; when the tag is off, a warning notice "Tagging commented videos is off" with *Open Settings* | Tag 12 files | the tag is off (the notice says why; today a red "Tag: off") |
 | Fix tags by priority | renames files | none; a line "Order: as in the tag list" with a link that closes batch mode | Reorder tags in 12 names | nothing checked |
 | Apply tag spacing | renames files | row "Spacing" with the current choice and *Change in Settings* | Rename 12 files | nothing checked |
 | Reset cache and reload | changes only frename's records | none | Reload 12 files | nothing checked |
-| Describe with AI | writes into comments (and markers) | rows: Model (the model and *Change*), Language (*Change*), checkbox "Describe again the videos that have a description"; plan rows; skipped line in `secondary` ("Skipped: 3 already described, 1 over 30 min") | Describe 12 videos · about $0.35 | estimating: a spinner line "Reading clip lengths… 40 of 120" over the plan rows drawn as empty skeletons, Run "Describe videos", reason "Waiting for the estimate"; no key (error notice + *Open Settings*); nothing to send |
-| Generate subtitles | writes `.srt` files | rows: Languages (from Settings, as a line, *Change*), Cue length, checkbox "Replace existing subtitles"; plan rows with the cost source ("from your account" / "typical price"); exclusions as `secondary` lines | Transcribe 12 videos · about $0.07 (or "Build 3 subtitles, free") | key missing or rejected (notice + *Open Settings*); nothing to transcribe |
+| Describe with AI | writes into comments (and markers) | rows: Model (the model and *Change*), Language (*Change*), checkbox "Describe again the videos that have a description"; plan rows and "Without subtitles: 4" (they are described from the picture only); skipped line in `secondary` ("Skipped: 3 already described, 1 over 30 min") | Describe 12 videos · about $0.35 | estimating: a spinner line "Reading clip lengths… 40 of 120" over the plan rows drawn as empty skeletons, Run "Describe videos", reason "Waiting for the estimate"; no key (error notice + *Open Settings*); nothing to send |
+| Generate subtitles | writes `.srt` files | rows: Languages (from Settings, as a line, *Change*), Cue length, checkbox "Replace existing subtitles"; plan rows: videos, length, cost with its source ("from your account" / "typical price"; "cost unknown" when neither is known), time; `secondary` lines: what is skipped and why, "The audio is sent to Soniox", "Uploads are deleted from Soniox afterwards (the log lists any that could not be)", and that the clips get the "subtitled" tag when Settings says so | Transcribe 12 videos · about $0.07 (or "Build 3 subtitles, free") | key missing or rejected (notice + *Open Settings*); nothing to transcribe |
 
-Today only one generic "Run on N files" exists for seven actions, the reason for a disabled Run is
-never shown, and while Describe with AI reads clip lengths every action's Run is off without a word.
+Today seven actions share one generic "Run on N files". What explains a disabled Run today: the red
+key footers of AI and subtitles, "Tag: off", and the labels "No videos to describe." / "Nothing to
+transcribe"; nothing says "nothing checked", "a job runs" or "reading clip lengths", and while
+Describe with AI reads clip lengths every action's Run is off without a word.
 
 #### 13.6.5 Progress
 
@@ -1333,9 +1448,10 @@ The action page is replaced by the job (the list and the header stay):
   under the bar the current file in `mono` and its step in `secondary` ("frame 12 of 60", "waiting
   for Claude", "saving", "transcribing").
 - **Live figures:** changed · unchanged · not done, as in the result (§13.6.7), updating as files
-  finish.
+  finish; after a stop, "not reached" is its own figure, never added to "not done".
 - **Button bar:** `secondary` Cancel `Esc` at the right. After a press: "Stopping after this file…"
   with a spinner, disabled.
+- **Closing the app** during a job cancels it and closes after the current file.
 - In the file list (§13.6.6) each file shows its state, and a status line on top of the list:
   `lock` "Locked while Describe with AI runs".
 
@@ -1352,7 +1468,9 @@ where "changed" and "nothing to change" looked the same):
 | Not done | `circle-alert` `error` | the reason ("No credit left") |
 | Not reached (stopped) | `circle-dashed` `text.secondary` | "Not reached" |
 
-A click on the icon turns it back into the checkbox (unchanged behaviour); Close clears them all.
+A click on the icon turns it back into the checkbox and keeps the file checked (**behaviour**,
+#58: today it unchecks it); Close clears them all. Undo history is cleared when a job ends (the
+files changed under it).
 
 #### 13.6.7 Result
 
@@ -1372,8 +1490,8 @@ The job's page stays until Close:
    reason in `body`, 8 rows then it scrolls; when every file has the stop reason, only the names
    (the reason is in the notice). Above it at the right: ghost *Copy the list* (copies "name — reason"
    lines) and *Open the log*.
-5. **Button bar:** secondary "Run again on 5 files" (the not done and not reached), then **primary
-   Close** `Esc` at the right (§8.1: the result screen's primary is Close). A key cap on a filled
+5. **Button bar:** secondary "Run again on 5 files" (the not done and not reached; it checks exactly
+   those files and starts at once), then **primary Close** `Esc` at the right (§8.1: the result screen's primary is Close). A key cap on a filled
    button is drawn with a white 60 % edge and white text.
 6. The job and result pages use `heading` for the action's name with a `secondary` word after it:
    "running", "finished", "stopped".
@@ -1393,10 +1511,11 @@ Every place that can be empty, with what it shows (words in `title` + `secondary
 
 | Place | Situation | Shown |
 |---|---|---|
-| Window | no folder open | the empty screen: "Open a folder of clips", *Open a folder…* (primary), *Open a file…*, recent folders (#63) |
+| Window | no folder open | the empty screen: "Open a folder of clips", *Open a folder…* (primary), *Open a file…* (proposed for #63; today a path on the command line opens a file), recent folders (#63); the last session's folder reopens by itself at start |
 | Window | first folder loading | `loader-circle` 24 and "Opening 2026-09 Lisbon…" |
 | File list | folder has no videos | `folder-x` "No videos in this folder" · "frename shows MP4, MOV, MKV and other video files." · *Open another folder…* |
 | File list | loading another folder | the old rows dimmed with a spinner line on top "Opening …" |
+| File list | the new folder cannot be read | the old folder stays; an error notice at the top of the list "Cannot open “Lisbon”: access denied" with *Try again* (**behaviour**, #59: today nothing is shown) |
 | File list | search or filters hide every file | `search-x` "No files match" · the active filters as removable badges · *Show all* |
 | Video pane | no file open | `clapperboard` "No clip open" · "Pick a file in the list." |
 | Video pane | cannot play | §13.3.1 |
@@ -1449,15 +1568,20 @@ Colors that belong to the content, not to the chrome, and are tokens too (§3.3)
 5. **Content has a maximum width**, readable lines of at most ~80 characters (§4.2): past it, the
    extra space is empty, not stretched. Lists and grids fill the width; pages of text and forms do
    not.
-6. Everything below is measured in logical pixels; the window's minimum fits 1280×720 at 150 %.
+6. Everything below is in logical pixels. The reference screen is 1080p at 150 %: a work area of
+   1280×680 under the taskbar (§1 principle 8); the minimum window fits it with room to spare.
 
 **Window**
 
 | | Width | Height | Notes |
 |---|---|---|---|
-| Minimum | 900 | 560 | 320 + 200 + 320 of columns + 2 splitters (24) = 864; the other 36 go to the video pane |
-| Default | 1440 | 800 | columns 600 / 360 / the rest (456) |
+| Minimum | 900 | 560 | 320 + 200 + 320 of columns + 2 splitters of 1 px = 842; the other 58 go to the video pane (378) |
+| Default | 1440 × 800, but at most 90 % of the work area (1152 × 612 on the reference screen) | | columns: at 1440 or more 600 / 360 / the rest; narrower, about 440 / 300 / the rest (≈ 516 at 1280) |
 | Maximum | none | none | extra width goes to the video pane first |
+| Today | 1200 × 600 | | video 460, file list 200, no minimum window size (**behaviour**, #59) |
+
+A saved size or column width below the minimum (from an older version or a smaller screen) is
+raised to the minimum when the window opens.
 
 When the window gets narrower than the sum of the user's column widths, the **video pane** shrinks
 first (it also grows first), down to its minimum; then the tags area; the file list keeps its width
@@ -1466,14 +1590,21 @@ minimum.
 
 **Video pane** (min 320, no max)
 
+The bar folds by its **measured** content (buttons 32, group gaps 12, padding 8 each side,
+the time readout 96 with the subtitle list button; the notice slot needs at least 120). The
+thresholds, with every button present:
+
 | Pane width | Controls bar | Timeline, lists |
 |---|---|---|
-| ≥ 560 | all groups (§13.3.5) | side list 2/5 of the picture, max 360 |
-| 480–559 | the time readout hides (the timeline's hover tooltip still shows times) | same |
-| 400–479 | the volume slider folds into its icon (click opens the slider in a popover) | same |
-| 360–399 | the Mark group (`camera`, `map-pin`) moves into **More** | side list min 240; below that it covers the whole picture with its own `x` |
-| 320–359 | the Views group (subtitle list, marker list) moves into **More**; transport, in/out and fullscreen stay | the marker label is cut to 12 characters |
+| ≥ 592 | all groups (§13.3.5) | side list 2/5 of the pane, max 360 |
+| 488–591 | the time readout hides (the timeline's hover tooltip still shows times) | side list 2/5 from 600; below 600 it covers the picture with its own `x` |
+| 416–487 | the volume slider folds into its icon (a click opens the slider in a popover); notices show as the pill over the picture | same |
+| 372–415 | the Mark group (`camera`, `map-pin`) moves into **More** | same |
+| 320–371 | the Views group (subtitle list, marker list) moves into **More**; transport, in/out and fullscreen stay | the marker label is cut to fit, at least 12 characters |
 | Height | the picture keeps at least 180; below that, the subtitle strip goes first (subtitles move to the side list) | |
+
+Without subtitles (no subtitle list button) each threshold is 32 lower. The mockups show the pane at
+640, 520, 440 and 340.
 
 Never hidden: play/pause, back/forward 10 s, `[` `]`, fullscreen, the timeline.
 
@@ -1492,16 +1623,19 @@ Never hidden: play/pause, back/forward 10 s, `[` `]`, fullscreen, the timeline.
 
 **Tags area** (min 320, no max)
 - **Grid:** column width = the widest chip of the tag list, but at most 240 (longer names are cut
-  with "…" inside the chip, full name in the tooltip) and at least 120. Columns = as many as fit;
-  at 320 that is 1–2; on a wide area many. Cells never stretch: extra width stays at the right
-  end of each row.
-- **Starred strip:** wraps like the grid; at most 3 rows, then it scrolls with a `caption` "+N more".
+  with "…" inside the chip, full name in the tooltip) and at least 120. Columns = as many as fit,
+  and never fewer than **2**: under about 480 the width becomes min(widest, 240, (area − gutter −
+  4) / 2), so at 320 two columns of 149. On a wide area many. Cells never stretch: extra width stays
+  at the right end of each row.
+- **Starred strip:** wraps like the grid; at most 3 rows, then "+N more" (§13.5.3).
 - **Order strip** (32 px): below 420 the two buttons become icon buttons (`arrow-up`, `arrow-down`)
   with their words in the tooltip; the sentence is cut with "…".
 - **File name card:** chips wrap to more lines (it grows; the grid gives up the height); the trash
   stays at the end of the first line.
 - **Comment:** min height 48, max 60 % of the area; the handle stops there.
-- **Height:** the grid keeps at least 2 rows (72); below that the comment shrinks first.
+- **Height:** when the area gets shorter, space is given up in this order: the comment shrinks to
+  its minimum; the starred strip shows 1 row ("+N more"); the file name card keeps one line of chips
+  ("+N" at its end); the grid never goes below 2 rows (72) and scrolls.
 
 ![Tags area sizes](design-system/sizes-tags.png)
 
@@ -1512,7 +1646,8 @@ Never hidden: play/pause, back/forward 10 s, `[` `]`, fullscreen, the timeline.
 | ≥ 600 | action list 232 with names + page |
 | 440–599 | the action list folds to its icons (48 wide, groups split by 1 px lines, each icon's name and badge in a tooltip to its right); the page gets the rest |
 | 320–439 | the action list becomes a dropdown (§8.7) at the top of the page ("Describe with AI ▾"); its menu keeps the group headings, icons and badges and marks the current action with a `check` |
-| Page content | max 640 wide; the plan and result tables max 720 |
+| Page under 440 | setting rows put the label above the control; the reason Run is off moves to its own line above the button bar; the cost leaves the Run label and stays in the plan |
+| Page content | max 640 wide (`PAGE_MAX_WIDTH`); the plan and result tables stay inside it |
 
 ![Batch panel sizes](design-system/sizes-batch.png)
 
@@ -1529,13 +1664,13 @@ fails. The keys are today's (#62 owns the list).
 
 | Task | Keys / mouse | Where it happens | Feedback | Error or empty state |
 |---|---|---|---|---|
-| Open a folder | 📂, drop a folder, recent folders (#63), a path on the command line | OS picker; the file list | the list fills; the app bar shows the folder (#64) | empty folder: empty state in the list; missing recent folder: dimmed row with a remove offer |
+| Open a folder | 📂, drop a folder, recent folders (#63), a path on the command line; the last session reopens at start | OS picker; the file list | the list fills; the app bar shows the folder (#64) | empty folder: empty state in the list; cannot read it: error notice, the old folder stays; missing recent folder: dimmed row with a remove offer |
 | Walk the clips | PageUp / PageDown, click | file list, video pane | row selected and scrolled into view; video loads | load failed: `circle-x` 48 and the reason in the video pane |
 | Tag a clip | type part of a name, arrows, Shift+Space | tag search, tag grid | checkbox ticks; the chip appears in the file name panel and the list row | no match: the search offers to create the tag (Enter) |
 | Rename | double-click a row, Enter / Esc | inline field in the row | the row shows the new name | error line under the field (why + what to do); the field keeps the text |
-| Comment | click the comment box, type | comment editor | saved on leave; comment line in the list row | save failed: error status in the file name panel |
+| Comment | click the comment box, type | comment editor | saved on leave; comment line in the list row; "Commented" tag checked if Settings says so | – |
 | Mark in / out | `[` `]` | video controls, file name panel | IN/OUT timecodes appear; segment on the bar | – |
-| Markers | F2 (hold for a range), Shift+F1/F3 | progress bar, marker list | pin appears, its label opens for a name | not saved: "Not saved" badge in the row and a notice |
+| Markers | F2 (F2 F2 to name, hold for a range), Shift+F1/F3, Shift+F2 (§13.3.4) | timeline, marker list | pin appears with its label | not saved: `circle-alert` at the row's right end and an error notice |
 | Run a batch action | batch mode, pick an action, primary button | batch panel | progress with n of total, time left, Cancel | stopped or failed: one notice with the reason and a fix button; files not done listed once |
 | Change a setting | ⚙, Ctrl+Tab between pages | Settings window | applies at once | key save failed: error line under the key row |
 | Update | the dot on ⚙ | Settings → Updates | status line; *Update and restart* | check failed: error line with the reason |
@@ -1543,15 +1678,12 @@ fails. The keys are today's (#62 owns the list).
 
 ### 13.11 How the later issues fit
 
-Mockups of #64's app bar, #63's recent folders, #62's cheat sheet and #58's batch screens on the same rules (earlier drafts; §13.1–§13.9 are the spec):
+Mockups of #63's recent folders and #62's cheat sheet on the same rules (#64's app bar and #58's
+batch screens are drawn in §13.1 and §13.6):
 
-| Main window with #64's app bar, #44's icons and #63's recent folders | Empty screen with recent folders (#63) |
+| Empty screen with recent folders (#63) | Cheat sheet (#62) |
 |---|---|
-| ![](design-system/future-main.png) | ![](design-system/future-empty.png) |
-
-| Cheat sheet (#62) | Batch choose and result (#58) |
-|---|---|
-| ![](design-system/future-cheatsheet.png) | ![](design-system/future-batch.png) |
+| ![](design-system/future-empty.png) | ![](design-system/future-cheatsheet.png) |
 
 These are directions, not specs: each issue writes its own details and may change them within
 these rules.
@@ -1789,7 +1921,8 @@ main window does not change in #57 and the README has no Settings screenshot.
 - A light theme. The tokens are named by role, so one could be added, but nothing asks for it.
 - User-adjustable font size or density.
 - Keyboard focus for buttons and checkboxes (iced 0.14 limit, §11).
-- Animation beyond iced's own hover changes.
+- Animation beyond iced's own hover changes, except three: the turning spinner, the pulsing
+  recording dot on a held `map-pin`, and the fade of a notice that times out.
 
 ## 17. Test plan
 
