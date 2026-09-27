@@ -151,8 +151,15 @@ workspace decides (pure function):
   in/out may not be in names at all;
 - no save needed → start, with the paths read from the directory (the new names).
 
+**Several files.** Every save made while a row is pressed is kept per file: the pressed row's own
+save, the file the press left (in batch mode it may be checked too), and the save the drag asked
+for. The drag waits while any dragged file's save is pending, and is refused when any dragged
+file's save failed or its markers are in the not-saved list. The drag paths are where the files
+really are (`FileTagger::disk_path`; debug builds rename only in memory).
+
 A press arms only while the button is still down (a tap arms nothing), and opening the rename
-editor (double-click) disarms: its held button selects text.
+editor (double-click) disarms: its held button selects text. A late end of a drag does not clear
+a newer press.
 
 **A drop on frename itself.** winit's drop target accepts files, so dropping the dragged files back
 on frename's window would open them. The app tells the drop feature which paths it is dragging;
@@ -189,8 +196,12 @@ Unit tests (all platforms):
   re-arms;
 - which files: batch mode with the pressed file checked → the checked listed files in list order;
   unchecked → only it; outside batch mode → only it;
-- save decision: in flight → wait; unsaved and not tried → save first; unsaved after trying →
-  refuse; clean → start;
+- save decision: a save pending or a video unloading → wait; the open file unsaved and not saved
+  since the press → save first; the save ran and failed (any dragged file, e.g. the file a batch
+  press left) → refuse; the save ran and worked, names still differ (reading back normalised) →
+  start; clean → start;
+- save failure: judged from the tags, name and extension that made it into the name, never from
+  in/out;
 - own drop: dropped paths of the running drag, and within a second after it, are ignored; other
   paths and later drops open as before.
 
@@ -201,7 +212,8 @@ By hand (owner, Windows): drag a tagged clip with in/out and markers into Premie
 timeline and source monitor: its name has the tags, in/out and markers are there. Drag onto
 Explorer: a copy appears and the original stays. Batch mode, several checked: all arrive. Edit tags
 then drag at once: Premiere gets the new name. Make the file read-only and change its tags, then
-drag: the notice shows and no drag starts.
+drag: the notice shows and no drag starts. While dragging, the picture stands still; after the
+drop it catches up.
 
 ## Decisions made without the owner
 
@@ -221,8 +233,9 @@ drag: the notice shows and no drag starts.
    also blocks a rename, which is detected.
 7. **Drag from the preview or the name panel?** No (out of scope above); can be added later.
 8. **Linux?** Not supported yet, documented in the README and the PR.
-9. **Frozen video during the drag?** Accepted: the modal drag loop owns the thread, as in other
-   winit apps; playback continues after the drop.
+9. **Frozen video during the drag?** Accepted: the modal drag loop owns the UI thread, as in other
+   winit apps, so the window is not redrawn. GStreamer plays on its own threads, so the sound
+   (likely) goes on and the picture jumps to the current frame after the drop.
 
 ## Sources
 

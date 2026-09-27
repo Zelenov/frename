@@ -321,7 +321,7 @@ folder-rename-error-bad-character = Нельзя: \ / : * ? " < > |
 folder-rename-error-trailing = Не может кончаться точкой или пробелом
 folder-rename-error-exists = Файл с таким именем уже есть
 folder-markers-not-saved = Маркеры не сохранены: файл доступен только для чтения или занят (закройте его в Premiere, затем откройте файл и снова закройте)
-drag-out-not-saved = Не перетащено: не удалось сохранить файл (только чтение или открыт в Premiere)
+drag-out-not-saved = Не перетащено: файл не сохранён (только чтение или открыт в Premiere)
 
 ## Controls bar under the file list
 
