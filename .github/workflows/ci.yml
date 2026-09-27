@@ -291,3 +291,75 @@ jobs:
           path: screenshot-macos.png
           retention-days: 14
           if-no-files-found: warn
+
+  # The Mac App Store variant (--features store), sandboxed and signed ad hoc: the Store-signed
+  # one is built by mac-app-store.yml, and could not run here anyway.
+  macos-store:
+    name: ci-macos-store
+    runs-on: macos-14
+    # A hang (e.g. a Keychain call waiting forever) ends here, not after GitHub's 6 hours.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: store
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/gst-download
+          key: gstreamer-macos-universal-${{ env.GST_VERSION }}
+
+      - name: Install GStreamer
+        run: |
+          packaging/macos/install-gstreamer.sh "$GST_VERSION" "$GST_MACOS_SHA256" "$GST_MACOS_DEVEL_SHA256" ~/gst-download
+          echo "/Library/Frameworks/GStreamer.framework/Versions/1.0/bin" >> "$GITHUB_PATH"
+          echo "PKG_CONFIG_PATH=/Library/Frameworks/GStreamer.framework/Versions/1.0/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      - name: Clippy (Store build)
+        run: cargo clippy --workspace --all-targets --locked --features store -- -D warnings
+
+      - name: Test (Store build)
+        run: cargo test --workspace --locked --features store
+
+      - name: Build release (Store build)
+        run: cargo build --release --locked --features store
+
+      - name: Build the Store app and .pkg
+        run: packaging/macos-store/build-store.sh 0.0.1 1 target/release/frename dist
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: frename-macos-store-${{ github.sha }}
+          path: dist/frename.pkg
+          retention-days: 14
+
+  # Installs the Store .pkg on a fresh runner without GStreamer and runs it in its sandbox.
+  macos-store-test:
+    name: ci-macos-store-test
+    needs: macos-store
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: frename-macos-store-${{ github.sha }}
+          path: dist
+
+      - name: Install and test in the sandbox on a clean system
+        run: packaging/macos-store/test-store.sh dist/frename.pkg screenshot-macos-store.png
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: screenshot-macos-store-${{ github.sha }}
+          path: screenshot-macos-store.png
+          retention-days: 14
+          if-no-files-found: warn

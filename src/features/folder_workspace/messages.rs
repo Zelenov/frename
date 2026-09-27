@@ -26,6 +26,9 @@ pub enum Message {
     LoadLastSession,
     /// Scan a directory and auto-select the target file afterwards
     ScanFolder(FolderAndFile),
+    /// The folder the user chose when asked for access to one the App Store's sandbox kept
+    /// closed (`folder_access`); only the Mac App Store build asks.
+    FolderAccessChosen(FolderAndFile),
     /// Directory scan completed (internal). target_file = which file to select and open, if any.
     FolderLoaded {
         directory: Directory,

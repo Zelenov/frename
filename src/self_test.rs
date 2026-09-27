@@ -74,6 +74,21 @@ pub fn run(paths: &[PathBuf]) -> i32 {
     i32::from(failed > 0 || missing_elements > 0)
 }
 
+/// `frename --self-test`: [`run`], and in the App Store build also a Keychain round trip: it runs
+/// sandboxed, and its keys must still reach the Keychain. Not in [`run`], which unit tests call
+/// in parallel: the file-based Keychain hangs under concurrent calls (seen on macOS CI).
+pub fn run_command(paths: &[PathBuf]) -> i32 {
+    let code = run(paths);
+    #[cfg(all(target_os = "macos", feature = "store"))]
+    if let Err(e) = frename_core::ai::key::check_credential_store() {
+        log::error!("self-test: FAILED credential store: {e}");
+        return 1;
+    }
+    #[cfg(all(target_os = "macos", feature = "store"))]
+    log::info!("self-test: ok     credential store");
+    code
+}
+
 /// Log each required element GStreamer does not have, and return how many there are.
 #[cfg(any(windows, target_os = "macos"))]
 fn missing_elements() -> usize {

@@ -47,6 +47,8 @@ enum Effect {
 pub struct UpdatesState {
     /// Updates work only in an installed or portable package.
     installed: bool,
+    /// The Store build: the store updates it, frename never checks.
+    from_store: bool,
     /// The running version, `0.67.0` (or `dev`).
     current_version: String,
     saved: UpdateCheckState,
@@ -60,6 +62,7 @@ impl Default for UpdatesState {
         let package = package::current();
         Self::new(
             package.is_some(),
+            package::STORE_BUILD,
             package.map_or_else(
                 || option_env!("APP_VERSION").unwrap_or("dev").to_string(),
                 |p| p.version.clone(),
@@ -70,9 +73,17 @@ impl Default for UpdatesState {
 }
 
 impl UpdatesState {
-    fn new(installed: bool, current_version: String, saved: UpdateCheckState) -> Self {
+    /// `from_store` wins over `installed`: the Store build never updates itself, whatever it
+    /// finds on disk.
+    fn new(
+        installed: bool,
+        from_store: bool,
+        current_version: String,
+        saved: UpdateCheckState,
+    ) -> Self {
         Self {
-            installed,
+            installed: installed && !from_store,
+            from_store,
             current_version,
             saved,
             status: Status::Idle,
@@ -232,6 +243,11 @@ impl UpdatesState {
         self.installed
     }
 
+    /// Whether this is the Store build, which the store updates.
+    pub fn is_store_build(&self) -> bool {
+        self.from_store
+    }
+
     /// The running version as the UI shows it, `0.67`.
     pub fn current_version(&self) -> String {
         short_version(&self.current_version)
@@ -304,6 +320,7 @@ mod tests {
     fn installed(last_check: u64) -> UpdatesState {
         UpdatesState::new(
             true,
+            false,
             "0.67.0".to_string(),
             UpdateCheckState {
                 check_on_start: true,
@@ -460,7 +477,8 @@ mod tests {
 
     #[test]
     fn an_unpackaged_build_never_checks() {
-        let mut state = UpdatesState::new(false, "dev".to_string(), UpdateCheckState::default());
+        let mut state =
+            UpdatesState::new(false, false, "dev".to_string(), UpdateCheckState::default());
         assert!(matches!(state.apply(Message::CheckNow, 10), Effect::None));
         assert!(matches!(state.apply(Message::Tick, 10 * DAY), Effect::None));
         assert!(matches!(
@@ -468,5 +486,30 @@ mod tests {
             Effect::None
         ));
         assert_eq!(state.status(), &Status::Idle);
+    }
+
+    /// A saved check (on at start-up, a newer version found) must not make the Store build check
+    /// GitHub or offer that version: the Store updates it.
+    #[test]
+    fn the_store_build_never_checks_even_with_a_saved_newer_version() {
+        // Even where something reports it as installed.
+        let mut state = UpdatesState::new(
+            true,
+            true,
+            "0.67.0".to_string(),
+            UpdateCheckState {
+                check_on_start: true,
+                last_check: 0,
+                newest_version: "0.68.0".to_string(),
+            },
+        );
+        assert!(state.is_store_build());
+        assert!(matches!(state.apply(Message::Tick, 10 * DAY), Effect::None));
+        assert!(matches!(state.apply(Message::CheckNow, 10), Effect::None));
+        assert!(matches!(
+            state.apply(Message::UpdateAndRestart, 10),
+            Effect::None
+        ));
+        assert_eq!(state.available_version(), None);
     }
 }

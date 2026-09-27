@@ -100,15 +100,36 @@ fn delete_key_of(user: &str) -> Result<(), KeyError> {
     }
 }
 
+/// Save, read back and delete a throwaway entry: whether this build can use the credential
+/// store at all (the App Store build's self-test checks that its sandbox allows the Keychain).
+/// The real keys are never touched.
+pub fn check_credential_store() -> Result<(), KeyError> {
+    let user = format!("self-test-{}", std::process::id());
+    save_key_of(&user, "self-test")?;
+    let read = read_key_of(&user);
+    delete_key_of(&user)?;
+    match read.as_deref() {
+        Some("self-test") => Ok(()),
+        _ => Err(KeyError("a saved entry does not read back".to_string())),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The Keychain tests take turns: macOS's file-based Keychain can hang under concurrent calls
+    /// (seen on CI).
+    static STORE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     /// The key goes to the store and back under a test entry of its own; where no store works
     /// (CI's Linux runner has no Secret Service), it says so instead of pretending to save
     /// into a mock.
     #[test]
     fn the_key_round_trips_or_the_store_says_it_is_unavailable() {
+        let _turn = STORE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let user = format!("{}-test-{}", ApiKey::Soniox.user(), std::process::id());
         match key_state_of(&user) {
             KeyState::Unavailable => {
@@ -126,6 +147,18 @@ mod tests {
                 assert_eq!(key_state_of(&user), KeyState::Missing);
                 delete_key_of(&user).expect("deleting none is fine");
             }
+        }
+    }
+
+    #[test]
+    fn the_store_check_passes_wherever_a_store_works() {
+        let _turn = STORE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let user = format!("{}-check-{}", ApiKey::Anthropic.user(), std::process::id());
+        match key_state_of(&user) {
+            KeyState::Unavailable => assert!(check_credential_store().is_err()),
+            _ => check_credential_store().expect("a working store passes"),
         }
     }
 }

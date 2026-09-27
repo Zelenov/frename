@@ -1,0 +1,173 @@
+name: Mac App Store
+run-name: Mac App Store - ${{ github.ref_name }}
+
+# Builds the Mac App Store .pkg, signed with the owner's certificates, and validates it with App
+# Store Connect; with upload it also uploads it (then it shows in TestFlight). Runs with upload
+# after every successful Release run on main, as a run of its own so a Store problem never marks
+# a release failed; by hand: Actions → Mac App Store → Run workflow (docs/mac-app-store-setup.md).
+# Without the MAS_* secrets it builds an unsigned .pkg and says so.
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: Upload the build to App Store Connect (TestFlight)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
+       && github.event.workflow_run.event == 'push')
+    runs-on: macos-14
+    env:
+      # After a release: the released commit, uploaded. By hand: the chosen branch, as ticked.
+      UPLOAD: ${{ github.event_name == 'workflow_run' || inputs.upload }}
+      # The GStreamer bundled in frename.app: as ci.yml.
+      GST_VERSION: 1.28.7
+      GST_MACOS_SHA256: 529fdf4a4027d942e59b5b3564f6400adaa008f63ce5f3fed4ffe35d73911994
+      GST_MACOS_DEVEL_SHA256: 72a44870cf02472cbf6e9a84bcc25ee6807dd1c26659a112066373544d365e7a
+      # Empty when not configured: `secrets` cannot be used in `if:` conditions.
+      MAS_CERTIFICATES_P12: ${{ secrets.MAS_CERTIFICATES_P12 }}
+      MAS_CERTIFICATES_PASSWORD: ${{ secrets.MAS_CERTIFICATES_PASSWORD }}
+      MAS_PROVISIONING_PROFILE: ${{ secrets.MAS_PROVISIONING_PROFILE }}
+      MAS_TEAM_ID: ${{ secrets.MAS_TEAM_ID }}
+      MAS_APPLE_APP_ID: ${{ secrets.MAS_APPLE_APP_ID }}
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+      APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Version
+        run: |
+          VERSION=$(sed -n '1s/^#[[:space:]]*//p' version.md | tr -d '[:space:]')
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
+            echo "::warning::version.md starts with '$VERSION', not a version: building as 0.0.1"
+            VERSION=0.0.1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          # A new, higher build number for every run (App Store Connect refuses one it has seen):
+          # this workflow's run number (grows whether a release or a person started it), then the
+          # attempt, for "Re-run jobs".
+          BUILD_NUMBER="${{ github.run_number }}.${{ github.run_attempt }}"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "Version $VERSION, build $BUILD_NUMBER"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: store
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/gst-download
+          key: gstreamer-macos-universal-${{ env.GST_VERSION }}
+
+      - name: Install GStreamer
+        run: |
+          packaging/macos/install-gstreamer.sh "$GST_VERSION" "$GST_MACOS_SHA256" "$GST_MACOS_DEVEL_SHA256" ~/gst-download
+          echo "/Library/Frameworks/GStreamer.framework/Versions/1.0/bin" >> "$GITHUB_PATH"
+          echo "PKG_CONFIG_PATH=/Library/Frameworks/GStreamer.framework/Versions/1.0/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      - name: Build release binary (Store build)
+        run: APP_VERSION="$VERSION" cargo build --release --locked --features store
+
+      # A keychain of its own for the certificates, deleted with the runner.
+      - name: Import signing certificates and profile
+        if: env.MAS_CERTIFICATES_P12 != ''
+        run: |
+          for name in MAS_CERTIFICATES_PASSWORD MAS_PROVISIONING_PROFILE MAS_TEAM_ID; do
+            [ -n "${!name}" ] || { echo "::error::MAS_CERTIFICATES_P12 is set but $name is not (docs/mac-app-store-setup.md, step 7)"; exit 1; }
+          done
+          keychain="$RUNNER_TEMP/mas.keychain-db"
+          password="$(uuidgen)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          echo "$MAS_CERTIFICATES_P12" | base64 --decode > "$RUNNER_TEMP/mas.p12"
+          security import "$RUNNER_TEMP/mas.p12" -P "$MAS_CERTIFICATES_PASSWORD" -A -f pkcs12 -k "$keychain"
+          rm "$RUNNER_TEMP/mas.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          # The SHA-1 of the first identity whose name starts with one of the given names
+          # (certificates made before 2019 carry the older names); codesign and productbuild take
+          # the hash, whatever characters the owner's name has.
+          identity() {
+            local policy="$1"; shift
+            for name in "$@"; do
+              hash="$(security find-identity -v -p "$policy" "$keychain" | grep -F "\"$name:" | awk '{print $2}' | head -1 || true)"
+              [ -n "$hash" ] && { echo "$hash"; return 0; }
+            done
+            return 0
+          }
+          app_identity="$(identity codesigning "Apple Distribution" "3rd Party Mac Developer Application")"
+          installer_identity="$(identity basic "Mac Installer Distribution" "3rd Party Mac Developer Installer")"
+          [ -n "$app_identity" ] || { echo "::error::No 'Apple Distribution' certificate in MAS_CERTIFICATES_P12"; exit 1; }
+          [ -n "$installer_identity" ] || { echo "::error::No 'Mac Installer Distribution' certificate in MAS_CERTIFICATES_P12"; exit 1; }
+          echo "App: $app_identity; installer: $installer_identity"
+          echo "$MAS_PROVISIONING_PROFILE" | base64 --decode > "$RUNNER_TEMP/frename.provisionprofile"
+          {
+            echo "MAS_APP_IDENTITY=$app_identity"
+            echo "MAS_INSTALLER_IDENTITY=$installer_identity"
+            echo "MAS_PROFILE=$RUNNER_TEMP/frename.provisionprofile"
+          } >> "$GITHUB_ENV"
+
+      - name: Build the Store app and .pkg
+        run: packaging/macos-store/build-store.sh "$VERSION" "$BUILD_NUMBER" target/release/frename dist
+
+      - name: Validate with App Store Connect
+        if: env.MAS_CERTIFICATES_P12 != '' && env.APP_STORE_CONNECT_API_KEY_ID != ''
+        run: |
+          for name in APP_STORE_CONNECT_API_ISSUER_ID APP_STORE_CONNECT_API_KEY_P8; do
+            [ -n "${!name}" ] || { echo "::error::APP_STORE_CONNECT_API_KEY_ID is set but $name is not (docs/mac-app-store-setup.md, step 7)"; exit 1; }
+          done
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$APP_STORE_CONNECT_API_KEY_P8" > ~/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_API_KEY_ID.p8
+          xcrun altool --validate-app -f dist/frename.pkg -t macos \
+            --apiKey "$APP_STORE_CONNECT_API_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_API_ISSUER_ID"
+
+      # The version record in App Store Connect must read exactly $VERSION (version.md's, `0.77`).
+      - name: Upload to App Store Connect
+        id: upload
+        if: env.UPLOAD == 'true' && env.MAS_CERTIFICATES_P12 != '' && env.APP_STORE_CONNECT_API_KEY_ID != ''
+        run: |
+          [ -n "$MAS_APPLE_APP_ID" ] || { echo "::error::MAS_APPLE_APP_ID is not set (docs/mac-app-store-setup.md, step 7)"; exit 1; }
+          xcrun altool --upload-package dist/frename.pkg -t macos \
+            --apiKey "$APP_STORE_CONNECT_API_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_API_ISSUER_ID" \
+            --apple-id "$MAS_APPLE_APP_ID" --bundle-id io.github.zelenov.frename \
+            --bundle-version "$BUILD_NUMBER" --bundle-short-version-string "$VERSION"
+
+      - name: Signing status
+        if: always()
+        run: |
+          if [ -f dist/frename.pkg ] && pkgutil --check-signature dist/frename.pkg > /dev/null; then
+            signed="signed for the App Store"
+          else
+            signed="unsigned (MAS_* secrets not set; see docs/mac-app-store-setup.md)"
+          fi
+          if [ "${{ steps.upload.outcome }}" = success ]; then
+            uploaded="uploaded to App Store Connect"
+          elif [ "$UPLOAD" = true ] && { [ -z "$MAS_CERTIFICATES_P12" ] || [ -z "$APP_STORE_CONNECT_API_KEY_ID" ]; }; then
+            uploaded="NOT uploaded (needs the signing and APP_STORE_CONNECT_* secrets)"
+          elif [ "$UPLOAD" = true ]; then
+            uploaded="NOT uploaded: see the red step in this run"
+          else
+            uploaded="not uploaded (not asked)"
+          fi
+          echo "Mac App Store build $VERSION ($BUILD_NUMBER): $signed; $uploaded." >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: frename-mac-app-store-${{ env.VERSION }}-${{ env.BUILD_NUMBER }}
+          path: dist/frename.pkg

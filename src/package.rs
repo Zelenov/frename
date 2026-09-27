@@ -6,6 +6,10 @@
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
+/// Built for a store (the Mac App Store here; the Microsoft Store in #51): the store installs and
+/// updates frename, Velopack does nothing.
+pub const STORE_BUILD: bool = cfg!(feature = "store");
+
 /// The package this process runs from, found once at start-up.
 static CURRENT: OnceLock<Option<Package>> = OnceLock::new();
 
@@ -66,7 +70,12 @@ pub fn current() -> Option<&'static Package> {
 ///
 /// Installing (and updating, so an install from before it gets it too) adds "Open in frename" to
 /// Explorer's context menu of folders and videos; uninstalling removes it.
+///
+/// The Store build skips all of it: the App Store installs, updates and uninstalls it.
 pub fn run_velopack_hooks() {
+    if STORE_BUILD {
+        return;
+    }
     let mut app = velopack::VelopackApp::build().set_auto_apply_on_startup(false);
     #[cfg(windows)]
     {
