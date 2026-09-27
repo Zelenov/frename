@@ -173,7 +173,7 @@ Why these values:
 ### 3.3 Content colors (kept as they are)
 
 - **Tag palette** (`src/tag_colors.rs`): 16 light colors with black text, 8–14 : 1. Unchanged;
-  the tokens module re-exports it. **Monochrome** (#53) will use `tag.mono.known` `#9EA5AF` (black
+  it moves into `ui` with #53 or #59. **Monochrome** (#53) will use `tag.mono.known` `#9EA5AF` (black
   text 7.9 : 1) for tags in the list and an outlined chip (`border.control` edge, `text.secondary`
   text) for tags not in the list; #53 implements it.
 - **Marker colors** (`theme::marker_color`): the nine Premiere Pro marker colors stay as they are:
@@ -210,6 +210,7 @@ Only these styles exist. Sizes are logical pixels.
 | `body.strong` | Inter SemiBold | 13 / 20 | the value that matters in a line: a count, the selected item, a key-saved state |
 | `secondary` | Inter Regular, `text.secondary` | 13 / 20 | help, descriptions under options, meta |
 | `caption` | Inter Regular | 11 / 16 | badges, counters, key caps, second line of a dense row |
+| `tooltip` | Inter Regular | 12 / 16 | tooltip text only (a tooltip is small and dense by nature) |
 | `mono` | JetBrains Mono NL | 12 / 20 | file names, paths, timecodes, examples of names |
 | `video.caption` | Inter Regular | 28 / 36 | subtitle caption over fullscreen video only |
 
@@ -294,8 +295,8 @@ destructive (BIR: "separate dangerous buttons with extra distance").
   and space group them (DI "Titled Sections"; AF ch. 17 "visual noise").
 - **Depth:** lighter is closer. Popups (menus, tooltips, dialogs) are `bg.overlay` with one shadow
   `0 8 24 black 50 %`; dragged chips keep their lift shadow. Nothing else has a shadow.
-- **Focus ring:** 2 px `accent.text`, 1 px outside the control, on fields (iced draws focus only
-  for text fields; see §11).
+- **Focus:** a focused field draws a 2 px `accent.text` border (iced draws a field's border inside its
+  bounds; only fields can take focus in iced 0.14, see §11).
 
 ## 7. Icons
 
@@ -311,8 +312,10 @@ destructive (BIR: "separate dangerous buttons with extra distance").
   ones (PUI: "filled icons often indicate that an element is selected").
 - **Every icon-only button has a tooltip** with its name and key (§8.13).
 - **Words stay words:** `[`, `]`, `CC`, `SRT`, `F1`… are text, as #44 says.
-- Implemented by #44 (`assets/icons/` + an `icons` module). Until then the glyphs stay, styled by
-  the tokens. The recommended mapping:
+- **Delivery:** #57 enables iced's `svg` feature and adds `assets/icons/` (with Lucide's ISC licence)
+  and the `ui::icons` module with the icons Settings needs (navigation, ⓘ, notices). #44 adds the rest
+  and replaces every glyph button. Until then the main window's glyphs stay as they are. The
+  recommended mapping for #44:
 
 | Today | Lucide | | Today | Lucide |
 |---|---|---|---|---|
@@ -361,6 +364,9 @@ selected where it has one). iced 0.14 gives buttons, checkboxes and radios no ke
 - States: hover = `accent.hover` / `state.hover` overlay; pressed = `accent.pressed` /
   `state.pressed`; disabled = 40 % opacity, same size and place. A disabled button always has a
   visible reason nearby or in its tooltip (PUI "Avoid disabled buttons"; BIR: caption it).
+- **Close and Cancel** are secondary buttons, except on a *result* screen where nothing is left to
+  commit (a finished batch job, #58): there Close is the primary button, and it is still the last
+  one on the right (§9.2).
 - Labels are verb + object in sentence case: *Save key*, *Describe 12 files*, never *OK*, *Yes*,
   *Submit* (DI "Prominent Done Button"; PUI; BIR «Кнопка»). The count goes into the label when
   it helps ("Run on 12 files").
@@ -419,7 +425,7 @@ in Settings apply at once either way; the button bar says so.
 - 28 high, padding 0×8, radius 4, `bg.raised`, `border.control` edge, text `body`, placeholder
   `text.placeholder`. Width shows the expected input (DI p. 473): a tag name 160, a key 280, a
   search the whole column.
-- States: hover edge `text.secondary`; **focused**: edge and 1 px ring `accent.text`; **error**:
+- States: hover edge `text.secondary`; **focused**: 2 px `accent.text` border; **error**:
   `error` edge and a message under it (§10.3); disabled: `bg.panel`, `border.subtle`,
   `text.disabled`.
 - A placeholder is an example (`sk-ant-…`), never the label (DI p. 473; PUI; BIR «Взгляд
@@ -432,8 +438,9 @@ in Settings apply at once either way; the button bar says so.
 
 - Looks like a field with a `chevron-down` on the right; the list is a menu (§8.14) under it,
   `bg.overlay`, the current item marked with `check` and `state.selected`.
-- For choices of 5 or more, or where the options are long (models with prices). Fewer than 5
-  short options are a radio group (PUI: radios up to about 10; BIR).
+- For choices of 5 or more, where the options are long (models with prices), or where the list
+  grows over time (UI languages). A fixed set of fewer than 5 short options is a radio group (PUI:
+  radios up to about 10; BIR).
 - Drop-downs choose values, never run commands (DI p. 378).
 
 ### 8.8 Slider
@@ -447,8 +454,9 @@ dragging shows the value. #59 moves their colors to tokens; no stock slider is u
 - 32 high (one line) or 44 (two lines: name + `caption` meta), padding 0×8, radius 4. The file
   list keeps its 52-px rows (tags + comment line).
 - States: hover `state.hover`; **selected** `state.selected` (plus SemiBold or an `accent.text`
-  icon where several things could look selected); disabled (a missing recent folder): whole row
-  `text.disabled`, still hoverable so its tooltip can say why.
+  icon where several things could look selected); **unavailable** (a recent folder that is not
+  found): dimmed, not disabled: text in `text.disabled` with a "not found" note, still clickable, and
+  a click offers the fix inline ("Remove from the list? [Remove] [Keep]", #63).
 - The whole row is the target (BIR: «Одна строка — это один объект»). Row actions (✕ remove)
   appear on hover and on the selected row, in a 24-px icon button at the right end (DI "Hover
   Tools": they must not shift the layout).
@@ -463,9 +471,10 @@ what is inside ("Comments", "Markers and ranges"); never "General", "Advanced", 
 
 - **Short help (one line) sits under its control** in `secondary`. It says what the choice does,
   not how to click it.
-- **Longer help goes behind ⓘ:** a 12-px `info` icon after the row label; hovering it shows a
-  tooltip (max 280 px wide). Only for knowledge that is useful but not needed to choose (PUI:
-  don't hide critical hints in tooltips).
+- **Longer help goes behind ⓘ:** a 12-px `info` icon after the row label or the control; hovering it
+  shows a tooltip (max 280 px wide). ⓘ holds only what is never needed to choose: anything that
+  changes the choice goes into the option's description (PUI: don't hide critical hints in
+  tooltips). iced cannot focus ⓘ, so keyboard users never see it; that is why the rule is strict.
 - Never a paragraph of gray text under an option: the owner's first complaint about Settings.
 
 ### 8.12 Status message (notice)
@@ -490,8 +499,8 @@ what is inside ("Comments", "Markers and ranges"); never "General", "Advanced", 
 
 ### 8.13 Tooltip
 
-- `bg.overlay`, `border.subtle` edge, radius 6, padding 6×8, text `body` 12/16 (the only use of 12
-  outside mono), max width 280, one shadow.
+- `bg.overlay`, `border.subtle` edge, radius 6, padding 6×8, text style `tooltip` (12/16), max width
+  280, one shadow.
 - **Delay 500 ms** (`tooltip.delay`); drag-and-drop previews show at once. AF ch. 18 asks for "a
   second or so", DI for 1–2 s; frename's users hover icon toolbars many times a day and read the
   key in the tooltip, so half a second.
@@ -567,6 +576,13 @@ In the middle of the empty area, left-aligned block max 420 wide: a 48-px icon i
 empty areas (an empty filter result, no markers yet) get one line of `secondary` and, if there is
 one, a ghost button ("Add a marker `F2`").
 
+### 8.21 Link
+
+A ghost button whose text is `accent.text`: *Change*, *Open Settings*, *Add credit* in a notice. It
+navigates (opens a page of frename, or a web page with a 12-px `external-link` icon after the words)
+and never runs a command (BIR: «Ссылки не предназначены для отдачи команды»). A web address that is
+only information ("console.soniox.com") is plain text, not a link.
+
 ## 9. Windows, dialogs and surfaces
 
 ![Anatomy](design-system/anatomy.png)
@@ -607,8 +623,13 @@ has only *Close*, and also closes on its own key (`Ctrl`+`/`) and Esc.
   `[ Run again ] [ Describe 12 files ] [ Cancel ]`. This is the Windows order (confirm left of
   Cancel), which BIR insists on keeping ("like swapping gas and brake"), and it keeps Close/Cancel
   in one place in every window, as #57 asks. A window with nothing to commit has Close only.
-- **Enter** runs the primary button when focus is not in a multi-line field; **Esc** runs
+- **Enter** runs the primary button only in a dialog or a panel whose primary is safe and can be
+  undone or cancelled (*Describe 12 files* can be cancelled; its cost is shown first), and only when
+  focus is not in a field. Never for *Update and restart* or a destructive button. Settings has no
+  window-level Enter: Enter only submits the focused field (a key field → *Save key*). **Esc** runs
   Close/Cancel. A destructive confirmation makes the safe button the default (§10.2).
+- *"Primary action on the right, Cancel/Close always in the same place"* (#57) is read as: the
+  buttons sit on the right; Close/Cancel is the fixed last one; the primary is next to it.
 - **Size:** fits 1280×680 logical; opens centered on the main window's monitor; remembers
   nothing it does not need to (Settings opens at its size every time). Resizable if its content
   can use the space, with a minimum size.
@@ -629,8 +650,11 @@ the platform's.
   Settings has focus (today F1/F3/F12 leak: #62 fixes it with the shortcut registry; Settings'
   own keys come with #57).
 - Esc closes the frontmost thing of the focused window: first an open popover, then a text field's
-  focus (iced unfocuses the field itself), then the dialog or panel, then (Settings only) the
-  window.
+  focus (iced unfocuses the field itself), then an inline confirmation (= *Keep*), then the dialog or
+  panel, then (Settings only) the window.
+- iced 0.14 limit: an open `pick_list` does not take Esc, so Esc with a dropdown open acts on the
+  next thing in that order (in Settings: closes the window). Accepted until iced handles it or
+  frename draws its own dropdown.
 
 ## 10. Patterns
 
@@ -725,11 +749,16 @@ registry and every surface follow:
 - **Every shortcut is shown** in its control's tooltip and in the cheat sheet; a menu item shows
   its key on the right.
 - **Dangerous commands get no single-key shortcut** (AF ch. 11 "Hide the ejector seat levers").
-- **Focus** is visible: 2 px `accent.text` ring. iced 0.14 can focus only text fields and editors;
-  buttons, checkboxes and radios cannot take keyboard focus. Until an iced version or a custom
-  widget gives them focus, every command reachable only by a button also has a shortcut or lives
-  in a list the arrows walk (the Settings navigation, menus). This limit is recorded here so
-  #59/#62 do not promise focus rings iced cannot draw.
+- **Reserved for #62's registry:** `Ctrl`+`,` opens Settings (the platform-standard key);
+  `Ctrl`+`/` opens the cheat sheet. Settings uses `Ctrl`+`Tab` / `Ctrl`+`Shift`+`Tab` for its pages
+  (the Windows convention for pages of a dialog) from #57 on.
+- **Focus** is visible: a 2 px `accent.text` border. iced 0.14 can focus only text fields and
+  editors; buttons, checkboxes and radios cannot take keyboard focus, and its focus operations run
+  over every open window at once, so Tab cannot be wired per window safely. In the main window every
+  daily command has a shortcut (#62). **Settings is the recorded exception:** its pages switch from
+  the keyboard and its fields take typing, but its checkboxes, radios and buttons need the mouse. It
+  is opened a few times a year; a row-focus model owned by Settings' own state (Tab moves a ring,
+  Space toggles) is filed as an idea rather than built into #57.
 
 ## 12. Text in the interface
 
@@ -756,7 +785,7 @@ special. "Now" means this PR.
 | **Settings window** | window anatomy, navigation list, row pattern, all form components, notices, button bar | **now** (§14) |
 | Main window frame | `bg.window`; panels with splitters; OS title bar; app bar (#64) | #59, #64 |
 | App bar (#64) | 40 px `bg.window`: folder name (`body.strong`) + parent path (`caption`, secondary) on the left; segmented *Single file / Batch*; icon buttons ⌨ (cheat sheet) and ⚙ with its update dot (7 px `accent.text` with a 2 px `bg.window` ring) on the right | #64 |
-| Empty "open a folder" screen | empty state (§8.20) with *Open a folder…* (primary) and *Open a file…*, and the recent folders list (44-px rows, missing ones disabled with "not found") | #59, #63 |
+| Empty "open a folder" screen | empty state (§8.20) with *Open a folder…* (primary) and *Open a file…*, and the recent folders list (44-px rows, missing ones dimmed with "not found", §8.9) | #59, #63 |
 | Folder controls bar | 32-px bar: ◀ ▶ ⊙ group, then a 12-px gap, then 📂 with a ▾ (recent folders popover, #63) | #59, #44, #63 |
 | File list | search field with the Filter dropdown; 52-px rows (tags as 20-px mini chips, name in `mono`, comment line `caption`); badges `SRT` and marker count; inline rename field with its error line; batch check column | #59 |
 | Tag search | search field (§8.6) with create `plus` and clear `x` | #59 |
@@ -770,12 +799,33 @@ special. "Now" means this PR.
 | Fullscreen | the video pane alone; controls fade in on mouse move | #59 |
 | Batch panel: choose | titled panel; action list (32-px rows) left; options on the right in the row pattern; cost as `body.strong`; button bar `[ Describe 12 files ] [ Cancel ]` | #58 |
 | Batch panel: progress | progress (§8.15) with Cancel; the file list shows each file's status | #58 |
-| Batch panel: result | one notice (done / stopped / cancelled) with the reason once and a fix button; counts as figures (`heading` digits over `secondary` words; "not done" in `error` only when > 0); failures as a table; `[ Run again ] [ Close ]` | #58 |
+| Batch panel: result | one notice (done / stopped / cancelled) with the reason once and a fix button; counts as figures (`heading` digits over `secondary` words; "not done" in `error` only when > 0); files not done as a table (a *Why* column only when the reasons differ); `[ Run again ] [ Close ]` with Close as the primary (§8.1) | #58 |
 | Cheat sheet (#62) | modal without a question: `title`, a find field, groups in three columns of `body` + key caps, *Close*; `Ctrl`+`/` and Esc close it | #62 |
 | Context menu (#48) | menu (§8.14) with keys on the right | #48 |
-| Recent folders popover (#63) | menu with 44-px two-line items, ✕ on hover, *Open a folder…* and *Clear list* at the bottom | #63 |
+| Recent folders popover (#63) | menu with 44-px two-line items, ✕ on hover, *Open a folder…* and *Clear list* at the bottom; *Clear list* confirms inline (it cannot be undone) | #63 |
 | Keyboard page in Settings (#62) | a sixth category, *Keyboard*, if #62 adds rebinding | #62 |
 | OS dialogs | folder/file pickers, the old-settings question: the platform's own | – |
+
+### 13.1 Tasks
+
+How the core tasks run on the system: keys, where the result shows, and what happens when it
+fails. The keys are today's (#62 owns the list).
+
+| Task | Keys / mouse | Where it happens | Feedback | Error or empty state |
+|---|---|---|---|---|
+| Open a folder | 📂, drop a folder, recent folders (#63), a path on the command line | OS picker; the file list | the list fills; the app bar shows the folder (#64) | empty folder: empty state in the list; missing recent folder: dimmed row with a remove offer |
+| Walk the clips | PageUp / PageDown, click | file list, video pane | row selected and scrolled into view; video loads | load failed: `circle-x` 48 and the reason in the video pane |
+| Tag a clip | type part of a name, arrows, Shift+Space | tag search, tag grid | checkbox ticks; the chip appears in the file name panel and the list row | no match: the search offers to create the tag (Enter) |
+| Rename | double-click a row, Enter / Esc | inline field in the row | the row shows the new name | error line under the field (why + what to do); the field keeps the text |
+| Comment | click the comment box, type | comment editor | saved on leave; comment line in the list row | save failed: error status in the file name panel |
+| Mark in / out | `[` `]` | video controls, file name panel | IN/OUT timecodes appear; segment on the bar | – |
+| Markers | F2 (hold for a range), Shift+F1/F3 | progress bar, marker list | pin appears, its label opens for a name | not saved: "Not saved" badge in the row and a notice |
+| Run a batch action | batch mode, pick an action, primary button | batch panel | progress with n of total, time left, Cancel | stopped or failed: one notice with the reason and a fix button; files not done listed once |
+| Change a setting | ⚙, Ctrl+Tab between pages | Settings window | applies at once | key save failed: error line under the key row |
+| Update | the dot on ⚙ | Settings → Updates | status line; *Update and restart* | check failed: error line with the reason |
+| Undo | Ctrl+Z / Ctrl+Y | where the change was | the change reverts in place | nothing to undo: nothing happens |
+
+### 13.2 Mockups
 
 Mockups of how these fit together:
 
@@ -797,24 +847,26 @@ these rules.
 - **Size** 800×600 logical (fits 1280×680), centered, **resizable** with a minimum of 720×520 so a
   long Russian label or a large system font never clips; the page scrolls when it does not fit.
 - **One instance**; opening it again focuses it and switches to the requested page.
-- **Closes** with *Close*, Esc (when no field is focused; a focused field loses focus first), or
-  the OS ✕.
-- **Keys:** Up/Down move between categories when no field has focus; Tab moves between fields.
-  Main-window keys do not act here (Esc is handled per window; the F-key leak is #62's).
-- Opened from ⚙ (main window), from *Describe with AI* and *Generate subtitles* in batch mode (on
-  their pages, instead of "scrolled to the end"), and from *Settings…* links of the *Tag commented*
-  and *Apply tag spacing* actions (on *Saving*). It opens on the last page shown in this session,
-  or *Interface* the first time.
+- **Closes** with *Close*, Esc, or the OS ✕. Esc first leaves a focused field (iced does that
+  itself) and first cancels an open remove confirmation (= *Keep*), per §9.4.
+- **Keys:** `Ctrl`+`Tab` / `Ctrl`+`Shift`+`Tab` move to the next / previous page (plain arrows would
+  switch pages while typing: iced fields do not take Up/Down). No window-level Enter (§9.2).
+  Main-window keys do not act here except the video F-keys, whose leak #62 fixes.
+- **Opened on a page:** ⚙ opens the last page shown in this session (*Interface* the first time), or
+  *Updates* when an update is ready (the dot on ⚙ leads to it, and the *Updates* item shows the
+  same dot). *Describe with AI* and *Generate subtitles* in batch mode open their pages (they used to
+  open "scrolled to the end"); the *Settings…* links of *Tag commented* and *Apply tag spacing* open
+  *Saving*.
 
 ### 14.2 Pages
 
 | Category (icon) | Rows |
 |---|---|
-| **Interface** (`languages`) | Language · Tags (*Monochrome tags*) · Video (*Play videos automatically when opened*) |
+| **Interface** (`languages`) | Language · Tag colors (*Monochrome*) · Video (*Play videos automatically when opened*) |
 | **Saving** (`folder`) | File names (*Space after each tag*) · Comments · Markers and ranges · In/out points |
 | **Describe with AI** (`sparkles`) | Anthropic API key · Model · Description language |
 | **Subtitles** (`captions`) | Soniox API key · Languages · Cue length |
-| **Updates** (`refresh-cw`) | Version (version, status, *Check for updates*, *Update and restart*, *Check for updates when frename starts*) · Older frename (installed only: *Import settings from an old frename folder…*) |
+| **Updates** (`refresh-cw`) | Version (version, status, *Check for updates*, *Update and restart*, *Check for updates when frename starts*) · Settings from an older frename (installed only) |
 
 Why these groups: *Saving* holds the four settings that decide what frename writes into files
 and names, which is what an editor thinks about together; *Interface* holds what changes only how
@@ -825,120 +877,137 @@ No "General" (BIR). The version is on *Updates* ("About" would hold only it).
 |---|---|---|
 | ![](design-system/settings-interface.png) | ![](design-system/settings-saving.png) | ![](design-system/settings-ai.png) |
 
-| Removing the key | Subtitles (no key yet) | Updates |
+| Removing the key | Subtitles (no key yet) | Updates (an update is ready) |
 |---|---|---|
 | ![](design-system/settings-ai-remove.png) | ![](design-system/settings-subtitles.png) | ![](design-system/settings-updates.png) |
 
 ### 14.3 Rows in detail
 
-- **Language:** dropdown, 240 wide: *System (English)*, then each language in its own name.
-- **Tags:** checkbox *Monochrome tags*, help "Every tag chip in one gray instead of its color."
+- **Language:** dropdown, 240 wide: *System (English)*, then each language in its own name (a
+  dropdown although the list is short: it grows, §8.7).
+- **Tag colors:** checkbox *Monochrome*, help "Every tag chip in one gray."
 - **Video:** checkbox *Play videos automatically when opened*.
 - **File names:** checkbox *Space after each tag*, example in `mono` `Food. Goat. clip.mp4`. After a
-  change: info notice "Files keep their names until renamed or saved." + *Add the space to existing
-  file names…* / *Remove the space from existing file names…* (secondary).
+  change: info notice "Files keep their names until renamed or saved." with *Add the space to
+  existing file names…* / *Remove the space from existing file names…* (secondary).
 - **Comments:** radios *Inside the video file* — "XMP, the Description column in Premiere Pro";
-  *In a text file next to the video* — `clip.comment.txt`. Under the first option, indented 24:
-  checkbox *Tag videos with a comment* and a 140-px field with the tag, help line with the example
-  (disabled while comments go to text files, as today). After a change: info notice + *Move
-  comments into the videos… / into text files…*.
+  *In a text file next to the video* — `clip.comment.txt`. While comments go inside the video (as
+  today, the part is hidden otherwise), under the first option, indented 24: checkbox *Tag videos with
+  a comment*, and under it, indented again, the label *Tag* with a 160-px field and an ⓘ that holds
+  today's explanation with the example name. After a change of storage: info notice + *Move comments
+  into the videos… / into text files…*.
 - **Markers and ranges:** radios *Inside the video file* — "XMP, shown on the clip in Premiere
-  Pro"; *In the comment, one line each* — `0:41–0:47 — Lion`. ⓘ on the label with today's hint
-  (points and ranges alike; AI moments too). Move notice after a change.
+  Pro"; *In the comment, one line each* — `0:41–0:47 — Lion`; one help line under them: "Points and
+  ranges alike, the moments AI finds too." Move notice after a change.
 - **In/out points:** radios *Inside the video file* — "A subclip marker in Premiere Pro"; *In the
   file name* — `in_00_01_05.out_00_01_20.clip.mp4`. Move notice after a change.
-- **API key rows** (Anthropic, Soniox), one component with four states:
-  - *Saved:* inline status `circle-check` "Saved in Windows Credential Manager" (the store's name per
-    OS); buttons *Replace…* (secondary) and *Remove…* (danger-ghost).
-  - *Replacing / missing:* secret field (fills the column) + *Show*/*Hide* (ghost); under it *Save
-    key* (primary, disabled while the field is empty, with the tooltip "Paste a key first") and,
-    when replacing, *Cancel* (secondary); help "Save keeps it in … on this computer." and where to
-    get one.
-  - *Confirm remove:* error notice "Remove the saved key?" / "You will need to paste it again." with
-    *Remove key* (danger) and *Keep* (secondary). Esc = Keep.
+- **API key rows** (Anthropic, Soniox), one component:
+  - *Saved:* inline status `circle-check` "Saved in Windows Credential Manager on this computer"
+    (the store's name per OS); buttons *Replace…* (secondary) and *Remove…* (danger-ghost).
+  - *Missing, or replacing:* secret field (fills the column) + *Show* / *Hide* (ghost); under it
+    *Save key* (primary, disabled while the field is empty) and, when replacing, *Cancel*
+    (secondary); one help line: where to get a key; the rest (where it is kept, what is sent) behind
+    ⓘ.
+  - *Confirm remove:* in place of the buttons, an error notice "Remove the saved Anthropic key?" /
+    "You will need to paste it again." with *Remove key* (danger) and *Keep* (secondary, the last
+    button). Esc = Keep. The other rows stay where they are.
   - *Keyring unavailable:* warning notice with today's text and hint.
-  - A failed save/remove: error line under the row.
-- **Model** (AI): dropdown 300 wide with the prices, help "Haiku is the cheapest and fine for most
-  clips; Sonnet and Opus notice more and cost more." **Description language:** dropdown 300.
-  Page help: ⓘ on the page's first row: "Used by Describe with AI in batch mode."
-- **Languages** (Subtitles): checkboxes in a grid of 3 columns (was 4 in the 560-px window; 3 fit the
-  388-px control column in Russian); status line under it (loading, locked, failed) in `secondary`;
-  help "The languages spoken in the footage, as hints." **Cue length:** radios *Short* — "One line,
-  up to 8 s"; *One sentence*.
-- **Version** (Updates): `body.strong` "frename <version>"; status line (up to date / checking /
-  downloading n % / failed: reason, in `error` with an icon); *Check for updates* (secondary);
-  *Update and restart* (primary, the page's only primary, when an update is ready; disabled while a
-  batch runs, tooltip "Wait for the batch to finish"); checkbox *Check for updates when frename
-  starts*.
-- **Button bar:** "Changes apply right away." on the left; *Close* on the right.
+  - A failed save or removal: error line under the row.
+- **Model** (AI): dropdown 300 wide with the prices; help "Haiku is the cheapest; Sonnet and Opus
+  notice more." **Description language:** dropdown 300. The page's ⓘ (on the key row): "Used by
+  Describe with AI in batch mode."
+- **Languages** (Subtitles): checkboxes of a fixed width that wrap into as many columns as fit (three
+  at the default size, two at the minimum); a status line under them while loading, locked or
+  failed; help "The languages spoken in the footage, as hints." **Cue length:** radios *Short* —
+  "One line, up to 8 s"; *One sentence*. ⓘ on the key row: "Used by Generate subtitles in batch
+  mode. The cue length applies to new subtitles."
+- **Version** (Updates): `body.strong` "frename <version>"; one status line (up to date, checking,
+  downloading n %, version n is available; failed: in `error`). In a build that cannot update
+  itself (a zip or development build) the status says "Updates work in the installed version" and
+  *Check for updates* is disabled: the reason is that line. *Check for updates* (secondary);
+  *Update and restart* (primary, only when an update is ready; disabled while a batch runs, with the
+  tooltip "Wait for the batch to finish"); checkbox *Check for updates when frename starts*.
+- **Settings from an older frename** (installed only): *Import from an old frename folder…*
+  (secondary), help "Bring the settings of a frename you ran from a zip folder.", and the import's
+  status line.
+- **Button bar:** "Changes apply right away." on the left; *Close* (secondary) on the right.
 
 ### 14.4 Behaviour that does not change
 
 Every setting keeps its meaning, its default and its storage; the key rows keep their credential
 store logic; the move offers open the same batch actions; *Update and restart* waits for a batch
-job as today. What changes is the layout, the grouping into pages, the wording of labels (shorter,
-with descriptions), and three additions the new window needs: the Close button, Esc, and opening
-on a given page.
+job as today. What changes: the layout, the grouping into pages, shorter labels with descriptions,
+and what the new window needs: the Close button, Esc, `Ctrl`+`Tab`, opening on a page.
 
 ## 15. Implementation
 
 ### 15.1 Module
 
-`src/ui/` replaces `src/theme.rs`:
+`src/ui/` is the design system in code:
 
 ```
 src/ui/
-  mod.rs        re-exports; `pub fn theme() -> iced::Theme` (custom palette)
+  mod.rs        the theme for windows on the system; re-exports
   tokens.rs     colors, spacing, sizes, radii, text sizes, fonts, durations — consts only
+  icons.rs      the bundled Lucide icons and `icon(name, size, color)`
   text.rs       text styles: heading(), title(), body(), strong(), secondary(), caption(), mono()
-  button.rs     primary(), secondary(), ghost(), danger(), danger_ghost(), icon(), icon_latched()
-  form.rs       checkbox(), radio_option(), text_field(), secret_field(), dropdown()
-  layout.rs     setting_row(), section(), button_bar(), notice(), inline_status(), info_tip()
-  style.rs      the style functions (container, scrollable, tooltip, menu, …) and the app's own
-                styles moved from theme.rs (marker colors, cue rows, overlay tabs, …)
+  button.rs     primary(), secondary(), ghost(), danger(), danger_ghost()
+  form.rs       checkbox(), radio_option(), text_field(), dropdown()
+  layout.rs     page(), setting_row(), nav_item(), button_bar(), notice(), inline_status(), info()
+  style.rs      the style functions behind them
+  legacy.rs     today's src/theme.rs, moved: the styles of views not yet on the system
 ```
 
+- **`ui` vs `widgets`:** `ui` holds tokens, styles and stateless constructors of standard controls;
+  `src/widgets/` keeps frename's own stateful or custom-drawn widgets (splitter, chips, progress
+  bar), which take their colors and sizes from `ui::tokens`.
 - **Tokens are consts** (`Color::from_rgb8` is const; `Padding` fields are public). Radii are
   `f32`; `Border` values are built inside style functions.
-- **A custom `iced::Theme`** (`Theme::custom_with_fn`) maps the tokens onto iced's palette, so
-  stock widgets that a view leaves unstyled (pick list menus, text editors, scrollbars) already
-  look right. The component constructors still set every style explicitly, so the look does not
-  depend on how iced derives its palette.
-- **Fonts:** `assets/fonts/` with the three files and their licences, loaded with `.font(bytes)`
-  on the daemon; `.default_font(Inter)` and `default_text_size` 13 via `.settings(…)`.
-- `src/theme.rs` becomes a thin re-export of `ui` for the views not yet moved (#58, #59), and #59
-  deletes it.
+- **Theme per window.** The daemon's theme hook takes the window id: Settings gets `ui::theme()`
+  (a `Theme::custom_with_fn` palette from the tokens, so unstyled parts such as the dropdown list
+  follow it); the main window keeps `Theme::Dark` until #59, so #57 changes nothing there.
+- **Fonts** (`assets/fonts/`, with their licences) are loaded once on the daemon with `.font(bytes)`.
+  They are not the default font: `ui` components set `FONT` / `FONT_STRONG` / `FONT_MONO` and their
+  sizes explicitly, so the main window keeps its system font and 16-px default until #59 moves it.
+- `src/theme.rs` moves to `src/ui/legacy.rs` with its values unchanged and stays reachable as
+  `crate::theme`, so the views not yet on the system build as before; #58 and #59 empty it and #59
+  deletes it. The tag palette (`src/tag_colors.rs`) moves into `ui` with #53 or #59.
 
 ### 15.2 The check that keeps the system followed
 
-A unit test (`src/ui/lint.rs`, `#[cfg(test)]`) reads every `.rs` file under `src/` and fails on:
-- `Color::from_rgb`, `Color::from_rgba`, `Color::from_rgb8`, `Color::from_rgba8`, `color!(`,
-  `Color::WHITE`, `Color::BLACK` outside `src/ui/`;
-- a numeric literal passed to `.padding(`, `.spacing(`, `.size(`, `.text_size(`, `.gap(`,
-  `border::rounded(`, `Padding::new(`, `padding::…(` outside `src/ui/` (`0` is allowed: it means
-  "none", not a size);
-- `iced::Theme::Dark` or any built-in theme.
+A unit test (`src/ui/lint.rs`) reads every `.rs` file under `src/` outside `src/ui/`, ignoring
+`#[cfg(test)]` code, and fails on:
+- a color literal: `Color::from_rgb`, `Color::from_rgba`, `Color::from_rgb8`, `Color::from_rgba8`,
+  `color!(`, `Color::WHITE`, `Color::BLACK`;
+- a number passed as a size: `.padding(`, `.spacing(`, `.size(`, `.text_size(`, `.gap(`, `.width(`,
+  `.height(`, `.max_width(`, `.line_height(`, `rounded(`, `Length::Fixed(`, `Padding::new(`, `padding::…(`
+  followed by a digit or `[`; and `Padding {` or `radius:` with a number in it. `0` alone is allowed
+  (it means "none").
 
-Files not yet moved to the system are listed in an **allow-list inside the test**, each with the
-issue that moves it (#58 batch, #59 the rest). The test also fails when an allow-listed file no
-longer needs its entry, so the list only shrinks. After #59 the list is empty.
+Files not yet on the system are in an **allow-list inside the test**, each with the issue that moves
+it (#58 batch, #59 the rest). The test also fails when an allow-listed file has nothing left to
+allow, so the list only shrinks. After #59 it is empty.
 
 ### 15.3 Demo mode
 
 `--settings [page]` makes the demo capture the Settings window (opened on `page`: `interface`,
 `saving`, `ai`, `subtitles`, `updates`) instead of the main window. In a demo the API keys read as
 "Anthropic saved, Soniox missing", never from the renderer's keyring, so a screenshot shows both
-states and asks no server. `docs/screenshots/render.sh` does not change (the README has no Settings
-screenshot).
+states and asks no server. `docs/screenshots/render.sh` and the README images do not change: the
+main window does not change in #57 and the README has no Settings screenshot.
 
 ### 15.4 Delivery
 
-- **This PR (#57):** this document; `src/ui/` with tokens, fonts, theme and the components Settings
-  needs; `src/features/settings/` and `src/features/updates/view.rs` rebuilt with it; the lint test
-  with the allow-list; Esc and Close for Settings; opening on a page; demo `--settings`;
-  new/changed strings in English and Russian; README's Settings section; `version.md`.
-- **#58:** batch views onto the system (removes `batch/**` from the allow-list).
-- **#44:** icons. **#59:** everything else; the allow-list becomes empty and `theme.rs` goes.
+- **#57 (this):** this document; `src/ui/` with tokens, fonts, icons, the Settings theme and the
+  components Settings needs; `theme.rs` moved into `ui::legacy`; `src/features/settings/` and
+  `src/features/updates/view.rs` rebuilt with them; the lint test with its allow-list; Close, Esc,
+  `Ctrl`+`Tab` and opening on a page; demo `--settings [page]`; new and changed strings in English
+  and Russian; the Settings section of the README; `version.md`; the `ui-dev` skill and the styling
+  section of the Elm skill pointed at this document and `src/ui`.
+- **#58:** the batch views onto the system (removes `batch/**` from the allow-list).
+- **#44:** the other icons. **#53:** monochrome tags and the tag palette into `ui`. **#59:**
+  everything else, the main window theme and fonts; the allow-list becomes empty and `ui::legacy`
+  goes.
 
 ## 16. Out of scope
 
@@ -953,12 +1022,14 @@ screenshot).
 ## 17. Test plan
 
 - **Unit:** the lint test (§15.2) with its allow-list; demo arguments parse `--settings [page]`;
-  the Settings page parses from its name; the token contrast pairs of §3.1 are recomputed by a test
-  from the constants (text ≥ 4.5, control edges ≥ 3.0), so a later color change cannot break them
-  silently.
+  the Settings page parses from its name and pages step with wrap-around; the token contrast pairs of
+  §3.1 are recomputed by a test from the constants (text ≥ 4.5, control edges ≥ 3.0), so a later
+  color change cannot break them silently.
 - **Screenshots:** `frename --demo docs/screenshots/main.toml --settings <page> --out …` for
   every page, English and Russian, at 800×600; before/after in the PR.
-- **By hand:** Esc closes; Esc in a focused field only leaves the field; Up/Down change pages;
+- **By hand:** Esc closes; Esc in a focused field only leaves the field; Esc during a remove
+  confirmation keeps the key; Ctrl+Tab / Ctrl+Shift+Tab change pages; ⚙ with an update ready opens
+  *Updates*;
   opening Settings from Describe with AI / Generate subtitles lands on their pages; every setting
   still changes what it did; key Save / Replace / Remove / Keep; move offers open the batch action;
   resize down to 720×520 in Russian: nothing clips.
@@ -976,6 +1047,8 @@ screenshot).
    to change as one token.
 6. **Chip height 28 → 24 (#59)?** Recommended: yes, it aligns chips with 32-px rows and the 4-px
    grid; #59 checks it in the tag grid with real names.
+7. **Keyboard focus for Settings' checkboxes and buttons?** Recommended: not in #57 (§11); filed as
+   an idea: a focus ring owned by Settings' state.
 
 ## 19. Sources
 
