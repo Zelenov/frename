@@ -166,7 +166,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if let Some(paths) = self_test {
-        std::process::exit(self_test::run(&paths));
+        std::process::exit(self_test::run_command(&paths));
     }
 
     // Initialize app database (migrations) before iced; decorator logs.

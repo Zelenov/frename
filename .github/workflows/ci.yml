@@ -297,6 +297,8 @@ jobs:
   macos-store:
     name: ci-macos-store
     runs-on: macos-14
+    # A hang (e.g. a Keychain call waiting forever) ends here, not after GitHub's 6 hours.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
 
@@ -342,6 +344,7 @@ jobs:
     name: ci-macos-store-test
     needs: macos-store
     runs-on: macos-14
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
