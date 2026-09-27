@@ -105,10 +105,30 @@ pub(crate) fn parse_in_out_line(line: &str) -> Option<Segment> {
 /// `comment` without its in/out line, and the points the line holds (empty when it has
 /// none). The line is looked for anywhere outside the AI block: the block is the AI's text.
 /// When several lines qualify the first one counts, and all of them go.
+///
+/// Taking the line out never makes an AI block the comment did not have: in
+/// `Mine\n\nIn/Out: …\nAI: my note`, the editor's `AI: my note` would follow a blank line and a
+/// new AI run would replace it. The blank lines right above the line then go with it; if that
+/// is not enough, the comment keeps the line, as text.
 pub(crate) fn split_in_out_line(comment: &str) -> (String, Segment) {
+    let block_before = crate::ai::block::ai_block(comment);
+    for drop_blank_above in [false, true] {
+        let Some((kept, segment)) = take_in_out_lines(comment, drop_blank_above) else {
+            break;
+        };
+        if crate::ai::block::ai_block(&kept) == block_before {
+            return (kept, segment);
+        }
+    }
+    (comment.to_string(), Segment::default())
+}
+
+/// [`split_in_out_line`] without its check: `None` when the comment has no in/out line. With
+/// `drop_blank_above`, blank lines right above a taken line go too.
+fn take_in_out_lines(comment: &str, drop_blank_above: bool) -> Option<(String, Segment)> {
     let block = crate::ai::block::ai_block_range(comment);
     let mut segment: Option<Segment> = None;
-    let mut kept = String::with_capacity(comment.len());
+    let mut kept: Vec<&str> = Vec::new();
     let mut first_line_taken = false;
     let mut offset = 0;
     for raw in comment.split_inclusive('\n') {
@@ -122,13 +142,15 @@ pub(crate) fn split_in_out_line(comment: &str) -> (String, Segment) {
             Some(points) => {
                 segment.get_or_insert(points);
                 first_line_taken |= at_start;
+                while drop_blank_above && kept.last().is_some_and(|l| l.trim().is_empty()) {
+                    kept.pop();
+                }
             }
-            None => kept.push_str(raw),
+            None => kept.push(raw),
         }
     }
-    let Some(segment) = segment else {
-        return (comment.to_string(), Segment::default());
-    };
+    let segment = segment?;
+    let mut kept = kept.concat();
     // With no text of the editor's, [`with_in_out_line`] puts the line first and a blank line
     // between it and the AI block, which the block needs to be one; without the line that gap
     // goes too.
@@ -142,8 +164,7 @@ pub(crate) fn split_in_out_line(comment: &str) -> (String, Segment) {
             }
         }
     }
-    let kept = kept.trim_end_matches(['\n', '\r']).to_string();
-    (kept, segment)
+    Some((kept.trim_end_matches(['\n', '\r']).to_string(), segment))
 }
 
 /// `comment` (which holds no in/out line) with the line for `segment` added as the last line
@@ -329,6 +350,25 @@ mod tests {
         assert_eq!(
             split_in_out_line(comment),
             (comment.to_string(), Segment::default())
+        );
+    }
+
+    #[test]
+    fn taking_the_line_out_never_makes_the_editors_text_an_ai_block() {
+        let comment = "Mine\n\nIn/Out: 00:00:01 – end\nAI: my own note";
+        let (text, points) = split_in_out_line(comment);
+        assert_eq!(text, "Mine\nAI: my own note");
+        assert_eq!(points, segment(Some(1.0), None));
+        assert_eq!(crate::ai::block::ai_block(&text), None);
+        // Saving puts the line back after the editor's text, and it reads back the same.
+        let saved = with_in_out_line(&text, points);
+        assert_eq!(split_in_out_line(&saved), (text, points));
+
+        // Nothing to drop above it: the line stays, as text.
+        let first = "In/Out: 00:00:01 – end\nAI: my own note";
+        assert_eq!(
+            split_in_out_line(first),
+            (first.to_string(), Segment::default())
         );
     }
 

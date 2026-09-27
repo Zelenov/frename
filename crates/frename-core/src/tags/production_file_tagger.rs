@@ -96,8 +96,8 @@ impl ProductionFileTagger {
             .unwrap_or_else(|| PathBuf::from(&new_file_name));
 
         if new_path != path {
-            crate::comment::rename_comment_file(path, &new_path);
-            crate::subtitles::rename_subtitle_file(path, &new_path);
+            // The video first: when it cannot be renamed (Premiere holds it), its comment and
+            // subtitle files must stay with it rather than wait under the new name.
             if let Err(e) = std::fs::rename(path, &new_path) {
                 log::error!(
                     "ProductionFileTagger: rename {:?} → {:?} failed: {}",
@@ -107,6 +107,8 @@ impl ProductionFileTagger {
                 );
                 return path.to_path_buf();
             }
+            crate::comment::rename_comment_file(path, &new_path);
+            crate::subtitles::rename_subtitle_file(path, &new_path);
             log::info!("Renamed on disk: {:?} → {:?}", path, new_path);
         }
         // A pending snapshot does not know an XMP comment, so it has no text file to write.
@@ -154,8 +156,8 @@ impl FileTaggerBackend for ProductionFileTagger {
             return path.to_path_buf();
         }
         let storage = inspection.storage_after(what);
-        // Parsing with XMP storage for both reads both homes: the text file and the name
-        // first, XMP where they are empty.
+        // Parsing with XMP storage for both reads both homes: the text file and the in/out
+        // line first, XMP where they are empty.
         let both_homes = MetadataStorage {
             comment: CommentStorage::InVideo,
             in_out: InOutStorage::InVideo,
@@ -476,6 +478,20 @@ mod tests {
         assert!(!tagger.metadata_move_needed(&path, MetadataMove::InOut(InOutStorage::InVideo)));
     }
 
+    #[test]
+    fn a_failed_rename_keeps_the_comment_with_the_video() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("rename-fails", "goat.mov");
+        crate::comment::save_comment(&path, "note");
+        // A folder under the new name makes the rename fail, as a clip Premiere holds would.
+        std::fs::create_dir(path.with_file_name("Food.goat.mov")).expect("folder");
+        let mut snapshot = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        snapshot.set_tags(["Food"]);
+        assert_eq!(tagger.save_with(&snapshot, &path, TEXT), path);
+        assert_eq!(crate::comment::load_comment(&path), "note");
+        assert!(!path.with_file_name("Food.goat.mov.comment.txt").exists());
+    }
+
     /// "Move in/out points out of file names" on the file at `path`, with `storage`.
     fn move_out_of_name(path: &Path, storage: MetadataStorage) -> super::super::NameInOutMove {
         let tagger = ProductionFileTagger;
@@ -488,9 +504,25 @@ mod tests {
     }
 
     fn moved_path(result: &super::super::NameInOutMove) -> PathBuf {
-        match &result.outcome {
-            crate::MoveOutcome::Moved(path) => path.clone(),
+        match result {
+            super::super::NameInOutMove::Moved { path, .. } => path.clone(),
             other => panic!("not moved: {other:?}"),
+        }
+    }
+
+    fn kept_stored(result: &super::super::NameInOutMove) -> Option<super::super::KeptStored> {
+        match result {
+            super::super::NameInOutMove::Moved { kept_stored, .. } => *kept_stored,
+            _ => None,
+        }
+    }
+
+    use super::super::NameInOutProblem;
+
+    fn failed(path: &Path, problem: NameInOutProblem) -> super::super::NameInOutMove {
+        super::super::NameInOutMove::Failed {
+            path: path.to_path_buf(),
+            problem,
         }
     }
 
@@ -498,7 +530,7 @@ mod tests {
     fn in_out_moves_out_of_an_old_name_into_the_video() {
         let path = clip_named("name-to-xmp", "Food.goat.in_00_00_00.mov");
         let result = move_out_of_name(&path, ADOBE);
-        assert_eq!(result.kept_stored, None);
+        assert_eq!(kept_stored(&result), None);
         let path = moved_path(&result);
         assert_eq!(file_name(&path), "Food.goat.mov");
         let back = ProductionFileTagger.parse_with(&path, &FolderInfo::default(), ADOBE);
@@ -509,8 +541,8 @@ mod tests {
             "in the marker, not a line"
         );
         assert_eq!(
-            move_out_of_name(&path, ADOBE).outcome,
-            crate::MoveOutcome::NothingToMove,
+            move_out_of_name(&path, ADOBE),
+            super::super::NameInOutMove::NothingToMove,
             "a rerun changes nothing"
         );
     }
@@ -538,7 +570,7 @@ mod tests {
 
         let result = move_out_of_name(&old_name, ADOBE);
         assert_eq!(
-            result.kept_stored,
+            kept_stored(&result),
             Some(super::super::KeptStored {
                 from_name: Segment {
                     start: Some(7.0),
@@ -582,7 +614,7 @@ mod tests {
 
         let result = move_out_of_name(&old_name, TEXT);
         assert_eq!(
-            result.kept_stored.map(|kept| kept.stored),
+            kept_stored(&result).map(|kept| kept.stored),
             Some(Segment {
                 start: Some(0.05),
                 end: None
@@ -608,14 +640,8 @@ mod tests {
         std::fs::write(&other, b"another clip").expect("write");
         crate::comment::save_comment(&old, "mine");
 
-        let result = move_out_of_name(&old, ADOBE);
-        assert_eq!(
-            result.problem,
-            Some(super::super::NameInOutProblem::NameTaken(
-                "goat.mov".to_string()
-            ))
-        );
-        assert_eq!(result.outcome, crate::MoveOutcome::Failed(old.clone()));
+        let taken = || failed(&old, NameInOutProblem::NameTaken("goat.mov".to_string()));
+        assert_eq!(move_out_of_name(&old, ADOBE), taken());
         assert_eq!(std::fs::read(&other).expect("read"), b"another clip");
         assert_eq!(crate::comment::load_comment(&old), "mine");
         assert!(!crate::comment::comment_path(&other).exists());
@@ -623,25 +649,42 @@ mod tests {
         // A comment file of a clip no longer there takes the name too.
         std::fs::remove_file(&other).expect("remove");
         crate::comment::save_comment(&other, "orphan");
-        assert_eq!(
-            move_out_of_name(&old, ADOBE).problem,
-            Some(super::super::NameInOutProblem::NameTaken(
-                "goat.mov".to_string()
-            ))
-        );
+        assert_eq!(move_out_of_name(&old, ADOBE), taken());
         assert_eq!(crate::comment::load_comment(&other), "orphan");
     }
 
     #[test]
     fn a_name_of_only_in_out_parts_is_left_alone() {
         let path = clip_named("name-empty", "in_00_00_00.out_00_00_00.mov");
-        let result = move_out_of_name(&path, ADOBE);
         assert_eq!(
-            result.problem,
-            Some(super::super::NameInOutProblem::NameWouldBeEmpty)
+            move_out_of_name(&path, ADOBE),
+            failed(&path, NameInOutProblem::NameWouldBeEmpty)
         );
-        assert_eq!(result.outcome, crate::MoveOutcome::Failed(path.clone()));
         assert!(path.exists());
+    }
+
+    #[test]
+    fn a_failed_rename_is_reported_and_the_comment_stays() {
+        let path = clip_named("name-not-renamed", "goat.in_00_00_00.mov");
+        crate::comment::save_comment(&path, "mine");
+        // A folder under the new name makes the rename fail after the check, as a clip
+        // Premiere holds would: the check only looks for files.
+        let block = path.with_file_name("goat.mov");
+        std::fs::create_dir(&block).expect("folder");
+        std::fs::remove_dir(&block).expect("remove");
+        let tagger = ProductionFileTagger;
+        let result = super::super::file_tagger::move_name_in_out(
+            &path,
+            |p| tagger.parse_with(p, &FolderInfo::default(), TEXT),
+            |p| tagger.stored_in_out(p),
+            |snapshot, p| {
+                std::fs::create_dir(&block).expect("folder");
+                tagger.save_with(snapshot, p, TEXT)
+            },
+        );
+        assert_eq!(result, failed(&path, NameInOutProblem::NotRenamed));
+        assert!(crate::comment::load_comment(&path).ends_with("mine"));
+        assert!(!crate::comment::comment_path(&block).exists());
     }
 
     /// Folder info as a scan builds it: the listing's sizes and times, and the tag file's list.

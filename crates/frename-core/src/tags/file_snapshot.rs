@@ -222,29 +222,31 @@ impl FileSnapshot {
             .filter(|s| !s.is_empty())
             .collect();
 
-        let (tags, name, ext) = match parts.as_slice() {
-            [] => (vec![], String::new(), String::new()),
-            [only] => (vec![], only.to_string(), String::new()),
-            [before @ .., ext] => {
-                let is_in_out = |part: &&str| name_in_out_part(part).is_some();
-                // The name is the last part that is not an old in/out part, with every in/out
-                // part: those among the tags first, then those after it.
-                match before.iter().rposition(|part| !is_in_out(part)) {
-                    None => (vec![], before.join("."), format!(".{ext}")),
-                    Some(name_at) => {
-                        let (tags, stray): (Vec<&str>, Vec<&str>) =
-                            before[..name_at].iter().partition(|part| !is_in_out(part));
-                        let name: Vec<&str> = std::iter::once(before[name_at])
-                            .chain(stray)
-                            .chain(before[name_at + 1..].iter().copied())
-                            .collect();
-                        (
-                            tags.into_iter().map(str::to_string).collect(),
-                            name.join("."),
-                            format!(".{ext}"),
-                        )
-                    }
-                }
+        let is_in_out = |part: &&str| name_in_out_part(part).is_some();
+        // The last part is the extension, unless it is an old in/out part: a name without an
+        // extension (`clip.in_00_00_07`) keeps it as part of the name.
+        let (before, ext) = match parts.split_last() {
+            None => (&parts[..], String::new()),
+            Some((last, rest)) if !rest.is_empty() && !is_in_out(last) => {
+                (rest, format!(".{last}"))
+            }
+            Some(_) => (&parts[..], String::new()),
+        };
+        // The name is the last part that is not an old in/out part, with every in/out part:
+        // those among the tags first, then those after it.
+        let (tags, name) = match before.iter().rposition(|part| !is_in_out(part)) {
+            None => (vec![], before.join(".")),
+            Some(name_at) => {
+                let (tags, stray): (Vec<&str>, Vec<&str>) =
+                    before[..name_at].iter().partition(|part| !is_in_out(part));
+                let name: Vec<&str> = std::iter::once(before[name_at])
+                    .chain(stray)
+                    .chain(before[name_at + 1..].iter().copied())
+                    .collect();
+                (
+                    tags.into_iter().map(str::to_string).collect(),
+                    name.join("."),
+                )
             }
         };
 
@@ -342,6 +344,34 @@ mod tests {
         // A part that is no valid time is an ordinary part, as before.
         let invalid = FileSnapshot::parse("Food.in_00_75_00.clip.mp4");
         assert_eq!(invalid.tags(), ["Food", "in_00_75_00"]);
+    }
+
+    #[test]
+    fn an_old_in_out_part_at_the_end_of_a_name_without_extension_is_no_extension() {
+        let mut snapshot = FileSnapshot::parse("Food.clip.in_00_00_07");
+        assert_eq!(snapshot.tags(), ["Food"]);
+        assert_eq!(snapshot.name_without_extension(), "clip.in_00_00_07");
+        assert_eq!(snapshot.extension(), "");
+        assert_eq!(snapshot.file_name_with(false), "Food.clip.in_00_00_07");
+        assert_eq!(
+            snapshot.take_name_in_out(),
+            Some(Segment {
+                start: Some(7.0),
+                end: None
+            })
+        );
+        assert_eq!(snapshot.file_name_with(false), "Food.clip");
+        // Other names keep their extension and tags as before.
+        let plain = FileSnapshot::parse("Food.clip.mp4");
+        assert_eq!(
+            (
+                plain.tags(),
+                plain.name_without_extension(),
+                plain.extension()
+            ),
+            (&["Food".to_string()][..], "clip", ".mp4")
+        );
+        assert_eq!(FileSnapshot::parse("clip").name_without_extension(), "clip");
     }
 
     #[test]

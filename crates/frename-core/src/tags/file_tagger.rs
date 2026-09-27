@@ -290,15 +290,21 @@ impl FileTagger {
 
 /// What [`FileTagger::move_in_out_out_of_name`] did to one file.
 #[derive(Debug, Clone, PartialEq)]
-pub struct NameInOutMove {
-    /// `Moved` to the new path, `NothingToMove` when the name held no in/out points, `Failed`
-    /// when the file was left as it was (see `problem`) or the rename did not happen.
-    pub outcome: MoveOutcome,
-    /// The file already had in/out points stored, in the comment or in the video: they were
-    /// kept (and saved where Settings keep in/out points now), and the name's were dropped.
-    pub kept_stored: Option<KeptStored>,
-    /// Why the file was left as it was, when it was.
-    pub problem: Option<NameInOutProblem>,
+pub enum NameInOutMove {
+    /// The name held no in/out points.
+    NothingToMove,
+    /// Renamed to `path`. `kept_stored` is set when the file already had in/out points
+    /// stored, in the comment or in the video: they were kept (and saved where Settings keep
+    /// in/out points now), and the name's were dropped.
+    Moved {
+        path: PathBuf,
+        kept_stored: Option<KeptStored>,
+    },
+    /// The file is still at `path`, for this reason.
+    Failed {
+        path: PathBuf,
+        problem: NameInOutProblem,
+    },
 }
 
 /// In/out points a file had both in its name and stored; see [`NameInOutMove::kept_stored`].
@@ -318,6 +324,8 @@ pub enum NameInOutProblem {
     /// The name without the in/out parts is taken: a file (or a comment or subtitle file of
     /// one) with this name is already in the folder, and renaming would replace it.
     NameTaken(String),
+    /// The rename failed (the file is in use or read-only); the log says why.
+    NotRenamed,
 }
 
 /// [`FileTagger::move_in_out_out_of_name`] with the parse and save to use, and `stored`, which
@@ -328,18 +336,13 @@ pub(crate) fn move_name_in_out(
     stored: impl Fn(&Path) -> Segment,
     save: impl Fn(&FileSnapshot, &Path) -> PathBuf,
 ) -> NameInOutMove {
-    let left_alone = |problem: NameInOutProblem| NameInOutMove {
-        outcome: MoveOutcome::Failed(path.to_path_buf()),
-        kept_stored: None,
-        problem: Some(problem),
+    let left_alone = |problem: NameInOutProblem| NameInOutMove::Failed {
+        path: path.to_path_buf(),
+        problem,
     };
     let mut snapshot = parse(path);
     let Some(from_name) = snapshot.take_name_in_out() else {
-        return NameInOutMove {
-            outcome: MoveOutcome::NothingToMove,
-            kept_stored: None,
-            problem: None,
-        };
+        return NameInOutMove::NothingToMove;
     };
     if snapshot.name_without_extension().is_empty() {
         return left_alone(NameInOutProblem::NameWouldBeEmpty);
@@ -363,10 +366,12 @@ pub(crate) fn move_name_in_out(
     let kept = if stored.is_empty() { from_name } else { stored };
     snapshot.set_segment(kept);
     let saved_path = save(&snapshot, path);
-    NameInOutMove {
-        outcome: FileTagger::renamed(saved_path, path),
+    if saved_path == path {
+        return left_alone(NameInOutProblem::NotRenamed);
+    }
+    NameInOutMove::Moved {
+        path: saved_path,
         kept_stored: (!stored.is_empty()).then_some(KeptStored { from_name, stored }),
-        problem: None,
     }
 }
 
