@@ -238,7 +238,7 @@ impl UpdatesState {
     }
 
     /// Whether this is the Microsoft Store build, which the Store updates.
-    pub fn from_store(&self) -> bool {
+    pub fn is_store_build(&self) -> bool {
         self.from_store
     }
 
@@ -495,7 +495,7 @@ mod tests {
             },
         );
         state.from_store = true;
-        assert!(state.from_store());
+        assert!(state.is_store_build());
         assert!(matches!(state.apply(Message::Tick, 10 * DAY), Effect::None));
         assert!(matches!(state.apply(Message::CheckNow, 10), Effect::None));
         assert!(matches!(

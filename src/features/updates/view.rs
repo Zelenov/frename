@@ -17,7 +17,7 @@ pub fn view(state: &UpdatesState, batch_running: bool) -> Element<'_, Message> {
     ))
     .size(13);
     // The Store build has no updater of its own: nothing to check or to switch on.
-    if state.from_store() {
+    if state.is_store_build() {
         return column![
             version,
             text(fl!("updates-from-store"))
