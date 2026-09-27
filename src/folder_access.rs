@@ -72,7 +72,11 @@ mod sandbox {
         let resolved = unsafe {
             NSURL::URLByResolvingBookmarkData_options_relativeToURL_bookmarkDataIsStale_error(
                 &data,
-                NSURLBookmarkResolutionOptions::WithSecurityScope,
+                // Never a dialog or a network mount on the UI thread: an unplugged drive or share
+                // just fails.
+                NSURLBookmarkResolutionOptions::WithSecurityScope
+                    | NSURLBookmarkResolutionOptions::WithoutUI
+                    | NSURLBookmarkResolutionOptions::WithoutMounting,
                 None,
                 &mut stale,
             )

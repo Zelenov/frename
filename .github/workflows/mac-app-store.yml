@@ -79,6 +79,9 @@ jobs:
       - name: Import signing certificates and profile
         if: env.MAS_CERTIFICATES_P12 != ''
         run: |
+          for name in MAS_CERTIFICATES_PASSWORD MAS_PROVISIONING_PROFILE MAS_TEAM_ID; do
+            [ -n "${!name}" ] || { echo "::error::MAS_CERTIFICATES_P12 is set but $name is not (docs/mac-app-store-setup.md, step 7)"; exit 1; }
+          done
           keychain="$RUNNER_TEMP/mas.keychain-db"
           password="$(uuidgen)"
           security create-keychain -p "$password" "$keychain"
@@ -89,17 +92,18 @@ jobs:
           rm "$RUNNER_TEMP/mas.p12"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
-          # Certificates made before 2019 carry the older names.
+          # The SHA-1 of the first identity whose name starts with one of the given names
+          # (certificates made before 2019 carry the older names); codesign and productbuild take
+          # the hash, whatever characters the owner's name has.
           identity() {
+            local policy="$1"; shift
             for name in "$@"; do
-              if security find-certificate -c "$name" "$keychain" > /dev/null 2>&1; then
-                security find-certificate -c "$name" "$keychain" | sed -n 's/.*"alis"<blob>="\(.*\)"/\1/p' | head -1
-                return
-              fi
+              hash="$(security find-identity -v -p "$policy" "$keychain" | grep -F "\"$name:" | awk '{print $2}' | head -1)"
+              [ -n "$hash" ] && { echo "$hash"; return; }
             done
           }
-          app_identity="$(identity "Apple Distribution" "3rd Party Mac Developer Application")"
-          installer_identity="$(identity "Mac Installer Distribution" "3rd Party Mac Developer Installer")"
+          app_identity="$(identity codesigning "Apple Distribution" "3rd Party Mac Developer Application")"
+          installer_identity="$(identity basic "Mac Installer Distribution" "3rd Party Mac Developer Installer")"
           [ -n "$app_identity" ] || { echo "::error::No 'Apple Distribution' certificate in MAS_CERTIFICATES_P12"; exit 1; }
           [ -n "$installer_identity" ] || { echo "::error::No 'Mac Installer Distribution' certificate in MAS_CERTIFICATES_P12"; exit 1; }
           echo "App: $app_identity; installer: $installer_identity"
@@ -133,7 +137,7 @@ jobs:
       - name: Signing status
         if: always()
         run: |
-          if [ -n "$MAS_CERTIFICATES_P12" ]; then
+          if [ -f dist/frename.pkg ] && pkgutil --check-signature dist/frename.pkg > /dev/null; then
             echo "Mac App Store build $VERSION ($BUILD_NUMBER): signed for the App Store." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "Mac App Store build $VERSION ($BUILD_NUMBER): unsigned (MAS_* secrets not set; see docs/mac-app-store-setup.md)." >> "$GITHUB_STEP_SUMMARY"

@@ -38,8 +38,10 @@ pkgutil --payload-files "$pkg" | head -5
 sudo installer -pkg "$pkg" -target /
 [ -x "$exe" ] || { echo "The .pkg did not install $app" >&2; exit 1; }
 "$repo/packaging/macos/check-bundle.sh" "$app"
-sandbox="$(codesign --display --entitlements - --xml "$app" 2> /dev/null \
-  | plutil -extract com.apple.security.app-sandbox raw -o - - || true)"
+# PlistBuddy, not plutil: plutil reads the dots in the key as a key path.
+entitlements="$(mktemp)"
+codesign --display --entitlements - --xml "$app" > "$entitlements" 2> /dev/null
+sandbox="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.app-sandbox' "$entitlements" || true)"
 [ "$sandbox" = "true" ] || { echo "$app is not signed with the sandbox entitlement" >&2; exit 1; }
 
 echo "== 3. The sandbox is on"

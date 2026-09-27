@@ -449,12 +449,14 @@ impl FolderWorkspace {
 
     fn open_file(&mut self, path: PathBuf) -> Task<Message> {
         let Some(file) = self.directory.as_mut().and_then(|dir| dir.open_path(&path)) else {
+            let pair = FolderAndFile::new(path.parent().unwrap_or(&path), Some(path.clone()));
+            // Asked first, so a cancelled picker leaves the open file as it was.
+            if folder_access::refused(pair.folder()) {
+                return ask_folder_access(pair);
+            }
             self.file_workspace.set_file(None);
             self.pending_file_updated = None;
-            return Task::done(Message::ScanFolder(FolderAndFile::new(
-                path.parent().unwrap_or(&path),
-                Some(path.clone()),
-            )));
+            return Task::done(Message::ScanFolder(pair));
         };
         Task::done(Message::FileOpened(file))
     }

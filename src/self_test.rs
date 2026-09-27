@@ -58,7 +58,7 @@ pub fn run(paths: &[PathBuf]) -> i32 {
         return 1;
     }
     // The App Store build runs sandboxed: its keys must still reach the Keychain.
-    #[cfg(feature = "store")]
+    #[cfg(all(target_os = "macos", feature = "store"))]
     let store_failed = match frename_core::ai::key::check_credential_store() {
         Ok(()) => {
             log::info!("self-test: ok     credential store");
@@ -69,7 +69,7 @@ pub fn run(paths: &[PathBuf]) -> i32 {
             true
         }
     };
-    #[cfg(not(feature = "store"))]
+    #[cfg(not(all(target_os = "macos", feature = "store")))]
     let store_failed = false;
     let mut failed = 0;
     for video in &videos {
