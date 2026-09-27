@@ -1,4 +1,4 @@
-# NEXT
+# 0.75
 ## Changed
 - Images are no longer opened; frename works with video files only.
 
