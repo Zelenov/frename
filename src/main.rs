@@ -140,20 +140,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         pair
     });
 
-    // Settings of an older zip version: a scheduled import, or the first-start offer. Only a
-    // package has its data away from the exe, and a self-test or demo never asks anything.
-    if package.is_some() && self_test.is_none() && demo.is_none() {
-        old_settings_prompt::run(&data_dir);
-    }
     // The Store build's first start takes the installed version's settings and folder history.
-    if let Some(installed) = package::installed_data_dir_beside_store(&data_dir) {
-        if self_test.is_none() && demo.is_none() {
+    // Also under --self-test, so CI proves it inside the package; a demo has a folder of its own.
+    if let (Some(store), Some(installed)) =
+        (package::store_data_dir(), package::installed_data_dir())
+    {
+        if data_dir == store {
             match frename_core::old_settings::import_once_from(&data_dir, &installed) {
                 Ok(true) => log::info!("settings imported from {}", installed.display()),
                 Ok(false) => {}
                 Err(e) => log::warn!("settings not imported from {}: {e}", installed.display()),
             }
         }
+    }
+
+    // Settings of an older zip version: a scheduled import, or the first-start offer. Only a
+    // package or the Store build has its data away from the exe, and a self-test or demo never
+    // asks anything.
+    if package::keeps_data_away_from_exe(package.as_ref()) && self_test.is_none() && demo.is_none()
+    {
+        old_settings_prompt::run(&data_dir);
     }
 
     // Check GStreamer availability

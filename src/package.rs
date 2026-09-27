@@ -7,7 +7,7 @@
 //! Store installs and updates it, so it never runs Velopack's hooks or updater, and keeps its
 //! files in `%LocalAppData%\frename-store` (docs/design/microsoft-store.md).
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::OnceLock;
 
 /// Built for the Microsoft Store: the Store installs and updates frename, Velopack does nothing.
@@ -152,18 +152,19 @@ pub fn store_data_dir() -> Option<PathBuf> {
 
 const STORE_DATA_FOLDER: &str = "frename-store";
 
-/// The installed version's data folder next to the Store build's `data_dir`, whose settings the
-/// Store build takes on its first start. `None` unless `data_dir` is the Store build's folder.
-pub fn installed_data_dir_beside_store(data_dir: &Path) -> Option<PathBuf> {
-    if !STORE_BUILD || data_dir.file_name()? != STORE_DATA_FOLDER {
-        return None;
-    }
-    installed_data_dir_beside(data_dir)
+/// The installed version's data folder, `%LocalAppData%\frename`, whose settings the Store build
+/// takes on its first start. `None` for other builds.
+pub fn installed_data_dir() -> Option<PathBuf> {
+    STORE_BUILD
+        .then(dirs::data_local_dir)
+        .flatten()
+        .map(|local| local.join("frename"))
 }
 
-/// `%LocalAppData%\frename` for `%LocalAppData%\frename-store`.
-fn installed_data_dir_beside(store_dir: &Path) -> Option<PathBuf> {
-    Some(store_dir.parent()?.join("frename"))
+/// Whether frename keeps its data away from the exe (a Velopack package or the Store build), so
+/// settings of an older zip version next to some exe can be imported.
+pub fn keeps_data_away_from_exe(package: Option<&Package>) -> bool {
+    package.is_some() || STORE_BUILD
 }
 
 /// The running version as the UI shows it: `0.68`, not Velopack's `0.68.0`. Packaged builds know
@@ -210,24 +211,23 @@ mod tests {
 
     #[test]
     fn the_store_build_keeps_its_own_folder_next_to_the_installed_versions() {
-        let local = PathBuf::from("C:/Users/me/AppData/Local");
-        let store = local.join(STORE_DATA_FOLDER);
-        assert_eq!(
-            installed_data_dir_beside(&store),
-            Some(local.join("frename"))
-        );
+        let local = dirs::data_local_dir().filter(|_| STORE_BUILD);
         assert_eq!(
             store_data_dir(),
-            dirs::data_local_dir()
-                .filter(|_| STORE_BUILD)
-                .map(|l| l.join("frename-store"))
+            local.as_ref().map(|l| l.join("frename-store"))
         );
-        // Only the Store build, and only from its own folder (not a demo's or FRENAME_DATA_DIR's).
-        assert_eq!(
-            installed_data_dir_beside_store(&store).is_some(),
-            STORE_BUILD
-        );
-        assert_eq!(installed_data_dir_beside_store(&local.join("demo")), None);
+        assert_eq!(installed_data_dir(), local.map(|l| l.join("frename")));
+    }
+
+    #[test]
+    fn a_package_or_the_store_build_keeps_its_data_away_from_the_exe() {
+        let package = Package {
+            root: PathBuf::from("root"),
+            portable: false,
+            version: "0.70.0".to_string(),
+        };
+        assert!(keeps_data_away_from_exe(Some(&package)));
+        assert_eq!(keeps_data_away_from_exe(None), STORE_BUILD);
     }
 
     #[test]
