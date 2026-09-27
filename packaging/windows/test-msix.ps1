@@ -9,7 +9,8 @@
 #    frename's self-test on tests/media inside the package, through its `frename.exe` alias,
 #    which must also copy the installed version's settings (a database made for the test);
 # 4. uninstalls it and runs the Windows App Certification Kit on it, writing its report to
-#    -Report; a FAIL fails the script. Where the kit is not installed, says so and skips it;
+#    -Report; anything but PASS or WARNING fails the script. Where the kit is not installed,
+#    says so and skips it;
 # 5. removes the package and the throwaway certificate again, also after a failure.
 # Run from the repository root (for tests/media), as administrator, in Windows PowerShell
 # (powershell.exe, not pwsh). Exits non-zero on the first failure.
@@ -61,6 +62,7 @@ $cert = New-SelfSignedCertificate -Type Custom -Subject $identity.Publisher `
 # The throwaway certificate must not stay trusted on the machine, whatever happens below.
 $overall = $null
 $seededDir = $null
+$seededDb = $null
 $pfx = Join-Path $work "test-signing.pfx"
 $cer = Join-Path $work "test-signing.cer"
 try {
@@ -95,7 +97,11 @@ try {
     if (!(Test-Path $installedDb)) {
         $python = Get-Command python -ErrorAction SilentlyContinue
         if ($python) {
+            # Only what this script makes is removed afterwards: the folder if it was not there
+            # (an installed frename that never started has it without a database).
+            if (!(Test-Path $installedDir)) { $seededDir = $installedDir }
             New-Item -ItemType Directory -Path $installedDir -Force | Out-Null
+            $seededDb = $installedDb
             $seed = Join-Path $work "seed.py"
             Set-Content $seed @'
 import sqlite3, sys
@@ -108,7 +114,6 @@ db.close()
 '@
             & $python.Source $seed $installedDb
             if ($LASTEXITCODE -ne 0) { throw "Could not create $installedDb" }
-            $seededDir = $installedDir
         } elseif ($env:GITHUB_ACTIONS) {
             throw "No python on this runner to make an installed version's database"
         } else {
@@ -181,7 +186,16 @@ db.close()
     Remove-Item "Cert:\LocalMachine\TrustedPeople\$($cert.Thumbprint)" -ErrorAction SilentlyContinue
     Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)" -DeleteKey -ErrorAction SilentlyContinue
     Remove-Item $pfx, $cer -ErrorAction SilentlyContinue
-    if ($seededDir) { Remove-Item $seededDir -Recurse -Force -ErrorAction SilentlyContinue }
+    if ($seededDir) {
+        Remove-Item $seededDir -Recurse -Force -ErrorAction SilentlyContinue
+    } elseif ($seededDb) {
+        foreach ($suffix in @("", "-wal", "-shm")) {
+            Remove-Item "$seededDb$suffix" -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
-if ($overall -eq "FAIL") { throw "The Windows App Certification Kit failed the package" }
+# Only a report that says it passed counts: no result at all (a crashed kit) fails too.
+if ($appcert -and $overall -notin @("PASS", "WARNING")) {
+    throw "The Windows App Certification Kit did not pass the package (overall result: '$overall')"
+}
 Write-Host "All Store package tests passed."

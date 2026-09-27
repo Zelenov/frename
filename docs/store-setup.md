@@ -224,6 +224,7 @@ On a Windows 10/11 machine, ideally one where frename was never installed:
 6. Uninstall from Start → right-click frename → **Uninstall**. The key entry remains in
    Credential Manager (remove it there, or in Settings before uninstalling).
 
-If anything fails, **hand it back** with what you saw. Once the Store version works, **hand it
+If anything fails, **hand it back** with what you saw (if it is the key in Credential Manager,
+the agent also corrects the privacy policy). Once the Store version works, **hand it
 back** with "it's live" and the Store link: the agent then updates README.md (install from the
 Store) and `version.md`, as the issue asks, and closes #51 with that PR.

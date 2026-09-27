@@ -185,6 +185,9 @@ jobs:
       - name: Test
         run: cargo test --workspace --locked
 
+      - name: Test (Store build)
+        run: cargo test --locked -p frename --features store
+
       - name: Build release
         run: cargo build --release --locked
 

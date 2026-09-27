@@ -65,8 +65,9 @@ The results (descriptions, markers, subtitles) are written back to your files on
 
 ## Children
 
-frename is a general-purpose tool, not directed at children, and collects no personal information
-from anyone.
+frename is a general-purpose tool, not directed at children. The developer collects no personal
+information from anyone; the two optional actions above send data only to the service they use,
+with your key.
 
 ## Removing your data
 
