@@ -277,9 +277,9 @@ fn cue_list_button<'a>(shown: bool) -> Element<'a, Message> {
         .padding(0)
         .style(theme::icon_button_style(true)),
         text(if shown {
-            "Hide subtitle list"
+            fl!("media-viewer-video-hide-subtitles")
         } else {
-            "Show subtitle list"
+            fl!("media-viewer-video-show-subtitles")
         }),
         tooltip::Position::Top,
     )
@@ -303,7 +303,7 @@ fn marker_list_button<'a>(shown: bool) -> Element<'a, Message> {
         .height(CONTROLS_HEIGHT)
         .padding(0)
         .style(theme::icon_button_style(true)),
-        text("Markers (Shift+F1 / Shift+F3 to jump, Shift+drag to snap)"),
+        text(fl!("media-viewer-video-markers-hint")),
         tooltip::Position::Top,
     )
     .into()
@@ -312,7 +312,7 @@ fn marker_list_button<'a>(shown: bool) -> Element<'a, Message> {
 /// `Subtitles` and `Markers` tabs over the side list, `active` lit.
 fn overlay_tabs<'a>(active: Overlay) -> Element<'a, Message> {
     // Each tab leads with the icon of its button in the controls bar.
-    let tab = |icon: &'a str, label: &'a str, overlay: Overlay| {
+    let tab = |icon: &'a str, label: String, overlay: Overlay| {
         button(
             row![text(icon).size(11), text(label).size(12)]
                 .spacing(6)
@@ -323,8 +323,12 @@ fn overlay_tabs<'a>(active: Overlay) -> Element<'a, Message> {
         .style(theme::overlay_tab_style(active == overlay))
     };
     row![
-        tab("CC", "Subtitles", Overlay::Subtitles),
-        tab("◆", "Markers", Overlay::Markers)
+        tab(
+            "CC",
+            fl!("folder-controls-filter-subtitles"),
+            Overlay::Subtitles
+        ),
+        tab("◆", fl!("folder-controls-filter-markers"), Overlay::Markers)
     ]
     .spacing(4)
     .padding([6, 12])

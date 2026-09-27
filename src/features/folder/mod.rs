@@ -24,5 +24,27 @@ pub struct InlineRename {
     /// The name as typed so far: the whole file name, extension included.
     pub text: String,
     /// Why the last Enter was refused; cleared by the next edit.
-    pub error: Option<&'static str>,
+    pub error: Option<RenameProblem>,
+}
+
+/// Why a typed file name was refused. State holds the meaning; the view holds the words
+/// (`fl!`), so a language switch redraws it without recomputing anything.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RenameProblem {
+    Empty,
+    BadCharacter,
+    Trailing,
+    Exists,
+}
+
+impl RenameProblem {
+    /// The message this problem shows to the user.
+    pub fn text(self) -> String {
+        match self {
+            Self::Empty => crate::fl!("folder-rename-error-empty"),
+            Self::BadCharacter => crate::fl!("folder-rename-error-bad-character"),
+            Self::Trailing => crate::fl!("folder-rename-error-trailing"),
+            Self::Exists => crate::fl!("folder-rename-error-exists"),
+        }
+    }
 }

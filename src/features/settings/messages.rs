@@ -14,6 +14,8 @@ use crate::features::updates;
 /// Save.
 #[derive(Debug, Clone)]
 pub enum Message {
+    /// The UI language code (`en`, `ru`); empty follows the OS language.
+    SetUiLanguage(String),
     /// Start playing videos as soon as they are opened.
     SetAutoplayVideo(bool),
     /// Draw every tag in one neutral color.

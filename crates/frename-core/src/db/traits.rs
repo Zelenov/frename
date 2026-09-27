@@ -71,6 +71,9 @@ pub struct AppSettings {
     pub subtitle_languages: Vec<String>,
     /// How long generated subtitle cues may get. Defaults to short.
     pub subtitle_cue_length: CueLength,
+    /// UI language code (`en`, `ru`); empty follows the OS language. Defaults to empty. Core
+    /// only stores it; the UI owns the supported languages.
+    pub ui_language: String,
 }
 
 impl Default for AppSettings {
@@ -91,6 +94,7 @@ impl Default for AppSettings {
                 .map(|code| code.to_string())
                 .collect(),
             subtitle_cue_length: CueLength::default(),
+            ui_language: String::new(),
         }
     }
 }

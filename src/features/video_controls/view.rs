@@ -80,7 +80,7 @@ pub fn view(
         .height(iced::Length::Fill)
         .padding(0)
         .style(theme::icon_button_style(true)),
-        text("[  Set In"),
+        text(fl!("video-controls-set-in")),
         tooltip::Position::Top,
     )
     .into();
@@ -96,7 +96,7 @@ pub fn view(
         .height(iced::Length::Fill)
         .padding(0)
         .style(theme::icon_button_style(true)),
-        text("]  Set Out"),
+        text(fl!("video-controls-set-out")),
         tooltip::Position::Top,
     )
     .into();
@@ -125,7 +125,7 @@ pub fn view(
         .height(iced::Length::Fill)
         .padding(0)
         .style(theme::icon_button_style(true)),
-        text("Save this frame as a JPEG (F12)"),
+        text(fl!("video-controls-screenshot")),
         tooltip::Position::Top,
     )
     .into();
@@ -163,9 +163,9 @@ pub fn view(
             theme::icon_button_style(can_add_markers)(t, status)
         }),
         text(if can_add_markers {
-            "Add marker (F2, hold for a range; again to name it)"
+            fl!("video-controls-add-marker")
         } else {
-            "This file cannot hold markers"
+            fl!("video-controls-cannot-hold-markers")
         }),
         tooltip::Position::Top,
     )
@@ -258,7 +258,9 @@ fn fit_label(name: &str, width: f32) -> String {
 /// marker list with the name field focused.
 fn marker_label_button(label: MarkerLabel<'_>) -> Element<'_, Message> {
     let name = if label.name.trim().is_empty() {
-        text("Add a name").size(12).color(theme::TEXT_MUTED)
+        text(fl!("video-controls-add-a-name"))
+            .size(12)
+            .color(theme::TEXT_MUTED)
     } else {
         let fitted = match label.right_edge {
             Some(width) => fit_label(label.name, width),

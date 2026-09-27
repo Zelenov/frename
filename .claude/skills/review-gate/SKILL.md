@@ -32,7 +32,7 @@ Code PR — all three, every round:
    Keyboard flow, discoverability, consistency with existing UI, README and `version.md` text
    (short, user language, per `readme` skill). For UI changes it looks at the screenshots and checks that
    the PR body shows every screen the change touches (a missing or wrong screenshot is a `major`
-   finding).
+   finding). New UI text has keys in every shipped language.
 
 Design doc (advisory only, one round, never blocks; see `nightly` step 3) — reviewers 2 and 3, judging the design: missing flows, edge cases, simpler
 alternatives, feasibility (is every format/API claim sourced?).

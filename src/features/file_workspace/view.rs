@@ -88,7 +88,7 @@ where
     let comment_scroll = responsive(move |size| {
         let comment_editor = text_editor_widget(&file_workspace.comment_content)
             .on_action(Message::CommentAction)
-            .placeholder("Comment...")
+            .placeholder(fl!("file-workspace-comment-placeholder"))
             .height(Length::Shrink)
             .min_height(size.height)
             // Room on the right for the expand button over the box's corner.
@@ -123,9 +123,9 @@ where
             .padding([0, 4])
             .style(theme::icon_button_style(true)),
         text(if expanded {
-            "Back to the tags"
+            fl!("file-workspace-comment-collapse")
         } else {
-            "Expand the comment"
+            fl!("file-workspace-comment-expand")
         })
         .size(12),
         tooltip::Position::Left,

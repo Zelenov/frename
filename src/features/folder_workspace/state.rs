@@ -2004,21 +2004,21 @@ fn check_new_file_name(
     folder: &std::path::Path,
     current: &str,
     typed: &str,
-) -> Result<(), &'static str> {
+) -> Result<(), folder::RenameProblem> {
     if typed.is_empty() {
-        return Err("Name is empty");
+        return Err(folder::RenameProblem::Empty);
     }
     if typed.chars().any(|c| {
         matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || c.is_control()
     }) {
-        return Err("Not allowed: \\ / : * ? \" < > |");
+        return Err(folder::RenameProblem::BadCharacter);
     }
     if typed.ends_with('.') || typed.ends_with(' ') {
-        return Err("Cannot end with a dot or space");
+        return Err(folder::RenameProblem::Trailing);
     }
     // A change of case only is the same file on Windows, not a clash.
     if !typed.eq_ignore_ascii_case(current) && folder.join(typed).exists() {
-        return Err("A file with this name exists");
+        return Err(folder::RenameProblem::Exists);
     }
     Ok(())
 }

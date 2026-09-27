@@ -31,7 +31,7 @@ pub fn view(
         .height(iced::Length::Fill)
         .padding(0)
         .style(theme::icon_button_style(has_previous)),
-        text("Page Up"),
+        text("Page Up"), // key name, as printed on the key
         iced::widget::tooltip::Position::Top,
     )
     .into();
@@ -63,7 +63,7 @@ pub fn view(
         .height(iced::Length::Fill)
         .padding(0)
         .style(theme::icon_button_style(has_selected)),
-        text("Scroll to file"),
+        text(fl!("folder-controls-scroll")),
         iced::widget::tooltip::Position::Top,
     )
     .into();
@@ -79,7 +79,7 @@ pub fn view(
         .height(iced::Length::Fill)
         .padding(0)
         .style(theme::icon_button_style(true)),
-        text("Open file"),
+        text(fl!("folder-controls-open")),
         iced::widget::tooltip::Position::Top,
     )
     .into();
@@ -98,9 +98,9 @@ pub fn view(
         match update_available {
             Some(version) => (
                 iced::widget::stack![settings_button, update_dot()].into(),
-                format!("Update available: {version}"),
+                fl!("folder-controls-update-available", version = version),
             ),
-            None => (settings_button.into(), "Settings".to_string()),
+            None => (settings_button.into(), fl!("folder-controls-settings")),
         };
     let settings_btn: Element<'_, folder::Message> = tooltip(
         settings_face,
@@ -110,9 +110,9 @@ pub fn view(
     .into();
 
     let batch_hint = if batch_mode {
-        "Back to the open file"
+        fl!("folder-controls-batch-back")
     } else {
-        "Batch actions on checked files"
+        fl!("folder-controls-batch")
     };
     let batch_btn: Element<'_, folder::Message> = tooltip(
         button(

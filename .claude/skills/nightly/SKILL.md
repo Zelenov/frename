@@ -298,5 +298,6 @@ PRs and release notes.
 ## Language
 
 Everything on GitHub and in the repository is English: issues, PRs, comments, commits, docs,
-README, release notes. Other languages appear only as test data (e.g. localization or Cyrillic
-file-name tests).
+README, release notes. Exception: translations in `i18n/<lang>/*.ftl`, and non-English examples
+in `docs/design/localization.md`. Other languages otherwise appear only as test data (e.g.
+localization or Cyrillic file-name tests).

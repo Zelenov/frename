@@ -180,7 +180,7 @@ impl AppStateStore for AppDatabase {
         conn.query_row(
             "SELECT autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled,
                     space_after_tags, summary_language, ai_model, subtitle_languages, subtitle_cue_length,
-                    marker_storage
+                    marker_storage, ui_language
              FROM app_settings WHERE id = 1",
             [],
             |row| Ok(AppSettings {
@@ -201,6 +201,7 @@ impl AppStateStore for AppDatabase {
                     .collect(),
                 subtitle_cue_length: CueLength::from_name(&row.get::<_, String>(10)?),
                 marker_storage: MarkerStorage::from_name(&row.get::<_, String>(11)?),
+                ui_language: row.get::<_, String>(12)?,
             }),
         ).ok()
     }
@@ -210,8 +211,8 @@ impl AppStateStore for AppDatabase {
             let conn = lock_connection(&conn);
             let _ = conn.execute(
                 "INSERT INTO app_settings (id, autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled, space_after_tags, summary_language, ai_model,
-                                           subtitle_languages, subtitle_cue_length, marker_storage)
-                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                                           subtitle_languages, subtitle_cue_length, marker_storage, ui_language)
+                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
                  ON CONFLICT(id) DO UPDATE SET
                      autoplay_video = excluded.autoplay_video,
                      monochrome_tags = excluded.monochrome_tags,
@@ -224,7 +225,8 @@ impl AppStateStore for AppDatabase {
                      ai_model = excluded.ai_model,
                      subtitle_languages = excluded.subtitle_languages,
                      subtitle_cue_length = excluded.subtitle_cue_length,
-                     marker_storage = excluded.marker_storage",
+                     marker_storage = excluded.marker_storage,
+                     ui_language = excluded.ui_language",
                 rusqlite::params![
                     settings.autoplay_video,
                     settings.monochrome_tags,
@@ -238,6 +240,7 @@ impl AppStateStore for AppDatabase {
                     settings.subtitle_languages.join(","),
                     settings.subtitle_cue_length.as_str(),
                     settings.marker_storage.as_str(),
+                    settings.ui_language,
                 ],
             );
         }
@@ -361,6 +364,21 @@ mod tests {
 
         // No language checked: detect automatically.
         settings.subtitle_languages.clear();
+        db.set_app_settings(settings.clone());
+        assert_eq!(db.get_app_settings(), Some(settings));
+    }
+
+    #[test]
+    fn app_settings_round_trip_with_the_ui_language() {
+        let path =
+            std::env::temp_dir().join(format!("frename-ui-language-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let db = AppDatabase::with_path(&path);
+        db.initialize().expect("migrate");
+
+        let mut settings = AppSettings::default();
+        assert_eq!(settings.ui_language, "", "System by default");
+        settings.ui_language = "ru".to_string();
         db.set_app_settings(settings.clone());
         assert_eq!(db.get_app_settings(), Some(settings));
     }

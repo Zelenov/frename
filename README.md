@@ -236,6 +236,8 @@ Subtitles. Formats such as mkv, m2ts and avi need [ffmpeg](https://ffmpeg.org) o
 
 The ⚙ button opens Settings:
 
+- the UI language: follows your system by default, or pick English or Russian (more languages
+  are on the way);
 - play videos automatically when opened;
 - draw all tags in one neutral color;
 - put a space after each tag in file names (`Food. Goat. clip.mp4`);

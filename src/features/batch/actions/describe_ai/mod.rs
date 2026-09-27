@@ -22,7 +22,9 @@ use super::super::{ItemProgress, ItemResult, ItemStatus};
 use super::ActionMessage;
 use crate::theme;
 
-pub const LABEL: &str = "Describe with AI";
+pub fn label() -> String {
+    fl!("batch-action-describe-ai")
+}
 
 /// Clip lengths read at once in the background.
 const PROBES_AT_ONCE: usize = 4;
@@ -192,7 +194,10 @@ impl Options {
     /// (`Describe 12 videos` once the estimate and the key are known). The plan is made once.
     pub fn panel(&self, checked: &[&File]) -> (Element<'_, ActionMessage>, String, bool) {
         let plan = self.plan(checked);
-        let label = format!("Describe {}", videos(plan.send.len()));
+        let label = fl!(
+            "batch-action-describe-ai-run",
+            videos = videos(plan.send.len())
+        );
         let ready = !plan.estimating && !plan.send.is_empty() && self.key == Some(KeyState::Saved);
         (self.view(&plan), label, ready)
     }
@@ -202,27 +207,32 @@ impl Options {
         let muted = |line: String| text(line).size(12).color(theme::TEXT_MUTED);
         if plan.estimating {
             let known = plan.probed + plan.described;
-            lines =
-                lines.push(text(format!("Estimating… {known} / {}", plan.checked_videos)).size(13));
+            lines = lines.push(
+                text(fl!(
+                    "batch-action-describe-ai-estimating",
+                    known = (known as i64),
+                    total = (plan.checked_videos as i64)
+                ))
+                .size(13),
+            );
         } else {
             if plan.send.is_empty() {
-                lines = lines.push(text("No videos to describe.").size(13));
+                lines = lines.push(text(fl!("batch-action-describe-ai-none")).size(13));
             } else {
                 lines = lines
                     .push(
-                        text(format!(
-                            "{}, {} · about {} with {}",
-                            videos(plan.send.len()),
-                            minutes(plan.seconds),
-                            dollars(self.model.cost_usd(plan.usage)),
-                            self.model.label
+                        text(fl!(
+                            "batch-action-describe-ai-plan",
+                            videos = videos(plan.send.len()),
+                            minutes = minutes(plan.seconds),
+                            dollars = dollars(self.model.cost_usd(plan.usage)),
+                            model = self.model.label
                         ))
                         .size(13),
                     )
-                    .push(muted(format!(
-                        "Takes about {}. The folder is locked until it ends. Cancel keeps the \
-                         videos already described; running it again skips them.",
-                        duration_text(plan.run_seconds)
+                    .push(muted(fl!(
+                        "batch-action-describe-ai-hint",
+                        duration = duration_text(plan.run_seconds)
                     )));
             }
             // Also when nothing is sent: it says why.
@@ -230,9 +240,9 @@ impl Options {
                 lines = lines.push(muted(skipped));
             }
             if plan.no_subtitles > 0 {
-                lines = lines.push(muted(format!(
-                    "Without subtitles (only the picture is described): {}.",
-                    videos(plan.no_subtitles)
+                lines = lines.push(muted(fl!(
+                    "batch-action-describe-ai-no-subtitles",
+                    videos = videos(plan.no_subtitles)
                 )));
             }
         }
@@ -243,23 +253,20 @@ impl Options {
                         .size(12)
                         .color(theme::TEXT_MUTED)
                         .width(Length::Fill),
-                    link_button("Change", ActionMessage::OpenAiSettings),
+                    link_button(fl!("batch-ai-change"), ActionMessage::OpenAiSettings),
                 ]
                 .spacing(8)
                 .align_y(iced::Alignment::Center),
             )
             .push(
                 checkbox(self.redo)
-                    .label("Redo videos that already have an AI description")
+                    .label(fl!("batch-action-describe-ai-redo"))
                     .text_size(13)
                     .on_toggle(|redo| ActionMessage::DescribeAi(Message::SetRedo(redo))),
             );
         super::panel(
-            LABEL,
-            "Describes what happens in each checked video, and when: a summary and time-ranged \
-             segments go into the AI description of its comment; your own text is kept. Frames \
-             and subtitles are sent to Anthropic."
-                .to_string(),
+            label(),
+            fl!("batch-action-describe-ai-hint-panel"),
             lines.into(),
         )
     }
@@ -269,11 +276,11 @@ impl Options {
         match self.key {
             Some(KeyState::Missing) => Some(
                 row![
-                    text("Set an Anthropic API key in Settings")
+                    text(fl!("batch-ai-key-missing"))
                         .size(13)
                         .color(theme::ERROR)
                         .width(Length::Fill),
-                    link_button("Open Settings", ActionMessage::OpenAiSettings),
+                    link_button(fl!("batch-ai-open-settings"), ActionMessage::OpenAiSettings),
                 ]
                 .spacing(8)
                 .align_y(iced::Alignment::Center)
@@ -281,15 +288,12 @@ impl Options {
             ),
             Some(KeyState::Unavailable) => Some(
                 row![
-                    text(
-                        "The system keyring could not be opened: it may be locked, or there is \
-                         none (such as GNOME Keyring or KWallet)."
-                    )
-                    .size(13)
-                    .color(theme::ERROR)
-                    .width(Length::Fill),
+                    text(fl!("batch-ai-key-unavailable"))
+                        .size(13)
+                        .color(theme::ERROR)
+                        .width(Length::Fill),
                     // Opening the settings reads the key's state again.
-                    link_button("Open Settings", ActionMessage::OpenAiSettings),
+                    link_button(fl!("batch-ai-open-settings"), ActionMessage::OpenAiSettings),
                 ]
                 .spacing(8)
                 .align_y(iced::Alignment::Center)
@@ -300,7 +304,7 @@ impl Options {
     }
 }
 
-fn link_button(label: &str, message: ActionMessage) -> Element<'_, ActionMessage> {
+fn link_button(label: String, message: ActionMessage) -> Element<'static, ActionMessage> {
     button(text(label).size(12))
         .on_press(message)
         .padding([3, 10])
@@ -332,48 +336,39 @@ struct Plan {
 impl Plan {
     /// `Skipped: 3 already described, 1 over 30 min, 200 photos.`
     fn skipped_line(&self) -> Option<String> {
-        let parts: Vec<String> = [
-            (self.described, "already described".to_string()),
-            (self.too_long, "over 30 min".to_string()),
-            (
-                self.not_videos,
-                if self.not_videos == 1 {
-                    "photo"
-                } else {
-                    "photos"
-                }
-                .to_string(),
-            ),
-            (self.unreadable, "unreadable".to_string()),
-        ]
-        .into_iter()
-        .filter(|(n, _)| *n > 0)
-        .map(|(n, what)| format!("{n} {what}"))
-        .collect();
-        (!parts.is_empty()).then(|| format!("Skipped: {}.", parts.join(", ")))
+        let parts: Vec<Option<String>> = vec![
+            (self.described > 0)
+                .then(|| format!("{} {}", self.described, fl!("batch-ai-skip-described"))),
+            (self.too_long > 0)
+                .then(|| format!("{} {}", self.too_long, fl!("batch-ai-skip-too-long"))),
+            (self.not_videos > 0)
+                .then(|| fl!("batch-ai-skip-photos", n = (self.not_videos as i64))),
+            (self.unreadable > 0)
+                .then(|| format!("{} {}", self.unreadable, fl!("batch-ai-skip-unreadable"))),
+        ];
+        let parts: Vec<String> = parts.into_iter().flatten().collect();
+        (!parts.is_empty()).then(|| fl!("batch-ai-skipped", parts = parts.join(", ")))
     }
 }
 
 /// "12 videos" / "1 video".
 fn videos(n: usize) -> String {
-    format!("{n} {}", if n == 1 { "video" } else { "videos" })
+    fl!("batch-videos-count", n = (n as i64))
 }
 
 /// "38 min", or "< 1 min".
 fn minutes(seconds: f64) -> String {
     match (seconds / 60.0).round() as u64 {
-        0 if seconds > 0.0 => "< 1 min".to_string(),
-        n => format!("{n} min"),
+        0 if seconds > 0.0 => fl!("batch-ai-minutes-under"),
+        n => fl!("batch-minutes", n = (n as i64)),
     }
 }
 
 /// "Descriptions in Russian", or in the subtitles' language.
 fn language_line(language: SummaryLanguage) -> String {
     match language {
-        SummaryLanguage::SameAsSubtitles => {
-            "Descriptions in the subtitles' language (English if none)".to_string()
-        }
-        language => format!("Descriptions in {language}"),
+        SummaryLanguage::SameAsSubtitles => fl!("batch-ai-language-same-as-subtitles"),
+        language => fl!("batch-ai-language", language = language.to_string()),
     }
 }
 
@@ -381,17 +376,21 @@ fn language_line(language: SummaryLanguage) -> String {
 fn duration_text(seconds: f64) -> String {
     let minutes = (seconds / 60.0).round() as u64;
     match minutes {
-        0 => "under a minute".to_string(),
-        m if m < 60 => format!("{m} min"),
-        m if m % 60 == 0 => format!("{} h", m / 60),
-        m => format!("{} h {} min", m / 60, m % 60),
+        0 => fl!("batch-ai-duration-under-minute"),
+        m if m < 60 => fl!("batch-minutes", n = (m as i64)),
+        m if m % 60 == 0 => fl!("batch-ai-duration-hours", h = ((m / 60) as i64)),
+        m => fl!(
+            "batch-ai-duration-hours-minutes",
+            h = ((m / 60) as i64),
+            m = ((m % 60) as i64)
+        ),
     }
 }
 
 /// "$0.35", "under $0.01".
 pub fn dollars(usd: f64) -> String {
     if usd > 0.0 && usd < 0.01 {
-        "under $0.01".to_string()
+        fl!("batch-ai-dollars-under")
     } else {
         format!("${usd:.2}")
     }
@@ -458,8 +457,8 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
     // Removed in the settings while the job runs: every later video would fail the same way.
     let Some(api_key) = key::read_key(key::ApiKey::Anthropic) else {
         return ItemResult {
-            stop_job: Some("Stopped: no Anthropic API key. Set one in Settings.".to_string()),
-            ..ItemResult::failed("No API key")
+            stop_job: Some(fl!("batch-ai-stop-no-key")),
+            ..ItemResult::failed(fl!("batch-ai-fail-no-key"))
         };
     };
     // A debug build renames in memory only: the clip and its subtitles are read by the name on disk.
@@ -488,14 +487,18 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
                     asked_at = (sampling_s / (sampling_s + SECONDS_PER_REQUEST)) as f32;
                     progress.set(
                         asked_at * done as f32 / total.max(1) as f32,
-                        format!("frame {} of {total}", done + 1),
+                        fl!(
+                            "batch-ai-progress-frame",
+                            done = ((done + 1) as i64),
+                            total = (total as i64)
+                        ),
                     );
                 }
                 Stage::Asking => progress.creep(
                     asked_at,
                     0.97,
                     std::time::Duration::from_secs_f64(SECONDS_PER_REQUEST),
-                    "waiting for Claude",
+                    fl!("batch-ai-progress-waiting"),
                 ),
             },
         );
@@ -505,7 +508,7 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
         Err(describe::Error::TooLong(_)) => return ItemResult::new(ItemStatus::Skipped, None),
         Err(describe::Error::Unreadable(e)) => {
             log::warn!("ai: cannot read {}: {e}", path.display());
-            return ItemResult::failed("Video could not be read");
+            return ItemResult::failed(fl!("batch-ai-fail-unreadable"));
         }
         Err(describe::Error::Ai(e)) => return ai_failed(e),
         Err(describe::Error::BadAnswer { reason, usage }) => {
@@ -516,7 +519,7 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
         }
     };
     let usage = Some(described.usage);
-    progress.set(0.98, "saving");
+    progress.set(0.98, fl!("batch-ai-progress-saving"));
     let new_block = match frename_core::marker_storage() {
         MarkerStorage::Comment => block::format_block(&described.description),
         MarkerStorage::InVideo => {
@@ -552,7 +555,7 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
         return ItemResult {
             usage,
             update: Some((new_path, saved)),
-            ..ItemResult::failed("The description could not be saved")
+            ..ItemResult::failed(fl!("batch-ai-fail-not-saved"))
         };
     }
     // A cancel that came while the answer was on its way still leaves this video done.
@@ -572,9 +575,7 @@ fn ai_failed(error: AiError) -> ItemResult {
         usage_unknown: error == AiError::Timeout,
         out_of_credit: error == AiError::OutOfCredit,
         stop_job: error.stops_job(),
-        stop_if_repeated: offline.then(|| {
-            "Stopped: no connection to Anthropic. Run it again to describe the rest.".to_string()
-        }),
+        stop_if_repeated: offline.then(|| fl!("batch-ai-stop-offline")),
         ..ItemResult::failed(error.reason())
     }
 }
@@ -638,8 +639,17 @@ mod tests {
             (1, 1, 1, 1, 1)
         );
         assert_eq!(
-            plan.skipped_line().as_deref(),
-            Some("Skipped: 1 already described, 1 over 30 min, 1 photo, 1 unreadable.")
+            plan.skipped_line(),
+            Some(fl!(
+                "batch-ai-skipped",
+                parts = format!(
+                    "1 {}, 1 {}, {}, 1 {}",
+                    fl!("batch-ai-skip-described"),
+                    fl!("batch-ai-skip-too-long"),
+                    fl!("batch-ai-skip-photos", n = 1),
+                    fl!("batch-ai-skip-unreadable"),
+                )
+            ))
         );
         assert_eq!(plan.no_subtitles, 1);
 
@@ -684,7 +694,10 @@ mod tests {
         options.update(Message::Probed(vec![(files[0].id(), probe(Some(10.0)))]));
         assert_eq!(
             run_button(&options, &checked),
-            ("Describe 1 video".to_string(), false),
+            (
+                fl!("batch-action-describe-ai-run", videos = videos(1)),
+                false
+            ),
             "key not read yet"
         );
         assert!(options.request_key_state(), "asked once");
@@ -698,13 +711,16 @@ mod tests {
     #[test]
     fn money_and_minutes_read_short() {
         assert_eq!(dollars(0.347), "$0.35");
-        assert_eq!(dollars(0.001), "under $0.01");
+        assert_eq!(dollars(0.001), fl!("batch-ai-dollars-under"));
         assert_eq!(dollars(0.0), "$0.00");
-        assert_eq!(minutes(20.0), "< 1 min");
-        assert_eq!(minutes(38.0 * 60.0), "38 min");
-        assert_eq!(duration_text(20.0), "under a minute");
-        assert_eq!(duration_text(25.0 * 60.0), "25 min");
-        assert_eq!(duration_text(130.0 * 60.0), "2 h 10 min");
+        assert_eq!(minutes(20.0), fl!("batch-ai-minutes-under"));
+        assert_eq!(minutes(38.0 * 60.0), fl!("batch-minutes", n = 38));
+        assert_eq!(duration_text(20.0), fl!("batch-ai-duration-under-minute"));
+        assert_eq!(duration_text(25.0 * 60.0), fl!("batch-minutes", n = 25));
+        assert_eq!(
+            duration_text(130.0 * 60.0),
+            fl!("batch-ai-duration-hours-minutes", h = 2, m = 10)
+        );
     }
 
     #[test]

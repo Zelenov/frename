@@ -129,3 +129,8 @@ pub const M12_SUBTITLE_SETTINGS: &str = "
 ALTER TABLE app_settings ADD COLUMN subtitle_languages TEXT NOT NULL DEFAULT 'en,ru';
 ALTER TABLE app_settings ADD COLUMN subtitle_cue_length TEXT NOT NULL DEFAULT 'short';
 ";
+
+/// Migration 14: the UI language code (`en`, `ru`); empty follows the OS language.
+pub const M14_UI_LANGUAGE: &str = "
+ALTER TABLE app_settings ADD COLUMN ui_language TEXT NOT NULL DEFAULT '';
+";

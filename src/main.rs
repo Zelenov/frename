@@ -10,6 +10,9 @@ use simplelog::{
 };
 use std::fs::File;
 
+#[macro_use]
+mod i18n;
+
 mod app;
 mod bundled_gstreamer;
 mod crash_guard;

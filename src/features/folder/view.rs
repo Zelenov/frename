@@ -84,15 +84,9 @@ pub fn view<'a>(
                     tooltip(
                         container(text("✕").size(12).color(theme::ERROR))
                             .center_x(Length::Fixed(SUBTITLES_MARKER_WIDTH)),
-                        container(
-                            text(
-                                "Markers not saved: the file is read-only or in use \
-                             (close it in Premiere, then open the file and leave it again)",
-                            )
-                            .size(12),
-                        )
-                        .padding([4, 8])
-                        .style(theme::elevated_container_bordered_style),
+                        container(text(fl!("folder-markers-not-saved")).size(12))
+                            .padding([4, 8])
+                            .style(theme::elevated_container_bordered_style),
                         tooltip::Position::Bottom,
                     )
                     .into()
@@ -254,13 +248,13 @@ fn batch_header<'a>(
     let any_listed = listed.peek().is_some();
     let all_checked = any_listed && listed.all(|f| batch.is_checked(f.id()));
     let mut all = checkbox(all_checked)
-        .label("All")
+        .label(fl!("folder-all"))
         .text_size(12)
         .size(CHECK_SIZE);
     if !locked {
         all = all.on_toggle(|_| Message::ToggleAllChecked);
     }
-    let invert = button(text("Invert").size(12))
+    let invert = button(text(fl!("folder-invert")).size(12))
         .on_press_maybe((!locked).then_some(Message::InvertChecks))
         .padding([2, 8])
         .style(theme::icon_button_style(!locked));
@@ -275,9 +269,12 @@ fn batch_header<'a>(
         }),
         invert,
         iced::widget::Space::new().width(Length::Fill),
-        text(format!("{} checked", batch.checked_count()))
-            .size(12)
-            .color(theme::TEXT_MUTED),
+        text(fl!(
+            "folder-checked",
+            count = (batch.checked_count() as i64)
+        ))
+        .size(12)
+        .color(theme::TEXT_MUTED),
     ]
     .spacing(8)
     .padding(iced::Padding {
@@ -301,9 +298,9 @@ fn check_cell(
     // The file in work keeps its plain box: most files take milliseconds, so anything shown
     // for them would only flicker. The job panel names the file in work.
     let outcome = match batch.status(id) {
-        Some(ItemStatus::Done) => Some((theme::VOLUME, None, "Changed")),
-        Some(ItemStatus::Skipped) => Some((theme::VOLUME, None, "Nothing to change")),
-        Some(ItemStatus::Failed) => Some((theme::ERROR, Some('✕'), "Failed, see the log")),
+        Some(ItemStatus::Done) => Some((theme::VOLUME, None, fl!("folder-outcome-changed"))),
+        Some(ItemStatus::Skipped) => Some((theme::VOLUME, None, fl!("folder-outcome-unchanged"))),
+        Some(ItemStatus::Failed) => Some((theme::ERROR, Some('✕'), fl!("folder-outcome-failed"))),
         Some(ItemStatus::Pending | ItemStatus::Running) | None => None,
     };
     let mut check = checkbox(batch.is_checked(id)).size(CHECK_SIZE);
@@ -348,12 +345,12 @@ enum FilterKind {
 }
 
 impl FilterKind {
-    fn label(self) -> &'static str {
+    fn label(self) -> String {
         match self {
-            Self::Untagged => "Untagged",
-            Self::Subtitles => "Subtitles",
-            Self::Comments => "Comments",
-            Self::Markers => "Markers",
+            Self::Untagged => fl!("folder-controls-filter-untagged"),
+            Self::Subtitles => fl!("folder-controls-filter-subtitles"),
+            Self::Comments => fl!("folder-controls-filter-comments"),
+            Self::Markers => fl!("folder-controls-filter-markers"),
         }
     }
 
@@ -410,9 +407,9 @@ fn filter_dropdown<'a>(dir: &crate::features::folder_workspace::Directory) -> El
     ];
     let active = items.iter().filter(|item| item.active).count();
     let placeholder = if active == 0 {
-        "Filter".to_string()
+        fl!("folder-controls-filter")
     } else {
-        format!("Filter ({active})")
+        fl!("folder-controls-filter-active", count = (active as i64))
     };
     // No tooltip: it would draw over the open list.
     pick_list(items.to_vec(), None::<FilterItem>, |item| {
@@ -476,7 +473,7 @@ fn rename_editor(rename: &InlineRename) -> Element<'_, Message> {
         );
     let mut content = row![input].spacing(6).align_y(iced::Alignment::Center);
     if let Some(error) = rename.error {
-        content = content.push(text(error).size(11).color(theme::ERROR));
+        content = content.push(text(error.text()).size(11).color(theme::ERROR));
     }
     container(content)
         .padding(iced::Padding {

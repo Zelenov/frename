@@ -10,7 +10,12 @@ use iced::Element;
 
 use super::super::ItemResult;
 
-pub const LABEL: &str = "Markers ⇄ comment";
+/// The log is always English, unlike the UI text `label()` returns.
+const LOG_LABEL: &str = "Markers <-> comment";
+
+pub fn label() -> String {
+    fl!("batch-action-markers-comment")
+}
 
 /// Which way the lines go.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,14 +63,14 @@ impl Options {
     pub fn view(&self) -> Element<'_, Message> {
         let choices = column![
             radio(
-                "Comment lines with a time into markers",
+                fl!("batch-action-markers-comment-to-markers"),
                 Direction::CommentToMarkers,
                 Some(self.direction),
                 Message::SetDirection
             )
             .text_size(13),
             radio(
-                "Markers into the comment (a copy: the markers stay)",
+                fl!("batch-action-markers-to-comment"),
                 Direction::MarkersToComment,
                 Some(self.direction),
                 Message::SetDirection
@@ -74,13 +79,8 @@ impl Options {
         ]
         .spacing(8);
         super::panel(
-            LABEL,
-            "A line like “03:24 — Take 3 — nice light” is a marker at 3:24 named “Take 3” with the \
-             comment “nice light”; “0:41-0:47 — Lion” is a marker from 0:41 to 0:47. The name \
-             and the comment are split at the first “ — ” or “ -- ”, not at a plain “ - ”. \
-             The moments of an AI description (“0:00–0:14 Street.”) become white markers and \
-             stay in the description. Running either way again adds nothing twice."
-                .to_string(),
+            label(),
+            fl!("batch-action-markers-comment-hint"),
             choices.into(),
         )
     }
@@ -97,7 +97,7 @@ pub fn run(direction: Direction, path: &Path) -> ItemResult {
         // The format cannot hold markers, the file is damaged, or the write failed (it is
         // read-only or open in Premiere): the comment is left as it was.
         Err(error) => {
-            log::warn!("{LABEL}: {path:?} not changed: {error}");
+            log::warn!("{LOG_LABEL}: {path:?} not changed: {error}");
             ItemResult::failed(error.to_string())
         }
     }

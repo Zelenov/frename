@@ -1,3 +1,8 @@
+# NEXT
+## Added
+- A UI language, in Settings: follows the system by default, or pick English or Русский. More
+  languages ship as they are ready.
+
 # 0.73
 ## Added
 - Ranges: hold `F2` (or 📍) while a clip plays to mark a stretch, or `Alt`+drag on the paused bar. A band above the progress bar shows it; overlapping bands stack.
