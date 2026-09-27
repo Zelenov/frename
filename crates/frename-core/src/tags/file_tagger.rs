@@ -15,7 +15,7 @@ use super::folder_tag_store::FolderTagStore;
 use super::in_memory_file_tagger::InMemoryFileTagger;
 use super::tag_list::TagList;
 use crate::markers::Marker;
-use crate::metadata::{MarkersError, MetadataMove, MoveOutcome};
+use crate::metadata::{MarkersError, MetadataMove, MoveOutcome, Rotation, RotationError};
 
 static BACKEND: OnceLock<Box<dyn FileTaggerBackend>> = OnceLock::new();
 
@@ -259,6 +259,18 @@ impl FileTagger {
             .collect();
         let (markers, dropped) = crate::markers::replace_ai_markers(&existing, &in_clip);
         Self::save_markers(path, &markers, &dropped)
+    }
+
+    /// How the video at `path` is turned: the display matrix of its first video track.
+    pub fn video_rotation(path: &Path) -> Result<Rotation, RotationError> {
+        backend().video_rotation(path)
+    }
+
+    /// Turn the video at `path` by `quarter_turns` clockwise (negative: counter-clockwise).
+    /// Only the rotation flag of its video tracks changes, in place: the picture is not
+    /// re-encoded, and the file keeps its size, times and metadata. Returns the new rotation.
+    pub fn rotate_video(path: &Path, quarter_turns: i32) -> Result<Rotation, RotationError> {
+        backend().rotate_video(path, quarter_turns)
     }
 
     /// Save a screenshot image for the given file and position.

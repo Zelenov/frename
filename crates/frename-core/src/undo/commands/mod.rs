@@ -4,6 +4,7 @@ pub mod marker;
 pub mod navigate_file;
 pub mod paste_tags;
 pub mod reorder_tag;
+pub mod rotate_video;
 pub mod save_tag_cmd;
 pub mod set_segment;
 pub mod star_tag;
@@ -18,6 +19,7 @@ pub use marker::{
 pub use navigate_file::NavigateFileCommand;
 pub use paste_tags::PasteTagsCommand;
 pub use reorder_tag::ReorderTagCommand;
+pub use rotate_video::RotateVideoCommand;
 pub use save_tag_cmd::SaveTagCommand;
 pub use set_segment::{SetSegmentEndCommand, SetSegmentStartCommand};
 pub use star_tag::StarTagCommand;

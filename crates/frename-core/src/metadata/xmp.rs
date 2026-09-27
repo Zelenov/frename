@@ -421,14 +421,14 @@ fn is_cloud_placeholder(_path: &Path) -> bool {
 
 /// A file's modified and created times, saved before a metadata write and put back after it,
 /// so the clip keeps its place in date-sorted lists and backups don't see it as new.
-struct FileTimes {
+pub(super) struct FileTimes {
     modified: SystemTime,
     #[cfg_attr(not(windows), allow(dead_code))]
     created: Option<SystemTime>,
 }
 
 impl FileTimes {
-    fn read(path: &Path) -> std::io::Result<Self> {
+    pub(super) fn read(path: &Path) -> std::io::Result<Self> {
         let metadata = std::fs::metadata(path)?;
         Ok(Self {
             modified: metadata.modified()?,
@@ -436,7 +436,7 @@ impl FileTimes {
         })
     }
 
-    fn restore(&self, path: &Path) -> std::io::Result<()> {
+    pub(super) fn restore(&self, path: &Path) -> std::io::Result<()> {
         let times = std::fs::FileTimes::new().set_modified(self.modified);
         #[cfg(windows)]
         let times = match self.created {

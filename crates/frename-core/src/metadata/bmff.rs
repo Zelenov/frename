@@ -22,7 +22,7 @@ const MAX_PACKET: u64 = 16 * 1024 * 1024;
 
 /// Top-level box types a MOV/MP4 file can start with. Anything else is not one, whatever
 /// its extension says.
-const FIRST_BOXES: [&[u8; 4]; 7] = [
+pub(super) const FIRST_BOXES: [&[u8; 4]; 7] = [
     b"ftyp", b"moov", b"mdat", b"wide", b"free", b"skip", b"pnot",
 ];
 
@@ -112,10 +112,10 @@ fn find_in_moov(file: &mut File, moov: &BoxHeader) -> io::Result<Option<String>>
 }
 
 /// A box: its type, where its payload starts and where it ends (absolute offsets).
-struct BoxHeader {
-    kind: [u8; 4],
-    payload: u64,
-    end: u64,
+pub(super) struct BoxHeader {
+    pub(super) kind: [u8; 4],
+    pub(super) payload: u64,
+    pub(super) end: u64,
 }
 
 impl BoxHeader {
@@ -126,7 +126,7 @@ impl BoxHeader {
 
 /// The box header at `pos`, or `None` once fewer than 8 bytes are left before `limit`.
 /// A header that points outside its parent is invalid data.
-fn read_header(file: &mut File, pos: u64, limit: u64) -> io::Result<Option<BoxHeader>> {
+pub(super) fn read_header(file: &mut File, pos: u64, limit: u64) -> io::Result<Option<BoxHeader>> {
     if pos.saturating_add(8) > limit {
         return Ok(None);
     }
@@ -159,14 +159,14 @@ fn read_packet(file: &mut File, start: u64, end: u64) -> io::Result<String> {
     Ok(text.trim_end_matches(['\0', ' ', '\n', '\r']).to_string())
 }
 
-fn read_bytes(file: &mut File, pos: u64, len: usize) -> io::Result<Vec<u8>> {
+pub(super) fn read_bytes(file: &mut File, pos: u64, len: usize) -> io::Result<Vec<u8>> {
     file.seek(SeekFrom::Start(pos))?;
     let mut buf = vec![0; len];
     file.read_exact(&mut buf)?;
     Ok(buf)
 }
 
-fn invalid() -> io::Error {
+pub(super) fn invalid() -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, "malformed MOV/MP4 box")
 }
 

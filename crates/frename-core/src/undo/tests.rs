@@ -1115,4 +1115,42 @@ mod tests {
             None
         );
     }
+
+    /// Turning a video: undo turns it back, redo turns it again. Tests run with the in-memory
+    /// file tagger, so the turns are kept in memory; the file tagger's own tests cover disk.
+    #[test]
+    fn undo_and_redo_turn_the_video() {
+        use crate::undo::RotateVideoCommand;
+        use crate::{FileTagger, Rotation};
+
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/wide.mov");
+        let dir = std::env::temp_dir().join(format!("frename-undo-rotate-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let path = dir.join("clip.mov");
+        std::fs::copy(fixture, &path).expect("copy");
+
+        let file = File::from_path(path.clone(), SystemTime::UNIX_EPOCH);
+        let id = file.id();
+        let mut directory = Directory::with_files(&dir, vec![file], FakeAppStorage::new());
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+
+        FileTagger::rotate_video(&path, -1).expect("rotate");
+        history.push(Box::new(RotateVideoCommand {
+            file: id,
+            path: path.clone(),
+            quarter_turns: -1,
+        }));
+        let degrees = || FileTagger::video_rotation(&path).map(Rotation::degrees);
+        assert_eq!(degrees(), Ok(270));
+
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).expect("undo");
+        assert_eq!(degrees(), Ok(0));
+        history.redo(&mut ctx).expect("redo");
+        assert_eq!(degrees(), Ok(270));
+    }
 }
