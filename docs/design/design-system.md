@@ -932,6 +932,23 @@ No "General" (BIR). The version is on *Updates* ("About" would hold only it).
   status line.
 - **Button bar:** "Changes apply right away." on the left; *Close* (secondary) on the right.
 
+### As built
+
+Screenshots of the app (`frename --demo docs/screenshots/main.toml --settings <page>`; a demo shows
+the Anthropic key as saved and the Soniox key as missing):
+
+| Interface | Saving | Describe with AI |
+|---|---|---|
+| ![](design-system/built-interface.png) | ![](design-system/built-saving.png) | ![](design-system/built-ai.png) |
+
+| Subtitles | Updates (a development build) | Russian: Saving, Describe with AI |
+|---|---|---|
+| ![](design-system/built-subtitles.png) | ![](design-system/built-updates.png) | ![](design-system/built-ru-saving.png) ![](design-system/built-ru-ai.png) |
+
+Differences from the mockups: the dropdown keeps iced's own arrow instead of a `chevron-down`
+(iced 0.14 draws the pick list's handle itself); a navigation item whose label wraps (Russian)
+grows taller instead of clipping.
+
 ### 14.4 Behaviour that does not change
 
 Every setting keeps its meaning, its default and its storage; the key rows keep their credential
