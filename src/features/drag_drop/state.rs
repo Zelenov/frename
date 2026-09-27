@@ -58,12 +58,19 @@ impl DragDropState {
     /// after.
     fn is_own_drop(&self, path: &std::path::Path, now: Instant) -> bool {
         let recent = self.own_drag_until.map_or(true, |until| now < until);
-        // Case-insensitive: the path comes back from the shell, maybe spelled differently.
-        recent
-            && self.own_drag.iter().any(|own| {
-                own.to_string_lossy()
-                    .eq_ignore_ascii_case(&path.to_string_lossy())
-            })
+        if !recent {
+            return false;
+        }
+        // The path comes back from the shell, maybe spelled differently (case, 8.3 names).
+        let same = |own: &PathBuf| {
+            own.to_string_lossy()
+                .eq_ignore_ascii_case(&path.to_string_lossy())
+                || matches!(
+                    (std::fs::canonicalize(own), std::fs::canonicalize(path)),
+                    (Ok(a), Ok(b)) if a == b
+                )
+        };
+        self.own_drag.iter().any(same)
     }
 
     /// On a timer tick: when the drop is complete, the path to open (the first folder, or else

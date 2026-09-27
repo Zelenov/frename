@@ -164,6 +164,14 @@ mod tests {
             ReleaseStgMedium(&mut medium);
             dropped
         };
+        // The shell spells the paths out in full: a temp folder given by its 8.3 short name
+        // (`RUNNER~1` on CI) comes back long, so the files are compared, not the spellings.
+        let same_files = |list: &[PathBuf]| -> Vec<PathBuf> {
+            list.iter()
+                .map(|path| std::fs::canonicalize(path).expect("file exists"))
+                .collect()
+        };
+        let (dropped, paths) = (same_files(&dropped), same_files(&paths));
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(dropped, paths);
     }
