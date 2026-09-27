@@ -323,12 +323,8 @@ fn overlay_tabs<'a>(active: Overlay) -> Element<'a, Message> {
         .style(theme::overlay_tab_style(active == overlay))
     };
     row![
-        tab(
-            "CC",
-            fl!("folder-controls-filter-subtitles"),
-            Overlay::Subtitles
-        ),
-        tab("◆", fl!("folder-controls-filter-markers"), Overlay::Markers)
+        tab("CC", fl!("settings-subtitles"), Overlay::Subtitles),
+        tab("◆", fl!("media-viewer-video-tab-markers"), Overlay::Markers)
     ]
     .spacing(4)
     .padding([6, 12])

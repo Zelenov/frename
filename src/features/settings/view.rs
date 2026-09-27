@@ -394,12 +394,9 @@ fn key_block<'a>(
         _ => {
             let can_save = !key.input.trim().is_empty();
             let save = can_save.then_some(message(KeyMessage::Save));
-            let cancel = key.replacing.then(|| {
-                small_button(
-                    fl!("settings-key-cancel"),
-                    message(KeyMessage::CancelReplace),
-                )
-            });
+            let cancel = key
+                .replacing
+                .then(|| small_button(fl!("batch-cancel"), message(KeyMessage::CancelReplace)));
             // The buttons go under the field, so the row fits the window with Cancel too.
             column![
                 text_input(&placeholder, &key.input)

@@ -51,7 +51,7 @@ pub fn view<'a>(state: &'a BatchState, directory: Option<&'a Directory>) -> Elem
             .on_press_maybe((!state.is_running()).then_some(Message::SetActive(false)))
             .padding([2, 8])
             .style(theme::icon_button_style(!state.is_running())),
-        container(text(fl!("batch-back")))
+        container(text(fl!("folder-controls-batch-back")))
             .padding([2, 6])
             .style(theme::elevated_container_style),
         tooltip::Position::Left,

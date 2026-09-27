@@ -78,7 +78,6 @@ settings-key-remove = Remove
 settings-key-keep = Keep
 settings-key-saved = Key saved
 settings-key-replace = Replace
-settings-key-cancel = Cancel
 settings-key-hide = Hide
 settings-key-show = Show
 settings-key-save = Save
@@ -92,7 +91,6 @@ batch-on-checked = on { $count ->
     [one] { $count } file
    *[other] { $count } files
 } checked
-batch-back = Back to the open file
 batch-run = Run on { $count ->
     [one] { $count } file
    *[other] { $count } files
@@ -299,6 +297,7 @@ video-controls-add-a-name = Add a name
 media-viewer-video-show-subtitles = Show subtitle list
 media-viewer-video-hide-subtitles = Hide subtitle list
 media-viewer-video-markers-hint = Markers (Shift+F1 / Shift+F3 to jump, Shift+drag to snap)
+media-viewer-video-tab-markers = Markers
 
 ## Markers list
 

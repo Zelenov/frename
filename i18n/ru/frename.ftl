@@ -108,7 +108,6 @@ settings-key-remove = Удалить
 settings-key-keep = Оставить
 settings-key-saved = Ключ сохранён
 settings-key-replace = Заменить
-settings-key-cancel = Отмена
 settings-key-hide = Скрыть
 settings-key-show = Показать
 settings-key-save = Сохранить
@@ -123,7 +122,6 @@ batch-on-checked = для { $count ->
     [few] { $count } отмеченных файлов
    *[many] { $count } отмеченных файлов
 }
-batch-back = Назад к открытому файлу
 batch-run = Применить к { $count ->
     [one] { $count } файлу
     [few] { $count } файлам
@@ -340,6 +338,7 @@ video-controls-add-a-name = Добавить имя
 media-viewer-video-show-subtitles = Показать список субтитров
 media-viewer-video-hide-subtitles = Скрыть список субтитров
 media-viewer-video-markers-hint = Маркеры (Shift+F1 / Shift+F3 — переход, Shift+перетаскивание — привязка)
+media-viewer-video-tab-markers = Маркеры
 
 ## Markers list
 
