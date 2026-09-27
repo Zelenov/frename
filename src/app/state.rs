@@ -534,10 +534,17 @@ impl FrenameApp {
                 Task::none()
             }
             Message::DragDrop(drag_drop::Message::FileDropped(path)) => {
-                self.drag_drop_state.handle_file_dropped(path.clone());
-                Task::done(Message::FolderWorkspace(
-                    folder_workspace::Message::OpenPath(path),
-                ))
+                self.drag_drop_state
+                    .handle_file_dropped(path, std::time::Instant::now());
+                Task::none()
+            }
+            Message::DragDrop(drag_drop::Message::Tick(now)) => {
+                match self.drag_drop_state.handle_tick(now) {
+                    Some(path) => Task::done(Message::FolderWorkspace(
+                        folder_workspace::Message::OpenPath(path),
+                    )),
+                    None => Task::none(),
+                }
             }
             Message::Noop => Task::none(),
             Message::FolderWorkspace(msg) => {
