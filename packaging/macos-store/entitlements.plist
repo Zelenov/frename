@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The Mac App Store build's entitlements (docs/design/mac-app-store.md). build-store.sh adds
+     com.apple.application-identifier and com.apple.developer.team-identifier when it signs for
+     the Store; they must match the provisioning profile. -->
+<plist version="1.0">
+<dict>
+  <!-- Required for the Mac App Store. -->
+  <key>com.apple.security.app-sandbox</key>
+  <true/>
+  <!-- Read, rename and write (XMP, comments, subtitles, frames) in the folders the user opens. -->
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+  <!-- Reopen the last folder after a restart (security-scoped bookmarks). -->
+  <key>com.apple.security.files.bookmarks.app-scope</key>
+  <true/>
+  <!-- Describe with AI (Anthropic) and Generate subtitles (Soniox). -->
+  <key>com.apple.security.network.client</key>
+  <true/>
+</dict>
+</plist>

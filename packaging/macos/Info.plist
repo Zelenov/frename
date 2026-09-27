@@ -26,7 +26,7 @@
   <key>CFBundleShortVersionString</key>
   <string>@VERSION@</string>
   <key>CFBundleVersion</key>
-  <string>@VERSION@</string>
+  <string>@BUILD_VERSION@</string>
   <key>LSApplicationCategoryType</key>
   <string>public.app-category.video</string>
   <key>LSMinimumSystemVersion</key>
