@@ -1,14 +1,15 @@
-//! The Updates section of the settings window.
+//! The Version row of the settings window's Updates page.
 
-use iced::widget::{button, checkbox, column, row, text, tooltip};
-use iced::{Alignment, Element};
+use iced::widget::tooltip;
+use iced::Element;
 
 use super::state::Status;
 use super::{Message, UpdatesState};
-use crate::theme;
+use crate::ui::layout;
+use crate::ui::{button, form, text};
 
-/// The running version, the check button with its outcome, **Update and restart** when a newer
-/// version is known, and the start-up check box. `batch_running` holds the update back: the
+/// The running version, one status line, **Check for updates** and, when a newer version is known,
+/// **Update and restart**, then the start-up checkbox. `batch_running` holds the update back: the
 /// batch job would be cut off by the restart.
 pub fn view(state: &UpdatesState, batch_running: bool) -> Element<'_, Message> {
     let status = state.status();
@@ -18,61 +19,66 @@ pub fn view(state: &UpdatesState, batch_running: bool) -> Element<'_, Message> {
     );
     let available = state.available_version();
 
-    let check = button(text(fl!("updates-check")).size(13))
-        .on_press_maybe((state.installed() && !busy).then_some(Message::CheckNow));
-
     let note = match (status, &available) {
-        _ if !state.installed() => fl!("updates-not-installed"),
-        (Status::Checking { .. }, _) => fl!("updates-checking"),
-        (Status::Downloading(percent), Some(version)) => fl!(
+        _ if !state.installed() => Some(text::secondary(fl!("updates-not-installed"))),
+        (Status::Checking { .. }, _) => Some(text::secondary(fl!("updates-checking"))),
+        (Status::Downloading(percent), Some(version)) => Some(text::secondary(fl!(
             "updates-downloading-named",
             version = version.clone(),
             percent = (*percent as i64)
-        ),
-        (Status::Downloading(percent), None) => {
-            fl!("updates-downloading", percent = (*percent as i64))
-        }
-        (Status::Restarting, _) => fl!("updates-restarting"),
-        (Status::CheckFailed(reason), _) => {
-            fl!("updates-check-failed", reason = reason.clone())
-        }
-        (Status::UpdateFailed(reason), _) => {
-            fl!("updates-update-failed", reason = reason.clone())
-        }
-        (_, Some(version)) => fl!("updates-version-available", version = version.clone()),
-        (Status::UpToDate, None) => fl!("updates-up-to-date"),
-        (Status::Idle, None) => String::new(),
+        ))),
+        (Status::Downloading(percent), None) => Some(text::secondary(fl!(
+            "updates-downloading",
+            percent = (*percent as i64)
+        ))),
+        (Status::Restarting, _) => Some(text::secondary(fl!("updates-restarting"))),
+        (Status::CheckFailed(reason), _) => Some(text::error(fl!(
+            "updates-check-failed",
+            reason = reason.clone()
+        ))),
+        (Status::UpdateFailed(reason), _) => Some(text::error(fl!(
+            "updates-update-failed",
+            reason = reason.clone()
+        ))),
+        (_, Some(version)) => Some(text::secondary(fl!(
+            "updates-version-available",
+            version = version.clone()
+        ))),
+        (Status::UpToDate, None) => Some(text::secondary(fl!("updates-up-to-date"))),
+        (Status::Idle, None) => None,
     };
 
-    let mut actions = row![check, text(note).size(13).color(theme::TEXT_MUTED)]
-        .spacing(10)
-        .align_y(Alignment::Center);
-    if available.is_some() {
-        let update = button(text(fl!("updates-update-and-restart")).size(13))
+    let check = button::secondary(fl!("updates-check"))
+        .on_press_maybe((state.installed() && !busy).then_some(Message::CheckNow));
+    let update = available.is_some().then(|| {
+        let update = button::primary(fl!("updates-update-and-restart"))
             .on_press_maybe((!busy && !batch_running).then_some(Message::UpdateAndRestart));
-        actions = actions.push(if batch_running {
-            tooltip(
+        if batch_running {
+            layout::with_tooltip(
                 update,
-                text(fl!("updates-wait-for-batch")),
+                fl!("updates-wait-for-batch"),
                 tooltip::Position::Top,
             )
-            .into()
         } else {
-            Element::from(update)
-        });
-    }
+            update.into()
+        }
+    });
+    let actions = layout::buttons(std::iter::once(check.into()).chain(update));
 
-    column![
-        text(fl!(
+    layout::aligned(
+        [text::strong(fl!(
             "updates-current-version",
             version = state.current_version()
         ))
-        .size(13),
-        actions,
-        checkbox(state.check_on_start())
-            .label(fl!("updates-check-on-start"))
-            .on_toggle_maybe(state.installed().then_some(Message::SetCheckOnStart)),
-    ]
-    .spacing(8)
+        .into()]
+        .into_iter()
+        .chain(note.map(Element::from))
+        .chain([
+            actions,
+            form::checkbox(fl!("updates-check-on-start"), state.check_on_start())
+                .on_toggle_maybe(state.installed().then_some(Message::SetCheckOnStart))
+                .into(),
+        ]),
+    )
     .into()
 }

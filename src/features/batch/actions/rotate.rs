@@ -5,11 +5,13 @@
 use std::path::Path;
 
 use frename_core::FileTagger;
-use iced::widget::{column, radio};
+use iced::widget::column;
 use iced::Element;
 
 use super::super::{ItemResult, ItemStatus};
 use crate::features::rotation_text::why_not_rotated;
+use crate::ui::form;
+use crate::ui::tokens::SPACE_S;
 
 /// The log is always English, unlike the UI text `label()` returns.
 const LOG_LABEL: &str = "Rotate videos";
@@ -57,7 +59,7 @@ impl Options {
 
     pub fn view(&self) -> Element<'_, Message> {
         let choice = |label: String, turn: Turn| {
-            radio(label, turn, Some(self.turn), Message::SetTurn).text_size(13)
+            form::radio_option(label, None, turn, Some(self.turn), Message::SetTurn)
         };
         let choices = column![
             choice(fl!("batch-action-rotate-right"), Turn::Right),
@@ -65,7 +67,7 @@ impl Options {
             choice(fl!("batch-action-rotate-half"), Turn::Half),
             choice(fl!("batch-action-rotate-reset"), Turn::Reset),
         ]
-        .spacing(8);
+        .spacing(SPACE_S);
         super::panel(label(), fl!("batch-action-rotate-hint"), choices.into())
     }
 }

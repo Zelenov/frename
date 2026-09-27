@@ -1,4 +1,5 @@
-//! Shared UI theme: colors and styling aligned with the video progress bar.
+//! Styles of the views not yet on the design system (#58, #59), moved here from `src/theme.rs`
+//! with their values unchanged. New code uses `ui::tokens` and the `ui` components; #59 deletes this.
 
 use iced::widget::scrollable::{AutoScroll, Rail, Scroller, Status};
 use iced::{Background, Color};
