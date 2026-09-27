@@ -14,7 +14,9 @@ use super::view::{CUE_LIST_SCROLLABLE_ID, CUE_ROW_PITCH};
 use super::Message;
 use crate::features::markers;
 use crate::features::video_controls::{self, VideoControlsState};
-use frename_core::{load_subtitles, AppDatabase, AppStateStore, FileTagger, Rotation, Subtitles};
+use frename_core::{
+    load_subtitles, AppDatabase, AppStateStore, FileTagger, Rotation, RotationError, Subtitles,
+};
 
 /// How long a note in the controls bar stays.
 const NOTICE_DURATION: Duration = Duration::from_secs(2);
@@ -90,8 +92,8 @@ pub struct VideoPlayerState {
     play_until: Option<RangePlay>,
     /// Where to seek once the video being loaded is open: it is the shown video, reopened.
     resume_at: Option<Duration>,
-    /// The rotation the video was opened with; see [`Self::rotation`].
-    rotation: Option<Rotation>,
+    /// The rotation the video was opened with, or why it has none; see [`Self::rotation`].
+    rotation: Option<Result<Rotation, RotationError>>,
     /// Number of the latest load; a `VideoLoaded` of an older one is dropped.
     load_generation: u64,
 }
@@ -128,8 +130,6 @@ impl VideoPlayerState {
     /// Load a video file asynchronously.
     pub fn load_video(&mut self, path: PathBuf) -> Task<Message> {
         self.resume_at = None;
-        // Another file: its rotation is unknown until it has loaded.
-        self.rotation = None;
         self.open(path, !self.autoplay)
     }
 
@@ -147,13 +147,22 @@ impl VideoPlayerState {
         task
     }
 
-    /// The rotation the shown video was opened with; `None` when it has none frename can read.
-    pub fn rotation(&self) -> Option<Rotation> {
-        self.rotation
+    /// The rotation the shown video was opened with, or why frename cannot read or change it;
+    /// `None` while it loads.
+    pub fn rotation(&self) -> Option<&Result<Rotation, RotationError>> {
+        self.rotation.as_ref()
+    }
+
+    /// How many loads have started (see `load_generation`), for tests of reopens.
+    #[cfg(test)]
+    pub fn loads_started(&self) -> u64 {
+        self.load_generation
     }
 
     fn open(&mut self, path: PathBuf, paused: bool) -> Task<Message> {
         log::info!("Starting video load: {}", path.display());
+        // Unknown until the load reads it: a reopen after a turn or an undo may see another.
+        self.rotation = None;
         self.loading = true;
         self.load_failed = false;
         self.current_video = None;
@@ -180,19 +189,19 @@ impl VideoPlayerState {
                 log::debug!("File URL created: {url}");
                 // Read by frename rather than left to GStreamer's tag, so a debug build shows
                 // a turn it keeps in memory.
-                let rotation = FileTagger::video_rotation(&path).ok();
-                match open_video(&url, rotation) {
+                let rotation = FileTagger::video_rotation(&path);
+                match open_video(&url, rotation.as_ref().ok().copied()) {
                     Ok(mut video) => {
                         log::info!("Video loaded successfully");
                         // Paused here, before the update thread sees it, so no audio slips out.
                         if paused {
                             video.set_paused(true);
                         }
-                        (Some(video), rotation)
+                        (Some(video), Some(rotation))
                     }
                     Err(e) => {
                         log::error!("Failed to load video: {e}");
-                        (None, rotation)
+                        (None, Some(rotation))
                     }
                 }
             })

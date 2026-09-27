@@ -13,6 +13,13 @@ use crate::features::video_controls::{self, BarMarker};
 use crate::theme;
 
 const CONTROLS_HEIGHT: f32 = 32.0;
+/// Widest a note over the picture gets before it wraps (px).
+const NOTICE_MAX_WIDTH: f32 = 260.0;
+
+/// The note shown over the picture, empty when there is none.
+fn notice_text(state: &VideoPlayerState) -> &str {
+    state.notice().unwrap_or_default()
+}
 const BAR_ROW_HEIGHT: f32 = 24.0;
 /// Fixed so the video does not jump as cues of one or two lines come and go.
 const SUBTITLE_STRIP_HEIGHT: f32 = 48.0;
@@ -113,25 +120,30 @@ pub fn view<'a>(
                 .into(),
             None => video_area.into(),
         };
-        // A short note (`Frame saved`, `Rotated: 90° right`) over the bottom of the picture: the
-        // controls bar has no room left for one in a player of the default width.
+        // A short note (`Frame saved`, `Rotated: 90° right`) over the bottom left of the picture:
+        // the controls bar has no room left for one in a player of the default width. In
+        // fullscreen the subtitles sit at the bottom, so it goes to the top left. Its width is
+        // capped so a long note wraps instead of running under the side list.
+        let note_place = container(
+            container(text(notice_text(state)).size(13).color(theme::TEXT))
+                .max_width(NOTICE_MAX_WIDTH)
+                .padding([4, 10])
+                .style(theme::panel_container_style),
+        )
+        .padding(8)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .align_left(Length::Fill);
+        let note_place = if is_fullscreen {
+            note_place.align_top(Length::Fill)
+        } else {
+            note_place.align_bottom(Length::Fill)
+        };
         let video_area: Element<'_, Message> = match state.notice() {
-            Some(notice) => stack![
-                video_area,
-                container(
-                    container(text(notice).size(13).color(theme::TEXT))
-                        .padding([4, 10])
-                        .style(theme::panel_container_style),
-                )
-                .padding(8)
+            Some(_) => stack![video_area, note_place]
                 .width(Length::Fill)
                 .height(Length::Fill)
-                .align_left(Length::Fill)
-                .align_bottom(Length::Fill),
-            ]
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into(),
+                .into(),
             None => video_area,
         };
 
@@ -189,7 +201,16 @@ pub fn view<'a>(
             state.controls(),
             markers.markers.is_some(),
             markers.state.recording().is_some(),
-            state.rotation().is_some(),
+            // Why ↺ ↻ are off; while the clip loads its rotation is not known yet, so they stay on.
+            state
+                .rotation()
+                .and_then(|read| read.as_ref().err())
+                .map(|error| {
+                    fl!(
+                        "rotate-cannot",
+                        reason = crate::features::rotation_text::why_not_rotated(error)
+                    )
+                }),
         )
         .map(Message::Controls);
 

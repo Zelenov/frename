@@ -2832,6 +2832,23 @@ mod tests {
         assert!(workspace.history.can_redo());
     }
 
+    /// Turn, then undo before the reopen from the turn has landed: the undo starts a reopen of
+    /// its own (which reads the upright file), so the turn's reopen, now stale, is dropped
+    /// instead of showing a turn the file no longer has.
+    #[test]
+    fn undoing_a_turn_before_its_reopen_lands_reopens_again() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let loads = |w: &FolderWorkspace| w.media_viewer.video_loads_started();
+        let before = loads(&workspace);
+        let _ = workspace.update(Message::RotateVideo(1));
+        assert_eq!(loads(&workspace), before + 1, "the turn reopens the video");
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(loads(&workspace), before + 2, "the undo reopens it again");
+        let rotation = frename_core::FileTagger::video_rotation(&test_dir.target_file());
+        assert_eq!(rotation.map(|r| r.degrees()), Ok(0));
+    }
+
     /// Typing `text` into the open marker row's name field.
     fn type_name(text: &str) -> crate::features::markers::Message {
         crate::features::markers::Message::NameAction(iced::widget::text_editor::Action::Edit(

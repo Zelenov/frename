@@ -1,6 +1,6 @@
 //! Messages for the video player sub-feature.
 
-use frename_core::{Rotation, Subtitles};
+use frename_core::{Rotation, RotationError, Subtitles};
 use iced_video_player::Video;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -21,8 +21,8 @@ pub enum Message {
     VideoLoaded {
         /// The opened video, or `None` when the open failed.
         video: LoadedVideo,
-        /// The rotation it was opened with.
-        rotation: Option<Rotation>,
+        /// The rotation it was opened with, or why it has none; `None` when it was not read.
+        rotation: Option<Result<Rotation, RotationError>>,
         /// Which load this is; see `VideoPlayerState::load_generation`.
         generation: u64,
     },

@@ -1,6 +1,6 @@
 //! State for the media_viewer feature: video, or a placeholder for anything else.
 
-use frename_core::{File, FileKind, Rotation};
+use frename_core::{File, FileKind};
 use iced::{Subscription, Task};
 
 use super::video::VideoPlayerState;
@@ -51,13 +51,10 @@ impl MediaViewerState {
         }
     }
 
-    /// The rotation the shown video was opened with; `None` when no video is shown or its
-    /// format has no rotation frename reads.
-    pub fn video_rotation(&self) -> Option<Rotation> {
-        match self.active {
-            ActiveMedia::Video => self.video.rotation(),
-            ActiveMedia::Unsupported | ActiveMedia::None => None,
-        }
+    /// How many times the video player has started loading, for tests of reopens.
+    #[cfg(test)]
+    pub fn video_loads_started(&self) -> u64 {
+        self.video.loads_started()
     }
 
     /// Returns `true` when a video is currently being shown.

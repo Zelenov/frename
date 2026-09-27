@@ -4,11 +4,12 @@
 
 use std::path::Path;
 
-use frename_core::{FileTagger, RotationError};
+use frename_core::FileTagger;
 use iced::widget::{column, radio};
 use iced::Element;
 
 use super::super::{ItemResult, ItemStatus};
+use crate::features::rotation_text::why_not_rotated;
 
 /// The log is always English, unlike the UI text `label()` returns.
 const LOG_LABEL: &str = "Rotate videos";
@@ -91,18 +92,6 @@ pub fn run(turn: Turn, path: &Path) -> ItemResult {
             log::warn!("{LOG_LABEL}: {path:?} not turned: {error}");
             ItemResult::failed(why_not_rotated(&error))
         }
-    }
-}
-
-/// Why a video was not turned, as the batch's failed list and the open clip's note say it.
-/// The system's own words (a sharing violation, access denied) are in the log.
-pub fn why_not_rotated(error: &RotationError) -> String {
-    match error {
-        RotationError::CannotRotate => fl!("rotate-reason-format"),
-        RotationError::Damaged => fl!("rotate-reason-damaged"),
-        RotationError::NoVideoTrack => fl!("rotate-reason-no-video"),
-        RotationError::UnusualMatrix => fl!("rotate-reason-matrix"),
-        RotationError::Io(_) => fl!("rotate-reason-in-use"),
     }
 }
 

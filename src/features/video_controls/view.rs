@@ -15,14 +15,15 @@ const ROTATE_BUTTON_WIDTH: f32 = 24.0;
 /// `position_secs` is the live playback position read from the video at view time.
 /// `segment_start` and `segment_end` are the optional segment markers (in seconds) for the current file.
 /// `can_add_markers` is false when the file cannot hold markers; `marker_held` shows 📍 pressed;
-/// `can_rotate` is false when the file has no rotation flag (↺ ↻ are off then).
+/// `cannot_rotate` says why the file cannot be turned (↺ ↻ are off then, with it as their
+/// tooltip).
 /// The progress bar is not part of it: the caller puts [`progress_bar`] on a row of its own
 /// above the buttons, which keep to the left, the volume to the right.
 pub fn view(
     state: &VideoControlsState,
     can_add_markers: bool,
     marker_held: bool,
-    can_rotate: bool,
+    cannot_rotate: Option<String>,
 ) -> Element<'_, Message> {
     let back10_btn: Element<'_, Message> = tooltip(
         button(
@@ -175,6 +176,7 @@ pub fn view(
     )
     .into();
 
+    let can_rotate = cannot_rotate.is_none();
     let rotate_btn =
         |icon: &'static str, quarter_turns: i32, tip: String| -> Element<'_, Message> {
             tooltip(
@@ -188,11 +190,7 @@ pub fn view(
                 .height(iced::Length::Fill)
                 .padding(0)
                 .style(theme::icon_button_style(can_rotate)),
-                text(if can_rotate {
-                    tip
-                } else {
-                    fl!("video-controls-cannot-rotate")
-                }),
+                text(cannot_rotate.clone().unwrap_or(tip)),
                 tooltip::Position::Top,
             )
             .into()
