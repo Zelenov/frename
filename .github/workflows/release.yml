@@ -78,12 +78,23 @@ jobs:
     runs-on: windows-2022
     permissions:
       contents: read
+      # Only used when the AZURE_* secrets below are set, for OIDC login to Azure Artifact Signing.
+      id-token: write
     env:
       # The GStreamer bundled with frename, and Velopack's packer (matches the crate): as ci.yml.
       GST_VERSION: 1.28.7
       GST_SHA256: 032fc6062b8539838fc8da22589cb9b24c5d820baa7f8cc160af9ea08395badf
       VPK_VERSION: 1.2.158
       PACKAGE_VERSION: ${{ needs.prepare.outputs.package_version }}
+      # Code signing (docs/signing-setup.md). Empty when not configured: `if: env.AZURE_CLIENT_ID
+      # != ''` steps below then skip and the release builds unsigned, as `secrets` cannot be used
+      # directly in `if:` conditions.
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_SIGNING_ENDPOINT: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+      AZURE_SIGNING_ACCOUNT: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+      AZURE_SIGNING_PROFILE: ${{ secrets.AZURE_SIGNING_PROFILE }}
     steps:
       - uses: actions/checkout@v5
 
@@ -127,15 +138,75 @@ jobs:
         shell: pwsh
         run: C:\vpk\vpk.exe download github --repoUrl https://github.com/${{ github.repository }} -o releases
 
+      # Below: code signing with Azure Artifact Signing (docs/signing-setup.md). Skipped entirely
+      # when the AZURE_* secrets aren't set — the release then builds unsigned, as before #50.
+      - name: Azure login for code signing
+        if: env.AZURE_CLIENT_ID != ''
+        uses: azure/login@v3
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up .NET for the Azure Artifact Signing dlib
+        if: env.AZURE_CLIENT_ID != ''
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Write Azure Artifact Signing metadata
+        if: env.AZURE_CLIENT_ID != ''
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $metadata = [ordered]@{
+            Endpoint               = $env:AZURE_SIGNING_ENDPOINT
+            CodeSigningAccountName = $env:AZURE_SIGNING_ACCOUNT
+            CertificateProfileName = $env:AZURE_SIGNING_PROFILE
+          } | ConvertTo-Json
+          # vpk's signing dlib requires plain UTF-8, no BOM.
+          $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+          [System.IO.File]::WriteAllText("$pwd\signing-metadata.json", $metadata, $utf8NoBom)
+
       - name: Pack with Velopack
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          C:\vpk\vpk.exe pack -u frename -v $env:PACKAGE_VERSION -p dist\frename -e frename.exe -o releases --packTitle frename --icon frename-icon.ico
+          $signArgs = @()
+          if ($env:AZURE_CLIENT_ID) { $signArgs = @("--azureTrustedSignFile", "signing-metadata.json") }
+          C:\vpk\vpk.exe pack -u frename -v $env:PACKAGE_VERSION -p dist\frename -e frename.exe -o releases --packTitle frename --icon frename-icon.ico @signArgs
           if ($LASTEXITCODE -ne 0) { throw "vpk pack failed" }
           # The portable zip keeps the name every release had (the pipeline checks for it).
           Move-Item releases\frename-win-Portable.zip "releases\frename-windows-x64-v$env:PACKAGE_VERSION.zip"
           Get-ChildItem releases | Format-Table Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
+
+      - name: Verify code signatures
+        if: env.AZURE_CLIENT_ID != ''
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\' } | Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtool) { throw "signtool.exe not found on this runner" }
+
+          $verifyDir = "verify-tmp"
+          Expand-Archive -Path "releases\frename-windows-x64-v$env:PACKAGE_VERSION.zip" -DestinationPath $verifyDir -Force
+
+          $toVerify = @("releases\frename-win-Setup.exe", (Join-Path $verifyDir "frename.exe"))
+          foreach ($f in $toVerify) {
+            Write-Host "Verifying signature of $f"
+            & $signtool verify /pa /v $f
+            if ($LASTEXITCODE -ne 0) { throw "Signature verification failed for $f" }
+          }
+
+      - name: Signing status
+        shell: pwsh
+        run: |
+          if ($env:AZURE_CLIENT_ID) {
+            Add-Content $env:GITHUB_STEP_SUMMARY "Windows build: signed with Azure Artifact Signing."
+          } else {
+            Add-Content $env:GITHUB_STEP_SUMMARY "Windows build: unsigned (code-signing secrets not set; see docs/signing-setup.md)."
+          }
 
       # What the updater reads, the installer and the portable zip; not the previous release's
       # package, nor the legacy RELEASES file (only for Squirrel migrations).
