@@ -2,10 +2,15 @@ name: Mac App Store
 run-name: Mac App Store - ${{ github.ref_name }}
 
 # Builds the Mac App Store .pkg, signed with the owner's certificates, and validates it with App
-# Store Connect; with `upload` ticked it also uploads it (then it shows in TestFlight). Started by
-# hand: Actions → Mac App Store → Run workflow (docs/mac-app-store-setup.md). Without the MAS_*
-# secrets it builds an unsigned .pkg and says so.
+# Store Connect; with `upload` it also uploads it (then it shows in TestFlight). release.yml runs
+# it with upload after every published release; by hand: Actions → Mac App Store → Run workflow
+# (docs/mac-app-store-setup.md). Without the MAS_* secrets it builds an unsigned .pkg and says so.
 on:
+  workflow_call:
+    inputs:
+      upload:
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       upload:
@@ -43,11 +48,12 @@ jobs:
             echo "::warning::version.md starts with '$VERSION', not a version: building as 0.0.1"
             VERSION=0.0.1
           fi
-          case "$VERSION" in *.*.*) ;; *) VERSION="$VERSION.0" ;; esac
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          # A new build number for every run: App Store Connect refuses one it has seen.
-          echo "BUILD_NUMBER=${{ github.run_number }}" >> "$GITHUB_ENV"
-          echo "Version $VERSION, build ${{ github.run_number }}"
+          # A new, higher build number for every run, whether started by a release or by hand:
+          # App Store Connect refuses one it has seen. UTC date, then the minute of the day.
+          BUILD_NUMBER="$(date -u +%y%m%d).$((10#$(date -u +%H) * 60 + 10#$(date -u +%M)))"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "Version $VERSION, build $BUILD_NUMBER"
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -115,6 +121,7 @@ jobs:
           xcrun altool --validate-app -f dist/frename.pkg -t macos \
             --apiKey "$APP_STORE_CONNECT_API_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_API_ISSUER_ID"
 
+      # The version record in App Store Connect must read exactly $VERSION (version.md's, `0.77`).
       - name: Upload to App Store Connect
         if: inputs.upload && env.MAS_CERTIFICATES_P12 != '' && env.APP_STORE_CONNECT_API_KEY_ID != ''
         run: |

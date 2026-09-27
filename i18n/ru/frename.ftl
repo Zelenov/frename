@@ -320,7 +320,7 @@ folder-rename-error-empty = Имя пустое
 folder-rename-error-bad-character = Нельзя: \ / : * ? " < > |
 folder-rename-error-trailing = Не может кончаться точкой или пробелом
 folder-rename-error-exists = Файл с таким именем уже есть
-folder-access-title = Разрешите frename открыть эту папку
+folder-access-title = Чтобы открыть эту папку, frename нужен доступ к ней: нажмите «Открыть»
 folder-markers-not-saved = Маркеры не сохранены: файл доступен только для чтения или занят (закройте его в Premiere, затем откройте файл и снова закройте)
 
 ## Controls bar under the file list

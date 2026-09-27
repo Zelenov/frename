@@ -33,17 +33,21 @@ frename in the Mac App Store, next to the free ad-hoc-signed download from #15
   (`com.apple.security.files.bookmarks.app-scope`): `bookmarkData(options: .withSecurityScope)`
   while the app has access, and at the next start `URLByResolvingBookmarkData` with
   `.withSecurityScope` + `startAccessingSecurityScopedResource()` (same Apple page).
-  `src/folder_access.rs`: every folder frename scans gets a fresh bookmark in
+  `src/folder_access.rs` (the Objective-C calls) and `frename_core::folder_bookmarks` (the
+  files): every folder frename scans gets a fresh bookmark in
   `<data folder>/folder-access/<FNV-1a of the path>.bookmark` (the 50 newest are kept; a fresh
   one each time replaces a stale one); before a scan the saved bookmark is resolved and started.
   Access is never stopped: the user may come back to the folder, and it ends with the process.
   Not in the database: no migration, and the bookmarks are useless outside this app and this Mac.
 - **A clip opened alone** (right-click 📂 → a file, or a file dropped on the window): the sandbox
   opens that file only, not its folder, and frename always opens the whole folder. The Store build
-  then asks for the folder once: the folder picker opens inside it, titled "Allow frename to open
-  this folder", so one click grants it; the clip stays selected. Cancelling leaves the current
-  folder open. Implemented in `folder_workspace::ask_folder_access`; only a folder that cannot be
-  read triggers it, so other builds never ask.
+  then asks for the folder: the folder picker opens inside it with the line "frename needs access
+  to this folder to open it: click Open" (rfd puts a dialog's title into `NSOpenPanel`'s message
+  on macOS, which the panel shows: `rfd` `backend/macos/file_dialog/panel_ffi.rs`), so one click
+  grants it; the clip stays selected if that folder is chosen (`chosen_pair`). Cancelling leaves
+  the current folder open. Only a refusal (`PermissionDenied`) asks: a missing folder (an unplugged
+  drive) fails quietly as in every build, and nothing is asked at start-up — the last folder is
+  reopened only if its bookmark still works.
 - **Data folder** (database, log, GStreamer registry, bookmarks): the app's container; `HOME`
   points into it, so #15's `~/Library/Application Support/frename` lands there
   ([App Sandbox in depth](https://developer.apple.com/library/archive/documentation/Security/Conceptual/AppSandboxDesignGuide/AppSandboxInDepth/AppSandboxInDepth.html)).
@@ -57,7 +61,7 @@ frename in the Mac App Store, next to the free ad-hoc-signed download from #15
   entitlement is needed for that. TN3137 calls the file-based keychain "on the road to
   deprecation" but supported ([TN3137](https://developer.apple.com/documentation/technotes/tn3137-on-mac-keychains)).
   CI checks it in the sandbox: the Store build's `--self-test` saves, reads and deletes a
-  throwaway entry (`frename_core::ai::key::check_store`).
+  throwaway entry (`frename_core::ai::key::check_credential_store`).
 - **Network** (Anthropic, Soniox): `com.apple.security.network.client`.
 - **Opening the log or a web page** (Settings, the Anthropic billing link): through
   `NSWorkspace.openURL` on macOS instead of starting `/usr/bin/open`.
@@ -83,9 +87,13 @@ frename in the Mac App Store, next to the free ad-hoc-signed download from #15
   copied into the container (decoding + Keychain), starts the app and takes a screenshot.
   A Store-signed app cannot run on a runner (it runs only once installed by the App Store or
   TestFlight), so this is as far as CI can test the sandbox.
-- `mac-app-store.yml` (started by hand): with the secrets, builds the signed `.pkg`,
-  `xcrun altool --validate-app`, and with **upload** ticked `xcrun altool --upload-package` with
-  the App Store Connect API key. `altool` remains the supported command-line upload for the App
+- `mac-app-store.yml`: with the secrets, builds the signed `.pkg`, `xcrun altool --validate-app`,
+  and with **upload** `xcrun altool --upload-package` with the App Store Connect API key.
+  `release.yml` calls it with upload after every published (non-draft) release, after the
+  `release` job so a Store problem never holds back the downloads; it can also be started by hand.
+  The version is `version.md`'s (`0.77`, which the App Store Connect version record must match);
+  the build number is the UTC date and minute of the day (`260927.874`), so it grows whichever way
+  the workflow started. `altool` remains the supported command-line upload for the App
   Store (only its notarization use ended, [TN3147 via fastlane](https://github.com/fastlane/fastlane/discussions/21347));
   notarization is not used for Store builds.
 
@@ -100,11 +108,17 @@ frename in the Mac App Store, next to the free ad-hoc-signed download from #15
 
 ## Decisions made without the owner
 
-- **Same feature name as the Microsoft Store build (#51, PR #86): `store`**, with the same
-  `package::STORE_BUILD` and `UpdatesState::is_store_build`. Each platform has one store, so one
-  flag means "the store installs and updates this build". The update-section text differs per
-  store (`updates-from-app-store` here). If #86 merges first, the overlap in `updates/` is the
-  same code; the merge keeps both texts.
+- **Same feature name as the Microsoft Store build (#51, PR #86): `store`**, with #86's
+  `package::STORE_BUILD`, `run_velopack_hooks` early return and `UpdatesState::new(installed,
+  from_store, …)` taken as written there. Each platform has one store, so one flag means "the
+  store installs and updates this build". Merging with #86 conflicts only where the stores differ:
+  the text of the Updates section (`updates-from-app-store` here, `updates-from-store` there; the
+  merge picks one per platform with `cfg!(target_os = "macos")`), the doc comments, the log label,
+  and #86's `store_data_dir`, which on macOS would move the Store build's data to
+  `…/Application Support/frename-store` inside the container (harmless, still the container).
+- **The privacy policy lives at #86's path** (`packaging/store/privacy-policy.md`, #86's text plus
+  the Mac builds), so both stores link one page; whichever PR merges second takes the other's
+  lines.
 - **Bundle id `io.github.zelenov.frename`**, the one #15's download uses: one app identity.
   The two builds do not share data (the Store build lives in its container).
 - **Bookmarks in files, not in the database**: no migration, and they belong to this machine.
@@ -112,7 +126,8 @@ frename in the Mac App Store, next to the free ad-hoc-signed download from #15
   every way of opening a clip keeps working.
 - **"Data Not Collected"** in the privacy answers: the optional AI actions send data from the
   user's Mac to the service the user chose, under the user's key; the developer gets nothing.
-- **Build number = the workflow's run number**: always increasing, no file to keep.
+- **Build number = UTC date and minute**: always increasing across release and manual runs
+  (their run numbers are separate counters), no file to keep.
 - **Screenshots**: the README ones at 2560×1600 (the issue asks for these); real Mac captures
   from TestFlight are better later.
 - **`ffmpeg` for subtitles of mkv/m2ts/avi** stays a `PATH` lookup: a sandboxed app cannot run a

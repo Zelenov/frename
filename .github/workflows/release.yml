@@ -424,3 +424,16 @@ jobs:
             artifacts/frename-macos-arm64-v${{ needs.prepare.outputs.package_version }}.zip
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+  # The Mac App Store build of the published version: signed, validated and uploaded to App Store
+  # Connect (TestFlight) when the MAS_* secrets are set, unsigned otherwise. After the release, so
+  # a Store problem never holds back the downloads.
+  mac-app-store:
+    needs: [prepare, release]
+    if: needs.prepare.outputs.should_build == 'true' && needs.prepare.outputs.draft == 'false'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/mac-app-store.yml
+    with:
+      upload: true
+    secrets: inherit

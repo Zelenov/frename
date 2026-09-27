@@ -2,8 +2,10 @@
 
 Everything that needs a person, in order. The agent built the rest: the sandboxed Store variant
 (`cargo build --features store`), its packaging (`packaging/macos-store/`), the listing texts and
-screenshots (`packaging/macos-store/listing.md`), and the workflow that signs, validates and
-uploads it (`.github/workflows/mac-app-store.yml`). Why it is built this way:
+screenshots (`packaging/macos-store/listing.md`), the privacy policy
+(`packaging/store/privacy-policy.md`, shared with the Microsoft Store), and the workflow that
+signs, validates and uploads it (`.github/workflows/mac-app-store.yml`; every published release
+runs it too). Why it is built this way:
 `docs/design/mac-app-store.md`.
 
 Times are rough; Apple's own waits (enrollment, review) vary.
@@ -20,7 +22,7 @@ Times are rough; Apple's own waits (enrollment, review) vary.
 | 8 | First build: run the workflow, TestFlight | GitHub Actions; TestFlight app on a Mac | 30 min + processing ~30 min |
 | 9 | Fill in the listing, privacy and export answers | App Store Connect → frename | 45 min |
 | 10 | Submit for review | App Store Connect | 5 min + review, usually 1–3 days |
-| 11 | Every later version | GitHub Actions → App Store Connect | 15 min per release |
+| 11 | Every later version | App Store Connect (the upload is automatic) | 10 min per release |
 
 ## 1. Apple Developer Program
 
@@ -88,6 +90,8 @@ it is the `MAS_APPLE_APP_ID` secret.
 App Store Connect → **Users and Access** → **Integrations** → **App Store Connect API** → Team
 Keys → **+** → name `GitHub frename`, access **App Manager** → Generate.
 
+- On a new team the tab first shows **Request Access**: the Account Holder clicks it and accepts
+  the terms; Apple enables it, usually within minutes, sometimes a day.
 - Download the key file `AuthKey_XXXXXXXXXX.p8` (only once possible).
 - Note the **Key ID** (in the table) and the **Issuer ID** (above the table).
 
@@ -107,36 +111,33 @@ secret, one per row. On a Mac, `base64 -i <file> | pbcopy` copies a file as base
 | `APP_STORE_CONNECT_API_ISSUER_ID` | the Issuer ID from step 6 |
 | `APP_STORE_CONNECT_API_KEY_P8` | the whole text of `AuthKey_….p8` (open it in TextEdit, copy all) |
 
-Only the workflow `Mac App Store`, started by hand, reads them. Pull request CI never does.
-
-Also add the privacy policy's Mac paragraph: `packaging/store/privacy-policy.md` (from #51) covers
-Windows and Linux. Before submitting, add to its "What stays on your computer" list: "On a Mac
-(App Store version) they are kept in the app's container,
-`~/Library/Containers/io.github.zelenov.frename/Data/Library/Application Support/frename`; the Mac
-download from GitHub keeps them in `~/Library/Application Support/frename`." And to "Updates":
-"**Mac App Store app:** the App Store installs and updates frename. frename itself makes no update
-requests." The agent can make this change once #51 is merged.
+Only the workflow `Mac App Store` reads them (started by hand, or by a release). Pull request CI
+never does.
 
 ## 8. First build and TestFlight
 
 1. github.com/Zelenov/frename → **Actions** → **Mac App Store** → **Run workflow** → branch
    `main`, tick **Upload the build to App Store Connect** → Run.
 2. The run (about 20 minutes) builds `frename.pkg`, signs it, **validates** it with App Store
-   Connect, uploads it, and keeps it as an artifact. Its summary says "signed for the App Store".
-   A red "Validate" step prints Apple's reason; send the run link to the agent.
+   Connect, uploads it, and keeps it as an artifact. Its summary says "signed for the App Store"
+   and the version and build, e.g. `0.77 (260927.874)`. A red "Validate" step prints Apple's
+   reason; send the run link to the agent. From then on every published release runs the same
+   workflow by itself.
 3. App Store Connect → frename → **TestFlight**: the build appears after processing (15–60 min).
    Answer the export question if asked: frename uses only standard encryption for HTTPS
    ("None of the algorithms mentioned above" / exempt); the build already declares
    `ITSAppUsesNonExemptEncryption = NO`.
 4. TestFlight → Internal Testing → **+** → add yourself. On a Mac with Apple silicon install
    **TestFlight** from the App Store, sign in with the same Apple Account, install frename.
-5. Check on that Mac (what CI cannot):
+5. Check on that Mac (what CI cannot). On a MacBook keyboard Page Down is `fn`+`↓`, and F1–F12
+   need `fn`:
    - 📂 → choose a folder of clips → a clip plays, with sound;
    - tag a clip and press Page Down: the file is renamed; press F2: a marker is saved (open the
      clip in Premiere Pro or check that the file's date changed);
    - quit frename (⌘Q) and start it again: **the same folder reopens without asking**;
-   - right-click 📂 → choose one clip: frename asks once for its folder with the picker already in
-     it; click Open;
+   - right-click 📂 → choose one clip: a second picker opens in the clip's folder with the line
+     "frename needs access to this folder to open it: click Open"; click Open, the clip is
+     selected;
    - Settings → paste an Anthropic key, run Describe with AI on one clip; quit and restart:
      the key is still there (Keychain);
    - Settings → Updates says "Updates come from the App Store".
@@ -153,6 +154,8 @@ App Store Connect → frename, using `packaging/macos-store/listing.md` field by
   marketing URLs, copyright, the three screenshots from `packaging/macos-store/screenshots/`,
   App Review Information (notes in `listing.md`, your contact), **Build** → select the TestFlight
   build from step 8.
+- The version record must read exactly the build's version (the run summary, e.g. `0.77`): App
+  Store Connect names the first one `1.0`; change it, or the build is not offered under Build.
 - **Version release**: "Manually release this version" lets you pick the day.
 
 ## 10. Submit
@@ -163,11 +166,15 @@ fixes it and you run step 8 again (a new build number is automatic).
 
 ## 11. Later versions
 
-After a GitHub release (the version in `version.md` is published):
+After a GitHub release (the version in `version.md` is published), the release workflow builds,
+signs and uploads the Store build by itself (its last job, "mac-app-store"):
 
-1. Actions → **Mac App Store** → Run workflow on `main` with upload ticked (15–20 min).
-2. App Store Connect → frename → **+ Version** (the new number, e.g. `0.78`) → What's New (the
-   newest `version.md` block) → select the new build → Add for Review → Submit.
+1. Wait for the build in App Store Connect → TestFlight (about an hour after the release).
+2. App Store Connect → frename → **+ Version** → exactly the release's version (e.g. `0.78`) →
+   What's New (the newest `version.md` block) → select the new build → Add for Review → Submit.
+
+If that job failed (e.g. an expired certificate), fix the secret and run Actions → **Mac App
+Store** → Run workflow on `main` with upload ticked.
 
 Once a year: renew the membership, then the certificates and profile (steps 3–4), and update the
 `MAS_CERTIFICATES_P12`, `MAS_CERTIFICATES_PASSWORD` and `MAS_PROVISIONING_PROFILE` secrets.

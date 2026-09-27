@@ -59,7 +59,7 @@ pub fn run(paths: &[PathBuf]) -> i32 {
     }
     // The App Store build runs sandboxed: its keys must still reach the Keychain.
     #[cfg(feature = "store")]
-    let store_failed = match frename_core::ai::key::check_store() {
+    let store_failed = match frename_core::ai::key::check_credential_store() {
         Ok(()) => {
             log::info!("self-test: ok     credential store");
             false

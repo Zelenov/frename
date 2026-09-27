@@ -6,7 +6,8 @@
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
-/// Built for the Mac App Store: the App Store installs and updates frename, Velopack does nothing.
+/// Built for a store (the Mac App Store here; the Microsoft Store in #51): the store installs and
+/// updates frename, Velopack does nothing.
 pub const STORE_BUILD: bool = cfg!(feature = "store");
 
 /// The package this process runs from, found once at start-up.

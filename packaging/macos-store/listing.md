@@ -4,7 +4,7 @@ Paste each field into App Store Connect → Apps → frename. Limits are Apple's
 ([App information](https://developer.apple.com/help/app-store-connect/reference/app-information/app-information),
 [Platform version information](https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information)).
 `docs/mac-app-store-setup.md` says when to do this. Wording follows the Microsoft Store listing
-(`packaging/store/listing.md`, #51) so both stores describe the same app.
+(`packaging/store/listing.md` on #51's branch) so both stores describe the same app.
 
 ## App Information page
 
@@ -29,8 +29,8 @@ Free (or the price the owner chooses), all countries.
 ## App Privacy page
 
 **Privacy policy URL:** https://github.com/Zelenov/frename/blob/main/packaging/store/privacy-policy.md
-(shared with the Microsoft Store, #51; before submitting, add the Mac paragraph from
-`docs/mac-app-store-setup.md`, step 7).
+(`packaging/store/privacy-policy.md`, shared with the Microsoft Store, #51; it covers the Mac
+builds).
 
 **Data collection:** "No, we do not collect data from this app." frename has no account, analytics
 or server. The two optional AI actions send frames or audio of the clips the user selects
@@ -39,7 +39,9 @@ partner of the developer receives it, which is outside Apple's definition of col
 ("transmitting data off the device in a way that allows you and/or your third-party partners to
 access it", [Apple](https://developer.apple.com/app-store/app-privacy-details/)).
 
-## Version page (macOS App, 1.0 Prepare for Submission)
+## Version page (macOS App, Prepare for Submission)
+
+The version record reads exactly the build's version, e.g. `0.77` (not the default `1.0`).
 
 **Promotional text** (up to 170 characters; can change without a new build)
 
@@ -64,7 +66,7 @@ inside frename.
 WHAT YOU CAN DO
 - Tag clips with one click or one key; copy the tags of one clip and paste them onto the next.
 - Mark the usable part of a clip with in and out points ([ and ]).
-- Press F2 to drop a marker at an interesting moment, name it, give it a color, or hold F2 to mark
+- Press F2 (fn+F2 on a MacBook) to drop a marker at an interesting moment, name it, give it a color, or hold F2 to mark
   a range. Markers are saved inside the video and Premiere Pro shows them on the clip.
 - Write a comment per clip; it is saved inside the video, where Premiere Pro shows it, or as a
   text file next to it.
@@ -132,7 +134,7 @@ better once one is at hand: App Review may ask for screenshots "of the app in us
 - Sign-in required: no.
 - Notes: "frename renames and tags video files in a folder the user opens with the 📂 button
   (bottom of the file list) or by dropping a folder on the window. To try it, open any folder
-  with a few .mp4 or .mov files, click a tag on the right, then press Page Down: the clip you left
-  is renamed with its tag. The optional Describe with AI and Generate subtitles actions need the
+  with a few .mp4 or .mov files, click a tag on the right, then press Page Down (fn + ↓ on a
+  MacBook keyboard) or click ▶ under the file list: the clip you left is renamed with its tag. The optional Describe with AI and Generate subtitles actions need the
   reviewer's own Anthropic or Soniox API key and are not needed to review the app."
 - Contact: the owner's name, phone and e-mail.

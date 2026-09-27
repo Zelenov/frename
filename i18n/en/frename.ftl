@@ -279,7 +279,7 @@ folder-rename-error-empty = Name is empty
 folder-rename-error-bad-character = Not allowed: \ / : * ? " < > |
 folder-rename-error-trailing = Cannot end with a dot or space
 folder-rename-error-exists = A file with this name exists
-folder-access-title = Allow frename to open this folder
+folder-access-title = frename needs access to this folder to open it: click Open
 folder-markers-not-saved = Markers not saved: the file is read-only or in use (close it in Premiere, then open the file and leave it again)
 
 ## Controls bar under the file list

@@ -8,6 +8,7 @@ pub mod demo;
 mod directory;
 mod file;
 mod file_kind;
+pub mod folder_bookmarks;
 mod folder_file;
 mod markers;
 mod metadata;

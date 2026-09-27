@@ -103,7 +103,7 @@ fn delete_key_of(user: &str) -> Result<(), KeyError> {
 /// Save, read back and delete a throwaway entry: whether this build can use the credential
 /// store at all (the App Store build's self-test checks that its sandbox allows the Keychain).
 /// The real keys are never touched.
-pub fn check_store() -> Result<(), KeyError> {
+pub fn check_credential_store() -> Result<(), KeyError> {
     let user = format!("self-test-{}", std::process::id());
     save_key_of(&user, "self-test")?;
     let read = read_key_of(&user);
@@ -147,8 +147,8 @@ mod tests {
     fn the_store_check_passes_wherever_a_store_works() {
         let user = format!("{}-check-{}", ApiKey::Anthropic.user(), std::process::id());
         match key_state_of(&user) {
-            KeyState::Unavailable => assert!(check_store().is_err()),
-            _ => check_store().expect("a working store passes"),
+            KeyState::Unavailable => assert!(check_credential_store().is_err()),
+            _ => check_credential_store().expect("a working store passes"),
         }
     }
 }

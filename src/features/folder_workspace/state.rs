@@ -164,11 +164,11 @@ impl FolderWorkspace {
             Message::LoadLastSession => self.load_last_session(),
             Message::ScanFolder(pair) => self.scan_folder(pair),
             Message::FolderAccessChosen(pair) => {
-                if folder_access::prepare(pair.folder()) {
-                    self.scan_accessible_folder(pair)
-                } else {
+                if folder_access::refused(pair.folder()) {
                     log::warn!("No access to {}, not opening", pair.folder().display());
                     Task::none()
+                } else {
+                    self.scan_accessible_folder(pair)
                 }
             }
             Message::FolderLoaded {
@@ -425,6 +425,14 @@ impl FolderWorkspace {
         let Some(session) = store.get_last_session() else {
             return Task::none();
         };
+        // Never ask at start-up: the user did not open anything (e.g. the drive is unplugged).
+        if folder_access::refused(session.folder()) {
+            log::info!(
+                "No access to the last folder {}, not reopening it",
+                session.folder().display()
+            );
+            return Task::none();
+        }
         Task::done(Message::ScanFolder(session))
     }
 
@@ -452,7 +460,7 @@ impl FolderWorkspace {
     }
 
     fn scan_folder(&mut self, pair: FolderAndFile) -> Task<Message> {
-        if !folder_access::prepare(pair.folder()) {
+        if folder_access::refused(pair.folder()) {
             return ask_folder_access(pair);
         }
         self.scan_accessible_folder(pair)
@@ -2077,11 +2085,17 @@ fn ask_folder_access(pair: FolderAndFile) -> Task<Message> {
         },
         move |picked| {
             picked.map_or(Message::Noop, |picked| {
-                let file = file.filter(|f| f.parent() == Some(picked.as_path()));
-                Message::FolderAccessChosen(FolderAndFile::new(picked, file))
+                Message::FolderAccessChosen(chosen_pair(picked, file))
             })
         },
     )
+}
+
+/// The folder the user chose in the access picker, with the clip still selected if it is in
+/// that folder.
+fn chosen_pair(picked: PathBuf, file: Option<PathBuf>) -> FolderAndFile {
+    let file = file.filter(|f| f.parent() == Some(picked.as_path()));
+    FolderAndFile::new(picked, file)
 }
 
 /// Where an Anthropic account buys credit.
@@ -3112,5 +3126,21 @@ mod tests {
         let _ = workspace.update(Message::OpenPath(test_dir.file_path("gone.mp4")));
         assert!(workspace.file_workspace().file().is_some());
         assert!(!workspace.is_loading());
+    }
+
+    #[test]
+    fn the_access_picker_keeps_the_clip_only_in_its_own_folder() {
+        let day = PathBuf::from("/Movies/day 1");
+        let clip = day.join("MVI_0001.MP4");
+        let same = super::chosen_pair(day.clone(), Some(clip.clone()));
+        assert_eq!(same.folder(), day.as_path());
+        assert_eq!(same.file(), Some(clip.as_path()));
+
+        let other = PathBuf::from("/Movies/day 2");
+        let moved = super::chosen_pair(other.clone(), Some(clip));
+        assert_eq!(moved.folder(), other.as_path());
+        assert_eq!(moved.file(), None);
+
+        assert_eq!(super::chosen_pair(day, None).file(), None);
     }
 }

@@ -68,9 +68,9 @@ anyhow = "1"
 indicatif = "0.18"
 
 [features]
-# The Mac App Store build (packaging/macos-store/): sandboxed, installed and updated by the App
-# Store, so Velopack's hooks and self-update are off, and folders the user opened are kept
-# openable across restarts with security-scoped bookmarks (src/folder_access.rs).
+# The store build: installed and updated by a store, so Velopack's hooks and self-update are off.
+# On macOS the Mac App Store build (packaging/macos-store/): sandboxed, folders the user opened
+# stay openable across restarts with security-scoped bookmarks (src/folder_access.rs).
 store = []
 
 [dev-dependencies]
