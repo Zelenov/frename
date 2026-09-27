@@ -60,24 +60,30 @@ pub struct UpdatesState {
 impl Default for UpdatesState {
     fn default() -> Self {
         let package = package::current();
-        let mut state = Self::new(
+        Self::new(
             package.is_some(),
+            package::STORE_BUILD,
             package.map_or_else(
                 || option_env!("APP_VERSION").unwrap_or("dev").to_string(),
                 |p| p.version.clone(),
             ),
             AppDatabase::new().get_update_check().unwrap_or_default(),
-        );
-        state.from_store = package::STORE_BUILD;
-        state
+        )
     }
 }
 
 impl UpdatesState {
-    fn new(installed: bool, current_version: String, saved: UpdateCheckState) -> Self {
+    /// `from_store` wins over `installed`: the Store build never updates itself, whatever it
+    /// finds on disk.
+    fn new(
+        installed: bool,
+        from_store: bool,
+        current_version: String,
+        saved: UpdateCheckState,
+    ) -> Self {
         Self {
-            installed,
-            from_store: false,
+            installed: installed && !from_store,
+            from_store,
             current_version,
             saved,
             status: Status::Idle,
@@ -314,6 +320,7 @@ mod tests {
     fn installed(last_check: u64) -> UpdatesState {
         UpdatesState::new(
             true,
+            false,
             "0.67.0".to_string(),
             UpdateCheckState {
                 check_on_start: true,
@@ -470,7 +477,8 @@ mod tests {
 
     #[test]
     fn an_unpackaged_build_never_checks() {
-        let mut state = UpdatesState::new(false, "dev".to_string(), UpdateCheckState::default());
+        let mut state =
+            UpdatesState::new(false, false, "dev".to_string(), UpdateCheckState::default());
         assert!(matches!(state.apply(Message::CheckNow, 10), Effect::None));
         assert!(matches!(state.apply(Message::Tick, 10 * DAY), Effect::None));
         assert!(matches!(
@@ -480,13 +488,15 @@ mod tests {
         assert_eq!(state.status(), &Status::Idle);
     }
 
-    /// The Store build shares `%LocalAppData%\frename` with an installed Velopack version, whose
-    /// saved check (on at start-up, a newer version found) must not make the Store build check
-    /// GitHub or offer that version: the Store updates it.
+    /// The Store build takes the installed version's database on its first start, with its saved
+    /// check (on at start-up, a newer version found): that must not make the Store build check
+    /// GitHub or offer that version, since the Store updates it.
     #[test]
     fn the_store_build_never_checks_even_with_a_saved_newer_version() {
+        // Even where something reports it as installed.
         let mut state = UpdatesState::new(
-            false,
+            true,
+            true,
             "0.67.0".to_string(),
             UpdateCheckState {
                 check_on_start: true,
@@ -494,7 +504,6 @@ mod tests {
                 newest_version: "0.68.0".to_string(),
             },
         );
-        state.from_store = true;
         assert!(state.is_store_build());
         assert!(matches!(state.apply(Message::Tick, 10 * DAY), Effect::None));
         assert!(matches!(state.apply(Message::CheckNow, 10), Effect::None));

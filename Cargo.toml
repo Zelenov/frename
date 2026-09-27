@@ -69,7 +69,7 @@ indicatif = "0.18"
 
 [features]
 # The Microsoft Store build (packaging/windows/build-msix.ps1): the Store installs and updates
-# frename, so Velopack's hooks and self-update are off and data lives in %LocalAppData%\frename.
+# frename, so Velopack's hooks and self-update are off and data lives in %LocalAppData%\frename-store.
 store = []
 
 [dev-dependencies]

@@ -4,13 +4,14 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-/// The data folder of an installed or portable package, set once by the app at start-up.
+/// The data folder of an installed, portable or Store package, set once by the app at start-up.
 static PACKAGE_DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 /// The folder for frename's own files: next to the executable, except when frename runs from an
 /// AppImage, whose folder is a read-only mount; then `$XDG_DATA_HOME/frename`, by default
 /// `~/.local/share/frename`. An installed or portable Windows package keeps them in the folder
-/// set with [`set_app_data_dir`], because the executable's folder is replaced on every update.
+/// set with [`set_app_data_dir`], because the executable's folder is replaced on every update, and
+/// so does the Microsoft Store build, whose executable's folder is read-only.
 /// An absolute `FRENAME_DATA_DIR` overrides all of these (demo mode uses it to keep the user's
 /// database untouched). The folder may not exist yet.
 pub fn app_data_dir() -> PathBuf {
@@ -21,7 +22,8 @@ pub fn app_data_dir() -> PathBuf {
     )
 }
 
-/// Set the data folder of the package frename runs from. Called once by `main`, before anything
+/// Set the data folder of the package frename runs from (Velopack or Microsoft Store). Called once
+/// by `main`, before anything
 /// reads [`app_data_dir`]; a second call is ignored. Tests do not call it.
 pub fn set_app_data_dir(dir: PathBuf) {
     if PACKAGE_DATA_DIR.set(dir).is_err() {

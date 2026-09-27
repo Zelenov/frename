@@ -61,7 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // An installed or portable package keeps the database and the log in its root: the folder
     // with the exe is replaced by every update. Set while the process is single-threaded.
-    // The Store build is not a Velopack package and keeps them in %LocalAppData%\frename.
+    // The Store build is not a Velopack package and keeps them in %LocalAppData%\frename-store.
     let package = package::Package::locate();
     if let Some(dir) = package
         .as_ref()
@@ -144,6 +144,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // package has its data away from the exe, and a self-test or demo never asks anything.
     if package.is_some() && self_test.is_none() && demo.is_none() {
         old_settings_prompt::run(&data_dir);
+    }
+    // The Store build's first start takes the installed version's settings and folder history.
+    if let Some(installed) = package::installed_data_dir_beside_store(&data_dir) {
+        if self_test.is_none() && demo.is_none() {
+            match frename_core::old_settings::import_once_from(&data_dir, &installed) {
+                Ok(true) => log::info!("settings imported from {}", installed.display()),
+                Ok(false) => {}
+                Err(e) => log::warn!("settings not imported from {}: {e}", installed.display()),
+            }
+        }
     }
 
     // Check GStreamer availability

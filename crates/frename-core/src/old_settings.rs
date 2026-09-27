@@ -131,6 +131,17 @@ pub fn import_into_data_dir(data_dir: &Path, old_folder: &Path) -> Result<(), St
     std::fs::rename(&imported, &database).map_err(|e| e.to_string())
 }
 
+/// On the first start of a data folder (no database in it yet), copy the database of another
+/// frename that keeps its data in `other_data_dir`, if it has one. Returns whether it copied.
+/// Used by the Microsoft Store build, which keeps its own folder next to the installed version's,
+/// so that moving to the Store keeps settings and folder history.
+pub fn import_once_from(data_dir: &Path, other_data_dir: &Path) -> Result<bool, String> {
+    if data_dir.join(DATABASE_FILE).exists() || !other_data_dir.join(DATABASE_FILE).exists() {
+        return Ok(false);
+    }
+    import_into_data_dir(data_dir, other_data_dir).map(|()| true)
+}
+
 /// Whether the first-start offer to import old settings should be made: the data folder has no
 /// database yet, or the user closed the offer last time without answering.
 pub fn import_offer_due(data_dir: &Path) -> bool {
@@ -240,6 +251,36 @@ mod tests {
     fn missing_search_folders_find_nothing() {
         let root = temp_folder("missing");
         assert!(find_old_frename_folders(&[root.join("nowhere")], SEARCH_DEPTH).is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_first_start_copies_the_other_database_once() {
+        let root = temp_folder("once");
+        let installed = root.join("frename");
+        let _open = old_frename(&installed, "installed settings");
+        let store = root.join("frename-store");
+
+        assert_eq!(import_once_from(&store, &installed), Ok(true));
+        assert_eq!(value_in(&store.join(DATABASE_FILE)), "installed settings");
+
+        // Later starts keep the folder's own database, even after the other one changed.
+        let later = Connection::open(installed.join(DATABASE_FILE)).expect("open");
+        later
+            .execute("UPDATE t SET v = 'changed later'", [])
+            .expect("update");
+        drop(later);
+        assert_eq!(import_once_from(&store, &installed), Ok(false));
+        assert_eq!(value_in(&store.join(DATABASE_FILE)), "installed settings");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_first_start_without_another_database_copies_nothing() {
+        let root = temp_folder("once-none");
+        let store = root.join("frename-store");
+        assert_eq!(import_once_from(&store, &root.join("frename")), Ok(false));
+        assert!(!store.join(DATABASE_FILE).exists());
         let _ = std::fs::remove_dir_all(&root);
     }
 

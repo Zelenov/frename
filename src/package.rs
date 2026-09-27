@@ -5,9 +5,9 @@
 //!
 //! The Microsoft Store build (`--features store`, packed as MSIX) is not a Velopack package: the
 //! Store installs and updates it, so it never runs Velopack's hooks or updater, and keeps its
-//! files in `%LocalAppData%\frename` (docs/design/microsoft-store.md).
+//! files in `%LocalAppData%\frename-store` (docs/design/microsoft-store.md).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 /// Built for the Microsoft Store: the Store installs and updates frename, Velopack does nothing.
@@ -138,20 +138,32 @@ mod explorer_menu {
     }
 }
 
-/// The data folder of the Store build: `%LocalAppData%\frename`, where the installed Velopack
-/// version keeps its data too. `None` for other builds, and when Windows has no local app data
-/// folder. Inside the MSIX package, Windows redirects new files there to the package's own
-/// storage, which the Store removes with the app.
+/// The data folder of the Store build: `%LocalAppData%\frename-store`. `None` for other builds,
+/// and when Windows has no local app data folder. Its own folder, not the installed version's
+/// `%LocalAppData%\frename`: the two builds may run side by side, at different versions of the
+/// database, and Windows puts a packaged app's new files in the package's own storage, where the
+/// other build cannot see them. The Store removes it with the app.
 pub fn store_data_dir() -> Option<PathBuf> {
     STORE_BUILD
         .then(dirs::data_local_dir)
         .flatten()
-        .map(|local| store_data_dir_in(&local))
+        .map(|local| local.join(STORE_DATA_FOLDER))
 }
 
-/// The Store build's data folder inside a local app data folder.
-fn store_data_dir_in(local_app_data: &std::path::Path) -> PathBuf {
-    local_app_data.join("frename")
+const STORE_DATA_FOLDER: &str = "frename-store";
+
+/// The installed version's data folder next to the Store build's `data_dir`, whose settings the
+/// Store build takes on its first start. `None` unless `data_dir` is the Store build's folder.
+pub fn installed_data_dir_beside_store(data_dir: &Path) -> Option<PathBuf> {
+    if !STORE_BUILD || data_dir.file_name()? != STORE_DATA_FOLDER {
+        return None;
+    }
+    installed_data_dir_beside(data_dir)
+}
+
+/// `%LocalAppData%\frename` for `%LocalAppData%\frename-store`.
+fn installed_data_dir_beside(store_dir: &Path) -> Option<PathBuf> {
+    Some(store_dir.parent()?.join("frename"))
 }
 
 /// The running version as the UI shows it: `0.68`, not Velopack's `0.68.0`. Packaged builds know
@@ -197,13 +209,25 @@ mod tests {
     }
 
     #[test]
-    fn the_store_build_keeps_its_data_where_the_installed_version_does() {
+    fn the_store_build_keeps_its_own_folder_next_to_the_installed_versions() {
         let local = PathBuf::from("C:/Users/me/AppData/Local");
-        assert_eq!(store_data_dir_in(&local), local.join("frename"));
+        let store = local.join(STORE_DATA_FOLDER);
         assert_eq!(
-            store_data_dir().is_some(),
-            STORE_BUILD && dirs::data_local_dir().is_some()
+            installed_data_dir_beside(&store),
+            Some(local.join("frename"))
         );
+        assert_eq!(
+            store_data_dir(),
+            dirs::data_local_dir()
+                .filter(|_| STORE_BUILD)
+                .map(|l| l.join("frename-store"))
+        );
+        // Only the Store build, and only from its own folder (not a demo's or FRENAME_DATA_DIR's).
+        assert_eq!(
+            installed_data_dir_beside_store(&store).is_some(),
+            STORE_BUILD
+        );
+        assert_eq!(installed_data_dir_beside_store(&local.join("demo")), None);
     }
 
     #[test]
