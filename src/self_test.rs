@@ -30,7 +30,8 @@ const REQUIRED_ELEMENTS: [&str; 10] = [
 ];
 
 /// Run the self-test on `paths` (videos, or folders whose videos are all tested) and return the
-/// process exit code: 0 when every video decoded a frame, 1 otherwise, including when there are
+/// process exit code: 0 when every video decoded a frame (and, in the Store build, the
+/// credential store works), 1 otherwise, including when there are
 /// no videos at all. The report goes to the log, which prints on the terminal (CI reads it there)
 /// and to the log file (a release build on Windows has no console).
 pub fn run(paths: &[PathBuf]) -> i32 {
@@ -56,6 +57,20 @@ pub fn run(paths: &[PathBuf]) -> i32 {
         log::error!("self-test: no videos to test");
         return 1;
     }
+    // The App Store build runs sandboxed: its keys must still reach the Keychain.
+    #[cfg(feature = "store")]
+    let store_failed = match frename_core::ai::key::check_store() {
+        Ok(()) => {
+            log::info!("self-test: ok     credential store");
+            false
+        }
+        Err(e) => {
+            log::error!("self-test: FAILED credential store: {e}");
+            true
+        }
+    };
+    #[cfg(not(feature = "store"))]
+    let store_failed = false;
     let mut failed = 0;
     for video in &videos {
         match decode_first_frame(video) {
@@ -71,7 +86,7 @@ pub fn run(paths: &[PathBuf]) -> i32 {
         videos.len() - failed,
         videos.len()
     );
-    i32::from(failed > 0 || missing_elements > 0)
+    i32::from(failed > 0 || missing_elements > 0 || store_failed)
 }
 
 /// Log each required element GStreamer does not have, and return how many there are.

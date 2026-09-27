@@ -31,6 +31,7 @@ use crate::features::markers::MarkersState;
 use crate::features::media_viewer::{self, video as media_viewer_video, MediaViewerState};
 use crate::features::sync_panel;
 use crate::features::tag_panel::{self, TagPanelState, TAG_LIST_SCROLLABLE_ID};
+use crate::folder_access;
 use crate::widgets::search_bar::SEARCH_BAR_INPUT_ID;
 use crate::widgets::splitter::HIT_WIDTH;
 
@@ -162,6 +163,14 @@ impl FolderWorkspace {
             Message::OpenPath(path) => self.open_path(path),
             Message::LoadLastSession => self.load_last_session(),
             Message::ScanFolder(pair) => self.scan_folder(pair),
+            Message::FolderAccessChosen(pair) => {
+                if folder_access::prepare(pair.folder()) {
+                    self.scan_accessible_folder(pair)
+                } else {
+                    log::warn!("No access to {}, not opening", pair.folder().display());
+                    Task::none()
+                }
+            }
             Message::FolderLoaded {
                 directory,
                 target_file,
@@ -443,6 +452,13 @@ impl FolderWorkspace {
     }
 
     fn scan_folder(&mut self, pair: FolderAndFile) -> Task<Message> {
+        if !folder_access::prepare(pair.folder()) {
+            return ask_folder_access(pair);
+        }
+        self.scan_accessible_folder(pair)
+    }
+
+    fn scan_accessible_folder(&mut self, pair: FolderAndFile) -> Task<Message> {
         self.inline_rename = None;
         self.markers.reset();
         // File ids are renewed by the scan, so markers kept for them cannot be matched again.
@@ -690,6 +706,7 @@ impl FolderWorkspace {
             Message::OpenPath(_)
                 | Message::LoadLastSession
                 | Message::ScanFolder(_)
+                | Message::FolderAccessChosen(_)
                 | Message::OpenFolderPicker
                 | Message::OpenFilePicker
                 | Message::PrepareBatch(_)
@@ -2042,6 +2059,31 @@ fn check_new_file_name(
     Ok(())
 }
 
+/// Ask the user to choose `pair`'s folder, which the App Store's sandbox keeps closed (a clip
+/// picked or dropped alone, or a folder whose saved access was lost): the folder picker opens in
+/// that folder, so one click grants it. The clip stays selected if its folder is chosen.
+fn ask_folder_access(pair: FolderAndFile) -> Task<Message> {
+    let folder = pair.folder().to_path_buf();
+    let file = pair.file().map(std::path::Path::to_path_buf);
+    let title = fl!("folder-access-title");
+    Task::perform(
+        async move {
+            rfd::AsyncFileDialog::new()
+                .set_directory(&folder)
+                .set_title(title)
+                .pick_folder()
+                .await
+                .map(|f| f.path().to_path_buf())
+        },
+        move |picked| {
+            picked.map_or(Message::Noop, |picked| {
+                let file = file.filter(|f| f.parent() == Some(picked.as_path()));
+                Message::FolderAccessChosen(FolderAndFile::new(picked, file))
+            })
+        },
+    )
+}
+
 /// Where an Anthropic account buys credit.
 const ANTHROPIC_BILLING_URL: &str = "https://console.anthropic.com/settings/billing";
 
@@ -2052,11 +2094,30 @@ fn open_in_default_app(target: impl AsRef<std::ffi::OsStr>) {
     #[cfg(windows)]
     let result = std::process::Command::new("explorer").arg(target).spawn();
     #[cfg(target_os = "macos")]
-    let result = std::process::Command::new("open").arg(target).spawn();
+    let result = open_on_macos(target);
     #[cfg(not(any(windows, target_os = "macos")))]
     let result = std::process::Command::new("xdg-open").arg(target).spawn();
     if let Err(e) = result {
         log::warn!("could not open {target:?}: {e}");
+    }
+}
+
+/// Open a file or a web address through Launch Services (`NSWorkspace`), which the App Store's
+/// sandbox allows; starting `/usr/bin/open` from inside it may not be.
+#[cfg(target_os = "macos")]
+fn open_on_macos(target: &std::ffi::OsStr) -> std::io::Result<()> {
+    use objc2_app_kit::NSWorkspace;
+    use objc2_foundation::{NSString, NSURL};
+    let text = target.to_string_lossy();
+    let url = if text.contains("://") {
+        NSURL::URLWithString(&NSString::from_str(&text))
+    } else {
+        Some(NSURL::fileURLWithPath(&NSString::from_str(&text)))
+    };
+    if url.is_some_and(|url| NSWorkspace::sharedWorkspace().openURL(&url)) {
+        Ok(())
+    } else {
+        Err(std::io::Error::other("the system did not open it"))
     }
 }
 

@@ -67,6 +67,12 @@ sonisub = { version = "0.3", default-features = false }
 anyhow = "1"
 indicatif = "0.18"
 
+[features]
+# The Mac App Store build (packaging/macos-store/): sandboxed, installed and updated by the App
+# Store, so Velopack's hooks and self-update are off, and folders the user opened are kept
+# openable across restarts with security-scoped bookmarks (src/folder_access.rs).
+store = []
+
 [dev-dependencies]
 # Parse the .ftl files in the translation tests
 fluent-syntax = "0.12"
@@ -94,6 +100,13 @@ windows-sys = { version = "0.61", features = [
 ] }
 # The Explorer entry "Open in frename", written to the user's registry on install
 winreg = "0.55"
+
+# Security-scoped bookmarks (the Mac App Store's sandbox) and opening files and links with the
+# app macOS uses for them. The versions iced and rfd already use.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSData", "NSError", "NSString", "NSURL"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWorkspace"] }
 
 # Windows subsystem - use "windows" for GUI app (no console), "console" for CLI
 [target.'cfg(windows)'.build-dependencies]

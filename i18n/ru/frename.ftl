@@ -320,6 +320,7 @@ folder-rename-error-empty = Имя пустое
 folder-rename-error-bad-character = Нельзя: \ / : * ? " < > |
 folder-rename-error-trailing = Не может кончаться точкой или пробелом
 folder-rename-error-exists = Файл с таким именем уже есть
+folder-access-title = Разрешите frename открыть эту папку
 folder-markers-not-saved = Маркеры не сохранены: файл доступен только для чтения или занят (закройте его в Premiere, затем откройте файл и снова закройте)
 
 ## Controls bar under the file list
@@ -370,6 +371,7 @@ file-workspace-comment-expand = Развернуть комментарий
 
 updates-check = Проверить обновления
 updates-not-installed = Обновления работают только в установленной версии
+updates-from-app-store = Обновления приходят из App Store
 updates-checking = Проверка…
 updates-downloading-named = Загрузка { $version }… { $percent }%
 updates-downloading = Загрузка… { $percent }%

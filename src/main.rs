@@ -18,6 +18,7 @@ mod bundled_gstreamer;
 mod crash_guard;
 mod demo;
 mod features;
+mod folder_access;
 mod old_settings_prompt;
 mod package;
 mod self_test;
@@ -113,6 +114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match &package {
             Some(p) if p.portable => "portable",
             Some(_) => "installed",
+            None if package::STORE_BUILD => "App Store",
             None => "not packaged",
         },
         data_dir.display()
