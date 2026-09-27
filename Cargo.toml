@@ -3,8 +3,9 @@ name = "frename"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["Eugene Zelenov"]
 description = "File renaming utility for Windows"
+license = "MIT"
 
 [workspace]
 members = [".", "crates/frename-core"]

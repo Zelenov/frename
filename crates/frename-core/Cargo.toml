@@ -3,6 +3,7 @@ name = "frename-core"
 version = "0.1.0"
 edition = "2021"
 description = "Core logic for frename file renaming utility"
+license = "MIT"
 
 [dependencies]
 log = "0.4"
