@@ -36,7 +36,7 @@ The in/out part is there only when you mark a segment.
 ## The workflow
 
 1. Open a folder with the 📂 button, drag a folder onto the window, or right-click a folder in
-   Explorer and choose "Open in frename" (installed version; on Windows 11 under "Show more
+   Explorer and choose "Open in frename" (Windows installer; on Windows 11 under "Show more
    options"). To start at one clip, right-click 📂 to pick the file, or drag the file in: its
    whole folder opens with that clip selected.
 2. The video starts playing.
@@ -247,7 +247,7 @@ The ⚙ button opens Settings:
 - where comments are kept (inside the video or `.comment.txt`), and the name of the "Commented"
   tag, or none;
 - where in/out points are kept (file name or inside the video);
-- updates: **Check for updates**, then **Update and restart** when a newer version is out.
+- updates (Windows): **Check for updates**, then **Update and restart** when a newer version is out.
   frename also checks once a day by itself (you can turn that off) and puts a dot on ⚙ when
   an update is ready; nothing is downloaded until you click;
 - your Anthropic API key for Describe with AI, kept in the system's password store (Windows
@@ -291,17 +291,17 @@ it. Video playback is built in; nothing else to install. If it says FUSE is miss
 from the [latest release](https://github.com/Zelenov/frename/releases/latest), double-click it
 and drag `frename.app` into **Applications**. frename is not signed with a paid Apple certificate,
 so the first time macOS refuses to open it ("cannot be opened" or "is damaged"). Open **Terminal**
-once and run:
+(`⌘Space`, type Terminal) once and run:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/frename.app
 ```
 
-(`xattr -d com.apple.quarantine` removes the "downloaded from the internet" flag; `-r` does it for
-every file inside the app.) Then open frename as usual. Video playback is built in. Shortcuts use
-`Ctrl`, as on Windows, not `⌘`. There are no automatic updates: download the new zip and replace the
-app the same way. Your settings and the last opened folder are kept in
-`~/Library/Application Support/frename`.
+Then open frename as usual. If Terminal says "Operation not permitted", allow Terminal in System
+Settings → Privacy & Security → App Management and run it again. Video playback is built in. On a
+Mac press `⌘` wherever this page says `Ctrl` (`⌘C`, `⌘V`, `⌘Z`, `⌘⇧Z`). There is no Finder menu
+entry and no automatic updates: download the new zip and replace the app the same way. Your
+settings and the last opened folder are kept in `~/Library/Application Support/frename`.
 
 ---
 

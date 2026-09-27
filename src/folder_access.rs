@@ -13,9 +13,6 @@
 
 use std::path::{Path, PathBuf};
 
-/// Whether this build runs in the App Sandbox.
-pub const SANDBOXED: bool = cfg!(all(target_os = "macos", feature = "store"));
-
 /// How many folders keep their bookmark; the oldest go first.
 const KEEP: usize = 50;
 
@@ -246,10 +243,9 @@ mod tests {
         assert_eq!(fnv1a("a".as_ref()), 0xaf63_dc4c_8601_ec8c);
     }
 
+    #[cfg(not(all(target_os = "macos", feature = "store")))]
     #[test]
     fn outside_the_sandbox_every_folder_is_open() {
-        if !SANDBOXED {
-            assert!(prepare(Path::new("/no such folder")));
-        }
+        assert!(prepare(Path::new("/no such folder")));
     }
 }

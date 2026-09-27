@@ -2,7 +2,7 @@
 
 frename for Macs with Apple silicon: an ad-hoc-signed `frename.app` with GStreamer inside, in every
 release as `frename-macos-arm64-v<version>.zip`. No paid Apple signing (owner's decision in #15);
-the Mac App Store variant is #85 (`docs/mac-app-store-setup.md` on its branch).
+the Mac App Store is a separate issue (#85).
 
 The only Mac that checks it is CI's `macos-14` runner (Apple silicon). So CI proves what it can:
 the app is built the way a release builds it, then on a **fresh runner with no GStreamer** it
@@ -60,6 +60,8 @@ frename.app/Contents/
   Resources/licenses/              the framework's licenses + README with source links
 ```
 
+- Icon: `packaging/macos/frename-512.png` is the 512 px image of `frename-icon.ico` (macOS has no
+  ImageMagick to read the `.ico`); `sips` + `iconutil` make every `.icns` size from it.
 - Libraries go to `Contents/Frameworks` and plug-ins to `Contents/PlugIns`, the places Apple's
   code signing expects nested code. The plugin folder has no dot in its name (`gstreamer`, not
   `gstreamer-1.0`): `codesign` takes a folder with an extension for a bundle.
@@ -70,9 +72,7 @@ frename.app/Contents/
   `check-bundle.sh` re-checks the finished app and `codesign --verify --strict --deep`.
 - **No `gst-plugin-scanner`.** GStreamer normally scans plugins in a child process; with
   `GST_REGISTRY_FORK=no` it scans in-process ([running.md](https://github.com/GStreamer/gstreamer/blob/main/subprojects/gstreamer/docs/gst/running.md),
-  `gstregistry.c`). One executable fewer to sign, and the App Store's sandbox (#85) would
-  otherwise need the scanner signed as an inheriting helper
-  ([Apple](https://developer.apple.com/documentation/xcode/embedding-a-helper-tool-in-a-sandboxed-app)).
+  `gstregistry.c`). One executable fewer to sign, ship and keep in the bundle layout.
   The cost, a crashing plugin taking the app down during the first scan, applies to a fixed,
   tested plugin set only.
 - Environment set before `gst::init` (`src/bundled_gstreamer.rs`, as on Windows): the plugin
@@ -91,9 +91,7 @@ frename.app/Contents/
 A signed bundle must not change after signing, and the app may sit in a folder the user cannot
 write, so a `frename.app` keeps its database, log and GStreamer registry in
 `~/Library/Application Support/frename` (`frename_core::app_dir`, detected from the executable
-being `<name>.app/Contents/MacOS/<exe>`). In the App Store's sandbox `HOME` is the app's
-container, so the same code lands in `~/Library/Containers/<bundle id>/Data/Library/Application Support/frename`
-([App Sandbox in depth](https://developer.apple.com/library/archive/documentation/Security/Conceptual/AppSandboxDesignGuide/AppSandboxInDepth/AppSandboxInDepth.html)).
+being `<name>.app/Contents/MacOS/<exe>`).
 
 ## Signing and Gatekeeper
 
@@ -140,13 +138,19 @@ container, so the same code lands in `~/Library/Containers/<bundle id>/Data/Libr
 - **Official framework, not Homebrew.** Pinned and hashed like the Windows package, relocatable,
   LGPL-only plugin choice; Homebrew bottles are built for the runner's macOS and pull in far more.
 - **Zip, not DMG.** `ditto` keeps signatures and permissions; one download, drag to Applications.
-- **arm64 only, macOS 12 minimum** (`LSMinimumSystemVersion`). The App Store accepts arm64-only
-  apps that require macOS 12 or newer ([Apple forums](https://developer.apple.com/forums/thread/810409)),
-  so #85 can use the same binary.
-- **Bundle id `io.github.zelenov.frename`**, also proposed for the Store build.
+- **arm64 only, macOS 12 minimum** (`LSMinimumSystemVersion`). Below what the parts need
+  (the GStreamer framework: macOS 10.13, [download page source](https://github.com/GStreamer/www/blob/main/src/htdocs/download/download.md);
+  Rust's `aarch64-apple-darwin`: macOS 11, [platform support](https://doc.rust-lang.org/rustc/platform-support/apple-darwin.html));
+  12 is the oldest arm64-only minimum the App Store accepts
+  ([Apple forums](https://developer.apple.com/forums/thread/810409)), which keeps one binary for
+  both. CI runs macOS 14 only.
+- **Bundle id `io.github.zelenov.frename`**.
 - **No self-update on macOS.** Velopack is not used for the Mac app (as for the AppImage);
   Settings → Updates says updates work in the installed version. A new release is a new zip.
-- **Shortcuts stay `Ctrl`.** Mapping them to `⌘` is a separate change (filed as an idea).
+- **Workflow steps**: build, sign, check and zip are four script calls in each workflow rather
+  than one wrapper, because the Store build (#85) signs the same app differently.
+- **Shortcuts:** frename checks `Modifiers::command()`, which iced maps to `⌘` on macOS, so the
+  README's `Ctrl` shortcuts are `⌘` on a Mac; the README says so.
 - **Opening from Finder** ("Open With", dropping on the Dock icon) needs Apple Events handling that
   iced does not expose; not in this issue. Drag onto the window and 📂 work.
 - `ffmpeg` for subtitles of mkv/m2ts/avi: an app started from Finder has a minimal `PATH`

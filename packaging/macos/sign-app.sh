@@ -4,9 +4,9 @@
 #   packaging/macos/sign-app.sh <frename.app> [identity] [entitlements.plist]
 #
 # The identity defaults to `-`, an ad-hoc signature: no Apple account, and enough for Apple
-# Silicon, which runs only signed code. Gatekeeper still blocks an ad-hoc app downloaded from the
-# web until its quarantine flag is removed (README). The App Store build passes its
-# "Apple Distribution" identity and its entitlements (packaging/macos-store/).
+# silicon, which runs only signed code. Gatekeeper still blocks an ad-hoc app downloaded from the
+# web until its quarantine flag is removed (README). The Mac App Store build passes its
+# "Apple Distribution" identity and its sandbox entitlements (packaging/macos-store/).
 set -euo pipefail
 
 app="$1"

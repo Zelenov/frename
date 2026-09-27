@@ -34,8 +34,7 @@ if [ -n "${MAS_APP_IDENTITY:-}" ] && [ -n "${MAS_INSTALLER_IDENTITY:-}" ] \
 fi
 
 mkdir -p "$out"
-BUNDLE_ID="$bundle_id" BUILD_VERSION="$build_number" \
-  "$here/../macos/build-app.sh" "$version" "$binary" "$app"
+BUILD_VERSION="$build_number" "$here/../macos/build-app.sh" "$version" "$binary" "$app"
 
 cp "$here/PrivacyInfo.xcprivacy" "$app/Contents/Resources/"
 # HTTPS only (Anthropic, Soniox): exempt from export documentation; the owner confirms this in
