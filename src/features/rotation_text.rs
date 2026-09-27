@@ -22,6 +22,6 @@ pub fn rotated(rotation: Rotation) -> String {
         90 => fl!("rotate-now-right"),
         180 => fl!("rotate-now-half"),
         270 => fl!("rotate-now-left"),
-        _ => fl!("rotate-now-upright"),
+        _ => fl!("rotate-now-none"),
     }
 }

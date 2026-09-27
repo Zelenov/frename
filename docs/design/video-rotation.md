@@ -19,19 +19,23 @@ their side. Showing the flag is part of this change.
 
 1. **Turn the open clip.** The editor sees a sideways clip and presses `Ctrl+Alt+→` (or clicks
    `↻`). The flag in the file changes, the video opens again at the same moment in the same
-   play/pause state, now upright; a note over the picture says how it is turned now (`Rotated:
-   90° right`, `90° left`, `180°`, `upright`). `Ctrl+Alt+←` / `↺` turns it back. Four presses the
-   same way bring the file back to exactly the bytes it had. A held key turns once.
+   play/pause state, now upright; a note over the picture names the file's rotation flag now
+   (`Rotation: 90° right`, `90° left`, `180°`, `none`). It names the flag, not the picture: a
+   phone's portrait clip plays upright with a 90° flag, and `none` would show it sideways.
+   `Ctrl+Alt+←` / `↺` turns it back. Four presses the same way bring the file back to exactly
+   the bytes it had. A held key turns once. With no video shown nothing happens.
 2. **Undo.** `Ctrl+Z` right after takes the turn back (the file is written again and the video
-   reopens, even when the turn's own reopen is still loading); `Ctrl+Y` turns it again. Each
-   press is one undo step.
+   reopens once, even when the turn's own reopen is still loading, with the same note); `Ctrl+Y`
+   turns it again. Each press is one undo step. The step refreshes nothing else: a turn changes
+   no tags, name or selection.
 3. **A file that cannot turn.** An MKV, a read-only file, a file Premiere has open, a damaged
    or moved file: nothing changes and a note over the picture says why, like the note for
    failed marker writes: `Not rotated: the file is read-only or in use`, `Not rotated: this format has no rotation
    flag`, `Not rotated: the file is damaged`. The batch's failed list gives the same reasons.
 4. **Many files.** Batch mode ▸ "Rotate videos" with four choices: 90° right, 90° left, 180°,
-   upright (reset to 0°). Run on the checked files. Files that already are upright count as
-   skipped for "upright"; MKVs and locked files count as failed with the reason.
+   "Reset: no rotation (0°)". Run on the checked files. Files with no rotation count as skipped
+   for "Reset"; MKVs and locked files count as failed with the reason. "Reset" also removes a
+   turn a phone recorded, which the hint says.
 5. **Premiere.** The editor imports the clips: they come in portrait. Whether a clip that was
    already in a project follows the change is not known yet (see the research; the owner checks by
    hand).
@@ -51,24 +55,26 @@ format has no rotation flag`, `… the file is damaged`), like 📍 for a file t
 markers; while a clip loads they stay on. The keys still show the reason in a note (a key press
 never does nothing silently).
 
-Short notes (`Frame saved`, `Rotated: 90° right`, `Not rotated: …`) show over the bottom left
+Short notes (`Frame saved`, `Rotation: 90° right`, `Not rotated: …`) show over the bottom left
 of the picture, 260 px wide at most (they wrap); in fullscreen at the top left, clear of the
 subtitles. They used to sit in the controls bar, which has no room left for them.
 
 Batch panel "Rotate videos": the title, a hint ("Changes the rotation flag of MP4 and MOV files;
-the picture is not re-encoded. Premiere Pro shows the clip turned after import. Running it again
-turns the files again; “Upright” puts them back."), four radio buttons.
+the picture is not re-encoded. Premiere Pro is expected to show the clip turned when it imports
+it. Running it again turns the files again; “Reset” removes any turn, including one a phone
+recorded."), four radio buttons.
 
 ## Keyboard shortcuts
 
 | Key | Action | Context |
 |---|---|---|
-| `Ctrl+Alt+→` | rotate the open video 90° clockwise | always, like the F-keys |
-| `Ctrl+Alt+←` | rotate the open video 90° counter-clockwise | always, like the F-keys |
+| `Ctrl+Alt+→` | rotate the open video 90° clockwise | not in the comment box or a marker name |
+| `Ctrl+Alt+←` | rotate the open video 90° counter-clockwise | not in the comment box or a marker name |
 
 They follow the rules proposed in #62: a combination with Ctrl/Alt, never a plain character. They
 act also after typing in a search field (like `[`, `]` and the F-keys), so they never do nothing
-silently; a held key turns once. Plain `←`/`→` stay with the tag grid.
+silently; in the comment box and a marker's name they stay with the text (the app asks whether
+the comment box has focus). A held key turns once. Plain `←`/`→` stay with the tag grid.
 
 ## Data format
 

@@ -25,7 +25,7 @@ pub enum Turn {
     Left,
     Half,
     /// Back to 0° (a mirror, if any, stays).
-    Upright,
+    Reset,
 }
 
 #[derive(Debug, Clone)]
@@ -63,20 +63,20 @@ impl Options {
             choice(fl!("batch-action-rotate-right"), Turn::Right),
             choice(fl!("batch-action-rotate-left"), Turn::Left),
             choice(fl!("batch-action-rotate-half"), Turn::Half),
-            choice(fl!("batch-action-rotate-reset"), Turn::Upright),
+            choice(fl!("batch-action-rotate-reset"), Turn::Reset),
         ]
         .spacing(8);
         super::panel(label(), fl!("batch-action-rotate-hint"), choices.into())
     }
 }
 
-/// Turn the file at `path` as `turn` says. A file already upright is skipped by `Upright`.
+/// Turn the file at `path` as `turn` says. A file with no rotation is skipped by `Reset`.
 pub fn run(turn: Turn, path: &Path) -> ItemResult {
     let quarter_turns = match turn {
         Turn::Right => Ok(1),
         Turn::Left => Ok(-1),
         Turn::Half => Ok(2),
-        Turn::Upright => FileTagger::video_rotation(path).map(|r| r.turns_to_upright()),
+        Turn::Reset => FileTagger::video_rotation(path).map(|r| r.turns_to_upright()),
     };
     match quarter_turns.and_then(|turns| {
         if turns == 0 {
@@ -121,14 +121,14 @@ mod tests {
     #[test]
     fn each_turn_and_back_upright() {
         let file = copy_of_clip("turns");
-        assert_eq!(run(Turn::Upright, &file).status, ItemStatus::Skipped);
+        assert_eq!(run(Turn::Reset, &file).status, ItemStatus::Skipped);
         assert_eq!(run(Turn::Right, &file).status, ItemStatus::Done);
         assert_eq!(degrees(&file), 90);
         assert_eq!(run(Turn::Half, &file).status, ItemStatus::Done);
         assert_eq!(degrees(&file), 270);
         assert_eq!(run(Turn::Left, &file).status, ItemStatus::Done);
         assert_eq!(degrees(&file), 180);
-        assert_eq!(run(Turn::Upright, &file).status, ItemStatus::Done);
+        assert_eq!(run(Turn::Reset, &file).status, ItemStatus::Done);
         assert_eq!(degrees(&file), 0);
     }
 
