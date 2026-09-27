@@ -536,7 +536,7 @@ impl FrenameApp {
             Message::DragDrop(drag_drop::Message::FileDropped(path)) => {
                 self.drag_drop_state.handle_file_dropped(path.clone());
                 Task::done(Message::FolderWorkspace(
-                    folder_workspace::Message::OpenFile(path),
+                    folder_workspace::Message::OpenPath(path),
                 ))
             }
             Message::Noop => Task::none(),

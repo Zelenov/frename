@@ -19,8 +19,9 @@ pub enum GlobalSearchKey {
 /// Messages handled by the folder workspace (owns directory, selection, and all logic).
 #[derive(Debug, Clone)]
 pub enum Message {
-    /// Open a file by path: if in current folder then select and open, else scan folder then open
-    OpenFile(PathBuf),
+    /// Open a path the user gave (picker, drag-drop, command line): a folder opens as itself;
+    /// a file opens its folder with the file selected (selected in place if already listed).
+    OpenPath(PathBuf),
     /// Initialize: load last session from state store and open that folder/file if any.
     LoadLastSession,
     /// Scan a directory and auto-select the target file afterwards
@@ -89,6 +90,8 @@ pub enum Message {
     CommentLayout(crate::features::file_workspace::CommentLayout),
     /// Screenshot captured at position (ms) with JPEG bytes.
     ScreenshotTaken(u64, Vec<u8>),
+    /// Open a native folder picker dialog so the user can choose a folder to open.
+    OpenFolderPicker,
     /// Open a native file picker dialog so the user can choose a file to open.
     OpenFilePicker,
     /// Batch mode messages (batch panel, and folder list checks translated by the workspace).

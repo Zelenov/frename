@@ -159,7 +159,7 @@ impl FolderWorkspace {
             {
                 Task::none()
             }
-            Message::OpenFile(path) => self.open_file(path),
+            Message::OpenPath(path) => self.open_path(path),
             Message::LoadLastSession => self.load_last_session(),
             Message::ScanFolder(pair) => self.scan_folder(pair),
             Message::FolderLoaded {
@@ -314,6 +314,15 @@ impl FolderWorkspace {
                     clear_files,
                 ])
             }
+            Message::OpenFolderPicker => Task::perform(
+                async {
+                    rfd::AsyncFileDialog::new()
+                        .pick_folder()
+                        .await
+                        .map(|f| f.path().to_path_buf())
+                },
+                |opt| opt.map_or(Message::Noop, Message::OpenPath),
+            ),
             Message::OpenFilePicker => Task::perform(
                 async {
                     rfd::AsyncFileDialog::new()
@@ -321,10 +330,7 @@ impl FolderWorkspace {
                         .await
                         .map(|f| f.path().to_path_buf())
                 },
-                |opt| match opt {
-                    Some(path) => Message::OpenFile(path),
-                    None => Message::Noop,
-                },
+                |opt| opt.map_or(Message::Noop, Message::OpenPath),
             ),
         }
     }
@@ -411,6 +417,17 @@ impl FolderWorkspace {
             return Task::none();
         };
         Task::done(Message::ScanFolder(session))
+    }
+
+    fn open_path(&mut self, path: PathBuf) -> Task<Message> {
+        let Some(pair) = FolderAndFile::from_path(&path) else {
+            log::warn!("Path does not exist, not opening: {}", path.display());
+            return Task::none();
+        };
+        match pair.file() {
+            Some(file_path) => self.open_file(file_path.to_path_buf()),
+            None => Task::done(Message::ScanFolder(pair)),
+        }
     }
 
     fn open_file(&mut self, path: PathBuf) -> Task<Message> {
@@ -670,9 +687,10 @@ impl FolderWorkspace {
         }
         let changes_files = matches!(
             message,
-            Message::OpenFile(_)
+            Message::OpenPath(_)
                 | Message::LoadLastSession
                 | Message::ScanFolder(_)
+                | Message::OpenFolderPicker
                 | Message::OpenFilePicker
                 | Message::PrepareBatch(_)
                 | Message::ToggleMediaFullscreen
@@ -1042,7 +1060,8 @@ impl FolderWorkspace {
                 Task::none()
             }
             folder::Message::ScrollToSelected => Task::done(Message::ScrollFolderListToSelected),
-            folder::Message::OpenFolder => Task::done(Message::OpenFilePicker),
+            folder::Message::OpenFolder => Task::done(Message::OpenFolderPicker),
+            folder::Message::OpenFile => Task::done(Message::OpenFilePicker),
             folder::Message::SetUntaggedOnly(untagged_only) => {
                 self.set_list_filter(|dir| dir.set_untagged_only(untagged_only))
             }
@@ -2936,9 +2955,9 @@ mod tests {
             &std::collections::HashSet::new(),
         )
         .expect("written");
-        let _ = workspace.update(Message::OpenFile(test_dir.file_path("file_0.mp4")));
+        let _ = workspace.update(Message::OpenPath(test_dir.file_path("file_0.mp4")));
         flush_file_opened(&mut workspace);
-        let _ = workspace.update(Message::OpenFile(test_dir.target_file()));
+        let _ = workspace.update(Message::OpenPath(test_dir.target_file()));
         flush_file_opened(&mut workspace);
         assert_eq!(marker_spans(&workspace), [(3_000, 3_000)]);
 
@@ -3021,5 +3040,14 @@ mod tests {
             .current_file()
             .is_some_and(|f| f.file_path().ends_with("Goat.file_0.mp4")));
         assert_eq!(marker_names(&workspace), [(1_000, "after".to_string())]);
+    }
+
+    #[test]
+    fn opening_a_path_that_does_not_exist_keeps_the_open_file() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let _ = workspace.update(Message::OpenPath(test_dir.file_path("gone.mp4")));
+        assert!(workspace.file_workspace().file().is_some());
+        assert!(!workspace.is_loading());
     }
 }

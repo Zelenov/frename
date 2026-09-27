@@ -8,10 +8,10 @@ use crate::theme;
 
 const CONTROLS_HEIGHT: f32 = 32.0;
 
-/// Render the folder controls: Previous File, Next File, Scroll-to-Selected, Open, Settings and
-/// Batch mode buttons. Buttons are enabled only when applicable. `batch_mode` highlights the
-/// batch button; `batch_running` locks it while a job runs. `update_available`, a newer frename
-/// version, puts a dot on the Settings button, where the update is.
+/// Render the folder controls: Previous File, Next File, Scroll-to-Selected, Open folder, Open
+/// file, Settings and Batch mode buttons. Buttons are enabled only when applicable. `batch_mode`
+/// highlights the batch button; `batch_running` locks it while a job runs. `update_available`, a
+/// newer frename version, puts a dot on the Settings button, where the update is.
 pub fn view(
     has_previous: bool,
     has_next: bool,
@@ -84,6 +84,16 @@ pub fn view(
     )
     .into();
 
+    // The fallback to pick one file, kept small next to the folder button it complements.
+    let open_file_btn: Element<'_, folder::Message> = button(
+        container(text(fl!("folder-controls-open-file")).size(12)).center_y(iced::Length::Fill),
+    )
+    .on_press(folder::Message::OpenFile)
+    .height(iced::Length::Fill)
+    .padding([0, 6])
+    .style(theme::icon_button_style(true))
+    .into();
+
     let settings_button = button(
         container(text("⚙").size(16))
             .center_x(iced::Length::Fill)
@@ -135,6 +145,7 @@ pub fn view(
         next_btn,
         scroll_btn,
         open_btn,
+        open_file_btn,
         settings_btn,
         batch_btn,
     ]
