@@ -41,9 +41,15 @@ Run these with the [Azure CLI](https://learn.microsoft.com/cli/azure/install-azu
 as yourself (`az login`):
 
 ```sh
+# 0. Your subscription ID (this is <subscriptionId> below, and the AZURE_SUBSCRIPTION_ID secret).
+az account show --query id -o tsv
+
 # 1. Register an app for GitHub Actions to use.
 az ad app create --display-name frename-release-signing
-# note the appId (this is your AZURE_CLIENT_ID) and note your tenant: az account show --query tenantId
+# note the appId in the output (this is <appId> below, and the AZURE_CLIENT_ID secret)
+
+# note your tenant (this is <tenantId>, and the AZURE_TENANT_ID secret):
+az account show --query tenantId -o tsv
 
 # 2. Create the matching service principal.
 az ad sp create --id <appId>
@@ -58,26 +64,27 @@ az ad app federated-credential create --id <appId> --parameters '{
 }'
 
 # 4. Grant that app permission to sign with your certificate profile (nothing broader).
+#    <resourceGroup>, <accountName> and <profileName> are the resource group and the account/profile
+#    names you chose or noted in step 1 above; <subscriptionId> and <appId> come from steps 0 and 1.
 az role assignment create \
   --assignee <appId> \
   --role "Artifact Signing Certificate Profile Signer" \
   --scope "/subscriptions/<subscriptionId>/resourceGroups/<resourceGroup>/providers/Microsoft.CodeSigning/codeSigningAccounts/<accountName>/certificateProfiles/<profileName>"
 ```
 
-Replace `<appId>`, `<subscriptionId>`, `<resourceGroup>`, `<accountName>`, `<profileName>` with
-your own values from step 1.
-
 ## 3. Add these GitHub Actions secrets
 
-Repo → Settings → Secrets and variables → Actions → New repository secret. Add all six (the
-workflow checks whether they're set — with none set, releases build unsigned as before; once
-all six are set, the workflow requires signing to succeed):
+Repo → Settings → Secrets and variables → Actions → New repository secret. Add **all six together,
+in one sitting** — the workflow checks whether they're set: with none set, releases build unsigned
+as before, but with only some of the six set, it will attempt signing with an incomplete
+configuration and fail the whole release. Once all six are set, the workflow requires signing to
+succeed:
 
 | Secret name | Value |
 |---|---|
 | `AZURE_CLIENT_ID` | the app's `appId` from step 2.1 |
 | `AZURE_TENANT_ID` | your Azure tenant ID (`az account show --query tenantId`) |
-| `AZURE_SUBSCRIPTION_ID` | your Azure subscription ID |
+| `AZURE_SUBSCRIPTION_ID` | your Azure subscription ID (`az account show --query id`) |
 | `AZURE_SIGNING_ENDPOINT` | the endpoint URL from step 1.6, e.g. `https://weu.codesigning.azure.net` |
 | `AZURE_SIGNING_ACCOUNT` | the signing account name from step 1.6 |
 | `AZURE_SIGNING_PROFILE` | the certificate profile name from step 1.6 |
@@ -91,8 +98,10 @@ kept out of the repository.
 Trigger a release the normal way (merge a `version.md` bump to `main`). In the `build-windows`
 job:
 - the "Signing status" step's job summary should say the build was signed, not "unsigned";
-- the "Verify code signatures" step runs `signtool verify /pa` on `frename-win-Setup.exe` and the
-  packaged `frename.exe`, and fails the job if either isn't validly signed.
+- the "Verify code signatures" step runs `signtool verify /pa` on `frename-win-Setup.exe`, the
+  portable zip's `frename.exe`, `current\frename.exe` and `Update.exe`, and every `.exe` inside the
+  full update package (`frename-*-full.nupkg`), failing the job if any of them isn't validly
+  signed.
 
 Then, **by hand** (the agent can't check this): download the published `frename-win-Setup.exe` on
 a Windows machine that hasn't run it before and see what SmartScreen shows. Expect the publisher

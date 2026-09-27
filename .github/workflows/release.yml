@@ -189,10 +189,28 @@ jobs:
             Where-Object { $_.FullName -match '\\x64\\' } | Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
           if (-not $signtool) { throw "signtool.exe not found on this runner" }
 
-          $verifyDir = "verify-tmp"
-          Expand-Archive -Path "releases\frename-windows-x64-v$env:PACKAGE_VERSION.zip" -DestinationPath $verifyDir -Force
+          # Portable zip layout (docs/design/installer.md "Package layout"): current\frename.exe,
+          # Update.exe and a root frename.exe launcher stub.
+          $portableDir = "verify-tmp\portable"
+          Expand-Archive -Path "releases\frename-windows-x64-v$env:PACKAGE_VERSION.zip" -DestinationPath $portableDir -Force
+          $toVerify = @(
+            "releases\frename-win-Setup.exe",
+            (Join-Path $portableDir "frename.exe"),
+            (Join-Path $portableDir "current\frename.exe"),
+            (Join-Path $portableDir "Update.exe")
+          )
 
-          $toVerify = @("releases\frename-win-Setup.exe", (Join-Path $verifyDir "frename.exe"))
+          # The full update package the updater downloads (not the delta one: a delta's payload is
+          # a binary patch, not standalone executables, so signtool can't verify it directly).
+          $fullNupkg = Get-ChildItem "releases\frename-$env:PACKAGE_VERSION-full.nupkg" -ErrorAction SilentlyContinue
+          if (-not $fullNupkg) { throw "Full update package (frename-$env:PACKAGE_VERSION-full.nupkg) not found to verify" }
+          $nupkgDir = "verify-tmp\nupkg"
+          Copy-Item $fullNupkg.FullName "verify-tmp\full.zip" -Force
+          Expand-Archive -Path "verify-tmp\full.zip" -DestinationPath $nupkgDir -Force
+          $nupkgExes = Get-ChildItem -Path $nupkgDir -Recurse -Filter "*.exe" | Select-Object -ExpandProperty FullName
+          if ($nupkgExes.Count -eq 0) { throw "No executables found inside $($fullNupkg.Name) to verify" }
+          $toVerify += $nupkgExes
+
           foreach ($f in $toVerify) {
             Write-Host "Verifying signature of $f"
             & $signtool verify /pa /v $f
