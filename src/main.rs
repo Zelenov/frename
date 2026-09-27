@@ -126,6 +126,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if bundled_gstreamer {
         log::info!("using the GStreamer bundled with frename");
     }
+    if package::STORE_BUILD {
+        // "Open log" opens it there; CI checks this is where Windows really keeps it.
+        log::info!(
+            "log for other apps: {}",
+            package::log_path_for_other_apps().display()
+        );
+    }
 
     // A folder or file given on the command line ("Open with", a drop onto the exe) opens
     // instead of the last session; one that does not exist is ignored.

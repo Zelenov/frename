@@ -168,6 +168,47 @@ fn local_app_data_folder(name: &str) -> Option<PathBuf> {
         .map(|local| local.join(name))
 }
 
+/// The log as other apps see it. The Store build's data folder is new in `%LocalAppData%`, so
+/// Windows keeps it in the package's own storage, which only frename's package sees at
+/// `%LocalAppData%\frename-store`; Explorer and the editor it opens the log in run outside the
+/// package and find it at `%LocalAppData%\Packages\<family name>\LocalCache\Local\frename-store`.
+/// Every other build, and a Store build run outside its package, returns [`frename_core::log_path`].
+pub fn log_path_for_other_apps() -> PathBuf {
+    let log = frename_core::log_path();
+    let packaged = STORE_BUILD
+        .then(|| {
+            let exe = std::env::current_exe().ok()?;
+            let family = package_family_name(exe.parent()?.file_name()?.to_str()?)?;
+            let local = dirs::data_local_dir()?;
+            let relative = log.strip_prefix(&local).ok()?;
+            Some(
+                local
+                    .join("Packages")
+                    .join(family)
+                    .join("LocalCache")
+                    .join("Local")
+                    .join(relative),
+            )
+        })
+        .flatten();
+    packaged.filter(|path| path.exists()).unwrap_or(log)
+}
+
+/// The package family name (`Name_PublisherId`) from the folder an MSIX package is installed in,
+/// its full name `Name_Version_Architecture_ResourceId_PublisherId`
+/// (`frename.dev_0.74.0.0_x64__mjf909wv0ft0r`). Package names cannot contain `_`.
+fn package_family_name(install_folder: &str) -> Option<String> {
+    let parts: Vec<&str> = install_folder.split('_').collect();
+    match parts.as_slice() {
+        [name, _version, _arch, _resource, publisher_id]
+            if !name.is_empty() && !publisher_id.is_empty() =>
+        {
+            Some(format!("{name}_{publisher_id}"))
+        }
+        _ => None,
+    }
+}
+
 /// Whether frename keeps its data away from the exe (a Velopack package or the Store build), so
 /// settings of an older zip version next to some exe can be imported.
 pub fn keeps_data_away_from_exe(package: Option<&Package>) -> bool {
@@ -226,6 +267,29 @@ mod tests {
             local.as_ref().map(|l| l.join("frename-store"))
         );
         assert_eq!(installed_data_dir(), local.map(|l| l.join("frename")));
+    }
+
+    #[test]
+    fn the_package_family_name_comes_from_the_install_folder() {
+        assert_eq!(
+            package_family_name("frename.dev_0.0.1.0_x64__mjf909wv0ft0r").as_deref(),
+            Some("frename.dev_mjf909wv0ft0r")
+        );
+        assert_eq!(
+            package_family_name("12345EugeneZelenov.frename_0.74.0.0_x64__8wekyb3d8bbwe")
+                .as_deref(),
+            Some("12345EugeneZelenov.frename_8wekyb3d8bbwe")
+        );
+        // Not a package folder: a Velopack `current`, a cargo target folder.
+        assert_eq!(package_family_name("current"), None);
+        assert_eq!(package_family_name("debug"), None);
+    }
+
+    #[test]
+    fn outside_the_store_package_the_log_is_where_frename_writes_it() {
+        if !STORE_BUILD {
+            assert_eq!(log_path_for_other_apps(), frename_core::log_path());
+        }
     }
 
     #[test]

@@ -27,8 +27,8 @@ const IMPORTING_DATABASE_FILE: &str = "frename.db.importing";
 /// Marks that the first-start offer was closed without an answer, so it comes back.
 const ASK_AGAIN_FILE: &str = "import-settings-ask-again";
 
-/// Marks a first-start import ([`import_once_from`]) that failed, so the next start tries again
-/// even though frename has made a database of its own meanwhile.
+/// Marks a first-start import ([`import_once_from`]) that failed, so the next start tries once
+/// more even though frename has made a database of its own meanwhile.
 const RETRY_FIRST_IMPORT_FILE: &str = "import-settings-retry";
 
 /// Whether `folder` holds an old frename: a `frename.db` with a `frename.exe` next to it.
@@ -132,32 +132,37 @@ pub fn import_into_data_dir(data_dir: &Path, old_folder: &Path) -> Result<(), St
             let _ = std::fs::remove_file(data_dir.join(format!("{DATABASE_FILE}{suffix}")));
         }
     }
-    std::fs::rename(&imported, &database).map_err(|e| e.to_string())
+    std::fs::rename(&imported, &database).map_err(|e| e.to_string())?;
+    // Settings are in place: a first-start import that failed earlier is not tried again.
+    let _ = std::fs::remove_file(data_dir.join(RETRY_FIRST_IMPORT_FILE));
+    Ok(())
 }
 
 /// On the first start of a data folder (no database in it yet), copy the database of another
 /// frename that keeps its data in `other_data_dir`, if it has one. Returns whether it copied.
-/// A failed copy (the other database busy or unreadable) is tried again at the next start, even
-/// though frename has made a database of its own by then. Used by the Microsoft Store build,
-/// which keeps its own folder next to the installed version's, so that moving to the Store keeps
-/// settings and folder history.
+/// A failed copy (the other database busy or unreadable) is tried once more at the very next
+/// start, over the database frename made meanwhile after a single session; never later, and not
+/// once another import (a zip version's) has succeeded, so settings the user has since built up
+/// are never replaced. Used by the Microsoft Store build, which keeps its own folder next to the
+/// installed version's, so that moving to the Store keeps settings and folder history.
 pub fn import_once_from(data_dir: &Path, other_data_dir: &Path) -> Result<bool, String> {
     let retry = data_dir.join(RETRY_FIRST_IMPORT_FILE);
-    let due = !data_dir.join(DATABASE_FILE).exists() || retry.exists();
+    let retrying = retry.exists();
+    if retrying {
+        std::fs::remove_file(&retry).map_err(|e| e.to_string())?;
+    }
+    let due = retrying || !data_dir.join(DATABASE_FILE).exists();
     if !due || !other_data_dir.join(DATABASE_FILE).exists() {
-        let _ = std::fs::remove_file(&retry);
         return Ok(false);
     }
-    match import_into_data_dir(data_dir, other_data_dir) {
-        Ok(()) => {
-            let _ = std::fs::remove_file(&retry);
-            Ok(true)
-        }
-        Err(e) => {
-            let _ = std::fs::create_dir_all(data_dir).and_then(|()| std::fs::write(&retry, b""));
-            Err(e)
-        }
-    }
+    import_into_data_dir(data_dir, other_data_dir)
+        .map(|()| true)
+        .inspect_err(|_| {
+            if !retrying {
+                let _ =
+                    std::fs::create_dir_all(data_dir).and_then(|()| std::fs::write(&retry, b""));
+            }
+        })
 }
 
 /// Whether the first-start offer to import old settings should be made: the data folder has no
@@ -293,28 +298,60 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
-    #[test]
-    fn a_failed_first_start_import_is_tried_again_at_the_next_start() {
-        let root = temp_folder("once-retry");
+    /// The installed version's database that cannot be read, and the Store build's first start,
+    /// which fails to copy it and then makes a database of its own.
+    fn failed_first_start(root: &Path) -> (PathBuf, PathBuf) {
         let installed = root.join("frename");
         std::fs::create_dir_all(&installed).expect("folder");
         std::fs::write(installed.join(DATABASE_FILE), b"not a database").expect("db");
         let store = root.join("frename-store");
-
         assert!(import_once_from(&store, &installed).is_err());
-        // frename goes on and makes a database of its own.
         let own = Connection::open(store.join(DATABASE_FILE)).expect("open");
-        own.execute_batch("CREATE TABLE t (v TEXT); INSERT INTO t (v) VALUES ('fresh');")
+        own.execute_batch("CREATE TABLE t (v TEXT); INSERT INTO t (v) VALUES ('own');")
             .expect("own");
-        drop(own);
+        (installed, store)
+    }
 
-        // The installed version's database is readable at the next start.
+    fn make_readable(installed: &Path) -> Connection {
         std::fs::remove_file(installed.join(DATABASE_FILE)).expect("remove");
-        let _open = old_frename(&installed, "installed settings");
+        old_frename(installed, "installed settings")
+    }
+
+    #[test]
+    fn a_failed_first_start_import_is_tried_again_at_the_next_start() {
+        let root = temp_folder("once-retry");
+        let (installed, store) = failed_first_start(&root);
+        let _open = make_readable(&installed);
+
         assert_eq!(import_once_from(&store, &installed), Ok(true));
         assert_eq!(value_in(&store.join(DATABASE_FILE)), "installed settings");
-        // Done: later starts keep it.
         assert_eq!(import_once_from(&store, &installed), Ok(false));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_failed_first_start_import_is_tried_only_once_more() {
+        let root = temp_folder("once-retry-once");
+        let (installed, store) = failed_first_start(&root);
+        // The next start fails too; after that the Store build's own database is kept for good.
+        assert!(import_once_from(&store, &installed).is_err());
+        let _open = make_readable(&installed);
+        assert_eq!(import_once_from(&store, &installed), Ok(false));
+        assert_eq!(value_in(&store.join(DATABASE_FILE)), "own");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_zip_import_after_a_failed_first_start_import_is_not_overwritten() {
+        let root = temp_folder("once-retry-zip");
+        let (installed, store) = failed_first_start(&root);
+        let zip = root.join("Downloads").join("frename");
+        let _zip = old_frename(&zip, "zip settings");
+        import_into_data_dir(&store, &zip).expect("zip import");
+
+        let _open = make_readable(&installed);
+        assert_eq!(import_once_from(&store, &installed), Ok(false));
+        assert_eq!(value_in(&store.join(DATABASE_FILE)), "zip settings");
         let _ = std::fs::remove_dir_all(&root);
     }
 
