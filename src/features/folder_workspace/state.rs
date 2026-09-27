@@ -24,6 +24,7 @@ use iced::widget::operation;
 use iced::{Subscription, Task};
 
 use crate::features::batch::{self, BatchState, ItemResult, ItemStatus};
+use crate::features::drag_out::DragOutState;
 use crate::features::file_name_panel::{self, FileNamePanelState};
 use crate::features::file_workspace::FileWorkspace;
 use crate::features::folder;
@@ -36,6 +37,7 @@ use crate::widgets::splitter::HIT_WIDTH;
 
 use super::Message;
 
+mod drag_out_actions;
 mod marker_actions;
 
 const DEFAULT_LEFT_WIDTH: f32 = 460.0;
@@ -98,6 +100,8 @@ pub struct FolderWorkspace {
     /// Markers whose write into their file failed (the file read-only or open in Premiere),
     /// kept until the file is saved again. By `FileId`, which the next folder scan renews.
     unsaved_markers: HashMap<FileId, Vec<Marker>>,
+    /// A press on a file row that may become a drag out of the window.
+    drag_out: DragOutState,
 }
 
 impl FolderWorkspace {
@@ -138,6 +142,7 @@ impl FolderWorkspace {
             markers: MarkersState::default(),
             known_marker_guids: HashSet::new(),
             unsaved_markers: HashMap::new(),
+            drag_out: DragOutState::default(),
         }
     }
 
@@ -184,6 +189,10 @@ impl FolderWorkspace {
                 self.spinner_frame = self.spinner_frame.wrapping_add(1);
                 Task::none()
             }
+            Message::DragOut(msg) => self.handle_drag_out(msg),
+            // Intercepted by the app, which owns the window; no-op here.
+            Message::StartDragOut(_) => Task::none(),
+            Message::DragOutFinished(outcome) => self.drag_out_finished(outcome),
             Message::Folder(folder_msg) => self.handle_folder_message(folder_msg),
             Message::MediaViewer(msg) => match msg {
                 media_viewer::Message::Unloaded => self.on_media_unloaded(),
@@ -1048,7 +1057,10 @@ impl FolderWorkspace {
 
     fn handle_folder_message(&mut self, msg: folder::Message) -> Task<Message> {
         match msg {
-            folder::Message::SelectFile(index) => self.select_file_at(index),
+            folder::Message::SelectFile(index) => {
+                self.arm_drag_out(index);
+                self.select_file_at(index)
+            }
             folder::Message::PreviousFile => self.select_previous(),
             folder::Message::NextFile => self.select_next(),
             folder::Message::Scrolled {
@@ -1905,6 +1917,7 @@ impl FolderWorkspace {
                 .map(Message::FileNamePanel),
             self.tag_panel.subscription().map(Message::TagPanel),
             spinner,
+            self.drag_out.subscription().map(Message::DragOut),
         ])
     }
 
@@ -3016,6 +3029,38 @@ mod tests {
         assert!(marker_names(&workspace).is_empty());
         let _ = workspace.update(Message::Undo);
         assert_eq!(marker_names(&workspace), [(1_000, String::new())]);
+    }
+
+    /// A drag out of the window waits for the open file's edits to be on disk: a toggled tag is
+    /// not, until the file is saved.
+    #[test]
+    fn the_open_file_is_unsaved_for_a_drag_until_its_edits_are_on_disk() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let id = file_id_at(&workspace, 0);
+        assert!(!workspace.open_file_unsaved(id), "just opened");
+
+        let tag_list = workspace.file_workspace().tag_list();
+        let tag_id = tag_list
+            .filtered_display_tag_ids()
+            .iter()
+            .find(|t| tag_list.get_tag(**t).is_some_and(|t| t.tag() == "pick"))
+            .copied()
+            .expect("pick is a built-in tag");
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
+        assert!(workspace.open_file_unsaved(id), "tag toggled");
+
+        let (_, snapshot) = workspace
+            .file_workspace()
+            .get_snapshot()
+            .expect("a file is open");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        assert!(!workspace.open_file_unsaved(id), "saved");
     }
 
     #[test]

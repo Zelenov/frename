@@ -6,7 +6,9 @@ use frename_core::{File, FileId, FileSnapshot, FolderAndFile};
 use iced::widget::text_editor;
 
 use super::Directory;
-use crate::features::{batch, file_name_panel, folder, media_viewer, sync_panel, tag_panel};
+use crate::features::{
+    batch, drag_out, file_name_panel, folder, media_viewer, sync_panel, tag_panel,
+};
 
 /// Key that triggered global focus (we emulate it into the search bar; Iced cannot replay the event).
 #[derive(Debug, Clone)]
@@ -115,4 +117,10 @@ pub enum Message {
     },
     /// Advance the loading spinner in the folder list (internal, only while files load).
     SpinnerTick,
+    /// Mouse events while a file row is pressed: may start a drag out of the window.
+    DragOut(drag_out::Message),
+    /// Drag these files out of the window. Handled by the app, which owns the window.
+    StartDragOut(Vec<PathBuf>),
+    /// The drag out of the window ended (the app sends it when the drag loop returns).
+    DragOutFinished(drag_out::Outcome),
 }
