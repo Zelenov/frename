@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Microsoft Store package of frename (docs/design/microsoft-store.md). build-msix.ps1 fills in
+  the $…$ placeholders: the identity comes from Partner Center (docs/store-setup.md), the version
+  from version.md.
+
+  frename is a full-trust desktop app: it reads and renames files in whatever folders the user
+  opens, with the ordinary Windows file APIs, so it needs runFullTrust and nothing else
+  (broadFileSystemAccess is only for the UWP StorageFile APIs, which frename does not use).
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap5 rescap">
+
+  <Identity
+    Name="$IDENTITY_NAME$"
+    Publisher="$PUBLISHER$"
+    Version="$VERSION$"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>frename</DisplayName>
+    <PublisherDisplayName>$PUBLISHER_DISPLAY_NAME$</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <Description>Review, tag and rename video clips before editing.</Description>
+  </Properties>
+
+  <Dependencies>
+    <!-- Windows 10 1809: the oldest version the Store still offers MSIX desktop apps to. -->
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <!-- The Store listing languages. frename's UI follows Windows (English, Russian) regardless. -->
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="frename" Executable="frename.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="frename"
+        Description="Review, tag and rename video clips before editing."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+      </uap:VisualElements>
+      <Extensions>
+        <!-- `frename.exe <folder>` from a terminal, as with the other builds; CI runs the
+             packaged self-test through it. -->
+        <uap5:Extension Category="windows.appExecutionAlias" Executable="frename.exe" EntryPoint="Windows.FullTrustApplication">
+          <uap5:AppExecutionAlias>
+            <uap5:ExecutionAlias Alias="frename.exe" />
+          </uap5:AppExecutionAlias>
+        </uap5:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!-- AI descriptions and subtitles call Anthropic and Soniox with the user's own keys. -->
+    <Capability Name="internetClient" />
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

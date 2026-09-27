@@ -43,6 +43,10 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
+      # The Microsoft Store build (docs/design/microsoft-store.md) compiles other code paths.
+      - name: Clippy (Store build)
+        run: cargo clippy --workspace --all-targets --locked --features store -- -D warnings
+
       # With the SONIOX_API_KEY secret set, one test also generates subtitles with the real
       # Soniox (about 30 s of audio); without it that test is skipped (issue #12).
       - name: Test
@@ -197,6 +201,30 @@ jobs:
             releases/frename-win-Portable.zip
           retention-days: 14
 
+      # The Microsoft Store package: the same app built without Velopack's updater, as MSIX.
+      # Unsigned (the Store signs it). The identity is Partner Center's once the owner sets the
+      # repository variables (docs/store-setup.md), a placeholder before that.
+      - name: Build the Store variant
+        run: cargo build --release --locked --features store
+
+      - name: Bundle GStreamer for the Store package
+        shell: pwsh
+        run: packaging/windows/bundle.ps1 -GstRoot C:\gstreamer -Exe target\release\frename.exe -Out dist\frename-store
+
+      - name: Pack the Store package (MSIX)
+        shell: pwsh
+        env:
+          STORE_IDENTITY_NAME: ${{ vars.STORE_IDENTITY_NAME }}
+          STORE_PUBLISHER: ${{ vars.STORE_PUBLISHER }}
+          STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.STORE_PUBLISHER_DISPLAY_NAME }}
+        run: packaging/windows/build-msix.ps1 -Bundle dist\frename-store -Version 0.0.1.0 -Out store\frename.msix -IdentityName $env:STORE_IDENTITY_NAME -Publisher $env:STORE_PUBLISHER -PublisherDisplayName $env:STORE_PUBLISHER_DISPLAY_NAME
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: frename-store-msix-${{ github.sha }}
+          path: store/frename.msix
+          retention-days: 14
+
   # Installs the packages on a fresh runner, which has no GStreamer: the build runner has one on
   # PATH, which would hide a DLL missing from the bundle.
   windows-install:
@@ -214,3 +242,29 @@ jobs:
       - name: Install and self-test on a clean system
         shell: pwsh
         run: packaging/windows/test-package.ps1 -Setup packages\frename-win-Setup.exe -Portable packages\frename-win-Portable.zip
+
+  # Installs the Store package on a fresh runner (no GStreamer), self-tests it inside its package
+  # and runs the Windows App Certification Kit on it.
+  windows-store:
+    name: ci-windows-store
+    needs: windows
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: frename-store-msix-${{ github.sha }}
+          path: store
+
+      - name: Install, self-test and certify the Store package
+        shell: pwsh
+        run: packaging/windows/test-msix.ps1 -Msix store\frename.msix -Report store\wack-report.xml
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: wack-report-${{ github.sha }}
+          path: store/wack-report.xml
+          retention-days: 14
+          if-no-files-found: ignore
