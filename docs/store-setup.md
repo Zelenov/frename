@@ -6,7 +6,7 @@ package (`ci-windows-store` on every PR, `build-store` / `test-store` in every r
 left needs a person: an account, an identity check, questionnaires, and pressing **Submit**.
 
 Nothing costs money: developer registration is free for individuals. Total hands-on time is about
-2 hours, plus waiting for the identity check and for certification (up to 3 business days).
+2 hours (3 with the optional steps 5 and 8), plus waiting for the identity check and for certification (up to 3 business days).
 
 The Store package is separate from the GitHub installer, which does not change. Code signing
 (`docs/signing-setup.md`) is not needed for the Store: the Store signs the package itself.
@@ -46,7 +46,9 @@ individual account cannot be converted to a company account later.
 1. Partner Center → **Apps and games** → **+ New product** → **MSIX or PWA app**.
 2. Type `frename` → **Check availability** → **Reserve product name**.
    If the name is taken, reserve `frename video tagger` (or another) and **hand it back** with
-   the name, so the manifest's display name is changed to match.
+   the name, so the manifest's display name is changed to match. Then do step 3 and wait: step 4
+   needs a release made after the agent's change (otherwise Partner Center rejects the package in
+   step 6.4 because its name is not the reserved one).
 3. Open the new product → **Product management** → **Product identity**. Keep this page open for
    step 3; it shows:
    - **Package/Identity/Name**, e.g. `12345EugeneZelenov.frename`
@@ -131,7 +133,8 @@ Partner Center → frename → **Start your submission**. The texts are ready in
    users"; answer **No** to unrestricted internet access for browsing. Expected result: 3+ / E /
    PEGI 3. (10 min)
 4. **Packages**: drag in the `.msix` from step 4. Partner Center validates it; errors about the
-   identity mean a variable in step 3 does not match. Device families: **Windows 10/11 Desktop**
+   identity or the display name mean a variable in step 3, or the reserved name, does not
+   match. Device families: **Windows 10/11 Desktop**
    only.
 5. **Store listings** → **Add/remove languages**: keep **English (United States)** →
    open it and paste every field from `packaging/store/listing.md`. Screenshots: upload the three
@@ -217,6 +220,8 @@ On a Windows 10/11 machine, ideally one where frename was never installed:
    videos: a clip plays (MP4 and MOV at least).
 3. Tag a clip and press PageDown: the file is renamed in that folder.
 4. Settings → Updates says **Updates come from the Microsoft Store**, with no Check button.
+   Check a few clips, click the batch button, and if a batch action shows **Open log**, click it:
+   the log opens.
 5. Settings → enter an Anthropic API key, run **Describe with AI** on one short clip; restart
    frename: the key is still saved. Open Windows **Credential Manager** → **Windows
    Credentials**: an entry with `frename` in its name exists. (This is the one thing the agent

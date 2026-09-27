@@ -51,6 +51,10 @@ try {
 }
 $identity = $manifest.Package.Identity
 Write-Host "Package: $($identity.Name) $($identity.Version), publisher $($identity.Publisher)"
+# The script uninstalls the package at the end, with its settings: never one that was here before.
+if (Get-AppxPackage -Name $identity.Name) {
+    throw "$($identity.Name) is already installed here; run this where frename from the Store is not"
+}
 
 $signed = Join-Path $work "frename-signed.msix"
 Copy-Item $Msix $signed
@@ -141,6 +145,11 @@ db.close()
     if (!$log) { throw "No log at $($logs -join ' or '): the packaged frename is not the Store build" }
     if (!(Select-String -Path $log -Pattern "Microsoft Store" -Quiet)) {
         throw "The packaged frename is not the Store build (its log does not say 'Microsoft Store')"
+    }
+    # "Open log" hands this path to Explorer, which runs outside the package: it must be the real
+    # file, the one found above in the package's storage.
+    if (!(Select-String -Path $log -Pattern ("log for other apps: " + $log) -SimpleMatch -Quiet)) {
+        throw "The Store build would open its log at another path than $log"
     }
     if ((Test-Path $installedDb) -and !(Select-String -Path $log -Pattern "settings imported from" -Quiet)) {
         throw "The Store build did not import the installed version's settings from $installedDb"

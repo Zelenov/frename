@@ -141,8 +141,15 @@ With its own folder, which is new and therefore lives in the package's private s
   the installed version's `%LocalAppData%\frename\frename.db`, if there is one, with the same
   `VACUUM INTO` import the installer uses for zip versions (`old_settings::import_once_from`; it
   reads changes still in the WAL and leaves the old files as they were). Settings and folder
-  history carry over; afterwards the two builds are independent. It runs under `--self-test` too, so CI proves it inside a real package (below); a demo
-  has a folder of its own and never imports;
+  history carry over; afterwards the two builds are independent. It runs under `--self-test`
+  too, so CI proves it inside a real package (below); a demo has a folder of its own and never
+  imports. A copy that fails (the installed database busy or unreadable) is tried once more at
+  the very next start, over the database of that one session, and never after that or after a
+  zip import succeeded, so settings built up in the Store build are never replaced;
+- **"Open log"** (batch view): Explorer and the editor it starts run outside the package, where the
+  log is at `%LocalAppData%\Packages\<family name>\LocalCache\Local\frename-store`, not at the
+  path frename sees. The Store build opens that path (`package::log_path_for_other_apps`, the
+  family name taken from the package's install folder), and writes it into its log at start-up;
 - **older zip or portable versions**: the same first-start offer and **Import from an old frename
   folder…** in Settings as the installed version has (`installer.md` flow 6), since the Store
   build also keeps its data away from the exe (`package::keeps_data_away_from_exe`);
@@ -227,7 +234,7 @@ the runners does the same with one less tool.
 
 - `ci.yml`, job `ci-windows`: after the Velopack packages, builds the `store` variant, bundles
   GStreamer into it (`bundle.ps1`), packs `frename.msix` (version `0.0.1.0`) and uploads it.
-  `ci-linux` and `ci-windows` run Clippy on the `store` build too, and `ci-linux` its unit tests.
+  `ci-linux` and `ci-windows` run Clippy and the unit tests on the `store` build too.
 - `ci.yml`, new job `ci-windows-store` on a fresh runner (`packaging/windows/test-msix.ps1`):
   1. fails if the runner has a GStreamer;
   2. signs a copy with a throwaway self-signed certificate whose subject is the package's
@@ -238,11 +245,13 @@ the runners does the same with one less tool.
      exist and say `Microsoft Store`. Before it, the script makes an installed version's database
      in `%LocalAppData%\frename` (WAL mode, with Python on the runner) unless one exists, and the
      log must then say `settings imported from`: the first-start import works from inside a
-     package, through file virtualization, not just in a unit test;
+     package, through file virtualization, not just in a unit test. The log must also name
+     itself, at the path found in the package's storage, as the one "Open log" opens. The script
+     refuses to run where the package is installed already (it uninstalls it at the end);
   4. uninstalls it and runs the **Windows App Certification Kit**
      (`appcert.exe reset`, `appcert.exe test -appxpackagepath … -reportoutputpath …`,
-     `WDD uwp/debug-test-perf/windows-app-certification-kit.md`); `OVERALL_RESULT="FAIL"` fails
-     the job, and the report is uploaded as an artifact. If a runner image ever lacks the kit, the
+     `WDD uwp/debug-test-perf/windows-app-certification-kit.md`); any overall result but PASS
+     or WARNING (a missing one too) fails the job, and the report is uploaded as an artifact. If a runner image ever lacks the kit, the
      job says so in its summary and passes on steps 1–3.
 - `release.yml`: `build-store` and `test-store` do the same with the release version; the GitHub
   release does not wait for them (a Store problem never blocks a GitHub release), and the MSIX is
