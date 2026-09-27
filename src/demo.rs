@@ -45,18 +45,28 @@ pub struct DemoRun {
     batch: bool,
     /// Show the AI description: its segments, or in batch mode the "Describe with AI" action.
     ai: bool,
+    /// A UI message id shown as a notice in the video controls bar before the screenshot.
+    notice: Option<String>,
     video_ready: bool,
 }
 
 impl DemoRun {
     /// `work` is the throwaway folder; `main` removes it after the app has exited.
-    pub fn new(scenario: DemoScenario, out: PathBuf, work: PathBuf, batch: bool, ai: bool) -> Self {
+    pub fn new(
+        scenario: DemoScenario,
+        out: PathBuf,
+        work: PathBuf,
+        batch: bool,
+        ai: bool,
+        notice: Option<String>,
+    ) -> Self {
         Self {
             scenario,
             out,
             work,
             batch,
             ai,
+            notice,
             video_ready: false,
         }
     }
@@ -89,7 +99,7 @@ impl DemoRun {
         let capture = Task::future(async { tokio::time::sleep(SETTLE).await })
             .then(move |()| window::screenshot(main_window))
             .map(Message::Captured);
-        let notice = match self.scenario.notice.clone() {
+        let notice = match self.notice.clone() {
             Some(id) => Task::future(async move {
                 tokio::time::sleep(NOTICE_AT).await;
                 folder_workspace::Message::MediaViewer(media_viewer::Message::Video(
@@ -174,7 +184,8 @@ fn save_png(shot: &window::Screenshot, expected: (u32, u32), path: &Path) -> Res
         .map_err(|e| format!("cannot save {}: {e}", path.display()))
 }
 
-/// What `--demo <scenario> --out <png> [--batch] [--mono] [--ai] [--lang <code>]` asks for.
+/// What `--demo <scenario> --out <png> [--batch] [--mono] [--ai] [--lang <code>]
+/// [--notice <message id>]` asks for.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DemoArgs {
     pub scenario: PathBuf,
@@ -188,6 +199,9 @@ pub struct DemoArgs {
     /// The UI language setting: `en` unless given, so screenshots never follow the renderer's
     /// OS language; `--lang ""` follows it (System).
     pub lang: String,
+    /// A UI message id (`i18n/<lang>/frename.ftl`) shown as a notice in the video controls bar
+    /// just before the screenshot, e.g. `drag-out-not-saved`.
+    pub notice: Option<String>,
 }
 
 /// The demo the command line asks for; `None` for a normal start.
@@ -202,12 +216,17 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
     };
     let out_at = args.iter().position(|a| a == "--out");
     let lang_at = args.iter().position(|a| a == "--lang");
+    let notice_at = args.iter().position(|a| a == "--notice");
     Some(value("--demo", Some(at)).and_then(|scenario| {
         let out =
             value("--out", out_at).map_err(|_| "--demo needs --out <file.png>".to_string())?;
         let lang = match lang_at {
             None => "en".to_string(),
             Some(_) => value("--lang", lang_at)?.to_string_lossy().into_owned(),
+        };
+        let notice = match notice_at {
+            None => None,
+            Some(_) => Some(value("--notice", notice_at)?.to_string_lossy().into_owned()),
         };
         Ok(DemoArgs {
             scenario,
@@ -216,6 +235,7 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
             mono: args.iter().any(|a| a == "--mono"),
             ai: args.iter().any(|a| a == "--ai"),
             lang,
+            notice,
         })
     }))
 }
@@ -267,6 +287,7 @@ pub fn prepare(args: &DemoArgs, work: &Path) -> Result<DemoRun, String> {
         work.to_path_buf(),
         args.batch,
         args.ai,
+        args.notice.clone(),
     ))
 }
 
@@ -294,6 +315,7 @@ mod tests {
                 mono: false,
                 ai: false,
                 lang: "en".to_string(),
+                notice: None,
             }))
         );
         assert_eq!(
@@ -308,7 +330,21 @@ mod tests {
                 mono: true,
                 ai: false,
                 lang: "ru".to_string(),
+                notice: None,
             }))
+        );
+        let with_notice = demo_args(&args(&[
+            "frename",
+            "--demo",
+            "a.toml",
+            "--out",
+            "a.png",
+            "--notice",
+            "drag-out-not-saved",
+        ]));
+        assert_eq!(
+            with_notice.and_then(Result::ok).and_then(|a| a.notice),
+            Some("drag-out-not-saved".to_string())
         );
     }
 
@@ -385,7 +421,7 @@ mod tests {
 
     #[test]
     fn only_the_first_ready_video_sets_up_the_scenario() {
-        let mut run = DemoRun::new(scenario(), "o.png".into(), "w".into(), false, false);
+        let mut run = DemoRun::new(scenario(), "o.png".into(), "w".into(), false, false, None);
         let window = window::Id::unique();
         assert!(run.video_ready(window).is_some());
         assert!(run.video_ready(window).is_none());
