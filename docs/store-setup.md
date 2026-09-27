@@ -11,6 +11,19 @@ Nothing costs money: developer registration is free for individuals. Total hands
 The Store package is separate from the GitHub installer, which does not change. Code signing
 (`docs/signing-setup.md`) is not needed for the Store: the Store signs the package itself.
 
+## Handing work back to the agent
+
+Issue #51 keeps the label `hold` while you work through these steps, so the nightly agent leaves it
+alone. Whenever a step below says **hand it back**:
+
+1. comment on #51 with what happened (a rejection report, a changed policy link, "the name is
+   taken, I reserved X", "it's live"), then
+2. remove the label `hold` from #51.
+
+The next nightly run then picks #51 up, does what the comment asks (a fix, a new package, a
+release, the README and `version.md` once it is live) in a new PR, and puts `hold` back when it
+needs you again. To have it done sooner, start an agent session and point it at your comment.
+
 ## 1. Create the developer account (15 min, then wait for the check)
 
 1. Open <https://storedeveloper.microsoft.com> and choose **Get started** / **Individual
@@ -32,8 +45,8 @@ individual account cannot be converted to a company account later.
 
 1. Partner Center → **Apps and games** → **+ New product** → **MSIX or PWA app**.
 2. Type `frename` → **Check availability** → **Reserve product name**.
-   If the name is taken, reserve `frename video tagger` (or another), and tell the agent in
-   issue #51 so the manifest's display name is changed to match.
+   If the name is taken, reserve `frename video tagger` (or another) and **hand it back** with
+   the name, so the manifest's display name is changed to match.
 3. Open the new product → **Product management** → **Product identity**. Keep this page open for
    step 3; it shows:
    - **Package/Identity/Name**, e.g. `12345EugeneZelenov.frename`
@@ -64,12 +77,13 @@ package version `0.74.0.0`; the Store needs every new upload to have a higher ve
 1. After step 3, wait for the next release (a `version.md` change merged to `main`), or run the
    release workflow by hand: **Actions** → **Release** → **Run workflow** on `main` (it rebuilds
    only if that version's GitHub release does not exist yet; if it exists, wait for the next one,
-   or ask in #51 for a release and the agent bumps `version.md`).
+   or **hand it back** asking for a release: the agent bumps `version.md`).
 2. Open that run → the `test-store` job must be green (it installed the package on a clean
    Windows and played the test clips). Its summary then says one of:
    - Windows App Certification Kit: **PASS** (or **WARNING**) → go on;
    - the kit was not available on the runner, skipped → go on: Partner Center validates the
-     package when you upload it (step 6.4); if that validation fails, post its message in #51.
+     package when you upload it (step 6.4); if that validation fails, **hand it back** with its
+     message.
 3. At the bottom of the run's page, under **Artifacts**, download
    `frename-store-msix-vX.Y.0` and unzip it: `frename-X.Y.0.0-x64.msix`.
    Artifacts are kept for 90 days.
@@ -82,14 +96,16 @@ tick **Windows Sandbox**, restart; Windows Pro or Enterprise): it has no GStream
 everything in it is gone when you close it. Inside the sandbox, install the
 [Windows SDK](https://developer.microsoft.com/windows/downloads/windows-sdk/) (for `signtool`),
 copy in the repository folder and the `.msix`, and in an **administrator** PowerShell in the
-repository folder run:
+repository folder run (the first line allows scripts in this window only):
 
 ```powershell
+Set-ExecutionPolicy -Scope Process Bypass
 packaging/windows/test-msix.ps1 -Msix <path>\frename-X.Y.0.0-x64.msix -Report wack.xml
 ```
 
 On your own machine the script refuses to run while GStreamer is installed (it proves a clean
-install). It removes its test certificate and the package when it ends.
+install). It removes its test certificate and the package when it ends. Without Visual Studio in
+the sandbox it skips its check of the package's DLLs (CI does that one).
 
 ## 6. Fill in the first submission (60 min)
 
@@ -141,19 +157,20 @@ Partner Center → frename → **Start your submission**. The texts are ready in
      > works. Updates come from the Store: the app has no updater of its own.
 
 7. Before pressing **Submit**, open the current Store Policies
-   (<https://learn.microsoft.com/windows/apps/publish/store-policies>) and check that the version
-   is still 7.20 or older and that sections 10.2, 10.5, 10.14 and 11.16 say what
-   `docs/design/microsoft-store.md` quotes. If something changed, tell the agent in #51.
+   (<https://learn.microsoft.com/windows/apps/publish/store-policies>) and look at the version at
+   the top. The design notes quote **7.19**; a 7.20 exists (published 2026-09-15), which the agent
+   could not read. If the page shows 7.20 or newer, **hand it back** with the link and wait for the
+   agent to compare sections 10.2, 10.5, 10.14 and 11.16 (a few lines of reading, usually the same
+   day); otherwise go on.
 8. **Submit to the Store**.
 
 ## 7. Certification (wait up to 3 business days)
 
 Partner Center shows the progress. The listing goes live about 15 minutes after it passes.
 
-If it is rejected, the report lists the failed policies with notes. Paste the report into issue
-#51 (or a new issue labelled `approved` that links #51) and remove `hold` from #51 if the agent
-should pick it up: the agent fixes the package or texts and a new CI package follows; you upload
-it as a new submission (step 6.4 only: everything else is kept).
+If it is rejected, the report lists the failed policies with notes. **Hand it back** with the
+report pasted into the comment: the agent fixes the package or the texts, and CI builds a new
+package; you upload it as a new submission (step 6.4 only: everything else is kept).
 
 ## 8. Optional: automatic submissions from each release (30 min, after the first one is live)
 
@@ -206,5 +223,6 @@ On a Windows 10/11 machine, ideally one where frename was never installed:
 6. Uninstall from Start → right-click frename → **Uninstall**. The key entry remains in
    Credential Manager (remove it there, or in Settings before uninstalling).
 
-Report anything that fails in #51. Once the Store version works, tell the agent in #51: it then
-updates README.md (install from the Store) and `version.md`, as the issue asks.
+If anything fails, **hand it back** with what you saw. Once the Store version works, **hand it
+back** with "it's live" and the Store link: the agent then updates README.md (install from the
+Store) and `version.md`, as the issue asks, and closes #51 with that PR.

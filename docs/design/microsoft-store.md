@@ -141,8 +141,11 @@ With its own folder, which is new and therefore lives in the package's private s
   the installed version's `%LocalAppData%\frename\frename.db`, if there is one, with the same
   `VACUUM INTO` import the installer uses for zip versions (`old_settings::import_once_from`; it
   reads changes still in the WAL and leaves the old files as they were). Settings and folder
-  history carry over; afterwards the two builds are independent. Not done for `--self-test` or a
-  demo;
+  history carry over; afterwards the two builds are independent. It runs under `--self-test` too, so CI proves it inside a real package (below); a demo
+  has a folder of its own and never imports;
+- **older zip or portable versions**: the same first-start offer and **Import from an old frename
+  folder…** in Settings as the installed version has (`installer.md` flow 6), since the Store
+  build also keeps its data away from the exe (`package::keeps_data_away_from_exe`);
 - uninstalling the Store app removes its folder (clean uninstall, policy 10.2.7) and leaves the
   installed version's data alone;
 - the GStreamer registry cache goes to the same folder (`bundled_gstreamer.rs`), so the two builds
@@ -169,8 +172,8 @@ on a real machine: step 9 of the owner's guide checks it.
   **Check for updates**, no start-up check, no update dot. `UpdatesState` treats the Store build as
   not installed whatever else it is told, so the installed version's imported update state (start-up
   check on, a newer version saved) changes nothing (unit test).
-- **No old-settings search** (the first-start offer to import a zip version's database): it only
-  runs for a Velopack package.
+- **Settings migration**: the installed version's database is copied on the first start, and a
+  zip or portable version's can be imported as in the installed version (see "Where data lives").
 - **No "Open in frename" in Explorer's menu.** The installer adds it through `HKCU`, which is
   virtualized in a package, and Velopack's hooks do not run. A packaged app registers menu
   entries in its manifest instead (`uap3:FileTypeAssociation` verbs, or
@@ -232,7 +235,10 @@ the runners does the same with one less tool.
      packages; `MSIX package/create-certificate-package-signing.md`);
   3. installs it, checks every DLL import with `check-bundle.ps1`, and runs
      `frename.exe --self-test tests/media` through the alias, inside the package; the log must
-     exist and say `Microsoft Store`;
+     exist and say `Microsoft Store`. Before it, the script makes an installed version's database
+     in `%LocalAppData%\frename` (WAL mode, with Python on the runner) unless one exists, and the
+     log must then say `settings imported from`: the first-start import works from inside a
+     package, through file virtualization, not just in a unit test;
   4. uninstalls it and runs the **Windows App Certification Kit**
      (`appcert.exe reset`, `appcert.exe test -appxpackagepath … -reportoutputpath …`,
      `WDD uwp/debug-test-perf/windows-app-certification-kit.md`); `OVERALL_RESULT="FAIL"` fails
@@ -278,9 +284,11 @@ the runners does the same with one less tool.
   (`old_settings.rs`); the Updates state never checks and offers nothing in the Store build, even
   when told it is installed and with a saved newer version (`src/features/updates/state.rs`).
 - CI: `ci-windows-store` (install, DLL walk, packaged self-test, certification kit) on every PR.
-- By the owner, on Windows (`store-setup.md` step 9): install the CI package with its test
-  certificate, play a clip, rename a file in a normal folder, save an Anthropic key and run
-  Describe with AI on one clip, uninstall; then the Store's own install after certification.
+- By the owner, on Windows, after certification (`store-setup.md` step 9): install from the Store;
+  settings of the GitHub-installed version, if any, are there; play a clip, rename a file in a
+  normal folder, save an Anthropic key and run Describe with AI on one clip, check the key in
+  Credential Manager, uninstall. Optionally before that, the CI package in Windows Sandbox
+  (step 5).
 
 ## Sources not re-checked here
 
@@ -296,3 +304,8 @@ the runners does the same with one less tool.
   rule. Plain demo-mode captures at 1920×1080 can replace them later without a new package.
 - *Make `velopack` an optional dependency* (design, round 1): see "What the `store` build
   changes"; the rationale now says what the flag does and does not guarantee.
+- *Bundle GStreamer once and copy it for the Store exe* (design, round 2): the two exes import the
+  same DLLs today, but `bundle.ps1` walks the imports of the exe it is given, so a Store-only
+  import could never be missed; about a minute of CI per run.
+- *Do not commit the Store PNGs, convert at submission time* (design, round 2): the owner should not
+  need ImageMagick; `screenshots.md` says how to refresh them when the README ones change.
