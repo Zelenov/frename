@@ -1,5 +1,5 @@
 # NEXT
-## Fixed
+## Changed
 - Pasting tags onto a clip no longer wipes its comment.
 
 # 0.80
