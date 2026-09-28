@@ -61,12 +61,19 @@ pub struct FolderWorkspace {
     media_viewer: MediaViewerState,
     tag_panel: TagPanelState,
     file_name_panel: FileNamePanelState,
-    /// Deferred rename: set when media must unload before the previous file can be renamed.
-    /// Stores the file's stable ID and the tag snapshot to save.
-    pending_file_updated: Option<(FileId, FileSnapshot)>,
+    /// Deferred renames: set when media must unload before a file can be renamed. Usually one
+    /// entry (the file just left); a second can queue up if another save (closing, opening
+    /// another folder, switching files again) is requested before the first `Unloaded` fires,
+    /// since only one video is ever loaded — pushed, never overwritten, so an earlier entry is
+    /// never silently dropped. Applied in order once `Unloaded` fires.
+    pending_file_updated: Vec<(FileId, FileSnapshot)>,
     /// A folder scan waiting for a playing video to unload first, since the open file's pending
     /// edits (in `pending_file_updated`) may rename it.
     pending_scan: Option<FolderAndFile>,
+    /// The window close waiting for a playing video to unload first. Sets apart from a plain
+    /// file switch: once the pending saves are applied, the video must not be reopened — the
+    /// app is closing, not moving to another file.
+    closing: bool,
     /// Batch mode: checked files, the chosen action and its job.
     batch: BatchState,
     /// A batch job waits for a playing video to unload, since it may write into and rename
@@ -128,8 +135,9 @@ impl FolderWorkspace {
             media_viewer: MediaViewerState::default(),
             tag_panel: TagPanelState::default(),
             file_name_panel: FileNamePanelState::default(),
-            pending_file_updated: None,
+            pending_file_updated: Vec::new(),
             pending_scan: None,
+            closing: false,
             batch: BatchState::default(),
             batch_waits_for_unload: false,
             inline_rename: None,
@@ -459,11 +467,15 @@ impl FolderWorkspace {
         let Some(file) = self.directory.as_mut().and_then(|dir| dir.open_path(&path)) else {
             // Capture the open file's pending edits before resetting file_workspace (issue #21).
             // The reset itself stays immediate and unconditional, as before: a reopen of the
-            // very same path (e.g. to pick up markers written externally) relies on file_workspace
-            // going through `None` so the next `FileOpened` sees `same_file = false` and reloads.
+            // very same path (`Directory::open_path` returns `None` for the already-selected
+            // file too, which is what routes that case here — see
+            // `a_white_ai_range_read_from_the_file_takes_a_new_color_and_keeps_it`, which reopens
+            // the open file to pick up markers written externally) relies on file_workspace going
+            // through `None` so the next `FileOpened` sees `same_file = false` and reloads. Do not
+            // clear `pending_file_updated` here: an earlier deferred save (still waiting for the
+            // same unload) must not be dropped by this one.
             let pending = self.file_workspace.get_snapshot();
             self.file_workspace.set_file(None);
-            self.pending_file_updated = None;
             let pair = FolderAndFile::new(path.parent().unwrap_or(&path), Some(path.clone()));
             return self.save_then_scan(pending, pair);
         };
@@ -491,7 +503,7 @@ impl FolderWorkspace {
             return self.scan_folder(pair);
         };
         if self.media_viewer.needs_unload_before_rename() {
-            self.pending_file_updated = Some((id, snap));
+            self.pending_file_updated.push((id, snap));
             self.pending_scan = Some(pair);
             Task::done(Message::MediaViewer(media_viewer::Message::Unload))
         } else {
@@ -512,7 +524,11 @@ impl FolderWorkspace {
         let store = LoggingAppStateStore::new(AppDatabase::new());
         self.loading = true;
         self.file_workspace.set_file(None);
-        self.pending_file_updated = None;
+        // Any deferred save must already be applied by now: `save_then_scan` only reaches this
+        // call after applying (or, past a needed unload, queuing it for `on_media_unloaded` to
+        // apply before this same call runs). This clear is just belt-and-braces against a stale
+        // entry from a directory this scan is about to replace.
+        self.pending_file_updated.clear();
 
         Task::future(async move {
             match Directory::open(&folder, store).await {
@@ -566,7 +582,7 @@ impl FolderWorkspace {
             ])
         } else {
             self.file_workspace.set_file(None);
-            self.pending_file_updated = None;
+            self.pending_file_updated.clear();
             load_comments_task
         }
     }
@@ -681,14 +697,15 @@ impl FolderWorkspace {
         }
         log::info!("Opening file: {}", file.file_path().display());
         let Some((id, snap)) = snapshot else {
-            self.pending_file_updated = None;
+            // Nothing new to save: leave any earlier deferred entry (still waiting for the same
+            // unload) queued rather than dropping it here.
             if same_file {
                 return Task::none();
             }
             return self.media_viewer.open(&file).map(Message::MediaViewer);
         };
         if self.media_viewer.needs_unload_before_rename() {
-            self.pending_file_updated = Some((id, snap));
+            self.pending_file_updated.push((id, snap));
             Task::done(Message::MediaViewer(media_viewer::Message::Unload))
         } else {
             let media_task = if same_file {
@@ -934,7 +951,7 @@ impl FolderWorkspace {
     /// Save the edits waiting for the disk (the open file may be one of the job's), close the
     /// open file until the job ends, and start the first file.
     fn run_batch(&mut self) -> Task<Message> {
-        if let Some((id, snapshot)) = self.pending_file_updated.take() {
+        for (id, snapshot) in std::mem::take(&mut self.pending_file_updated) {
             let _ = self.apply_file_updated(id, snapshot);
         }
         if let Some((id, snapshot)) = self.file_workspace.get_snapshot() {
@@ -1015,26 +1032,40 @@ impl FolderWorkspace {
         Task::batch([Task::done(Message::FileOpened(file)), load_comments])
     }
 
+    /// Every queued deferred save, applied in order (there is normally one; see
+    /// `pending_file_updated`'s doc comment for when a second can queue up).
+    fn apply_pending_file_updates(&mut self) -> Task<Message> {
+        let tasks: Vec<Task<Message>> = std::mem::take(&mut self.pending_file_updated)
+            .into_iter()
+            .map(|(id, snapshot)| self.apply_file_updated(id, snapshot))
+            .collect();
+        Task::batch(tasks)
+    }
+
     /// Called when media has unloaded. Persist pending snapshot (FileUpdated) then open the new media.
     fn on_media_unloaded(&mut self) -> Task<Message> {
         if std::mem::take(&mut self.batch_waits_for_unload) {
             return self.run_batch();
         }
+        // Closing wins over any scan/switch also waiting on this same unload: just save, and
+        // let the caller (CloseRequested's window::close) proceed. Reopening the video (the
+        // plain branch below) or starting a scan would be wasted work on a window that is going
+        // away, and racing a fresh GStreamer pipeline init against process shutdown besides.
+        if std::mem::take(&mut self.closing) {
+            self.pending_scan = None;
+            return self.apply_pending_file_updates();
+        }
         if let Some(pair) = self.pending_scan.take() {
-            let saved = self
-                .pending_file_updated
-                .take()
-                .map(|(id, snapshot)| self.apply_file_updated(id, snapshot))
-                .unwrap_or_else(Task::none);
+            let saved = self.apply_pending_file_updates();
             return Task::batch([saved, self.scan_folder(pair)]);
         }
-        let Some((id, snapshot)) = self.pending_file_updated.take() else {
+        if self.pending_file_updated.is_empty() {
             return Task::none();
-        };
+        }
         // Save before opening media, not alongside it: when the selected file is the one being
         // saved (re-clicking it, renaming it in place), opening it first would lock it against
         // the rename, or point the player at the name it had before the save.
-        let saved = self.apply_file_updated(id, snapshot);
+        let saved = self.apply_pending_file_updates();
         let Some(file) = self
             .directory
             .as_ref()
@@ -2058,11 +2089,15 @@ impl FolderWorkspace {
     /// rename, the save is deferred: the caller must still trigger the unload (`needs_media_unload`
     /// says whether to) and `on_media_unloaded` flushes it once that finishes.
     pub fn flush_open_file(&mut self) -> Task<Message> {
+        // Set regardless of whether there is anything new to save below: an earlier deferred
+        // save (from a file switch that hasn't unloaded yet) must not reopen the video once
+        // `on_media_unloaded` runs — the window is closing.
+        self.closing = true;
         let Some((id, snap)) = self.file_workspace.get_snapshot() else {
             return Task::none();
         };
         if self.media_viewer.needs_unload_before_rename() {
-            self.pending_file_updated = Some((id, snap));
+            self.pending_file_updated.push((id, snap));
             Task::none()
         } else {
             self.apply_file_updated(id, snap)
@@ -2073,13 +2108,13 @@ impl FolderWorkspace {
     /// Only available in test builds.
     #[cfg(test)]
     pub fn inject_pending_rename(&mut self, id: FileId, snapshot: FileSnapshot) {
-        self.pending_file_updated = Some((id, snapshot));
+        self.pending_file_updated.push((id, snapshot));
     }
 
     /// Test helper: check whether a deferred rename is pending.
     #[cfg(test)]
     pub fn has_pending_rename(&self) -> bool {
-        self.pending_file_updated.is_some()
+        !self.pending_file_updated.is_empty()
     }
 
     /// State of the marker list (open row, color picker).
@@ -2555,6 +2590,94 @@ mod tests {
                 .and_then(|d| d.file_by_id(file_0_id))
                 .is_some_and(|f| f.snapshot().has_tag("pick")),
             "the tag toggled just before opening another folder must be saved, not lost"
+        );
+    }
+
+    /// Regression test: a save deferred by a file switch (file_0's rename, waiting for its
+    /// video to unload) used to be silently overwritten if closing (or opening another folder)
+    /// captured and queued a second save before that same `Unloaded` fired — `flush_open_file`
+    /// and `save_then_scan` used to assign `pending_file_updated` directly instead of pushing,
+    /// so only the second, later entry survived. Both entries must now be applied once
+    /// `Unloaded` fires, in the order they were queued.
+    #[test]
+    fn a_second_deferred_save_does_not_drop_an_earlier_one() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let file_0_id = file_id_at(&workspace, 0);
+        // file_0.mp4 is "loading" → needs_unload_before_rename() = true.
+
+        let tag_list = workspace.file_workspace().tag_list();
+        let tag_id = tag_list
+            .filtered_display_tag_ids()
+            .iter()
+            .find(|id| {
+                tag_list
+                    .get_tag(**id)
+                    .map(|t| t.tag() == "pick")
+                    .unwrap_or(false)
+            })
+            .copied()
+            .expect("pick is a built-in tag");
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
+
+        // Switch to file_1: file_0's rename (with "pick") is deferred into pending_file_updated,
+        // since its video is still "loading". Its own Unload is dispatched but not driven here —
+        // media_viewer still reflects file_0's video, so needs_unload_before_rename() stays true.
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        assert!(
+            workspace.has_pending_rename(),
+            "file_0's rename must be deferred while its video is still loading"
+        );
+
+        // Close right now, before that Unload's Unloaded ever fires (a fast double-action, or
+        // simply a user who closes immediately after clicking another file).
+        let _ = workspace.flush_open_file();
+
+        // The single Unloaded that eventually fires must apply both queued saves, not just the
+        // second one.
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+
+        assert!(
+            workspace
+                .directory()
+                .and_then(|d| d.file_by_id(file_0_id))
+                .is_some_and(|f| f.snapshot().has_tag("pick")),
+            "file_0's tag, deferred before the close queued its own save, must not be dropped"
+        );
+    }
+
+    /// Regression test: closing the window while a video is loaded used to reopen it (a fresh
+    /// GStreamer pipeline load) right after saving, because `on_media_unloaded`'s generic
+    /// epilogue always reopens the directory's selected file. Closing must only save and let
+    /// the window close, not reload media it is about to tear down anyway.
+    #[test]
+    fn closing_does_not_reopen_the_video() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let loads_before = workspace.media_viewer().video_loads_started();
+
+        let _ = workspace.flush_open_file();
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+
+        assert_eq!(
+            workspace.media_viewer().video_loads_started(),
+            loads_before,
+            "closing must not reopen the video after saving"
         );
     }
 
@@ -3059,14 +3182,14 @@ mod tests {
         );
         // No refresh of the open file: it would unload the video to save the file while the
         // reopen is still opening it.
-        assert!(workspace.pending_file_updated.is_none());
+        assert!(workspace.pending_file_updated.is_empty());
         let degrees = || {
             frename_core::FileTagger::video_rotation(&test_dir.target_file()).map(|r| r.degrees())
         };
         assert_eq!(degrees(), Ok(0));
         let _ = workspace.update(Message::Redo);
         assert_eq!(loads(&workspace), before + 3, "the redo reopens it once");
-        assert!(workspace.pending_file_updated.is_none());
+        assert!(workspace.pending_file_updated.is_empty());
         assert_eq!(degrees(), Ok(90));
     }
 
