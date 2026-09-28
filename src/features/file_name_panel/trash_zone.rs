@@ -44,7 +44,12 @@ where
         .then(|| state.dragging_tag_id())
         .flatten()
         .and_then(|id| tag_list.get_tag(id))
-        .map(|tag| tag_chip::view_display_only(tag.tag(), tag_palette.color(tag.color_index())));
+        .map(|tag| {
+            tag_chip::view_display_only(
+                tag.tag(),
+                tag_palette.color(tag.color_index(), tag.is_stored()),
+            )
+        });
 
     let tooltip_body = match tooltip_content {
         Some(chip) => chip,

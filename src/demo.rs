@@ -586,8 +586,15 @@ mod tests {
         std::fs::remove_file(&path).unwrap();
     }
 
+    /// (scenario file, tag) pairs allowed to use a tag `DEFAULT_TAGS` doesn't have, on purpose:
+    /// each one exists to show what an unsaved tag looks like, which needs a tag a new folder
+    /// does not already have (#53's monochrome screenshot: `aerial-fpv` is deliberately never
+    /// added to the tag list, so it renders as unsaved next to the ones that are).
+    const UNSAVED_TAG_DEMOS: &[(&str, &str)] = &[("mono.toml", "aerial-fpv")];
+
     /// The committed README scenarios stage clips CI can decode, and only tags a new folder
-    /// already has (any other tag would show up as unsaved).
+    /// already has (any other tag would show up as unsaved) — unless the tag is deliberately
+    /// demonstrating that (see [`UNSAVED_TAG_DEMOS`]).
     #[test]
     fn the_readme_scenarios_are_valid() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -613,7 +620,12 @@ mod tests {
                     file.from
                 );
                 for tag in frename_core::FileSnapshot::parse(&file.name).tags() {
-                    assert!(known.contains(&tag.as_str()), "{name}: tag {tag}");
+                    let deliberately_unsaved =
+                        UNSAVED_TAG_DEMOS.contains(&(name.as_str(), tag.as_str()));
+                    assert!(
+                        known.contains(&tag.as_str()) || deliberately_unsaved,
+                        "{name}: tag {tag}"
+                    );
                 }
             }
         }

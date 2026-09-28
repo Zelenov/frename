@@ -9,6 +9,7 @@
 
 ## Fixed
 - The volume control no longer disappears when the video panel is narrow: below a width it collapses to its icon, which you scroll to change the volume. The panel can no longer be narrowed past the point where a button would be cut off.
+- Monochrome tags now tell a tag in your list apart from one that is not, instead of looking identical.
 
 # 0.80
 ## Changed

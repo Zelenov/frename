@@ -43,6 +43,11 @@ pub enum TagPalette {
     Monochrome,
 }
 
+/// Monochrome's own color for a tag that is in the tag list. Distinct from `TagColors::PALETTE[0]`
+/// (monochrome's color for a tag that is not), which `color_index == 0` cannot reliably stand in
+/// for: the sequential color counter can hand a real stored tag index 0 too (issue #53).
+const MONOCHROME_STORED: Color = Color::from_rgb(0.55, 0.55, 0.58);
+
 impl TagPalette {
     /// Palette for the monochrome tags setting.
     pub fn from_monochrome(monochrome: bool) -> Self {
@@ -53,11 +58,66 @@ impl TagPalette {
         }
     }
 
-    /// Returns the color for the given tag color index under this palette.
-    pub fn color(self, index: u8) -> Color {
+    /// Returns the color for a tag with the given color index and stored-ness under this
+    /// palette. `stored` is ignored in `Colored` mode (each tag already has its own color there);
+    /// in `Monochrome` mode it is the only thing that decides which of monochrome's two looks a
+    /// tag gets, never the color index (see [`MONOCHROME_STORED`]).
+    pub fn color(self, index: u8, stored: bool) -> Color {
         match self {
             Self::Colored => TagColors::color(index),
+            Self::Monochrome if stored => MONOCHROME_STORED,
             Self::Monochrome => TagColors::PALETTE[0],
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn luminance(c: Color) -> f32 {
+        let channel = |v: f32| {
+            if v <= 0.039_28 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b)
+    }
+
+    fn contrast_with_black(c: Color) -> f32 {
+        (luminance(c) + 0.05) / 0.05
+    }
+
+    /// Issue #53: monochrome must key its two looks on whether a tag is stored, not on its color
+    /// index — a real stored tag can land on index 0 too (the sequential color counter wraps).
+    #[test]
+    fn monochrome_keys_its_two_looks_on_stored_not_on_color_index() {
+        let stored_at_zero = TagPalette::Monochrome.color(0, true);
+        let unstored_at_zero = TagPalette::Monochrome.color(0, false);
+        assert_ne!(
+            stored_at_zero, unstored_at_zero,
+            "index 0 alone must not decide the look"
+        );
+        // Whatever index an unstored tag happens to have, it still gets the "not in the list"
+        // look, and a stored tag still gets the "in the list" look.
+        assert_eq!(TagPalette::Monochrome.color(7, false), unstored_at_zero);
+        assert_eq!(TagPalette::Monochrome.color(7, true), stored_at_zero);
+    }
+
+    /// Colored mode is unaffected by stored-ness: it already gives every tag its own color.
+    #[test]
+    fn colored_mode_ignores_stored_ness() {
+        assert_eq!(
+            TagPalette::Colored.color(3, true),
+            TagPalette::Colored.color(3, false)
+        );
+    }
+
+    #[test]
+    fn both_monochrome_looks_keep_black_text_readable() {
+        assert!(contrast_with_black(TagPalette::Monochrome.color(0, false)) >= 4.5);
+        assert!(contrast_with_black(TagPalette::Monochrome.color(0, true)) >= 4.5);
     }
 }

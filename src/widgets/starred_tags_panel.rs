@@ -120,7 +120,7 @@ where
                     let id = tag.id();
                     let is_checked = tag.is_checked();
                     let is_selected = selected_id == Some(id);
-                    let tag_color = tag_palette.color(tag.color_index());
+                    let tag_color = tag_palette.color(tag.color_index(), tag.is_stored());
 
                     let checkbox_el: Element<'static, Message> = checkbox(is_checked)
                         .on_toggle(move |_| Message::ToggleTag(id))
