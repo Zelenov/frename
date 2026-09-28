@@ -14,17 +14,20 @@ use std::time::{Duration, SystemTime};
 
 use frename_core::ai::key::{self, ApiKey, KeyState};
 use frename_core::{subtitle_path, CueLength, File, FileId, FileTagger};
-use iced::widget::{button, checkbox, column, row, text};
-use iced::{Element, Length};
+use iced::widget::column;
+use iced::Element;
 use sonisub::batch::{self as plan_batch, Action as Planned, Totals};
 use sonisub::cancel::CancelToken;
 use sonisub::job::{self, Outcome};
 use sonisub::soniox::{self, api_error, Client};
 use sonisub::{audio, languages, srt, usage};
 
+use super::super::page::{self, Change};
 use super::super::{ItemProgress, ItemResult, ItemStatus};
-use super::ActionMessage;
-use crate::theme;
+use super::{ActionMessage, Panel};
+use crate::ui::layout::{self, NoticeKind};
+use crate::ui::tokens::SPACE_XXS;
+use crate::ui::{button, form, text};
 
 pub fn label() -> String {
     fl!("batch-action-generate-subtitles")
@@ -278,10 +281,15 @@ impl Options {
         ))))
     }
 
-    /// The panel for `checked`, and the run button's label and whether it can run.
-    pub fn panel(&self, checked: &[&File]) -> (Element<'_, ActionMessage>, String, bool) {
+    /// Whether the settings said no key is saved: the action list shows "No key".
+    pub fn key_missing(&self) -> bool {
+        self.key == Some(KeyState::Missing)
+    }
+
+    /// The page for `checked` and its run button.
+    pub fn panel(&self, checked: &[&File]) -> Panel<'_> {
         let plan = self.plan_for(checked);
-        let (label, ready) = match plan {
+        let (run, ready) = match plan {
             None => (fl!("batch-subtitles-transcribe"), false),
             Some(plan) if plan.transcribe > 0 => (
                 fl!(
@@ -297,71 +305,109 @@ impl Options {
                 ),
                 self.operation().is_some(),
             ),
-            Some(_) => (fl!("batch-subtitles-nothing"), false),
+            // The plan's last line says there is nothing to transcribe.
+            Some(_) => (fl!("batch-subtitles-transcribe"), false),
         };
-        (self.view(plan), label, ready)
+        let reason = (plan.is_none() && !checked.is_empty()).then(|| fl!("batch-reason-estimate"));
+        Panel {
+            page: self.view(plan),
+            run,
+            ready,
+            reason,
+        }
     }
 
     fn view(&self, plan: Option<&Plan>) -> Element<'_, ActionMessage> {
-        let muted = |line: String| text(line).size(12).color(theme::TEXT_MUTED);
-        let mut lines = column![].spacing(4);
-        match plan {
-            None => lines = lines.push(text(fl!("batch-subtitles-estimating")).size(13)),
+        let languages = if self.config.languages.is_empty() {
+            fl!("batch-subtitles-languages-auto")
+        } else {
+            self.config.languages.join(", ")
+        };
+        let cue_length = match self.config.cue_length {
+            CueLength::Short => fl!("settings-subtitles-cue-short"),
+            CueLength::Sentence => fl!("settings-subtitles-cue-sentence"),
+        };
+        let settings = [
+            page::linked_row(
+                fl!("settings-subtitles-languages-label"),
+                languages,
+                fl!("batch-ai-change"),
+                ActionMessage::OpenSubtitleSettings,
+            ),
+            page::linked_row(
+                fl!("settings-subtitles-cue-length-label"),
+                cue_length,
+                fl!("batch-ai-change"),
+                ActionMessage::OpenSubtitleSettings,
+            ),
+            layout::setting_row(
+                fl!("batch-option-subtitled"),
+                layout::aligned([form::checkbox_with_hint(
+                    form::checkbox(fl!("batch-action-generate-subtitles-replace"), self.replace)
+                        .on_toggle(|on| ActionMessage::GenerateSubtitles(Message::SetReplace(on))),
+                    text::secondary(fl!("batch-action-generate-subtitles-replace-hint")),
+                )]),
+            ),
+        ];
+        let estimate: Element<'_, ActionMessage> = match plan {
+            None => text::body(fl!("batch-subtitles-estimating")).into(),
             Some(plan) => {
                 // Without a saved key there is no account to learn the price from.
                 let price = match self.key {
                     Some(KeyState::Saved) => self.price(),
                     _ => Some(Price::Typical),
                 };
-                for line in plan_lines(plan, price) {
-                    lines = lines.push(text(line).size(13));
-                }
+                let mut lines = plan_lines(plan, price).into_iter();
+                column![]
+                    .push(lines.next().map(text::strong))
+                    .push(page::notes(lines))
+                    .spacing(SPACE_XXS)
+                    .into()
             }
-        }
-        let options = column![
-            lines,
-            column![
-                checkbox(self.replace)
-                    .label(fl!("batch-action-generate-subtitles-replace"))
-                    .text_size(13)
-                    .on_toggle(|on| ActionMessage::GenerateSubtitles(Message::SetReplace(on))),
-                muted(fl!("batch-action-generate-subtitles-replace-hint")),
-            ]
-            .spacing(4),
-            column![
-                muted(fl!("batch-action-generate-subtitles-privacy")),
-                muted(fl!("batch-action-generate-subtitles-duration-hint")),
-            ]
-            .spacing(4),
-        ]
-        .spacing(12);
-        super::panel(
+        };
+        let notes = page::notes([
+            fl!("batch-action-generate-subtitles-privacy"),
+            fl!("batch-action-generate-subtitles-duration-hint"),
+        ]);
+        page::page(
             label(),
             fl!("batch-action-generate-subtitles-hint"),
-            options.into(),
+            &[Change::Subtitles],
+            settings
+                .into_iter()
+                .chain([estimate, notes])
+                .chain(self.key_notice()),
         )
     }
 
-    /// Why the key keeps the run button off, shown next to it so it is never scrolled away.
-    pub fn footer(&self) -> Option<Element<'_, ActionMessage>> {
-        let line = match (self.key, self.price()) {
-            (Some(KeyState::Missing), _) => fl!("batch-subtitles-key-missing"),
-            (Some(KeyState::Unavailable), _) => fl!("batch-ai-key-unavailable"),
-            (Some(KeyState::Saved), Some(Price::Rejected)) => fl!("batch-subtitles-key-rejected"),
+    /// Why the key keeps the run button off, with the button that fixes it.
+    fn key_notice(&self) -> Option<Element<'_, ActionMessage>> {
+        let (kind, headline, fix) = match (self.key, self.price()) {
+            (Some(KeyState::Missing), _) => (
+                NoticeKind::Error,
+                fl!("batch-subtitles-key-missing"),
+                fl!("batch-set-key"),
+            ),
+            (Some(KeyState::Unavailable), _) => (
+                NoticeKind::Warning,
+                fl!("batch-ai-key-unavailable"),
+                fl!("batch-check-key"),
+            ),
+            (Some(KeyState::Saved), Some(Price::Rejected)) => (
+                NoticeKind::Error,
+                fl!("batch-subtitles-key-rejected"),
+                fl!("batch-check-key"),
+            ),
             _ => return None,
         };
-        Some(
-            row![
-                text(line).size(13).color(theme::ERROR).width(Length::Fill),
-                button(text(fl!("batch-ai-open-settings")).size(12))
-                    .on_press(ActionMessage::OpenSubtitleSettings)
-                    .padding([3, 10])
-                    .style(theme::icon_button_style(true)),
-            ]
-            .spacing(8)
-            .align_y(iced::Alignment::Center)
-            .into(),
-        )
+        Some(layout::notice(
+            kind,
+            headline,
+            None,
+            [button::secondary(fix)
+                .on_press(ActionMessage::OpenSubtitleSettings)
+                .into()],
+        ))
     }
 }
 
@@ -1222,9 +1268,9 @@ mod tests {
         assert!(options.operation().is_none(), "waits for the price");
         options.update(Message::PriceReady(Price::Learned(0.1)));
         assert!(options.operation().is_some());
-        let (_, label, ready) = options.panel(&[&a]);
+        let panel = options.panel(&[&a]);
         assert_eq!(
-            (label, ready),
+            (panel.run, panel.ready),
             (
                 fl!("batch-subtitles-transcribe-count", videos = videos(1)),
                 true

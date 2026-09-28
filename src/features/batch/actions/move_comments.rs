@@ -4,10 +4,11 @@
 use std::path::Path;
 
 use frename_core::{CommentStorage, FileTagger, MetadataMove};
-use iced::widget::{column, radio};
 use iced::Element;
 
+use super::super::page::{self, Change};
 use super::super::ItemResult;
+use crate::ui::{form, layout};
 
 pub fn label() -> String {
     fl!("batch-action-move-comments")
@@ -49,27 +50,32 @@ impl Options {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        let choices = column![
-            radio(
-                fl!("batch-action-move-comments-into-videos"),
-                CommentStorage::InVideo,
-                Some(self.to),
-                Message::SetTo
-            )
-            .text_size(13),
-            radio(
-                fl!("batch-action-move-comments-into-text-files"),
-                CommentStorage::TextFile,
-                Some(self.to),
-                Message::SetTo
-            )
-            .text_size(13),
-        ]
-        .spacing(8);
-        super::panel(
+        let choice = |label: String, description: Element<'static, Message>, to| {
+            form::radio_option(label, Some(description), to, Some(self.to), Message::SetTo)
+        };
+        let change = match self.to {
+            CommentStorage::InVideo => Change::IntoVideos,
+            CommentStorage::TextFile => Change::TextFiles,
+        };
+        page::page(
             label(),
             fl!("batch-action-move-comments-hint"),
-            choices.into(),
+            &[change],
+            [layout::setting_row(
+                fl!("batch-option-direction"),
+                layout::aligned([
+                    choice(
+                        fl!("batch-action-move-comments-into-videos"),
+                        form::description(fl!("settings-comments-in-video-hint")),
+                        CommentStorage::InVideo,
+                    ),
+                    choice(
+                        fl!("batch-action-move-comments-into-text-files"),
+                        form::example(fl!("settings-comments-text-file-example")),
+                        CommentStorage::TextFile,
+                    ),
+                ]),
+            )],
         )
     }
 }

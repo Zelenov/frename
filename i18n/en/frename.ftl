@@ -108,6 +108,120 @@ settings-key-save-into = Save key keeps it in { $store } on this computer.
 
 ## Batch mode
 
+batch-back-while-running = Cancel the action first
+batch-checked-count = { $count ->
+    [one] { $count } file checked
+   *[other] { $count } files checked
+}
+batch-no-key = No key
+batch-group-move = Move between places
+batch-group-fix = Fix names and videos
+batch-group-paid = Paid services
+batch-reason-none-checked = No files checked
+batch-reason-reading = Reading clip lengths…
+batch-check-all = Check all { $count ->
+    [one] { $count } file
+   *[other] { $count } files
+}
+batch-job-running = running
+batch-job-finished = finished
+batch-job-stopped = stopped
+batch-progress-files = { $finished } of { $total ->
+    [one] { $total } file
+   *[other] { $total } files
+}
+batch-time-left = about { $time } left
+batch-time-estimating = estimating time…
+batch-time-spent = { $time } so far
+batch-locked-until-end = The folder is locked until it ends
+batch-run-again = Run again on { $count ->
+    [one] { $count } file
+   *[other] { $count } files
+}
+batch-result-done = Done: { $total ->
+    [one] { $total } file
+   *[other] { $total } files
+}
+batch-result-done-detail = { $changed } changed, { $unchanged } had nothing to change
+batch-result-problems = Done with problems: { $failed } of { $total ->
+    [one] { $total } file
+   *[other] { $total } files
+} not done
+batch-figure-unchanged = unchanged
+batch-figure-not-done = not done
+batch-figure-not-reached = not reached
+batch-files-not-done = Files not done
+batch-table-file = File
+batch-table-why = Why
+
+batch-run-move-comments = Move { $count ->
+    [one] { $count } comment
+   *[other] { $count } comments
+}
+batch-run-move-in-out = Move in/out of { $count ->
+    [one] { $count } file
+   *[other] { $count } files
+}
+batch-run-in-out-from-names = Take in/out out of { $count ->
+    [one] { $count } name
+   *[other] { $count } names
+}
+batch-run-convert = Convert { $count ->
+    [one] { $count } file
+   *[other] { $count } files
+}
+batch-run-rotate = Rotate { $count ->
+    [one] { $count } video
+   *[other] { $count } videos
+}
+batch-run-tag = Tag { $count ->
+    [one] { $count } file
+   *[other] { $count } files
+}
+batch-run-fix-tags = Reorder tags in { $count ->
+    [one] { $count } name
+   *[other] { $count } names
+}
+batch-run-rename = Rename { $count ->
+    [one] { $count } file
+   *[other] { $count } files
+}
+batch-run-reload = Reload { $count ->
+    [one] { $count } file
+   *[other] { $count } files
+}
+batch-service-anthropic = Anthropic
+batch-service-soniox = Soniox
+batch-change-renames = Renames files
+batch-change-videos = Writes into the videos
+batch-change-text-files = Writes text files next to the videos
+batch-change-comments = Writes into the comments
+batch-change-subtitles = Writes subtitle files next to the videos
+batch-change-records = Changes only frename's own records
+batch-option-direction = Direction
+batch-option-goes-to = Goes to
+batch-option-language = Language
+batch-option-described = Described videos
+batch-option-subtitled = Subtitled videos
+batch-option-spacing = Spacing
+batch-option-tag = Tag
+batch-option-turn = Turn
+batch-plan-videos = Videos
+batch-plan-length = Length
+batch-plan-cost = Cost
+batch-plan-time = Time
+batch-reason-estimate = Waiting for the estimate
+batch-set-key = Set the key…
+batch-check-key = Check the key…
+batch-subtitles-languages-auto = Detected in each video
+batch-action-describe-ai-run-waiting = Describe videos
+batch-action-fix-tags-order = Order: as in the tag list, unknown tags first.
+batch-action-markers-comment-hint-short = Turns comment lines with a time into markers, or copies the markers into the comment.
+batch-action-markers-to-comment-hint = The markers stay; running it again adds nothing twice.
+batch-action-rotate-hint-short = Turns MP4 and MOV clips by their rotation flag, without re-encoding.
+batch-action-tag-commented-off = Tagging commented videos is off
+batch-action-tag-commented-choose = Choose the tag…
+
 batch-title = Batch actions
 batch-on-checked = on { $count ->
     [one] { $count } file
@@ -138,7 +252,7 @@ batch-failed-plain = Failed:
 batch-failed-with-log = Failed (the log says why):
 batch-retry = Retry
 batch-add-credit = Add credit
-batch-open-log = Open log
+batch-open-log = Open the log
 
 batch-action-move-comments = Move comments
 batch-action-move-comments-hint = Moves the comment of each checked file to the chosen place, with the in/out points it holds. Tags and in/out points kept in the video stay where they are.
@@ -187,7 +301,7 @@ batch-action-reload-files = Reset cache and reload
 batch-action-reload-files-hint = Reads the comment and in/out points of each checked file from the file itself again and replaces what the folder remembered for it. Use it after the files were changed in another program. Files whose remembered values were missing or out of date count as changed.
 
 batch-action-describe-ai = Describe with AI
-batch-action-describe-ai-run = Describe { $videos }
+batch-action-describe-ai-run = Describe { $videos } · about { $dollars }
 batch-action-describe-ai-estimating = Estimating… { $known } / { $total }
 batch-action-describe-ai-none = No videos to describe.
 batch-action-describe-ai-plan = { $videos }, { $minutes } · about { $dollars } with { $model }

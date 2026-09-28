@@ -9,33 +9,37 @@ use std::path::Path;
 use frename_core::{
     format_in_out_range, FileTagger, InOutStorage, MoveOutcome, NameInOutMove, NameInOutProblem,
 };
-use iced::widget::column;
 use iced::Element;
 
+use super::super::page::{self, Change};
 use super::super::ItemResult;
 use super::ActionMessage;
-use crate::ui;
 
 pub fn label() -> String {
     fl!("batch-action-in-out-from-names")
 }
 
 pub fn view<'a>() -> Element<'a, ActionMessage> {
-    let status = match frename_core::metadata_storage().in_out {
-        InOutStorage::Comment => fl!("batch-action-in-out-from-names-status-comment"),
-        InOutStorage::InVideo => fl!("batch-action-in-out-from-names-status-video"),
+    let (goes_to, change) = match frename_core::metadata_storage().in_out {
+        InOutStorage::Comment => (
+            fl!("batch-action-in-out-from-names-status-comment"),
+            Change::IntoComments,
+        ),
+        InOutStorage::InVideo => (
+            fl!("batch-action-in-out-from-names-status-video"),
+            Change::IntoVideos,
+        ),
     };
-    // One above the other: side by side, the panel is too narrow for the status.
-    let settings = column![
-        ui::text::body(status),
-        ui::button::secondary(fl!("batch-action-in-out-from-names-settings"))
-            .on_press(ActionMessage::OpenSettings),
-    ]
-    .spacing(ui::tokens::SPACE_S);
-    super::panel(
+    page::page(
         label(),
         fl!("batch-action-in-out-from-names-hint"),
-        settings.into(),
+        &[Change::Renames, change],
+        [page::linked_row(
+            fl!("batch-option-goes-to"),
+            goes_to,
+            fl!("batch-ai-change"),
+            ActionMessage::OpenSettings,
+        )],
     )
 }
 

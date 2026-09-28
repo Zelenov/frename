@@ -120,6 +120,7 @@ pub fn indented<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Element<'a, M>
 }
 
 /// An item of a navigation list: the page shown is marked by a bar, a fill and bold text.
+/// `dot` puts the update dot at its end.
 pub fn nav_item<'a, M: Clone + 'a>(
     glyph: Icon,
     label: impl IntoFragment<'a>,
@@ -127,15 +128,27 @@ pub fn nav_item<'a, M: Clone + 'a>(
     dot: bool,
     on_press: M,
 ) -> Element<'a, M> {
-    let color = if selected {
-        ACCENT_TEXT
-    } else {
-        TEXT_SECONDARY
+    nav_item_with(glyph, label, selected, dot.then(update_dot), Some(on_press))
+}
+
+/// [`nav_item`] with `trailing` at its right end (a badge), and without `on_press` disabled.
+pub fn nav_item_with<'a, M: Clone + 'a>(
+    glyph: Icon,
+    label: impl IntoFragment<'a>,
+    selected: bool,
+    trailing: Option<Element<'a, M>>,
+    on_press: Option<M>,
+) -> Element<'a, M> {
+    let enabled = on_press.is_some();
+    let color = match (enabled, selected) {
+        (false, _) => TEXT_DISABLED,
+        (true, true) => ACCENT_TEXT,
+        (true, false) => TEXT_SECONDARY,
     };
-    let label = if selected {
-        text::strong(label)
-    } else {
-        text::secondary(label)
+    let label = match (enabled, selected) {
+        (false, _) => text::body(label).color(TEXT_DISABLED),
+        (true, true) => text::strong(label),
+        (true, false) => text::secondary(label),
     };
     let mark = container(space())
         .width(SELECTION_BAR)
@@ -148,8 +161,8 @@ pub fn nav_item<'a, M: Clone + 'a>(
     let mut content = row![mark, icon(glyph, ICON_M, color), label]
         .spacing(SPACE_S)
         .align_y(Alignment::Center);
-    if dot {
-        content = content.push(space::horizontal()).push(update_dot());
+    if let Some(trailing) = trailing {
+        content = content.push(space::horizontal()).push(trailing);
     }
     // 32 px for one line; a label that wraps (a long translation) makes the item taller.
     button(content)
@@ -161,7 +174,7 @@ pub fn nav_item<'a, M: Clone + 'a>(
             right: SPACE_M,
         })
         .style(style::button(ButtonKind::Nav(selected)))
-        .on_press(on_press)
+        .on_press_maybe(on_press)
         .into()
 }
 
@@ -198,7 +211,8 @@ pub fn button_bar<'a, M: 'a>(
     .into()
 }
 
-fn horizontal_line<'a, M: 'a>() -> Element<'a, M> {
+/// A 1-px line between two regions one above the other.
+pub fn horizontal_line<'a, M: 'a>() -> Element<'a, M> {
     container(space())
         .width(Length::Fill)
         .height(LINE)

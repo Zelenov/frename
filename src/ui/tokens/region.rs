@@ -3,6 +3,7 @@
 
 use super::size::*;
 use super::space::*;
+use super::typography::LINE_BODY;
 
 // The main window (§13.9): the minimum fits a 1280×680 work area with room to spare.
 pub const WINDOW_MIN_WIDTH: f32 = 900.0;
@@ -83,6 +84,10 @@ pub const ACTION_LIST_WIDTH: f32 = 232.0;
 pub const BATCH_PANEL_WIDTH: f32 = 600.0;
 /// The failed files' table scrolls after this many rows.
 pub const FAILED_ROWS_SHOWN: f32 = 8.0;
+/// A job's progress bar.
+pub const PROGRESS_HEIGHT: f32 = 6.0;
+/// A row of the failed files' table: a line of text and 6 px above and below.
+pub const TABLE_ROW_HEIGHT: f32 = LINE_BODY + 2.0 * SPACE_TIGHT;
 
 /// The widest a page of settings or options gets: longer lines are hard to read.
 pub const PAGE_MAX_WIDTH: f32 = 640.0;
