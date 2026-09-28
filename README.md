@@ -63,6 +63,10 @@ Next time you start frename, it reopens the last folder and clip.
 | Double-click a file | Rename it by hand: `Enter` renames, `Esc` cancels |
 | `Ctrl+click` a file | Add it (and the open one) to a selection, or drop it if already selected |
 | `Shift+click` a file | Select every file between it and the last `Ctrl`-clicked one |
+| Right-click a file or the open file's name | Menu: show it in Explorer, copy its full path or its name (`Esc` or a click outside closes it) |
+| `F11` | Show the open file in Explorer, with the file selected (Linux: in the file manager) |
+| `Shift+F11` | Copy the open file's full path (`D:\footage\clip.mp4`) |
+| `Ctrl+F11` | Copy the open file's name (`clip.mp4`) |
 | `Escape` | Leaves a selection made with `Ctrl`/`Shift`+click (batch mode); otherwise clears the file and tag searches |
 
 ### Tags

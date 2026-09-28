@@ -1,5 +1,6 @@
 # NEXT
 ## Added
+- Right-click a file in the list, or the open file's name, for a menu: Show in Explorer (the folder opens with the file selected; on Linux the file manager), Copy full path, Copy file name. The keys work without the menu on the open file: `F11`, `Shift+F11`, `Ctrl+F11`. The file's tags are saved first, so what you copy is its final name.
 - Select several clips without turning on batch mode by hand: `Ctrl+click` a clip to add it (and the one open before it) to the selection, or drop it if it is already selected; `Shift+click` a clip to select every clip between it and the last one you `Ctrl`-clicked. Either turns on batch mode with exactly that selection checked; `Esc` leaves it, same as clicking ☑ again.
 
 ## Changed
