@@ -584,13 +584,22 @@ impl FrenameApp {
                         crate::features::batch::Message::Cancel,
                     )));
                 }
+                // Save the open file's tags, comment and in/out before closing: otherwise they
+                // are lost silently (issue #21).
+                let save = self
+                    .folder_workspace
+                    .flush_open_file()
+                    .map(Message::FolderWorkspace);
                 if !self.folder_workspace.needs_media_unload() {
-                    return window::close(id);
+                    return Task::batch([save, window::close(id)]);
                 }
                 self.pending_close = Some(id);
-                Task::done(Message::FolderWorkspace(
-                    folder_workspace::Message::MediaViewer(media_viewer::Message::Unload),
-                ))
+                Task::batch([
+                    save,
+                    Task::done(Message::FolderWorkspace(
+                        folder_workspace::Message::MediaViewer(media_viewer::Message::Unload),
+                    )),
+                ])
             }
             Message::WindowMoved(x, y) => {
                 if !self.is_maximized {

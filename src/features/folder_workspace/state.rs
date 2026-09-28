@@ -64,6 +64,9 @@ pub struct FolderWorkspace {
     /// Deferred rename: set when media must unload before the previous file can be renamed.
     /// Stores the file's stable ID and the tag snapshot to save.
     pending_file_updated: Option<(FileId, FileSnapshot)>,
+    /// A folder scan waiting for a playing video to unload first, since the open file's pending
+    /// edits (in `pending_file_updated`) may rename it.
+    pending_scan: Option<FolderAndFile>,
     /// Batch mode: checked files, the chosen action and its job.
     batch: BatchState,
     /// A batch job waits for a playing video to unload, since it may write into and rename
@@ -126,6 +129,7 @@ impl FolderWorkspace {
             tag_panel: TagPanelState::default(),
             file_name_panel: FileNamePanelState::default(),
             pending_file_updated: None,
+            pending_scan: None,
             batch: BatchState::default(),
             batch_waits_for_unload: false,
             inline_rename: None,
@@ -169,7 +173,7 @@ impl FolderWorkspace {
             }
             Message::OpenPath(path) => self.open_path(path),
             Message::LoadLastSession => self.load_last_session(),
-            Message::ScanFolder(pair) => self.scan_folder(pair),
+            Message::ScanFolder(pair) => self.begin_scan_folder(pair),
             Message::FolderLoaded {
                 directory,
                 target_file,
@@ -453,14 +457,47 @@ impl FolderWorkspace {
 
     fn open_file(&mut self, path: PathBuf) -> Task<Message> {
         let Some(file) = self.directory.as_mut().and_then(|dir| dir.open_path(&path)) else {
+            // Capture the open file's pending edits before resetting file_workspace (issue #21).
+            // The reset itself stays immediate and unconditional, as before: a reopen of the
+            // very same path (e.g. to pick up markers written externally) relies on file_workspace
+            // going through `None` so the next `FileOpened` sees `same_file = false` and reloads.
+            let pending = self.file_workspace.get_snapshot();
             self.file_workspace.set_file(None);
             self.pending_file_updated = None;
-            return Task::done(Message::ScanFolder(FolderAndFile::new(
-                path.parent().unwrap_or(&path),
-                Some(path.clone()),
-            )));
+            let pair = FolderAndFile::new(path.parent().unwrap_or(&path), Some(path.clone()));
+            return self.save_then_scan(pending, pair);
         };
         Task::done(Message::FileOpened(file))
+    }
+
+    /// Save the open file's pending edits before scanning a new folder, so tags, comment and
+    /// in/out set on the last clip of the previous folder are not lost when the user never
+    /// switched files first (opening a different folder, `frename <folder>`, dropping a folder,
+    /// "Open with", …). Mirrors the snapshot capture in `apply_file_opened`.
+    fn begin_scan_folder(&mut self, pair: FolderAndFile) -> Task<Message> {
+        let pending = self.file_workspace.get_snapshot();
+        self.save_then_scan(pending, pair)
+    }
+
+    /// Apply an already-captured snapshot (deferred past a needed unload, same as a file
+    /// switch) and only then scan the new folder, so the save resolves the old file's id
+    /// against the still-current directory instead of racing the scan that replaces it.
+    fn save_then_scan(
+        &mut self,
+        pending: Option<(FileId, FileSnapshot)>,
+        pair: FolderAndFile,
+    ) -> Task<Message> {
+        let Some((id, snap)) = pending else {
+            return self.scan_folder(pair);
+        };
+        if self.media_viewer.needs_unload_before_rename() {
+            self.pending_file_updated = Some((id, snap));
+            self.pending_scan = Some(pair);
+            Task::done(Message::MediaViewer(media_viewer::Message::Unload))
+        } else {
+            let saved = self.apply_file_updated(id, snap);
+            Task::batch([saved, self.scan_folder(pair)])
+        }
     }
 
     fn scan_folder(&mut self, pair: FolderAndFile) -> Task<Message> {
@@ -982,6 +1019,14 @@ impl FolderWorkspace {
     fn on_media_unloaded(&mut self) -> Task<Message> {
         if std::mem::take(&mut self.batch_waits_for_unload) {
             return self.run_batch();
+        }
+        if let Some(pair) = self.pending_scan.take() {
+            let saved = self
+                .pending_file_updated
+                .take()
+                .map(|(id, snapshot)| self.apply_file_updated(id, snapshot))
+                .unwrap_or_else(Task::none);
+            return Task::batch([saved, self.scan_folder(pair)]);
         }
         let Some((id, snapshot)) = self.pending_file_updated.take() else {
             return Task::none();
@@ -2007,6 +2052,23 @@ impl FolderWorkspace {
         self.media_viewer.needs_unload_before_rename()
     }
 
+    /// Save the open file's live edits before the window closes, so tags, comment and in/out
+    /// set on the last clip of the session are not lost when the user closes frename without
+    /// switching files or folders first. If the video needs unloading before the resulting
+    /// rename, the save is deferred: the caller must still trigger the unload (`needs_media_unload`
+    /// says whether to) and `on_media_unloaded` flushes it once that finishes.
+    pub fn flush_open_file(&mut self) -> Task<Message> {
+        let Some((id, snap)) = self.file_workspace.get_snapshot() else {
+            return Task::none();
+        };
+        if self.media_viewer.needs_unload_before_rename() {
+            self.pending_file_updated = Some((id, snap));
+            Task::none()
+        } else {
+            self.apply_file_updated(id, snap)
+        }
+    }
+
     /// Test helper: inject a pending deferred rename as if media is locked.
     /// Only available in test builds.
     #[cfg(test)]
@@ -2386,6 +2448,113 @@ mod tests {
         assert!(
             !workspace.has_pending_rename(),
             "still None after second Unloaded"
+        );
+    }
+
+    /// Regression test for issue #21: closing the window used to only unload the video and
+    /// never save the open file's pending tags/comment/in-out, so the last clip of a session
+    /// silently lost them. `flush_open_file` must capture them for save before the app decides
+    /// whether to unload and close.
+    #[test]
+    fn closing_the_window_saves_the_open_files_pending_edits() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let file_0_id = file_id_at(&workspace, 0);
+        // file_0.mp4 is "loading" → needs_unload_before_rename() = true, same as a real open file.
+
+        let tag_list = workspace.file_workspace().tag_list();
+        let tag_id = tag_list
+            .filtered_display_tag_ids()
+            .iter()
+            .find(|id| {
+                tag_list
+                    .get_tag(**id)
+                    .map(|t| t.tag() == "pick")
+                    .unwrap_or(false)
+            })
+            .copied()
+            .expect("pick is a built-in tag");
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
+
+        // What the app does on CloseRequested, before deciding whether to unload and close.
+        let _ = workspace.flush_open_file();
+        assert!(
+            workspace.has_pending_rename(),
+            "the open file's edit must be captured for save, not dropped, when closing"
+        );
+
+        // on_media_unloaded (fired for real on MediaViewer::Unloaded) applies the save.
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+
+        assert!(
+            workspace
+                .directory()
+                .and_then(|d| d.file_by_id(file_0_id))
+                .is_some_and(|f| f.snapshot().has_tag("pick")),
+            "the tag toggled just before closing must be saved, not lost"
+        );
+    }
+
+    /// Regression test for issue #21: opening a different folder without switching files first
+    /// used to reset the file workspace and drop `pending_file_updated`, losing the open file's
+    /// edits. `begin_scan_folder` must save them (deferred past a needed unload, same as a file
+    /// switch) before the scan replaces the directory.
+    #[test]
+    fn opening_a_new_folder_saves_the_open_files_pending_edits() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let file_0_id = file_id_at(&workspace, 0);
+
+        let tag_list = workspace.file_workspace().tag_list();
+        let tag_id = tag_list
+            .filtered_display_tag_ids()
+            .iter()
+            .find(|id| {
+                tag_list
+                    .get_tag(**id)
+                    .map(|t| t.tag() == "pick")
+                    .unwrap_or(false)
+            })
+            .copied()
+            .expect("pick is a built-in tag");
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
+
+        // Open a different folder directly (📂, drag-drop, `frename <folder>`, …) without
+        // switching files first. The scan itself never resolves in this test (no async
+        // executor), so `workspace.directory()` still refers to the original folder below —
+        // exactly what lets us check the save happened before it would be replaced.
+        let other_folder = std::env::temp_dir().join("frename-test-other-folder-issue-21");
+        let _ = workspace.update(Message::ScanFolder(frename_core::FolderAndFile::new(
+            other_folder,
+            None::<PathBuf>,
+        )));
+        assert!(
+            workspace.has_pending_rename(),
+            "the open file's edit must be captured before the scan replaces the directory"
+        );
+
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+
+        assert!(
+            workspace
+                .directory()
+                .and_then(|d| d.file_by_id(file_0_id))
+                .is_some_and(|f| f.snapshot().has_tag("pick")),
+            "the tag toggled just before opening another folder must be saved, not lost"
         );
     }
 
