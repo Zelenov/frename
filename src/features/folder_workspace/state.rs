@@ -1040,7 +1040,9 @@ impl FolderWorkspace {
         Task::batch(tasks)
     }
 
-    /// Called when media has unloaded. Persist pending snapshot (FileUpdated) then open the new media.
+    /// Called when media has unloaded. Runs whichever action was waiting on it — a batch, a
+    /// deferred close, a deferred folder scan, or a plain file-switch save — then, for the plain
+    /// case, opens the newly selected file.
     fn on_media_unloaded(&mut self) -> Task<Message> {
         if std::mem::take(&mut self.batch_waits_for_unload) {
             return self.run_batch();
