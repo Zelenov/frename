@@ -411,7 +411,7 @@ mod tests {
     }
 
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
-    const NOT_UI_TEXT: [(&str, &str); 47] = [
+    const NOT_UI_TEXT: [(&str, &str); 72] = [
         ("comment-editor", "widget id"),
         (
             "Rotate videos",
@@ -521,6 +521,106 @@ mod tests {
         (
             "{failed_deletes} upload(s) not deleted from Soniox",
             "English-only log text, see SubtitleJob::log_report",
+        ),
+        (
+            "move_comments",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "move_in_out",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "in_out_from_names",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "markers_comment",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "rotate",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "tag_commented",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "fix_tags",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "respace_tags",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "reload_files",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "describe_ai",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "generate_subtitles",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "comment_to_markers",
+            "stable option value for the batch run remembered across restarts (#65), see Direction::as_str",
+        ),
+        (
+            "markers_to_comment",
+            "stable option value for the batch run remembered across restarts (#65), see Direction::as_str",
+        ),
+        (
+            "right",
+            "stable option value for the batch run remembered across restarts (#65), see Turn::as_str",
+        ),
+        (
+            "left",
+            "stable option value for the batch run remembered across restarts (#65), see Turn::as_str",
+        ),
+        (
+            "half",
+            "stable option value for the batch run remembered across restarts (#65), see Turn::as_str",
+        ),
+        (
+            "reset",
+            "stable option value for the batch run remembered across restarts (#65), see Turn::as_str",
+        ),
+        (
+            "to",
+            "stable option key for the batch run remembered across restarts (#65), see Actions::persist",
+        ),
+        (
+            "direction",
+            "stable option key for the batch run remembered across restarts (#65), see Actions::persist",
+        ),
+        (
+            "turn",
+            "stable option key for the batch run remembered across restarts (#65), see Actions::persist",
+        ),
+        (
+            "language",
+            "stable option key for the batch run remembered across restarts (#65), see Actions::persist",
+        ),
+        (
+            "model",
+            "stable option key for the batch run remembered across restarts (#65), see Actions::persist",
+        ),
+        (
+            "redo",
+            "stable option key for the batch run remembered across restarts (#65), see Actions::persist",
+        ),
+        (
+            "replace",
+            "stable option key for the batch run remembered across restarts (#65), see Actions::persist",
+        ),
+        (
+            "true",
+            "stable option value (a bool) for the batch run remembered across restarts (#65), see Actions::persist",
         ),
     ];
 

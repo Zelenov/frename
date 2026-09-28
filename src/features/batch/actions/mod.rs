@@ -353,32 +353,48 @@ impl Actions {
     }
 
     /// `action`'s current options, as simple key/value pairs to remember for next time (#65).
-    /// Actions with nothing to choose return none.
+    /// Actions with nothing to choose return none. Reads each action's own options directly
+    /// (not through [`Self::operation`]), so it does not depend on the action being ready to
+    /// run right now (e.g. "Generate subtitles" before its plan and key are known).
     pub fn persist(&self, action: Action) -> Vec<(String, String)> {
-        match self.operation(action) {
-            Some(Operation::MoveComments(to)) => vec![("to".to_string(), to.as_str().to_string())],
-            Some(Operation::MoveInOut(to)) => vec![("to".to_string(), to.as_str().to_string())],
-            Some(Operation::MarkersComment(direction)) => {
-                vec![("direction".to_string(), direction.as_str().to_string())]
-            }
-            Some(Operation::Rotate(turn)) => vec![("turn".to_string(), turn.as_str().to_string())],
-            Some(Operation::DescribeAi(run)) => vec![
-                ("language".to_string(), run.language.as_str().to_string()),
-                ("model".to_string(), run.model.to_string()),
-                ("redo".to_string(), run.redo.to_string()),
-            ],
-            Some(Operation::GenerateSubtitles(_)) => vec![(
+        match action {
+            Action::MoveComments => match self.move_comments.operation() {
+                Operation::MoveComments(to) => vec![("to".to_string(), to.as_str().to_string())],
+                _ => unreachable!("move_comments::Options::operation always returns MoveComments"),
+            },
+            Action::MoveInOut => match self.move_in_out.operation() {
+                Operation::MoveInOut(to) => vec![("to".to_string(), to.as_str().to_string())],
+                _ => unreachable!("move_in_out::Options::operation always returns MoveInOut"),
+            },
+            Action::MarkersComment => match self.markers_comment.operation() {
+                Operation::MarkersComment(direction) => {
+                    vec![("direction".to_string(), direction.as_str().to_string())]
+                }
+                _ => {
+                    unreachable!("markers_comment::Options::operation always returns MarkersComment")
+                }
+            },
+            Action::Rotate => match self.rotate.operation() {
+                Operation::Rotate(turn) => vec![("turn".to_string(), turn.as_str().to_string())],
+                _ => unreachable!("rotate::Options::operation always returns Rotate"),
+            },
+            Action::DescribeAi => match self.describe_ai.operation() {
+                Operation::DescribeAi(run) => vec![
+                    ("language".to_string(), run.language.as_str().to_string()),
+                    ("model".to_string(), run.model.to_string()),
+                    ("redo".to_string(), run.redo.to_string()),
+                ],
+                _ => unreachable!("describe_ai::Options::operation always returns DescribeAi"),
+            },
+            Action::GenerateSubtitles => vec![(
                 "replace".to_string(),
                 self.generate_subtitles.replaces().to_string(),
             )],
-            Some(
-                Operation::InOutFromNames
-                | Operation::TagCommented
-                | Operation::FixTags
-                | Operation::RespaceTags
-                | Operation::ReloadFiles,
-            )
-            | None => Vec::new(),
+            Action::InOutFromNames
+            | Action::TagCommented
+            | Action::FixTags
+            | Action::RespaceTags
+            | Action::ReloadFiles => Vec::new(),
         }
     }
 
