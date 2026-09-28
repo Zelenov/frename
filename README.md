@@ -218,6 +218,8 @@ No subtitles yet? Check the videos in batch mode and run **Generate subtitles** 
 Click ☑ to check files in the list (All / Invert) and run one action on all of them, with progress
 and Cancel. Each file then shows a green or red check box. Drag a checked file to drag all checked
 files (an unchecked one drags only itself). Esc leaves batch mode, the same as clicking ☑ again.
+Batch mode opens with the action you last ran selected, and its own options (e.g. which way
+in/out points move, or "Replace existing subtitles") as they were then, even across restarts.
 
 **Select several clips without ☑**: **Ctrl+click** a clip to add it (and the one open before it) to
 the selection; Ctrl+click a selected clip to drop it. **Shift+click** a clip to select every clip

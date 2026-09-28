@@ -108,6 +108,30 @@ impl Action {
             _ => fl!("batch-done-label-changed"),
         }
     }
+
+    /// Stable id for remembering the last action run (#65): unlike `label()` it never changes
+    /// with the UI language, and unlike `log_id()` it is never shown, so it can change wording
+    /// there without breaking a saved id.
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::MoveComments => "move_comments",
+            Self::MoveInOut => "move_in_out",
+            Self::InOutFromNames => "in_out_from_names",
+            Self::MarkersComment => "markers_comment",
+            Self::Rotate => "rotate",
+            Self::TagCommented => "tag_commented",
+            Self::FixTags => "fix_tags",
+            Self::RespaceTags => "respace_tags",
+            Self::ReloadFiles => "reload_files",
+            Self::DescribeAi => "describe_ai",
+            Self::GenerateSubtitles => "generate_subtitles",
+        }
+    }
+
+    /// Parse a persisted id; `None` for one no action has (e.g. an action removed since).
+    pub fn from_id(id: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|action| action.id() == id)
+    }
 }
 
 /// What a job does to each file, with the options it was started with.
@@ -327,6 +351,108 @@ impl Actions {
         }
     }
 
+    /// `action`'s current options, as simple key/value pairs to remember for next time (#65).
+    /// Actions with nothing to choose return none. Reads each action's own options directly
+    /// (not through [`Self::operation`]), so it does not depend on the action being ready to
+    /// run right now (e.g. "Generate subtitles" before its plan and key are known).
+    pub fn persist(&self, action: Action) -> Vec<(String, String)> {
+        match action {
+            // Each field's own `operation()` always returns its own action's variant.
+            Action::MoveComments => match self.move_comments.operation() {
+                Operation::MoveComments(to) => vec![("to".to_string(), to.as_str().to_string())],
+                _ => unreachable!(),
+            },
+            Action::MoveInOut => match self.move_in_out.operation() {
+                Operation::MoveInOut(to) => vec![("to".to_string(), to.as_str().to_string())],
+                _ => unreachable!(),
+            },
+            Action::MarkersComment => match self.markers_comment.operation() {
+                Operation::MarkersComment(direction) => {
+                    vec![("direction".to_string(), direction.as_str().to_string())]
+                }
+                _ => unreachable!(),
+            },
+            Action::Rotate => match self.rotate.operation() {
+                Operation::Rotate(turn) => vec![("turn".to_string(), turn.as_str().to_string())],
+                _ => unreachable!(),
+            },
+            // `language` and `model` are not a batch-local choice: the panel only shows them,
+            // set from Settings (`FrenameApp::update`'s `WindowReady` sync, which would
+            // overwrite a restored value right on startup) — like "Generate subtitles"'s
+            // `config` below, only `redo`, the panel's own checkbox, is worth remembering.
+            Action::DescribeAi => match self.describe_ai.operation() {
+                Operation::DescribeAi(run) => vec![("redo".to_string(), run.redo.to_string())],
+                _ => unreachable!(),
+            },
+            Action::GenerateSubtitles => vec![(
+                "replace".to_string(),
+                self.generate_subtitles.replaces().to_string(),
+            )],
+            Action::InOutFromNames
+            | Action::TagCommented
+            | Action::FixTags
+            | Action::RespaceTags
+            | Action::ReloadFiles => Vec::new(),
+        }
+    }
+
+    /// Apply `options`, as [`Self::persist`] returned them for `action`, to its own options. A
+    /// key it does not recognise, or a value it cannot parse, is simply left at its default
+    /// (removed choices, or ones only another version understands, are never an error).
+    pub fn restore(&mut self, action: Action, options: &[(String, String)]) {
+        let get = |key: &str| {
+            options
+                .iter()
+                .find(|(k, _)| k == key)
+                .map(|(_, v)| v.as_str())
+        };
+        match action {
+            Action::MoveComments => {
+                if let Some(v) = get("to") {
+                    self.move_comments
+                        .update(move_comments::Message::SetTo(CommentStorage::from_name(v)));
+                }
+            }
+            Action::MoveInOut => {
+                if let Some(v) = get("to") {
+                    self.move_in_out
+                        .update(move_in_out::Message::SetTo(InOutStorage::from_name(v)));
+                }
+            }
+            Action::MarkersComment => {
+                if let Some(v) = get("direction") {
+                    self.markers_comment
+                        .update(markers_comment::Message::SetDirection(
+                            markers_comment::Direction::from_name(v),
+                        ));
+                }
+            }
+            Action::Rotate => {
+                if let Some(v) = get("turn") {
+                    self.rotate
+                        .update(rotate::Message::SetTurn(rotate::Turn::from_name(v)));
+                }
+            }
+            Action::DescribeAi => {
+                if let Some(v) = get("redo") {
+                    self.describe_ai
+                        .update(describe_ai::Message::SetRedo(v == "true"));
+                }
+            }
+            Action::GenerateSubtitles => {
+                if let Some(v) = get("replace") {
+                    self.generate_subtitles
+                        .update(generate_subtitles::Message::SetReplace(v == "true"));
+                }
+            }
+            Action::InOutFromNames
+            | Action::TagCommented
+            | Action::FixTags
+            | Action::RespaceTags
+            | Action::ReloadFiles => {}
+        }
+    }
+
     /// The panel of `action` for the `checked` files (its title, what it does, and its options),
     /// the run button's label, and whether it can run.
     pub fn panel(
@@ -391,4 +517,140 @@ fn item_result(outcome: MoveOutcome) -> ItemResult {
 fn reparsed(path: PathBuf) -> (PathBuf, FileSnapshot) {
     let snapshot = FileTagger::parse(&path, &FolderInfo::default());
     (path, snapshot)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_action_s_id_round_trips_and_an_unknown_one_is_none() {
+        for action in Action::ALL {
+            assert_eq!(Action::from_id(action.id()), Some(action));
+        }
+        assert_eq!(Action::from_id("no-such-action"), None);
+    }
+
+    #[test]
+    fn move_comments_and_move_in_out_persist_and_restore() {
+        let mut actions = Actions::default();
+        actions.update(ActionMessage::MoveComments(move_comments::Message::SetTo(
+            CommentStorage::TextFile,
+        )));
+        let saved = actions.persist(Action::MoveComments);
+        let mut restored = Actions::default();
+        restored.restore(Action::MoveComments, &saved);
+        assert_eq!(
+            restored.operation(Action::MoveComments),
+            Some(Operation::MoveComments(CommentStorage::TextFile))
+        );
+
+        actions.update(ActionMessage::MoveInOut(move_in_out::Message::SetTo(
+            InOutStorage::Comment,
+        )));
+        let saved = actions.persist(Action::MoveInOut);
+        let mut restored = Actions::default();
+        restored.restore(Action::MoveInOut, &saved);
+        assert_eq!(
+            restored.operation(Action::MoveInOut),
+            Some(Operation::MoveInOut(InOutStorage::Comment))
+        );
+    }
+
+    #[test]
+    fn markers_comment_and_rotate_persist_and_restore() {
+        let mut actions = Actions::default();
+        actions.update(ActionMessage::MarkersComment(
+            markers_comment::Message::SetDirection(markers_comment::Direction::MarkersToComment),
+        ));
+        let saved = actions.persist(Action::MarkersComment);
+        let mut restored = Actions::default();
+        restored.restore(Action::MarkersComment, &saved);
+        assert_eq!(
+            restored.operation(Action::MarkersComment),
+            Some(Operation::MarkersComment(
+                markers_comment::Direction::MarkersToComment
+            ))
+        );
+
+        actions.update(ActionMessage::Rotate(rotate::Message::SetTurn(
+            rotate::Turn::Half,
+        )));
+        let saved = actions.persist(Action::Rotate);
+        let mut restored = Actions::default();
+        restored.restore(Action::Rotate, &saved);
+        assert_eq!(
+            restored.operation(Action::Rotate),
+            Some(Operation::Rotate(rotate::Turn::Half))
+        );
+    }
+
+    #[test]
+    fn describe_ai_and_generate_subtitles_options_persist_and_restore() {
+        // `language`/`model` are not persisted: the panel only shows them, set from Settings
+        // (`FrenameApp::update`'s `WindowReady` sync would overwrite a restored value on
+        // startup anyway); only `redo`, the panel's own checkbox, is a batch-local choice.
+        let mut actions = Actions::default();
+        actions.update(ActionMessage::DescribeAi(describe_ai::Message::SetRedo(
+            true,
+        )));
+        let saved = actions.persist(Action::DescribeAi);
+        assert_eq!(saved, vec![("redo".to_string(), "true".to_string())]);
+        let mut restored = Actions::default();
+        restored.restore(Action::DescribeAi, &saved);
+        match restored.operation(Action::DescribeAi) {
+            Some(Operation::DescribeAi(run)) => assert!(run.redo),
+            other => panic!("expected DescribeAi, got {other:?}"),
+        }
+
+        actions.update(ActionMessage::GenerateSubtitles(
+            generate_subtitles::Message::SetReplace(true),
+        ));
+        let saved = actions.persist(Action::GenerateSubtitles);
+        assert_eq!(saved, vec![("replace".to_string(), "true".to_string())]);
+        let mut restored = Actions::default();
+        restored.restore(Action::GenerateSubtitles, &saved);
+        assert!(restored.generate_subtitles.replaces());
+    }
+
+    #[test]
+    fn an_unknown_option_value_falls_back_to_its_default() {
+        let mut actions = Actions::default();
+        actions.restore(Action::Rotate, &[("turn".to_string(), "??".to_string())]);
+        assert_eq!(
+            actions.operation(Action::Rotate),
+            Some(Operation::Rotate(rotate::Turn::Right)),
+            "an unknown turn falls back to the default"
+        );
+    }
+
+    #[test]
+    fn an_unrecognised_option_key_is_ignored() {
+        let mut actions = Actions::default();
+        actions.restore(
+            Action::Rotate,
+            &[
+                ("turn".to_string(), "half".to_string()),
+                ("bogus".to_string(), "x".to_string()),
+            ],
+        );
+        assert_eq!(
+            actions.operation(Action::Rotate),
+            Some(Operation::Rotate(rotate::Turn::Half))
+        );
+    }
+
+    #[test]
+    fn actions_without_a_choice_persist_nothing() {
+        let actions = Actions::default();
+        for action in [
+            Action::TagCommented,
+            Action::FixTags,
+            Action::RespaceTags,
+            Action::ReloadFiles,
+            Action::InOutFromNames,
+        ] {
+            assert!(actions.persist(action).is_empty());
+        }
+    }
 }
