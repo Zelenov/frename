@@ -3,6 +3,7 @@
 
 use super::size::*;
 use super::space::*;
+use super::typography::LINE_BODY;
 
 // The main window (§13.9): the minimum fits a 1280×680 work area with room to spare.
 pub const WINDOW_MIN_WIDTH: f32 = 900.0;
@@ -52,6 +53,29 @@ pub const TIME_READOUT_WIDTH: f32 = 104.0;
 pub const NOTICE_SLOT_MIN_WIDTH: f32 = 120.0;
 /// A marker row's color dot.
 pub const MARKER_DOT: f32 = 14.0;
+/// The timeline's and the volume's track.
+pub const TRACK_HEIGHT: f32 = 6.0;
+/// How far the playhead line reaches beyond the track at both ends, and its knob while the
+/// timeline is hovered or dragged.
+pub const PLAYHEAD_OVERHANG: f32 = 4.0;
+pub const PLAYHEAD_KNOB: f32 = 10.0;
+/// A point marker's round head, and how far its needle reaches below the track.
+pub const PIN_HEAD: f32 = 7.0;
+pub const PIN_OVERHANG: f32 = 3.0;
+/// A range's band in its lane (lanes are `LINE` apart).
+pub const BAND_HEIGHT: f32 = 4.0;
+/// The handles at the ends of the active range.
+pub const RANGE_HANDLE_WIDTH: f32 = 6.0;
+pub const RANGE_HANDLE_HEIGHT: f32 = 8.0;
+/// How far around a band or a handle a press still hits it.
+pub const TIMELINE_HIT_SLACK: f32 = 3.0;
+/// A Shift seek or a dragged handle snaps to a marker this close to the pointer.
+pub const SNAP_REACH: f32 = 8.0;
+/// A subtitle row of the side list: its time and up to three lines of the cue.
+pub const CUE_ROW_HEIGHT: f32 = 4.0 * LINE_BODY + 2.0 * SPACE_TIGHT;
+/// A marker row with a one-line name: its first line of row buttons and the name. A longer
+/// name adds `LINE_BODY` per line.
+pub const MARKER_ROW_HEIGHT: f32 = ICON_BUTTON_SMALL + SPACE_XXS + LINE_BODY + 2.0 * SPACE_TIGHT;
 
 // File list (§13.4).
 /// The search bar over a list: a 28 px field with 6 px around it.

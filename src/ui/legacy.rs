@@ -34,9 +34,6 @@ pub const TEXT_MUTED: Color = Color::from_rgb(0.55, 0.55, 0.6);
 /// Error / failed state (e.g. video failed to load).
 pub const ERROR: Color = Color::from_rgb(0.95, 0.35, 0.35);
 
-/// Segment range highlight on the progress bar (inverted accent – warm yellow-green).
-pub const SEGMENT: Color = Color::from_rgba(1.0, 0.85, 0.2, 0.75);
-
 /// Secondary text on dark translucent surfaces (subtitle list); brighter than TEXT_MUTED.
 pub const TEXT_SOFT: Color = Color::from_rgb(0.75, 0.75, 0.8);
 
@@ -104,43 +101,6 @@ pub fn elevated_container_bordered_style(_theme: &iced::Theme) -> iced::widget::
             color: TEXT_MUTED,
         },
         ..Default::default()
-    }
-}
-
-/// Fullscreen subtitle caption: dark translucent pill so text reads over any picture.
-pub fn subtitle_caption_style(_theme: &iced::Theme) -> iced::widget::container::Style {
-    iced::widget::container::Style {
-        background: Some(Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.62))),
-        border: iced::border::rounded(8),
-        ..Default::default()
-    }
-}
-
-/// Fullscreen subtitle list panel: translucent so the picture stays visible behind it.
-pub fn subtitle_list_style(_theme: &iced::Theme) -> iced::widget::container::Style {
-    iced::widget::container::Style {
-        background: Some(Background::Color(Color::from_rgba(0.06, 0.06, 0.06, 0.72))),
-        ..Default::default()
-    }
-}
-
-/// Row in the subtitle list: accent tint for the cue on screen, hover highlight otherwise.
-pub fn cue_row_style(
-    active: bool,
-) -> impl Fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style + Clone {
-    move |_theme: &iced::Theme, status: iced::widget::button::Status| {
-        let bg = match (active, status) {
-            (true, _) => ACCENT_TAG_ROW,
-            (false, iced::widget::button::Status::Hovered) => Color::from_rgba(1.0, 1.0, 1.0, 0.08),
-            _ => Color::TRANSPARENT,
-        };
-        iced::widget::button::Style {
-            background: Some(Background::Color(bg)),
-            text_color: TEXT,
-            border: iced::border::rounded(4),
-            shadow: iced::Shadow::default(),
-            snap: true,
-        }
     }
 }
 
@@ -287,76 +247,5 @@ pub fn dark_scrollable_style(
             shadow: iced::Shadow::default(),
             icon: TEXT_MUTED,
         },
-    }
-}
-
-pub use super::palette::marker_color;
-
-/// A round button filled with a marker color: the color dot of a marker row and the colors of
-/// its picker. `selected` rings it in white.
-pub fn marker_dot_style(
-    color: Color,
-    selected: bool,
-) -> impl Fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style + Clone {
-    move |_theme: &iced::Theme, status: iced::widget::button::Status| {
-        let ring = match status {
-            _ if selected => TEXT,
-            iced::widget::button::Status::Hovered => TEXT_SOFT,
-            _ => Color::TRANSPARENT,
-        };
-        iced::widget::button::Style {
-            background: Some(Background::Color(color)),
-            text_color: TEXT,
-            border: iced::Border {
-                radius: 999.0.into(),
-                width: 2.0,
-                color: ring,
-            },
-            shadow: iced::Shadow::default(),
-            snap: true,
-        }
-    }
-}
-
-/// Tab of the side list over the video (Subtitles / Markers): the open one underlined in the
-/// accent color.
-pub fn overlay_tab_style(
-    active: bool,
-) -> impl Fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style + Clone {
-    move |_theme: &iced::Theme, status: iced::widget::button::Status| {
-        let bg = match (active, status) {
-            (true, _) => ACCENT_SELECTED,
-            (false, iced::widget::button::Status::Hovered) => Color::from_rgba(1.0, 1.0, 1.0, 0.08),
-            _ => Color::TRANSPARENT,
-        };
-        iced::widget::button::Style {
-            background: Some(Background::Color(bg)),
-            text_color: if active { TEXT } else { TEXT_SOFT },
-            border: iced::border::rounded(4),
-            shadow: iced::Shadow::default(),
-            snap: true,
-        }
-    }
-}
-
-/// The marker label over the progress bar: the head of the marker's pin, outlined in the
-/// pin's `color`; a click renames the marker.
-pub fn marker_label_style(
-    color: Color,
-) -> impl Fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style {
-    move |_theme: &iced::Theme, status: iced::widget::button::Status| {
-        let bg = match status {
-            iced::widget::button::Status::Hovered | iced::widget::button::Status::Pressed => {
-                ACCENT_SELECTED
-            }
-            _ => BG_ELEVATED,
-        };
-        iced::widget::button::Style {
-            background: Some(Background::Color(bg)),
-            text_color: TEXT,
-            border: iced::border::rounded(6).color(color).width(1.5),
-            shadow: iced::Shadow::default(),
-            snap: true,
-        }
     }
 }

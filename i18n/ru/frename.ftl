@@ -395,14 +395,25 @@ folder-controls-open-file = Правый клик: открыть один фа�
 
 ## Video
 
-video-controls-set-in = [  Точка входа
-video-controls-set-out = ]  Точка выхода
-video-controls-screenshot = Сохранить этот кадр как JPEG (F12)
-video-controls-add-marker = Добавить маркер (F2, удерживайте для диапазона; ещё раз — назвать)
+video-controls-back = Назад на 10 с
+video-controls-play = Воспроизвести
+video-controls-pause = Пауза
+video-controls-forward = Вперёд на 10 с
+video-controls-set-in = Поставить точку входа
+video-controls-set-out = Поставить точку выхода
+video-controls-screenshot = Сохранить этот кадр
+video-controls-add-marker = Добавить маркер
+video-controls-add-marker-hold = Удерживайте для диапазона; нажмите ещё раз, чтобы назвать
 video-controls-cannot-hold-markers = Этот файл не может хранить маркеры
 video-controls-add-a-name = Добавить имя
-video-controls-rotate-left = Повернуть влево (Ctrl+Alt+←)
-video-controls-rotate-right = Повернуть вправо (Ctrl+Alt+→)
+video-controls-rotate-left = Повернуть влево
+video-controls-rotate-right = Повернуть вправо
+video-controls-volume = Громкость
+video-controls-more = Ещё
+media-viewer-no-clip = Клип не открыт
+media-viewer-loading-slow = Ждём файл… (файл из облака может загружаться долго)
+media-viewer-cannot-play = Этот клип не воспроизводится
+media-viewer-no-picture = В этом файле нет видеоизображения
 rotate-cannot = Нельзя повернуть: { $reason }
 rotate-reason-missing = файла больше нет на месте
 rotate-flag-right = 90° вправо
@@ -423,19 +434,32 @@ batch-action-rotate-right = На 90° вправо (по часовой стре
 batch-action-rotate-left = На 90° влево (против часовой стрелки)
 batch-action-rotate-half = На 180°
 batch-action-rotate-reset = Сбросить: без поворота (0°)
-media-viewer-video-show-subtitles = Показать список субтитров
-media-viewer-video-hide-subtitles = Скрыть список субтитров
-media-viewer-video-markers-hint = Маркеры (Shift+F1 / Shift+F3 — переход, Shift+перетаскивание — привязка)
+media-viewer-video-subtitle-list = Список субтитров
+media-viewer-video-marker-list = Список маркеров
+media-viewer-video-markers-hint = Shift+F1 / Shift+F3 — переход между маркерами; Shift+перетаскивание — привязка
 media-viewer-video-tab-markers = Маркеры
+media-viewer-video-fullscreen = Во весь экран
+media-viewer-video-close-list = Закрыть список
 
 ## Markers list
 
 markers-empty = Маркеров пока нет
-markers-add = 📍 Добавить маркер (F2)
+markers-add = Добавить маркер
 markers-ai-hint = Маркер AI: заменяется при повторном описании этого клипа
 markers-keep-color = Оставить цвет
-markers-done-enter = Готово (Enter)
+markers-done = Готово
 markers-delete = Удалить маркер
+markers-cannot-hold-hint = Premiere читает маркеры из файлов MP4 и MOV.
+markers-color-green = Зелёный
+markers-color-red = Красный
+markers-color-orange = Оранжевый
+markers-color-yellow = Жёлтый
+markers-color-white = Белый
+markers-color-blue = Синий
+markers-color-cyan = Голубой
+markers-color-lavender = Лавандовый
+markers-color-magenta = Пурпурный
+markers-color-other = Другой цвет
 markers-read-only = только чтение
 markers-name-placeholder = Имя
 

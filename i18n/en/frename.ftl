@@ -353,14 +353,25 @@ folder-controls-open-file = Right-click: open one file
 
 ## Video
 
-video-controls-set-in = [  Set In
-video-controls-set-out = ]  Set Out
-video-controls-screenshot = Save this frame as a JPEG (F12)
-video-controls-add-marker = Add marker (F2, hold for a range; again to name it)
+video-controls-back = Back 10 s
+video-controls-play = Play
+video-controls-pause = Pause
+video-controls-forward = Forward 10 s
+video-controls-set-in = Set the in point
+video-controls-set-out = Set the out point
+video-controls-screenshot = Save this frame
+video-controls-add-marker = Add a marker
+video-controls-add-marker-hold = Hold for a range; press again to name it
 video-controls-cannot-hold-markers = This file cannot hold markers
 video-controls-add-a-name = Add a name
-video-controls-rotate-left = Rotate left (Ctrl+Alt+←)
-video-controls-rotate-right = Rotate right (Ctrl+Alt+→)
+video-controls-rotate-left = Rotate left
+video-controls-rotate-right = Rotate right
+video-controls-volume = Volume
+video-controls-more = More
+media-viewer-no-clip = No clip open
+media-viewer-loading-slow = Waiting for the file… (a cloud file may take a while)
+media-viewer-cannot-play = This clip cannot be played
+media-viewer-no-picture = This file has no video picture
 rotate-cannot = Cannot rotate: { $reason }
 rotate-reason-missing = the file is no longer there
 rotate-flag-right = 90° right
@@ -381,19 +392,32 @@ batch-action-rotate-right = 90° right (clockwise)
 batch-action-rotate-left = 90° left (counter-clockwise)
 batch-action-rotate-half = 180°
 batch-action-rotate-reset = Reset: no rotation (0°)
-media-viewer-video-show-subtitles = Show subtitle list
-media-viewer-video-hide-subtitles = Hide subtitle list
-media-viewer-video-markers-hint = Markers (Shift+F1 / Shift+F3 to jump, Shift+drag to snap)
+media-viewer-video-subtitle-list = Subtitle list
+media-viewer-video-marker-list = Marker list
+media-viewer-video-markers-hint = Shift+F1 / Shift+F3 jump between markers; Shift+drag snaps
 media-viewer-video-tab-markers = Markers
+media-viewer-video-fullscreen = Full screen
+media-viewer-video-close-list = Close the list
 
 ## Markers list
 
 markers-empty = No markers yet
-markers-add = 📍 Add a marker (F2)
+markers-add = Add a marker
 markers-ai-hint = AI marker: replaced when the AI describes this clip again
 markers-keep-color = Keep the color
-markers-done-enter = Done (Enter)
+markers-done = Done
 markers-delete = Delete the marker
+markers-cannot-hold-hint = Premiere reads markers from MP4 and MOV files.
+markers-color-green = Green
+markers-color-red = Red
+markers-color-orange = Orange
+markers-color-yellow = Yellow
+markers-color-white = White
+markers-color-blue = Blue
+markers-color-cyan = Cyan
+markers-color-lavender = Lavender
+markers-color-magenta = Magenta
+markers-color-other = Another color
 markers-read-only = read-only
 markers-name-placeholder = Name
 
