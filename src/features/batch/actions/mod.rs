@@ -27,7 +27,6 @@ use std::sync::atomic::AtomicBool;
 
 use clipscribe::AiUsage;
 use clipscribe::Model;
-use clipscribe::SummaryLanguage;
 use frename_core::{
     CommentStorage, File, FileId, FileSnapshot, FileTagger, FolderInfo, InOutStorage, MoveOutcome,
 };
@@ -377,12 +376,12 @@ impl Actions {
                 Operation::Rotate(turn) => vec![("turn".to_string(), turn.as_str().to_string())],
                 _ => unreachable!(),
             },
+            // `language` and `model` are not a batch-local choice: the panel only shows them,
+            // set from Settings (`FrenameApp::update`'s `WindowReady` sync, which would
+            // overwrite a restored value right on startup) — like "Generate subtitles"'s
+            // `config` below, only `redo`, the panel's own checkbox, is worth remembering.
             Action::DescribeAi => match self.describe_ai.operation() {
-                Operation::DescribeAi(run) => vec![
-                    ("language".to_string(), run.language.as_str().to_string()),
-                    ("model".to_string(), run.model.to_string()),
-                    ("redo".to_string(), run.redo.to_string()),
-                ],
+                Operation::DescribeAi(run) => vec![("redo".to_string(), run.redo.to_string())],
                 _ => unreachable!(),
             },
             Action::GenerateSubtitles => vec![(
@@ -435,15 +434,6 @@ impl Actions {
                 }
             }
             Action::DescribeAi => {
-                if let Some(v) = get("language") {
-                    self.describe_ai.update(describe_ai::Message::SetLanguage(
-                        SummaryLanguage::from_name(v),
-                    ));
-                }
-                if let Some(v) = get("model") {
-                    self.describe_ai
-                        .update(describe_ai::Message::SetModel(Model::from_id(v)));
-                }
                 if let Some(v) = get("redo") {
                     self.describe_ai
                         .update(describe_ai::Message::SetRedo(v == "true"));
@@ -597,21 +587,19 @@ mod tests {
 
     #[test]
     fn describe_ai_and_generate_subtitles_options_persist_and_restore() {
+        // `language`/`model` are not persisted: the panel only shows them, set from Settings
+        // (`FrenameApp::update`'s `WindowReady` sync would overwrite a restored value on
+        // startup anyway); only `redo`, the panel's own checkbox, is a batch-local choice.
         let mut actions = Actions::default();
-        actions.update(ActionMessage::DescribeAi(
-            describe_ai::Message::SetLanguage(SummaryLanguage::Russian),
-        ));
         actions.update(ActionMessage::DescribeAi(describe_ai::Message::SetRedo(
             true,
         )));
         let saved = actions.persist(Action::DescribeAi);
+        assert_eq!(saved, vec![("redo".to_string(), "true".to_string())]);
         let mut restored = Actions::default();
         restored.restore(Action::DescribeAi, &saved);
         match restored.operation(Action::DescribeAi) {
-            Some(Operation::DescribeAi(run)) => {
-                assert_eq!(run.language, SummaryLanguage::Russian);
-                assert!(run.redo);
-            }
+            Some(Operation::DescribeAi(run)) => assert!(run.redo),
             other => panic!("expected DescribeAi, got {other:?}"),
         }
 
@@ -628,20 +616,12 @@ mod tests {
     #[test]
     fn an_unknown_option_value_falls_back_to_its_default() {
         let mut actions = Actions::default();
-        actions.restore(
-            Action::DescribeAi,
-            &[
-                ("language".to_string(), "??".to_string()),
-                ("model".to_string(), "no-such-model".to_string()),
-            ],
+        actions.restore(Action::Rotate, &[("turn".to_string(), "??".to_string())]);
+        assert_eq!(
+            actions.operation(Action::Rotate),
+            Some(Operation::Rotate(rotate::Turn::Right)),
+            "an unknown turn falls back to the default"
         );
-        match actions.operation(Action::DescribeAi) {
-            Some(Operation::DescribeAi(run)) => {
-                assert_eq!(run.language, SummaryLanguage::default());
-                assert_eq!(run.model, Model::default().id);
-            }
-            other => panic!("expected DescribeAi, got {other:?}"),
-        }
     }
 
     #[test]

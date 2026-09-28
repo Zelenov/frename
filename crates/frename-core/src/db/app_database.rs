@@ -432,6 +432,18 @@ mod tests {
     }
 
     #[test]
+    fn decode_options_drops_a_pair_without_an_equals_sign() {
+        assert_eq!(
+            decode_options("a=1;bogus;b=2"),
+            vec![
+                ("a".to_string(), "1".to_string()),
+                ("b".to_string(), "2".to_string())
+            ]
+        );
+        assert_eq!(decode_options(""), Vec::<(String, String)>::new());
+    }
+
+    #[test]
     fn the_batch_run_round_trips_with_its_options() {
         let path =
             std::env::temp_dir().join(format!("frename-batch-run-{}.db", std::process::id()));
