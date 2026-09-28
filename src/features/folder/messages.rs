@@ -27,6 +27,8 @@ pub enum Message {
     SetMarkedOnly(bool),
     /// Narrow the list to files whose name contains this text (empty = no filter).
     SetNameFilter(String),
+    /// Clear the search and every filter: the list shows every file again.
+    ShowAll,
     /// Open the settings window (from the controls bar). Handled by the app.
     OpenSettings,
     /// Double-click on a row's name: edit that file's name in place.

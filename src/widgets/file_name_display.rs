@@ -1,22 +1,21 @@
-//! File name display widget. Shows how the new file name is combined: each tag as a colored
-//! chip (dot-separated), then the name and extension concatenated (no separator between them).
-//! Display-only; no interactions. Uses [crate::widgets::tag_chip] for tag pills.
+//! A file name as a file list row shows it (`docs/design/design-system.md` §13.4.2): each tag as a
+//! mini chip, a `·` where the name has a dot, then the rest of the name with its extension in
+//! mono. Display-only. In/out points are not part of the file name, so they are not shown here.
 
-use iced::widget::{row, text};
-use iced::Element;
+use iced::widget::{row, Row};
+use iced::{Alignment, Element};
 
 use frename_core::{FileSnapshot, TagColorMapping};
 
-use crate::theme;
 use crate::ui::palette::TagPalette;
+use crate::ui::text;
+use crate::ui::tokens::*;
 use crate::widgets::tag_chip;
 
-/// Dot separator between parts (tags, name, extension).
-const DOT: &str = " . ";
+/// Where the name has a dot between its parts.
+const DOT: &str = "·";
 
-/// Renders the file name as tag chips + name.extension (no outer container). In/out points are
-/// not part of the file name, so they are not shown here.
-/// Callers wrap in a container when they need panel style (e.g. file workspace, folder list rows).
+/// Renders the file name as mini chips + name.extension (no outer container), on one line.
 ///
 /// Borrows the snapshot: the folder list renders one of these per row on every redraw, so taking
 /// it by value cost a full `FileSnapshot` clone (plus a `Vec<String>` and a `String` per tag) per
@@ -25,50 +24,58 @@ pub fn view<'a, Message: 'a>(
     snapshot: &'a FileSnapshot,
     color_mapping: &TagColorMapping,
     tag_palette: TagPalette,
-    wrap: bool,
-) -> Element<'a, Message> {
+) -> Row<'a, Message> {
     let tags = snapshot.tags();
     let name_ext = name_ext_from_parts(snapshot.name_without_extension(), snapshot.extension());
 
-    let mut parts: Vec<Element<'a, Message>> = Vec::new();
+    let mut parts: Vec<Element<'a, Message>> = Vec::with_capacity(2 * tags.len() + 1);
     for (i, tag_name) in tags.iter().enumerate() {
         if i > 0 {
-            parts.push(dot_text());
+            parts.push(dot());
         }
-        let color_index = color_mapping.color_index_for(tag_name);
-        let tag_color = tag_palette.color(color_index);
-        parts.push(tag_chip::view_display_only(tag_name, tag_color));
+        let tag_color = tag_palette.color(color_mapping.color_index_for(tag_name));
+        parts.push(tag_chip::mini(tag_name, tag_color));
     }
     if !name_ext.is_empty() {
         if !tags.is_empty() {
-            parts.push(dot_text());
+            parts.push(dot());
         }
-        parts.push(text(name_ext).size(14).color(theme::TEXT).into());
+        parts.push(
+            text::mono(name_ext)
+                .color(TEXT)
+                .wrapping(iced::widget::text::Wrapping::None)
+                .into(),
+        );
     }
-
-    let row = row(parts).spacing(0).align_y(iced::Alignment::Center);
-    if wrap {
-        row.wrap()
-            .vertical_spacing(4)
-            .align_x(iced::Alignment::Start)
-            .into()
-    } else {
-        row.into()
-    }
+    row(parts).spacing(SPACE_XS).align_y(Alignment::Center)
 }
 
-fn dot_text<'a, Message: 'a>() -> Element<'a, Message> {
-    text(DOT).size(14).color(theme::TEXT_MUTED).into()
+fn dot<'a, Message: 'a>() -> Element<'a, Message> {
+    text::caption(DOT).into()
 }
 
+/// `name` and `ext` joined as the file name shows them: `name.ext`, with no doubled dot.
 fn name_ext_from_parts(name: &str, ext: &str) -> String {
     if name.is_empty() {
         ext.to_string()
     } else if ext.is_empty() {
         name.to_string()
     } else if ext.starts_with('.') {
-        format!("{}{}", name, ext)
+        format!("{name}{ext}")
     } else {
-        format!("{}.{}", name, ext)
+        format!("{name}.{ext}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::name_ext_from_parts;
+
+    #[test]
+    fn the_name_and_extension_meet_at_one_dot() {
+        assert_eq!(name_ext_from_parts("MVI_0410", ".mp4"), "MVI_0410.mp4");
+        assert_eq!(name_ext_from_parts("MVI_0410", "mp4"), "MVI_0410.mp4");
+        assert_eq!(name_ext_from_parts("", ".mp4"), ".mp4");
+        assert_eq!(name_ext_from_parts("notes", ""), "notes");
     }
 }

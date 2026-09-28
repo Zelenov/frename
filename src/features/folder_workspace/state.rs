@@ -33,8 +33,11 @@ use crate::features::media_viewer::{self, video as media_viewer_video, MediaView
 use crate::features::sync_panel;
 use crate::features::tag_panel::{self, TagPanelState, TAG_LIST_SCROLLABLE_ID};
 use crate::features::video_controls;
+use crate::ui::tokens::{
+    FILE_LIST_MAX_WIDTH, FILE_LIST_MIN_WIDTH, FILE_LIST_WIDTH, SPLITTER_HIT, VIDEO_MIN_WIDTH,
+    VIDEO_WIDTH,
+};
 use crate::widgets::search_bar::SEARCH_BAR_INPUT_ID;
-use crate::widgets::splitter::HIT_WIDTH;
 
 use super::Message;
 
@@ -42,9 +45,6 @@ mod drag_out_actions;
 mod marker_actions;
 mod rotation;
 
-const DEFAULT_LEFT_WIDTH: f32 = 460.0;
-const DEFAULT_FOLDER_WIDTH: f32 = 200.0;
-const MIN_FOLDER_WIDTH: f32 = 120.0;
 /// How many actions undo/redo keeps. Reset per folder, since tags are per folder.
 const HISTORY_DEPTH: usize = 50;
 
@@ -123,6 +123,14 @@ pub struct FolderWorkspace {
     select_anchor: Option<FileId>,
 }
 
+/// The video pane's and the file list's widths, kept within their limits (§13.9).
+fn column_widths(video: f32, file_list: f32) -> (f32, f32) {
+    (
+        video.max(VIDEO_MIN_WIDTH),
+        file_list.clamp(FILE_LIST_MIN_WIDTH, FILE_LIST_MAX_WIDTH),
+    )
+}
+
 impl FolderWorkspace {
     pub fn new() -> Self {
         let (left_width, folder_width) = AppDatabase::new()
@@ -134,7 +142,9 @@ impl FolderWorkspace {
                     None
                 }
             })
-            .unwrap_or((DEFAULT_LEFT_WIDTH, DEFAULT_FOLDER_WIDTH));
+            .unwrap_or((VIDEO_WIDTH, FILE_LIST_WIDTH));
+        // A width saved by an older version or on a smaller screen is raised to the minimum.
+        let (left_width, folder_width) = column_widths(left_width, folder_width);
         Self {
             directory: None,
             loading: false,
@@ -256,16 +266,18 @@ impl FolderWorkspace {
             Message::SyncPanel(msg) => self.handle_sync_panel(msg),
             Message::LeftSplitterDragged(x) => {
                 self.left_width = x;
-                let folder_start = self.left_width + HIT_WIDTH;
+                let folder_start = self.left_width + SPLITTER_HIT;
                 let folder_end = folder_start + self.folder_width;
-                let new_folder_width = folder_end - x - HIT_WIDTH;
-                self.folder_width = new_folder_width.max(MIN_FOLDER_WIDTH);
+                let new_folder_width = folder_end - x - SPLITTER_HIT;
+                self.folder_width =
+                    new_folder_width.clamp(FILE_LIST_MIN_WIDTH, FILE_LIST_MAX_WIDTH);
                 AppDatabase::new().set_panel_widths(self.left_width, self.folder_width);
                 Task::none()
             }
             Message::RightSplitterDragged(x) => {
-                let new_folder_width = x - self.left_width - HIT_WIDTH;
-                self.folder_width = new_folder_width.max(MIN_FOLDER_WIDTH);
+                let new_folder_width = x - self.left_width - SPLITTER_HIT;
+                self.folder_width =
+                    new_folder_width.clamp(FILE_LIST_MIN_WIDTH, FILE_LIST_MAX_WIDTH);
                 AppDatabase::new().set_panel_widths(self.left_width, self.folder_width);
                 Task::none()
             }
@@ -1222,6 +1234,16 @@ impl FolderWorkspace {
                 self.set_list_filter(|dir| dir.set_marked_only(marked_only))
             }
             folder::Message::SetNameFilter(query) => self.set_file_name_filter(query),
+            folder::Message::ShowAll => Task::batch(
+                [
+                    folder::Message::SetNameFilter(String::new()),
+                    folder::Message::SetUntaggedOnly(false),
+                    folder::Message::SetSubtitledOnly(false),
+                    folder::Message::SetCommentedOnly(false),
+                    folder::Message::SetMarkedOnly(false),
+                ]
+                .map(|m| Task::done(Message::Folder(m))),
+            ),
             // Intercepted by the app, which owns the windows; no-op here.
             folder::Message::OpenSettings => Task::none(),
             folder::Message::StartRename(index) => self.start_rename(index),
@@ -2133,13 +2155,14 @@ impl FolderWorkspace {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        // The spinner only turns while rows are loading, so an idle list does not redraw.
+        // The spinner only turns while something waits (rows loading their comments, a folder
+        // opening, a job's file in work), so an idle list does not redraw.
         let loading_comments = self
             .directory
             .as_ref()
             .is_some_and(|d| d.loading_comment_count() > 0);
-        let spinner = if loading_comments {
-            iced::time::every(std::time::Duration::from_millis(150)).map(|_| Message::SpinnerTick)
+        let spinner = if loading_comments || self.loading || self.batch.is_running() {
+            iced::time::every(crate::ui::tokens::SPINNER_TICK).map(|_| Message::SpinnerTick)
         } else {
             Subscription::none()
         };
@@ -2347,6 +2370,20 @@ mod tests {
     use crate::features::{batch, folder, tag_panel};
 
     use super::{Directory, FolderWorkspace, ItemResult, ItemStatus, Message};
+
+    #[test]
+    fn saved_column_widths_are_kept_within_their_limits() {
+        use crate::ui::tokens::{FILE_LIST_MAX_WIDTH, FILE_LIST_MIN_WIDTH, VIDEO_MIN_WIDTH};
+        assert_eq!(
+            super::column_widths(150.0, 120.0),
+            (VIDEO_MIN_WIDTH, FILE_LIST_MIN_WIDTH)
+        );
+        assert_eq!(
+            super::column_widths(500.0, 900.0),
+            (500.0, FILE_LIST_MAX_WIDTH)
+        );
+        assert_eq!(super::column_widths(640.0, 300.0), (640.0, 300.0));
+    }
 
     /// Simulates the iced runtime processing a FileOpened task: directory already has selection, so send FileOpened(selected_file).
     fn flush_file_opened(workspace: &mut FolderWorkspace) {

@@ -316,6 +316,23 @@ folder-rename-error-trailing = Cannot end with a dot or space
 folder-rename-error-exists = A file with this name exists
 folder-markers-not-saved = Markers not saved: the file is read-only or in use (close it in Premiere, then open the file and leave it again)
 drag-out-not-saved = Not dragged: can't save the file (read-only, or open in Premiere)
+folder-opening = Opening the folder…
+folder-empty-title = No videos in this folder
+folder-empty-line = frename shows MP4, MOV, MKV and other video files.
+folder-open-another = Open another folder…
+folder-no-match = No files match
+folder-show-all = Show all
+folder-locked = Locked while { $action } runs
+folder-checked-hidden = { $count } checked · { $hidden } hidden
+folder-checked-hidden-tip = { $hidden ->
+    [one] 1 checked file is hidden by the search or a filter; the action runs on it too
+   *[other] { $hidden } checked files are hidden by the search or a filter; the action runs on them too
+}
+folder-outcome-working = Working on it
+folder-outcome-not-reached = Not reached
+folder-window-empty-title = Open a folder of clips
+folder-window-empty-line = Or drop a folder on the window. A right-click on the button opens one file.
+folder-window-open = Open a folder…
 
 ## Controls bar under the file list
 
@@ -325,11 +342,14 @@ folder-controls-filter-untagged = Untagged
 folder-controls-filter-subtitles = Subtitles
 folder-controls-filter-comments = Comments
 folder-controls-filter-markers = Markers
-folder-controls-scroll = Scroll to file
-folder-controls-open = Open folder (right-click: open a file)
+folder-controls-scroll = Show the open file in the list
+folder-controls-open = Open a folder
 folder-controls-batch = Batch actions on checked files
 folder-controls-batch-back = Back to the open file
 folder-controls-update-available = Update available: { $version }
+folder-controls-previous = Previous file
+folder-controls-next = Next file
+folder-controls-open-file = Right-click: open one file
 
 ## Video
 
