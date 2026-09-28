@@ -222,6 +222,11 @@ impl Options {
         self.price.flatten()
     }
 
+    /// Whether "Replace existing subtitles" is checked, for persisting the last run (#65).
+    pub(in crate::features::batch) fn replaces(&self) -> bool {
+        self.replace
+    }
+
     /// The plan, when it was made for exactly `checked`.
     fn plan_for(&self, checked: &[&File]) -> Option<&Plan> {
         let (files, replace) = self.planned_for.as_ref()?;

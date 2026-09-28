@@ -11,8 +11,8 @@ use std::path::PathBuf;
 use arboard;
 use frename_core::undo::History;
 use frename_core::{
-    AppDatabase, AppStateStore, CreateTagCommand, DeleteTagCommand, File, FileId, FileSnapshot,
-    FolderAndFile, FolderTagStore, LoggingAppStateStore, Marker, NavigateFileCommand,
+    AppDatabase, AppStateStore, BatchRun, CreateTagCommand, DeleteTagCommand, File, FileId,
+    FileSnapshot, FolderAndFile, FolderTagStore, LoggingAppStateStore, Marker, NavigateFileCommand,
     PasteTagsCommand, ReorderTagCommand, SaveAndReparse, SaveTagCommand, SetSegmentEndCommand,
     SetSegmentStartCommand, StarTagCommand, ToggleTagCommand, UndoContext, UndoError,
 };
@@ -143,6 +143,10 @@ impl FolderWorkspace {
             })
             .unwrap_or((DEFAULT_LEFT_WIDTH, DEFAULT_FOLDER_WIDTH));
         let left_width = clamp_left_width(left_width);
+        let mut batch = BatchState::default();
+        if let Some(run) = AppDatabase::new().get_batch_run() {
+            batch.restore_last_run(run);
+        }
         Self {
             directory: None,
             loading: false,
@@ -153,7 +157,7 @@ impl FolderWorkspace {
             pending_file_updates: Vec::new(),
             pending_scan: None,
             closing: false,
-            batch: BatchState::default(),
+            batch,
             batch_waits_for_unload: false,
             inline_rename: None,
             comment_load_generation: 0,
@@ -969,6 +973,11 @@ impl FolderWorkspace {
         if !self.batch.start(files) {
             return Task::none();
         }
+        let action = self.batch.action();
+        AppDatabase::new().set_batch_run(BatchRun {
+            action: action.id().to_string(),
+            options: self.batch.actions().persist(action),
+        });
         self.media_fullscreen = false;
         if self.media_viewer.needs_unload_before_rename() {
             self.batch_waits_for_unload = true;
