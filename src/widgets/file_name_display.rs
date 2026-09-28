@@ -36,7 +36,12 @@ pub fn view<'a, Message: 'a>(
             parts.push(dot_text());
         }
         let color_index = color_mapping.color_index_for(tag_name);
-        let tag_color = tag_palette.color(color_index);
+        // No explicit "is this tag in the list" flag reaches this widget (it only has the file
+        // name's tag strings and the color mapping); index 0 is the mapping's own default for a
+        // name that is not in it, the same sentinel colored mode already draws identically to an
+        // unlisted tag's chip.
+        let in_list = color_index != 0;
+        let tag_color = tag_palette.color(color_index, in_list);
         parts.push(tag_chip::view_display_only(tag_name, tag_color));
     }
     if !name_ext.is_empty() {

@@ -28,11 +28,12 @@ else
   exit 1
 fi
 
-# render <template> <output> [demo flags]: every template shows the one folder of main.toml.
+# render <template> <scenario> <output> [demo flags]: main and batch show main.toml's folder;
+# mono has its own scenario (mono.toml) so it can add a tag that is not in the list.
 render() {
-  local template=$1 output=$2
-  shift 2
-  (cd "$here" && "$binary" --demo main.toml --out "$template.png" "$@")
+  local template=$1 scenario=$2 output=$3
+  shift 3
+  (cd "$here" && "$binary" --demo "$scenario" --out "$template.png" "$@")
   # librsvg only loads images next to or below the template, so the PNGs stay in this folder.
   svg_to_png "$here/$template.svg" "$here/$template-annotated.png"
   to_jpg "$here/$template-annotated.png" "$docs/$output"
@@ -40,6 +41,6 @@ render() {
   echo "wrote docs/$output"
 }
 
-render main frename-screenshot.jpg
-render batch frename-screenshot-batch.jpg --batch
-render mono frename-screenshot-mono.jpg --mono
+render main main.toml frename-screenshot.jpg
+render batch main.toml frename-screenshot-batch.jpg --batch
+render mono mono.toml frename-screenshot-mono.jpg --mono
