@@ -6,8 +6,8 @@ use iced::{mouse, Alignment, Border, Element, Length};
 use frename_core::{File, StoredTagStore, TagList};
 
 use super::{Message, TagPanelState, TAG_LIST_SCROLLABLE_ID};
-use crate::tag_colors;
 use crate::theme;
+use crate::ui::palette::TagPalette;
 use crate::widgets::bounds_reporter::BoundsReporter;
 use crate::widgets::tag_chip;
 
@@ -94,7 +94,7 @@ where
             let is_stored = tag.is_stored();
             let is_starred = tag.is_starred();
             let _is_drop_target = drop_target_index == Some(index);
-            let tag_color = tag_colors::TagColors::color(tag.color_index());
+            let tag_color = TagPalette::Colored.color(tag.color_index());
             let checkbox_el = checkbox(is_checked)
                 .on_toggle(move |_| Message::ToggleTag(id))
                 .size(16)

@@ -290,23 +290,7 @@ pub fn dark_scrollable_style(
     }
 }
 
-/// How a clip marker's color is drawn: close to Premiere's marker colors, gray for a value
-/// frename does not know.
-pub fn marker_color(color: frename_core::MarkerColor) -> Color {
-    use frename_core::MarkerColor as M;
-    match color {
-        M::Green => Color::from_rgb(0.36, 0.76, 0.36),
-        M::Red => Color::from_rgb(0.86, 0.22, 0.22),
-        M::Orange => Color::from_rgb(0.93, 0.55, 0.15),
-        M::Yellow => Color::from_rgb(0.93, 0.85, 0.20),
-        M::White => Color::from_rgb(0.95, 0.95, 0.95),
-        M::Blue => Color::from_rgb(0.28, 0.48, 0.96),
-        M::Cyan => Color::from_rgb(0.15, 0.78, 0.86),
-        M::Lavender => Color::from_rgb(0.70, 0.58, 0.94),
-        M::Magenta => Color::from_rgb(0.92, 0.28, 0.78),
-        M::Other(_) => TEXT_MUTED,
-    }
-}
+pub use super::palette::marker_color;
 
 /// A round button filled with a marker color: the color dot of a marker row and the colors of
 /// its picker. `selected` rings it in white.

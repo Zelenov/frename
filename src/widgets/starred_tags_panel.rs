@@ -9,8 +9,8 @@ use iced::{mouse, Alignment, Border, Element, Length};
 use frename_core::{StoredTagStore, TagId, TagList};
 
 use crate::features::tag_panel::Message;
-use crate::tag_colors::TagPalette;
 use crate::theme;
+use crate::ui::palette::TagPalette;
 use crate::widgets::tag_chip;
 
 const CHIP_HEIGHT: f32 = tag_chip::CHIP_ROW_HEIGHT;

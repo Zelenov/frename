@@ -37,7 +37,6 @@ const NOT_YET: &[(&str, &str)] = &[
     ("features/video_controls/progress_bar.rs", "#59"),
     ("features/video_controls/view.rs", "#59"),
     ("main.rs", "#59"),
-    ("tag_colors.rs", "#53, #59"),
     ("widgets/file_name_display.rs", "#59"),
     ("widgets/height_handle.rs", "#59"),
     ("widgets/search_bar.rs", "#59"),

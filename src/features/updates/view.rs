@@ -1,11 +1,11 @@
 //! The Version row of the settings window's Updates page.
 
-use iced::widget::tooltip;
 use iced::Element;
 
 use super::state::Status;
 use super::{Message, UpdatesState};
 use crate::ui::layout;
+use crate::ui::tooltip::{self, Position};
 use crate::ui::{button, form, text};
 
 /// The running version, one status line, **Check for updates** and, when a newer version is known,
@@ -54,11 +54,7 @@ pub fn view(state: &UpdatesState, batch_running: bool) -> Element<'_, Message> {
         let update = button::primary(fl!("updates-update-and-restart"))
             .on_press_maybe((!busy && !batch_running).then_some(Message::UpdateAndRestart));
         if batch_running {
-            layout::with_tooltip(
-                update,
-                fl!("updates-wait-for-batch"),
-                tooltip::Position::Top,
-            )
+            tooltip::tip_text(update, fl!("updates-wait-for-batch"), Position::Top)
         } else {
             update.into()
         }

@@ -7,8 +7,8 @@ use iced::Element;
 
 use frename_core::{FileSnapshot, TagColorMapping};
 
-use crate::tag_colors::TagPalette;
 use crate::theme;
+use crate::ui::palette::TagPalette;
 use crate::widgets::tag_chip;
 
 /// Dot separator between parts (tags, name, extension).

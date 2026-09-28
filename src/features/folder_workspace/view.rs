@@ -7,8 +7,8 @@ use iced::widget::{column, container, mouse_area, row, stack, text};
 use iced::{Element, Length};
 
 use crate::features::{batch, file_workspace, folder, folder_controls, media_viewer};
-use crate::tag_colors::TagPalette;
 use crate::theme;
+use crate::ui::palette::TagPalette;
 use crate::widgets::splitter::{Splitter, HIT_WIDTH};
 
 use super::{FolderWorkspace, Message};

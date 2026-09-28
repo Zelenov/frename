@@ -9,8 +9,8 @@ use iced::{mouse, Alignment, Border, Element, Length};
 use frename_core::{File, StoredTagStore, TagList};
 
 use crate::features::tag_panel::{Message, TagPanelState, TAG_LIST_SCROLLABLE_ID};
-use crate::tag_colors::TagPalette;
 use crate::theme;
+use crate::ui::palette::TagPalette;
 use crate::widgets::bounds_reporter::BoundsReporter;
 use crate::widgets::tag_chip;
 

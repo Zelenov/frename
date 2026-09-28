@@ -10,7 +10,7 @@ use iced::{Alignment, Element, Length};
 
 use crate::ui::layout::{self, NoticeKind};
 use crate::ui::tokens::*;
-use crate::ui::{button, form, text};
+use crate::ui::{button, form, scroll, text};
 
 use super::state::{KeySection, LanguageList, OldSettingsImport};
 use super::{KeyMessage, Message, Page, SettingsState, SETTINGS_SCROLLABLE_ID};
@@ -40,7 +40,7 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
     };
     layout::window_with_navigation(
         layout::sidebar(navigation),
-        layout::scroll(SETTINGS_SCROLLABLE_ID, page),
+        scroll::vertical_with_id(SETTINGS_SCROLLABLE_ID, page),
         layout::button_bar(
             fl!("settings-apply-note"),
             [button::secondary(fl!("settings-close"))

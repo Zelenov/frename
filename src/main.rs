@@ -21,7 +21,6 @@ mod features;
 mod old_settings_prompt;
 mod package;
 mod self_test;
-mod tag_colors;
 mod ui;
 use ui::legacy as theme;
 mod widgets;
@@ -222,9 +221,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .theme(FrenameApp::theme)
     .title(FrenameApp::title)
-    .antialiasing(false)
+    .settings(iced::Settings {
+        default_font: ui::tokens::FONT,
+        default_text_size: ui::tokens::TEXT_BODY.into(),
+        antialiasing: false,
+        ..iced::Settings::default()
+    })
     .subscription(FrenameApp::subscription);
-    // The design system's fonts, drawn the same on every OS; only its components use them yet.
+    // The design system's fonts, drawn the same on every OS.
     let daemon = ui::tokens::FONT_FILES
         .into_iter()
         .fold(daemon, |daemon, font| daemon.font(font));

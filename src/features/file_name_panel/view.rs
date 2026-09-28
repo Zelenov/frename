@@ -5,8 +5,8 @@ use iced::{Alignment, Element, Length};
 
 use frename_core::{StoredTagStore, TagList};
 
-use crate::tag_colors::TagPalette;
 use crate::theme;
+use crate::ui::palette::TagPalette;
 
 use crate::widgets::timecode_badge;
 

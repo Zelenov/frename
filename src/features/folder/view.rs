@@ -9,8 +9,8 @@ use iced::widget::{
 use iced::{mouse, Element, Length};
 
 use crate::features::batch::{BatchState, ItemStatus};
-use crate::tag_colors::TagPalette;
 use crate::theme;
+use crate::ui::palette::TagPalette;
 use crate::widgets;
 use crate::widgets::search_bar::FILE_SEARCH_BAR_INPUT_ID;
 

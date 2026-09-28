@@ -28,9 +28,14 @@ pub fn label<'a>(content: impl IntoFragment<'a>, font: Font) -> Text<'a> {
         .font(font)
 }
 
-/// A page title.
+/// A page title; a panel's title; the title of a whole-window empty state.
 pub fn heading<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
     styled(content, TEXT_HEADING, LINE_HEADING, FONT_STRONG, TEXT)
+}
+
+/// A section title; a dialog's title; the title of an empty pane.
+pub fn title<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
+    styled(content, TEXT_TITLE, LINE_TITLE, FONT_STRONG, TEXT)
 }
 
 /// Everything else: labels, values, lines of text.
@@ -53,9 +58,41 @@ pub fn error<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
     styled(content, TEXT_BODY, LINE_BODY, FONT, ERROR)
 }
 
-/// File names, paths, timecodes, examples of names.
+/// File names, paths, timecodes, examples of names; in `TEXT_SECONDARY` (a file name in a list
+/// takes `.color(TEXT)`).
 pub fn mono<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
     styled(content, TEXT_MONO, LINE_BODY, FONT_MONO, TEXT_SECONDARY)
+}
+
+/// Badges, counters, key caps, the second line of a dense row.
+pub fn caption<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
+    styled(content, TEXT_CAPTION, LINE_CAPTION, FONT, TEXT_SECONDARY)
+}
+
+/// A caption that is a fact to notice: a badge.
+pub fn caption_strong<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
+    styled(
+        content,
+        TEXT_CAPTION,
+        LINE_CAPTION,
+        FONT_STRONG,
+        TEXT_SECONDARY,
+    )
+}
+
+/// The label of a mini chip in a file list row.
+pub fn chip_mini<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
+    styled(content, TEXT_CHIP_MINI, LINE_CHIP_MINI, FONT, TAG_TEXT)
+}
+
+/// The cue under the windowed video.
+pub fn subtitle<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
+    styled(content, TEXT_SUBTITLE, LINE_SUBTITLE, FONT, TEXT)
+}
+
+/// The caption over fullscreen video.
+pub fn video_caption<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
+    styled(content, TEXT_VIDEO_CAPTION, LINE_VIDEO_CAPTION, FONT, TEXT)
 }
 
 /// The text of a tooltip.

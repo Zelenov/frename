@@ -11,8 +11,8 @@ use iced::widget::{
 };
 use iced::{Element, Length};
 
-use crate::tag_colors::TagPalette;
 use crate::theme;
+use crate::ui::palette::TagPalette;
 use crate::widgets::height_handle::HeightHandle;
 use crate::widgets::starred_tags_panel;
 

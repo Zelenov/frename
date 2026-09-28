@@ -13,7 +13,7 @@ use crate::features::{
     batch, drag_drop, drag_out, folder, folder_workspace, media_viewer,
     media_viewer::video as media_viewer_video, settings, tag_panel, updates,
 };
-use crate::tag_colors::TagPalette;
+use crate::ui::palette::TagPalette;
 use frename_core::ai::key::{self as api_key, ApiKey};
 use frename_core::{AppDatabase, AppStateStore, WindowGeometry};
 
@@ -813,12 +813,9 @@ impl FrenameApp {
 
     /// The theme of a window: the design system's in Settings; the main window keeps iced's dark
     /// theme until it moves onto the system (#59).
-    pub fn theme(&self, window_id: window::Id) -> iced::Theme {
-        if self.settings_window == Some(window_id) {
-            crate::ui::theme()
-        } else {
-            iced::Theme::Dark
-        }
+    /// Every window is on the design system.
+    pub fn theme(&self, _window_id: window::Id) -> iced::Theme {
+        crate::ui::theme()
     }
 
     /// Feature subscriptions (file drop, window opened, global keyboard to search bar).

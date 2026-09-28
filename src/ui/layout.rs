@@ -2,13 +2,14 @@
 //! button bar, notices and help.
 
 use iced::widget::text::IntoFragment;
-use iced::widget::{button, column, container, row, scrollable, space, tooltip, Column};
+use iced::widget::{button, column, container, row, space, Column};
 use iced::{Alignment, Color, Element, Length, Padding};
 
 use super::icons::{icon, Icon};
 use super::style::{self, ButtonKind};
 use super::text;
 use super::tokens::*;
+use super::tooltip::{self, Position};
 
 /// Where the first line of a control sits below the top of a 28-px control: labels and choice
 /// groups move down by it so their text lines up with a field's text.
@@ -57,21 +58,6 @@ pub fn sidebar<'a, M: 'a>(items: impl IntoIterator<Item = Element<'a, M>>) -> El
         .height(Length::Fill)
         .padding(SPACE_S)
         .style(style::window)
-        .into()
-}
-
-/// `content` scrolling vertically; `id` lets a task scroll it.
-pub fn scroll<'a, M: 'a>(id: &'static str, content: impl Into<Element<'a, M>>) -> Element<'a, M> {
-    let bar = scrollable::Scrollbar::new()
-        .width(SCROLLBAR_WIDTH)
-        .scroller_width(SCROLLBAR_WIDTH)
-        .spacing(SCROLLBAR_GAP);
-    scrollable(content)
-        .direction(scrollable::Direction::Vertical(bar))
-        .id(iced::widget::Id::new(id))
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(style::scrollable)
         .into()
 }
 
@@ -184,7 +170,7 @@ pub fn update_dot<'a, M: 'a>() -> Element<'a, M> {
     container(space())
         .width(DOT_SIZE)
         .height(DOT_SIZE)
-        .style(style::fill(ACCENT_TEXT))
+        .style(style::dot(ACCENT_TEXT))
         .into()
 }
 
@@ -322,33 +308,9 @@ pub fn inline_status<'a, M: 'a>(
 
 /// ⓘ: help that is never needed to choose, shown on hover (§8.11).
 pub fn info<'a, M: 'a>(help: impl IntoFragment<'a>) -> Element<'a, M> {
-    with_tooltip(
+    tooltip::tip_text(
         icon(Icon::Info, ICON_S, TEXT_SECONDARY),
         help,
-        tooltip::Position::Bottom,
+        Position::Bottom,
     )
-}
-
-/// `content` with a tooltip (§8.13).
-pub fn with_tooltip<'a, M: 'a>(
-    content: impl Into<Element<'a, M>>,
-    tip: impl IntoFragment<'a>,
-    position: tooltip::Position,
-) -> Element<'a, M> {
-    tooltip(
-        content,
-        container(text::tooltip(tip))
-            .max_width(TOOLTIP_MAX_WIDTH)
-            .padding(Padding {
-                top: SPACE_XS + SPACE_XXS,
-                bottom: SPACE_XS + SPACE_XXS,
-                left: SPACE_S,
-                right: SPACE_S,
-            })
-            .style(style::tooltip),
-        position,
-    )
-    .gap(SPACE_XS + SPACE_XXS)
-    .delay(TOOLTIP_DELAY)
-    .into()
 }

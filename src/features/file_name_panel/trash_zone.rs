@@ -8,8 +8,8 @@ use iced::{Element, Length};
 
 use frename_core::{StoredTagStore, TagList};
 
-use crate::tag_colors::TagPalette;
 use crate::theme;
+use crate::ui::palette::TagPalette;
 use crate::widgets::bounds_reporter::BoundsReporter;
 use crate::widgets::tag_chip;
 
