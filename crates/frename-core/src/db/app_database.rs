@@ -14,8 +14,29 @@ use crate::{CommentStorage, CueLength, FolderAndFile, InOutStorage, MarkerStorag
 
 use super::migrations;
 use super::traits::{
-    AppSettings, AppStateStore, Initializable, UpdateCheckState, VideoSettings, WindowGeometry,
+    AppSettings, AppStateStore, BatchRun, Initializable, UpdateCheckState, VideoSettings,
+    WindowGeometry,
 };
+
+/// `key=value` pairs joined by `;`, for [`BatchRun::options`] in one TEXT column. Values are
+/// always simple identifiers, model ids or `true`/`false`, so none of them ever holds `=` or `;`.
+fn encode_options(options: &[(String, String)]) -> String {
+    options
+        .iter()
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
+/// The inverse of [`encode_options`]. A pair without `=`, from a future version's format, is
+/// dropped rather than misread.
+fn decode_options(text: &str) -> Vec<(String, String)> {
+    text.split(';')
+        .filter(|pair| !pair.is_empty())
+        .filter_map(|pair| pair.split_once('='))
+        .map(|(key, value)| (key.to_string(), value.to_string()))
+        .collect()
+}
 
 /// Open connections, keyed by database path.
 ///
@@ -282,6 +303,33 @@ impl AppStateStore for AppDatabase {
         }
     }
 
+    fn get_batch_run(&self) -> Option<BatchRun> {
+        let conn = self.conn().ok()?;
+        let conn = lock_connection(&conn);
+        conn.query_row(
+            "SELECT action, options FROM batch_run WHERE id = 1",
+            [],
+            |row| {
+                Ok(BatchRun {
+                    action: row.get(0)?,
+                    options: decode_options(&row.get::<_, String>(1)?),
+                })
+            },
+        )
+        .ok()
+    }
+
+    fn set_batch_run(&self, run: BatchRun) {
+        if let Ok(conn) = self.conn() {
+            let conn = lock_connection(&conn);
+            let _ = conn.execute(
+                "INSERT INTO batch_run (id, action, options) VALUES (1, ?1, ?2)
+                 ON CONFLICT(id) DO UPDATE SET action = excluded.action, options = excluded.options",
+                rusqlite::params![run.action, encode_options(&run.options)],
+            );
+        }
+    }
+
     fn set_window_state(&self, geometry: WindowGeometry) {
         if let Ok(conn) = self.conn() {
             let conn = lock_connection(&conn);
@@ -381,5 +429,51 @@ mod tests {
         settings.ui_language = "ru".to_string();
         db.set_app_settings(settings.clone());
         assert_eq!(db.get_app_settings(), Some(settings));
+    }
+
+    #[test]
+    fn the_batch_run_round_trips_with_its_options() {
+        let path =
+            std::env::temp_dir().join(format!("frename-batch-run-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let db = AppDatabase::with_path(&path);
+        db.initialize().expect("migrate");
+        assert_eq!(db.get_batch_run(), None, "never saved");
+
+        let run = BatchRun {
+            action: "describe_ai".to_string(),
+            options: vec![
+                ("language".to_string(), "ru".to_string()),
+                ("redo".to_string(), "false".to_string()),
+            ],
+        };
+        db.set_batch_run(run.clone());
+        assert_eq!(db.get_batch_run(), Some(run));
+
+        // A later save replaces the row instead of adding another.
+        let run = BatchRun {
+            action: "rotate".to_string(),
+            options: vec![("turn".to_string(), "left".to_string())],
+        };
+        db.set_batch_run(run.clone());
+        assert_eq!(db.get_batch_run(), Some(run));
+    }
+
+    #[test]
+    fn a_batch_run_with_no_options_round_trips_too() {
+        let path = std::env::temp_dir().join(format!(
+            "frename-batch-run-no-options-{}.db",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let db = AppDatabase::with_path(&path);
+        db.initialize().expect("migrate");
+
+        let run = BatchRun {
+            action: "tag_commented".to_string(),
+            options: Vec::new(),
+        };
+        db.set_batch_run(run.clone());
+        assert_eq!(db.get_batch_run(), Some(run));
     }
 }

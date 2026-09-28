@@ -35,6 +35,28 @@ pub enum Message {
     SetTurn(Turn),
 }
 
+impl Turn {
+    /// Stable name for persisting the last run's option (#65).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Right => "right",
+            Self::Left => "left",
+            Self::Half => "half",
+            Self::Reset => "reset",
+        }
+    }
+
+    /// Parse a persisted name; unknown names fall back to the default.
+    pub fn from_name(name: &str) -> Self {
+        match name {
+            "left" => Self::Left,
+            "half" => Self::Half,
+            "reset" => Self::Reset,
+            _ => Self::Right,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Options {
     turn: Turn,

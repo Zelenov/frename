@@ -268,6 +268,16 @@ impl BatchState {
         }
     }
 
+    /// Preselect the last action run (#65) and restore its options; an id no action has (e.g. an
+    /// action removed since) is left as the default (the first action), its options ignored.
+    pub fn restore_last_run(&mut self, run: frename_core::BatchRun) {
+        let Some(action) = Action::from_id(&run.action) else {
+            return;
+        };
+        self.action = action;
+        self.actions.restore(action, &run.options);
+    }
+
     /// Start the selected action on `files` (the checked ones, in list order). Returns false
     /// when there is nothing to run: no files, an action that is not available, or a job
     /// already running.
@@ -615,6 +625,30 @@ mod tests {
         });
         state.update(Message::SetActive(false));
         state
+    }
+
+    #[test]
+    fn restoring_a_known_last_run_preselects_it_and_its_options() {
+        let mut batch = BatchState::default();
+        batch.restore_last_run(frename_core::BatchRun {
+            action: "move_in_out".to_string(),
+            options: vec![("to".to_string(), "comment".to_string())],
+        });
+        assert_eq!(batch.action(), Action::MoveInOut);
+        assert_eq!(
+            batch.operation(),
+            Some(Operation::MoveInOut(InOutStorage::Comment))
+        );
+    }
+
+    #[test]
+    fn restoring_an_unknown_action_id_leaves_the_default_action() {
+        let mut batch = BatchState::default();
+        batch.restore_last_run(frename_core::BatchRun {
+            action: "an-action-removed-since".to_string(),
+            options: vec![("to".to_string(), "comment".to_string())],
+        });
+        assert_eq!(batch.action(), Action::MoveComments, "the first action");
     }
 
     #[test]

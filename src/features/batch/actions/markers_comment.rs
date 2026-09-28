@@ -44,6 +44,24 @@ impl Default for Options {
     }
 }
 
+impl Direction {
+    /// Stable name for persisting the last run's option (#65).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::CommentToMarkers => "comment_to_markers",
+            Self::MarkersToComment => "markers_to_comment",
+        }
+    }
+
+    /// Parse a persisted name; unknown names fall back to the default.
+    pub fn from_name(name: &str) -> Self {
+        match name {
+            "markers_to_comment" => Self::MarkersToComment,
+            _ => Self::CommentToMarkers,
+        }
+    }
+}
+
 impl Options {
     /// Preset the direction, when Settings opens the action.
     pub fn prepare(&mut self, direction: Direction) {
