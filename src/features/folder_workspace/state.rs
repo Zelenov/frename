@@ -66,11 +66,11 @@ pub struct FolderWorkspace {
     /// another folder, switching files again) is requested before the first `Unloaded` fires,
     /// since only one video is ever loaded — pushed, never overwritten, so an earlier entry is
     /// never silently dropped. Applied in order once `Unloaded` fires.
-    pending_file_updated: Vec<(FileId, FileSnapshot)>,
+    pending_file_updates: Vec<(FileId, FileSnapshot)>,
     /// A folder scan waiting for a playing video to unload first, since the open file's pending
-    /// edits (in `pending_file_updated`) may rename it.
+    /// edits (in `pending_file_updates`) may rename it.
     pending_scan: Option<FolderAndFile>,
-    /// The window close waiting for a playing video to unload first. Sets apart from a plain
+    /// The window close waiting for a playing video to unload first. Sets it apart from a plain
     /// file switch: once the pending saves are applied, the video must not be reopened — the
     /// app is closing, not moving to another file.
     closing: bool,
@@ -135,7 +135,7 @@ impl FolderWorkspace {
             media_viewer: MediaViewerState::default(),
             tag_panel: TagPanelState::default(),
             file_name_panel: FileNamePanelState::default(),
-            pending_file_updated: Vec::new(),
+            pending_file_updates: Vec::new(),
             pending_scan: None,
             closing: false,
             batch: BatchState::default(),
@@ -472,7 +472,7 @@ impl FolderWorkspace {
             // `a_white_ai_range_read_from_the_file_takes_a_new_color_and_keeps_it`, which reopens
             // the open file to pick up markers written externally) relies on file_workspace going
             // through `None` so the next `FileOpened` sees `same_file = false` and reloads. Do not
-            // clear `pending_file_updated` here: an earlier deferred save (still waiting for the
+            // clear `pending_file_updates` here: an earlier deferred save (still waiting for the
             // same unload) must not be dropped by this one.
             let pending = self.file_workspace.get_snapshot();
             self.file_workspace.set_file(None);
@@ -503,7 +503,7 @@ impl FolderWorkspace {
             return self.scan_folder(pair);
         };
         if self.media_viewer.needs_unload_before_rename() {
-            self.pending_file_updated.push((id, snap));
+            self.pending_file_updates.push((id, snap));
             self.pending_scan = Some(pair);
             Task::done(Message::MediaViewer(media_viewer::Message::Unload))
         } else {
@@ -528,7 +528,7 @@ impl FolderWorkspace {
         // call after applying (or, past a needed unload, queuing it for `on_media_unloaded` to
         // apply before this same call runs). This clear is just belt-and-braces against a stale
         // entry from a directory this scan is about to replace.
-        self.pending_file_updated.clear();
+        self.pending_file_updates.clear();
 
         Task::future(async move {
             match Directory::open(&folder, store).await {
@@ -582,7 +582,7 @@ impl FolderWorkspace {
             ])
         } else {
             self.file_workspace.set_file(None);
-            self.pending_file_updated.clear();
+            self.pending_file_updates.clear();
             load_comments_task
         }
     }
@@ -705,7 +705,7 @@ impl FolderWorkspace {
             return self.media_viewer.open(&file).map(Message::MediaViewer);
         };
         if self.media_viewer.needs_unload_before_rename() {
-            self.pending_file_updated.push((id, snap));
+            self.pending_file_updates.push((id, snap));
             Task::done(Message::MediaViewer(media_viewer::Message::Unload))
         } else {
             let media_task = if same_file {
@@ -951,9 +951,7 @@ impl FolderWorkspace {
     /// Save the edits waiting for the disk (the open file may be one of the job's), close the
     /// open file until the job ends, and start the first file.
     fn run_batch(&mut self) -> Task<Message> {
-        for (id, snapshot) in std::mem::take(&mut self.pending_file_updated) {
-            let _ = self.apply_file_updated(id, snapshot);
-        }
+        let _ = self.apply_pending_file_updates();
         if let Some((id, snapshot)) = self.file_workspace.get_snapshot() {
             let _ = self.apply_file_updated(id, snapshot);
         }
@@ -1033,9 +1031,9 @@ impl FolderWorkspace {
     }
 
     /// Every queued deferred save, applied in order (there is normally one; see
-    /// `pending_file_updated`'s doc comment for when a second can queue up).
+    /// `pending_file_updates`'s doc comment for when a second can queue up).
     fn apply_pending_file_updates(&mut self) -> Task<Message> {
-        let tasks: Vec<Task<Message>> = std::mem::take(&mut self.pending_file_updated)
+        let tasks: Vec<Task<Message>> = std::mem::take(&mut self.pending_file_updates)
             .into_iter()
             .map(|(id, snapshot)| self.apply_file_updated(id, snapshot))
             .collect();
@@ -1059,7 +1057,7 @@ impl FolderWorkspace {
             let saved = self.apply_pending_file_updates();
             return Task::batch([saved, self.scan_folder(pair)]);
         }
-        if self.pending_file_updated.is_empty() {
+        if self.pending_file_updates.is_empty() {
             return Task::none();
         }
         // Save before opening media, not alongside it: when the selected file is the one being
@@ -2097,7 +2095,7 @@ impl FolderWorkspace {
             return Task::none();
         };
         if self.media_viewer.needs_unload_before_rename() {
-            self.pending_file_updated.push((id, snap));
+            self.pending_file_updates.push((id, snap));
             Task::none()
         } else {
             self.apply_file_updated(id, snap)
@@ -2108,13 +2106,13 @@ impl FolderWorkspace {
     /// Only available in test builds.
     #[cfg(test)]
     pub fn inject_pending_rename(&mut self, id: FileId, snapshot: FileSnapshot) {
-        self.pending_file_updated.push((id, snapshot));
+        self.pending_file_updates.push((id, snapshot));
     }
 
     /// Test helper: check whether a deferred rename is pending.
     #[cfg(test)]
     pub fn has_pending_rename(&self) -> bool {
-        !self.pending_file_updated.is_empty()
+        !self.pending_file_updates.is_empty()
     }
 
     /// State of the marker list (open row, color picker).
@@ -2371,7 +2369,7 @@ mod tests {
     /// When a video file is "loading" its GStreamer pipeline holds a file handle, so rename
     /// must be deferred.  Opening an .mp4 sets `video.loading = true`, which makes
     /// `needs_unload_before_rename()` return true on the next file switch — the rename is
-    /// stored in `pending_file_updated` and only fires after `MediaViewer::Unloaded`.
+    /// stored in `pending_file_updates` and only fires after `MediaViewer::Unloaded`.
     #[test]
     fn deferred_rename_fires_after_media_unloaded() {
         let test_dir = TestDirectory::new(2);
@@ -2538,7 +2536,7 @@ mod tests {
     }
 
     /// Regression test for issue #21: opening a different folder without switching files first
-    /// used to reset the file workspace and drop `pending_file_updated`, losing the open file's
+    /// used to reset the file workspace and drop `pending_file_updates`, losing the open file's
     /// edits. `begin_scan_folder` must save them (deferred past a needed unload, same as a file
     /// switch) before the scan replaces the directory.
     #[test]
@@ -2596,7 +2594,7 @@ mod tests {
     /// Regression test: a save deferred by a file switch (file_0's rename, waiting for its
     /// video to unload) used to be silently overwritten if closing (or opening another folder)
     /// captured and queued a second save before that same `Unloaded` fired — `flush_open_file`
-    /// and `save_then_scan` used to assign `pending_file_updated` directly instead of pushing,
+    /// and `save_then_scan` used to assign `pending_file_updates` directly instead of pushing,
     /// so only the second, later entry survived. Both entries must now be applied once
     /// `Unloaded` fires, in the order they were queued.
     #[test]
@@ -2625,7 +2623,7 @@ mod tests {
             .expect("pick is a built-in tag");
         let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
 
-        // Switch to file_1: file_0's rename (with "pick") is deferred into pending_file_updated,
+        // Switch to file_1: file_0's rename (with "pick") is deferred into pending_file_updates,
         // since its video is still "loading". Its own Unload is dispatched but not driven here —
         // media_viewer still reflects file_0's video, so needs_unload_before_rename() stays true.
         let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
@@ -3182,14 +3180,14 @@ mod tests {
         );
         // No refresh of the open file: it would unload the video to save the file while the
         // reopen is still opening it.
-        assert!(workspace.pending_file_updated.is_empty());
+        assert!(workspace.pending_file_updates.is_empty());
         let degrees = || {
             frename_core::FileTagger::video_rotation(&test_dir.target_file()).map(|r| r.degrees())
         };
         assert_eq!(degrees(), Ok(0));
         let _ = workspace.update(Message::Redo);
         assert_eq!(loads(&workspace), before + 3, "the redo reopens it once");
-        assert!(workspace.pending_file_updated.is_empty());
+        assert!(workspace.pending_file_updates.is_empty());
         assert_eq!(degrees(), Ok(90));
     }
 

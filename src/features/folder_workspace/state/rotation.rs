@@ -15,7 +15,7 @@ impl FolderWorkspace {
     /// happens when no video is shown (the note would go to a player that is not there), or
     /// while the player is closing a file to save it (a reopen then would race that save).
     pub(super) fn rotate_video(&mut self, quarter_turns: i32) -> Task<Message> {
-        if !self.media_viewer.is_previewable() || !self.pending_file_updated.is_empty() {
+        if !self.media_viewer.is_previewable() || !self.pending_file_updates.is_empty() {
             return Task::none();
         }
         let Some(file) = self.file_workspace.file() else {
@@ -65,7 +65,7 @@ impl FolderWorkspace {
     /// The turned file is the open one: a turn is only made on the open file, and the steps
     /// that switch files are undone and redone around it, so the file is open again by then.
     pub(super) fn follow_rotation(&mut self) -> Task<Message> {
-        if !self.pending_file_updated.is_empty() {
+        if !self.pending_file_updates.is_empty() {
             return Task::none();
         }
         let note = self

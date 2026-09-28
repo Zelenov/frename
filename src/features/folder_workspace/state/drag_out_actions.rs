@@ -89,7 +89,7 @@ impl FolderWorkspace {
         // be among the checked ones too.
         let save_of = |id: FileId| self.drag_out.save_of(id);
         let check = DragCheck {
-            waiting: !self.pending_file_updated.is_empty()
+            waiting: !self.pending_file_updates.is_empty()
                 || ids.iter().any(|id| save_of(*id) == Some(Save::Pending)),
             failed: ids.iter().any(|id| {
                 save_of(*id) == Some(Save::Failed)

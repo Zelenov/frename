@@ -585,11 +585,18 @@ impl FrenameApp {
                     )));
                 }
                 // Save the open file's tags, comment and in/out before closing: otherwise they
-                // are lost silently (issue #21).
-                let save = self
-                    .folder_workspace
-                    .flush_open_file()
-                    .map(Message::FolderWorkspace);
+                // are lost silently (issue #21). Only for the main window: `CloseRequested`
+                // also fires for the Settings window's own OS close button (the subscription
+                // isn't scoped to one window), and that must not tell folder_workspace the app
+                // itself is closing — it would wrongly drop a queued folder scan or skip
+                // reopening the video once the (unrelated) unload this triggers finishes.
+                let save = if id == self.main_window {
+                    self.folder_workspace
+                        .flush_open_file()
+                        .map(Message::FolderWorkspace)
+                } else {
+                    Task::none()
+                };
                 if !self.folder_workspace.needs_media_unload() {
                     return Task::batch([save, window::close(id)]);
                 }
