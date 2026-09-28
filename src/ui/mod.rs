@@ -10,6 +10,7 @@ pub mod form;
 pub mod icons;
 pub mod layout;
 pub mod legacy;
+pub mod menu;
 mod style;
 pub mod text;
 pub mod tokens;

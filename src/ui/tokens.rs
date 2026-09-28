@@ -116,6 +116,8 @@ pub const SCROLLBAR_GAP: f32 = 8.0;
 pub const PAGE_MAX_WIDTH: f32 = 640.0;
 /// Widest tooltip.
 pub const TOOLTIP_MAX_WIDTH: f32 = 280.0;
+/// A menu: menus are 200–360 wide (§14), this one fits a label and its keys.
+pub const MENU_WIDTH: f32 = 260.0;
 /// The dot that says "an update is ready".
 pub const DOT_SIZE: f32 = 7.0;
 

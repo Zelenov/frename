@@ -8,7 +8,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use arboard;
 use frename_core::undo::History;
 use frename_core::{
     AppDatabase, AppStateStore, BatchRun, CreateTagCommand, DeleteTagCommand, File, FileId,
@@ -25,6 +24,7 @@ use iced::{Subscription, Task};
 
 use crate::features::batch::{self, BatchState, ItemResult, ItemStatus};
 use crate::features::drag_out::{self, DragOutState};
+use crate::features::file_menu::{self, FileAction, FileMenuState};
 use crate::features::file_name_panel::{self, FileNamePanelState};
 use crate::features::file_workspace::FileWorkspace;
 use crate::features::folder;
@@ -39,6 +39,7 @@ use crate::widgets::splitter::HIT_WIDTH;
 use super::Message;
 
 mod drag_out_actions;
+mod file_actions;
 mod marker_actions;
 mod rotation;
 
@@ -128,6 +129,13 @@ pub struct FolderWorkspace {
     /// starts without one (a first Shift+click), the file that was open before it. `None` outside
     /// multi-selection, so the next one starts fresh from whatever is open then.
     select_anchor: Option<FileId>,
+    /// The file context menu (right-click on a file).
+    file_menu: FileMenuState,
+    /// A file menu action waiting for its file's pending edits to reach the disk, so it acts on
+    /// the file's final name. Run by the save of that file.
+    pending_file_action: Option<(FileId, FileAction)>,
+    /// The system clipboard, kept open: on Linux what was copied lasts only while it is.
+    clipboard: Option<arboard::Clipboard>,
 }
 
 impl FolderWorkspace {
@@ -178,6 +186,9 @@ impl FolderWorkspace {
             drag_out: DragOutState::default(),
             modifiers: iced::keyboard::Modifiers::empty(),
             select_anchor: None,
+            file_menu: FileMenuState::default(),
+            pending_file_action: None,
+            clipboard: None,
         }
     }
 
@@ -234,6 +245,9 @@ impl FolderWorkspace {
                 Task::none()
             }
             Message::Folder(folder_msg) => self.handle_folder_message(folder_msg),
+            Message::FileMenu(msg) => self.handle_file_menu(msg),
+            Message::FileAction(action) => self.file_action_on_open_file(action),
+            Message::RunFileAction(id, action) => self.run_file_action(id, action),
             Message::MediaViewer(msg) => match msg {
                 media_viewer::Message::Unloaded => self.on_media_unloaded(),
                 media_viewer::Message::ToggleFullscreen => {
@@ -352,6 +366,9 @@ impl FolderWorkspace {
                 Self::notice("Frame saved")
             }
             Message::EscapePressed => {
+                if self.file_menu.is_open() {
+                    return self.handle_file_menu(file_menu::Message::Close);
+                }
                 if self.markers.is_editing() {
                     self.markers.close();
                     return Task::none();
@@ -446,8 +463,8 @@ impl FolderWorkspace {
             return Task::none();
         };
         self.copied_tags = Some(snapshot.tags().to_vec());
-        if let Ok(mut cb) = arboard::Clipboard::new() {
-            let _ = cb.set_text(snapshot.file_name());
+        if let Err(e) = self.set_clipboard_text(snapshot.file_name()) {
+            log::warn!("could not copy the file name to the clipboard: {e}");
         }
         Task::none()
     }
@@ -807,6 +824,9 @@ impl FolderWorkspace {
                 | Message::OpenFilePicker
                 | Message::PrepareBatch(_)
                 | Message::ToggleMediaFullscreen
+                | Message::FileAction(_)
+                | Message::RunFileAction(..)
+                | Message::FileMenu(file_menu::Message::Open(_))
                 | Message::Folder(
                     folder::Message::SelectFile(_)
                         | folder::Message::PreviousFile
@@ -1168,6 +1188,8 @@ impl FolderWorkspace {
         } else {
             Task::none()
         };
+        // A file menu action waiting for this save runs now, on the name the file has on disk.
+        let file_action = self.file_action_after_save(id, refused);
 
         let _ = self
             .directory
@@ -1204,10 +1226,11 @@ impl FolderWorkspace {
             return Task::batch([
                 markers_saved,
                 refused_notice,
+                file_action,
                 Task::done(Message::ScrollFolderListToSelected),
             ]);
         }
-        Task::batch([markers_saved, refused_notice])
+        Task::batch([markers_saved, refused_notice, file_action])
     }
 
     fn handle_folder_message(&mut self, msg: folder::Message) -> Task<Message> {
@@ -1242,6 +1265,16 @@ impl FolderWorkspace {
             // Intercepted by the app, which owns the windows; no-op here.
             folder::Message::OpenSettings => Task::none(),
             folder::Message::StartRename(index) => self.start_rename(index),
+            folder::Message::OpenFileMenu(index) => {
+                let file = self
+                    .directory
+                    .as_ref()
+                    .and_then(|dir| dir.files_in_order().nth(index))
+                    .map(|file| file.id());
+                file.map_or_else(Task::none, |id| {
+                    Task::done(Message::FileMenu(file_menu::Message::Open(id)))
+                })
+            }
             folder::Message::RenameInput(text) => {
                 if let Some(rename) = self.inline_rename.as_mut() {
                     rename.text = text;
@@ -1789,6 +1822,11 @@ impl FolderWorkspace {
     }
 
     fn handle_file_name_panel(&mut self, msg: file_name_panel::Message) -> Task<Message> {
+        if let file_name_panel::Message::OpenFileMenu = msg {
+            return self.file_workspace.file().map_or_else(Task::none, |file| {
+                Task::done(Message::FileMenu(file_menu::Message::Open(file.id())))
+            });
+        }
         if let file_name_panel::Message::RemoveTag(id) = msg {
             let was_checked = self
                 .file_workspace
@@ -2294,6 +2332,11 @@ impl FolderWorkspace {
 
     pub fn file_name_panel(&self) -> &FileNamePanelState {
         &self.file_name_panel
+    }
+
+    /// The file context menu.
+    pub fn file_menu(&self) -> &FileMenuState {
+        &self.file_menu
     }
 
     pub fn sync_locked(&self) -> bool {
@@ -4151,5 +4194,105 @@ mod tests {
             assert!(workspace.batch().is_checked(id));
         }
         assert!(!workspace.batch().is_checked(ids[0]) && !workspace.batch().is_checked(ids[4]));
+    }
+
+    /// A file menu action on the open file waits for its pending edits to be saved (here a
+    /// tag, which renames it), and then sees the file's new name.
+    #[test]
+    fn a_file_action_saves_the_open_files_edits_first_and_sees_the_new_name() {
+        use crate::features::file_menu::{system, FileAction};
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = workspace_with_unsaved_tag(&test_dir);
+        let id = file_id_at(&workspace, 0);
+        let path_of = |workspace: &FolderWorkspace| {
+            workspace
+                .directory()
+                .and_then(|d| d.file_by_id(id))
+                .map(|f| f.file_path().to_path_buf())
+                .expect("the file is listed")
+        };
+
+        let _ = workspace.update(Message::FileAction(FileAction::CopyName));
+        assert_eq!(
+            workspace.pending_file_action,
+            Some((id, FileAction::CopyName)),
+            "waits for the save it asked for"
+        );
+        assert_eq!(path_of(&workspace), test_dir.file_path("file_0.mp4"));
+
+        // The save runs: the same-file refresh unloads the video, then saves.
+        flush_file_opened(&mut workspace);
+        assert!(workspace.pending_file_action.is_some(), "still unloading");
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert_eq!(workspace.pending_file_action, None, "ran after the save");
+        let name = system::clipboard_text(FileAction::CopyName, &path_of(&workspace));
+        assert_eq!(name.as_deref(), Some("pick.file_0.mp4"));
+    }
+
+    /// A file with nothing to save (another file in the list, or the open one already saved)
+    /// runs the action at once.
+    #[test]
+    fn a_file_action_on_a_file_with_nothing_to_save_does_not_wait() {
+        use crate::features::file_menu::{self, FileAction};
+        let (_test_dir, mut workspace) = open_folder(2);
+        let _ = workspace.update(Message::FileAction(FileAction::ShowInFileManager));
+        assert_eq!(workspace.pending_file_action, None);
+        let other = file_id_at(&workspace, 1);
+        let _ = workspace.update(Message::FileMenu(file_menu::Message::Choose(
+            other,
+            FileAction::CopyPath,
+        )));
+        assert_eq!(workspace.pending_file_action, None);
+    }
+
+    /// The waiting action runs on its own file's save only, and not when that save was refused
+    /// (the notice of the refused save says why).
+    #[test]
+    fn a_waiting_file_action_runs_on_its_files_save_unless_it_was_refused() {
+        use crate::features::file_menu::FileAction;
+        let (_test_dir, mut workspace) = open_folder(2);
+        let (open, other) = (file_id_at(&workspace, 0), file_id_at(&workspace, 1));
+        workspace.pending_file_action = Some((open, FileAction::CopyPath));
+        assert_eq!(workspace.file_action_after_save(other, false).units(), 0);
+        assert!(
+            workspace.pending_file_action.is_some(),
+            "another file's save"
+        );
+        assert_eq!(workspace.file_action_after_save(open, false).units(), 1);
+        assert_eq!(workspace.pending_file_action, None);
+
+        workspace.pending_file_action = Some((open, FileAction::CopyPath));
+        assert_eq!(workspace.file_action_after_save(open, true).units(), 0);
+        assert_eq!(workspace.pending_file_action, None, "dropped");
+    }
+
+    /// Esc closes an open file menu and does nothing else.
+    #[test]
+    fn escape_closes_the_file_menu_first() {
+        use crate::features::file_menu;
+        let (_test_dir, mut workspace) = open_folder(2);
+        let _ = workspace.update(Message::FileNamePanel(
+            crate::features::file_name_panel::Message::OpenFileMenu,
+        ));
+        assert!(!workspace.file_menu().is_open(), "no right press: no menu");
+        let _ = workspace.update(Message::FileMenu(file_menu::Message::RightPressed(
+            iced::Point::new(10.0, 10.0),
+        )));
+        let _ = workspace.update(Message::Folder(folder::Message::OpenFileMenu(1)));
+        // The row's message becomes the menu's own `Open` (a task in the app).
+        let _ = workspace.update(Message::FileMenu(file_menu::Message::Open(file_id_at(
+            &workspace, 1,
+        ))));
+        assert!(workspace.file_menu().is_open());
+        workspace.file_workspace.set_tag_filter("pi".to_string());
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(!workspace.file_menu().is_open());
+        assert_eq!(
+            workspace.file_workspace().tag_list().filter_query(),
+            "pi",
+            "the search is cleared by the next Esc, not this one"
+        );
     }
 }

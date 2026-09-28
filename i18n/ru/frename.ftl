@@ -356,6 +356,16 @@ folder-rename-error-exists = Файл с таким именем уже есть
 folder-markers-not-saved = Маркеры не сохранены: файл доступен только для чтения или занят (закройте его в Premiere, затем откройте файл и снова закройте)
 drag-out-not-saved = Не перетащено: файл не сохранён (только чтение или открыт в Premiere)
 
+## File menu (right-click on a file, or F11 / Shift+F11 / Ctrl+F11)
+
+file-menu-show-in-explorer = Показать в проводнике
+file-menu-show-in-file-manager = Показать в файловом менеджере
+file-menu-copy-path = Копировать полный путь
+file-menu-copy-name = Копировать имя файла
+file-menu-copied = Скопировано
+file-menu-not-copied = Не скопировано: буфер обмена недоступен
+file-menu-not-shown = Не удалось открыть файловый менеджер
+
 ## Controls bar under the file list
 
 folder-controls-filter = Фильтр

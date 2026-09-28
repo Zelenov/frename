@@ -15,6 +15,8 @@ pub enum ButtonKind {
     DangerGhost,
     /// A navigation item; `true` when it is the page shown.
     Nav(bool),
+    /// An item of a menu (§8.14): no fill until the pointer is on it.
+    MenuItem,
 }
 
 fn faded(color: Color) -> Color {
@@ -83,6 +85,14 @@ pub fn button(
                     _ => Color::TRANSPARENT,
                 },
                 if selected { TEXT } else { TEXT_SECONDARY },
+                Color::TRANSPARENT,
+            ),
+            ButtonKind::MenuItem => (
+                match status {
+                    Hovered | Pressed => SELECTED,
+                    _ => Color::TRANSPARENT,
+                },
+                TEXT,
                 Color::TRANSPARENT,
             ),
         };
@@ -218,7 +228,12 @@ fn popup_shadow() -> Shadow {
     }
 }
 
-pub fn tooltip(_theme: &Theme) -> container::Style {
+pub fn tooltip(theme: &Theme) -> container::Style {
+    popup(theme)
+}
+
+/// A popup's surface (§8.14, §8.13): a menu or a tooltip over the content, with the one shadow.
+pub fn popup(_theme: &Theme) -> container::Style {
     container::Style {
         text_color: Some(TEXT),
         background: Some(Background::Color(BG_OVERLAY)),
