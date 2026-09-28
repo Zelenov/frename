@@ -1,4 +1,4 @@
-# NEXT
+# 0.79
 ## Added
 - Settings → In/out points: keep them in the comment, as one line (`In/Out: 00:01:05.250 – 00:02:10.000`) you change with `[` and `]`, or inside the video (the default).
 - Batch action "Move in/out points out of file names": moves `in_…` / `out_…` from the names of the checked files to where in/out points are kept now, and says which files kept the points they already had.
