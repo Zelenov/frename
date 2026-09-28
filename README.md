@@ -49,7 +49,8 @@ Nothing is locked inside frename.
 8. Drag a clip from the list into Premiere Pro, Explorer or any other program (Windows): it is saved
    first, so it arrives under its new name with everything you marked. Nothing is moved.
 
-Next time you start frename, it reopens the last folder and clip.
+Next time you start frename, it reopens the last folder and clip — and opening any other folder
+again, even after a restart, returns to the clip you last viewed in it.
 
 ---
 
