@@ -6,6 +6,7 @@
 //!
 //! ```toml
 //! version = 3
+//! last_viewed = "Food.Commented.IMG_0424.MOV"
 //!
 //! tags = [
 //!   { id = "00000000-0000-0000-0000-000000000000", name = "pick", color = 9, starred = true },
@@ -32,6 +33,10 @@
 //!
 //! Array order is the tag order — there are no sort keys in the file, so reordering tags means
 //! moving lines. One tag per line keeps that edit, and its diff, to a single line.
+//!
+//! `last_viewed` is the name of the file open in this folder when it was last left (#98), so
+//! reopening the folder returns to it. It is updated with a rename and omitted when nothing is
+//! remembered yet.
 //!
 //! The `[[files]]` blocks list the folder's videos with the comment, in/out points and number
 //! of clip markers stored inside each video. Comments are multi-line, so they are written as `"""` strings: the text
@@ -86,6 +91,10 @@ const ORDER_GAP: i64 = 1_000_000;
 #[derive(Debug, Serialize, Deserialize)]
 struct TagFile {
     version: u32,
+    /// The name of the file open in this folder when it was last left (switching files, closing
+    /// frename, or switching to another folder); empty when none is remembered yet (#98).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    last_viewed: String,
     tags: Vec<TagEntry>,
     #[serde(default)]
     files: Vec<CachedFile>,
@@ -221,8 +230,8 @@ impl FolderTagStore {
         Ok(file.tags)
     }
 
-    /// Writes the tags, replacing them in the file and keeping its file list. Does nothing
-    /// when no folder is open.
+    /// Writes the tags, replacing them in the file and keeping its file list and last viewed
+    /// file. Does nothing when no folder is open.
     fn write_entries(
         &self,
         entries: &[TagEntry],
@@ -233,8 +242,10 @@ impl FolderTagStore {
         let _lock = TAG_FILE_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let files = read_file(folder).map(|f| f.files).unwrap_or_default();
-        write_file(folder, entries, &files)
+        let existing = read_file(folder);
+        let files = existing.as_ref().map_or_else(Vec::new, |f| f.files.clone());
+        let last_viewed = existing.map(|f| f.last_viewed).unwrap_or_default();
+        write_file(folder, entries, &files, &last_viewed)
     }
 
     /// The folder's file list (see the module docs), in file order. Empty when there is no tag
@@ -250,16 +261,41 @@ impl FolderTagStore {
         let _lock = TAG_FILE_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let (tags, mut files) = match read_file(folder) {
-            Some(file) => (file.tags, file.files),
-            None => (Self::default_entries(), Vec::new()),
+        let (tags, mut files, last_viewed) = match read_file(folder) {
+            Some(file) => (file.tags, file.files, file.last_viewed),
+            None => (Self::default_entries(), Vec::new(), String::new()),
         };
         let replaced: std::collections::HashSet<&str> =
             upsert.iter().map(|f| f.name.as_str()).collect();
         files.retain(|f| !remove.contains(&f.name) && !replaced.contains(f.name.as_str()));
         files.extend(upsert);
         files.sort_by(|a, b| a.name.cmp(&b.name));
-        let _ = write_file(folder, &tags, &files);
+        let _ = write_file(folder, &tags, &files, &last_viewed);
+    }
+
+    /// The name of the file this folder last had open (#98), or empty when none is remembered.
+    pub fn get_last_viewed(folder: &Path) -> String {
+        read_file(folder).map(|f| f.last_viewed).unwrap_or_default()
+    }
+
+    /// Remembers `name` as the file this folder last had open (#98), keeping the tags and file
+    /// list. A folder without a tag file gets one with the built-in tags. A folder whose tag
+    /// file cannot be written (read-only media, no permission) keeps working; the failure is
+    /// only logged.
+    pub fn set_last_viewed(folder: &Path, name: &str) {
+        let _lock = TAG_FILE_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let (tags, files) = match read_file(folder) {
+            Some(file) => (file.tags, file.files),
+            None => (Self::default_entries(), Vec::new()),
+        };
+        if let Err(e) = write_file(folder, &tags, &files, name) {
+            log::warn!(
+                "could not remember the last viewed file in {}: {e}",
+                folder.display()
+            );
+        }
     }
 
     /// Reads the tags paired with the order key each one currently has.
@@ -301,10 +337,11 @@ fn write_file(
     folder: &Path,
     tags: &[TagEntry],
     files: &[CachedFile],
+    last_viewed: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let path = folder.join(TAG_FILE_NAME);
     let temp_path = folder.join(TAG_FILE_TEMP_NAME);
-    std::fs::write(&temp_path, render(tags, files)?)
+    std::fs::write(&temp_path, render(tags, files, last_viewed)?)
         .map_err(|e| with_path("write tag file", &temp_path, e))?;
     std::fs::rename(&temp_path, &path).map_err(|e| {
         // The scratch file would otherwise be left behind next to the user's footage.
@@ -320,8 +357,13 @@ fn write_file(
 fn render(
     tags: &[TagEntry],
     files: &[CachedFile],
+    last_viewed: &str,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let mut out = format!("version = {FORMAT_VERSION}\n\ntags = [\n");
+    let mut out = format!("version = {FORMAT_VERSION}\n");
+    if !last_viewed.is_empty() {
+        out.push_str(&format!("last_viewed = {}\n", basic_string(last_viewed)));
+    }
+    out.push_str("\ntags = [\n");
     for tag in tags {
         let mut fields = vec![
             format!("id = {}", basic_string(&tag.id.to_string())),
@@ -796,5 +838,79 @@ out = 3.0
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].comment, "Written by hand,\nover two lines");
         assert_eq!((files[0].start, files[0].end), (None, Some(3.0)));
+    }
+
+    #[test]
+    fn a_folder_with_no_tag_file_remembers_nothing() {
+        let folder = TempFolder::new("last-viewed-none");
+        assert_eq!(FolderTagStore::get_last_viewed(&folder.0), "");
+    }
+
+    #[test]
+    fn setting_the_last_viewed_file_round_trips_and_keeps_the_tags_and_file_list() {
+        let folder = TempFolder::new("last-viewed-round-trip");
+        let _ = folder.store().get_stored_tags(); // writes the built-in tags
+        FolderTagStore::update_file_cache(
+            &folder.0,
+            &[],
+            vec![CachedFile {
+                name: "clip.mp4".into(),
+                size: 1,
+                modified_ms: 2,
+                comment: String::new(),
+                start: None,
+                end: None,
+                markers: None,
+            }],
+        );
+
+        FolderTagStore::set_last_viewed(&folder.0, "pick.clip.mp4");
+        assert_eq!(FolderTagStore::get_last_viewed(&folder.0), "pick.clip.mp4");
+        assert_eq!(names(&folder.store()), vec!["pick"], "tags untouched");
+        assert_eq!(
+            FolderTagStore::read_file_cache(&folder.0).len(),
+            1,
+            "file list untouched"
+        );
+
+        // A rename updates it; the field is omitted once emptied back out.
+        FolderTagStore::set_last_viewed(&folder.0, "review.clip.mp4");
+        assert_eq!(FolderTagStore::get_last_viewed(&folder.0), "review.clip.mp4");
+        FolderTagStore::set_last_viewed(&folder.0, "");
+        assert_eq!(FolderTagStore::get_last_viewed(&folder.0), "");
+        assert!(
+            !folder.tag_file().contains("last_viewed"),
+            "omitted once empty: {}",
+            folder.tag_file()
+        );
+    }
+
+    #[test]
+    fn an_old_tag_file_without_last_viewed_loads_unchanged() {
+        let folder = TempFolder::new("last-viewed-old-file");
+        folder.write_tag_file(
+            r#"version = 3
+tags = [{ id = "00000000-0000-0000-0000-000000000001", name = "nairobi" }]
+"#,
+        );
+        assert_eq!(FolderTagStore::get_last_viewed(&folder.0), "");
+        assert_eq!(names(&folder.store()), vec!["nairobi"]);
+    }
+
+    #[test]
+    fn saving_a_tag_keeps_the_last_viewed_file() {
+        let folder = TempFolder::new("last-viewed-survives-tag-save");
+        let mut store = folder.store();
+        let _ = store.get_stored_tags(); // writes the built-in tags
+        FolderTagStore::set_last_viewed(&folder.0, "pick.clip.mp4");
+
+        store
+            .save_tag(
+                StoredTag::with_all(Uuid::new_v4(), "nairobi", ORDER_GAP, false),
+                7,
+            )
+            .expect("save tag");
+
+        assert_eq!(FolderTagStore::get_last_viewed(&folder.0), "pick.clip.mp4");
     }
 }

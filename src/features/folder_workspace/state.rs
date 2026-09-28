@@ -609,7 +609,15 @@ impl FolderWorkspace {
         self.history = WorkspaceHistory::new(HISTORY_DEPTH);
         let load_comments_task = self.load_next_comment_batch(true);
         let dir = self.directory.as_mut().expect("just set");
-        let selected = target_file.as_deref().and_then(|p| dir.open_path(p));
+        // A specific file (a dropped file, "Open with") always wins; opening the folder itself
+        // returns to the file it last had open (#98), falling back to the first one listed.
+        let selected = match target_file.as_deref() {
+            Some(path) => dir.open_path(path),
+            None => {
+                let last_viewed = FolderTagStore::get_last_viewed(&folder);
+                dir.open_last_viewed(&last_viewed).or_else(|| dir.select_index(0))
+            }
+        };
         if let Some(file) = selected {
             Task::batch([
                 Task::done(Message::FileOpened(file)),
@@ -1173,6 +1181,15 @@ impl FolderWorkspace {
             .directory
             .as_mut()
             .map(|dir| dir.rename_file(id, &new_path, &snapshot_after_save));
+
+        // Remember this as the folder's last viewed file (#98): every path here left a file that
+        // was open, whether by switching to another one, closing frename, or switching folders.
+        if let (Some(folder), Some(name)) = (
+            self.directory.as_ref().map(|dir| dir.path().to_path_buf()),
+            new_path.file_name().and_then(|n| n.to_str()),
+        ) {
+            FolderTagStore::set_last_viewed(&folder, name);
+        }
 
         // Push NavigateFileCommand when we have a valid to_file_id (set by select_* after navigating).
         if let Some(to_file_id) = self.pending_to_file_id.take() {
@@ -2352,12 +2369,13 @@ fn open_in_default_app(target: impl AsRef<std::ffi::OsStr>) {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::SystemTime;
 
     use frename_core::{
-        AppDatabase, File, FileId, FileSnapshot, Initializable, LoggingAppStateStore,
+        AppDatabase, File, FileId, FileSnapshot, FolderTagStore, Initializable,
+        LoggingAppStateStore,
     };
     use iced::keyboard::Modifiers;
 
@@ -2411,6 +2429,11 @@ mod tests {
             self.path.join("file_0.mp4")
         }
 
+        /// The folder itself, for reading or seeding its `.frename` file directly.
+        pub fn path(&self) -> &Path {
+            &self.path
+        }
+
         /// Path of a file in this folder, for asserting on renames.
         pub fn file_path(&self, name: &str) -> PathBuf {
             self.path.join(name)
@@ -2460,6 +2483,89 @@ mod tests {
             Some(2),
             "folder panel should show two files"
         );
+    }
+
+    /// Issue #98: opening a folder without a specific target file returns to the clip it last
+    /// had open, stored in its own `.frename` file.
+    #[test]
+    fn opening_a_folder_with_no_target_selects_the_remembered_file() {
+        let test_dir = TestDirectory::new(2);
+        FolderTagStore::set_last_viewed(test_dir.path(), "file_1.mp4");
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: None,
+        });
+        flush_file_opened(&mut workspace);
+        assert_eq!(
+            workspace
+                .file_workspace()
+                .file()
+                .and_then(|f| f.file_path().file_name())
+                .and_then(|n| n.to_str()),
+            Some("file_1.mp4")
+        );
+    }
+
+    /// Nothing remembered yet (a folder never opened before, or opened only before #98): the
+    /// first file in the list opens, same as today's other folders.
+    #[test]
+    fn opening_a_folder_with_no_target_and_nothing_remembered_opens_the_first_file() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: None,
+        });
+        assert_eq!(
+            workspace.directory().and_then(|d| d.selected_index()),
+            Some(0)
+        );
+    }
+
+    /// A specific file (a dropped file, "Open with") always wins over the remembered one.
+    #[test]
+    fn opening_a_specific_file_wins_over_the_remembered_one() {
+        let test_dir = TestDirectory::new(2);
+        FolderTagStore::set_last_viewed(test_dir.path(), "file_1.mp4");
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()), // file_0.mp4
+        });
+        assert_eq!(
+            workspace.directory().and_then(|d| d.selected_index()),
+            Some(0)
+        );
+    }
+
+    /// Leaving a file (switching to another one) remembers it as this folder's last viewed file.
+    #[test]
+    fn leaving_a_file_remembers_it_as_the_folder_s_last_viewed_file() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()), // file_0.mp4
+        });
+        flush_file_opened(&mut workspace);
+        assert_eq!(
+            FolderTagStore::get_last_viewed(test_dir.path()),
+            "",
+            "nothing remembered yet"
+        );
+        let file_0_id = file_id_at(&workspace, 0);
+
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        // Manually drive the FileUpdated that would fire from the iced runtime.
+        let snapshot = FileSnapshot::new(Vec::<String>::new(), "file_0", ".mp4", "file_0.mp4");
+        let _ = workspace.update(Message::FileUpdated {
+            id: file_0_id,
+            snapshot,
+        });
+
+        assert_eq!(FolderTagStore::get_last_viewed(test_dir.path()), "file_0.mp4");
     }
 
     /// Helper: get the FileId of the file at the given directory index.

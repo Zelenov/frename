@@ -2,6 +2,7 @@
 ## Added
 - Select several clips without turning on batch mode by hand: `Ctrl+click` a clip to add it (and the one open before it) to the selection, or drop it if it is already selected; `Shift+click` a clip to select every clip between it and the last one you `Ctrl`-clicked. Either turns on batch mode with exactly that selection checked; `Esc` leaves it, same as clicking ☑ again.
 - Batch mode remembers the action you last ran, and its own options (e.g. the subtitle "Replace existing" checkbox, which way in/out points or markers move), and opens with them selected, even after a restart.
+- Each folder remembers the clip you were last viewing in it, in its own `.frename` file, so switching between shoots no longer loses your place in the one you switch back to. A renamed clip is still found; if it is gone, the first clip in the list opens instead.
 
 ## Changed
 - Monochrome tags now use two grays instead of one: a tag you added shows darker, a tag that is not in your list (a stray word from a file name) stays the lighter gray it always was. The two were indistinguishable before.
