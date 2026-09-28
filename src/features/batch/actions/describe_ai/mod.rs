@@ -1,6 +1,8 @@
-//! "Describe with AI": for each checked video, frames sampled every 2 s and its subtitles go to
-//! Claude, and the summary and time-ranged segments it returns are written into the AI block of
-//! the video's comment (see `frename_core::ai::block`). The editor's own text is never touched.
+//! "Describe with AI": for each checked video, key frames (chosen where the picture changes the
+//! most) and its subtitles go to Claude, and the summary and time-ranged segments it returns —
+//! only what stands out, possibly none for a static or uniform clip — are written into the AI
+//! block of the video's comment (see `frename_core::ai::block`). The editor's own text is never
+//! touched.
 //!
 //! Before running, the panel shows what will be sent and about what it costs: clip lengths are
 //! read in the background (see [`Options::missing_probes`]) and kept per file.

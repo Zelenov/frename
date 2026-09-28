@@ -23,14 +23,8 @@ comes in the same way with its batch action (#56).
 
 - Never copy their code into frename, not even a small helper: call the crate. If frename needs
   something a crate lacks, change the crate and move the pin.
-- Per the owner: the pin follows every release of either crate, not just the ones with a breaking
-  change — this is not gated on an issue or an `approved` label. When a session has access to both
-  this repo and the crate's, move the pin (`Cargo.toml` + `Cargo.lock`) and make whatever code
-  change the crate's `version.md` `## Changed` requires (nothing, for an additive release) in the
-  same session as the crate's release, after the crate's CI is green on that commit; run frename's
-  own test suite before pushing. A session without access to the crate's repo files an issue here
-  instead (labelled `feature`, body `🤖 agent:`, the version, what changed, what frename must do)
-  for the next session that has both to pick up.
+- A new pin is its own commit (`Cargo.toml` + `Cargo.lock`), after the crate's CI is green on that
+  commit.
 - Their releases (tags, crates.io, binaries) are the owner's.
 
 ## Commands
