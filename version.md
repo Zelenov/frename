@@ -5,6 +5,7 @@
 ## Changed
 - Pasting tags onto a clip no longer wipes its comment.
 - A rename that would give a clip the same name as another one (or its comment, subtitle or transcript) is refused instead of replacing it, with a note that it was not saved.
+- Leaving a clip and moving to the next one before its video has finished loading no longer risks the tag you just set failing to reach the file.
 
 # 0.80
 ## Changed

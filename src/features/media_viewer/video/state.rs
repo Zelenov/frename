@@ -497,6 +497,7 @@ impl VideoPlayerState {
                 self.current_path = None;
                 self.subtitles = None;
                 if load_in_flight {
+                    log::debug!("Unload: a load is still in flight, holding VideoUnloaded back");
                     self.unloading = true;
                     Task::none()
                 } else {
