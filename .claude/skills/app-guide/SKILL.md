@@ -84,8 +84,7 @@ C:\Work\my\frename\
 | `features/video_controls/` | Progress bar, play/pause |
 | `features/drag_drop/` | OS file drag-drop → `OpenPath(path)` |
 | `widgets/` | 5 reusable widgets (search_bar, tag_chip, splitter, etc.) |
-| `ui/` | The design system (`docs/design/design-system.md`): tokens, fonts, icons, components; `ui/legacy.rs` holds the old `theme.rs` styles of views not moved yet |
-| `tag_colors.rs` | 16-color tag palette |
+| `ui/` | The design system (`docs/design/design-system.md`): tokens, fonts, icons, components, styles; `ui/palette.rs` holds the 16-color tag palette and the marker colors |
 
 ---
 
@@ -127,7 +126,7 @@ Last opened folder + file stored in `folder_history` SQLite table. Restored on s
 
 ## Tag colors
 
-`tag_colors::TagColors::PALETTE` — 16 fixed colors (grays, blues, greens, ambers, etc.).
+`ui::tokens::TAG_PALETTE` (resolved by `ui::palette::TagPalette`) — 16 fixed colors (grays, blues, greens, ambers, etc.).
 `TagColors::color(index: u8) -> Color` — wraps index modulo 16.
 Color is assigned **randomly** when a tag is saved for the first time (`random_color_index()` in core).
 Colors are stored by tag **name** in `tag_color_mapping` table, so they survive renames if done via `save_tag`.

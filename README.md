@@ -34,9 +34,9 @@ Nothing is locked inside frename.
 
 ## The workflow
 
-1. Open a folder with the 📂 button, drag a folder onto the window, or right-click a folder in
+1. Open a folder with the **Open a folder** button (under the file list), drag a folder onto the window, or right-click a folder in
    Explorer and choose "Open in frename" (installed version; on Windows 11 under "Show more
-   options"). To start at one clip, right-click 📂 to pick the file, or drag the file in: its
+   options"). To start at one clip, right-click that button to pick the file, or drag the file in: its
    whole folder opens with that clip selected.
 2. The video starts playing.
 3. Tag what you see: click a tag, or move with the arrow keys and press `Shift+Space`.
@@ -211,11 +211,11 @@ No subtitles yet? Check the videos in batch mode and run **Generate subtitles** 
 
 ![Batch mode](docs/frename-screenshot-batch.jpg)
 
-Click ☑ to check files in the list (All / Invert) and run one action on all of them, with progress
-and Cancel. Each file then shows a green or red check box. Drag a checked file to drag all checked
-files (an unchecked one drags only itself). Esc leaves batch mode, the same as clicking ☑ again.
+Click **Batch actions** (the right end of the bar under the file list) to check files in the list (All / Invert) and run one action on all of them, with progress
+and Cancel. Each file then shows an icon for what happened to it (changed, nothing to change, not done). Drag a checked file to drag all checked
+files (an unchecked one drags only itself). Esc leaves batch mode, the same as clicking **Batch actions** again.
 
-**Select several clips without ☑**: **Ctrl+click** a clip to add it (and the one open before it) to
+**Select several clips without the button**: **Ctrl+click** a clip to add it (and the one open before it) to
 the selection; Ctrl+click a selected clip to drop it. **Shift+click** a clip to select every clip
 between it and the last one you clicked with Ctrl (or the open clip, if you have not Ctrl+clicked
 yet), replacing the selection. Either turns on batch mode with exactly that selection checked, and
@@ -276,7 +276,7 @@ Subtitles. Formats such as mkv, m2ts and avi need [ffmpeg](https://ffmpeg.org) o
 
 ## Settings
 
-The ⚙ button opens Settings. Changes apply right away; **Close** or `Esc` closes it. It has five
+The **Settings** button (under the file list) opens Settings. Changes apply right away; **Close** or `Esc` closes it. It has five
 pages:
 
 - **Interface:** the UI language (follows your system by default, or pick English or Russian;
@@ -293,8 +293,8 @@ pages:
 - **Subtitles:** your Soniox API key (kept the same way), the languages spoken in your footage, and
   whether a subtitle is a short line or a whole sentence.
 - **Updates:** **Check for updates**, then **Update and restart** when a newer version is out.
-  frename also checks once a day by itself (you can turn that off) and puts a dot on ⚙ when an
-  update is ready; ⚙ then opens this page. Nothing is downloaded until you click.
+  frename also checks once a day by itself (you can turn that off) and puts a dot on the Settings button
+  when an update is ready; it then opens this page. Nothing is downloaded until you click.
 
 ![Monochrome tags](docs/frename-screenshot-mono.jpg)
 

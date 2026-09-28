@@ -64,30 +64,41 @@ The design system is the rule: `docs/design/design-system.md` (tokens, text styl
 windows, patterns, every screen). Its code is `src/ui/`:
 
 ```rust
+use crate::ui::icon_button::IconButton;
+use crate::ui::icons::Icon;
 use crate::ui::layout::{self, NoticeKind};
-use crate::ui::tokens::*;                 // colors, SPACE_*, sizes, radii, fonts
-use crate::ui::{button, form, text};
+use crate::ui::tokens::*;                 // colors, SPACE_*, sizes, regions, radii, fonts
+use crate::ui::tooltip::{Position, Tip};
+use crate::ui::{badge, button, empty, form, list, scroll, style, text};
 
-text::body(fl!("…")); text::secondary(fl!("…")); text::mono(name);
-button::primary(fl!("…")).on_press(msg); button::secondary(fl!("…"));
+text::body(fl!("…")); text::secondary(fl!("…")); text::mono(name).color(TEXT);
+button::primary(fl!("…")).on_press(msg); button::ghost(fl!("…")); button::link(fl!("…"));
+IconButton::new(Icon::Rewind)
+    .tip(Tip::new(fl!("…")).keys(&["F1"]), Position::Top)
+    .on_press(msg);
 form::checkbox(label, on).on_toggle(Msg::Set);
-form::radio_option(label, Some(form::description(hint)), value, selected, Msg::Set);
 layout::setting_row(label, layout::aligned([..]));
 layout::notice(NoticeKind::Info, headline, None, [button::secondary(label).on_press(msg).into()]);
+list::row_item(content, selected, HOVER);      // the one hover + selected look, with its bar
+scroll::vertical_with_id(ID, content);         // keeps the scrollbar gutter
+empty::pane(Icon::Clapperboard, fl!("…"), None, Some(button.into()));
 ```
 
-- A view on the system never writes a color, a size, a padding, a spacing or a radius as a number:
-  `ui::lint` fails the tests if it does. `0` alone is allowed.
-- Views not moved yet still use `crate::theme` (now `src/ui/legacy.rs`) and are listed in
-  `ui::lint::NOT_YET` with the issue that moves them (#58 batch, #59 the rest). The list only
-  shrinks: moving a file means removing its entry.
+- A view never writes a color, a size, a padding, a spacing or a radius as a number: `ui::lint`
+  fails the tests if it does (`0` alone is allowed). Its allow-list `NOT_YET` is empty and stays
+  empty: a new size or color is a token in `src/ui/tokens/` (by kind: color, content, space, size,
+  region, typography), with a doc comment.
+- Every icon is a Lucide SVG in `assets/icons/` with one line in the `icons!` list of
+  `src/ui/icons.rs`; every icon-only button is an `IconButton` with a tooltip.
 - Something the system lacks is added to `docs/design/design-system.md` first, then to `src/ui/`.
-- `ui` holds tokens, styles and stateless constructors of standard controls; `src/widgets/` keeps
-  frename's own stateful or custom-drawn widgets, which take their values from `ui::tokens`.
-- The Settings window uses `ui::theme()`; the main window keeps `iced::Theme::Dark` until #59.
+  A piece two views need is one component, never a copy.
+- `ui` holds tokens, styles (`ui::style`) and stateless constructors of standard controls;
+  `src/widgets/` keeps frename's own stateful or custom-drawn widgets (splitter, tag chip,
+  progress bar), which take their values from `ui::tokens` and `ui::style`.
+- Every window uses `ui::theme()`; Inter at 13 px is the default font.
 
-Tag chip colors: always use `tag_colors::TagColors::color(tag.color_index())`.
-Palette has 16 entries; index wraps modulo 16.
+Tag chip colors: `ui::palette::TagPalette::color(tag.color_index())` (16 colors, the index
+wraps); marker colors: `ui::palette::marker_color`.
 
 ---
 

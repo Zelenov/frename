@@ -1,8 +1,15 @@
 # NEXT
 ## Added
-- Select several clips without turning on batch mode by hand: `Ctrl+click` a clip to add it (and the one open before it) to the selection, or drop it if it is already selected; `Shift+click` a clip to select every clip between it and the last one you `Ctrl`-clicked. Either turns on batch mode with exactly that selection checked; `Esc` leaves it, same as clicking ☑ again.
+- Select several clips without turning on batch mode by hand: `Ctrl+click` a clip to add it (and the one open before it) to the selection, or drop it if it is already selected; `Shift+click` a clip to select every clip between it and the last one you `Ctrl`-clicked. Either turns on batch mode with exactly that selection checked; `Esc` leaves it, same as clicking the batch button again.
 
 ## Changed
+- The whole main window follows the design system that Settings got in 0.77: one font (Inter, bundled), the same dark surfaces, and icons with tooltips that show their keys instead of emoji buttons.
+  - Video: the controls in groups with a time readout, and a timeline with a visible playhead. The subtitle and marker lists get tabs with counts. The rotate buttons are in the new ⋯ menu, which also takes the buttons that don't fit a narrow player.
+  - File list: file names in a fixed-width font with small tag chips. The open file is marked by a bar. While a batch action runs, a line says the list is locked. After a job, each file shows an icon for what happened to it.
+  - Tags: a checked tag's name is bold; stars are black so they show on every chip color. The columns no longer jump while you search. The order strip says in words what reordering does.
+  - Batch actions: every action has an icon, and the paid ones show who bills them. Each page says what it changes. Run names what it will do ("Move 14 comments"), and when it is off, the reason is shown next to it. A finished job shows its outcome once, the counts as figures, and the files not done as a table.
+  - Empty screens say what is missing and offer the button that fixes it, instead of showing a lone symbol.
+- The main window can no longer be made smaller than 900 × 560.
 - Pasting tags onto a clip no longer wipes its comment.
 - A rename that would give a clip the same name as another one (or its comment, subtitle or transcript) is refused instead of replacing it, with a note that it was not saved.
 - Leaving a clip and moving to the next one before its video has finished loading no longer risks the tag you just set failing to reach the file.
