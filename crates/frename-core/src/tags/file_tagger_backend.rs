@@ -7,7 +7,7 @@ use super::file_snapshot::FileSnapshot;
 use super::folder_info::FolderInfo;
 use super::production_file_tagger::is_screenshot_sidecar;
 use crate::markers::Marker;
-use crate::metadata::{MarkersError, MetadataMove};
+use crate::metadata::{MarkersError, MetadataMove, Rotation, RotationError};
 
 /// The interface that both InMemoryFileTagger and ProductionFileTagger implement.
 pub trait FileTaggerBackend: Send + Sync {
@@ -87,6 +87,16 @@ pub trait FileTaggerBackend: Send + Sync {
     ) -> Result<(), MarkersError> {
         Ok(())
     }
+
+    /// How the video at `path` is turned (see [`crate::Rotation`]). Reading never changes a
+    /// file, so every backend reads it from where the file is on disk.
+    fn video_rotation(&self, path: &Path) -> Result<Rotation, RotationError> {
+        crate::metadata::rotation::read(&self.disk_path(path))
+    }
+
+    /// Turn the video at `path` by `quarter_turns` clockwise (negative: counter-clockwise) and
+    /// return its new rotation (see [`crate::FileTagger::rotate_video`]).
+    fn rotate_video(&self, path: &Path, quarter_turns: i32) -> Result<Rotation, RotationError>;
 
     /// Save a screenshot image for the given file and position.
     /// `image_data` is raw JPEG bytes (e.g. from GStreamer). Pass `&[]` to create an empty placeholder.

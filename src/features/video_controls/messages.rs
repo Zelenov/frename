@@ -44,4 +44,7 @@ pub enum Message {
     NextMarker,
     /// The label over the progress bar was clicked: rename the marker with this GUID.
     EditMarker(String),
+    /// `↺` / `↻`: turn the video by this many quarter turns clockwise (-1: counter-clockwise).
+    /// Bubbles up to FolderWorkspace, which changes the file.
+    Rotate(i32),
 }

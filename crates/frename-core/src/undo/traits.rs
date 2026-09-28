@@ -5,6 +5,12 @@ use super::{UndoContext, UndoError};
 pub trait Undoable<SD, ST>: Send {
     fn undo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError>;
     fn redo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError>;
+
+    /// Whether undoing or redoing it turns a video, so the player must reopen the video to
+    /// show it.
+    fn turns_a_video(&self) -> bool {
+        false
+    }
 }
 
 /// Trait for anything that can receive pushed commands.

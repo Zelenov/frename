@@ -27,6 +27,10 @@ avi
 audioparsers
 videoparsersbad
 
+# videoflip, which shows a turned clip (a phone's portrait clip, or one rotated in frename)
+# upright
+videofilter
+
 # capssetter, for clips without a fixed frame rate (the player's retry pipeline); in
 # debugutilsbad before GStreamer 1.28
 debug

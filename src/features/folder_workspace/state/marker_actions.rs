@@ -371,7 +371,7 @@ impl FolderWorkspace {
         }
     }
 
-    /// Show a short note in the video's controls bar.
+    /// Show a short note over the video's picture.
     pub(super) fn notice(text: &str) -> Task<Message> {
         Task::done(Message::MediaViewer(media_viewer::Message::Video(
             video::Message::ShowNotice(text.to_string()),

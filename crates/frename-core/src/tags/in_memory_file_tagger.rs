@@ -8,7 +8,7 @@ use super::file_snapshot::FileSnapshot;
 use super::file_tagger_backend::FileTaggerBackend;
 use super::FolderInfo;
 use crate::markers::Marker;
-use crate::metadata::MarkersError;
+use crate::metadata::{MarkersError, Rotation, RotationError};
 
 #[derive(Default)]
 pub struct InMemoryFileTagger {
@@ -17,6 +17,8 @@ pub struct InMemoryFileTagger {
     disk_paths: Mutex<HashMap<PathBuf, PathBuf>>,
     /// Markers "written" to each file, by where it is on disk.
     markers: Mutex<HashMap<PathBuf, Vec<Marker>>>,
+    /// Rotations "written" to each file, by where it is on disk.
+    rotations: Mutex<HashMap<PathBuf, Rotation>>,
 }
 
 impl FileTaggerBackend for InMemoryFileTagger {
@@ -66,6 +68,23 @@ impl FileTaggerBackend for InMemoryFileTagger {
         Ok(())
     }
 
+    fn video_rotation(&self, path: &Path) -> Result<Rotation, RotationError> {
+        let on_disk = self.disk_path(path);
+        let saved = self.rotations.lock().expect("lock").get(&on_disk).copied();
+        // A file that cannot turn says so even after a turn was kept for it (it cannot have one).
+        let from_file = crate::metadata::rotation::read(&on_disk)?;
+        Ok(saved.unwrap_or(from_file))
+    }
+
+    fn rotate_video(&self, path: &Path, quarter_turns: i32) -> Result<Rotation, RotationError> {
+        let turned = self.video_rotation(path)?.turned(quarter_turns);
+        self.rotations
+            .lock()
+            .expect("lock")
+            .insert(self.disk_path(path), turned);
+        Ok(turned)
+    }
+
     fn disk_path(&self, path: &Path) -> PathBuf {
         self.disk_paths
             .lock()
@@ -94,5 +113,44 @@ mod tests {
         let renamed = tagger.save(&snapshot, &renamed);
         assert_eq!(tagger.disk_path(&renamed), original);
         assert_eq!(tagger.disk_path(original), original);
+    }
+
+    /// A debug build turns videos in memory only: the file keeps its bytes, and the turn
+    /// follows the file through in-memory renames.
+    #[test]
+    fn rotations_stay_in_memory() {
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/wide.mp4");
+        let dir =
+            std::env::temp_dir().join(format!("frename-memory-rotation-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let original = dir.join("clip.mp4");
+        std::fs::copy(fixture, &original).expect("copy");
+        let bytes = std::fs::read(&original).expect("read");
+
+        let tagger = InMemoryFileTagger::default();
+        assert_eq!(tagger.video_rotation(&original), Ok(Rotation::UPRIGHT));
+        assert_eq!(
+            tagger.rotate_video(&original, 1).map(Rotation::degrees),
+            Ok(90)
+        );
+        let mut snapshot = FileSnapshot::parse("clip.mp4");
+        snapshot.set_tags(["Goat"]);
+        let renamed = tagger.save(&snapshot, &original);
+        assert_eq!(
+            tagger.rotate_video(&renamed, 1).map(Rotation::degrees),
+            Ok(180)
+        );
+        assert_eq!(
+            tagger.video_rotation(&original).map(Rotation::degrees),
+            Ok(180)
+        );
+        assert_eq!(std::fs::read(&original).expect("read"), bytes);
+
+        let text = dir.join("notes.mkv");
+        std::fs::write(&text, b"no").expect("write");
+        assert_eq!(
+            tagger.rotate_video(&text, 1),
+            Err(RotationError::CannotRotate)
+        );
     }
 }

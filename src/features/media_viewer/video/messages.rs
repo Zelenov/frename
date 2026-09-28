@@ -1,6 +1,6 @@
 //! Messages for the video player sub-feature.
 
-use frename_core::Subtitles;
+use frename_core::{Rotation, RotationError, Subtitles};
 use iced_video_player::Video;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -17,8 +17,15 @@ pub type LoadedVideo = Arc<Mutex<Option<Video>>>;
 /// Messages handled by the video player.
 #[derive(Debug, Clone)]
 pub enum Message {
-    /// Video finished loading; carries the opened video, or `None` when the open failed.
-    VideoLoaded(LoadedVideo),
+    /// Video finished loading.
+    VideoLoaded {
+        /// The opened video, or `None` when the open failed.
+        video: LoadedVideo,
+        /// The rotation it was opened with, or why it has none; `None` when it was not read.
+        rotation: Option<Result<Rotation, RotationError>>,
+        /// Which load this is; see `VideoPlayerState::load_generation`.
+        generation: u64,
+    },
     /// Video became available after loading
     VideoReady { duration_secs: f32 },
     /// New video frame rendered (triggers view refresh for progress bar)
@@ -59,7 +66,7 @@ pub enum Message {
     ShowOverlay(Overlay),
     /// Seek exactly to this time (ms), e.g. a marker.
     SeekExact(u64),
-    /// Show a short note in the controls bar (e.g. `Frame saved`) for a moment.
+    /// Show a short note over the picture (e.g. `Frame saved`) for a moment.
     ShowNotice(String),
     /// Hide the note with this number, unless a newer one replaced it (internal).
     ClearNotice(u64),
