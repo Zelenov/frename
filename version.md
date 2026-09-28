@@ -2,6 +2,9 @@
 ## Added
 - Select several clips without turning on batch mode by hand: `Ctrl+click` a clip to add it (and the one open before it) to the selection, or drop it if it is already selected; `Shift+click` a clip to select every clip between it and the last one you `Ctrl`-clicked. Either turns on batch mode with exactly that selection checked; `Esc` leaves it, same as clicking ☑ again.
 
+## Changed
+- Pasting tags onto a clip no longer wipes its comment.
+
 # 0.80
 ## Changed
 - Closing frename, opening another folder, or opening a file outside the current folder now saves the open file's tags, comment and in/out instead of losing them.

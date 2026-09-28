@@ -453,7 +453,9 @@ impl FolderWorkspace {
             snapshot_before.extension(),
             snapshot_before.initial_file_name(),
         );
-        // Pasting changes the tags only; the in/out points are not in the name any more.
+        // Pasting changes the tags only; the comment and in/out points are not in the name any
+        // more and must be carried over, or they would show as wiped until the next save (#83).
+        snapshot_after.set_comment(snapshot_before.comment().to_string());
         snapshot_after.set_segment(snapshot_before.segment());
         self.file_workspace
             .reinitialize_tags_from_snapshot(snapshot_after.clone());
@@ -2485,6 +2487,35 @@ mod tests {
             workspace.file_workspace().segment_start_secs(),
             Some(3.0),
             "in/out points are not tags: a paste keeps them"
+        );
+    }
+
+    /// Issue #83: pasting tags built a fresh snapshot and dropped the open file's comment,
+    /// which then looked wiped in the comment box and the "commented" filter until the next save.
+    #[test]
+    fn pasting_tags_keeps_the_comment() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        workspace
+            .file_workspace
+            .tag_list_mut()
+            .set_comment("keep this note".to_string());
+        let _ = workspace.update(Message::CopyTags);
+        let _ = workspace.update(Message::PasteTags);
+        assert_eq!(
+            workspace
+                .file_workspace()
+                .get_snapshot()
+                .unwrap()
+                .1
+                .comment(),
+            "keep this note",
+            "the comment is not a tag: a paste keeps it"
         );
     }
 
