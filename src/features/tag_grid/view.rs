@@ -1,85 +1,60 @@
-//! UI for the tag grid: scrollable grid of tag chips (same content as tag panel).
-//! Column count is dynamic: panel width / longest chip width.
+//! UI for the tag grid (design system §13.5.2): the folder's tags in their order, left to right,
+//! top to bottom, in columns as wide as the widest chip; the cursor is the tag the keys act on.
 
-use iced::widget::{
-    checkbox, column, container, mouse_area, row, scrollable, stack, text, tooltip,
-};
-use iced::{mouse, Alignment, Border, Element, Length};
+use iced::widget::{column, container, row, stack, Column};
+use iced::{Alignment, Element, Length};
 
 use frename_core::{File, StoredTagStore, TagList};
 
-use crate::features::tag_panel::{Message, TagPanelState, TAG_LIST_SCROLLABLE_ID};
-use crate::theme;
+use super::cell;
+use super::layout::{self, Columns};
+use crate::features::tag_panel::{
+    Message, TagPanelState, GRID_CELL_HEIGHT, GRID_GAP, GRID_ROW_STRIDE, TAG_LIST_SCROLLABLE_ID,
+};
+use crate::ui::icons::Icon;
 use crate::ui::palette::TagPalette;
+use crate::ui::tokens::*;
+use crate::ui::{empty, scroll, text};
 use crate::widgets::bounds_reporter::BoundsReporter;
-use crate::widgets::tag_chip;
 
-/// Height of one grid row: chip height + margin (separator between rows/columns).
-const CHIP_HEIGHT: f32 = tag_chip::CHIP_ROW_HEIGHT;
-const GRID_MARGIN: f32 = 4.0;
-/// Row height in pixels (content only). Used for each row widget height.
-pub const GRID_ROW_HEIGHT: f32 = CHIP_HEIGHT + GRID_MARGIN;
-/// Vertical stride per grid row: row height + column spacing. Must match scrollable layout for scroll-into-view.
-const GRID_ROW_STRIDE: f32 = GRID_ROW_HEIGHT + GRID_MARGIN;
-
-/// Horizontal padding of the panel container (each side).
-const PANEL_PADDING_X: f32 = 4.0;
-
-/// Estimated width of a tag chip from tag name length (14px font, ~8px per character).
-fn estimated_chip_width(tag_name_len: usize) -> f32 {
-    let base = 2.0 * tag_chip::CHIP_PADDING_HORIZONTAL
-        + tag_chip::LEADING_SLOT_WIDTH
-        + tag_chip::LEADING_TO_LABEL_SPACING
-        + tag_chip::LABEL_TO_TRAILING_SPACING
-        + tag_chip::TRAILING_SLOT_WIDTH;
-    const ESTIMATED_CHAR_WIDTH: f32 = 8.0;
-    base + ESTIMATED_CHAR_WIDTH * (tag_name_len as f32)
+/// The width the grid's cells have to share: the area without the scroll gutter.
+fn content_width(state: &TagPanelState) -> Option<f32> {
+    state
+        .panel_bounds()
+        .map(|b| (b.width - SCROLL_GUTTER).max(0.0))
 }
 
-/// Minimum chip width when there are no tags (avoid divide by zero).
-const MIN_CHIP_WIDTH: f32 = 60.0;
-
-/// Dark checkbox style: dark background, light text, accent when checked.
-fn dark_checkbox_style(
-    _theme: &iced::Theme,
-    status: iced::widget::checkbox::Status,
-) -> iced::widget::checkbox::Style {
-    let is_checked = match status {
-        iced::widget::checkbox::Status::Active { is_checked }
-        | iced::widget::checkbox::Status::Hovered { is_checked }
-        | iced::widget::checkbox::Status::Disabled { is_checked } => is_checked,
-    };
-    let (background, border_color) = match status {
-        iced::widget::checkbox::Status::Hovered { .. } => (
-            if is_checked {
-                theme::ACCENT
-            } else {
-                theme::SPLITTER_ACTIVE
-            },
-            theme::TEXT_MUTED,
-        ),
-        _ => (
-            if is_checked {
-                theme::ACCENT
-            } else {
-                theme::TRACK
-            },
-            theme::TEXT_MUTED,
-        ),
-    };
-    iced::widget::checkbox::Style {
-        background: iced::Background::Color(background),
-        icon_color: theme::TEXT,
-        border: Border {
-            radius: 2.0.into(),
-            width: 1.0,
-            color: border_color,
+/// The grid's columns in the area the grid was last laid out in (one before its first layout).
+pub fn grid_columns<S: StoredTagStore + Clone>(
+    state: &TagPanelState,
+    tag_list: &TagList<S>,
+) -> Columns {
+    content_width(state).map_or(
+        Columns {
+            count: 1,
+            cell_width: layout::chip_width(0),
         },
-        text_color: Some(theme::TEXT),
-    }
+        |width| layout::columns_for(tag_list, width),
+    )
 }
 
-/// Render the tag grid: scrollable two-column grid of tag checkboxes (same data as tag panel).
+/// `cells` in rows of `columns`, `GRID_GAP` apart; cells never stretch.
+pub fn rows<'a>(
+    cells: impl IntoIterator<Item = Element<'a, Message>>,
+    columns: Columns,
+) -> Column<'a, Message> {
+    let mut cells = cells.into_iter().peekable();
+    let mut rows = Column::new().spacing(GRID_GAP);
+    while cells.peek().is_some() {
+        let line = row(cells.by_ref().take(columns.count as usize))
+            .spacing(GRID_GAP)
+            .height(GRID_CELL_HEIGHT);
+        rows = rows.push(line);
+    }
+    rows
+}
+
+/// Render the tag grid for the open file; the search's "Create" cell comes first.
 pub fn view<'a, S>(
     state: &'a TagPanelState,
     selected_file: Option<&'a File>,
@@ -89,210 +64,58 @@ pub fn view<'a, S>(
 where
     S: StoredTagStore + Clone,
 {
-    let Some(_file) = selected_file else {
-        return container(
-            text("📄")
-                .size(48)
-                .color(theme::TEXT_MUTED)
-                .width(Length::Fill)
-                .height(Length::Fill),
-        )
-        .padding([8, 8])
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(theme::panel_container_style)
-        .into();
-    };
+    if selected_file.is_none() {
+        return empty::pane(Icon::Tag, fl!("tag-grid-no-file"), None, None);
+    }
+    let filter = tag_list.filter_query().trim();
+    let ids = tag_list.filtered_display_tag_ids();
+    if ids.is_empty() && filter.is_empty() {
+        return no_tags();
+    }
 
-    let selected_id = state.selected_tag_id();
-    let ids: Vec<_> = tag_list.filtered_display_tag_ids().to_vec();
-    let row_height = Length::Fixed(GRID_ROW_HEIGHT);
-
-    let max_chip_width = tag_list
-        .longest_display_tag_id()
-        .and_then(|id| tag_list.get_tag(id))
-        .map(|t| estimated_chip_width(t.tag().len()))
-        .unwrap_or(MIN_CHIP_WIDTH)
-        .max(MIN_CHIP_WIDTH);
-
-    let content_width = state
-        .panel_bounds()
-        .map(|b| (b.width - 2.0 * PANEL_PADDING_X).max(0.0));
-
-    let cols = content_width
-        .map(|w| {
-            let divisor = max_chip_width + GRID_MARGIN;
-            if divisor <= 0.0 {
-                1
-            } else {
-                ((w + GRID_MARGIN) / divisor).floor() as u32
-            }
-        })
-        .unwrap_or(1)
-        .max(1);
-
-    let cols_usize = cols as usize;
-
-    let empty_cell = || {
-        container(iced::widget::Space::new())
-            .width(Length::Fill)
-            .height(row_height)
-            .into()
-    };
-
-    let grid_rows: Vec<Element<'_, Message>> = ids
-        .chunks(cols_usize)
-        .map(|chunk| {
-            let mut cells: Vec<Element<'_, Message>> = chunk
-                .iter()
-                .filter_map(|id| {
-                    let id = *id;
-                    let tag = tag_list.get_tag(id)?;
-                    let is_checked = tag.is_checked();
-                    let is_selected = selected_id == Some(id);
-                    let is_stored = tag.is_stored();
-                    let is_starred = tag.is_starred();
-                    let tag_color = tag_palette.color(tag.color_index());
-                    let checkbox_el = checkbox(is_checked)
-                        .on_toggle(move |_| Message::ToggleTag(id))
-                        .size(16)
-                        .spacing(0)
-                        .style(dark_checkbox_style)
-                        .into();
-                    // Trailing: [star (20px) | action (16px)] always visible; action content conditional.
-                    let trailing_el: Element<'_, Message> = {
-                        let star_part: Element<'_, Message> = if is_stored {
-                            let symbol = if is_starred { "★" } else { "☆" };
-                            let star_color = if is_starred {
-                                iced::Color::from_rgb(1.0, 0.8, 0.0)
-                            } else {
-                                theme::TEXT_MUTED
-                            };
-                            mouse_area(
-                                container(text(symbol).size(13).color(star_color))
-                                    .width(Length::Fixed(20.0))
-                                    .height(Length::Fill)
-                                    .center_x(Length::Fill)
-                                    .center_y(Length::Fill),
-                            )
-                            .on_press(Message::ToggleStar(id))
-                            .interaction(mouse::Interaction::Pointer)
-                            .into()
-                        } else {
-                            container(iced::widget::Space::new())
-                                .width(Length::Fixed(20.0))
-                                .into()
-                        };
-                        let action_part: Element<'_, Message> = {
-                            let (label, msg, tip) = match is_stored {
-                                true => ("×", Message::DeleteTag(id), "Delete"),
-                                false => ("○", Message::SaveTag(id), "Enter"),
-                            };
-                            if is_stored && !is_selected {
-                                container(iced::widget::Space::new())
-                                    .width(Length::Fixed(16.0))
-                                    .into()
-                            } else {
-                                let btn = mouse_area(
-                                    container(
-                                        text(label)
-                                            .size(13)
-                                            .color(iced::Color::from_rgb(0.0, 0.0, 0.0)),
-                                    )
-                                    .width(Length::Fixed(16.0))
-                                    .height(Length::Fill)
-                                    .center_x(Length::Fill)
-                                    .center_y(Length::Fill),
-                                )
-                                .on_press(msg);
-                                if is_selected {
-                                    tooltip(btn, text(tip), tooltip::Position::Top).into()
-                                } else {
-                                    btn.into()
-                                }
-                            }
-                        };
-                        row![star_part, action_part]
-                            .spacing(0)
-                            .align_y(Alignment::Center)
-                            .into()
-                    };
-                    let chip = tag_chip::view_with_leading(
-                        tag.tag(),
-                        tag_color,
-                        CHIP_HEIGHT,
-                        Some(checkbox_el),
-                        None,
-                        Some(Message::ToggleTag(id)),
-                        false,
-                        false,
-                        Some(trailing_el),
-                        false, // trailing always visible (star shows state; action visibility managed internally)
-                        is_selected,
-                    );
-                    let chip_cell = container(chip)
-                        .width(Length::Shrink)
-                        .height(Length::Fixed(CHIP_HEIGHT))
-                        .id(iced::widget::Id::from(id.widget_id()));
-                    let main_cell = mouse_area(chip_cell)
-                        .on_press(Message::ToggleTag(id))
-                        .interaction(mouse::Interaction::Pointer);
-                    let cell = container(
-                        container(main_cell)
-                            .width(Length::Fill)
-                            .height(row_height)
-                            .align_x(Alignment::Start)
-                            .center_y(Length::Fill),
-                    )
-                    .width(Length::Fill)
-                    .height(row_height)
-                    .style(move |theme: &iced::Theme| {
-                        theme::tag_row_background_style(theme, is_selected)
-                    });
-                    Some(cell.into())
-                })
-                .collect();
-            while cells.len() < cols_usize {
-                cells.push(empty_cell());
-            }
-            row(cells)
-                .spacing(GRID_MARGIN)
-                .width(Length::Fill)
-                .height(row_height)
-                .into()
-        })
-        .collect();
-
-    let tag_column = column(grid_rows).spacing(GRID_MARGIN).width(Length::Fill);
-    let tag_scroll = scrollable(tag_column)
-        .id(iced::widget::Id::new(TAG_LIST_SCROLLABLE_ID))
-        .height(Length::Fill)
-        .on_scroll(|viewport| {
-            let offset = viewport.absolute_offset();
-            let scroll_y = offset.y;
-            let viewport_height = viewport.bounds().height;
-            Message::TagListScrolled {
-                scroll_y,
-                viewport_height,
-            }
-        })
-        .style(theme::dark_scrollable_style);
-
-    let with_bounds = stack([
+    let columns = grid_columns(state, tag_list);
+    let cursor = state.selected_tag_id();
+    let cells = ids.iter().filter_map(|&id| {
+        let tag = tag_list.get_tag(id)?;
+        let color = tag_palette.color(tag.color_index());
+        Some(cell::cell(tag, color, cursor == Some(id), columns))
+    });
+    let grid = scroll::vertical_with_id(TAG_LIST_SCROLLABLE_ID, rows(cells, columns)).on_scroll(
+        |viewport| Message::TagListScrolled {
+            scroll_y: viewport.absolute_offset().y,
+            viewport_height: viewport.bounds().height,
+        },
+    );
+    let with_bounds = stack![
         BoundsReporter::new(move |bounds| Message::PanelBounds {
             bounds,
             row_height: GRID_ROW_STRIDE,
-            cols,
-            row_content_height: Some(GRID_ROW_HEIGHT),
-        })
-        .into(),
-        tag_scroll.into(),
-    ]);
+            cols: columns.count,
+            row_content_height: Some(GRID_CELL_HEIGHT),
+        }),
+        grid,
+    ];
 
-    container(with_bounds)
+    // The "Create" cell stays above the rows, so the scroll arithmetic counts only tags.
+    let create =
+        (!filter.is_empty() && !tag_list.has_tag_with_name(filter)).then(|| cell::create(filter));
+    column![]
+        .push(create)
+        .push(with_bounds)
+        .spacing(GRID_GAP)
         .width(Length::Fill)
         .height(Length::Fill)
-        .padding([4, 4])
-        .style(theme::panel_container_style)
         .into()
+}
+
+/// The folder has no tags yet: the one hint that stays text, since typing goes into the tag
+/// search right above it.
+fn no_tags<'a>() -> Element<'a, Message> {
+    let block = column![
+        text::title(fl!("tag-grid-no-tags")),
+        text::secondary(fl!("tag-grid-no-tags-hint")),
+    ]
+    .spacing(SPACE_XS)
+    .align_x(Alignment::Center);
+    container(block).center(Length::Fill).into()
 }

@@ -1,4 +1,6 @@
-//! Tag grid feature - two-column grid of tags for the current file.
-//! Same data and messages as tag_panel; only the layout (grid) differs. Used in file workspace.
+//! Tag grid feature: the open file's tags as a grid of chips. Same data and messages as
+//! `tag_panel`; the starred strip draws its cells the same way.
 
+pub mod cell;
+pub mod layout;
 pub mod view;

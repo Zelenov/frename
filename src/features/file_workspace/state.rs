@@ -31,12 +31,8 @@ pub struct FileWorkspace<S> {
     comment_expanded: bool,
 }
 
-/// Height of the comment box until it is resized.
-pub const COMMENT_HEIGHT: f32 = 80.0;
-/// The comment box keeps at least about two lines.
-pub const COMMENT_MIN_HEIGHT: f32 = 48.0;
-/// And leaves the tags room: taller than this, "Expand" is the way.
-pub const COMMENT_MAX_HEIGHT: f32 = 600.0;
+/// The comment box's heights: at first, lowest, tallest.
+pub use crate::ui::tokens::{COMMENT_HEIGHT, COMMENT_MAX_HEIGHT, COMMENT_MIN_HEIGHT};
 
 impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     /// Create a file workspace with the given store. Tag list is built from the store; no file selected.

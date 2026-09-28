@@ -426,6 +426,34 @@ file-workspace-comment-placeholder = Комментарий...
 file-workspace-comment-collapse = Назад к тегам
 file-workspace-comment-expand = Развернуть комментарий
 
+## Tag grid
+
+tag-grid-star = Звезда: держать наверху
+tag-grid-unstar = Убрать звезду
+tag-grid-save = Добавить в теги папки
+tag-grid-delete = Удалить «{ $tag }» из тегов папки
+tag-grid-create = Создать «{ $tag }»
+tag-grid-no-file = Откройте клип, чтобы ставить теги
+tag-grid-no-tags = Тегов пока нет
+tag-grid-no-tags-hint = Наберите название и нажмите Enter, чтобы создать первый.
+tag-grid-more = ещё { $count }
+
+## Order strip
+
+sync-panel-locked = Перестановка ниже меняет порядок папки
+sync-panel-unlocked = Перестановка ниже меняет только этот клип
+sync-panel-unlock = Открепить
+sync-panel-lock = Закрепить
+sync-panel-differs = Порядок не как в папке
+sync-panel-use-for-folder = Сделать порядком папки
+sync-panel-sort-like-folder = Упорядочить как в папке
+sync-panel-no-undo = Это пока нельзя отменить
+
+## File name card
+
+file-name-panel-no-tags = У клипа нет тегов
+file-name-panel-untag = Снять тег
+
 ## Updates (Settings)
 
 updates-check = Проверить обновления
