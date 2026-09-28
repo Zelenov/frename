@@ -6,6 +6,7 @@
 - Pasting tags onto a clip no longer wipes its comment.
 - A rename that would give a clip the same name as another one (or its comment, subtitle or transcript) is refused instead of replacing it, with a note that it was not saved.
 - Leaving a clip and moving to the next one before its video has finished loading no longer risks the tag you just set failing to reach the file.
+- Describe with AI: frames are chosen where the picture changes the most instead of a fixed interval, and a description's moments now cover only what stands out (a static or uniform clip can get none) instead of always tiling the whole clip.
 
 # 0.80
 ## Changed
