@@ -200,6 +200,20 @@ mod tests {
     }
 
     #[test]
+    fn no_segments_leaves_just_the_summary_and_no_markers() {
+        let no_segments = Description {
+            summary: description().summary,
+            segments: vec![],
+        };
+        assert_eq!(format_block(&no_segments), "AI: A guide leads tourists.");
+        assert_eq!(
+            format_summary_block(&no_segments),
+            "AI: A guide leads tourists."
+        );
+        assert_eq!(segment_lines(&no_segments), []);
+    }
+
+    #[test]
     fn a_new_run_keeps_everything_above_the_block_byte_for_byte() {
         let editor = "Шаткий проход 🎥\n  indented line  \n\n";
         let comment = format!("{editor}{BLOCK}");
