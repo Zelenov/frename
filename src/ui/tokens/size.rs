@@ -54,8 +54,8 @@ pub const SCROLL_GUTTER: f32 = SCROLLBAR_WIDTH + SCROLLBAR_GAP;
 // Popups.
 /// Widest tooltip.
 pub const TOOLTIP_MAX_WIDTH: f32 = 280.0;
-/// The narrowest a menu is.
-pub const MENU_MIN_WIDTH: f32 = 200.0;
+/// A menu's width: room for an icon, a name and its keys; a longer name wraps.
+pub const MENU_WIDTH: f32 = 240.0;
 /// The widest a menu gets; longer items are cut.
 pub const MENU_MAX_WIDTH: f32 = 360.0;
 /// The shadow under popups.

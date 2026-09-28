@@ -296,6 +296,10 @@ the first look. Read it before any UI change.
   stay `Shrink`. A `Shrink` label before a badge squeezed the badge until its fill no longer
   covered its words; a long button-bar hint would squeeze the buttons. Badges also never wrap
   (`Wrapping::None`).
+- **A `Shrink` column whose children are all `Fill` is 0 px wide.** iced sizes a `Shrink`
+  column (or container) by its children that are not `Fill`, then stretches the `Fill` ones to
+  that: with none, it is only its padding (the filter menu drew as a 4 px line). A popup of items
+  gets a fixed width (`ui::menu::menu(rows, Length::Fixed(MENU_WIDTH))`).
 - **A `Fill` height inside a scroll area collapses to nothing.** `list::row_item(…, height)` takes
   `Length::Fill` for a row in a slot of fixed height (file rows, marker rows) and `Length::Shrink`
   for a row of natural height (subtitle cues). A `Fill` child in a `Shrink` row is still

@@ -407,7 +407,7 @@ fn more_popover<'a>(
         );
     }
     rows.extend(items.into_iter().map(menu::item));
-    let popup = container(menu::menu(rows))
+    let popup = container(menu::menu(rows, Length::Fixed(MENU_WIDTH)))
         .width(Length::Fill)
         .height(Length::Fill)
         .padding(SPACE_S)

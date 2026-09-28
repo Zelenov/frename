@@ -71,12 +71,19 @@ pub fn row_of<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Element<'a, M> {
         .into()
 }
 
-/// The popup around `rows` (items, or a row of its own such as a slider).
-pub fn menu<'a, M: 'a>(rows: impl IntoIterator<Item = Element<'a, M>>) -> Element<'a, M> {
+/// The popup around `rows` (items, or a row of its own such as a slider), `width` wide.
+///
+/// Items fill the menu's width, and iced sizes a `Shrink` column by its children that are not
+/// `Fill`: a menu of items only would be 0 px wide (just its padding). So `width` is `Shrink` only
+/// when a row has a width of its own (the volume slider); otherwise a fixed width.
+pub fn menu<'a, M: 'a>(
+    rows: impl IntoIterator<Item = Element<'a, M>>,
+    width: Length,
+) -> Element<'a, M> {
     let rows: Column<'a, M> = column(rows).spacing(SPACE_XXS);
     container(rows)
         .padding(SPACE_XS)
-        .width(Length::Shrink)
+        .width(width)
         .max_width(MENU_MAX_WIDTH)
         .style(style::popup)
         .into()

@@ -130,7 +130,7 @@ pub fn menu<'a>(dir: &Directory) -> Element<'a, Message> {
             checked: false,
             on_press: Some(Message::ShowAll),
         })));
-    let popup = container(container(menu::menu(rows)).width(MENU_MIN_WIDTH))
+    let popup = container(menu::menu(rows, Length::Fixed(MENU_WIDTH)))
         .padding(Padding {
             right: SPACE_S,
             ..Padding::ZERO
