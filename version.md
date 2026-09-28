@@ -1,3 +1,7 @@
+# 0.83
+## Added
+- Generate subtitles: choose what is written for each video, **SRT subtitles** (`clip.srt`, as before) and/or a **Premiere Pro transcript** (`clip.premiere.json`, for Import Static Transcript in Premiere's Text panel). The choice is remembered like the other batch options.
+
 # 0.82
 ## Changed
 - The whole main window follows the design system that Settings got in 0.77: one font (Inter, bundled), the same dark surfaces, and icons with tooltips that show their keys instead of emoji buttons.

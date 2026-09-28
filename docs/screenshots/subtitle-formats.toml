@@ -1,0 +1,20 @@
+# Generate subtitles (#126): the batch page with the "Files to write" checkboxes. Not a README
+# image; for looking at the feature (`frename --demo`, with `--batch`).
+source = "../../tests/folder"
+open = "pick.wide.MVI_0701.mp4"
+seek = 2.0
+window = [1280, 720]
+panels = [460, 320]
+batch_action = "Generate subtitles"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_0701.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "review.people.MVI_0702.mp4"
+
+[[files]]
+from = "Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm"
+name = "b-roll.city.MVI_0703.webm"

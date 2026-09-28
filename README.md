@@ -274,8 +274,14 @@ are lines of the description.
 **Generate subtitles** sends the audio of each checked video to [Soniox](https://soniox.com), a
 paid speech-to-text service (a few cents per hour of audio), and saves the subtitles next to it as
 `clip.srt`. Before you run it, the panel shows how much audio will be sent and about what it
-costs. Videos that already have subtitles are skipped unless you tick **Replace existing
-subtitles**, and a video found to have no speech is not sent again. Afterwards the panel lists
+costs. Under **Files to write** tick what you want: **SRT subtitles** (`clip.srt`, on by
+default) and/or a **Premiere Pro transcript** (`clip.premiere.json`, for Text panel → Transcript →
+Import Static Transcript in Premiere Pro); with neither ticked Run stays off. A video is skipped
+only when every ticked file already exists (unless you tick **Replace existing subtitles**, which
+applies to every ticked file), and a video found to have no speech is not sent again. If only one
+of the files exists, adding the other is free when the video's transcript was saved earlier;
+otherwise the video is transcribed again. When a Premiere transcript was written, the result
+lists the files written for each video. Afterwards the panel lists
 every video that got no subtitles and why. You need your own Soniox API key: set it in Settings →
 Subtitles. Formats such as mkv, m2ts and avi need [ffmpeg](https://ffmpeg.org) on your PATH.
 

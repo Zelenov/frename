@@ -584,6 +584,19 @@ impl BatchState {
         })
     }
 
+    /// Files of the current job that were done and say what they got (e.g. the subtitle files
+    /// written), in job order.
+    pub fn done_with_reason(&self) -> Vec<(FileId, &str)> {
+        self.job.as_ref().map_or_else(Vec::new, |job| {
+            job.order
+                .iter()
+                .copied()
+                .filter(|id| job.statuses.get(id) == Some(&ItemStatus::Done))
+                .filter_map(|id| job.reasons.get(&id).map(|r| (id, r.as_str())))
+                .collect()
+        })
+    }
+
     /// The action of the current job, which the report's wording follows.
     pub fn job_action(&self) -> Option<Action> {
         self.job.as_ref().map(|job| job.operation.action())
