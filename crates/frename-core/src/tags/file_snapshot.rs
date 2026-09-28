@@ -5,8 +5,7 @@
 //! points are not part of the name: they live in the video or in the comment (see
 //! `crate::metadata`). Names written by older versions still carry `in_HH_MM_SS` /
 //! `out_HH_MM_SS` after the name; those parts are read as part of the name (wherever they
-//! are), never as tags, until [`FileSnapshot::take_name_in_out`] (the batch action that
-//! converts such files) takes them out.
+//! are), never as tags.
 
 use regex::Regex;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -27,17 +26,15 @@ fn name_in_out_re() -> &'static Regex {
 }
 
 /// Whether a dot-part of a name is an in or out point as older versions wrote it
-/// (`in_00_01_05`, `out_00_02_10`): `Some((is_in, seconds))`.
-fn name_in_out_part(part: &str) -> Option<(bool, f32)> {
-    let caps = name_in_out_re().captures(part)?;
-    let h: u32 = caps[2].parse().ok()?;
-    let m: u32 = caps[3].parse().ok()?;
-    let s: u32 = caps[4].parse().ok()?;
-    if m >= 60 || s >= 60 {
-        return None;
-    }
-    let secs = h as f32 * 3600.0 + m as f32 * 60.0 + s as f32;
-    Some((&caps[1] == "in", secs))
+/// (`in_00_01_05`, `out_00_02_10`, a valid time).
+fn is_name_in_out_part(part: &str) -> bool {
+    let Some(caps) = name_in_out_re().captures(part) else {
+        return false;
+    };
+    let minutes_and_seconds_valid = [&caps[3], &caps[4]]
+        .iter()
+        .all(|v| v.parse::<u32>().is_ok_and(|v| v < 60));
+    caps[2].parse::<u32>().is_ok() && minutes_and_seconds_valid
 }
 
 // Whether saved names put a space after the dot that ends each tag, process-wide like the
@@ -222,7 +219,7 @@ impl FileSnapshot {
             .filter(|s| !s.is_empty())
             .collect();
 
-        let is_in_out = |part: &&str| name_in_out_part(part).is_some();
+        let is_in_out = |part: &&str| is_name_in_out_part(part);
         // The last part is the extension, unless it is an old in/out part: a name without an
         // extension (`clip.in_00_00_07`) keeps it as part of the name.
         let (before, ext) = match parts.split_last() {
@@ -251,37 +248,6 @@ impl FileSnapshot {
         };
 
         FileSnapshot::new(tags, name, ext, raw_name)
-    }
-
-    /// Take the in/out parts an older version wrote into the name out of it (`clip.in_00_00_07`
-    /// becomes `clip`), and return the points they held. `None` when the name has none; the
-    /// snapshot's own in/out points are left as they are. A name made only of such parts is
-    /// empty afterwards: the caller must not save it.
-    pub fn take_name_in_out(&mut self) -> Option<Segment> {
-        let mut found = Segment::default();
-        let mut any = false;
-        let kept: Vec<&str> = self
-            .name_without_extension
-            .split('.')
-            .filter(|part| match name_in_out_part(part) {
-                Some((is_in, secs)) => {
-                    let slot = if is_in {
-                        &mut found.start
-                    } else {
-                        &mut found.end
-                    };
-                    slot.get_or_insert(secs);
-                    any = true;
-                    false
-                }
-                None => true,
-            })
-            .collect();
-        if !any {
-            return None;
-        }
-        self.name_without_extension = kept.join(".");
-        Some(found)
     }
 }
 
@@ -348,19 +314,11 @@ mod tests {
 
     #[test]
     fn an_old_in_out_part_at_the_end_of_a_name_without_extension_is_no_extension() {
-        let mut snapshot = FileSnapshot::parse("Food.clip.in_00_00_07");
+        let snapshot = FileSnapshot::parse("Food.clip.in_00_00_07");
         assert_eq!(snapshot.tags(), ["Food"]);
         assert_eq!(snapshot.name_without_extension(), "clip.in_00_00_07");
         assert_eq!(snapshot.extension(), "");
         assert_eq!(snapshot.file_name_with(false), "Food.clip.in_00_00_07");
-        assert_eq!(
-            snapshot.take_name_in_out(),
-            Some(Segment {
-                start: Some(7.0),
-                end: None
-            })
-        );
-        assert_eq!(snapshot.file_name_with(false), "Food.clip");
         // Other names keep their extension and tags as before.
         let plain = FileSnapshot::parse("Food.clip.mp4");
         assert_eq!(
@@ -386,34 +344,5 @@ mod tests {
             (snapshot.segment_start(), snapshot.segment_end()),
             (None, None)
         );
-    }
-
-    #[test]
-    fn taking_the_old_in_out_parts_leaves_the_bare_name() {
-        let mut snapshot = FileSnapshot::parse("Food.clip.in_00_00_07.out_01_00_12.mp4");
-        assert_eq!(
-            snapshot.take_name_in_out(),
-            Some(Segment {
-                start: Some(7.0),
-                end: Some(3612.0)
-            })
-        );
-        assert_eq!(snapshot.file_name_with(false), "Food.clip.mp4");
-        assert_eq!(snapshot.take_name_in_out(), None);
-
-        let mut only_out = FileSnapshot::parse("clip.out_00_00_12.mov");
-        assert_eq!(
-            only_out.take_name_in_out(),
-            Some(Segment {
-                start: None,
-                end: Some(12.0)
-            })
-        );
-        assert_eq!(only_out.file_name_with(false), "clip.mov");
-        assert_eq!(FileSnapshot::parse("clip.mov").take_name_in_out(), None);
-
-        let mut only_points = FileSnapshot::parse("in_00_00_07.out_00_00_09.mp4");
-        assert!(only_points.take_name_in_out().is_some());
-        assert_eq!(only_points.name_without_extension(), "");
     }
 }

@@ -12,7 +12,6 @@
 pub mod describe_ai;
 mod fix_tags;
 pub mod generate_subtitles;
-mod in_out_from_names;
 mod markers_comment;
 pub use markers_comment::Direction as MarkersDirection;
 mod move_comments;
@@ -30,18 +29,16 @@ use clipscribe::Model;
 use frename_core::{
     CommentStorage, File, FileId, FileSnapshot, FileTagger, FolderInfo, InOutStorage, MoveOutcome,
 };
-use iced::widget::{column, text};
 use iced::Element;
 
 use super::{ItemProgress, ItemResult, ItemStatus};
-use crate::theme;
+use crate::ui::icons::Icon;
 
 /// An entry of the action list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     MoveComments,
     MoveInOut,
-    InOutFromNames,
     MarkersComment,
     Rotate,
     TagCommented,
@@ -54,10 +51,9 @@ pub enum Action {
 
 impl Action {
     /// Every action, in list order.
-    pub const ALL: [Action; 11] = [
+    pub const ALL: [Action; 10] = [
         Action::MoveComments,
         Action::MoveInOut,
-        Action::InOutFromNames,
         Action::MarkersComment,
         Action::Rotate,
         Action::TagCommented,
@@ -72,7 +68,6 @@ impl Action {
         match self {
             Self::MoveComments => move_comments::label(),
             Self::MoveInOut => move_in_out::label(),
-            Self::InOutFromNames => in_out_from_names::label(),
             Self::MarkersComment => markers_comment::label(),
             Self::Rotate => rotate::label(),
             Self::TagCommented => tag_commented::label(),
@@ -89,7 +84,6 @@ impl Action {
         match self {
             Self::MoveComments => "Move comments",
             Self::MoveInOut => "In/out points: comment <-> video",
-            Self::InOutFromNames => "Move in/out points out of file names",
             Self::MarkersComment => "Markers <-> comment",
             Self::Rotate => "Rotate videos",
             Self::TagCommented => "Tag commented videos",
@@ -101,7 +95,56 @@ impl Action {
         }
     }
 
-    /// The counts line's word for a file the action did its work on.
+    /// The group of the action list it is under.
+    pub fn group(self) -> Group {
+        match self {
+            Self::MoveComments | Self::MoveInOut | Self::MarkersComment => Group::MoveBetweenPlaces,
+            Self::Rotate
+            | Self::TagCommented
+            | Self::FixTags
+            | Self::RespaceTags
+            | Self::ReloadFiles => Group::FixFiles,
+            Self::DescribeAi | Self::GenerateSubtitles => Group::PaidServices,
+        }
+    }
+
+    /// The icon the action list shows it with (design system §13.6.3).
+    pub fn icon(self) -> Icon {
+        match self {
+            Self::MoveComments => Icon::MessageSquareText,
+            Self::MoveInOut => Icon::Scissors,
+            Self::MarkersComment => Icon::MapPin,
+            Self::Rotate => Icon::RotateCw,
+            Self::TagCommented => Icon::Tag,
+            Self::FixTags => Icon::ListOrdered,
+            Self::RespaceTags => Icon::TextCursorInput,
+            Self::ReloadFiles => Icon::RotateCcw,
+            Self::DescribeAi => Icon::Sparkles,
+            Self::GenerateSubtitles => Icon::Captions,
+        }
+    }
+
+    /// The run button's label for `count` files: a verb and the count, or with nothing checked
+    /// the action's name alone (§13.6.4). The paid actions label it themselves.
+    pub fn run_label(self, count: usize) -> String {
+        if count == 0 {
+            return self.label();
+        }
+        let count = count as i64;
+        match self {
+            Self::MoveComments => fl!("batch-run-move-comments", count = count),
+            Self::MoveInOut => fl!("batch-run-move-in-out", count = count),
+            Self::MarkersComment => fl!("batch-run-convert", count = count),
+            Self::Rotate => fl!("batch-run-rotate", count = count),
+            Self::TagCommented => fl!("batch-run-tag", count = count),
+            Self::FixTags => fl!("batch-run-fix-tags", count = count),
+            Self::RespaceTags => fl!("batch-run-rename", count = count),
+            Self::ReloadFiles => fl!("batch-run-reload", count = count),
+            Self::DescribeAi | Self::GenerateSubtitles => self.label(),
+        }
+    }
+
+    /// The figures' word for a file the action did its work on.
     pub fn done_label(self) -> String {
         match self {
             Self::GenerateSubtitles => fl!("batch-done-label-subtitled"),
@@ -116,7 +159,6 @@ impl Action {
         match self {
             Self::MoveComments => "move_comments",
             Self::MoveInOut => "move_in_out",
-            Self::InOutFromNames => "in_out_from_names",
             Self::MarkersComment => "markers_comment",
             Self::Rotate => "rotate",
             Self::TagCommented => "tag_commented",
@@ -134,13 +176,36 @@ impl Action {
     }
 }
 
+/// An action as a dropdown shows it: its name.
+impl std::fmt::Display for Action {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.label())
+    }
+}
+
+/// A group of the action list, under its caption.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Group {
+    MoveBetweenPlaces,
+    FixFiles,
+    PaidServices,
+}
+
+impl Group {
+    pub fn label(self) -> String {
+        match self {
+            Self::MoveBetweenPlaces => fl!("batch-group-move"),
+            Self::FixFiles => fl!("batch-group-fix"),
+            Self::PaidServices => fl!("batch-group-paid"),
+        }
+    }
+}
+
 /// What a job does to each file, with the options it was started with.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Operation {
     MoveComments(CommentStorage),
     MoveInOut(InOutStorage),
-    /// Take the in/out points older versions wrote into file names out of them.
-    InOutFromNames,
     MarkersComment(markers_comment::Direction),
     /// Turn each video by changing its rotation flag.
     Rotate(rotate::Turn),
@@ -162,7 +227,6 @@ impl Operation {
         match self {
             Self::MoveComments(to) => move_comments::run(*to, path),
             Self::MoveInOut(to) => move_in_out::run(*to, path),
-            Self::InOutFromNames => in_out_from_names::run(path),
             Self::MarkersComment(direction) => markers_comment::run(*direction, path),
             Self::Rotate(turn) => rotate::run(*turn, path),
             Self::TagCommented => tag_commented::run(path),
@@ -203,7 +267,6 @@ impl Operation {
         match self {
             Self::MoveComments(_) => Action::MoveComments,
             Self::MoveInOut(_) => Action::MoveInOut,
-            Self::InOutFromNames => Action::InOutFromNames,
             Self::MarkersComment(_) => Action::MarkersComment,
             Self::Rotate(_) => Action::Rotate,
             Self::TagCommented => Action::TagCommented,
@@ -302,7 +365,6 @@ impl Actions {
             Operation::MarkersComment(direction) => self.markers_comment.prepare(direction),
             Operation::Rotate(_)
             | Operation::TagCommented
-            | Operation::InOutFromNames
             | Operation::FixTags
             | Operation::RespaceTags
             | Operation::ReloadFiles
@@ -316,7 +378,6 @@ impl Actions {
         match action {
             Action::MoveComments => Some(self.move_comments.operation()),
             Action::MoveInOut => Some(self.move_in_out.operation()),
-            Action::InOutFromNames => Some(Operation::InOutFromNames),
             Action::MarkersComment => Some(self.markers_comment.operation()),
             Action::Rotate => Some(self.rotate.operation()),
             Action::TagCommented => tag_commented::operation(),
@@ -342,11 +403,18 @@ impl Actions {
         self.describe_ai.is_probing()
     }
 
-    /// What `action` shows next to the run button (why it cannot run), if anything.
-    pub fn footer(&self, action: Action) -> Option<Element<'_, ActionMessage>> {
+    /// Which paid service `action` bills through, and whether its key is missing: the badge of
+    /// its row in the action list. `None` for the free actions.
+    pub fn service(&self, action: Action) -> Option<(String, bool)> {
         match action {
-            Action::DescribeAi => self.describe_ai.footer(),
-            Action::GenerateSubtitles => self.generate_subtitles.footer(),
+            Action::DescribeAi => Some((
+                fl!("batch-service-anthropic"),
+                self.describe_ai.key_missing(),
+            )),
+            Action::GenerateSubtitles => Some((
+                fl!("batch-service-soniox"),
+                self.generate_subtitles.key_missing(),
+            )),
             _ => None,
         }
     }
@@ -388,11 +456,9 @@ impl Actions {
                 "replace".to_string(),
                 self.generate_subtitles.replaces().to_string(),
             )],
-            Action::InOutFromNames
-            | Action::TagCommented
-            | Action::FixTags
-            | Action::RespaceTags
-            | Action::ReloadFiles => Vec::new(),
+            Action::TagCommented | Action::FixTags | Action::RespaceTags | Action::ReloadFiles => {
+                Vec::new()
+            }
         }
     }
 
@@ -445,27 +511,17 @@ impl Actions {
                         .update(generate_subtitles::Message::SetReplace(v == "true"));
                 }
             }
-            Action::InOutFromNames
-            | Action::TagCommented
-            | Action::FixTags
-            | Action::RespaceTags
-            | Action::ReloadFiles => {}
+            Action::TagCommented | Action::FixTags | Action::RespaceTags | Action::ReloadFiles => {}
         }
     }
 
-    /// The panel of `action` for the `checked` files (its title, what it does, and its options),
-    /// the run button's label, and whether it can run.
-    pub fn panel(
-        &self,
-        action: Action,
-        checked: &[&File],
-    ) -> (Element<'_, ActionMessage>, String, bool) {
-        let view = match action {
+    /// The page of `action` for the `checked` files, and its run button.
+    pub fn panel(&self, action: Action, checked: &[&File]) -> Panel<'_> {
+        let page = match action {
             Action::DescribeAi => return self.describe_ai.panel(checked),
             Action::GenerateSubtitles => return self.generate_subtitles.panel(checked),
             Action::MoveComments => self.move_comments.view().map(ActionMessage::MoveComments),
             Action::MoveInOut => self.move_in_out.view().map(ActionMessage::MoveInOut),
-            Action::InOutFromNames => in_out_from_names::view(),
             Action::MarkersComment => self
                 .markers_comment
                 .view()
@@ -476,21 +532,24 @@ impl Actions {
             Action::RespaceTags => tag_spacing::view(),
             Action::ReloadFiles => reload_files::view(),
         };
-        let label = fl!("batch-run", count = (checked.len() as i64));
-        let ready = !checked.is_empty() && self.operation(action).is_some();
-        (view, label, ready)
+        Panel {
+            page,
+            run: action.run_label(checked.len()),
+            ready: !checked.is_empty() && self.operation(action).is_some(),
+            reason: None,
+        }
     }
 }
 
-/// An action's panel as every action shows it: title, what it does, then its options.
-fn panel<'a, M: 'a>(title: String, hint: String, options: Element<'a, M>) -> Element<'a, M> {
-    column![
-        text(title).size(15),
-        text(hint).size(12).color(theme::TEXT_MUTED),
-        options
-    ]
-    .spacing(12)
-    .into()
+/// An action's page and its run button.
+pub struct Panel<'a> {
+    pub page: Element<'a, ActionMessage>,
+    /// The run button's label: a verb and the count.
+    pub run: String,
+    pub ready: bool,
+    /// Why it cannot run, for the button bar, when the page does not already say it in a
+    /// notice. The batch panel adds the reason every action shares: nothing checked.
+    pub reason: Option<String>,
 }
 
 /// What a job's AI requests to `model` cost: `$0.31 (Claude Haiku 4.5)`.
@@ -648,7 +707,6 @@ mod tests {
             Action::FixTags,
             Action::RespaceTags,
             Action::ReloadFiles,
-            Action::InOutFromNames,
         ] {
             assert!(actions.persist(action).is_empty());
         }

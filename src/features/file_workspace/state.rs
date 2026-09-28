@@ -29,14 +29,12 @@ pub struct FileWorkspace<S> {
     comment_height: f32,
     /// The comment box takes the whole panel instead of the tags.
     comment_expanded: bool,
+    /// The comment box has the keys: its edge draws the focus ring.
+    comment_focused: bool,
 }
 
-/// Height of the comment box until it is resized.
-pub const COMMENT_HEIGHT: f32 = 80.0;
-/// The comment box keeps at least about two lines.
-pub const COMMENT_MIN_HEIGHT: f32 = 48.0;
-/// And leaves the tags room: taller than this, "Expand" is the way.
-pub const COMMENT_MAX_HEIGHT: f32 = 600.0;
+/// The comment box's heights: at first, lowest, tallest.
+pub use crate::ui::tokens::{COMMENT_HEIGHT, COMMENT_MAX_HEIGHT, COMMENT_MIN_HEIGHT};
 
 impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     /// Create a file workspace with the given store. Tag list is built from the store; no file selected.
@@ -49,6 +47,7 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
             comment_content: text_editor::Content::new(),
             comment_height: COMMENT_HEIGHT,
             comment_expanded: false,
+            comment_focused: false,
         }
     }
 
@@ -125,6 +124,15 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     }
 
     /// Whether the comment box takes the whole panel instead of the tags.
+    /// Whether the comment box has the keys.
+    pub fn comment_focused(&self) -> bool {
+        self.comment_focused
+    }
+
+    pub fn set_comment_focused(&mut self, focused: bool) {
+        self.comment_focused = focused;
+    }
+
     pub fn comment_expanded(&self) -> bool {
         self.comment_expanded
     }

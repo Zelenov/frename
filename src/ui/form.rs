@@ -5,15 +5,17 @@ use std::borrow::Borrow;
 
 use iced::widget::text::{IntoFragment, LineHeight};
 use iced::widget::{
-    checkbox as iced_checkbox, column, mouse_area, pick_list, radio, text_input, Checkbox,
-    PickList, TextInput,
+    checkbox as iced_checkbox, column, container, mouse_area, pick_list, radio, stack, text_input,
+    Checkbox, PickList, TextInput,
 };
-use iced::{Element, Padding, Pixels};
+use iced::{mouse, Element, Length, Padding, Pixels};
 
+use super::icons::{icon, Icon};
 use super::layout;
 use super::style;
 use super::text;
 use super::tokens::*;
+use super::tooltip::{self, Position, Tip};
 
 /// Text of controls: 20-px lines.
 const LINE: LineHeight = LineHeight::Absolute(Pixels(LINE_BODY));
@@ -95,6 +97,56 @@ pub fn text_field<'a, M: Clone + 'a>(placeholder: &str, value: &str) -> TextInpu
         .padding(FIELD_PADDING)
         .font(FONT)
         .style(style::text_input)
+}
+
+/// A text field whose edge is red: its value was refused, the reason is under it (§8.6).
+pub fn invalid_text_field<'a, M: Clone + 'a>(placeholder: &str, value: &str) -> TextInput<'a, M> {
+    text_field(placeholder, value).style(style::field(true))
+}
+
+/// Room at a search field's ends for the icon inside it: 8 + 16 + 6.
+const SEARCH_ICON_ROOM: f32 = SPACE_S + ICON_M + SPACE_TIGHT;
+
+/// A search field (§8.6): `search` inside on the left, and `x` "Clear" on the right while it
+/// has text. The caller adds `on_input`, `on_submit` and an id to the field it is given back
+/// through `field`.
+pub fn search_field<'a, M: Clone + 'a>(
+    field: TextInput<'a, M>,
+    has_text: bool,
+    clear: M,
+    clear_tip: String,
+) -> Element<'a, M> {
+    let field = field.padding(Padding {
+        left: SEARCH_ICON_ROOM,
+        right: SEARCH_ICON_ROOM,
+        ..FIELD_PADDING
+    });
+    let magnifier = container(icon(Icon::Search, ICON_M, TEXT_SECONDARY))
+        .padding(Padding {
+            left: SPACE_S,
+            ..Padding::ZERO
+        })
+        .center_y(Length::Fill);
+    let mut layers = stack![field, magnifier].width(Length::Fill);
+    if has_text {
+        let x = mouse_area(icon(Icon::X, ICON_M, TEXT_SECONDARY))
+            .on_press(clear)
+            .interaction(mouse::Interaction::Pointer);
+        layers = layers.push(
+            container(tooltip::tip(
+                x,
+                Tip::new(clear_tip).keys(&["Esc"]),
+                Position::Bottom,
+            ))
+            .padding(Padding {
+                right: SPACE_S,
+                ..Padding::ZERO
+            })
+            .align_right(Length::Fill)
+            .center_y(Length::Fill),
+        );
+    }
+    layers.into()
 }
 
 /// A dropdown of `options` (§8.7).

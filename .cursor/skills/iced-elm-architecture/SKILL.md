@@ -542,7 +542,7 @@ No direct `update()` calls across components. One message chain; each layer only
 
 To avoid layout/alignment bugs and disappearing content when adding hover/delete to list rows:
 
-- **One parent container** owns the row background. Use a **single style** on that container (today the old theme's `theme::row_background_style(theme, is_selected)`; new lists use the design system's list row, `docs/design/design-system.md` §8.9, which arrives in `src/ui` with #59). Child cells (checkbox, main content, delete slot, right margin) have **no** background style so they inherit the parent’s look.
+- **One parent container** owns the row background. Use the design system's list row for it: `ui::list::row_item(content, selected, HOVER)` (`docs/design/design-system.md` §8.9). Child cells (checkbox, main content, delete slot, right margin) have **no** background style so they inherit the parent’s look.
 - **Fixed row height**: define a constant (e.g. `TAG_ROW_HEIGHT`) and use it for the parent row and all inner columns so height is consistent and scroll-into-view works.
 - **Layout**: parent = row with: `container(main_cell).height(row_height).width(Length::Fill)`, `container(delete_slot).width(24).height(row_height)`, and a fixed-width right-margin column. Only the parent gets `.style(...)` for background.
 - **Hover**: store `hovered_id: Option<TagId>` in state. Main cell uses `on_enter(Message::TagHovered(Some(id)))` and `on_exit(Message::TagHovered(None))`. Show delete control when `is_selected || hovered_id == Some(id)`. When not shown, use an empty `Space` in the delete slot so layout does not shift.
@@ -552,8 +552,7 @@ To avoid layout/alignment bugs and disappearing content when adding hover/delete
 
 Avoid duplicated inline `container::Style { background: Some(Background::Color(...)), ... }` across views.
 
-- **One place:** frename's design system (`docs/design/design-system.md`) lives in `src/ui/`: tokens, text styles, and components (`ui::button`, `ui::form`, `ui::layout`). Views build from them instead of repeating style structs; a test (`ui::lint`) fails on color and size literals outside `src/ui/`.
-- **Older views** still call `theme::…` helpers (`src/ui/legacy.rs`) until they move onto the system.
+- **One place:** frename's design system (`docs/design/design-system.md`) lives in `src/ui/`: tokens, text styles, style functions (`ui::style`) and components (`ui::button`, `ui::icon_button`, `ui::form`, `ui::list`, `ui::layout`, …). Views build from them instead of repeating style structs; a test (`ui::lint`) fails on color and size literals outside `src/ui/`, with no exceptions.
 - **Widget-specific styling** whose value is dynamic (a tag's color, a marker's color) comes from a function in `src/ui/` that takes the value, not from a literal in the view.
 
 ### Delete + Hover Without Breaking the List
@@ -569,7 +568,5 @@ When adding delete (and hover) to a list (e.g. tag list):
 When a list/grid has selectable items (e.g. tag chips) and you want selection to read clearly and match between the item and the row:
 
 - **Widget owns the “element” selection look.** Put the selection style that belongs to the **item itself** (e.g. border/outline) in the **reusable widget** (e.g. `tag_chip`). The widget takes an `is_selected` (or similar) and draws e.g. a bright accent border. All chip-related selection visuals live in the widget; callers only pass `is_selected`.
-- **Row/cell provides the background.** Use a **single parent container** for the row/cell and apply a theme style (e.g. `tag_row_background_style(theme, is_selected)`). Selected = accent-tinted background; unselected = panel/default. This keeps the row visually tied to the selected item without duplicating logic in the widget.
-- **Same accent family for both.** Use theme constants so the widget outline and row background feel consistent: e.g. solid `ACCENT` for the widget border, and a dedicated constant (e.g. `ACCENT_TAG_ROW`) with the same hue and an opacity that matches the border’s perceived strength. If the row feels “lighter” or “different” than the border, add or tune a constant (e.g. higher alpha) so they read as the same accent.
-- **Dedicated style per selection context.** When you have more than one kind of selection (e.g. file in folder list vs tag in tag list), use **separate** theme helpers (e.g. `selectable_row_style` for files, `tag_row_background_style` for tags) and, if needed, separate constants. That way file selection and tag selection can differ in opacity/strength without affecting each other.
+- **Row/cell provides the background.** Use a **single parent container** for the row/cell with the design system's one selected look (`ui::style::selectable(selected)`, or `ui::list::row_item`, which adds hover and the selection bar). frename has one "selected" look everywhere (`docs/design/design-system.md` §3.2): `SELECTED` fill, plus an `ACCENT_TEXT` bar or ring where several things could look selected. Do not add per-context tints.
 - **Center the widget in the cell.** To avoid the item sitting at the top of the row, center it vertically: on the container that wraps the widget use `.center_y(Length::Fill)`, and on the row use `.align_y(Alignment::Center)`. Use a fixed row height constant so scroll-into-view and layout stay consistent.

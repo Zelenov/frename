@@ -136,8 +136,7 @@ ALTER TABLE app_settings ADD COLUMN ui_language TEXT NOT NULL DEFAULT '';
 ";
 
 /// Migration 15: file names no longer hold in/out points (#69). Who kept them there
-/// (`file_name`, the default of migration 5) now keeps them inside the video; the batch action
-/// "Move in/out points out of file names" moves the existing ones.
+/// (`file_name`, the default of migration 5) now keeps them inside the video.
 pub const M15_IN_OUT_OUT_OF_NAMES: &str = "
 UPDATE app_settings SET in_out_storage = 'xmp' WHERE in_out_storage = 'file_name';
 ";

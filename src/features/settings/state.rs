@@ -359,7 +359,6 @@ impl SettingsState {
             Message::Key(which, message) => self.apply_key(which, message),
             Message::OpenBatchAction(
                 Operation::TagCommented
-                | Operation::InOutFromNames
                 | Operation::FixTags
                 | Operation::ReloadFiles
                 | Operation::Rotate(_)

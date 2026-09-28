@@ -6,46 +6,7 @@ use std::path::{Path, PathBuf};
 
 /// Files not on the design system yet, each with the issue that moves it. The list only shrinks:
 /// a file here with nothing left to allow fails the test too.
-const NOT_YET: &[(&str, &str)] = &[
-    ("features/batch/actions/describe_ai/mod.rs", "#58"),
-    ("features/batch/actions/generate_subtitles.rs", "#58"),
-    ("features/batch/actions/markers_comment.rs", "#58"),
-    ("features/batch/actions/mod.rs", "#58"),
-    ("features/batch/actions/move_comments.rs", "#58"),
-    ("features/batch/actions/move_in_out.rs", "#58"),
-    ("features/batch/actions/tag_commented.rs", "#58"),
-    ("features/batch/actions/tag_spacing.rs", "#58"),
-    ("features/batch/view.rs", "#58"),
-    ("features/file_name_panel/file_name_line.rs", "#59"),
-    ("features/file_name_panel/mod.rs", "#59"),
-    ("features/file_name_panel/trash_zone.rs", "#59"),
-    ("features/file_name_panel/view.rs", "#59"),
-    ("features/file_workspace/state.rs", "#59"),
-    ("features/file_workspace/view.rs", "#59"),
-    ("features/folder/mod.rs", "#59"),
-    ("features/folder/view.rs", "#59"),
-    ("features/folder_controls/view.rs", "#59"),
-    ("features/folder_workspace/state.rs", "#59"),
-    ("features/folder_workspace/view.rs", "#59"),
-    ("features/markers/view.rs", "#59"),
-    ("features/media_viewer/video/view.rs", "#59"),
-    ("features/media_viewer/view.rs", "#59"),
-    ("features/sync_panel/view.rs", "#59"),
-    ("features/tag_grid/view.rs", "#59"),
-    ("features/tag_panel/state.rs", "#59"),
-    ("features/tag_panel/view.rs", "#59"),
-    ("features/video_controls/progress_bar.rs", "#59"),
-    ("features/video_controls/view.rs", "#59"),
-    ("main.rs", "#59"),
-    ("tag_colors.rs", "#53, #59"),
-    ("widgets/file_name_display.rs", "#59"),
-    ("widgets/height_handle.rs", "#59"),
-    ("widgets/search_bar.rs", "#59"),
-    ("widgets/splitter.rs", "#59"),
-    ("widgets/starred_tags_panel.rs", "#59"),
-    ("widgets/tag_chip.rs", "#59"),
-    ("widgets/timecode_badge.rs", "#59"),
-];
+const NOT_YET: &[(&str, &str)] = &[];
 
 /// A method whose name ends in one of these takes a size, a padding or a spacing.
 const SIZE_METHOD_ENDINGS: [&str; 7] = [

@@ -34,9 +34,9 @@ Nothing is locked inside frename.
 
 ## The workflow
 
-1. Open a folder with the 📂 button, drag a folder onto the window, or right-click a folder in
+1. Open a folder with the **Open a folder** button (under the file list), drag a folder onto the window, or right-click a folder in
    Explorer and choose "Open in frename" (installed version; on Windows 11 under "Show more
-   options"). To start at one clip, right-click 📂 to pick the file, or drag the file in: its
+   options"). To start at one clip, right-click that button to pick the file, or drag the file in: its
    whole folder opens with that clip selected.
 2. The video starts playing.
 3. Tag what you see: click a tag, or move with the arrow keys and press `Shift+Space`.
@@ -150,7 +150,8 @@ A folder without one starts with a set for travel and documentary work: `pick`, 
 
 The progress bar shows what you have noted about a clip:
 
-- **Markers:** `F2` or 📍 marks the moment under the playhead with a pin in the marker's color. ◆ opens the
+- **Markers:** `F2` or the pin button marks the moment under the playhead with a pin in the marker's color. The
+  marker list button opens the
   marker list over the picture (in fullscreen too; it shares the place with the subtitle list, with a
   tab for each; an empty list has an Add button). Click a marker's row to name it, its dot to
   pick one of Premiere's colors, ✕ to delete it, and its time to jump there. Markers are saved inside the video when you leave the
@@ -161,7 +162,7 @@ The progress bar shows what you have noted about a clip:
   While the playhead is on a marker, its name becomes the pin's head; click it to rename the
   marker. Settings → Saving → Markers and ranges can keep them in the comment instead, one line each
   (`0:41–0:47 — Lion`): in frename they still work as markers.
-- **Ranges:** hold `F2` (or 📍) while the clip plays to mark a stretch (`0:41–0:47 — Lion`); a
+- **Ranges:** hold `F2` (or the pin button) while the clip plays to mark a stretch (`0:41–0:47 — Lion`); a
   band just above the bar shows it, and overlapping bands stack. Drag the handles at the ends of the current
   range to change it (`Shift` snaps), drag them together or `Alt`+click the band to make it a
   single moment again, and click a band to play just that stretch.
@@ -178,8 +179,7 @@ The progress bar shows what you have noted about a clip:
   By default they are saved inside the video as a marker that Premiere Pro turns into a subclip.
   Settings can keep them in the comment instead, as a line after your own text
   (`In/Out: 00:01:05.250 – 00:02:10.000`), which the comment box does not show: change it with
-  `[` and `]`. Older versions could put them in the file name (`in_00_01_05`); frename no longer
-  reads them there, and the batch action **Move in/out points out of file names** moves them.
+  `[` and `]`.
 - **Comments:** free text per clip. By default it is saved inside the video, where Premiere Pro
   shows it in the Description column and finds it by search. Settings can keep it in a
   `.comment.txt` next to the video instead. The file list shows the first line of each comment.
@@ -189,8 +189,8 @@ The progress bar shows what you have noted about a clip:
   and ⊡ brings the tags back.
 
 Some formats, such as mkv, cannot hold comments, in/out points or markers inside them; for those,
-frename keeps the comment, with the in/out line, in `.comment.txt` whatever Settings say, and 📍 is
-off. mp4 and mov hold everything.
+frename keeps the comment, with the in/out line, in `.comment.txt` whatever Settings say, and the pin
+button is off. mp4 and mov hold everything.
 
 `.comment.txt` files and subtitles are renamed together with their video.
 
@@ -200,8 +200,9 @@ off. mp4 and mov hold everything.
 
 - **Search** the file list by name. Tags already in a name are searchable too.
 - **Filter** the list to files that are untagged, have subtitles, a comment or markers: the
-  Filter dropdown sits at the right end of the search bar. A file with markers shows 📍 and
-  their number in the list.
+  filter button at the right end of the search bar opens a menu (tick as many as you like;
+  **Show all** clears them) and shows how many are on. A file with subtitles shows the subtitles
+  icon, and a file with markers a pin and their number.
 - The list shows only videos (mp4, mov, mkv, avi, webm, and other common formats), oldest first.
 
 ## Subtitles
@@ -216,13 +217,13 @@ No subtitles yet? Check the videos in batch mode and run **Generate subtitles** 
 
 ![Batch mode](docs/frename-screenshot-batch.jpg)
 
-Click ☑ to check files in the list (All / Invert) and run one action on all of them, with progress
-and Cancel. Each file then shows a green or red check box. Drag a checked file to drag all checked
-files (an unchecked one drags only itself). Esc leaves batch mode, the same as clicking ☑ again.
+Click **Batch actions** (the right end of the bar under the file list) to check files in the list (All / Invert) and run one action on all of them, with progress
+and Cancel. Each file then shows an icon for what happened to it (changed, nothing to change, not done). Drag a checked file to drag all checked
+files (an unchecked one drags only itself). Esc leaves batch mode, the same as clicking **Batch actions** again.
 Batch mode opens with the action you last ran selected, and its own options (e.g. which way
 in/out points move, or "Replace existing subtitles") as they were then, even across restarts.
 
-**Select several clips without ☑**: **Ctrl+click** a clip to add it (and the one open before it) to
+**Select several clips without the button**: **Ctrl+click** a clip to add it (and the one open before it) to
 the selection; Ctrl+click a selected clip to drop it. **Shift+click** a clip to select every clip
 between it and the last one you clicked with Ctrl (or the open clip, if you have not Ctrl+clicked
 yet), replacing the selection. Either turns on batch mode with exactly that selection checked, and
@@ -233,9 +234,6 @@ Actions:
 
 - move comments between the video and `.comment.txt` files;
 - move in/out points between the comment and the video;
-- move in/out points out of file names written by older versions into the comment or the video,
-  as set in Settings (a file that already has in/out points stored keeps them, and the report
-  lists it);
 - turn comment lines that start with a time (`03:24 — Take 3 — nice light`, `0:41-0:47 — Lion`)
   into markers, or copy the markers into the comment as such lines. What follows the name after
   a second ` — ` or ` -- ` (not a plain ` - `) goes into the marker's comment, which Premiere
@@ -283,7 +281,7 @@ Subtitles. Formats such as mkv, m2ts and avi need [ffmpeg](https://ffmpeg.org) o
 
 ## Settings
 
-The ⚙ button opens Settings. Changes apply right away; **Close** or `Esc` closes it. It has five
+The **Settings** button (under the file list) opens Settings. Changes apply right away; **Close** or `Esc` closes it. It has five
 pages:
 
 - **Interface:** the UI language (follows your system by default, or pick English or Russian;
@@ -301,8 +299,8 @@ pages:
 - **Subtitles:** your Soniox API key (kept the same way), the languages spoken in your footage, and
   whether a subtitle is a short line or a whole sentence.
 - **Updates:** **Check for updates**, then **Update and restart** when a newer version is out.
-  frename also checks once a day by itself (you can turn that off) and puts a dot on ⚙ when an
-  update is ready; ⚙ then opens this page. Nothing is downloaded until you click.
+  frename also checks once a day by itself (you can turn that off) and puts a dot on the Settings button
+  when an update is ready; it then opens this page. Nothing is downloaded until you click.
 
 ![Monochrome tags](docs/frename-screenshot-mono.jpg)
 

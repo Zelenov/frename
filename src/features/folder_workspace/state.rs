@@ -31,10 +31,14 @@ use crate::features::folder;
 use crate::features::markers::MarkersState;
 use crate::features::media_viewer::{self, video as media_viewer_video, MediaViewerState};
 use crate::features::sync_panel;
+use crate::features::tag_grid::groups::Shape;
 use crate::features::tag_panel::{self, TagPanelState, TAG_LIST_SCROLLABLE_ID};
 use crate::features::video_controls;
+use crate::ui::tokens::{
+    FILE_LIST_MAX_WIDTH, FILE_LIST_MIN_WIDTH, FILE_LIST_WIDTH, SPLITTER_HIT, VIDEO_MIN_WIDTH,
+    VIDEO_WIDTH,
+};
 use crate::widgets::search_bar::SEARCH_BAR_INPUT_ID;
-use crate::widgets::splitter::HIT_WIDTH;
 
 use super::Message;
 
@@ -43,18 +47,8 @@ mod file_actions;
 mod marker_actions;
 mod rotation;
 
-const DEFAULT_LEFT_WIDTH: f32 = 460.0;
-const DEFAULT_FOLDER_WIDTH: f32 = 200.0;
-const MIN_FOLDER_WIDTH: f32 = 120.0;
 /// How many actions undo/redo keeps. Reset per folder, since tags are per folder.
 const HISTORY_DEPTH: usize = 50;
-
-/// A saved left-panel width narrower than the video panel's controls need must not load as-is,
-/// or the panel would clip immediately on launch (no drag needed to trigger it) for anyone who
-/// saved a width before the splitter's own minimum was widened (#96).
-fn clamp_left_width(saved: f32) -> f32 {
-    saved.max(media_viewer_video::MIN_PANEL_WIDTH)
-}
 
 /// Concrete history type for this workspace: Directory uses LoggingAppStateStore<AppDatabase>,
 /// TagList uses the tag store of the open folder.
@@ -89,6 +83,8 @@ pub struct FolderWorkspace {
     batch_waits_for_unload: bool,
     /// The file being renamed in place in the folder list, if any.
     inline_rename: Option<folder::InlineRename>,
+    /// The file list's filter menu is open.
+    filter_menu_open: bool,
     /// Bumped per folder, so a comment batch for a folder no longer open is dropped.
     comment_load_generation: u64,
     /// Frame of the loading spinner shown in rows whose comment is still loading.
@@ -138,6 +134,14 @@ pub struct FolderWorkspace {
     clipboard: Option<arboard::Clipboard>,
 }
 
+/// The video pane's and the file list's widths, kept within their limits (§13.9).
+fn column_widths(video: f32, file_list: f32) -> (f32, f32) {
+    (
+        video.max(VIDEO_MIN_WIDTH),
+        file_list.clamp(FILE_LIST_MIN_WIDTH, FILE_LIST_MAX_WIDTH),
+    )
+}
+
 impl FolderWorkspace {
     pub fn new() -> Self {
         let (left_width, folder_width) = AppDatabase::new()
@@ -149,8 +153,9 @@ impl FolderWorkspace {
                     None
                 }
             })
-            .unwrap_or((DEFAULT_LEFT_WIDTH, DEFAULT_FOLDER_WIDTH));
-        let left_width = clamp_left_width(left_width);
+            .unwrap_or((VIDEO_WIDTH, FILE_LIST_WIDTH));
+        // A width saved by an older version or on a smaller screen is raised to the minimum.
+        let (left_width, folder_width) = column_widths(left_width, folder_width);
         let mut batch = BatchState::default();
         if let Some(run) = AppDatabase::new().get_batch_run() {
             batch.restore_last_run(run);
@@ -168,6 +173,7 @@ impl FolderWorkspace {
             batch,
             batch_waits_for_unload: false,
             inline_rename: None,
+            filter_menu_open: false,
             comment_load_generation: 0,
             spinner_frame: 0,
             pending_to_file_id: None,
@@ -282,16 +288,18 @@ impl FolderWorkspace {
             Message::SyncPanel(msg) => self.handle_sync_panel(msg),
             Message::LeftSplitterDragged(x) => {
                 self.left_width = x;
-                let folder_start = self.left_width + HIT_WIDTH;
+                let folder_start = self.left_width + SPLITTER_HIT;
                 let folder_end = folder_start + self.folder_width;
-                let new_folder_width = folder_end - x - HIT_WIDTH;
-                self.folder_width = new_folder_width.max(MIN_FOLDER_WIDTH);
+                let new_folder_width = folder_end - x - SPLITTER_HIT;
+                self.folder_width =
+                    new_folder_width.clamp(FILE_LIST_MIN_WIDTH, FILE_LIST_MAX_WIDTH);
                 AppDatabase::new().set_panel_widths(self.left_width, self.folder_width);
                 Task::none()
             }
             Message::RightSplitterDragged(x) => {
-                let new_folder_width = x - self.left_width - HIT_WIDTH;
-                self.folder_width = new_folder_width.max(MIN_FOLDER_WIDTH);
+                let new_folder_width = x - self.left_width - SPLITTER_HIT;
+                self.folder_width =
+                    new_folder_width.clamp(FILE_LIST_MIN_WIDTH, FILE_LIST_MAX_WIDTH);
                 AppDatabase::new().set_panel_widths(self.left_width, self.folder_width);
                 Task::none()
             }
@@ -339,7 +347,24 @@ impl FolderWorkspace {
             Message::SetSegmentEnd => Task::done(Message::MediaViewer(
                 media_viewer::Message::Video(media_viewer_video::Message::CaptureSegmentEnd),
             )),
+            Message::CheckCommentFocus => {
+                // Asked only while the box is on screen: about a missing widget, no answer comes.
+                if self.batch.is_active() || self.file_workspace.file().is_none() {
+                    self.file_workspace.set_comment_focused(false);
+                    return Task::none();
+                }
+                iced::widget::operation::is_focused(iced::widget::Id::new(
+                    crate::features::file_workspace::view::COMMENT_EDITOR_ID,
+                ))
+                .map(Message::CommentFocused)
+            }
+            Message::CommentFocused(focused) => {
+                self.file_workspace.set_comment_focused(focused);
+                Task::none()
+            }
             Message::CommentAction(action) => {
+                // Anything done in the box (a click, typing) means it has the keys.
+                self.file_workspace.set_comment_focused(true);
                 let typed = matches!(action, iced::widget::text_editor::Action::Edit(_));
                 self.file_workspace.apply_comment_action(action);
                 // The box grows with its text inside a scrollable: typing on the last line
@@ -1287,6 +1312,27 @@ impl FolderWorkspace {
                 self.set_list_filter(|dir| dir.set_marked_only(marked_only))
             }
             folder::Message::SetNameFilter(query) => self.set_file_name_filter(query),
+            folder::Message::ToggleFilterMenu => {
+                self.filter_menu_open = !self.filter_menu_open;
+                Task::none()
+            }
+            folder::Message::CloseFilterMenu => {
+                self.filter_menu_open = false;
+                Task::none()
+            }
+            folder::Message::ShowAll => {
+                self.filter_menu_open = false;
+                Task::batch(
+                    [
+                        folder::Message::SetNameFilter(String::new()),
+                        folder::Message::SetUntaggedOnly(false),
+                        folder::Message::SetSubtitledOnly(false),
+                        folder::Message::SetCommentedOnly(false),
+                        folder::Message::SetMarkedOnly(false),
+                    ]
+                    .map(|m| Task::done(Message::Folder(m))),
+                )
+            }
             // Intercepted by the app, which owns the windows; no-op here.
             folder::Message::OpenSettings => Task::none(),
             folder::Message::StartRename(index) => self.start_rename(index),
@@ -1499,7 +1545,22 @@ impl FolderWorkspace {
             return self.ctrl_click_select(index);
         }
         self.arm_drag_out(index);
+        // The file open already stays as it is: opening it again reloads its video, so the two
+        // clicks of a double-click (rename) would load it twice.
+        if self.is_open_at(index) {
+            return Task::none();
+        }
         self.select_file_at(index)
+    }
+
+    /// Whether the file at `index` of the list is the one open in the file workspace.
+    fn is_open_at(&self, index: usize) -> bool {
+        let listed = self
+            .directory
+            .as_ref()
+            .and_then(|dir| dir.files_in_order().nth(index))
+            .map(|f| f.id());
+        listed.is_some() && listed == self.file_workspace.file().map(|f| f.id())
     }
 
     /// Ctrl+click: with no multi-selection running yet, starts one with the previously open file
@@ -2056,69 +2117,32 @@ impl FolderWorkspace {
         self.tag_panel.set_selected(filtered.get(new_i).copied());
     }
 
-    /// Up: move one visual row up; top row wraps to last row at same column.
+    /// Up: one row up in the grid as it is drawn (its groups start rows of their own); the top
+    /// row wraps to the last.
     fn move_selection_up(&mut self) {
-        let filtered = self
-            .file_workspace
-            .tag_list()
-            .filtered_display_tag_ids()
-            .to_vec();
-        if filtered.is_empty() {
-            self.tag_panel.set_selected(None);
-            return;
-        }
-        let cols = self.tag_panel.cols().max(1) as usize;
-        let count = filtered.len();
-        let cur = self
-            .tag_panel
-            .selected_tag_id()
-            .and_then(|id| filtered.iter().position(|&fid| fid == id));
-        let new_i = match cur {
-            None => count - 1,
-            Some(i) if i < cols => {
-                // top row → jump to last row, same column
-                let x = i % cols;
-                let last_row = (count - 1) / cols;
-                let new_i = last_row * cols + x;
-                if new_i >= count {
-                    new_i - cols
-                } else {
-                    new_i
-                }
-            }
-            Some(i) => i - cols,
-        };
-        self.tag_panel.set_selected(filtered.get(new_i).copied());
+        self.move_selection_by_row(Shape::up);
     }
 
-    /// Down: move one visual row down; last row wraps to first row at same column.
+    /// Down: one row down; the last row wraps to the top.
     fn move_selection_down(&mut self) {
-        let filtered = self
-            .file_workspace
-            .tag_list()
-            .filtered_display_tag_ids()
-            .to_vec();
+        self.move_selection_by_row(Shape::down);
+    }
+
+    /// Move the tag cursor to the tag `step` finds from it in the grid's shape; with no cursor,
+    /// to the first tag.
+    fn move_selection_by_row(&mut self, step: fn(&Shape, usize) -> Option<usize>) {
+        let tag_list = self.file_workspace.tag_list();
+        let filtered = tag_list.filtered_display_tag_ids().to_vec();
         if filtered.is_empty() {
             self.tag_panel.set_selected(None);
             return;
         }
-        let cols = self.tag_panel.cols().max(1) as usize;
-        let count = filtered.len();
+        let shape = Shape::of(tag_list, self.tag_panel.cols() as usize);
         let cur = self
             .tag_panel
             .selected_tag_id()
             .and_then(|id| filtered.iter().position(|&fid| fid == id));
-        let new_i = match cur {
-            None => 0,
-            Some(i) => {
-                let new_i = i + cols;
-                if new_i >= count {
-                    i % cols
-                } else {
-                    new_i
-                }
-            }
-        };
+        let new_i = cur.and_then(|i| step(&shape, i)).unwrap_or(0);
         self.tag_panel.set_selected(filtered.get(new_i).copied());
     }
 
@@ -2136,11 +2160,12 @@ impl FolderWorkspace {
             Some(i) => i,
             None => return Task::none(),
         };
-        let cols = self.tag_panel.cols() as usize;
-        let row_stride = self.tag_panel.row_height();
-        let row_extent = self.tag_panel.row_content_height().unwrap_or(row_stride);
-        let visual_row = flat_index / cols;
-        let row_top = (visual_row as f32) * row_stride;
+        let shape = Shape::of(tag_list, self.tag_panel.cols() as usize);
+        let row_extent = self
+            .tag_panel
+            .row_content_height()
+            .unwrap_or(self.tag_panel.row_height());
+        let row_top = shape.row_top(shape.position(flat_index).0);
         let row_bottom = row_top + row_extent;
 
         let (current, vh) = match (
@@ -2213,13 +2238,14 @@ impl FolderWorkspace {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        // The spinner only turns while rows are loading, so an idle list does not redraw.
+        // The spinner only turns while something waits (rows loading their comments, a folder
+        // opening, a job's file in work), so an idle list does not redraw.
         let loading_comments = self
             .directory
             .as_ref()
             .is_some_and(|d| d.loading_comment_count() > 0);
-        let spinner = if loading_comments {
-            iced::time::every(std::time::Duration::from_millis(150)).map(|_| Message::SpinnerTick)
+        let spinner = if loading_comments || self.loading || self.batch.is_running() {
+            iced::time::every(crate::ui::tokens::SPINNER_TICK).map(|_| Message::SpinnerTick)
         } else {
             Subscription::none()
         };
@@ -2232,6 +2258,7 @@ impl FolderWorkspace {
             };
         Subscription::batch([
             self.media_viewer.subscription().map(Message::MediaViewer),
+            iced::event::listen_with(focus_may_move),
             job_progress,
             self.file_name_panel
                 .subscription()
@@ -2263,6 +2290,11 @@ impl FolderWorkspace {
     }
 
     /// The file being renamed in place in the folder list, if any.
+    /// Whether the file list's filter menu is open.
+    pub fn filter_menu_open(&self) -> bool {
+        self.filter_menu_open
+    }
+
     pub fn inline_rename(&self) -> Option<&folder::InlineRename> {
         self.inline_rename.as_ref()
     }
@@ -2418,6 +2450,27 @@ fn open_in_default_app(target: impl AsRef<std::ffi::OsStr>) {
     }
 }
 
+/// A mouse press, Tab or Esc may move the keys into or out of the comment box: ask where they
+/// are then, so the box's edge shows its focus (the edge is drawn outside the editor, which
+/// scrolls inside it).
+fn focus_may_move(
+    event: iced::Event,
+    _status: iced::event::Status,
+    _window: iced::window::Id,
+) -> Option<Message> {
+    use iced::keyboard::{key::Named, Key};
+    match event {
+        iced::Event::Mouse(iced::mouse::Event::ButtonPressed(_)) => {
+            Some(Message::CheckCommentFocus)
+        }
+        iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+            key: Key::Named(Named::Tab | Named::Escape),
+            ..
+        }) => Some(Message::CheckCommentFocus),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::{Path, PathBuf};
@@ -2432,7 +2485,21 @@ mod tests {
 
     use crate::features::{batch, folder, tag_panel};
 
-    use super::{clamp_left_width, Directory, FolderWorkspace, ItemResult, ItemStatus, Message};
+    use super::{Directory, FolderWorkspace, ItemResult, ItemStatus, Message};
+
+    #[test]
+    fn saved_column_widths_are_kept_within_their_limits() {
+        use crate::ui::tokens::{FILE_LIST_MAX_WIDTH, FILE_LIST_MIN_WIDTH, VIDEO_MIN_WIDTH};
+        assert_eq!(
+            super::column_widths(150.0, 120.0),
+            (VIDEO_MIN_WIDTH, FILE_LIST_MIN_WIDTH)
+        );
+        assert_eq!(
+            super::column_widths(500.0, 900.0),
+            (500.0, FILE_LIST_MAX_WIDTH)
+        );
+        assert_eq!(super::column_widths(640.0, 300.0), (640.0, 300.0));
+    }
 
     /// Simulates the iced runtime processing a FileOpened task: directory already has selection, so send FileOpened(selected_file).
     fn flush_file_opened(workspace: &mut FolderWorkspace) {
@@ -2502,21 +2569,6 @@ mod tests {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
         std::env::temp_dir().join(format!("frename-test-{}-{n}", std::process::id()))
-    }
-
-    /// Issue #96: a width saved before the splitter's own minimum was widened must not load
-    /// narrower than the video panel's controls now need.
-    #[test]
-    fn a_saved_width_narrower_than_the_panel_s_own_minimum_is_widened_on_load() {
-        assert_eq!(
-            clamp_left_width(50.0),
-            crate::features::media_viewer::video::MIN_PANEL_WIDTH
-        );
-        assert_eq!(
-            clamp_left_width(10_000.0),
-            10_000.0,
-            "a saved width already wide enough is kept as-is"
-        );
     }
 
     #[test]
@@ -2647,6 +2699,23 @@ mod tests {
             .and_then(|d| d.files_in_order().nth(index))
             .map(|f| f.id())
             .expect("file at index should exist")
+    }
+
+    #[test]
+    fn a_click_on_the_open_file_does_not_open_it_again() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let open = workspace
+            .directory()
+            .and_then(|d| d.selected_index())
+            .expect("a file is open");
+        assert!(workspace.is_open_at(open));
+        assert!(!workspace.is_open_at(1 - open));
     }
 
     #[test]

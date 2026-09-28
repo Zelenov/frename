@@ -5,12 +5,13 @@
 use std::path::Path;
 
 use frename_core::{FileTagger, MoveOutcome};
-use iced::widget::{button, row, text};
 use iced::Element;
 
+use super::super::page::{self, Change};
 use super::super::ItemResult;
 use super::ActionMessage;
-use crate::theme;
+use crate::ui::button;
+use crate::ui::layout::{self, NoticeKind};
 
 pub fn label() -> String {
     fl!("batch-action-tag-commented")
@@ -21,30 +22,32 @@ pub fn operation() -> Option<super::Operation> {
     frename_core::commented_tag().map(|_| super::Operation::TagCommented)
 }
 
-/// What the action does with the tag from the settings, or that the tag is turned off there,
-/// with a button to the settings, where the tag is named and turned on or off.
+/// What the action does with the tag from the settings, or, when the tag is turned off there,
+/// the notice with the button that turns it on (the Saving page of Settings, at the tag row).
 pub fn view<'a>() -> Element<'a, ActionMessage> {
-    let tag = frename_core::commented_tag();
-    let hint = match &tag {
-        Some(tag) => fl!("batch-action-tag-commented-hint", tag = tag.clone()),
-        None => fl!("batch-action-tag-commented-hint-off"),
+    let (hint, part) = match frename_core::commented_tag() {
+        Some(tag) => (
+            fl!("batch-action-tag-commented-hint", tag = tag.clone()),
+            page::linked_row(
+                fl!("batch-option-tag"),
+                tag,
+                fl!("batch-ai-change"),
+                ActionMessage::OpenSettings,
+            ),
+        ),
+        None => (
+            fl!("batch-action-tag-commented-hint-off"),
+            layout::notice(
+                NoticeKind::Warning,
+                fl!("batch-action-tag-commented-off"),
+                None,
+                [button::secondary(fl!("batch-action-tag-commented-choose"))
+                    .on_press(ActionMessage::OpenSettings)
+                    .into()],
+            ),
+        ),
     };
-    let status = match tag {
-        Some(tag) => text(fl!("batch-action-tag-commented-status", tag = tag)).size(13),
-        None => text(fl!("batch-action-tag-commented-status-off"))
-            .size(13)
-            .color(theme::ERROR),
-    };
-    let settings = row![
-        status,
-        button(text(fl!("batch-action-tag-commented-settings")).size(12))
-            .on_press(ActionMessage::OpenSettings)
-            .padding([3, 10])
-            .style(theme::icon_button_style(true)),
-    ]
-    .spacing(12)
-    .align_y(iced::Alignment::Center);
-    super::panel(label(), hint, settings.into())
+    page::page(label(), hint, &[Change::Renames], [part])
 }
 
 /// Bring the commented tag of the file at `path` in line with its comment.

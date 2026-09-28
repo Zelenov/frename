@@ -244,6 +244,7 @@ unit"; PUI "4 point increments" for detailed interfaces):
 |---|---|---|
 | `xxs` | 2 | between rows of a list; between a label and its description |
 | `xs` | 4 | between buttons of a toolbar group; between chips; icon to text in a badge |
+| `tight` | 6 | between an icon and its words in a button; inside tooltips and the search bar |
 | `s` | 8 | inside a group: between controls of one row, options of one question, buttons of a bar |
 | `m` | 12 | between the options of a radio group that have descriptions; toolbar group gap |
 | `l` | 16 | padding of button bars; between the label column and the control column |
@@ -988,7 +989,7 @@ part over the segment, because the yellow over the blue would hide where the pla
 | Played part | `accent`, from the start to the playhead | same |
 | **Playhead** | a 2 px `text.primary` line 4 px taller than the track at both ends; while hovering or dragging, a 10 px `text.primary` knob on it | none: the fill's end is the only sign |
 | Hover | the hovered time in a tooltip above the pointer (`mono`); the track brightens to `border.control` | nothing |
-| In/out segment | `video.segment` `#F2C94C` at 70 % over the track, square ends with 2 px full-color lines; only in: one line; only out: one line | same, 75 % |
+| In/out segment | a band in `video.segment` `#F2C94C` in its own lane above the bar, like a range (no handles; a click plays it), and 2 px lines across the track at in and out; only in: one line; only out: one line. Not a fill on the track: the played part hid it | 75 % over the track |
 | Point marker | 2 px needle in the marker color from the head to 3 px below the track; 7 px round head at the top of the row; head has a 1 px `bg.panel` outline so heads that overlap stay readable | no outline |
 | Point marker, active | no head: the marker label is its head | same |
 | Range | 4 px band in its lane, marker color, 60 % when idle, 100 % when active | same |
@@ -1063,6 +1064,8 @@ left to right, with the widths §13.9 folds by:
 | Volume (96) | `volume-2` icon 16 in `text.secondary` (not a button), 8 px, a 72 px slider (§8.8); folded: a 32 px icon button `volume-2` that opens the slider in a popover |
 | Views (96) | `captions` "Subtitle list" (only with subtitles) · `map-pin` "Marker list" with "`Shift`+`F1` / `Shift`+`F3` jump between markers" on its second line · **More** `ellipsis` (only when something is folded) · `maximize-2`/`minimize-2` "Full screen `F5`" |
 
+- **Rotate** `rotate-ccw` / `rotate-cw` (added after this spec) live in **More**, so More is always
+  shown; they are used rarely and have their keys (`Ctrl`+`Alt`+`←` / `→`).
 - **Latched** (list shown, fullscreen): `state.selected` fill and the icon in `accent.text`
   (§8.1), not only a blue glyph.
 - **Held** (`map-pin` while F2 or the button is held to draw a range): `state.pressed` fill and a
@@ -1424,6 +1427,11 @@ in `text.secondary`:
 | | `rotate-ccw` | Reset cache and reload | |
 | Paid services | `sparkles` | Describe with AI | Anthropic |
 | | `captions` | Generate subtitles | Soniox |
+
+As built there are ten actions in three groups: *Move between places* (Move comments, Move
+in/out points, Markers ⇄ comment), *Fix
+names and videos* (Rotate videos with `rotate-cw`, Tag commented, Fix tags by priority, Apply tag
+spacing, Reset cache and reload), *Paid services* (Describe with AI, Generate subtitles).
 
 - Rows as the Settings navigation (§14): 32 px, the selected one `state.selected` with the bar and
   SemiBold; hover `state.hover`. Icons `text.secondary`, the selected row's `text.primary`; badges
@@ -1852,7 +1860,7 @@ only replaces the OS title bar with A's bar.
 | **Interface** (`languages`) | Language · Tag colors (*Monochrome*) · Video (*Play videos automatically when opened*) |
 | **Saving** (`folder`) | File names (*Space after each tag*) · Comments · Markers and ranges · In/out points |
 | **Describe with AI** (`sparkles`; Russian list label «Описание от AI», heading «Описать с помощью AI») | Anthropic API key · Model · Description language |
-| **Subtitles** (`captions`) | Soniox API key · Languages · Cue length |
+| **Subtitles** (`captions`) | Soniox API key · Cue length · Languages (cue length first: the language list is long and hid it) |
 | **Updates** (`refresh-cw`) | Version (version, status, *Check for updates*, *Update and restart*, *Check for updates when frename starts*) · Settings from an older frename (installed only) |
 
 Why these groups: *Saving* holds the four settings that decide what frename writes into files
@@ -1967,20 +1975,32 @@ and what the new window needs: the Close button, Esc, `Ctrl`+`Tab`, opening on a
 
 ```
 src/ui/
-  mod.rs        the theme for windows on the system; re-exports
-  tokens.rs     colors, spacing, sizes, radii, text sizes, fonts, durations — consts only
-  icons.rs      the bundled Lucide icons and `icon(name, size, color)`
-  text.rs       text styles: heading(), body(), strong(), secondary(), error(), mono(), tooltip(),
-                and label() (a button's text, which takes the button's color); title() and
-                caption() come with their first user (#58)
-  button.rs     primary(), secondary(), danger(), danger_ghost(); ghost() comes with its first user
-  form.rs       checkbox(), checkbox_with_hint(), radio_option() with description() or
-                example() under it, text_field(), dropdown()
-  layout.rs     window_with_navigation(), sidebar(), scroll(), page(), setting_row(), setting_row_with_info(),
-                aligned(), controls(), indented(), buttons(), nav_item(), update_dot(),
-                button_bar(), vertical_line(), notice(), inline_status(), info(), with_tooltip()
-  style.rs      the style functions behind them
-  legacy.rs     today's src/theme.rs, moved: the styles of views not yet on the system
+  mod.rs        re-exports; theme.rs: the theme of every window, a palette from the tokens
+  tokens/       consts only, by kind: color.rs (chrome), content.rs (video, tags, markers),
+                space.rs, size.rs (controls, lines, icons, radii), region.rs (windows, columns,
+                bars, §13.9), typography.rs (sizes, lines, fonts); durations in mod.rs
+  palette.rs    TagPalette (a tag's chip color) and marker_color (a marker's Premiere color)
+  icons.rs      the bundled Lucide icons (one `icons!` list), icon(), spinner()
+  text.rs       heading(), title(), body(), strong(), secondary(), error(), mono(), caption(),
+                caption_strong(), chip_mini(), subtitle(), video_caption(), tooltip(), label()
+  button.rs     primary(), secondary(), ghost(), danger(), danger_ghost(), link(), with_icon()
+  icon_button.rs  IconButton: toolbar 32 / small 24 / control 28, latched, held, overlay, dot,
+                on_hold, tip
+  tooltip.rs    Tip (name, keys as key caps, detail), tip(), tip_text()
+  badge.rs      badge(BadgeKind), key_cap(), timecode()
+  form.rs       checkbox(), checkbox_with_hint(), radio_option() with description() or example(),
+                text_field(), invalid_text_field(), search_field(), dropdown()
+  list.rs       hoverable(), selection_bar(), row_item(): the one hover and selected look
+  scroll.rs     vertical(), vertical_with_id(): scroll areas that keep the gutter
+  segmented.rs  segmented() of Segment
+  menu.rs       the popup menu of commands (the video pane's More)
+  empty.rs      pane(), pane_in(), small(): empty states
+  layout.rs     window_with_navigation(), sidebar(), page(), setting_row(), setting_row_with_info(),
+                aligned(), controls(), indented(), buttons(), nav_item(), nav_item_with(),
+                update_dot(), button_bar(), horizontal_line(), vertical_line(), notice(),
+                inline_status(), info()
+  style/        the style functions behind them: button.rs (ButtonKind), form.rs, surface.rs,
+                scroll.rs
 ```
 
 - **`ui` vs `widgets`:** `ui` holds tokens, styles and stateless constructors of standard controls;
@@ -1994,9 +2014,9 @@ src/ui/
 - **Fonts** (`assets/fonts/`, with their licences) are loaded once on the daemon with `.font(bytes)`.
   They are not the default font: `ui` components set `FONT` / `FONT_STRONG` / `FONT_MONO` and their
   sizes explicitly, so the main window keeps its system font and 16-px default until #59 moves it.
-- `src/theme.rs` moves to `src/ui/legacy.rs` with its values unchanged and stays reachable as
-  `crate::theme`, so the views not yet on the system build as before; #58 and #59 empty it and #59
-  deletes it. The tag palette (`src/tag_colors.rs`) moves into `ui` with #53 or #59.
+- `src/theme.rs` moved to `src/ui/legacy.rs` in #57 and was deleted when #58 and #59 moved the
+  last views; the tag palette (`src/tag_colors.rs`) is `ui::palette` now. Every window uses
+  `ui::theme()`, with Inter as the default font at 13 px.
 
 ### 15.2 The check that keeps the system followed
 
@@ -2040,10 +2060,21 @@ main window does not change in #57 and the README has no Settings screenshot.
   `Ctrl`+`Tab` and opening on a page; demo `--settings [page]`; new and changed strings in English
   and Russian; the Settings section of the README; `version.md`; the `ui-dev` skill and the styling
   section of the Elm skill pointed at this document and `src/ui`.
-- **#58:** the batch views onto the system (removes `batch/**` from the allow-list).
-- **#44:** the other icons. **#53:** monochrome tags and the tag palette into `ui`. **#59:**
-  everything else, the main window theme and fonts; the allow-list becomes empty and `ui::legacy`
-  goes.
+- **After the owner's first look (2026-09-28):** the filter is the `list-filter` button with the
+  count badge and its menu (checkbox per filter with its count, *Show all*, stays open while
+  ticking); tags that do not fit become `+N` and names are cut with "…" (mono has a fixed
+  advance, chips are estimated); the in/out span is a band in its own lane above the bar (a fill on
+  the track hid under the played part) and a line at the top of the marker list; the timeline
+  keeps a lane for the marker label so it never covers the subtitle strip; subtitle rows have
+  their natural height; the tag grid shows the two groups of §13.5.2 with their captions; batch
+  option rows put the label above the controls (the page is always under 440); the segmented
+  control is one outlined box. The action "Move in/out points out of file names" is removed.
+- **#58 and #59 (built together):** the batch views, the video pane, the file list, the tags
+  area and the window frame on the system, with the icons of §7 in their places; the allow-list
+  is empty and `ui::legacy` is gone. Left for later issues: the changes marked **behaviour**,
+  `+N` chips and "…" on long names (iced 0.14 cannot measure or cut text), the drop target of
+  §13.4.4, and *Copy the list* on a batch result.
+- **#44:** the icons not placed yet. **#53:** monochrome tags.
 
 ## 16. Out of scope
 

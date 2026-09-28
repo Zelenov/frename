@@ -1,24 +1,23 @@
-//! UI for the file name panel: composes chips panel, trash zone, and file name line.
+//! UI for the file name card: its chips, the trash, the timecodes and the name line.
 
 use iced::widget::{column, container, mouse_area, row};
 use iced::{Alignment, Element, Length};
 
 use frename_core::{StoredTagStore, TagList};
 
-use crate::tag_colors::TagPalette;
-use crate::theme;
-
-use crate::widgets::timecode_badge;
+use crate::ui::badge;
+use crate::ui::palette::TagPalette;
+use crate::ui::style;
+use crate::ui::tokens::*;
 
 use super::chips_panel;
 use super::file_name_line;
 use super::trash_zone;
-use super::{FileNamePanelState, Message, TRASH_SPACING};
+use super::{FileNamePanelState, Message};
 
-/// Renders the file name panel:
-/// - Top: chips (wrapping) | trash (right, centered)
-/// - Divider
-/// - Bottom: [IN×] [OUT×] (optional) | filename.ext
+/// Renders the file name card (design system §13.5.6):
+/// - first line: the checked tags as chips in the file's order | the trash
+/// - second line: the IN and OUT timecodes (when set) | the name without the tags
 pub fn view<'a, S>(
     state: &'a FileNamePanelState,
     tag_list: &'a TagList<S>,
@@ -35,7 +34,7 @@ where
     let chips = chips_panel::view(state, tag_list, tag_palette);
     let trash = trash_zone::view(state, tag_list, tag_palette);
     let top_row = row![chips, trash]
-        .spacing(TRASH_SPACING)
+        .spacing(SPACE_S)
         .align_y(Alignment::Center)
         .width(Length::Fill);
 
@@ -44,30 +43,34 @@ where
 
     let mut bottom_items: Vec<Element<'_, Message>> = Vec::new();
     if let Some(s) = seg_start {
-        bottom_items.push(timecode_badge::view(
+        bottom_items.push(badge::timecode(
             "IN",
-            timecode_badge::fmt_timecode(s),
-            Message::ClearSegmentStart,
+            file_name_line::fmt_timecode(s),
+            Some(Message::ClearSegmentStart),
         ));
     }
     if let Some(e) = seg_end {
-        bottom_items.push(timecode_badge::view(
+        bottom_items.push(badge::timecode(
             "OUT",
-            timecode_badge::fmt_timecode(e),
-            Message::ClearSegmentEnd,
+            file_name_line::fmt_timecode(e),
+            Some(Message::ClearSegmentEnd),
         ));
     }
     bottom_items.push(file_name_line::view(name_ext));
 
     let bottom_row = row(bottom_items)
-        .spacing(6)
+        .spacing(SPACE_TIGHT)
         .align_y(Alignment::Center)
         .width(Length::Fill);
 
-    let inner = container(column![top_row, bottom_row].spacing(8).width(Length::Fill))
-        .padding([8, 8])
-        .width(Length::Fill)
-        .style(theme::elevated_container_style);
+    let inner = container(
+        column![top_row, bottom_row]
+            .spacing(SPACE_S)
+            .width(Length::Fill),
+    )
+    .padding(SPACE_S)
+    .width(Length::Fill)
+    .style(style::card);
 
     // A right-click on the file's name (its chips or the name line) opens the file menu.
     mouse_area(container(inner).width(Length::Fill))

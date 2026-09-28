@@ -5,6 +5,8 @@ use iced::widget::{mouse_area, opaque, pin, responsive, space, stack};
 use iced::{Element, Length, Point, Size};
 
 use crate::ui;
+use crate::ui::menu::MenuItem;
+use crate::ui::tokens::MENU_WIDTH;
 
 use super::{FileAction, FileMenuState, Message};
 
@@ -15,11 +17,14 @@ pub fn view(state: &FileMenuState) -> Element<'_, Message> {
     };
     responsive(move |area| {
         let items = FileAction::ALL.map(|action| {
-            ui::menu::item(
-                label(action),
-                action.keys(),
-                Message::Choose(menu.file, action),
-            )
+            ui::menu::item(MenuItem {
+                icon: None,
+                label: label(action),
+                // One key cap per key: "Shift+F11" is `Shift` `F11`.
+                keys: action.keys().split('+').collect(),
+                checked: false,
+                on_press: Some(Message::Choose(menu.file, action)),
+            })
         });
         let size = ui::menu::size(items.len());
         let at = inside(menu.position, size, area);
@@ -29,10 +34,13 @@ pub fn view(state: &FileMenuState) -> Element<'_, Message> {
             .on_press(Message::Close)
             .on_right_press(Message::Close)
             .on_middle_press(Message::Close);
-        stack![opaque(outside), pin(ui::menu::menu(items)).position(at)]
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        stack![
+            opaque(outside),
+            pin(ui::menu::menu(items, Length::Fixed(MENU_WIDTH))).position(at)
+        ]
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
     })
     .into()
 }

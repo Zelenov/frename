@@ -1,4 +1,5 @@
 //! Draggable horizontal bar that resizes the panel below it: dragging up makes the panel taller.
+//! A 2-px line in an 8-px hit area (design system §13.5.7), brighter under the pointer.
 
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer;
@@ -7,13 +8,7 @@ use iced::advanced::{self, Clipboard, Shell};
 use iced::mouse;
 use iced::{Border, Element, Event, Length, Point, Rectangle, Shadow, Size};
 
-use crate::theme;
-
-/// Visual height of the bar.
-const BAR_HEIGHT: f32 = 3.0;
-
-/// Hit-test height (taller than visual for easier grabbing).
-const HIT_HEIGHT: f32 = 8.0;
+use crate::ui::tokens::{BORDER_CONTROL, BORDER_SUBTLE, HANDLE_HIT, HANDLE_LINE};
 
 /// Internal widget state for tracking drag.
 #[derive(Default)]
@@ -53,7 +48,7 @@ where
     }
 
     fn size(&self) -> Size<Length> {
-        Size::new(Length::Fill, Length::Fixed(HIT_HEIGHT))
+        Size::new(Length::Fill, Length::Fixed(HANDLE_HIT))
     }
 
     fn layout(
@@ -62,7 +57,7 @@ where
         _renderer: &Renderer,
         limits: &layout::Limits,
     ) -> layout::Node {
-        layout::Node::new(limits.resolve(Length::Fill, Length::Fixed(HIT_HEIGHT), Size::ZERO))
+        layout::Node::new(limits.resolve(Length::Fill, Length::Fixed(HANDLE_HIT), Size::ZERO))
     }
 
     fn draw(
@@ -80,9 +75,9 @@ where
 
         let is_active = state.last.is_some() || cursor.is_over(bounds);
         let color = if is_active {
-            theme::SPLITTER_ACTIVE
+            BORDER_CONTROL
         } else {
-            theme::SPLITTER
+            BORDER_SUBTLE
         };
 
         // A thin centered bar within the hit area.
@@ -90,9 +85,9 @@ where
             renderer::Quad {
                 bounds: Rectangle {
                     x: bounds.x,
-                    y: bounds.y + (bounds.height - BAR_HEIGHT) / 2.0,
+                    y: bounds.y + (bounds.height - HANDLE_LINE) / 2.0,
                     width: bounds.width,
-                    height: BAR_HEIGHT,
+                    height: HANDLE_LINE,
                 },
                 border: Border::default(),
                 shadow: Shadow::default(),

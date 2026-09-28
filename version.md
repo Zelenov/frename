@@ -1,3 +1,22 @@
+# 0.82
+## Changed
+- The whole main window follows the design system that Settings got in 0.77: one font (Inter, bundled), the same dark surfaces, and icons with tooltips that show their keys instead of emoji buttons.
+  - Video: the controls in groups with a time readout, and a timeline with a visible playhead. The subtitle and marker lists get tabs with counts. The rotate buttons are in the new ⋯ menu, which also takes the buttons that don't fit a narrow player, the volume slider included; the wheel over the volume still changes it.
+  - The in/out span is a band above the timeline, where the played part no longer hides it, and a line at the top of the marker list.
+  - Subtitles in the side list take only the height their text needs.
+  - File list: file names in a fixed-width font with small tag chips; the open file is marked by a bar; a clip with subtitles shows the subtitles icon. Tags that do not fit a row become "+2" instead of being cut at the edge, and long names end in "…". While a batch action runs, a line says the list is locked; after a job, each file shows an icon for what happened to it.
+  - The file list's filter is a button with a menu: tick several filters, **Show all** clears them.
+  - Tags: a checked tag's name is bold; stars are black so they show on every chip color. Tags not yet in the folder's tags are listed first, under a caption of their own, then the folder's tags. The columns no longer jump while you search. The order strip says in words what reordering does.
+  - Batch actions: every action has an icon, and the paid ones show who bills them. Each page says what it changes. Run names what it will do ("Move 14 comments"), and when it is off, the reason is shown next to it. A finished job shows its outcome once, the counts as figures, and the files not done as a table.
+  - Empty screens say what is missing and offer the button that fixes it, instead of showing a lone symbol.
+  - Settings → Subtitles: the cue length comes before the list of languages.
+- The main window can no longer be made smaller than 900 × 560.
+- Picking another batch action after a job finished now opens it (it used to keep showing the result).
+- A double-click to rename a clip no longer loads its video twice.
+
+## Removed
+- The batch action "Move in/out points out of file names", which only existed for names written by old versions.
+
 # 0.81
 ## Added
 - Right-click a file in the list, or the open file's name, for a menu: Show in Explorer (the folder opens with the file selected; on Linux the file manager), Copy full path, Copy file name. The keys work without the menu on the open file: `F11`, `Shift+F11`, `Ctrl+F11`. The file's tags are saved first, so what you copy is its final name.

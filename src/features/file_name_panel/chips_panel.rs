@@ -1,17 +1,19 @@
-//! Widget: wrapping row of tag chips (draggable) with bounds reporter for drop index.
+//! The first line of the file name card (design system §13.5.6): the file's checked tags as
+//! chips in the file's order, the order of the new name. A chip is dragged to reorder it and
+//! middle-clicked to take it off the clip; a bounds reporter maps the pointer to a drop index.
 
 use iced::widget::{container, mouse_area, row, stack};
-use iced::{Alignment, Element, Length};
+use iced::{mouse, Alignment, Element, Length};
 
 use frename_core::{StoredTagStore, TagList};
 
-use crate::tag_colors::TagPalette;
+use crate::ui::palette::TagPalette;
 use crate::widgets::bounds_reporter::BoundsReporter;
 use crate::widgets::tag_chip;
 
-use super::{
-    FileNamePanelState, Message, TAG_CHIP_CELL_HEIGHT, TAG_CHIP_ROW_HEIGHT, TAG_CHIP_SPACING,
-};
+use crate::ui::text;
+
+use super::{FileNamePanelState, Message, TAG_CHIP_CELL_HEIGHT, TAG_CHIP_SPACING};
 
 /// Renders the chips panel: wrapping row of tag chips with drop-index bounds reporting.
 pub fn view<'a, S>(
@@ -42,6 +44,14 @@ where
         _ => (0..tag_count).collect(),
     };
 
+    if tag_count == 0 {
+        return container(text::secondary(fl!("file-name-panel-no-tags")))
+            .width(Length::Fill)
+            .height(TAG_CHIP_CELL_HEIGHT)
+            .center_y(TAG_CHIP_CELL_HEIGHT)
+            .into();
+    }
+
     let mut chip_elements: Vec<Element<'_, Message>> = Vec::with_capacity(display_order.len());
     for &idx in &display_order {
         let tag_id = match tag_list.checked_tag_id_at(idx) {
@@ -52,26 +62,15 @@ where
             Some(t) => t,
             None => continue,
         };
-        let tag_name = tag.tag().to_string();
         let tag_color = tag_palette.color(tag.color_index(), tag.is_stored());
         let is_dragging = dragging_index == Some(idx);
-        let chip = tag_chip::view_with_leading(
-            tag_name,
-            tag_color,
-            TAG_CHIP_ROW_HEIGHT,
-            None,
-            Some((TAG_CHIP_CELL_HEIGHT, is_dragging)),
-            Some(Message::DragStarted {
+        let chip = mouse_area(tag_chip::draggable(tag.tag(), tag_color, is_dragging))
+            .on_press(Message::DragStarted {
                 tag_id,
                 initial_index: idx,
-            }),
-            false,
-            false, // no hover feedback
-            None,
-            false,
-            false,
-        );
-        let chip = mouse_area(chip).on_middle_press(Message::RemoveTag(tag_id));
+            })
+            .on_middle_press(Message::RemoveTag(tag_id))
+            .interaction(mouse::Interaction::Grab);
         chip_elements.push(chip.into());
     }
 
@@ -83,14 +82,12 @@ where
         .vertical_spacing(TAG_CHIP_SPACING)
         .align_x(Alignment::Start);
 
+    // The chips are the stack's first layer, so they give it its height: wrapped onto more
+    // lines, the card grows instead of the second line running over the name below. The bounds
+    // reporter fills that height on top; it takes no events, so the chips still get the clicks.
     let content_bounds = BoundsReporter::new(Message::PanelBounds);
-    // Wrap BoundsReporter in a Fixed height to prevent it (Fill x Fill) from propagating
-    // Fill height up through the Shrink chain in file_name_panel → file_workspace column.
-    let content_bounds = container(content_bounds)
-        .width(Length::Fill)
-        .height(Length::Fixed(TAG_CHIP_CELL_HEIGHT));
     let chips_cell =
-        container(stack![content_bounds, tag_row].width(Length::Fill)).width(Length::Fill);
+        container(stack![tag_row, content_bounds].width(Length::Fill)).width(Length::Fill);
 
     chips_cell.into()
 }
