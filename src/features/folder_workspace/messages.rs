@@ -129,4 +129,7 @@ pub enum Message {
     StartDragOut(Vec<PathBuf>),
     /// The drag out of the window ended (the app sends it when the drag loop returns).
     DragOutFinished,
+    /// The keyboard modifiers held right now (Ctrl/Shift), or none once the window loses focus.
+    /// A mouse click carries no modifiers in iced, so a file-row click reads this instead.
+    ModifiersChanged(iced::keyboard::Modifiers),
 }

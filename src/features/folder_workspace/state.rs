@@ -114,6 +114,13 @@ pub struct FolderWorkspace {
     unsaved_markers: HashMap<FileId, Vec<Marker>>,
     /// A press on a file row that may become a drag out of the window.
     drag_out: DragOutState,
+    /// Ctrl/Shift held right now, as of the last `ModifiersChanged`/window-unfocus event: a
+    /// mouse click carries no modifiers of its own in iced, so a file-row click reads this.
+    modifiers: iced::keyboard::Modifiers,
+    /// The file a Shift+click range runs from: the last Ctrl-clicked file, or, once multi-select
+    /// starts without one (a first Shift+click), the file that was open before it. `None` outside
+    /// multi-selection, so the next one starts fresh from whatever is open then.
+    select_anchor: Option<FileId>,
 }
 
 impl FolderWorkspace {
@@ -157,6 +164,8 @@ impl FolderWorkspace {
             known_marker_guids: HashSet::new(),
             unsaved_markers: HashMap::new(),
             drag_out: DragOutState::default(),
+            modifiers: iced::keyboard::Modifiers::empty(),
+            select_anchor: None,
         }
     }
 
@@ -208,6 +217,10 @@ impl FolderWorkspace {
             // Intercepted by the app, which owns the window; no-op here.
             Message::StartDragOut(_) => Task::none(),
             Message::DragOutFinished => self.drag_out_finished(),
+            Message::ModifiersChanged(modifiers) => {
+                self.modifiers = modifiers;
+                Task::none()
+            }
             Message::Folder(folder_msg) => self.handle_folder_message(folder_msg),
             Message::MediaViewer(msg) => match msg {
                 media_viewer::Message::Unloaded => self.on_media_unloaded(),
@@ -337,6 +350,15 @@ impl FolderWorkspace {
                 if self.media_fullscreen {
                     self.media_fullscreen = false;
                     return Task::none();
+                }
+                if self.batch.is_active() {
+                    // A running job ignores `SetActive` (see `BatchState::update`), so batch mode
+                    // stays on: keep the anchor too, or a Shift+click after the job finishes would
+                    // silently range from the wrong file instead of the documented last-Ctrl-click.
+                    if !self.batch.is_running() {
+                        self.select_anchor = None;
+                    }
+                    return self.handle_batch(batch::Message::SetActive(false));
                 }
                 // Both search bars label their clear button "Esc", so clear both.
                 let clear_files = self.set_file_name_filter(String::new());
@@ -810,10 +832,7 @@ impl FolderWorkspace {
             open_in_default_app(ANTHROPIC_BILLING_URL);
             return Task::none();
         }
-        // Batch mode does not edit the open file, so its rename editor goes.
-        self.inline_rename = None;
-        self.batch.update(msg);
-        Task::batch([self.describe_ai_reads(), self.subtitle_reads()])
+        self.handle_batch_many([msg])
     }
 
     /// What "Generate subtitles" shows before it runs is worked out in the background while
@@ -1151,10 +1170,7 @@ impl FolderWorkspace {
 
     fn handle_folder_message(&mut self, msg: folder::Message) -> Task<Message> {
         match msg {
-            folder::Message::SelectFile(index) => {
-                self.arm_drag_out(index);
-                self.select_file_at(index)
-            }
+            folder::Message::SelectFile(index) => self.select_file_on_click(index),
             folder::Message::PreviousFile => self.select_previous(),
             folder::Message::NextFile => self.select_next(),
             folder::Message::Scrolled {
@@ -1193,6 +1209,12 @@ impl FolderWorkspace {
             }
             folder::Message::SubmitRename => self.submit_rename(),
             folder::Message::SetBatchMode(on) => {
+                // A running job ignores `SetActive` (see `BatchState::update`): the UI already
+                // disables the ☑ button then, but keep the anchor too in case something else
+                // sends this message while a job runs.
+                if !on && !self.batch.is_running() {
+                    self.select_anchor = None;
+                }
                 // The open file starts checked: it is usually the one to act on.
                 let open = self
                     .directory
@@ -1363,6 +1385,103 @@ impl FolderWorkspace {
         };
         self.pending_to_file_id = Some(file.id());
         Task::done(Message::FileOpened(file))
+    }
+
+    /// A file row was clicked: a plain click selects it alone and may start a drag out, as
+    /// before; Ctrl+click or Shift+click instead build a multi-selection out of batch mode's
+    /// checked set (see `ctrl_click_select`/`shift_click_select`). Either way the clicked file
+    /// opens in the viewer, same as a plain click — it stays the file tags/comment edit.
+    fn select_file_on_click(&mut self, index: usize) -> Task<Message> {
+        if self.modifiers.shift() {
+            return self.shift_click_select(index);
+        }
+        if self.modifiers.command() {
+            return self.ctrl_click_select(index);
+        }
+        self.arm_drag_out(index);
+        self.select_file_at(index)
+    }
+
+    /// Ctrl+click: with no multi-selection running yet, starts one with the previously open file
+    /// plus the clicked one (just the clicked one when they are the same file); with one already
+    /// running, toggles the clicked file in the checked set. Either way the clicked file becomes
+    /// the anchor for the next Shift+click.
+    fn ctrl_click_select(&mut self, index: usize) -> Task<Message> {
+        let Some(dir) = self.directory.as_ref() else {
+            return Task::none();
+        };
+        let Some(id) = dir.files_in_order().nth(index).map(|f| f.id()) else {
+            return Task::none();
+        };
+        let previously_open = dir.selected_file().map(|f| f.id());
+        let open = self.select_file_at(index);
+        let check = if self.batch.is_active() {
+            self.handle_batch(batch::Message::Toggle(id))
+        } else {
+            let ids: Vec<FileId> = previously_open.into_iter().chain([id]).collect();
+            self.handle_batch_many([
+                batch::Message::SetActive(true),
+                batch::Message::CheckAll(ids),
+            ])
+        };
+        self.select_anchor = Some(id);
+        Task::batch([open, check])
+    }
+
+    /// Shift+click: checks every file from the anchor (the last Ctrl-clicked file, or, when
+    /// multi-selection has not started yet, the file open before this click) to the clicked one,
+    /// inclusive, in the list's current order — replacing whatever was checked before. Does not
+    /// move the anchor, so repeated Shift+clicks keep ranging from the same file.
+    fn shift_click_select(&mut self, index: usize) -> Task<Message> {
+        let Some(dir) = self.directory.as_ref() else {
+            return Task::none();
+        };
+        let listed: Vec<FileId> = dir.files_in_order().map(|f| f.id()).collect();
+        let Some(&clicked_id) = listed.get(index) else {
+            return Task::none();
+        };
+        let anchor = self
+            .select_anchor
+            .or_else(|| dir.selected_file().map(|f| f.id()));
+        let range: Vec<FileId> = match anchor.and_then(|a| listed.iter().position(|id| *id == a)) {
+            // The anchor may no longer be listed under the current filter: fall back to just
+            // the clicked file rather than ranging from a position that no longer means it.
+            Some(anchor_index) => {
+                let (lo, hi) = if anchor_index <= index {
+                    (anchor_index, index)
+                } else {
+                    (index, anchor_index)
+                };
+                listed[lo..=hi].to_vec()
+            }
+            None => vec![clicked_id],
+        };
+        if self.select_anchor.is_none() {
+            self.select_anchor = anchor.or(Some(clicked_id));
+        }
+        let open = self.select_file_at(index);
+        let check = self.handle_batch_many([
+            batch::Message::SetActive(true),
+            batch::Message::CheckNone,
+            batch::Message::CheckAll(range),
+        ]);
+        Task::batch([open, check])
+    }
+
+    /// Apply several batch messages as one step, so the reads they trigger (AI/subtitle plans)
+    /// run once for the result instead of once per message. `Run`/`Retry`/`OpenLog`/`OpenBilling`
+    /// are `handle_batch`'s own special cases (starting a job, opening a file); never pass them
+    /// here, or they reach `BatchState::update`, which does not handle them.
+    fn handle_batch_many(
+        &mut self,
+        msgs: impl IntoIterator<Item = batch::Message>,
+    ) -> Task<Message> {
+        // Batch mode does not edit the open file, so its rename editor goes.
+        self.inline_rename = None;
+        for msg in msgs {
+            self.batch.update(msg);
+        }
+        Task::batch([self.describe_ai_reads(), self.subtitle_reads()])
     }
 
     fn select_previous(&mut self) -> Task<Message> {
@@ -2198,6 +2317,7 @@ mod tests {
     use frename_core::{
         AppDatabase, File, FileId, FileSnapshot, Initializable, LoggingAppStateStore,
     };
+    use iced::keyboard::Modifiers;
 
     use crate::features::{batch, folder, tag_panel};
 
@@ -3646,5 +3766,267 @@ mod tests {
         let _ = workspace.update(Message::OpenPath(test_dir.file_path("gone.mp4")));
         assert!(workspace.file_workspace().file().is_some());
         assert!(!workspace.is_loading());
+    }
+
+    // --- Multi-select (Ctrl+click / Shift+click), issue #60 ---
+
+    /// Opens a fresh folder of `file_count` files with `file_0` open, ready for `SelectFile`.
+    fn open_folder(file_count: usize) -> (TestDirectory, FolderWorkspace) {
+        let test_dir = TestDirectory::new(file_count);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        (test_dir, workspace)
+    }
+
+    fn ctrl_click(workspace: &mut FolderWorkspace, index: usize) {
+        let _ = workspace.update(Message::ModifiersChanged(Modifiers::COMMAND));
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(index)));
+        flush_file_opened(workspace);
+        let _ = workspace.update(Message::ModifiersChanged(Modifiers::empty()));
+    }
+
+    fn shift_click(workspace: &mut FolderWorkspace, index: usize) {
+        let _ = workspace.update(Message::ModifiersChanged(Modifiers::SHIFT));
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(index)));
+        flush_file_opened(workspace);
+        let _ = workspace.update(Message::ModifiersChanged(Modifiers::empty()));
+    }
+
+    #[test]
+    fn the_modifiers_held_are_tracked_from_modifiers_changed_and_cleared_on_unfocus() {
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::ModifiersChanged(Modifiers::COMMAND));
+        assert!(workspace.modifiers.command());
+        let _ = workspace.update(Message::ModifiersChanged(Modifiers::empty()));
+        assert!(!workspace.modifiers.command());
+    }
+
+    #[test]
+    fn ctrl_click_starts_multi_select_with_the_open_file_and_the_clicked_one() {
+        let (_test_dir, mut workspace) = open_folder(3);
+        let (a, b) = (file_id_at(&workspace, 0), file_id_at(&workspace, 2));
+        ctrl_click(&mut workspace, 2);
+        assert!(
+            workspace.batch().is_active(),
+            "ctrl+click starts multi-select"
+        );
+        assert!(workspace.batch().is_checked(a) && workspace.batch().is_checked(b));
+        assert_eq!(workspace.batch().checked_count(), 2);
+        assert!(
+            workspace.current_file().is_some_and(|f| f.id() == b),
+            "the clicked file becomes the open one"
+        );
+    }
+
+    #[test]
+    fn ctrl_click_on_the_open_file_itself_starts_multi_select_with_just_it() {
+        let (_test_dir, mut workspace) = open_folder(3);
+        let a = file_id_at(&workspace, 0);
+        ctrl_click(&mut workspace, 0);
+        assert!(workspace.batch().is_active());
+        assert_eq!(workspace.batch().checked_count(), 1);
+        assert!(workspace.batch().is_checked(a));
+    }
+
+    #[test]
+    fn a_further_ctrl_click_toggles_a_single_file_in_and_then_out() {
+        let (_test_dir, mut workspace) = open_folder(3);
+        let c = file_id_at(&workspace, 2);
+        ctrl_click(&mut workspace, 1);
+        ctrl_click(&mut workspace, 2);
+        assert!(workspace.batch().is_checked(c), "toggled in");
+        assert_eq!(workspace.batch().checked_count(), 3);
+        ctrl_click(&mut workspace, 2);
+        assert!(!workspace.batch().is_checked(c), "toggled back out");
+        assert_eq!(workspace.batch().checked_count(), 2);
+    }
+
+    #[test]
+    fn shift_click_checks_every_file_from_the_anchor_to_the_clicked_one_inclusive() {
+        let (_test_dir, mut workspace) = open_folder(5);
+        let ids: Vec<FileId> = (0..5).map(|i| file_id_at(&workspace, i)).collect();
+        ctrl_click(&mut workspace, 3); // anchor = file_3, checked = {file_0, file_3}
+        shift_click(&mut workspace, 1); // range [1, 3]
+        assert_eq!(workspace.batch().checked_count(), 3);
+        for (i, id) in ids.iter().enumerate().take(4).skip(1) {
+            assert!(workspace.batch().is_checked(*id), "file {i} in range");
+        }
+        assert!(
+            !workspace.batch().is_checked(ids[0]),
+            "outside the range now"
+        );
+        assert!(
+            !workspace.batch().is_checked(ids[4]),
+            "outside the range now"
+        );
+    }
+
+    #[test]
+    fn repeated_shift_clicks_range_from_the_same_anchor() {
+        let (_test_dir, mut workspace) = open_folder(5);
+        let ids: Vec<FileId> = (0..5).map(|i| file_id_at(&workspace, i)).collect();
+        ctrl_click(&mut workspace, 3); // anchor = file_3
+        shift_click(&mut workspace, 1); // checked = {1, 2, 3}
+        shift_click(&mut workspace, 4); // anchor is still file_3: checked = {3, 4}
+        assert_eq!(workspace.batch().checked_count(), 2);
+        assert!(workspace.batch().is_checked(ids[3]) && workspace.batch().is_checked(ids[4]));
+        assert!(!workspace.batch().is_checked(ids[1]) && !workspace.batch().is_checked(ids[2]));
+    }
+
+    #[test]
+    fn ctrl_click_after_shift_click_moves_the_anchor() {
+        let (_test_dir, mut workspace) = open_folder(5);
+        let ids: Vec<FileId> = (0..5).map(|i| file_id_at(&workspace, i)).collect();
+        ctrl_click(&mut workspace, 3); // anchor = file_3
+        shift_click(&mut workspace, 1); // checked = {1, 2, 3}, anchor unchanged
+        ctrl_click(&mut workspace, 0); // toggles file_0 in; anchor moves to file_0
+        assert_eq!(workspace.select_anchor, Some(ids[0]));
+        shift_click(&mut workspace, 2); // ranges from the new anchor: [0, 2]
+        assert_eq!(workspace.batch().checked_count(), 3);
+        for id in ids.iter().take(3) {
+            assert!(workspace.batch().is_checked(*id));
+        }
+    }
+
+    #[test]
+    fn a_shift_click_with_an_anchor_no_longer_listed_checks_only_the_clicked_file() {
+        let (_test_dir, mut workspace) = open_folder(3);
+        // An anchor from a file that has since left the list under a filter (or, as here,
+        // simply does not exist any more) cannot define a range: fall back to just the click.
+        workspace.select_anchor = Some(FileId::new());
+        let clicked = file_id_at(&workspace, 2);
+        shift_click(&mut workspace, 2);
+        assert_eq!(workspace.batch().checked_count(), 1);
+        assert!(workspace.batch().is_checked(clicked));
+    }
+
+    #[test]
+    fn a_plain_click_during_multi_select_only_changes_the_open_file() {
+        let (_test_dir, mut workspace) = open_folder(3);
+        let (a, b) = (file_id_at(&workspace, 0), file_id_at(&workspace, 1));
+        ctrl_click(&mut workspace, 1); // checked = {a, b}, multi-select active
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        flush_file_opened(&mut workspace);
+        assert!(
+            workspace.batch().is_active(),
+            "a plain click does not leave multi-select"
+        );
+        assert!(
+            workspace.batch().is_checked(a) && workspace.batch().is_checked(b),
+            "checks are unaffected, as clicking any row already did before this feature"
+        );
+        assert!(workspace.current_file().is_some_and(|f| f.id() == a));
+    }
+
+    #[test]
+    fn escape_leaves_multi_select_and_clears_the_anchor() {
+        let (_test_dir, mut workspace) = open_folder(3);
+        ctrl_click(&mut workspace, 1);
+        assert!(workspace.batch().is_active());
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(!workspace.batch().is_active());
+        assert_eq!(workspace.select_anchor, None);
+    }
+
+    #[test]
+    fn turning_batch_mode_off_clears_the_anchor() {
+        let (_test_dir, mut workspace) = open_folder(3);
+        ctrl_click(&mut workspace, 1);
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(false)));
+        assert_eq!(workspace.select_anchor, None);
+    }
+
+    /// A running job ignores `SetActive(false)` (`BatchState::update`'s own guard), so batch
+    /// mode stays on: the anchor must stay too, or a Shift+click once the job ends would range
+    /// from the wrong file with no sign anything changed.
+    #[test]
+    fn escape_during_a_running_batch_job_keeps_batch_mode_and_the_anchor() {
+        let (_test_dir, mut workspace) = open_folder(3);
+        ctrl_click(&mut workspace, 1);
+        ctrl_click(&mut workspace, 2); // anchor = file_2
+        let anchor = workspace.select_anchor;
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        assert!(
+            workspace.is_batch_running(),
+            "the job must actually be running"
+        );
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(
+            workspace.batch().is_active(),
+            "SetActive(false) had no effect while the job runs"
+        );
+        assert_eq!(
+            workspace.select_anchor, anchor,
+            "the anchor must not be dropped either"
+        );
+    }
+
+    /// Ctrl/Shift+click must index the *filtered* list (as the issue's own "in the list's
+    /// current order (with the current filter/search applied)" says), not the unfiltered one.
+    #[test]
+    fn multi_select_indexes_the_filtered_list_not_the_unfiltered_one() {
+        let (_test_dir, mut workspace) = open_folder(5);
+        let ids: Vec<FileId> = (0..5).map(|i| file_id_at(&workspace, i)).collect();
+        let _ = workspace.update(Message::Folder(folder::Message::SetUntaggedOnly(true)));
+        // Tags file_2, dropping it out of the untagged-only list: filtered order becomes
+        // [file_0, file_1, file_3, file_4] (file_2 is not the selected file, so it is hidden).
+        let snapshot =
+            FileSnapshot::new(vec!["Comedy".to_string()], "file_2", ".mp4", "file_2.mp4");
+        let _ = workspace.update(Message::FileUpdated {
+            id: ids[2],
+            snapshot,
+        });
+        assert_eq!(
+            workspace
+                .directory()
+                .unwrap()
+                .files_in_order()
+                .map(|f| f.id())
+                .collect::<Vec<_>>(),
+            vec![ids[0], ids[1], ids[3], ids[4]],
+            "file_2 must be filtered out"
+        );
+
+        ctrl_click(&mut workspace, 2); // filtered index 2 = file_3; anchor = file_3
+        shift_click(&mut workspace, 3); // filtered index 3 = file_4: range [file_3, file_4]
+
+        assert_eq!(workspace.batch().checked_count(), 2);
+        assert!(workspace.batch().is_checked(ids[3]) && workspace.batch().is_checked(ids[4]));
+        assert!(!workspace.batch().is_checked(ids[0]));
+        assert!(
+            !workspace.batch().is_checked(ids[2]),
+            "file_2 was never a real position in the filtered range"
+        );
+    }
+
+    /// The anchor is stored by `FileId`, not by the index it had when set — it must keep
+    /// pointing at the right file once a filter that changed the list's shape is turned off.
+    #[test]
+    fn the_anchor_keeps_working_after_the_filter_that_hid_other_files_is_turned_off() {
+        let (_test_dir, mut workspace) = open_folder(5);
+        let ids: Vec<FileId> = (0..5).map(|i| file_id_at(&workspace, i)).collect();
+        let _ = workspace.update(Message::Folder(folder::Message::SetUntaggedOnly(true)));
+        let snapshot =
+            FileSnapshot::new(vec!["Comedy".to_string()], "file_2", ".mp4", "file_2.mp4");
+        let _ = workspace.update(Message::FileUpdated {
+            id: ids[2],
+            snapshot,
+        });
+        // Filtered order: [0, 1, 3, 4]; ctrl-click filtered index 2 = file_3, becoming the anchor.
+        ctrl_click(&mut workspace, 2);
+        assert_eq!(workspace.select_anchor, Some(ids[3]));
+
+        let _ = workspace.update(Message::Folder(folder::Message::SetUntaggedOnly(false)));
+        // Unfiltered order is [0,1,2,3,4] again; file_3 (the anchor) is now at index 3.
+        shift_click(&mut workspace, 1); // range [1, 3] in the now-unfiltered order
+        assert_eq!(workspace.batch().checked_count(), 3);
+        for id in [ids[1], ids[2], ids[3]] {
+            assert!(workspace.batch().is_checked(id));
+        }
+        assert!(!workspace.batch().is_checked(ids[0]) && !workspace.batch().is_checked(ids[4]));
     }
 }

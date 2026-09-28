@@ -43,6 +43,14 @@ pub struct DemoScenario {
     /// In batch mode (`--batch`), the action to select, by its English name ("Rotate videos").
     #[serde(default)]
     pub batch_action: Option<String>,
+    /// Files to Ctrl+click in order, by name, after the seek: builds a multi-selection the way
+    /// a click does (issue #60), turning batch mode on. Independent of `--batch`.
+    #[serde(default)]
+    pub ctrl_click: Vec<String>,
+    /// One more file to Shift+click after `ctrl_click`, extending the selection to the range
+    /// between it and the last Ctrl-clicked file (or `open`, if `ctrl_click` is empty).
+    #[serde(default)]
+    pub shift_click: Option<String>,
     /// The staged files, oldest first: the file list shows them in this order.
     pub files: Vec<DemoFile>,
 }
@@ -134,6 +142,21 @@ impl DemoScenario {
         }
         if self.window.contains(&0) {
             return Err(DemoError("window size must not be zero".into()));
+        }
+        let staged = |name: &str| self.files.iter().any(|f| f.name == name);
+        for name in &self.ctrl_click {
+            if !staged(name) {
+                return Err(DemoError(format!(
+                    "ctrl_click = {name:?} is not one of the staged files"
+                )));
+            }
+        }
+        if let Some(name) = &self.shift_click {
+            if !staged(name) {
+                return Err(DemoError(format!(
+                    "shift_click = {name:?} is not one of the staged files"
+                )));
+            }
         }
         Ok(())
     }

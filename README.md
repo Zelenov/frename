@@ -61,6 +61,9 @@ Next time you start frename, it reopens the last folder and clip.
 | `PageDown` | Next file (renames the file you leave) |
 | `PageUp` | Previous file (renames the file you leave) |
 | Double-click a file | Rename it by hand: `Enter` renames, `Esc` cancels |
+| `Ctrl+click` a file | Add it (and the open one) to a selection, or drop it if already selected |
+| `Shift+click` a file | Select every file between it and the last `Ctrl`-clicked one |
+| `Escape` | Leaves a selection made with `Ctrl`/`Shift`+click (batch mode); otherwise clears the file and tag searches |
 
 ### Tags
 | Key | Action |
@@ -70,7 +73,7 @@ Next time you start frename, it reopens the last folder and clip.
 | Any letter, `Backspace` | Type into the tag search |
 | `Enter` | Add the typed tag, or the selected unsaved (○) tag, to the folder's tags |
 | `Delete` | Delete the selected tag from the folder's tags |
-| `Escape` | Clear the tag and file searches |
+| `Escape` | Clear the tag and file searches, or leave a `Ctrl`/`Shift`+click selection first if one is running (see Files above) |
 | `Ctrl+C` | Copy the file's tags (and its new name to the clipboard) |
 | `Ctrl+V` | Replace the file's tags with the copied ones |
 | `Ctrl+Z` | Undo |
@@ -210,7 +213,16 @@ No subtitles yet? Check the videos in batch mode and run **Generate subtitles** 
 
 Click ☑ to check files in the list (All / Invert) and run one action on all of them, with progress
 and Cancel. Each file then shows a green or red check box. Drag a checked file to drag all checked
-files (an unchecked one drags only itself). Actions:
+files (an unchecked one drags only itself). Esc leaves batch mode, the same as clicking ☑ again.
+
+**Select several clips without ☑**: **Ctrl+click** a clip to add it (and the one open before it) to
+the selection; Ctrl+click a selected clip to drop it. **Shift+click** a clip to select every clip
+between it and the last one you clicked with Ctrl (or the open clip, if you have not Ctrl+clicked
+yet), replacing the selection. Either turns on batch mode with exactly that selection checked, and
+the clip you clicked stays the one shown in the player. A plain click still opens just that one
+clip, as always.
+
+Actions:
 
 - move comments between the video and `.comment.txt` files;
 - move in/out points between the comment and the video;
