@@ -361,6 +361,7 @@ impl SettingsState {
                 Operation::TagCommented
                 | Operation::FixTags
                 | Operation::ReloadFiles
+                | Operation::Rotate(_)
                 | Operation::DescribeAi(_)
                 | Operation::GenerateSubtitles(_),
             ) => {}

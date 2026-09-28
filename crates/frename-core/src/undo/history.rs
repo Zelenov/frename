@@ -65,4 +65,18 @@ where
     pub fn can_redo(&self) -> bool {
         !self.redo_stack.is_empty()
     }
+
+    /// Whether the step [`Self::undo`] would take turns a video (see [`Undoable::turns_a_video`]).
+    pub fn undo_turns_a_video(&self) -> bool {
+        self.undo_stack
+            .last()
+            .is_some_and(|cmd| cmd.turns_a_video())
+    }
+
+    /// Whether the step [`Self::redo`] would take turns a video.
+    pub fn redo_turns_a_video(&self) -> bool {
+        self.redo_stack
+            .last()
+            .is_some_and(|cmd| cmd.turns_a_video())
+    }
 }
