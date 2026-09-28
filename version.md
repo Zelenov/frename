@@ -4,7 +4,7 @@
 
 ## Changed
 - Pasting tags onto a clip no longer wipes its comment.
-- A rename that would give a clip the same name as another one (or its comment) is refused instead of replacing it, with a note that the file already exists.
+- A rename that would give a clip the same name as another one (or its comment, subtitle or transcript) is refused instead of replacing it, with a note that it was not saved.
 
 # 0.80
 ## Changed

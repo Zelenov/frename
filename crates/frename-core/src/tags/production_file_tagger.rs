@@ -114,12 +114,13 @@ impl ProductionFileTagger {
             .map(|p| p.join(&new_file_name))
             .unwrap_or_else(|| PathBuf::from(&new_file_name));
 
-        // Checked before any write: a rename onto an existing file (or its comment/subtitle
-        // sidecars) would silently replace it — e.g. two clips that end up with the same tags
-        // and base name (duplicated subclips, `clip.mp4` and `clip (1).mp4` renamed alike).
-        if new_path != path && super::file_tagger::target_name_taken(&new_path) {
+        // Checked before any write: a rename onto an existing file (or its comment, subtitle or
+        // transcript sidecar) would silently replace it — e.g. two clips that end up with the
+        // same tags and base name (duplicated subclips, `clip.mp4` and `clip (1).mp4` renamed
+        // alike). See `target_name_taken` for what "taken" excludes (a same-file case change).
+        if new_path != path && super::file_tagger::target_name_taken(path, &new_path) {
             log::error!(
-                "ProductionFileTagger: not saving {:?}: {:?} (or a comment/subtitle sidecar) already exists",
+                "ProductionFileTagger: not saving {:?}: {:?} (or a sidecar) already exists",
                 path,
                 new_path
             );
