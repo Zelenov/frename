@@ -8,7 +8,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use arboard;
 use frename_core::undo::History;
 use frename_core::{
     AppDatabase, AppStateStore, CreateTagCommand, DeleteTagCommand, File, FileId, FileSnapshot,
@@ -25,6 +24,7 @@ use iced::{Subscription, Task};
 
 use crate::features::batch::{self, BatchState, ItemResult, ItemStatus};
 use crate::features::drag_out::{self, DragOutState};
+use crate::features::file_menu::{self, FileAction, FileMenuState};
 use crate::features::file_name_panel::{self, FileNamePanelState};
 use crate::features::file_workspace::FileWorkspace;
 use crate::features::folder;
@@ -39,6 +39,7 @@ use crate::widgets::splitter::HIT_WIDTH;
 use super::Message;
 
 mod drag_out_actions;
+mod file_actions;
 mod marker_actions;
 mod rotation;
 
@@ -128,6 +129,13 @@ pub struct FolderWorkspace {
     /// starts without one (a first Shift+click), the file that was open before it. `None` outside
     /// multi-selection, so the next one starts fresh from whatever is open then.
     select_anchor: Option<FileId>,
+    /// The file context menu (right-click on a file).
+    file_menu: FileMenuState,
+    /// A file menu action waiting for its file's pending edits to reach the disk, so it acts on
+    /// the file's final name. Run by the save of that file.
+    pending_file_action: Option<(FileId, FileAction)>,
+    /// The system clipboard, kept open: on Linux what was copied lasts only while it is.
+    clipboard: Option<arboard::Clipboard>,
 }
 
 impl FolderWorkspace {
@@ -174,6 +182,9 @@ impl FolderWorkspace {
             drag_out: DragOutState::default(),
             modifiers: iced::keyboard::Modifiers::empty(),
             select_anchor: None,
+            file_menu: FileMenuState::default(),
+            pending_file_action: None,
+            clipboard: None,
         }
     }
 
@@ -230,6 +241,9 @@ impl FolderWorkspace {
                 Task::none()
             }
             Message::Folder(folder_msg) => self.handle_folder_message(folder_msg),
+            Message::FileMenu(msg) => self.handle_file_menu(msg),
+            Message::FileAction(action) => self.file_action_on_open_file(action),
+            Message::RunFileAction(id, action) => self.run_file_action(id, action),
             Message::MediaViewer(msg) => match msg {
                 media_viewer::Message::Unloaded => self.on_media_unloaded(),
                 media_viewer::Message::ToggleFullscreen => {
@@ -348,6 +362,9 @@ impl FolderWorkspace {
                 Self::notice("Frame saved")
             }
             Message::EscapePressed => {
+                if self.file_menu.is_open() {
+                    return self.handle_file_menu(file_menu::Message::Close);
+                }
                 if self.markers.is_editing() {
                     self.markers.close();
                     return Task::none();
@@ -442,8 +459,8 @@ impl FolderWorkspace {
             return Task::none();
         };
         self.copied_tags = Some(snapshot.tags().to_vec());
-        if let Ok(mut cb) = arboard::Clipboard::new() {
-            let _ = cb.set_text(snapshot.file_name());
+        if let Err(e) = self.set_clipboard_text(snapshot.file_name()) {
+            log::warn!("could not copy the file name to the clipboard: {e}");
         }
         Task::none()
     }
@@ -803,6 +820,9 @@ impl FolderWorkspace {
                 | Message::OpenFilePicker
                 | Message::PrepareBatch(_)
                 | Message::ToggleMediaFullscreen
+                | Message::FileAction(_)
+                | Message::RunFileAction(..)
+                | Message::FileMenu(file_menu::Message::Open(_))
                 | Message::Folder(
                     folder::Message::SelectFile(_)
                         | folder::Message::PreviousFile
@@ -1159,6 +1179,8 @@ impl FolderWorkspace {
         } else {
             Task::none()
         };
+        // A file menu action waiting for this save runs now, on the name the file has on disk.
+        let file_action = self.file_action_after_save(id, refused);
 
         let _ = self
             .directory
@@ -1195,10 +1217,11 @@ impl FolderWorkspace {
             return Task::batch([
                 markers_saved,
                 refused_notice,
+                file_action,
                 Task::done(Message::ScrollFolderListToSelected),
             ]);
         }
-        Task::batch([markers_saved, refused_notice])
+        Task::batch([markers_saved, refused_notice, file_action])
     }
 
     fn handle_folder_message(&mut self, msg: folder::Message) -> Task<Message> {
@@ -1233,6 +1256,16 @@ impl FolderWorkspace {
             // Intercepted by the app, which owns the windows; no-op here.
             folder::Message::OpenSettings => Task::none(),
             folder::Message::StartRename(index) => self.start_rename(index),
+            folder::Message::OpenFileMenu(index) => {
+                let file = self
+                    .directory
+                    .as_ref()
+                    .and_then(|dir| dir.files_in_order().nth(index))
+                    .map(|file| file.id());
+                file.map_or_else(Task::none, |id| {
+                    Task::done(Message::FileMenu(file_menu::Message::Open(id)))
+                })
+            }
             folder::Message::RenameInput(text) => {
                 if let Some(rename) = self.inline_rename.as_mut() {
                     rename.text = text;
@@ -1780,6 +1813,11 @@ impl FolderWorkspace {
     }
 
     fn handle_file_name_panel(&mut self, msg: file_name_panel::Message) -> Task<Message> {
+        if let file_name_panel::Message::OpenFileMenu = msg {
+            return self.file_workspace.file().map_or_else(Task::none, |file| {
+                Task::done(Message::FileMenu(file_menu::Message::Open(file.id())))
+            });
+        }
         if let file_name_panel::Message::RemoveTag(id) = msg {
             let was_checked = self
                 .file_workspace
@@ -2285,6 +2323,11 @@ impl FolderWorkspace {
 
     pub fn file_name_panel(&self) -> &FileNamePanelState {
         &self.file_name_panel
+    }
+
+    /// The file context menu.
+    pub fn file_menu(&self) -> &FileMenuState {
+        &self.file_menu
     }
 
     pub fn sync_locked(&self) -> bool {

@@ -1,6 +1,6 @@
 //! UI for the file name panel: composes chips panel, trash zone, and file name line.
 
-use iced::widget::{column, container, row};
+use iced::widget::{column, container, mouse_area, row};
 use iced::{Alignment, Element, Length};
 
 use frename_core::{StoredTagStore, TagList};
@@ -69,5 +69,8 @@ where
         .width(Length::Fill)
         .style(theme::elevated_container_style);
 
-    container(inner).width(Length::Fill).into()
+    // A right-click on the file's name (its chips or the name line) opens the file menu.
+    mouse_area(container(inner).width(Length::Fill))
+        .on_right_press(Message::OpenFileMenu)
+        .into()
 }

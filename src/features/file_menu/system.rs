@@ -1,5 +1,6 @@
-//! What the file menu's actions hand to the system: the text put on the clipboard, and showing
-//! a file in Explorer or the Linux file manager. The text is built by plain functions, tested
+//! What the file menu's actions hand to the system: the text put on the clipboard (by the
+//! workspace, which keeps the clipboard open), and showing a file in Explorer or the Linux file
+//! manager. The text is built by plain functions, tested
 //! without a clipboard, Explorer or a D-Bus session.
 
 use std::path::{Path, PathBuf};
@@ -39,7 +40,9 @@ pub fn name_text(path: &Path) -> String {
 
 /// The argument that makes Explorer open the file's folder with the file selected. Quoted as a
 /// whole path, since Explorer reads its command line itself and a comma or space in the path
-/// would otherwise end it (a Windows path cannot contain `"`).
+/// would otherwise end it (a Windows path cannot contain `"`). Tested on every system, used on
+/// Windows.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn explorer_select_arg(path: &Path) -> String {
     format!("/select,\"{}\"", path_text(path))
 }
@@ -47,11 +50,6 @@ pub fn explorer_select_arg(path: &Path) -> String {
 /// The `file://` URI the freedesktop file manager interface takes for `path`.
 pub fn file_uri(path: &Path) -> Option<String> {
     url::Url::from_file_path(path).ok().map(String::from)
-}
-
-/// Put `text` on the system clipboard.
-pub fn copy_to_clipboard(text: &str) -> Result<(), arboard::Error> {
-    arboard::Clipboard::new()?.set_text(text)
 }
 
 /// Show the file at `path` in the system's file manager: its folder opens with it selected.
