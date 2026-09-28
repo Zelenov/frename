@@ -7,6 +7,9 @@
 - A rename that would give a clip the same name as another one (or its comment, subtitle or transcript) is refused instead of replacing it, with a note that it was not saved.
 - Leaving a clip and moving to the next one before its video has finished loading no longer risks the tag you just set failing to reach the file.
 
+## Fixed
+- The volume control no longer disappears when the video panel is narrow: below a width it collapses to its icon, which you scroll to change the volume. The video panel's own minimum width was widened so no other control clips either.
+
 # 0.80
 ## Changed
 - Closing frename, opening another folder, or opening a file outside the current folder now saves the open file's tags, comment and in/out instead of losing them.

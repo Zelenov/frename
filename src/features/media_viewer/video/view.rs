@@ -16,6 +16,14 @@ const CONTROLS_HEIGHT: f32 = 32.0;
 /// Widest a note over the picture gets before it wraps (px).
 const NOTICE_MAX_WIDTH: f32 = 260.0;
 const BAR_ROW_HEIGHT: f32 = 24.0;
+
+/// Narrowest the video panel can be and still show every control without clipping (#96):
+/// `video_controls::view`'s own minimum, plus the three buttons this module appends after it
+/// (subtitle list, marker list, fullscreen) — `video_controls::view` only ever sees the width
+/// left over for its own row, not the panel's full width, so those three have to be added here,
+/// at the worst case of all three showing (the subtitle button only shows when the clip has
+/// subtitles, the other two always do).
+pub const MIN_CONTROLS_ROW_WIDTH: f32 = video_controls::MIN_CONTROLS_WIDTH + CONTROLS_HEIGHT * 3.0;
 /// Fixed so the video does not jump as cues of one or two lines come and go.
 const SUBTITLE_STRIP_HEIGHT: f32 = 48.0;
 const SUBTITLE_STRIP_TEXT_SIZE: f32 = 14.0;
