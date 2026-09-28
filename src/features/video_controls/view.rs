@@ -36,6 +36,13 @@ pub const MIN_CONTROLS_WIDTH: f32 =
 /// the volume) rather than being clipped or pushed off the row's right edge (#96).
 const VOLUME_BAR_MIN_WIDTH: f32 = MIN_CONTROLS_WIDTH + ROW_SPACING + VOLUME_BAR_WIDTH;
 
+// The relation between the constants above, checked once at compile time rather than as a
+// runtime test (clippy's own suggestion for an assertion on values that never change): the
+// panel's floor must actually be wider than the buttons alone, and narrower than the point
+// where the bar fits, or one of the two thresholds would be pointless.
+const _: () = assert!(MIN_CONTROLS_WIDTH > BUTTONS_CONTENT_WIDTH + BUTTONS_GAPS);
+const _: () = assert!(MIN_CONTROLS_WIDTH < VOLUME_BAR_MIN_WIDTH);
+
 /// Whether the controls row is wide enough to show the volume bar (not just its icon), at
 /// `available_width` (#96).
 fn show_volume_bar(available_width: f32) -> bool {
@@ -416,14 +423,6 @@ mod tests {
         let fitted = fit_label(long, 300.0);
         assert!(fitted.ends_with('…'), "{fitted}");
         assert!(fitted.chars().count() as f32 * LABEL_CHAR_WIDTH + LABEL_CHROME <= 300.0);
-    }
-
-    /// Issue #96: the splitter's own minimum must never be narrower than what the buttons and
-    /// the collapsed (icon-only) volume control need, or they would clip with nowhere to go.
-    #[test]
-    fn the_panel_minimum_fits_every_button_and_the_collapsed_volume_control() {
-        assert!(MIN_CONTROLS_WIDTH > BUTTONS_CONTENT_WIDTH + BUTTONS_GAPS);
-        assert!(MIN_CONTROLS_WIDTH < VOLUME_BAR_MIN_WIDTH);
     }
 
     /// Below the threshold the bar has no room and gives way to the icon; at or above it, it
