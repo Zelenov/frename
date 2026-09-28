@@ -120,11 +120,13 @@ pub fn view<'a>(
             // Batch mode previews files but does not edit them, renaming included.
             (false, true) => mouse_area(item)
                 .on_press(Message::SelectFile(state.index))
+                .on_right_press(Message::OpenFileMenu(state.index))
                 .interaction(mouse::Interaction::Pointer)
                 .into(),
             (false, false) => mouse_area(item)
                 .on_press(Message::SelectFile(state.index))
                 .on_double_click(Message::StartRename(state.index))
+                .on_right_press(Message::OpenFileMenu(state.index))
                 .interaction(mouse::Interaction::Pointer)
                 .into(),
         }

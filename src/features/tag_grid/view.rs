@@ -108,7 +108,7 @@ where
         .iter()
         .filter_map(|&id| {
             let tag = tag_list.get_tag(id)?;
-            let color = tag_palette.color(tag.color_index());
+            let color = tag_palette.color(tag.color_index(), tag.is_stored());
             Some(cell::cell(tag, color, cursor == Some(id), columns))
         })
         .collect();

@@ -51,7 +51,7 @@ settings-video = Видео
 settings-video-autoplay = Сразу воспроизводить открытое видео
 settings-tags = Цвет тегов
 settings-tags-monochrome = Одноцветные
-settings-tags-monochrome-hint = Все теги одного серого цвета.
+settings-tags-monochrome-hint = Добавленные вами теги — тёмно-серые, остальные — светло-серые, других цветов нет.
 settings-file-names = Имена файлов
 settings-tags-space-after = Пробел после каждого тега
 settings-tags-space-example = Food. Goat. clip.mp4
@@ -459,6 +459,16 @@ folder-window-empty-title = Откройте папку с клипами
 folder-window-empty-line = Или перетащите папку в окно. Правый клик по кнопке открывает один файл.
 folder-window-open = Открыть папку…
 
+## File menu (right-click on a file, or F11 / Shift+F11 / Ctrl+F11)
+
+file-menu-show-in-explorer = Показать в проводнике
+file-menu-show-in-file-manager = Показать в файловом менеджере
+file-menu-copy-path = Копировать полный путь
+file-menu-copy-name = Копировать имя файла
+file-menu-copied = Скопировано
+file-menu-not-copied = Не скопировано: буфер обмена недоступен
+file-menu-not-shown = Не удалось открыть файловый менеджер
+
 ## Controls bar under the file list
 
 folder-controls-filter-untagged = Без тегов
@@ -489,12 +499,12 @@ video-controls-cannot-hold-markers = Этот файл не может хран�
 video-controls-add-a-name = Добавить имя
 video-controls-rotate-left = Повернуть влево
 video-controls-rotate-right = Повернуть вправо
-video-controls-volume = Громкость
 video-controls-more = Ещё
 media-viewer-no-clip = Клип не открыт
 media-viewer-loading-slow = Ждём файл… (файл из облака может загружаться долго)
 media-viewer-cannot-play = Этот клип не воспроизводится
 media-viewer-no-picture = В этом файле нет видеоизображения
+video-controls-volume-scroll = Громкость — прокрутите, чтобы изменить
 rotate-cannot = Нельзя повернуть: { $reason }
 rotate-reason-missing = файла больше нет на месте
 rotate-flag-right = 90° вправо

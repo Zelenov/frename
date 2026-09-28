@@ -1,0 +1,26 @@
+# Narrow video panel (#96): the panel is dragged down to the splitter's own minimum, where the
+# controls row is at its tightest and the volume control has already collapsed to its icon
+# (scroll it to change the volume). Not a README image; for looking at the feature
+# (`frename --demo`).
+source = "../../tests/folder"
+open = "pick.wide.MVI_0901.mp4"
+seek = 2.0
+window = [1000, 640]
+panels = [444, 220]
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_0901.mp4"
+# With subtitles, so the CC button shows too — the worst case for how many buttons the row holds.
+subtitles = """1
+00:00:01,000 --> 00:00:04,000
+Testing the narrow controls row
+"""
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "review.people.MVI_0902.mov"
+
+[[files]]
+from = "Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm"
+name = "b-roll.city.MVI_0903.webm"

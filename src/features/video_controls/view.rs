@@ -2,8 +2,8 @@
 //! [`Command`]: the same one is drawn as an icon button in the bar or as an item of **More**
 //! when the pane is too narrow for it (see [`super::Fold`]).
 
-use iced::widget::{button as iced_button, container, row, stack, Row};
-use iced::{Alignment, Element, Length, Padding};
+use iced::widget::{button as iced_button, container, mouse_area, row, stack, Row};
+use iced::{mouse, Alignment, Element, Length, Padding};
 
 use super::progress_bar::{BarMarker, ProgressBar};
 use super::{Message, VideoControlsState};
@@ -295,15 +295,39 @@ pub fn volume_slider(state: &VideoControlsState) -> Element<'_, Message> {
     .into()
 }
 
-/// The volume: its icon (not a button) and the slider.
+/// The volume: its icon (not a button) and the slider. The wheel over either changes it too.
 pub fn volume(state: &VideoControlsState) -> Element<'_, Message> {
-    row![
-        icon(Icon::Volume, ICON_M, TEXT_SECONDARY),
-        volume_slider(state)
-    ]
-    .spacing(SPACE_S)
-    .align_y(Alignment::Center)
+    let volume = state.volume();
+    mouse_area(
+        row![
+            icon(Icon::Volume, ICON_M, TEXT_SECONDARY),
+            volume_slider(state)
+        ]
+        .spacing(SPACE_S)
+        .align_y(Alignment::Center),
+    )
+    .on_scroll(move |delta| Message::SetVolume(volume_after_scroll(volume, delta)))
     .into()
+}
+
+/// How far one notch of a mouse wheel moves the volume (out of 1). A trackpad's pixel delta is
+/// scaled to it over `VOLUME_WHEEL_PIXELS_PER_STEP`, so a gentle swipe (many small deltas) moves
+/// it about as far as a deliberate one, not a full step each.
+const VOLUME_SCROLL_STEP: f32 = 0.05;
+/// Trackpad pixels worth one full `VOLUME_SCROLL_STEP`.
+const VOLUME_WHEEL_PIXELS_PER_STEP: f32 = 20.0;
+
+/// The volume after the wheel moved by `delta` over the volume control, kept within 0..=1.
+pub fn volume_after_scroll(current: f32, delta: mouse::ScrollDelta) -> f32 {
+    // `f32::signum` is 1.0 for a zero of either sign, so a still wheel needs its own case.
+    let step = match delta {
+        mouse::ScrollDelta::Lines { y: 0.0, .. } => 0.0,
+        mouse::ScrollDelta::Lines { y, .. } => y.signum() * VOLUME_SCROLL_STEP,
+        mouse::ScrollDelta::Pixels { y, .. } => {
+            (y / VOLUME_WHEEL_PIXELS_PER_STEP).clamp(-1.0, 1.0) * VOLUME_SCROLL_STEP
+        }
+    };
+    (current + step).clamp(0.0, 1.0)
 }
 
 /// The seek bar with the in/out range, the clip markers as pins and the label of the marker the
@@ -430,6 +454,44 @@ fn marker_label_button(label: MarkerLabel<'_>) -> Element<'_, Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scrolling_up_raises_volume_and_down_lowers_it_clamped() {
+        let up = mouse::ScrollDelta::Lines { x: 0.0, y: 1.0 };
+        let down = mouse::ScrollDelta::Lines { x: 0.0, y: -1.0 };
+        assert_eq!(volume_after_scroll(0.5, up), 0.5 + VOLUME_SCROLL_STEP);
+        assert_eq!(volume_after_scroll(0.5, down), 0.5 - VOLUME_SCROLL_STEP);
+        assert_eq!(volume_after_scroll(1.0, up), 1.0, "clamped at the top");
+        assert_eq!(volume_after_scroll(0.0, down), 0.0, "clamped at the bottom");
+        let still = mouse::ScrollDelta::Lines { x: 0.0, y: 0.0 };
+        assert_eq!(
+            volume_after_scroll(0.5, still),
+            0.5,
+            "a still wheel is a no-op"
+        );
+        let no_move = mouse::ScrollDelta::Pixels { x: 0.0, y: 0.0 };
+        assert_eq!(volume_after_scroll(0.5, no_move), 0.5);
+    }
+
+    /// A trackpad's inertial scroll sends many small `Pixels` deltas per gesture: each moves the
+    /// volume only as far as its own size warrants, and never more than one step (#96).
+    #[test]
+    fn a_small_trackpad_scroll_moves_the_volume_less_than_a_full_step() {
+        let gentle = mouse::ScrollDelta::Pixels { x: 0.0, y: 2.0 };
+        let after = volume_after_scroll(0.5, gentle);
+        assert!(after > 0.5 && after < 0.5 + VOLUME_SCROLL_STEP, "{after}");
+        let large = mouse::ScrollDelta::Pixels {
+            x: 0.0,
+            y: VOLUME_WHEEL_PIXELS_PER_STEP * 10.0,
+        };
+        assert_eq!(volume_after_scroll(0.5, large), 0.5 + VOLUME_SCROLL_STEP);
+        let gentle_down = mouse::ScrollDelta::Pixels { x: 0.0, y: -2.0 };
+        let after_down = volume_after_scroll(0.5, gentle_down);
+        assert!(
+            after_down < 0.5 && after_down > 0.5 - VOLUME_SCROLL_STEP,
+            "{after_down}"
+        );
+    }
 
     #[test]
     fn a_long_marker_name_is_cut_to_the_player() {

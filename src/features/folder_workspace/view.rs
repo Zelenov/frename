@@ -8,11 +8,12 @@ use iced::{Alignment, Element, Length};
 
 use crate::features::folder::view::ListProps;
 use crate::features::folder_controls::view::ToolbarProps;
-use crate::features::{batch, file_workspace, folder, folder_controls, media_viewer};
+use crate::features::{batch, file_menu, file_workspace, folder, folder_controls, media_viewer};
 use crate::ui::icons::{icon, spinner, Icon};
 use crate::ui::palette::TagPalette;
 use crate::ui::tokens::*;
 use crate::ui::{button, style, text};
+use crate::widgets::right_press_reporter::RightPressReporter;
 use crate::widgets::splitter::Splitter;
 
 use super::{FolderWorkspace, Message};
@@ -147,10 +148,18 @@ pub fn view(
         iced::widget::Space::new().into()
     };
 
-    stack![normal_layout, overlay]
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+    // The file menu over everything, once a file is right-clicked (nothing otherwise).
+    let file_menu = file_menu::view::view(state.file_menu()).map(Message::FileMenu);
+
+    // The right button's position is taken here, over the whole window: a row inside the
+    // scrolled file list does not know where it is on screen.
+    RightPressReporter::new(
+        stack![normal_layout, overlay, file_menu]
+            .width(Length::Fill)
+            .height(Length::Fill),
+        |position| Message::FileMenu(file_menu::Message::RightPressed(position)),
+    )
+    .into()
 }
 
 /// The whole window when no folder is open (§13.7): what to do first and the button that does

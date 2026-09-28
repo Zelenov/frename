@@ -45,7 +45,10 @@ where
         .and_then(|id| tag_list.get_tag(id))
         .map(|tag| {
             column![
-                tag_chip::view_display_only(tag.tag(), tag_palette.color(tag.color_index())),
+                tag_chip::view_display_only(
+                    tag.tag(),
+                    tag_palette.color(tag.color_index(), tag.is_stored())
+                ),
                 text::caption_strong(fl!("file-name-panel-untag")).color(ERROR),
             ]
             .spacing(SPACE_XS)

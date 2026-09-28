@@ -366,6 +366,13 @@ mod tests`, not `#[cfg(test)]`, which also marks items inside a macro); a
   text between every character. Assert the anchor order in the script.
 - Editing `.ftl` files with a script: a multi-line entry ends at its own `}` line; remove that
   line with the entry, or the file stops parsing and every i18n test fails at once.
+- Merging `main` into a long UI branch: a conflict in a view is usually `main`'s whole old file
+  against the rewrite. Read what `main` actually changed there (`git diff <merge-base>
+  origin/main -- <file>`), take the branch's side, and port only that change onto the new
+  structure (a new message, a right-click, a palette argument). Never take `main`'s old view: it
+  brings back literals and the old theme. Then re-check strings (`every_message_is_used`), the
+  lint, and `version.md` (a released block stays exactly as `main` has it; the branch's block is
+  `main`'s version + 1).
 - Several worktrees building at once share one `CARGO_TARGET_DIR`, or drive C: fills up.
 
 ---

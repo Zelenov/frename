@@ -305,11 +305,22 @@ fn controls_bar<'a>(
     groups.push(if fold.volume_slider {
         controls::volume(controls_state).map(Message::Controls)
     } else {
-        IconButton::new(Icon::Volume)
-            .latched(state.more_open())
-            .tip(Tip::new(fl!("video-controls-volume")), Position::Top)
-            .on_press(Message::ToggleMore)
+        {
+            // Folded, the slider is in More; the wheel over the button still changes the volume.
+            let volume = controls_state.volume();
+            mouse_area(
+                IconButton::new(Icon::Volume)
+                    .latched(state.more_open())
+                    .tip(Tip::new(fl!("video-controls-volume-scroll")), Position::Top)
+                    .on_press(Message::ToggleMore),
+            )
+            .on_scroll(move |delta| {
+                Message::Controls(video_controls::Message::SetVolume(
+                    video_controls::volume_after_scroll(volume, delta),
+                ))
+            })
             .into()
+        }
     });
     let mut views: Vec<Element<'a, Message>> = Vec::new();
     if fold.lists {

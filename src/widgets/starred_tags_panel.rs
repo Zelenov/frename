@@ -38,7 +38,7 @@ where
     let shown = MAX_ROWS * columns.count as usize;
     let hidden = starred.len().saturating_sub(shown);
     let cells = starred.into_iter().take(shown).map(|tag| {
-        let color = tag_palette.color(tag.color_index());
+        let color = tag_palette.color(tag.color_index(), tag.is_stored());
         cell::cell(tag, color, cursor == Some(tag.id()), columns)
     });
     let more = (hidden > 0).then(|| text::caption(fl!("tag-grid-more", count = (hidden as i64))));

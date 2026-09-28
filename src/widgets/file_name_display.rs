@@ -107,7 +107,10 @@ pub fn view<'a, Message: 'a>(
         if !parts.is_empty() {
             parts.push(dot());
         }
-        let tag_color = tag_palette.color(color_mapping.color_index_for(tag_name));
+        let tag_color = tag_palette.color(
+            color_mapping.color_index_for(tag_name),
+            color_mapping.contains(tag_name),
+        );
         parts.push(tag_chip::mini(tag_name, tag_color));
     }
     if shown.hidden > 0 {

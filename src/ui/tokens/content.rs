@@ -54,6 +54,10 @@ pub const TAG_PALETTE: [Color; 16] = [
     Color::from_rgb(0.70, 0.85, 0.85), // cyan
 ];
 
+/// Monochrome tags: a tag in the tag list, darker than the light gray (`TAG_PALETTE[0]`) kept for
+/// a tag that is not in it.
+pub const TAG_MONO_KNOWN: Color = Color::from_rgb(0.50, 0.50, 0.53);
+
 // Premiere Pro's marker colors: they must match Premiere, not the theme.
 pub const MARKER_GREEN: Color = Color::from_rgb(0.36, 0.76, 0.36);
 pub const MARKER_RED: Color = Color::from_rgb(0.86, 0.22, 0.22);
@@ -75,5 +79,6 @@ mod tests {
         for color in TAG_PALETTE {
             assert!(contrast(TAG_TEXT, color) >= 7.0, "{color:?}");
         }
+        assert!(contrast(TAG_TEXT, TAG_MONO_KNOWN) >= 4.5);
     }
 }

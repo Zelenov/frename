@@ -20,8 +20,8 @@ pub mod undo;
 
 pub use app_dir::{app_data_dir, log_path, set_app_data_dir, DATA_DIR_VAR};
 pub use db::{
-    AppDatabase, AppSettings, AppStateStore, Initializable, LoggingAppStateStore, StoredTagStore,
-    UpdateCheckState, VideoSettings, WindowGeometry,
+    AppDatabase, AppSettings, AppStateStore, BatchRun, Initializable, LoggingAppStateStore,
+    StoredTagStore, UpdateCheckState, VideoSettings, WindowGeometry,
 };
 pub use directory::Directory;
 pub use file::{File, FileId};

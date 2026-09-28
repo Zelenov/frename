@@ -132,6 +132,17 @@ impl Default for UpdateCheckState {
     }
 }
 
+/// The last batch action run, and its options, so batch mode reopens with them selected (#65).
+/// Options are simple `key=value` pairs the UI's own action list understands; a key it no longer
+/// has, or a value it cannot parse, is for the reader to fall back on quietly.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BatchRun {
+    /// The stable id of the action that ran (see the UI's action list); empty when none has run
+    /// yet.
+    pub action: String,
+    pub options: Vec<(String, String)>,
+}
+
 /// Interface for storing and restoring app state (last folder and file, window geometry).
 /// Implemented by the application database and by the test fake (e.g. `FakeAppStorage`).
 /// Pass by value (e.g. `Box<dyn AppStateStore>`); no singleton, connection is opened per use.
@@ -173,6 +184,14 @@ pub trait AppStateStore: Send + Sync {
 
     /// Saves the update check state.
     fn set_update_check(&self, _state: UpdateCheckState) {}
+
+    /// Returns the last batch action run and its options, if any.
+    fn get_batch_run(&self) -> Option<BatchRun> {
+        None
+    }
+
+    /// Saves the last batch action run and its options.
+    fn set_batch_run(&self, _run: BatchRun) {}
 }
 
 /// Interface for stored tags and tag color mapping. Tags are keyed by tag id (UUID); tag colors are keyed by tag name.

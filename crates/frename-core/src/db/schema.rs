@@ -140,3 +140,13 @@ ALTER TABLE app_settings ADD COLUMN ui_language TEXT NOT NULL DEFAULT '';
 pub const M15_IN_OUT_OUT_OF_NAMES: &str = "
 UPDATE app_settings SET in_out_storage = 'xmp' WHERE in_out_storage = 'file_name';
 ";
+
+/// Migration 16: the last batch action run and its options (#65), so batch mode reopens with
+/// them selected.
+pub const M16_BATCH_RUN: &str = "
+CREATE TABLE IF NOT EXISTS batch_run (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    action TEXT NOT NULL DEFAULT '',
+    options TEXT NOT NULL DEFAULT ''
+);
+";

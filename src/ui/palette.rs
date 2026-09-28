@@ -12,7 +12,8 @@ pub enum TagPalette {
     /// Each tag gets its own palette color.
     #[default]
     Colored,
-    /// Every tag gets the neutral first palette color.
+    /// Every tag gets one of two grays: `TAG_MONO_KNOWN` when it is in the tag list, the palette's
+    /// light gray when it is not (a stray word from a file name), so the two stay apart.
     Monochrome,
 }
 
@@ -26,10 +27,12 @@ impl TagPalette {
         }
     }
 
-    /// The chip color of a tag with the stored color `index` (wrapping around the palette).
-    pub fn color(self, index: u8) -> Color {
+    /// The chip color of a tag: `index` is its stored palette color (colored mode only, wrapping
+    /// around the palette); `in_list` whether it is in the tag list (monochrome mode only).
+    pub fn color(self, index: u8, in_list: bool) -> Color {
         match self {
             Self::Colored => TAG_PALETTE[usize::from(index) % TAG_PALETTE.len()],
+            Self::Monochrome if in_list => TAG_MONO_KNOWN,
             Self::Monochrome => TAG_PALETTE[0],
         }
     }
@@ -58,16 +61,17 @@ mod tests {
 
     #[test]
     fn a_color_index_wraps_around_the_palette() {
-        assert_eq!(TagPalette::Colored.color(1), TAG_PALETTE[1]);
-        assert_eq!(TagPalette::Colored.color(17), TAG_PALETTE[1]);
+        assert_eq!(TagPalette::Colored.color(1, true), TAG_PALETTE[1]);
+        assert_eq!(TagPalette::Colored.color(17, false), TAG_PALETTE[1]);
     }
 
     #[test]
-    fn monochrome_gives_every_tag_the_same_color() {
-        assert_eq!(
-            TagPalette::Monochrome.color(5),
-            TagPalette::Monochrome.color(9)
-        );
+    fn monochrome_tells_a_listed_tag_from_an_unlisted_one_and_ignores_the_index() {
+        for index in 0..TAG_PALETTE.len() as u8 {
+            assert_eq!(TagPalette::Monochrome.color(index, true), TAG_MONO_KNOWN);
+            assert_eq!(TagPalette::Monochrome.color(index, false), TAG_PALETTE[0]);
+        }
+        assert_ne!(TAG_MONO_KNOWN, TAG_PALETTE[0]);
         assert_eq!(TagPalette::from_monochrome(true), TagPalette::Monochrome);
         assert_eq!(TagPalette::from_monochrome(false), TagPalette::Colored);
     }

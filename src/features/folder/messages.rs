@@ -37,6 +37,8 @@ pub enum Message {
     OpenSettings,
     /// Double-click on a row's name: edit that file's name in place.
     StartRename(usize),
+    /// Right-click on a row: open the file menu for that file.
+    OpenFileMenu(usize),
     /// Text typed into the in-place rename editor.
     RenameInput(String),
     /// Enter in the in-place rename editor: rename the file.

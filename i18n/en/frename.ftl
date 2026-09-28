@@ -21,7 +21,7 @@ settings-video = Video
 settings-video-autoplay = Play videos automatically when opened
 settings-tags = Tag colors
 settings-tags-monochrome = Monochrome
-settings-tags-monochrome-hint = Every tag chip in one gray.
+settings-tags-monochrome-hint = Tags you added show in a darker gray, others in a lighter one — no other colors.
 settings-file-names = File names
 settings-tags-space-after = Space after each tag
 settings-tags-space-example = Food. Goat. clip.mp4
@@ -406,6 +406,16 @@ folder-window-empty-title = Open a folder of clips
 folder-window-empty-line = Or drop a folder on the window. A right-click on the button opens one file.
 folder-window-open = Open a folder…
 
+## File menu (right-click on a file, or F11 / Shift+F11 / Ctrl+F11)
+
+file-menu-show-in-explorer = Show in Explorer
+file-menu-show-in-file-manager = Show in file manager
+file-menu-copy-path = Copy full path
+file-menu-copy-name = Copy file name
+file-menu-copied = Copied
+file-menu-not-copied = Not copied: the clipboard is not available
+file-menu-not-shown = Could not open the file manager
+
 ## Controls bar under the file list
 
 folder-controls-filter-untagged = Untagged
@@ -436,12 +446,12 @@ video-controls-cannot-hold-markers = This file cannot hold markers
 video-controls-add-a-name = Add a name
 video-controls-rotate-left = Rotate left
 video-controls-rotate-right = Rotate right
-video-controls-volume = Volume
 video-controls-more = More
 media-viewer-no-clip = No clip open
 media-viewer-loading-slow = Waiting for the file… (a cloud file may take a while)
 media-viewer-cannot-play = This clip cannot be played
 media-viewer-no-picture = This file has no video picture
+video-controls-volume-scroll = Volume — scroll to change
 rotate-cannot = Cannot rotate: { $reason }
 rotate-reason-missing = the file is no longer there
 rotate-flag-right = 90° right

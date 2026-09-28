@@ -29,6 +29,8 @@ pub enum ButtonKind {
     OverlayIcon,
     /// A segment of a segmented control; `true` when it is the current one (§8.4).
     Segment(bool),
+    /// An item of a menu (§8.14): no fill until the pointer or the keys are on it.
+    MenuItem,
 }
 
 impl ButtonKind {
@@ -75,6 +77,14 @@ impl ButtonKind {
             ButtonKind::OverlayIcon => (
                 match status {
                     Hovered | Pressed => OVERLAY_HOVER,
+                    _ => clear,
+                },
+                TEXT,
+                clear,
+            ),
+            ButtonKind::MenuItem => (
+                match status {
+                    Hovered | Pressed => SELECTED,
                     _ => clear,
                 },
                 TEXT,

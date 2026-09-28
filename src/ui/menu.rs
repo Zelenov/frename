@@ -1,8 +1,10 @@
-//! Menus (`docs/design/design-system.md` §8.14): a popup of commands, each with its icon (or the
-//! icon's room), its name and its keys on the right; a latched one is marked with `check`.
+//! Menus (`docs/design/design-system.md` §8.14): a popup of commands 28 high, each with its icon
+//! (or the icon's room), its name and its keys on the right; a latched one is marked with
+//! `check`. The caller places the menu (a context menu opens under the pointer, see
+//! `file_menu`) and closes it; [`size`] says how much room it takes, to keep it inside the window.
 
 use iced::widget::{button, column, container, row, space, Column};
-use iced::{Alignment, Element, Length, Padding};
+use iced::{Alignment, Element, Length, Padding, Size};
 
 use super::badge::key_cap;
 use super::icons::{icon, Icon};
@@ -21,6 +23,9 @@ pub struct MenuItem<M> {
     /// `None`: shown disabled.
     pub on_press: Option<M>,
 }
+
+/// Around the items, inside the edge.
+const PADDING: f32 = SPACE_XS;
 
 const ITEM_PADDING: Padding = Padding {
     top: (MENU_ITEM_HEIGHT - LINE_BODY) / 2.0,
@@ -59,7 +64,7 @@ pub fn item<'a, M: Clone + 'a>(item: MenuItem<M>) -> Element<'a, M> {
         .width(Length::Fill)
         .padding(ITEM_PADDING)
         .on_press_maybe(item.on_press)
-        .style(style::button(ButtonKind::Ghost))
+        .style(style::button(ButtonKind::MenuItem))
         .into()
 }
 
@@ -80,11 +85,29 @@ pub fn menu<'a, M: 'a>(
     rows: impl IntoIterator<Item = Element<'a, M>>,
     width: Length,
 ) -> Element<'a, M> {
-    let rows: Column<'a, M> = column(rows).spacing(SPACE_XXS);
+    // Items touch: a menu is exactly its items and its edge high (see `size`).
+    let rows: Column<'a, M> = column(rows);
     container(rows)
-        .padding(SPACE_XS)
+        .padding(PADDING)
         .width(width)
         .max_width(MENU_MAX_WIDTH)
         .style(style::popup)
         .into()
+}
+
+/// The size of a menu of `items` items, [`MENU_WIDTH`] wide (its edge is drawn inside it).
+pub fn size(items: usize) -> Size {
+    Size::new(MENU_WIDTH, items as f32 * MENU_ITEM_HEIGHT + 2.0 * PADDING)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_menu_is_as_high_as_its_items_and_its_edge() {
+        let size = size(3);
+        assert_eq!(size.width, MENU_WIDTH);
+        assert_eq!(size.height, 3.0 * MENU_ITEM_HEIGHT + 2.0 * SPACE_XS);
+    }
 }

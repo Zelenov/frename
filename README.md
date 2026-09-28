@@ -49,7 +49,8 @@ Nothing is locked inside frename.
 8. Drag a clip from the list into Premiere Pro, Explorer or any other program (Windows): it is saved
    first, so it arrives under its new name with everything you marked. Nothing is moved.
 
-Next time you start frename, it reopens the last folder and clip.
+Next time you start frename, it reopens the last folder and clip — and opening any other folder
+again, even after a restart, returns to the clip you last viewed in it.
 
 ---
 
@@ -63,6 +64,10 @@ Next time you start frename, it reopens the last folder and clip.
 | Double-click a file | Rename it by hand: `Enter` renames, `Esc` cancels |
 | `Ctrl+click` a file | Add it (and the open one) to a selection, or drop it if already selected |
 | `Shift+click` a file | Select every file between it and the last `Ctrl`-clicked one |
+| Right-click a file or the open file's name | Menu: show it in Explorer, copy its full path or its name (`Esc` or a click outside closes it) |
+| `F11` | Show the open file in Explorer, with the file selected (Linux: in the file manager) |
+| `Shift+F11` | Copy the open file's full path (`D:\footage\clip.mp4`) |
+| `Ctrl+F11` | Copy the open file's name (`clip.mp4`) |
 | `Escape` | Leaves a selection made with `Ctrl`/`Shift`+click (batch mode); otherwise clears the file and tag searches |
 
 ### Tags
@@ -145,7 +150,8 @@ A folder without one starts with a set for travel and documentary work: `pick`, 
 
 The progress bar shows what you have noted about a clip:
 
-- **Markers:** `F2` or 📍 marks the moment under the playhead with a pin in the marker's color. ◆ opens the
+- **Markers:** `F2` or the pin button marks the moment under the playhead with a pin in the marker's color. The
+  marker list button opens the
   marker list over the picture (in fullscreen too; it shares the place with the subtitle list, with a
   tab for each; an empty list has an Add button). Click a marker's row to name it, its dot to
   pick one of Premiere's colors, ✕ to delete it, and its time to jump there. Markers are saved inside the video when you leave the
@@ -156,7 +162,7 @@ The progress bar shows what you have noted about a clip:
   While the playhead is on a marker, its name becomes the pin's head; click it to rename the
   marker. Settings → Saving → Markers and ranges can keep them in the comment instead, one line each
   (`0:41–0:47 — Lion`): in frename they still work as markers.
-- **Ranges:** hold `F2` (or 📍) while the clip plays to mark a stretch (`0:41–0:47 — Lion`); a
+- **Ranges:** hold `F2` (or the pin button) while the clip plays to mark a stretch (`0:41–0:47 — Lion`); a
   band just above the bar shows it, and overlapping bands stack. Drag the handles at the ends of the current
   range to change it (`Shift` snaps), drag them together or `Alt`+click the band to make it a
   single moment again, and click a band to play just that stretch.
@@ -183,8 +189,8 @@ The progress bar shows what you have noted about a clip:
   and ⊡ brings the tags back.
 
 Some formats, such as mkv, cannot hold comments, in/out points or markers inside them; for those,
-frename keeps the comment, with the in/out line, in `.comment.txt` whatever Settings say, and 📍 is
-off. mp4 and mov hold everything.
+frename keeps the comment, with the in/out line, in `.comment.txt` whatever Settings say, and the pin
+button is off. mp4 and mov hold everything.
 
 `.comment.txt` files and subtitles are renamed together with their video.
 
@@ -214,6 +220,8 @@ No subtitles yet? Check the videos in batch mode and run **Generate subtitles** 
 Click **Batch actions** (the right end of the bar under the file list) to check files in the list (All / Invert) and run one action on all of them, with progress
 and Cancel. Each file then shows an icon for what happened to it (changed, nothing to change, not done). Drag a checked file to drag all checked
 files (an unchecked one drags only itself). Esc leaves batch mode, the same as clicking **Batch actions** again.
+Batch mode opens with the action you last ran selected, and its own options (e.g. which way
+in/out points move, or "Replace existing subtitles") as they were then, even across restarts.
 
 **Select several clips without the button**: **Ctrl+click** a clip to add it (and the one open before it) to
 the selection; Ctrl+click a selected clip to drop it. **Shift+click** a clip to select every clip
@@ -277,7 +285,8 @@ The **Settings** button (under the file list) opens Settings. Changes apply righ
 pages:
 
 - **Interface:** the UI language (follows your system by default, or pick English or Russian;
-  more languages are on the way), monochrome tags, and playing videos as soon as they open.
+  more languages are on the way), monochrome tags (a tag you added shows darker, one that is not
+  in your list stays the lighter gray it always was), and playing videos as soon as they open.
 - **Saving:** a space after each tag in file names (`Food. Goat. clip.mp4`), and where comments,
   markers and in/out points are kept: inside the video, or in a text file (comments) or the
   comment (markers; in/out points as one line, `In/Out: 00:01:05.250 – 00:02:10.000`). While

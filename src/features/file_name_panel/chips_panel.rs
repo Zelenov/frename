@@ -62,7 +62,7 @@ where
             Some(t) => t,
             None => continue,
         };
-        let tag_color = tag_palette.color(tag.color_index());
+        let tag_color = tag_palette.color(tag.color_index(), tag.is_stored());
         let is_dragging = dragging_index == Some(idx);
         let chip = mouse_area(tag_chip::draggable(tag.tag(), tag_color, is_dragging))
             .on_press(Message::DragStarted {
