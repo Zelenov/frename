@@ -7,10 +7,7 @@ use super::progress_bar::{BarMarker, ProgressBar};
 use super::{Message, VideoControlsState};
 use crate::theme;
 
-// `pub(crate)`: media_viewer/video/view.rs's own `MIN_PANEL_WIDTH` needs this to size the three
-// buttons it appends after this module's row, rather than risking its own, separately-defined
-// copy drifting from this one.
-pub(crate) const CONTROLS_HEIGHT: f32 = 32.0;
+const CONTROLS_HEIGHT: f32 = 32.0;
 /// ↺ and ↻ sit side by side as one pair, a little narrower than the other buttons.
 const ROTATE_BUTTON_WIDTH: f32 = 24.0;
 /// Room between items in the controls row (and inside the collapsed volume control).
@@ -322,6 +319,7 @@ fn view_at_width(
         .height(iced::Length::Fill)
         .into();
 
+    // 10 slots — keep CONTROLS_ROW_SLOTS above in sync with the item count here (#96).
     let controls = row![
         back10_btn,
         play_pause_btn,
@@ -496,5 +494,22 @@ mod tests {
             y: VOLUME_SCROLL_PIXELS_PER_STEP * 10.0,
         };
         assert_eq!(volume_after_scroll(0.5, large), 0.5 + VOLUME_SCROLL_STEP);
+
+        // The same scaling and cap apply symmetrically the other way.
+        let gentle_down = mouse::ScrollDelta::Pixels { x: 0.0, y: -2.0 };
+        let after_down = volume_after_scroll(0.5, gentle_down);
+        assert!(after_down < 0.5, "still moves down");
+        assert!(
+            after_down > 0.5 - VOLUME_SCROLL_STEP,
+            "but not by a full step: {after_down}"
+        );
+        let large_down = mouse::ScrollDelta::Pixels {
+            x: 0.0,
+            y: -VOLUME_SCROLL_PIXELS_PER_STEP * 10.0,
+        };
+        assert_eq!(
+            volume_after_scroll(0.5, large_down),
+            0.5 - VOLUME_SCROLL_STEP
+        );
     }
 }

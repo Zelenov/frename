@@ -24,8 +24,11 @@ const BAR_ROW_HEIGHT: f32 = 24.0;
 /// added here, at the worst case of all three showing (the subtitle button only shows when the
 /// clip has subtitles, the other two always do). This is the value the video panel's splitter
 /// uses as its own minimum width, not `video_controls::MIN_CONTROLS_WIDTH` on its own.
-pub const MIN_PANEL_WIDTH: f32 =
-    video_controls::view::CONTROLS_HEIGHT * 3.0 + video_controls::MIN_CONTROLS_WIDTH;
+///
+/// The `* 3.0` term uses THIS module's own `CONTROLS_HEIGHT` above, not
+/// `video_controls::view::CONTROLS_HEIGHT` — that one sizes an unrelated row's buttons; this
+/// one is what actually sizes `cue_list_button`/`marker_list_button`/`fullscreen_btn` below.
+pub const MIN_PANEL_WIDTH: f32 = CONTROLS_HEIGHT * 3.0 + video_controls::MIN_CONTROLS_WIDTH;
 /// Fixed so the video does not jump as cues of one or two lines come and go.
 const SUBTITLE_STRIP_HEIGHT: f32 = 48.0;
 const SUBTITLE_STRIP_TEXT_SIZE: f32 = 14.0;
