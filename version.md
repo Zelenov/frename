@@ -3,7 +3,7 @@
 - Select several clips without turning on batch mode by hand: `Ctrl+click` a clip to add it (and the one open before it) to the selection, or drop it if it is already selected; `Shift+click` a clip to select every clip between it and the last one you `Ctrl`-clicked. Either turns on batch mode with exactly that selection checked; `Esc` leaves it, same as clicking ☑ again.
 
 ## Changed
-- Monochrome tags now uses two grays instead of one: a tag you added shows darker, a tag that is not in your list (a stray word from a file name) stays the lighter gray it always was. The two were indistinguishable before.
+- Monochrome tags now use two grays instead of one: a tag you added shows darker, a tag that is not in your list (a stray word from a file name) stays the lighter gray it always was. The two were indistinguishable before.
 - Pasting tags onto a clip no longer wipes its comment.
 - A rename that would give a clip the same name as another one (or its comment, subtitle or transcript) is refused instead of replacing it, with a note that it was not saved.
 - Leaving a clip and moving to the next one before its video has finished loading no longer risks the tag you just set failing to reach the file.
