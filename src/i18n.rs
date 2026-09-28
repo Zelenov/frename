@@ -411,7 +411,7 @@ mod tests {
     }
 
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
-    const NOT_UI_TEXT: [(&str, &str); 72] = [
+    const NOT_UI_TEXT: [(&str, &str); 74] = [
         ("comment-editor", "widget id"),
         (
             "Rotate videos",
@@ -611,6 +611,14 @@ mod tests {
         (
             "replace",
             "stable option key for the batch run remembered across restarts (#65), see Actions::persist",
+        ),
+        (
+            "srt",
+            "stable option key for the batch run remembered across restarts (#126), see Actions::persist",
+        ),
+        (
+            "premiere",
+            "stable option key for the batch run remembered across restarts (#126), see Actions::persist",
         ),
         (
             "true",
