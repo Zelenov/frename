@@ -170,6 +170,33 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
     if scenario.rotate != 0 {
         steps.push(folder_workspace::Message::RotateVideo(scenario.rotate));
     }
+    // Multi-select (issue #60): reproduce Ctrl/Shift+click the way a real click does — hold
+    // the modifier, then select — independently of `--batch`, since either click turns batch
+    // mode on by itself.
+    let index_of = |name: &str| scenario.files.iter().position(|f| f.name == name);
+    for name in &scenario.ctrl_click {
+        if let Some(index) = index_of(name) {
+            steps.push(folder_workspace::Message::ModifiersChanged(
+                iced::keyboard::Modifiers::COMMAND,
+            ));
+            steps.push(folder_workspace::Message::Folder(
+                folder::Message::SelectFile(index),
+            ));
+        }
+    }
+    if let Some(index) = scenario.shift_click.as_deref().and_then(index_of) {
+        steps.push(folder_workspace::Message::ModifiersChanged(
+            iced::keyboard::Modifiers::SHIFT,
+        ));
+        steps.push(folder_workspace::Message::Folder(
+            folder::Message::SelectFile(index),
+        ));
+    }
+    if !scenario.ctrl_click.is_empty() || scenario.shift_click.is_some() {
+        steps.push(folder_workspace::Message::ModifiersChanged(
+            iced::keyboard::Modifiers::empty(),
+        ));
+    }
     if batch {
         steps.push(folder_workspace::Message::Folder(
             folder::Message::SetBatchMode(true),
