@@ -352,7 +352,12 @@ impl FolderWorkspace {
                     return Task::none();
                 }
                 if self.batch.is_active() {
-                    self.select_anchor = None;
+                    // A running job ignores `SetActive` (see `BatchState::update`), so batch mode
+                    // stays on: keep the anchor too, or a Shift+click after the job finishes would
+                    // silently range from the wrong file instead of the documented last-Ctrl-click.
+                    if !self.batch.is_running() {
+                        self.select_anchor = None;
+                    }
                     return self.handle_batch(batch::Message::SetActive(false));
                 }
                 // Both search bars label their clear button "Esc", so clear both.
@@ -827,10 +832,7 @@ impl FolderWorkspace {
             open_in_default_app(ANTHROPIC_BILLING_URL);
             return Task::none();
         }
-        // Batch mode does not edit the open file, so its rename editor goes.
-        self.inline_rename = None;
-        self.batch.update(msg);
-        Task::batch([self.describe_ai_reads(), self.subtitle_reads()])
+        self.handle_batch_many([msg])
     }
 
     /// What "Generate subtitles" shows before it runs is worked out in the background while
@@ -1168,7 +1170,7 @@ impl FolderWorkspace {
 
     fn handle_folder_message(&mut self, msg: folder::Message) -> Task<Message> {
         match msg {
-            folder::Message::SelectFile(index) => self.click_select_file(index),
+            folder::Message::SelectFile(index) => self.select_file_on_click(index),
             folder::Message::PreviousFile => self.select_previous(),
             folder::Message::NextFile => self.select_next(),
             folder::Message::Scrolled {
@@ -1207,7 +1209,10 @@ impl FolderWorkspace {
             }
             folder::Message::SubmitRename => self.submit_rename(),
             folder::Message::SetBatchMode(on) => {
-                if !on {
+                // A running job ignores `SetActive` (see `BatchState::update`): the UI already
+                // disables the ☑ button then, but keep the anchor too in case something else
+                // sends this message while a job runs.
+                if !on && !self.batch.is_running() {
                     self.select_anchor = None;
                 }
                 // The open file starts checked: it is usually the one to act on.
@@ -1386,7 +1391,7 @@ impl FolderWorkspace {
     /// before; Ctrl+click or Shift+click instead build a multi-selection out of batch mode's
     /// checked set (see `ctrl_click_select`/`shift_click_select`). Either way the clicked file
     /// opens in the viewer, same as a plain click — it stays the file tags/comment edit.
-    fn click_select_file(&mut self, index: usize) -> Task<Message> {
+    fn select_file_on_click(&mut self, index: usize) -> Task<Message> {
         if self.modifiers.shift() {
             return self.shift_click_select(index);
         }
@@ -1464,7 +1469,9 @@ impl FolderWorkspace {
     }
 
     /// Apply several batch messages as one step, so the reads they trigger (AI/subtitle plans)
-    /// run once for the result instead of once per message.
+    /// run once for the result instead of once per message. `Run`/`Retry`/`OpenLog`/`OpenBilling`
+    /// are `handle_batch`'s own special cases (starting a job, opening a file); never pass them
+    /// here, or they reach `BatchState::update`, which does not handle them.
     fn handle_batch_many(
         &mut self,
         msgs: impl IntoIterator<Item = batch::Message>,
@@ -3930,5 +3937,95 @@ mod tests {
         ctrl_click(&mut workspace, 1);
         let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(false)));
         assert_eq!(workspace.select_anchor, None);
+    }
+
+    /// A running job ignores `SetActive(false)` (`BatchState::update`'s own guard), so batch
+    /// mode stays on: the anchor must stay too, or a Shift+click once the job ends would range
+    /// from the wrong file with no sign anything changed.
+    #[test]
+    fn escape_during_a_running_batch_job_keeps_batch_mode_and_the_anchor() {
+        let (_test_dir, mut workspace) = open_folder(3);
+        ctrl_click(&mut workspace, 1);
+        ctrl_click(&mut workspace, 2); // anchor = file_2
+        let anchor = workspace.select_anchor;
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        assert!(
+            workspace.is_batch_running(),
+            "the job must actually be running"
+        );
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(
+            workspace.batch().is_active(),
+            "SetActive(false) had no effect while the job runs"
+        );
+        assert_eq!(
+            workspace.select_anchor, anchor,
+            "the anchor must not be dropped either"
+        );
+    }
+
+    /// Ctrl/Shift+click must index the *filtered* list (as the issue's own "in the list's
+    /// current order (with the current filter/search applied)" says), not the unfiltered one.
+    #[test]
+    fn multi_select_indexes_the_filtered_list_not_the_unfiltered_one() {
+        let (_test_dir, mut workspace) = open_folder(5);
+        let ids: Vec<FileId> = (0..5).map(|i| file_id_at(&workspace, i)).collect();
+        let _ = workspace.update(Message::Folder(folder::Message::SetUntaggedOnly(true)));
+        // Tags file_2, dropping it out of the untagged-only list: filtered order becomes
+        // [file_0, file_1, file_3, file_4] (file_2 is not the selected file, so it is hidden).
+        let snapshot =
+            FileSnapshot::new(vec!["Comedy".to_string()], "file_2", ".mp4", "file_2.mp4");
+        let _ = workspace.update(Message::FileUpdated {
+            id: ids[2],
+            snapshot,
+        });
+        assert_eq!(
+            workspace
+                .directory()
+                .unwrap()
+                .files_in_order()
+                .map(|f| f.id())
+                .collect::<Vec<_>>(),
+            vec![ids[0], ids[1], ids[3], ids[4]],
+            "file_2 must be filtered out"
+        );
+
+        ctrl_click(&mut workspace, 2); // filtered index 2 = file_3; anchor = file_3
+        shift_click(&mut workspace, 3); // filtered index 3 = file_4: range [file_3, file_4]
+
+        assert_eq!(workspace.batch().checked_count(), 2);
+        assert!(workspace.batch().is_checked(ids[3]) && workspace.batch().is_checked(ids[4]));
+        assert!(!workspace.batch().is_checked(ids[0]));
+        assert!(
+            !workspace.batch().is_checked(ids[2]),
+            "file_2 was never a real position in the filtered range"
+        );
+    }
+
+    /// The anchor is stored by `FileId`, not by the index it had when set — it must keep
+    /// pointing at the right file once a filter that changed the list's shape is turned off.
+    #[test]
+    fn the_anchor_keeps_working_after_the_filter_that_hid_other_files_is_turned_off() {
+        let (_test_dir, mut workspace) = open_folder(5);
+        let ids: Vec<FileId> = (0..5).map(|i| file_id_at(&workspace, i)).collect();
+        let _ = workspace.update(Message::Folder(folder::Message::SetUntaggedOnly(true)));
+        let snapshot =
+            FileSnapshot::new(vec!["Comedy".to_string()], "file_2", ".mp4", "file_2.mp4");
+        let _ = workspace.update(Message::FileUpdated {
+            id: ids[2],
+            snapshot,
+        });
+        // Filtered order: [0, 1, 3, 4]; ctrl-click filtered index 2 = file_3, becoming the anchor.
+        ctrl_click(&mut workspace, 2);
+        assert_eq!(workspace.select_anchor, Some(ids[3]));
+
+        let _ = workspace.update(Message::Folder(folder::Message::SetUntaggedOnly(false)));
+        // Unfiltered order is [0,1,2,3,4] again; file_3 (the anchor) is now at index 3.
+        shift_click(&mut workspace, 1); // range [1, 3] in the now-unfiltered order
+        assert_eq!(workspace.batch().checked_count(), 3);
+        for id in [ids[1], ids[2], ids[3]] {
+            assert!(workspace.batch().is_checked(id));
+        }
+        assert!(!workspace.batch().is_checked(ids[0]) && !workspace.batch().is_checked(ids[4]));
     }
 }

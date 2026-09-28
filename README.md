@@ -63,7 +63,7 @@ Next time you start frename, it reopens the last folder and clip.
 | Double-click a file | Rename it by hand: `Enter` renames, `Esc` cancels |
 | `Ctrl+click` a file | Add it (and the open one) to a selection, or drop it if already selected |
 | `Shift+click` a file | Select every file between it and the last `Ctrl`-clicked one |
-| `Escape` | Also leaves a selection made with `Ctrl`/`Shift`+click (batch mode) |
+| `Escape` | Leaves a selection made with `Ctrl`/`Shift`+click (batch mode); otherwise clears the file and tag searches |
 
 ### Tags
 | Key | Action |
