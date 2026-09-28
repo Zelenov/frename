@@ -145,6 +145,38 @@ pub fn text_editor(
     }
 }
 
+/// A multi-line editor inside a [`field_box`]: the box draws the fill and the edge, so neither
+/// scrolls away with the text.
+pub fn bare_text_editor(
+    _theme: &Theme,
+    status: widget::text_editor::Status,
+) -> widget::text_editor::Style {
+    let value = match status {
+        widget::text_editor::Status::Disabled => TEXT_DISABLED,
+        _ => TEXT,
+    };
+    widget::text_editor::Style {
+        background: Background::Color(Color::TRANSPARENT),
+        border: Border::default(),
+        placeholder: TEXT_PLACEHOLDER,
+        value,
+        selection: SELECTED,
+    }
+}
+
+/// The box around a scrolling editor: a field's fill and edge, the focus ring when `focused`.
+pub fn field_box(focused: bool) -> impl Fn(&Theme) -> widget::container::Style {
+    move |_| widget::container::Style {
+        background: Some(Background::Color(BG_RAISED)),
+        border: Border {
+            color: if focused { ACCENT_TEXT } else { BORDER_CONTROL },
+            width: if focused { RING } else { LINE },
+            radius: RADIUS_S.into(),
+        },
+        ..widget::container::Style::default()
+    }
+}
+
 pub fn pick_list(_theme: &Theme, status: widget::pick_list::Status) -> widget::pick_list::Style {
     let edge = match status {
         widget::pick_list::Status::Active => BORDER_CONTROL,

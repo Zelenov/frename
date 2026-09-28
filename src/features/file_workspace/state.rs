@@ -29,6 +29,8 @@ pub struct FileWorkspace<S> {
     comment_height: f32,
     /// The comment box takes the whole panel instead of the tags.
     comment_expanded: bool,
+    /// The comment box has the keys: its edge draws the focus ring.
+    comment_focused: bool,
 }
 
 /// The comment box's heights: at first, lowest, tallest.
@@ -45,6 +47,7 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
             comment_content: text_editor::Content::new(),
             comment_height: COMMENT_HEIGHT,
             comment_expanded: false,
+            comment_focused: false,
         }
     }
 
@@ -121,6 +124,15 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     }
 
     /// Whether the comment box takes the whole panel instead of the tags.
+    /// Whether the comment box has the keys.
+    pub fn comment_focused(&self) -> bool {
+        self.comment_focused
+    }
+
+    pub fn set_comment_focused(&mut self, focused: bool) {
+        self.comment_focused = focused;
+    }
+
     pub fn comment_expanded(&self) -> bool {
         self.comment_expanded
     }

@@ -64,7 +64,7 @@ impl Options {
             label(),
             fl!("batch-action-rotate-hint-short"),
             &[Change::IntoVideos],
-            [layout::setting_row_with_info(
+            [page::option_row_with_info(
                 fl!("batch-option-turn"),
                 fl!("batch-action-rotate-hint"),
                 layout::choices([

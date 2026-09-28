@@ -46,9 +46,11 @@ pub fn row_item<'a, M: 'a>(
     hover_layer: Color,
     height: Length,
 ) -> Element<'a, M> {
+    // Clipped: nothing inside a row draws past its background, whatever its text.
     let body = container(content)
         .width(Length::Fill)
         .height(height)
+        .clip(true)
         .padding(Padding {
             left: SPACE_S - SELECTION_BAR,
             right: SPACE_S,

@@ -79,7 +79,7 @@ impl Options {
             label(),
             fl!("batch-action-markers-comment-hint-short"),
             changes,
-            [layout::setting_row_with_info(
+            [page::option_row_with_info(
                 fl!("batch-option-direction"),
                 fl!("batch-action-markers-comment-hint"),
                 layout::choices([

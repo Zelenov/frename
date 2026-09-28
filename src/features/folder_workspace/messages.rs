@@ -88,6 +88,10 @@ pub enum Message {
     SetSegmentEnd,
     /// User interacted with the multiline comment editor.
     CommentAction(text_editor::Action),
+    /// A click or a focus key somewhere: ask whether the comment box has the keys now.
+    CheckCommentFocus,
+    /// Whether the comment box has the keys, so its edge can show it.
+    CommentFocused(bool),
     /// Resize the comment box, or let it take the whole panel.
     CommentLayout(crate::features::file_workspace::CommentLayout),
     /// Screenshot captured at position (ms) with JPEG bytes.

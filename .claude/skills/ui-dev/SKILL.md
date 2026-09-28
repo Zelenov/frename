@@ -318,6 +318,22 @@ the first look. Read it before any UI change.
   (`MONO_CHAR_WIDTH`), so a file name is cut exactly; other text is estimated
   (`BODY_CHAR_WIDTH`, `CHIP_MINI_CHAR_WIDTH`). Use a realistic estimate to fit things into a row
   (a generous one hid chips that fitted), a generous one to size columns.
+- **Nothing draws past its background.** iced does not clip by default: text with
+  `Wrapping::None` runs on past its row. Rows, nav items and menu items clip their content
+  (`list::row_item`, `layout::nav_item_with`, `menu::item` do it), and a single line in a row is cut
+  with `ui::text::fit` (by `CAPTION_CHAR_WIDTH`, `MONO_CHAR_WIDTH`…) so it ends in "…" instead of
+  being sliced. A new container with a fill or an edge and text inside gets `.clip(true)`.
+- **Long words do not wrap** with the default `Wrapping::Word`: a file name has no spaces and runs
+  past a tooltip or a table cell. Text that may be a file name wraps with `Wrapping::WordOrGlyph`
+  (`text::tooltip` does it for every tooltip; the failed-files table for its names).
+- **An editor inside a scroll area loses its edge**: the editor's border scrolls with its text. The
+  box draws the edge instead (`style::field_box(focused)` around the scroll area, the editor in
+  `style::bare_text_editor`), and the focus ring comes from state: set on any edit, and asked with
+  `operation::is_focused` after every mouse press, Tab or Esc (`CheckCommentFocus`). Ask only while
+  the widget is on screen: about a missing widget no answer comes.
+- **Never rotate a rasterized SVG** (`Svg::rotation`): the thin stroke is resampled and breaks into
+  dots. Turn it inside the SVG (`<g transform="rotate(…)">`) and cache one handle per step
+  (`ui::icons::spinner`).
 - **A segmented control is one box**: the segments have no edges of their own, only the ends are
   rounded (on their outer corners), and a line separates them (`ui::segmented`).
 - **A click on the row already open must not open it again**: each click of a double-click is a
@@ -339,6 +355,11 @@ the first look. Read it before any UI change.
 - Gate: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D
   warnings`, `cargo test --workspace --locked --no-fail-fast` (on this Windows machine the three
   `self_test` GStreamer tests fail on `main` too).
+- Editing Rust with a script: find the end of a block with an anchor that is unique and after its
+  start (`#[cfg(test)]
+mod tests`, not `#[cfg(test)]`, which also marks items inside a macro); a
+  slice with its end before its start is empty, and `str.replace("", …)` then writes the new
+  text between every character. Assert the anchor order in the script.
 - Editing `.ftl` files with a script: a multi-line entry ends at its own `}` line; remove that
   line with the entry, or the file stops parsing and every i18n test fails at once.
 - Several worktrees building at once share one `CARGO_TARGET_DIR`, or drive C: fills up.

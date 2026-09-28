@@ -53,7 +53,9 @@ pub fn item<'a, M: Clone + 'a>(item: MenuItem<M>) -> Element<'a, M> {
     .push(mark)
     .spacing(SPACE_S)
     .align_y(Alignment::Center);
+    // Clipped: a long label never draws past the item's background.
     button(content)
+        .clip(true)
         .width(Length::Fill)
         .padding(ITEM_PADDING)
         .on_press_maybe(item.on_press)

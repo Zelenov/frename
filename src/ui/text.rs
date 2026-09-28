@@ -1,5 +1,7 @@
 //! The text styles (`docs/design/design-system.md` §4.2). No other text style exists.
 
+use std::borrow::Cow;
+
 use iced::widget::text::{IntoFragment, LineHeight, Wrapping};
 use iced::widget::{text, Text};
 use iced::{Color, Font, Pixels};
@@ -99,4 +101,29 @@ pub fn video_caption<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
 /// name has no spaces): otherwise it runs past the tooltip's box, which stops at its widest.
 pub fn tooltip<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
     styled(content, TEXT_TOOLTIP, LINE_TOOLTIP, FONT, TEXT).wrapping(Wrapping::WordOrGlyph)
+}
+
+/// `line` cut with "…" at the end to at most `width` px, at `char_width` px a character: exact for
+/// `mono` (`MONO_CHAR_WIDTH`), an estimate otherwise. iced cannot cut text itself; a clipping
+/// container behind it keeps an estimate that is short from drawing past its background.
+pub fn fit(line: &str, width: f32, char_width: f32) -> Cow<'_, str> {
+    let room = (width / char_width).floor().max(0.0) as usize;
+    if line.chars().count() <= room {
+        return Cow::Borrowed(line);
+    }
+    let kept: String = line.chars().take(room.saturating_sub(1)).collect();
+    Cow::Owned(format!("{}…", kept.trim_end()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_line_longer_than_its_room_ends_in_an_ellipsis() {
+        assert_eq!(fit("short", 100.0, 10.0), "short");
+        let cut = fit("a very long comment line", 100.0, 10.0);
+        assert!(cut.ends_with('…'));
+        assert!(cut.chars().count() <= 10, "{cut}");
+    }
 }

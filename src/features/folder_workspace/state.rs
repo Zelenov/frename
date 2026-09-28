@@ -329,7 +329,24 @@ impl FolderWorkspace {
             Message::SetSegmentEnd => Task::done(Message::MediaViewer(
                 media_viewer::Message::Video(media_viewer_video::Message::CaptureSegmentEnd),
             )),
+            Message::CheckCommentFocus => {
+                // Asked only while the box is on screen: about a missing widget, no answer comes.
+                if self.batch.is_active() || self.file_workspace.file().is_none() {
+                    self.file_workspace.set_comment_focused(false);
+                    return Task::none();
+                }
+                iced::widget::operation::is_focused(iced::widget::Id::new(
+                    crate::features::file_workspace::view::COMMENT_EDITOR_ID,
+                ))
+                .map(Message::CommentFocused)
+            }
+            Message::CommentFocused(focused) => {
+                self.file_workspace.set_comment_focused(focused);
+                Task::none()
+            }
             Message::CommentAction(action) => {
+                // Anything done in the box (a click, typing) means it has the keys.
+                self.file_workspace.set_comment_focused(true);
                 let typed = matches!(action, iced::widget::text_editor::Action::Edit(_));
                 self.file_workspace.apply_comment_action(action);
                 // The box grows with its text inside a scrollable: typing on the last line
@@ -2169,6 +2186,7 @@ impl FolderWorkspace {
             };
         Subscription::batch([
             self.media_viewer.subscription().map(Message::MediaViewer),
+            iced::event::listen_with(focus_may_move),
             job_progress,
             self.file_name_panel
                 .subscription()
@@ -2352,6 +2370,27 @@ fn open_in_default_app(target: impl AsRef<std::ffi::OsStr>) {
     let result = std::process::Command::new("xdg-open").arg(target).spawn();
     if let Err(e) = result {
         log::warn!("could not open {target:?}: {e}");
+    }
+}
+
+/// A mouse press, Tab or Esc may move the keys into or out of the comment box: ask where they
+/// are then, so the box's edge shows its focus (the edge is drawn outside the editor, which
+/// scrolls inside it).
+fn focus_may_move(
+    event: iced::Event,
+    _status: iced::event::Status,
+    _window: iced::window::Id,
+) -> Option<Message> {
+    use iced::keyboard::{key::Named, Key};
+    match event {
+        iced::Event::Mouse(iced::mouse::Event::ButtonPressed(_)) => {
+            Some(Message::CheckCommentFocus)
+        }
+        iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+            key: Key::Named(Named::Tab | Named::Escape),
+            ..
+        }) => Some(Message::CheckCommentFocus),
+        _ => None,
     }
 }
 

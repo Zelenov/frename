@@ -88,6 +88,15 @@ pub fn option_row<'a, M: 'a>(
     layout::stacked_row(label, content)
 }
 
+/// An [`option_row`] whose label carries ⓘ with `help`.
+pub fn option_row_with_info<'a, M: 'a>(
+    label: impl IntoFragment<'a>,
+    help: impl IntoFragment<'a>,
+    content: impl Into<Element<'a, M>>,
+) -> Element<'a, M> {
+    layout::stacked_row_with_info(label, help, content)
+}
+
 /// An option whose value is set somewhere else: `label`, then [`value_with_link`].
 pub fn linked_row<'a, M: Clone + 'a>(
     label: impl IntoFragment<'a>,

@@ -75,9 +75,23 @@ pub fn stacked_row<'a, M: 'a>(
     label: impl IntoFragment<'a>,
     content: impl Into<Element<'a, M>>,
 ) -> Element<'a, M> {
-    column![text::strong(label), content.into()]
-        .spacing(SPACE_S)
-        .into()
+    stacked(text::strong(label).into(), content.into())
+}
+
+/// A [`stacked_row`] whose label carries ⓘ with `help` (§8.11).
+pub fn stacked_row_with_info<'a, M: 'a>(
+    label: impl IntoFragment<'a>,
+    help: impl IntoFragment<'a>,
+    content: impl Into<Element<'a, M>>,
+) -> Element<'a, M> {
+    let label = row![text::strong(label), info(help)]
+        .spacing(SPACE_XS)
+        .align_y(Alignment::Center);
+    stacked(label.into(), content.into())
+}
+
+fn stacked<'a, M: 'a>(label: Element<'a, M>, content: Element<'a, M>) -> Element<'a, M> {
+    column![label, content].spacing(SPACE_S).into()
 }
 
 /// A setting row whose label carries ⓘ with `help` (§8.11).
@@ -182,7 +196,9 @@ pub fn nav_item_with<'a, M: Clone + 'a>(
     .spacing(SPACE_S)
     .align_y(Alignment::Center);
     // 32 px for one line; a label that wraps (a long translation) makes the item taller.
+    // Clipped: a long label never draws past the item's background.
     button(content)
+        .clip(true)
         .width(Length::Fill)
         .padding(Padding {
             top: ROW_PADDING_Y,

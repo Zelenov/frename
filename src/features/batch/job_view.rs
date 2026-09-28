@@ -307,7 +307,11 @@ fn files_not_done<'a>(
     });
     let lines = Column::with_children(rows.into_iter().map(|(id, reason)| {
         table_row(
-            text::mono(file_name(directory, id)).color(TEXT).into(),
+            // A file name has no spaces: it breaks inside the word rather than run past its cell.
+            text::mono(file_name(directory, id))
+                .color(TEXT)
+                .wrapping(iced::widget::text::Wrapping::WordOrGlyph)
+                .into(),
             with_reasons.then(|| text::body(reason.unwrap_or_default()).into()),
         )
     }));
@@ -323,8 +327,8 @@ fn table_row<'a>(
     name: Element<'a, Message>,
     why: Option<Element<'a, Message>>,
 ) -> Element<'a, Message> {
-    let cells = row![container(name).width(Length::FillPortion(2))]
-        .push(why.map(|why| container(why).width(Length::FillPortion(3))))
+    let cells = row![container(name).width(Length::FillPortion(2)).clip(true)]
+        .push(why.map(|why| container(why).width(Length::FillPortion(3)).clip(true)))
         .spacing(SPACE_S)
         .padding(Padding {
             top: SPACE_TIGHT,

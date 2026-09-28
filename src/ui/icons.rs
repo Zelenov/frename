@@ -5,7 +5,7 @@
 use std::sync::OnceLock;
 
 use iced::widget::{svg, Svg};
-use iced::{Color, Radians};
+use iced::Color;
 
 /// Declares the icons: each variant with its file, so a new icon without its file is a compile
 /// error, and [`Icon::ALL`] lists them for the tests.
@@ -126,11 +126,41 @@ pub fn icon<'a>(icon: Icon, size: f32, color: Color) -> Svg<'a> {
 /// Steps of one turn of the spinner, one per tick of the app's spinner clock.
 const SPINNER_STEPS: usize = 12;
 
+/// The `loader-circle` outline turned by `degrees` about its centre, as SVG: the turn is part of
+/// the drawing, so each step is rasterized sharp. Turning the rasterized icon instead
+/// (`Svg::rotation`) resamples its thin stroke and breaks it into dots.
+fn turned_loader(degrees: f32) -> String {
+    let source = include_str!("../../assets/icons/loader-circle.svg");
+    let body_start = source
+        .find("<svg")
+        .and_then(|at| source[at..].find('>').map(|end| at + end + 1));
+    let body_end = source.rfind("</svg>");
+    match (body_start, body_end) {
+        (Some(start), Some(end)) if start <= end => format!(
+            "{}<g transform=\"rotate({degrees} 12 12)\">{}</g>{}",
+            &source[..start],
+            &source[start..end],
+            &source[end..]
+        ),
+        _ => source.to_string(),
+    }
+}
+
 /// The turning `loader-circle` (§8.15), at `frame` of the app's spinner clock.
 pub fn spinner<'a>(frame: usize, size: f32, color: Color) -> Svg<'a> {
-    let step = (frame % SPINNER_STEPS) as f32;
-    let angle = std::f32::consts::TAU * step / SPINNER_STEPS as f32;
-    icon(Icon::LoaderCircle, size, color).rotation(Radians(angle))
+    static STEPS: OnceLock<Vec<svg::Handle>> = OnceLock::new();
+    let steps = STEPS.get_or_init(|| {
+        (0..SPINNER_STEPS)
+            .map(|step| {
+                let degrees = 360.0 * step as f32 / SPINNER_STEPS as f32;
+                svg::Handle::from_memory(turned_loader(degrees).into_bytes())
+            })
+            .collect()
+    });
+    svg(steps[frame % SPINNER_STEPS].clone())
+        .width(size)
+        .height(size)
+        .style(move |_, _| svg::Style { color: Some(color) })
 }
 
 #[cfg(test)]
@@ -149,6 +179,17 @@ mod tests {
             assert!(text.contains("<svg"), "{icon:?}");
             assert!(text.contains("currentColor"), "{icon:?}");
         }
+    }
+
+    #[test]
+    fn each_spinner_step_turns_the_whole_drawing() {
+        let turned = turned_loader(90.0);
+        assert!(
+            turned.contains("<g transform=\"rotate(90 12 12)\">"),
+            "{turned}"
+        );
+        assert!(turned.contains("</g></svg>"), "{turned}");
+        assert_eq!(turned.matches("<svg").count(), 1);
     }
 
     #[test]

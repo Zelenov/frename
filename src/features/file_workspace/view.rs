@@ -180,7 +180,7 @@ where
             .min_height((size.height - COMMENT_PADDING.y()).max(0.0))
             .size(TEXT_BODY)
             .padding(COMMENT_PADDING)
-            .style(style::text_editor)
+            .style(style::bare_text_editor)
             // Explicitly capture Enter so the event is not treated as Ignored by Iced,
             // which prevents Windows from playing the system beep for unhandled WM_CHAR(0x0D).
             .key_binding(|kp| {
@@ -201,12 +201,17 @@ where
         .small()
         .tip(tip, Position::Left)
         .on_press(Message::CommentLayout(CommentLayout::ToggleExpanded));
+    // The box draws the field's fill and edge (and the focus ring) outside the scroll area, so
+    // the edge stays put while the text scrolls, and the scrollbar sits inside the box. It keeps
+    // the ring's width free inside, so the ring never covers the text.
     container(stack![
         comment_scroll,
         container(toggle)
             .align_right(Length::Fill)
             .padding(TOGGLE_PADDING),
     ])
+    .padding(RING)
+    .style(style::field_box(file_workspace.comment_focused()))
     .width(Length::Fill)
     .height(if expanded {
         Length::Fill

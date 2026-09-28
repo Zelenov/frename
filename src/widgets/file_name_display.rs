@@ -48,12 +48,7 @@ fn hidden_badge_width(hidden: usize) -> f32 {
 
 /// `name` cut with "…" to at most `width` px of mono text.
 fn fit_name(name: &str, width: f32) -> Cow<'_, str> {
-    let room = (width / MONO_CHAR_WIDTH).floor().max(0.0) as usize;
-    if name.chars().count() <= room {
-        return Cow::Borrowed(name);
-    }
-    let kept: String = name.chars().take(room.saturating_sub(1)).collect();
-    Cow::Owned(format!("{kept}…"))
+    text::fit(name, width, MONO_CHAR_WIDTH)
 }
 
 /// How `tags` and `name` share `width` px.
