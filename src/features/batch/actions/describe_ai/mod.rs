@@ -10,7 +10,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
 use clipscribe::{
-    self as describe, AiError, AiUsage, Model, Stage, SummaryLanguage, MAX_DURATION_S,
+    self as describe, AiError, AiUsage, FrameSampling, Model, MomentsMode, Stage, SummaryLanguage,
+    MAX_DURATION_S,
 };
 use frename_core::ai::block;
 use frename_core::ai::key::{self, KeyState};
@@ -486,6 +487,8 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
         api_key,
         model: options.model(),
         language: options.language,
+        frame_sampling: FrameSampling::KeyFrames,
+        moments: MomentsMode::Important,
     };
     // The file's share of reading frames, as the estimate counts it; waiting for the answer
     // takes the rest.
@@ -588,7 +591,7 @@ fn ai_failed(error: AiError) -> ItemResult {
     ItemResult {
         // A request that timed out may have been answered and billed after all.
         usage_unknown: error == AiError::Timeout,
-        out_of_credit: error == AiError::OutOfCredit,
+        out_of_credit: matches!(error, AiError::OutOfCredit(_)),
         stop_job: error.stops_job(),
         stop_if_repeated: offline.then(|| fl!("batch-ai-stop-offline")),
         ..ItemResult::failed(error.reason())
