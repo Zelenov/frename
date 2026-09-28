@@ -385,6 +385,34 @@ file-workspace-comment-placeholder = Comment...
 file-workspace-comment-collapse = Back to the tags
 file-workspace-comment-expand = Expand the comment
 
+## Tag grid
+
+tag-grid-star = Star: keep it at the top
+tag-grid-unstar = Unstar
+tag-grid-save = Add to the folder's tags
+tag-grid-delete = Delete “{ $tag }” from the folder's tags
+tag-grid-create = Create “{ $tag }”
+tag-grid-no-file = Open a clip to tag it
+tag-grid-no-tags = No tags yet
+tag-grid-no-tags-hint = Type a name and press Enter to create the first one.
+tag-grid-more = +{ $count } more
+
+## Order strip
+
+sync-panel-locked = Reordering below reorders the folder
+sync-panel-unlocked = Reordering below changes this clip only
+sync-panel-unlock = Unlock
+sync-panel-lock = Lock
+sync-panel-differs = Order differs from the folder
+sync-panel-use-for-folder = Use for the folder
+sync-panel-sort-like-folder = Sort like the folder
+sync-panel-no-undo = This cannot be undone yet
+
+## File name card
+
+file-name-panel-no-tags = No tags on this clip
+file-name-panel-untag = Untag
+
 ## Updates (Settings)
 
 updates-check = Check for updates

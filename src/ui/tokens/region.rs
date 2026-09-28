@@ -75,6 +75,29 @@ pub const ORDER_STRIP_HEIGHT: f32 = BAR_HEIGHT;
 pub const TRASH_SIDE: f32 = 36.0;
 /// The comment box: its lowest height.
 pub const COMMENT_MIN_HEIGHT: f32 = 48.0;
+/// The comment box: its height until it is resized, and the tallest the handle makes it
+/// (taller than that, "Expand" is the way).
+pub const COMMENT_HEIGHT: f32 = 80.0;
+pub const COMMENT_MAX_HEIGHT: f32 = 600.0;
+/// A dragged chip in the file name card floats this far above its line.
+pub const CHIP_DRAG_LIFT: f32 = SPACE_TIGHT;
+/// The width a chip of the file name card is taken to have when the drop place is worked out.
+pub const CHIP_DROP_ESTIMATE_WIDTH: f32 = 64.0;
+/// A generous average width of one character of a chip's 13-px label, to size grid columns.
+pub const CHIP_CHAR_WIDTH: f32 = 7.5;
+/// The chip's marks at its right end: the star and the action, 14 px each, 4 px apart.
+pub const CHIP_MARKS_WIDTH: f32 = 2.0 * ICON_MARK + SPACE_XS;
+/// Between the chip and the cursor ring drawn outside it.
+pub const CHIP_RING_GAP: f32 = LINE;
+/// Between the cells of the tag grid, across and down.
+pub const GRID_GAP: f32 = SPACE_XS;
+/// A grid cell: the chip and room around it for the cursor's ring, drawn outside the chip.
+pub const GRID_CELL_INSET: f32 = RING + CHIP_RING_GAP;
+pub const GRID_CELL_HEIGHT: f32 = CHIP_HEIGHT + 2.0 * GRID_CELL_INSET;
+/// From the top of one grid row to the top of the next.
+pub const GRID_ROW_STRIDE: f32 = GRID_CELL_HEIGHT + GRID_GAP;
+/// Columns of the tag grid: never fewer, however narrow the area.
+pub const GRID_MIN_COLUMNS: u32 = 2;
 
 // Batch panel (§13.6).
 pub const BATCH_HEADER_HEIGHT: f32 = 48.0;
