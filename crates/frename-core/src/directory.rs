@@ -347,7 +347,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
                 .values()
                 .find(|f| {
                     f.snapshot().name_without_extension() == base_name
-                        && f.snapshot().extension() == extension
+                        && f.snapshot().extension().eq_ignore_ascii_case(extension)
                 })?
                 .id()
         };
@@ -841,6 +841,17 @@ mod tests {
             .open_last_viewed("clip.mp4")
             .expect("found by base name and extension");
         assert_eq!(opened.file_path().file_name().unwrap(), "keep.clip.mp4");
+    }
+
+    #[test]
+    fn open_last_viewed_s_fallback_ignores_extension_case() {
+        // A camera-style uppercase extension, renamed outside frename with a lowercased one:
+        // still the same clip.
+        let mut dir = directory_with(&["pick.IMG_0424.mov"]);
+        let opened = dir
+            .open_last_viewed("IMG_0424.MOV")
+            .expect("found despite the extension's case");
+        assert_eq!(opened.file_path().file_name().unwrap(), "pick.IMG_0424.mov");
     }
 
     #[test]
