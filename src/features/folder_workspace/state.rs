@@ -48,6 +48,13 @@ const MIN_FOLDER_WIDTH: f32 = 120.0;
 /// How many actions undo/redo keeps. Reset per folder, since tags are per folder.
 const HISTORY_DEPTH: usize = 50;
 
+/// A saved left-panel width narrower than the video panel's controls need must not load as-is,
+/// or the panel would clip immediately on launch (no drag needed to trigger it) for anyone who
+/// saved a width before the splitter's own minimum was widened (#96).
+fn clamp_left_width(saved: f32) -> f32 {
+    saved.max(media_viewer_video::MIN_PANEL_WIDTH)
+}
+
 /// Concrete history type for this workspace: Directory uses LoggingAppStateStore<AppDatabase>,
 /// TagList uses the tag store of the open folder.
 type WorkspaceHistory = History<LoggingAppStateStore<AppDatabase>, FolderTagStore>;
@@ -135,6 +142,7 @@ impl FolderWorkspace {
                 }
             })
             .unwrap_or((DEFAULT_LEFT_WIDTH, DEFAULT_FOLDER_WIDTH));
+        let left_width = clamp_left_width(left_width);
         Self {
             directory: None,
             loading: false,
@@ -2346,7 +2354,7 @@ mod tests {
 
     use crate::features::{batch, folder, tag_panel};
 
-    use super::{Directory, FolderWorkspace, ItemResult, ItemStatus, Message};
+    use super::{clamp_left_width, Directory, FolderWorkspace, ItemResult, ItemStatus, Message};
 
     /// Simulates the iced runtime processing a FileOpened task: directory already has selection, so send FileOpened(selected_file).
     fn flush_file_opened(workspace: &mut FolderWorkspace) {
@@ -2411,6 +2419,21 @@ mod tests {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
         std::env::temp_dir().join(format!("frename-test-{}-{n}", std::process::id()))
+    }
+
+    /// Issue #96: a width saved before the splitter's own minimum was widened must not load
+    /// narrower than the video panel's controls now need.
+    #[test]
+    fn a_saved_width_narrower_than_the_panel_s_own_minimum_is_widened_on_load() {
+        assert_eq!(
+            clamp_left_width(50.0),
+            crate::features::media_viewer::video::MIN_PANEL_WIDTH
+        );
+        assert_eq!(
+            clamp_left_width(10_000.0),
+            10_000.0,
+            "a saved width already wide enough is kept as-is"
+        );
     }
 
     #[test]

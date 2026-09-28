@@ -380,6 +380,7 @@ video-controls-cannot-hold-markers = Этот файл не может хран�
 video-controls-add-a-name = Добавить имя
 video-controls-rotate-left = Повернуть влево (Ctrl+Alt+←)
 video-controls-rotate-right = Повернуть вправо (Ctrl+Alt+→)
+video-controls-volume-scroll = Громкость — прокрутите, чтобы изменить
 rotate-cannot = Нельзя повернуть: { $reason }
 rotate-reason-missing = файла больше нет на месте
 rotate-flag-right = 90° вправо

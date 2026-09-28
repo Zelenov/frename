@@ -339,6 +339,7 @@ video-controls-cannot-hold-markers = This file cannot hold markers
 video-controls-add-a-name = Add a name
 video-controls-rotate-left = Rotate left (Ctrl+Alt+←)
 video-controls-rotate-right = Rotate right (Ctrl+Alt+→)
+video-controls-volume-scroll = Volume — scroll to change
 rotate-cannot = Cannot rotate: { $reason }
 rotate-reason-missing = the file is no longer there
 rotate-flag-right = 90° right
