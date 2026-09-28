@@ -47,7 +47,9 @@ pub fn explorer_select_arg(path: &Path) -> String {
     format!("/select,\"{}\"", path_text(path))
 }
 
-/// The `file://` URI the freedesktop file manager interface takes for `path`.
+/// The `file://` URI the freedesktop file manager interface takes for `path`. Tested on every
+/// system, used on Linux.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub fn file_uri(path: &Path) -> Option<String> {
     url::Url::from_file_path(path).ok().map(String::from)
 }
