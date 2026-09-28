@@ -257,6 +257,10 @@ impl VideoPlayerState {
                 self.loads_in_flight = self.loads_in_flight.saturating_sub(1);
                 let unloaded = if self.unloading && self.loads_in_flight == 0 {
                     self.unloading = false;
+                    // The wait `Unload` set up is over: `loading` (kept true so the view showed
+                    // its spinner rather than "nothing loaded" for the wait) is now false, same
+                    // as `Unload` itself would have set it had no load been in flight.
+                    self.loading = false;
                     Task::done(Message::VideoUnloaded)
                 } else {
                     Task::none()
@@ -493,14 +497,17 @@ impl VideoPlayerState {
                 self.load_generation = self.load_generation.wrapping_add(1);
                 self.resume_at = None;
                 self.current_video = None;
-                self.loading = false;
                 self.current_path = None;
                 self.subtitles = None;
                 if load_in_flight {
-                    log::debug!("Unload: a load is still in flight, holding VideoUnloaded back");
+                    // `loading` stays true for this same wait: the view keeps showing its
+                    // spinner instead of falling back to "nothing loaded", and `is_active()`
+                    // correctly still reports the player as busy in the meantime.
+                    log::debug!("Deferring VideoUnloaded: a load is still in flight");
                     self.unloading = true;
                     Task::none()
                 } else {
+                    self.loading = false;
                     Task::done(Message::VideoUnloaded)
                 }
             }
@@ -1092,7 +1099,10 @@ mod tests {
         };
         let _ = player.update(Message::Unload);
         assert!(player.unloading, "must wait for the in-flight load");
-        assert!(!player.loading);
+        assert!(
+            player.loading,
+            "the view must keep showing its spinner, not \"nothing loaded\", during the wait"
+        );
 
         // The load lands, stale (Unload bumped the generation): only now is it safe to say so.
         let stale = Message::VideoLoaded {
@@ -1102,6 +1112,7 @@ mod tests {
         };
         let _ = player.update(stale);
         assert!(!player.unloading, "the wait ends once the stale load lands");
+        assert!(!player.loading, "the wait is over");
         assert_eq!(player.loads_in_flight, 0);
     }
 
@@ -1118,6 +1129,7 @@ mod tests {
         };
         let _ = player.update(Message::Unload);
         assert!(player.unloading);
+        assert!(player.loading, "still waiting: the spinner must stay up");
 
         let stale = |generation| Message::VideoLoaded {
             video: Arc::new(Mutex::new(None)),
@@ -1129,10 +1141,12 @@ mod tests {
             player.unloading,
             "one of two loads landed: still waiting on the other"
         );
+        assert!(player.loading, "still one load left in flight");
         assert_eq!(player.loads_in_flight, 1);
 
         let _ = player.update(stale(3));
         assert!(!player.unloading, "both loads landed: safe to say so now");
+        assert!(!player.loading, "the wait is over");
         assert_eq!(player.loads_in_flight, 0);
     }
 
