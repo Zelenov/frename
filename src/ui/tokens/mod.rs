@@ -20,9 +20,5 @@ pub use typography::*;
 
 /// Hover time before a tooltip shows.
 pub const TOOLTIP_DELAY: Duration = Duration::from_millis(500);
-/// How long a confirmation ("Frame saved") stays as inline status.
-pub const CONFIRMATION_LIFETIME: Duration = Duration::from_secs(2);
-/// A wait shorter than this shows nothing; a longer one shows a spinner.
-pub const SPINNER_DELAY: Duration = Duration::from_millis(500);
 /// One step of the spinner clock: `ui::icons::spinner` turns once in twelve.
 pub const SPINNER_TICK: Duration = Duration::from_millis(150);

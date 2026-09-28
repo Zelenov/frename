@@ -22,7 +22,6 @@ mod old_settings_prompt;
 mod package;
 mod self_test;
 mod ui;
-use ui::legacy as theme;
 mod widgets;
 
 use app::FrenameApp;

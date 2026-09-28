@@ -122,19 +122,6 @@ pub fn outline(danger: bool) -> impl Fn(&Theme) -> Style {
     }
 }
 
-/// A drop target over the whole window (§13.4.4).
-pub fn drop_target(_theme: &Theme) -> Style {
-    Style {
-        background: Some(Background::Color(SCRIM_DROP)),
-        border: Border {
-            color: ACCENT_TEXT,
-            width: RING,
-            radius: RADIUS_L.into(),
-        },
-        ..Style::default()
-    }
-}
-
 /// The body of a notice (§8.12): raised, or tinted red for an error.
 pub fn notice(error: bool) -> impl Fn(&Theme) -> Style {
     move |_| Style {

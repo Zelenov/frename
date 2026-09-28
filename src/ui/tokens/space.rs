@@ -20,5 +20,3 @@ pub const SPACE_XXL: f32 = 32.0;
 
 /// Page padding: top and bottom.
 pub const PAGE_PADDING_Y: f32 = 20.0;
-/// Inside a modal dialog.
-pub const DIALOG_PADDING: f32 = 20.0;

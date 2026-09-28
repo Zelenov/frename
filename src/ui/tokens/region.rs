@@ -16,9 +16,6 @@ pub const VIDEO_MIN_WIDTH: f32 = 320.0;
 pub const FILE_LIST_MIN_WIDTH: f32 = 200.0;
 pub const FILE_LIST_MAX_WIDTH: f32 = 720.0;
 pub const TAGS_MIN_WIDTH: f32 = 320.0;
-/// The column widths a window starts with: a wide one (1440 or more) and a narrower one.
-pub const VIDEO_WIDTH_WIDE: f32 = 600.0;
-pub const FILE_LIST_WIDTH_WIDE: f32 = 360.0;
 pub const VIDEO_WIDTH: f32 = 440.0;
 pub const FILE_LIST_WIDTH: f32 = 300.0;
 /// The block of the whole-window empty screen ("Open a folder of clips"), left-aligned.
@@ -87,8 +84,6 @@ pub const CHECK_COLUMN: f32 = 28.0;
 pub const STATUS_COLUMN: f32 = 32.0;
 /// The line over the list that says why it is locked.
 pub const LOCK_LINE_HEIGHT: f32 = CONTROL_HEIGHT;
-/// A file name keeps at least this much beside its chips.
-pub const NAME_MIN_WIDTH: f32 = 80.0;
 
 // Tags area (§13.5).
 pub const CHIP_HEIGHT: f32 = CONTROL_HEIGHT;

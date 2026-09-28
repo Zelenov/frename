@@ -31,21 +31,15 @@ const KEY_PADDING: Padding = Padding {
 pub enum BadgeKind {
     /// `SRT`, "3 markers": raised, secondary text.
     Neutral,
-    /// A count that is on: the filters on, the checked files.
-    Accent,
     /// Needs attention: "No key".
     Warning,
-    /// "Not saved".
-    Error,
 }
 
 impl BadgeKind {
     fn colors(self) -> (Color, Color) {
         match self {
             BadgeKind::Neutral => (BG_RAISED, TEXT_SECONDARY),
-            BadgeKind::Accent => (ACCENT_TINT, ACCENT_TEXT),
             BadgeKind::Warning => (WARNING_TINT, WARNING),
-            BadgeKind::Error => (ERROR_TINT, ERROR),
         }
     }
 }

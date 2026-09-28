@@ -20,8 +20,6 @@ pub const OVERLAY_CAPTION: Color = Color::from_rgba(0.0, 0.0, 0.0, 0.62);
 pub const OVERLAY_HOVER: Color = Color::from_rgba(1.0, 1.0, 1.0, 0.10);
 /// A range being drawn on the timeline.
 pub const NEW_RANGE: Color = Color::from_rgba(0.902, 0.910, 0.922, 0.35);
-/// Under the fullscreen controls, so they read over the picture: from clear to this.
-pub const FULLSCREEN_SHADE: Color = Color::from_rgba(0.0, 0.0, 0.0, 0.6);
 /// Idle range bands are drawn at this opacity, the active one fully.
 pub const IDLE_BAND_ALPHA: f32 = 0.6;
 

@@ -6,10 +6,7 @@ use std::path::{Path, PathBuf};
 
 /// Files not on the design system yet, each with the issue that moves it. The list only shrinks:
 /// a file here with nothing left to allow fails the test too.
-const NOT_YET: &[(&str, &str)] = &[
-    // Only the `crate::theme` alias of `ui::legacy` is left here: it goes with legacy.
-    ("main.rs", "#59"),
-];
+const NOT_YET: &[(&str, &str)] = &[];
 
 /// A method whose name ends in one of these takes a size, a padding or a spacing.
 const SIZE_METHOD_ENDINGS: [&str; 7] = [

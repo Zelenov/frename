@@ -12,7 +12,6 @@ pub mod form;
 pub mod icon_button;
 pub mod icons;
 pub mod layout;
-pub mod legacy;
 pub mod list;
 pub mod menu;
 pub mod palette;

@@ -20,8 +20,6 @@ pub const HOVER: Color = Color::from_rgba(1.0, 1.0, 1.0, 0.06);
 pub const PRESSED: Color = Color::from_rgba(1.0, 1.0, 1.0, 0.12);
 /// The selected row, category, cell or segment.
 pub const SELECTED: Color = Color::from_rgb8(0x1D, 0x31, 0x5A);
-/// Over the window while something is dragged over it (§13.4.4): `BG_WINDOW` at 80 %.
-pub const SCRIM_DROP: Color = Color::from_rgba(0.075, 0.082, 0.098, 0.8);
 
 // Lines.
 /// Dividers and popup outlines (decorative, no contrast minimum).
@@ -45,15 +43,11 @@ pub const ACCENT_HOVER: Color = Color::from_rgb8(0x2F, 0x6D, 0xF0);
 pub const ACCENT_PRESSED: Color = Color::from_rgb8(0x1D, 0x56, 0xD6);
 /// The accent as text or a line on dark: links, focus ring, selection bar.
 pub const ACCENT_TEXT: Color = Color::from_rgb8(0x6C, 0xB0, 0xFF);
-/// Behind an accent badge: `ACCENT_TEXT` at 16 %.
-pub const ACCENT_TINT: Color = Color::from_rgba(0.424, 0.690, 1.0, 0.16);
 
 // Status.
 pub const SUCCESS: Color = Color::from_rgb8(0x5C, 0xCB, 0x8F);
 pub const WARNING: Color = Color::from_rgb8(0xE9, 0xB9, 0x55);
 pub const ERROR: Color = Color::from_rgb8(0xFF, 0x7A, 0x7A);
-/// Behind an error badge: `ERROR` at 16 %.
-pub const ERROR_TINT: Color = Color::from_rgba(1.0, 0.478, 0.478, 0.16);
 /// Behind a warning badge: `WARNING` at 16 %.
 pub const WARNING_TINT: Color = Color::from_rgba(0.914, 0.725, 0.333, 0.16);
 /// Fill of the button that confirms a destructive action.
