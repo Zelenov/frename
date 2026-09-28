@@ -276,6 +276,8 @@ batch-stopped = Остановлено после { $finished } из { $total ->
 }.
 batch-close = Закрыть
 batch-failed-subtitles = Без субтитров:
+batch-written-subtitles = Записанные файлы:
+batch-table-written = Записано
 batch-add-credit = Пополнить счёт
 batch-open-log = Открыть журнал
 
@@ -366,7 +368,7 @@ batch-action-generate-subtitles-premiere = Транскрипт для Premiere 
 batch-action-generate-subtitles-premiere-hint = В Premiere Pro: панель «Текст» → «Транскрипция» → «Импортировать статическую транскрипцию».
 batch-action-generate-subtitles-privacy = Аудио этих видео отправляется в Soniox и затем удаляется там.
 batch-action-generate-subtitles-duration-hint = Занимает несколько минут на час аудио; папка заблокирована до конца. Закрытие frename останавливает распознавание; готовые субтитры сохраняются.
-batch-action-generate-subtitles-hint = Распознаёт речь каждого отмеченного видео через Soniox и сохраняет субтитры рядом с ним (clip.srt) — там, где их показывает frename.
+batch-action-generate-subtitles-hint = Распознаёт речь каждого отмеченного видео через Soniox и сохраняет результат рядом с ним: субтитры (clip.srt), где их показывает frename, и/или транскрипт для Premiere Pro.
 batch-subtitles-transcribe = Распознать
 batch-subtitles-transcribe-count = Распознать { $videos }
 batch-subtitles-build-free = Собрать { $count } (бесплатно)

@@ -583,18 +583,20 @@ fn plan_with(files: &[PathBuf], replace: bool, formats: Formats, ffmpeg: bool) -
     for file in files {
         let output = subtitle_path(file);
         // Case-insensitive: clip.MP4 and clip.mov both write clip.srt on Windows. Every checked
-        // format counts, so a name any of them shares excludes the video.
-        let mut shared = false;
-        for format in formats.list() {
-            let name = format.path(&output).to_string_lossy().to_lowercase();
-            shared |= !names.insert(name);
-        }
-        if shared {
+        // format counts, so a name any of them shares excludes the video; an excluded video
+        // writes nothing, so it takes no names.
+        let taken: Vec<String> = formats
+            .list()
+            .into_iter()
+            .map(|f| f.path(&output).to_string_lossy().to_lowercase())
+            .collect();
+        if taken.iter().any(|name| names.contains(name)) {
             plan.shared_name += 1;
             plan.excluded
                 .insert(file.clone(), fl!("batch-subtitles-shared-name-reason"));
             continue;
         }
+        names.extend(taken);
         items.push(plan_batch::Item {
             input: file.clone(),
             output,
@@ -880,7 +882,7 @@ fn item_result(path: &Path, result: anyhow::Result<Outcome>, cancelled: bool) ->
         Ok(outcome) => {
             log::info!("subtitles: {}: {outcome:?}", path.display());
             return match outcome {
-                Outcome::Written { .. } => ItemResult::new(ItemStatus::Done, None),
+                Outcome::Written { files, .. } => written_result(&subtitle_path(path), &files),
                 Outcome::Skipped { .. } => {
                     with_reason(ItemStatus::Skipped, &fl!("batch-subtitles-reason-already"))
                 }
@@ -942,6 +944,20 @@ fn failure_reason(e: &anyhow::Error) -> String {
         return fl!("batch-subtitles-unsupported-reason");
     }
     e.root_cause().to_string().chars().take(120).collect()
+}
+
+/// A written video. A Premiere transcript among the files is worth saying, so the result list
+/// names every file; SRT alone is the plain "done" it always was.
+fn written_result(srt: &Path, files: &[PathBuf]) -> ItemResult {
+    if files.iter().all(|f| f == srt) {
+        return ItemResult::new(ItemStatus::Done, None);
+    }
+    let names: Vec<String> = files
+        .iter()
+        .filter_map(|f| f.file_name())
+        .map(|n| n.to_string_lossy().into_owned())
+        .collect();
+    with_reason(ItemStatus::Done, &names.join(", "))
 }
 
 fn with_reason(status: ItemStatus, reason: &str) -> ItemResult {
@@ -1160,6 +1176,7 @@ mod tests {
             0
         );
         assert_eq!(plan_with(&files, false, BOTH, true).transcribe, 1);
+        assert_eq!(plan_with(&files, false, PREMIERE_ONLY, true).transcribe, 1);
     }
 
     #[test]
@@ -1173,6 +1190,48 @@ mod tests {
             assert_eq!(plan.shared_name, 1, "{formats:?}");
             assert!(plan.excluded.contains_key(&second), "{formats:?}");
         }
+    }
+
+    #[test]
+    fn the_run_writes_the_formats_the_plan_was_made_for() {
+        let mut options = Options::default();
+        options.update(Message::KeyState(KeyState::Saved));
+        options.update(Message::PriceReady(Price::Learned(0.1)));
+        options.update(Message::SetPremiere(true));
+        options.plan = Some(Plan {
+            rebuilt_free: 1,
+            ..Plan::default()
+        });
+        match options.operation() {
+            Some(super::super::Operation::GenerateSubtitles(run)) => {
+                assert_eq!(run.0.options.formats, BOTH.list());
+            }
+            other => panic!("expected a subtitles run, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_result_names_the_files_when_a_premiere_transcript_is_written() {
+        let both = [
+            PathBuf::from("dir/clip.srt"),
+            PathBuf::from("dir/clip.premiere.json"),
+        ];
+        let srt = Path::new("dir/clip.srt");
+        let result = written_result(srt, &both);
+        assert_eq!(result.status, ItemStatus::Done);
+        assert_eq!(
+            result.reason.as_deref(),
+            Some("clip.srt, clip.premiere.json")
+        );
+        assert_eq!(
+            written_result(srt, &both[1..]).reason.as_deref(),
+            Some("clip.premiere.json")
+        );
+        assert_eq!(
+            written_result(srt, &both[..1]).reason,
+            None,
+            "SRT alone: as before"
+        );
     }
 
     #[test]

@@ -231,6 +231,8 @@ batch-stopped = Stopped after { $finished } of { $total ->
 }.
 batch-close = Close
 batch-failed-subtitles = Not subtitled:
+batch-written-subtitles = Files written:
+batch-table-written = Written
 batch-add-credit = Add credit
 batch-open-log = Open the log
 
@@ -319,7 +321,7 @@ batch-action-generate-subtitles-premiere = Premiere Pro transcript (clip.premier
 batch-action-generate-subtitles-premiere-hint = In Premiere Pro: Text panel → Transcript → Import Static Transcript.
 batch-action-generate-subtitles-privacy = The audio of these videos is sent to Soniox and deleted there afterwards.
 batch-action-generate-subtitles-duration-hint = Takes a few minutes per hour of audio; the folder is locked until it ends. Closing frename stops the run; finished subtitles are kept.
-batch-action-generate-subtitles-hint = Transcribes the speech of each checked video with Soniox and saves the subtitles next to it (clip.srt), where frename shows them.
+batch-action-generate-subtitles-hint = Transcribes the speech of each checked video with Soniox and saves the result next to it: subtitles (clip.srt), where frename shows them, and/or a Premiere Pro transcript.
 batch-subtitles-transcribe = Transcribe
 batch-subtitles-transcribe-count = Transcribe { $videos }
 batch-subtitles-build-free = Build { $count } (free)

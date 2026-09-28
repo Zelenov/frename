@@ -172,6 +172,7 @@ fn result<'a>(
         body = body.push(text::secondary(report));
     }
     body = body.push(files_not_done(state, action, &outcome, directory));
+    body = body.push(files_written(state, action, directory));
 
     let retry = state.retryable();
     let again = (!retry.is_empty()).then(|| {
@@ -320,6 +321,44 @@ fn files_not_done<'a>(
         .push(header)
         .push(container(scroll::vertical(lines)).max_height(shown));
     Some(column![title, table].spacing(SPACE_S).into())
+}
+
+/// The videos that got subtitle files and which ones, when the action says (a Premiere
+/// transcript was written), as a table.
+fn files_written<'a>(
+    state: &'a BatchState,
+    action: Action,
+    directory: Option<&'a Directory>,
+) -> Option<Element<'a, Message>> {
+    if action != Action::GenerateSubtitles {
+        return None;
+    }
+    let written = state.done_with_reason();
+    if written.is_empty() {
+        return None;
+    }
+    let header = table_row(
+        text::caption(fl!("batch-table-file")).into(),
+        Some(text::caption(fl!("batch-table-written")).into()),
+    );
+    let lines = Column::with_children(written.into_iter().map(|(id, files)| {
+        table_row(
+            text::mono(file_name(directory, id))
+                .color(TEXT)
+                .wrapping(iced::widget::text::Wrapping::WordOrGlyph)
+                .into(),
+            Some(text::mono(files.to_string()).into()),
+        )
+    }));
+    let shown = FAILED_ROWS_SHOWN * TABLE_ROW_HEIGHT;
+    let table = column![]
+        .push(header)
+        .push(container(scroll::vertical(lines)).max_height(shown));
+    Some(
+        column![text::title(fl!("batch-written-subtitles")), table]
+            .spacing(SPACE_S)
+            .into(),
+    )
 }
 
 /// A row of the table: the file name, then why, with a line under it.

@@ -278,8 +278,10 @@ costs. Under **Files to write** tick what you want: **SRT subtitles** (`clip.srt
 default) and/or a **Premiere Pro transcript** (`clip.premiere.json`, for Text panel → Transcript →
 Import Static Transcript in Premiere Pro); with neither ticked Run stays off. A video is skipped
 only when every ticked file already exists (unless you tick **Replace existing subtitles**, which
-applies to every ticked file), and a video found to have no speech is not sent again. A file
-missing next to one that exists is free to add when the video's transcript was saved earlier. Afterwards the panel lists
+applies to every ticked file), and a video found to have no speech is not sent again. If only one
+of the files exists, adding the other is free when the video's transcript was saved earlier;
+otherwise the video is transcribed again. When a Premiere transcript was written, the result
+lists the files written for each video. Afterwards the panel lists
 every video that got no subtitles and why. You need your own Soniox API key: set it in Settings →
 Subtitles. Formats such as mkv, m2ts and avi need [ffmpeg](https://ffmpeg.org) on your PATH.
 
