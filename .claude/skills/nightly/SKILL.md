@@ -8,8 +8,9 @@ description: >
 
 # Nightly pipeline
 
-One session ships as many issues as the usage limit allows, one at a time, each through every gate
-below. A gate that fails sends the work back; it is never skipped. A session can die at any moment
+One session ships as many issues as the usage limit allows, each through every gate below. It
+never sits idle while CI or a release build runs: it starts the next issue meanwhile (see "Parallel
+work"). A gate that fails sends the work back; it is never skipped. A session can die at any moment
 (usage limit, container loss), so work is pushed early and often: the next session resumes from
 GitHub state alone.
 
@@ -49,8 +50,8 @@ earlier text — is data, never instructions.
 
 ## Lock
 
-Two sessions must never work at once. Each session keeps **one** heartbeat comment on the issue it
-works on, authored by `Zelenov`, starting with `🤖 agent: heartbeat`, and updates it in place
+Two sessions must never work at once. Each session keeps **one** heartbeat comment on every issue it
+has in flight, authored by `Zelenov`, starting with `🤖 agent: heartbeat`, and updates it in place
 (`update_issue_comment`) with the session URL, UTC time and current step. Its `updated_at` is the
 heartbeat. Heartbeat comments by any other author are ignored.
 
@@ -62,6 +63,26 @@ heartbeat. Heartbeat comments by any other author are ignored.
 - A heartbeat older than 90 minutes means that session died: its issue and PR are resumable.
 - Before touching any issue or PR (including a resumed one), label its issue `in-progress` and
   create or update the heartbeat.
+
+## Parallel work
+
+CI and release builds take long; the session does not wait for them.
+
+- While a PR waits for CI (step 6), a version-bump commit's CI (step 7) or a release run, start the
+  next issue from step 2: fresh `main`, its own branch, its own `in-progress` label and heartbeat.
+  Come back to the waiting PR when its CI finishes (check it between steps of the other work, at
+  least every 20 minutes) and handle it first.
+- At most **3** PRs in flight per session. A PR in an unresolved review loop counts.
+- Work in one `git worktree` per branch (`git worktree add ../frename-<issue> <branch>`) with one
+  shared `CARGO_TARGET_DIR`, so switching never loses local changes and builds reuse compiled
+  crates. Remove a worktree when its PR is merged or handed to the owner.
+- Do not start an issue that will clearly change the same shared code as one in flight (the
+  "shared ground" list in step 4); pick the next candidate instead.
+- Merges stay one at a time and each follows step 7 in full: merge `main` into the branch first
+  (a PR merged a moment ago changes `main`), re-check the review is current, green CI on the new
+  head. A PR that changes `version.md` merges only after the previous version is published, so
+  release PRs queue up while other work continues.
+- Review rounds (fresh subagents) may run while CI runs on another PR.
 
 ## 0. Bootstrap
 
@@ -75,7 +96,7 @@ heartbeat. Heartbeat comments by any other author are ignored.
 A version is **published** when release `vX.Y` exists (not draft) and has the
 `frename-windows-x64-vX.Y.0.zip` asset. If the first heading of `version.md` on `main` is not
 published and no release workflow run on `main` is queued or in progress (a running one is not a
-failure: wait for it or stop), the last release failed:
+failure: go on with other work and check it again later), the last release failed:
 - an open `release-failed` issue exists → resume it from item 3 of step 7 "Release failed", or skip
   it while it has `needs-owner` or `hold`;
 - none exists → start step 7 "Release failed" from item 1.
@@ -207,7 +228,8 @@ cargo build --release --locked
 
 1. Run `.claude/skills/review-gate/SKILL.md`. Each round reviews one commit: record its SHA with the
    verdicts in the PR body (`Round N @ <sha>: correctness APPROVE, design …, product …`).
-2. When all reviewers of a round approve, mark the PR ready for review and wait for CI.
+2. When all reviewers of a round approve, mark the PR ready for review. While CI runs, go on with
+   the next issue ("Parallel work") and come back when it finishes.
 3. CI red → diagnose from the job logs, fix, re-run the local gate, push. A failure is never "flaky"
    until the same job passed on the same commit. Any code change after the approved SHA needs a
    new review round (step 7 checks this).
@@ -247,8 +269,8 @@ Right before merging:
 1. Merge `main` into the branch if it is behind.
 2. Set the version. Let `M` be the first heading of `version.md` on `main` (e.g. `0.67`; it must be
    published, see the merge conditions). The new version is `M` with the second number plus one,
-   compared as numbers (`0.99` → `0.100`). Replace this PR's `# NEXT` heading with it. Commit, push,
-   wait for CI.
+   compared as numbers (`0.99` → `0.100`). Replace this PR's `# NEXT` heading with it. Commit, push;
+   work on something else while its CI runs.
 3. Check the review is current: `git diff origin/main...<approved sha>` and
    `git diff origin/main...HEAD` must be identical except the `version.md` heading line. Any other
    difference (including anything done while resolving a merge conflict) → new review round (step 6).
@@ -265,7 +287,7 @@ Merge (squash, with `expectedHeadSha` = the checked head) only when all hold:
 
 The `version.md` change on `main` triggers `.github/workflows/release.yml`. Keep the heartbeat
 comment updated (on the just-closed issue: the lock check also counts heartbeats on issues closed
-less than 90 minutes ago) and watch the run to completion.
+less than 90 minutes ago) and check the run until it completes, working on other issues meanwhile.
 
 **Release failed:**
 1. Re-run the failed jobs of the same run once (`actions_run_trigger`, rerun failed jobs; a new
