@@ -452,10 +452,17 @@ impl Actions {
                 Operation::DescribeAi(run) => vec![("redo".to_string(), run.redo.to_string())],
                 _ => unreachable!(),
             },
-            Action::GenerateSubtitles => vec![(
-                "replace".to_string(),
-                self.generate_subtitles.replaces().to_string(),
-            )],
+            Action::GenerateSubtitles => {
+                let formats = self.generate_subtitles.formats();
+                vec![
+                    (
+                        "replace".to_string(),
+                        self.generate_subtitles.replaces().to_string(),
+                    ),
+                    ("srt".to_string(), formats.srt.to_string()),
+                    ("premiere".to_string(), formats.premiere.to_string()),
+                ]
+            }
             Action::TagCommented | Action::FixTags | Action::RespaceTags | Action::ReloadFiles => {
                 Vec::new()
             }
@@ -509,6 +516,14 @@ impl Actions {
                 if let Some(v) = get("replace") {
                     self.generate_subtitles
                         .update(generate_subtitles::Message::SetReplace(v == "true"));
+                }
+                if let Some(v) = get("srt") {
+                    self.generate_subtitles
+                        .update(generate_subtitles::Message::SetSrt(v == "true"));
+                }
+                if let Some(v) = get("premiere") {
+                    self.generate_subtitles
+                        .update(generate_subtitles::Message::SetPremiere(v == "true"));
                 }
             }
             Action::TagCommented | Action::FixTags | Action::RespaceTags | Action::ReloadFiles => {}
@@ -666,10 +681,39 @@ mod tests {
             generate_subtitles::Message::SetReplace(true),
         ));
         let saved = actions.persist(Action::GenerateSubtitles);
-        assert_eq!(saved, vec![("replace".to_string(), "true".to_string())]);
+        assert_eq!(
+            saved,
+            vec![
+                ("replace".to_string(), "true".to_string()),
+                ("srt".to_string(), "true".to_string()),
+                ("premiere".to_string(), "false".to_string()),
+            ]
+        );
         let mut restored = Actions::default();
         restored.restore(Action::GenerateSubtitles, &saved);
         assert!(restored.generate_subtitles.replaces());
+
+        actions.update(ActionMessage::GenerateSubtitles(
+            generate_subtitles::Message::SetSrt(false),
+        ));
+        actions.update(ActionMessage::GenerateSubtitles(
+            generate_subtitles::Message::SetPremiere(true),
+        ));
+        let saved = actions.persist(Action::GenerateSubtitles);
+        let mut restored = Actions::default();
+        restored.restore(Action::GenerateSubtitles, &saved);
+        let formats = restored.generate_subtitles.formats();
+        assert!(!formats.srt && formats.premiere);
+        // A run saved before the formats existed keeps the default: SRT only.
+        let mut old = Actions::default();
+        old.restore(
+            Action::GenerateSubtitles,
+            &[("replace".to_string(), "false".to_string())],
+        );
+        assert_eq!(
+            old.generate_subtitles.formats(),
+            generate_subtitles::Formats::default()
+        );
     }
 
     #[test]

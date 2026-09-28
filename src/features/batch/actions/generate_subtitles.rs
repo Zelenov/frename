@@ -48,6 +48,43 @@ pub struct Config {
     pub cue_length: CueLength,
 }
 
+/// What is written for each video: either or both of the files.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Formats {
+    /// `clip.srt`, the subtitles frename shows.
+    pub srt: bool,
+    /// `clip.premiere.json`, for Premiere Pro's "Import Static Transcript".
+    pub premiere: bool,
+}
+
+impl Default for Formats {
+    fn default() -> Self {
+        Self {
+            srt: true,
+            premiere: false,
+        }
+    }
+}
+
+impl Formats {
+    /// Whether nothing is checked: there is nothing to write.
+    pub fn is_empty(self) -> bool {
+        !self.srt && !self.premiere
+    }
+
+    /// The checked formats, as sonisub takes them.
+    fn list(self) -> Vec<job::Format> {
+        let mut list = Vec::new();
+        if self.srt {
+            list.push(job::Format::Srt);
+        }
+        if self.premiere {
+            list.push(job::Format::Premiere);
+        }
+        list
+    }
+}
+
 /// The transcription price the estimate uses.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Price {
@@ -74,6 +111,10 @@ pub enum Message {
     SetConfig(Config),
     /// Transcribe again videos that already have subtitles.
     SetReplace(bool),
+    /// Write (or not) `clip.srt`.
+    SetSrt(bool),
+    /// Write (or not) `clip.premiere.json`.
+    SetPremiere(bool),
     /// Whether a Soniox key is saved, from the settings (which read it).
     KeyState(KeyState),
     /// A Soniox key was saved: look its price up again, even for the same key (it may have
@@ -90,7 +131,10 @@ impl Message {
     /// Whether it may change the options while a job runs: answers of background reads and
     /// settings, which the next run needs.
     pub fn applies_while_running(&self) -> bool {
-        !matches!(self, Self::SetReplace(_))
+        !matches!(
+            self,
+            Self::SetReplace(_) | Self::SetSrt(_) | Self::SetPremiere(_)
+        )
     }
 }
 
@@ -109,7 +153,7 @@ pub struct Plan {
     /// Checked before and found to have no speech.
     pub no_speech_before: usize,
     pub no_audio: usize,
-    /// Videos whose `.srt` name another checked video already takes.
+    /// Videos whose output name (`.srt`, `.premiere.json`) another checked video already takes.
     pub shared_name: usize,
     /// Videos the built-in decoder cannot read while ffmpeg is not installed.
     pub unreadable: usize,
@@ -127,22 +171,25 @@ impl Plan {
 /// What the workspace should work out in the background for the panel.
 #[derive(Debug, Default, PartialEq)]
 pub struct Reads {
-    /// The plan of these files (list order), with Replace on or off, for this generation.
-    pub plan: Option<(u64, Vec<PathBuf>, bool)>,
+    /// The plan of these files (list order), with Replace on or off and these formats, for
+    /// this generation.
+    pub plan: Option<(u64, Vec<PathBuf>, bool, Formats)>,
     /// The price of the saved key.
     pub price: bool,
     /// Whether a key is saved.
     pub key_state: bool,
 }
 
-/// The checked files a plan was made for, and with Replace on or off.
-type PlannedFor = (Vec<(FileId, PathBuf)>, bool);
+/// The checked files a plan was made for, and with Replace on or off and which formats.
+type PlannedFor = (Vec<(FileId, PathBuf)>, bool, Formats);
 
 #[derive(Debug, Clone, Default)]
 pub struct Options {
     config: Config,
     /// "Replace existing subtitles".
     replace: bool,
+    /// Which files are written.
+    formats: Formats,
     /// `None` until read (only when the action is first shown: reading may unlock a keyring).
     key: Option<KeyState>,
     key_requested: bool,
@@ -161,6 +208,8 @@ impl Options {
         match message {
             Message::SetConfig(config) => self.config = config,
             Message::SetReplace(replace) => self.replace = replace,
+            Message::SetSrt(on) => self.formats.srt = on,
+            Message::SetPremiere(on) => self.formats.premiere = on,
             Message::KeyState(state) => {
                 if state != KeyState::Saved {
                     self.price = None;
@@ -196,6 +245,7 @@ impl Options {
                 .map(|f| (f.id(), f.file_path().to_path_buf()))
                 .collect(),
             self.replace,
+            self.formats,
         );
         let plan = (self.planned_for.as_ref() != Some(&planned_for)).then(|| {
             self.generation += 1;
@@ -205,7 +255,7 @@ impl Options {
                 .map(|f| FileTagger::disk_path(f.file_path()))
                 .collect();
             self.planned_for = Some(planned_for);
-            (self.generation, files, self.replace)
+            (self.generation, files, self.replace, self.formats)
         });
         let price = self.key == Some(KeyState::Saved) && self.price.is_none();
         if price {
@@ -230,10 +280,16 @@ impl Options {
         self.replace
     }
 
+    /// Which files are written, for persisting the last run (#65).
+    pub(in crate::features::batch) fn formats(&self) -> Formats {
+        self.formats
+    }
+
     /// The plan, when it was made for exactly `checked`.
     fn plan_for(&self, checked: &[&File]) -> Option<&Plan> {
-        let (files, replace) = self.planned_for.as_ref()?;
+        let (files, replace, formats) = self.planned_for.as_ref()?;
         let same = *replace == self.replace
+            && *formats == self.formats
             && files.len() == checked.len()
             && files.iter().zip(checked).all(|((id, _), f)| *id == f.id());
         self.plan.as_ref().filter(|_| same)
@@ -241,6 +297,9 @@ impl Options {
 
     /// The job, when the plan is known, the key accepted and there is something to do.
     pub fn operation(&self) -> Option<super::Operation> {
+        if self.formats.is_empty() {
+            return None;
+        }
         let plan = self.plan.as_ref().filter(|p| p.has_work())?;
         if self.key != Some(KeyState::Saved) {
             return None;
@@ -260,6 +319,7 @@ impl Options {
                 CueLength::Sentence => srt::Layout::unlimited(),
             },
             force: self.replace,
+            formats: self.formats.list(),
             keep_json: false,
             audio: audio::Backend::Auto,
             reference: format!(
@@ -313,7 +373,11 @@ impl Options {
             // The plan's last line says there is nothing to transcribe.
             Some(_) => (fl!("batch-subtitles-transcribe"), false),
         };
-        let reason = (plan.is_none() && !checked.is_empty()).then(|| fl!("batch-reason-estimate"));
+        let reason = if self.formats.is_empty() {
+            Some(fl!("batch-reason-subtitles-no-format"))
+        } else {
+            (plan.is_none() && !checked.is_empty()).then(|| fl!("batch-reason-estimate"))
+        };
         Panel {
             page: self.view(plan),
             run,
@@ -344,6 +408,22 @@ impl Options {
                 cue_length,
                 fl!("batch-ai-change"),
                 ActionMessage::OpenSubtitleSettings,
+            ),
+            page::option_row(
+                fl!("batch-option-subtitles-write"),
+                layout::choices([
+                    form::checkbox(fl!("batch-action-generate-subtitles-srt"), self.formats.srt)
+                        .on_toggle(|on| ActionMessage::GenerateSubtitles(Message::SetSrt(on)))
+                        .into(),
+                    form::checkbox_with_hint(
+                        form::checkbox(
+                            fl!("batch-action-generate-subtitles-premiere"),
+                            self.formats.premiere,
+                        )
+                        .on_toggle(|on| ActionMessage::GenerateSubtitles(Message::SetPremiere(on))),
+                        text::secondary(fl!("batch-action-generate-subtitles-premiere-hint")),
+                    ),
+                ]),
             ),
             page::option_row(
                 fl!("batch-option-subtitled"),
@@ -492,18 +572,24 @@ fn plan_lines(plan: &Plan, price: Option<Price>) -> Vec<String> {
 
 /// Work out what each of `files` (on-disk paths, list order) needs. Blocking: reads file
 /// headers. Of several videos whose subtitles would have the same name, the first keeps it.
-pub fn plan(files: &[PathBuf], replace: bool) -> Plan {
-    plan_with(files, replace, ffmpeg_installed())
+pub fn plan(files: &[PathBuf], replace: bool, formats: Formats) -> Plan {
+    plan_with(files, replace, formats, ffmpeg_installed())
 }
 
-fn plan_with(files: &[PathBuf], replace: bool, ffmpeg: bool) -> Plan {
+fn plan_with(files: &[PathBuf], replace: bool, formats: Formats, ffmpeg: bool) -> Plan {
     let mut plan = Plan::default();
     let mut names = HashSet::new();
     let mut items = Vec::new();
     for file in files {
         let output = subtitle_path(file);
-        // Case-insensitive: clip.MP4 and clip.mov both write clip.srt on Windows.
-        if !names.insert(output.to_string_lossy().to_lowercase()) {
+        // Case-insensitive: clip.MP4 and clip.mov both write clip.srt on Windows. Every checked
+        // format counts, so a name any of them shares excludes the video.
+        let mut shared = false;
+        for format in formats.list() {
+            let name = format.path(&output).to_string_lossy().to_lowercase();
+            shared |= !names.insert(name);
+        }
+        if shared {
             plan.shared_name += 1;
             plan.excluded
                 .insert(file.clone(), fl!("batch-subtitles-shared-name-reason"));
@@ -517,6 +603,7 @@ fn plan_with(files: &[PathBuf], replace: bool, ffmpeg: bool) -> Plan {
     }
     let options = job::Options {
         force: replace,
+        formats: formats.list(),
         ..job::Options::default()
     };
     let mut to_send = Vec::new();
@@ -987,7 +1074,7 @@ mod tests {
         let second = folder.file("pair.mov", "x");
         let files = vec![subtitled, cached, silent, first, second.clone()];
 
-        let plan = plan_with(&files, false, false);
+        let plan = plan_with(&files, false, Formats::default(), false);
         assert_eq!(plan.already_subtitled, 1);
         assert_eq!(plan.rebuilt_free, 1);
         assert_eq!(plan.no_speech_before, 1);
@@ -1001,17 +1088,161 @@ mod tests {
         assert!(plan.has_work(), "the free rebuild");
 
         // With ffmpeg there, an unreadable header is left to the real run: sent, length unknown.
-        let plan = plan_with(&files, false, true);
+        let plan = plan_with(&files, false, Formats::default(), true);
         assert_eq!(
             (plan.unreadable, plan.transcribe, plan.unknown_length),
             (0, 1, 1)
         );
 
         // Replace ignores existing subtitles and saved transcripts, but not shared names.
-        let plan = plan_with(&files, true, true);
+        let plan = plan_with(&files, true, Formats::default(), true);
         assert_eq!(plan.already_subtitled + plan.rebuilt_free, 0);
         assert_eq!(plan.transcribe, 4);
         assert_eq!(plan.shared_name, 1);
+    }
+
+    const BOTH: Formats = Formats {
+        srt: true,
+        premiere: true,
+    };
+    const PREMIERE_ONLY: Formats = Formats {
+        srt: false,
+        premiere: true,
+    };
+
+    #[test]
+    fn the_plan_follows_the_checked_formats() {
+        let folder = Folder::new("plan-formats");
+        // Has its SRT only, and a saved transcript.
+        let srt_only = folder.file("a.mp4", "x");
+        folder.file("a.srt", "1\n00:00:01,000 --> 00:00:02,000\nHi\n");
+        folder.file("a.soniox.json", TRANSCRIPT);
+        // Has both files.
+        let complete = folder.file("b.mp4", "x");
+        folder.file("b.srt", "1\n00:00:01,000 --> 00:00:02,000\nHi\n");
+        folder.file("b.premiere.json", "{}");
+        let files = vec![srt_only, complete];
+
+        let plan = plan_with(&files, false, Formats::default(), true);
+        assert_eq!(
+            (plan.already_subtitled, plan.rebuilt_free),
+            (2, 0),
+            "SRT only"
+        );
+
+        let plan = plan_with(&files, false, PREMIERE_ONLY, true);
+        assert_eq!(
+            (plan.already_subtitled, plan.rebuilt_free, plan.transcribe),
+            (1, 1, 0),
+            "a.mp4 lacks its Premiere file: free, its transcript is saved"
+        );
+
+        let plan = plan_with(&files, false, BOTH, true);
+        assert_eq!(
+            (plan.already_subtitled, plan.rebuilt_free, plan.transcribe),
+            (1, 1, 0),
+            "SRT exists, Premiere missing: still work"
+        );
+
+        // Replace applies to every checked format.
+        let plan = plan_with(&files, true, BOTH, true);
+        assert_eq!(plan.already_subtitled, 0);
+    }
+
+    #[test]
+    fn a_video_with_no_saved_transcript_is_paid_for_a_missing_format() {
+        let folder = Folder::new("plan-paid");
+        let video = folder.file("a.mp4", "x");
+        folder.file("a.srt", "1\n00:00:01,000 --> 00:00:02,000\nHi\n");
+        let files = vec![video];
+        assert_eq!(
+            plan_with(&files, false, Formats::default(), true).transcribe,
+            0
+        );
+        assert_eq!(plan_with(&files, false, BOTH, true).transcribe, 1);
+    }
+
+    #[test]
+    fn shared_names_are_checked_for_every_format() {
+        let folder = Folder::new("shared-formats");
+        let first = folder.file("pair.MP4", "x");
+        let second = folder.file("pair.mov", "x");
+        let files = vec![first, second.clone()];
+        for formats in [Formats::default(), PREMIERE_ONLY, BOTH] {
+            let plan = plan_with(&files, false, formats, true);
+            assert_eq!(plan.shared_name, 1, "{formats:?}");
+            assert!(plan.excluded.contains_key(&second), "{formats:?}");
+        }
+    }
+
+    #[test]
+    fn run_is_off_when_no_format_is_checked() {
+        let a = file("a.mp4");
+        let mut options = Options::default();
+        options.update(Message::KeyState(KeyState::Saved));
+        options.update(Message::PriceReady(Price::Learned(0.1)));
+        options.update(Message::SetSrt(false));
+        options.update(Message::SetPremiere(false));
+        let generation = options.reads(&[&a]).plan.expect("a plan").0;
+        options.update(Message::PlanReady {
+            generation,
+            plan: Box::new(Plan {
+                rebuilt_free: 1,
+                ..Plan::default()
+            }),
+        });
+        assert!(options.operation().is_none());
+        let super::Panel { ready, reason, .. } = options.panel(&[&a]);
+        assert!(!ready);
+        assert_eq!(reason, Some(fl!("batch-reason-subtitles-no-format")));
+
+        options.update(Message::SetPremiere(true));
+        assert!(options.formats() == PREMIERE_ONLY);
+    }
+
+    #[test]
+    fn a_saved_transcript_is_rebuilt_into_both_formats_without_soniox() {
+        let folder = Folder::new("both");
+        let video = folder.video("clip.mp4");
+        folder.file("clip.soniox.json", TRANSCRIPT);
+        let job = Run(Arc::new(SubtitleJob {
+            options: job::Options {
+                formats: BOTH.list(),
+                ..job::Options::default()
+            },
+            excluded: HashMap::new(),
+            usd_per_hour: 0.12,
+            uploaded_ms: AtomicU64::new(0),
+            failed_deletes: AtomicUsize::new(0),
+        }));
+        let result = run_now(&job, &video);
+        assert_eq!(result.status, ItemStatus::Done, "{:?}", result.reason);
+        assert!(subtitle_path(&video).is_file());
+        let premiere = job::Format::Premiere.path(&subtitle_path(&video));
+        assert!(premiere.ends_with("clip.premiere.json"));
+        assert!(premiere.is_file(), "clip.premiere.json written");
+        assert_eq!(uploaded(&job), 0, "nothing was sent");
+
+        // Only Premiere: the SRT is not written.
+        let only = folder.video("only.mp4");
+        folder.file("only.soniox.json", TRANSCRIPT);
+        let job = Run(Arc::new(SubtitleJob {
+            options: job::Options {
+                formats: PREMIERE_ONLY.list(),
+                ..job::Options::default()
+            },
+            excluded: HashMap::new(),
+            usd_per_hour: 0.12,
+            uploaded_ms: AtomicU64::new(0),
+            failed_deletes: AtomicUsize::new(0),
+        }));
+        assert_eq!(run_now(&job, &only).status, ItemStatus::Done);
+        assert!(!subtitle_path(&only).exists());
+        assert!(job::Format::Premiere.path(&subtitle_path(&only)).is_file());
+    }
+
+    fn uploaded(job: &Run) -> u64 {
+        job.0.uploaded_ms.load(Ordering::Relaxed)
     }
 
     #[test]
@@ -1238,8 +1469,9 @@ mod tests {
         let mut options = Options::default();
         let reads = options.reads(&[&a, &b]);
         assert!(reads.key_state);
-        let (generation, files, replace) = reads.plan.expect("a plan");
+        let (generation, files, replace, formats) = reads.plan.expect("a plan");
         assert_eq!((files.len(), replace), (2, false));
+        assert_eq!(formats, Formats::default());
         assert_eq!(
             options.reads(&[&a, &b]),
             Reads::default(),
@@ -1290,7 +1522,14 @@ mod tests {
 
         // Replace changes the plan too.
         options.update(Message::SetReplace(true));
-        assert!(options.reads(&[&a]).plan.is_some_and(|(_, _, r)| r));
+        assert!(options.reads(&[&a]).plan.is_some_and(|(_, _, r, _)| r));
+
+        // So do the formats.
+        options.update(Message::SetPremiere(true));
+        assert!(options
+            .reads(&[&a])
+            .plan
+            .is_some_and(|(_, _, _, f)| f.srt && f.premiere));
     }
 
     #[test]

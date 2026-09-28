@@ -936,10 +936,10 @@ impl FolderWorkspace {
                 batch::ActionMessage::ReadSonioxKeyState,
             ))));
         }
-        if let Some((generation, files, replace)) = reads.plan {
+        if let Some((generation, files, replace, formats)) = reads.plan {
             tasks.push(Task::future(async move {
                 let plan = tokio::task::spawn_blocking(move || {
-                    batch::generate_subtitles::plan(&files, replace)
+                    batch::generate_subtitles::plan(&files, replace, formats)
                 })
                 .await
                 .unwrap_or_else(|e| {
