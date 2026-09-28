@@ -8,7 +8,7 @@
 - Leaving a clip and moving to the next one before its video has finished loading no longer risks the tag you just set failing to reach the file.
 
 ## Fixed
-- The volume control no longer disappears when the video panel is narrow: below a width it collapses to its icon, which you scroll to change the volume. The video panel's own minimum width was widened so no other control clips either.
+- The volume control no longer disappears when the video panel is narrow: below a width it collapses to its icon, which you scroll to change the volume. The panel can no longer be narrowed past the point where a button would be cut off.
 
 # 0.80
 ## Changed

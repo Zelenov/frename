@@ -6,7 +6,7 @@ source = "../../tests/folder"
 open = "pick.wide.MVI_0901.mp4"
 seek = 2.0
 window = [1000, 640]
-panels = [440, 220]
+panels = [444, 220]
 
 [[files]]
 from = "file_example_MP4_480_1_5MG.mp4"

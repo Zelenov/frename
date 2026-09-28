@@ -7,4 +7,4 @@ pub mod view;
 pub use messages::Message;
 pub(crate) use state::check_decodes;
 pub use state::{Overlay, VideoPlayerState};
-pub use view::MIN_CONTROLS_ROW_WIDTH;
+pub use view::MIN_PANEL_WIDTH;

@@ -65,7 +65,7 @@ pub fn view(
     let left_splitter = Splitter::new(Message::LeftSplitterDragged)
         // Anything narrower and the controls row's own buttons start clipping (#96); the
         // volume control itself already gives way to just its icon well before this floor.
-        .min_left(media_viewer::video::MIN_CONTROLS_ROW_WIDTH)
+        .min_left(media_viewer::video::MIN_PANEL_WIDTH)
         .min_right(200.0);
 
     let (has_previous, has_next) = state.has_previous_next();

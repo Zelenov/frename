@@ -7,7 +7,10 @@ use super::progress_bar::{BarMarker, ProgressBar};
 use super::{Message, VideoControlsState};
 use crate::theme;
 
-const CONTROLS_HEIGHT: f32 = 32.0;
+// `pub(crate)`: media_viewer/video/view.rs's own `MIN_PANEL_WIDTH` needs this to size the three
+// buttons it appends after this module's row, rather than risking its own, separately-defined
+// copy drifting from this one.
+pub(crate) const CONTROLS_HEIGHT: f32 = 32.0;
 /// ↺ and ↻ sit side by side as one pair, a little narrower than the other buttons.
 const ROTATE_BUTTON_WIDTH: f32 = 24.0;
 /// Room between items in the controls row (and inside the collapsed volume control).
@@ -18,29 +21,44 @@ const ROW_PADDING: f32 = 16.0;
 /// when it and the buttons around it still fit (below) is exact, not a font-dependent guess.
 const VOLUME_ICON_WIDTH: f32 = 24.0;
 const VOLUME_BAR_WIDTH: f32 = 72.0;
-/// How much one wheel notch changes the volume when the bar itself has no room to drag (#96).
+/// How much one full wheel notch changes the volume when the bar itself has no room to drag
+/// (#96). Applied as-is to a notched wheel's `Lines` delta; a trackpad's `Pixels` delta is
+/// scaled to this over `VOLUME_SCROLL_PIXELS_PER_STEP`, so a gentle swipe (many small deltas)
+/// changes the volume by roughly the same total a deliberate one does, not a full step each.
 const VOLUME_SCROLL_STEP: f32 = 0.05;
+/// Trackpad pixels equivalent to one full `VOLUME_SCROLL_STEP`.
+const VOLUME_SCROLL_PIXELS_PER_STEP: f32 = 20.0;
 
-/// Width of the seven square buttons (⏪ ▶ ⏩ [ ] 📷 📍) plus the ↺↻ pair, with the gaps
-/// between all eight of them — everything in the row except the volume control.
+/// Width of the seven square buttons (⏪ ▶ ⏩ [ ] 📷 📍) plus the ↺↻ pair — everything in the
+/// row except the `bar` spacer and the volume control.
 const BUTTONS_CONTENT_WIDTH: f32 = CONTROLS_HEIGHT * 7.0 + ROTATE_BUTTON_WIDTH * 2.0;
-const BUTTONS_GAPS: f32 = ROW_SPACING * 7.0;
+
+/// Items in `controls` (view_at_width, below) when the volume is collapsed to its icon: the
+/// seven square buttons, `rotate_pair`, the `bar` spacer and `volume_control` — one slot each,
+/// regardless of a slot's own width. iced charges `ROW_SPACING` between every pair of slots,
+/// including on both sides of `bar`, even though `bar` itself renders at zero width — a row of
+/// N slots has N-1 gaps, not N-2 (the mistake #96's first fix made, undercounting by one gap).
+const CONTROLS_ROW_SLOTS: f32 = 10.0;
 
 /// Narrowest the controls row can be and still show every button plus a reachable volume
 /// control (icon only, no bar): the video panel's own splitter minimum is set to this so
 /// nothing in the row is ever clipped, at any width frename allows (#96).
-pub const MIN_CONTROLS_WIDTH: f32 =
-    BUTTONS_CONTENT_WIDTH + BUTTONS_GAPS + ROW_SPACING + VOLUME_ICON_WIDTH + ROW_PADDING;
+pub const MIN_CONTROLS_WIDTH: f32 = BUTTONS_CONTENT_WIDTH
+    + ROW_SPACING * (CONTROLS_ROW_SLOTS - 1.0)
+    + VOLUME_ICON_WIDTH
+    + ROW_PADDING;
 
 /// Below this, the volume bar is dropped in favor of the icon alone (scroll it to change
-/// the volume) rather than being clipped or pushed off the row's right edge (#96).
+/// the volume) rather than being clipped or pushed off the row's right edge (#96). The volume
+/// control is still a single row slot with the bar showing — only its own content widens by
+/// the bar plus the gap between it and the icon, not the outer row's own slot count.
 const VOLUME_BAR_MIN_WIDTH: f32 = MIN_CONTROLS_WIDTH + ROW_SPACING + VOLUME_BAR_WIDTH;
 
 // The relation between the constants above, checked once at compile time rather than as a
 // runtime test (clippy's own suggestion for an assertion on values that never change): the
 // panel's floor must actually be wider than the buttons alone, and narrower than the point
 // where the bar fits, or one of the two thresholds would be pointless.
-const _: () = assert!(MIN_CONTROLS_WIDTH > BUTTONS_CONTENT_WIDTH + BUTTONS_GAPS);
+const _: () = assert!(MIN_CONTROLS_WIDTH > BUTTONS_CONTENT_WIDTH);
 const _: () = assert!(MIN_CONTROLS_WIDTH < VOLUME_BAR_MIN_WIDTH);
 
 /// Whether the controls row is wide enough to show the volume bar (not just its icon), at
@@ -49,17 +67,19 @@ fn show_volume_bar(available_width: f32) -> bool {
     available_width >= VOLUME_BAR_MIN_WIDTH
 }
 
-/// New volume after one wheel notch over the collapsed volume icon, clamped to 0.0..=1.0.
+/// New volume after a scroll over the collapsed volume icon, clamped to 0.0..=1.0. A notched
+/// mouse wheel's `Lines` moves a full `VOLUME_SCROLL_STEP` per notch; a trackpad's `Pixels`
+/// moves proportionally to the swipe, capped at one full step, so a long inertial scroll cannot
+/// swing the volume from empty to full in the time it takes many small events to arrive.
 fn volume_after_scroll(current: f32, delta: mouse::ScrollDelta) -> f32 {
-    let y = match delta {
-        mouse::ScrollDelta::Lines { y, .. } | mouse::ScrollDelta::Pixels { y, .. } => y,
-    };
-    let step = if y > 0.0 {
-        VOLUME_SCROLL_STEP
-    } else if y < 0.0 {
-        -VOLUME_SCROLL_STEP
-    } else {
-        0.0
+    // `f32::signum` returns 1.0 for a zero of either sign, not 0.0, so a still wheel needs its
+    // own case rather than folding into the Lines arm below.
+    let step = match delta {
+        mouse::ScrollDelta::Lines { y: 0.0, .. } => 0.0,
+        mouse::ScrollDelta::Lines { y, .. } => y.signum() * VOLUME_SCROLL_STEP,
+        mouse::ScrollDelta::Pixels { y, .. } => {
+            (y / VOLUME_SCROLL_PIXELS_PER_STEP).clamp(-1.0, 1.0) * VOLUME_SCROLL_STEP
+        }
     };
     (current + step).clamp(0.0, 1.0)
 }
@@ -208,9 +228,13 @@ fn view_at_width(
             .into()
     } else {
         let volume = state.volume();
-        mouse_area(volume_icon())
-            .on_scroll(move |delta| Message::SetVolume(volume_after_scroll(volume, delta)))
-            .into()
+        tooltip(
+            mouse_area(volume_icon())
+                .on_scroll(move |delta| Message::SetVolume(volume_after_scroll(volume, delta))),
+            text(fl!("video-controls-volume-scroll")),
+            tooltip::Position::Top,
+        )
+        .into()
     };
 
     let screenshot_btn: Element<'_, Message> = tooltip(
@@ -443,7 +467,34 @@ mod tests {
         assert_eq!(volume_after_scroll(0.5, down), 0.5 - VOLUME_SCROLL_STEP);
         assert_eq!(volume_after_scroll(1.0, up), 1.0, "clamped at the top");
         assert_eq!(volume_after_scroll(0.0, down), 0.0, "clamped at the bottom");
+        let still = mouse::ScrollDelta::Lines { x: 0.0, y: 0.0 };
+        assert_eq!(
+            volume_after_scroll(0.5, still),
+            0.5,
+            "a still wheel is a no-op"
+        );
         let no_move = mouse::ScrollDelta::Pixels { x: 0.0, y: 0.0 };
         assert_eq!(volume_after_scroll(0.5, no_move), 0.5);
+    }
+
+    /// Issue #96: a trackpad's inertial scroll sends many small `Pixels` deltas per gesture —
+    /// each one must move the volume only as far as its own size warrants, or a gentle swipe
+    /// would swing the volume from empty to full over a handful of tiny events.
+    #[test]
+    fn a_small_trackpad_scroll_moves_the_volume_less_than_a_full_step() {
+        let gentle = mouse::ScrollDelta::Pixels { x: 0.0, y: 2.0 };
+        let after = volume_after_scroll(0.5, gentle);
+        assert!(after > 0.5, "still moves up");
+        assert!(
+            after < 0.5 + VOLUME_SCROLL_STEP,
+            "but not by a full step: {after}"
+        );
+
+        // A swipe far past VOLUME_SCROLL_PIXELS_PER_STEP still caps at one step, not more.
+        let large = mouse::ScrollDelta::Pixels {
+            x: 0.0,
+            y: VOLUME_SCROLL_PIXELS_PER_STEP * 10.0,
+        };
+        assert_eq!(volume_after_scroll(0.5, large), 0.5 + VOLUME_SCROLL_STEP);
     }
 }
