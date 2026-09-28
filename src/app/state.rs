@@ -58,6 +58,15 @@ fn main_window_event(
         iced::Event::Window(window::Event::Resized(size)) => {
             Some(Message::WindowResized(size.width, size.height))
         }
+        // The keyboard modifiers Ctrl/Shift+click on a file row reads (a mouse click carries
+        // none of its own in iced). Cleared on losing focus, so a Ctrl released while the
+        // window was unfocused cannot leave a stuck modifier behind.
+        iced::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => Some(
+            Message::FolderWorkspace(folder_workspace::Message::ModifiersChanged(modifiers)),
+        ),
+        iced::Event::Window(window::Event::Unfocused) => Some(Message::FolderWorkspace(
+            folder_workspace::Message::ModifiersChanged(keyboard::Modifiers::empty()),
+        )),
         // Shift+Space toggles the selected tag.
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
             key: keyboard::Key::Named(keyboard::key::Named::Space),
