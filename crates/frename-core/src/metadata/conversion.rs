@@ -7,8 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
-use super::{xmp, CommentStorage, InOutStorage, MetadataStorage, Segment};
-use crate::tags::FileSnapshot;
+use super::{in_out_line, xmp, CommentStorage, InOutStorage, MetadataStorage, Segment};
 
 /// What a move takes to where. The other kind of metadata stays in its current home.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,8 +36,8 @@ pub enum MoveOutcome {
     /// The file already keeps it in the destination, or has none.
     NothingToMove,
     /// Something is still outside the destination, e.g. because the format cannot hold XMP
-    /// or the file could not be written; the details are in the log. The file's path
-    /// afterwards, since part of the move may have renamed it.
+    /// or the file could not be written or renamed; the details are in the log. The file's
+    /// path afterwards.
     Failed(PathBuf),
 }
 
@@ -60,7 +59,10 @@ impl FileConversion {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Inspection {
     has_text_file: bool,
-    name_has_in_out: bool,
+    /// The text file holds a comment, not just an in/out line.
+    text_has_comment: bool,
+    /// The comment (the text file's, or else the XMP one) has an in/out line.
+    comment_has_in_out: bool,
     /// `None` when the file cannot hold XMP (or is a cloud placeholder).
     xmp: Option<xmp::XmpFields>,
 }
@@ -68,28 +70,41 @@ pub(crate) struct Inspection {
 impl Inspection {
     /// Read both homes of the file at `path`.
     pub(crate) fn of(path: &Path) -> Self {
-        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        let from_name = FileSnapshot::parse(name);
+        let has_text_file = crate::comment::comment_path(path).is_file();
+        let xmp = xmp::probe(path);
+        let (text, text_line) = if has_text_file {
+            in_out_line::split_in_out_line(&crate::comment::load_comment(path))
+        } else {
+            Default::default()
+        };
+        let text_has_comment = !text.trim().is_empty();
+        // As in parsing: the text file's line wins, else the XMP comment's (unless the text
+        // file holds a comment, which then is the comment).
+        let xmp_line = xmp
+            .as_ref()
+            .filter(|_| !text_has_comment)
+            .map(|x| in_out_line::split_in_out_line(&x.comment).1)
+            .unwrap_or_default();
         Self {
-            has_text_file: crate::comment::comment_path(path).is_file(),
-            name_has_in_out: from_name.segment_start().is_some()
-                || from_name.segment_end().is_some(),
-            xmp: xmp::probe(path),
+            has_text_file,
+            text_has_comment,
+            comment_has_in_out: !text_line.is_empty() || !xmp_line.is_empty(),
+            xmp,
         }
     }
 
-    /// The storage the file uses now: a text file or in/out in the name win over XMP, as in
-    /// parsing, and a file that cannot hold XMP keeps both outside it.
+    /// The storage the file uses now: a text file or an in/out line in the comment win over
+    /// XMP, as in parsing, and a file that cannot hold XMP keeps both outside it.
     fn current_storage(&self) -> MetadataStorage {
         let can_hold_xmp = self.xmp.is_some();
         MetadataStorage {
-            comment: if self.has_text_file || !can_hold_xmp {
+            comment: if self.text_has_comment || !can_hold_xmp {
                 CommentStorage::TextFile
             } else {
                 CommentStorage::InVideo
             },
-            in_out: if self.name_has_in_out || !can_hold_xmp {
-                InOutStorage::FileName
+            in_out: if self.comment_has_in_out || !can_hold_xmp {
+                InOutStorage::Comment
             } else {
                 InOutStorage::InVideo
             },
@@ -118,26 +133,28 @@ impl Inspection {
         }
     }
 
-    /// What converting the file to `storage` would move. A text file or in/out in the name
-    /// wins over XMP, as in parsing, so XMP is only moved out when the other home is empty;
-    /// otherwise the XMP copy is left alone rather than lost.
+    /// What converting the file to `storage` would move. A text file or an in/out line wins
+    /// over XMP, as in parsing, so XMP is only moved out when the other home is empty;
+    /// otherwise the XMP copy is left alone rather than lost. A text file holding only an
+    /// in/out line is no comment: moving comments into the video merges its line into the
+    /// video's comment, and moving them out takes the video's comment along.
     fn needed(&self, storage: MetadataStorage) -> FileConversion {
         let can_hold_xmp = self.xmp.is_some();
         let xmp = self.xmp.clone().unwrap_or_default();
         FileConversion {
             comment: match storage.comment {
                 CommentStorage::InVideo => self.has_text_file && can_hold_xmp,
-                CommentStorage::TextFile => !self.has_text_file && !xmp.comment.is_empty(),
+                CommentStorage::TextFile => !self.text_has_comment && !xmp.comment.is_empty(),
             },
             in_out: match storage.in_out {
-                InOutStorage::InVideo => self.name_has_in_out && can_hold_xmp,
-                InOutStorage::FileName => !self.name_has_in_out && !xmp.segment.is_empty(),
+                InOutStorage::InVideo => self.comment_has_in_out && can_hold_xmp,
+                InOutStorage::Comment => !self.comment_has_in_out && !xmp.segment.is_empty(),
             },
         }
     }
 }
 
-/// After a move to text file or file name saved the file at `path`, remove the XMP
+/// After a move to the text file or the comment saved the file at `path`, remove the XMP
 /// copies that were moved out, so Premiere does not keep showing stale values. Only removes
 /// what now exists in the new home.
 pub(crate) fn clear_moved_xmp(path: &Path, moved: FileConversion, storage: MetadataStorage) {
@@ -145,8 +162,8 @@ pub(crate) fn clear_moved_xmp(path: &Path, moved: FileConversion, storage: Metad
         && storage.comment == CommentStorage::TextFile
         && crate::comment::comment_path(path).is_file();
     let clear_in_out = moved.in_out
-        && storage.in_out == InOutStorage::FileName
-        && Inspection::of(path).name_has_in_out;
+        && storage.in_out == InOutStorage::Comment
+        && Inspection::of(path).comment_has_in_out;
     if !clear_comment && !clear_in_out {
         return;
     }

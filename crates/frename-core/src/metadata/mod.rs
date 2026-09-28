@@ -2,13 +2,16 @@
 //!
 //! Each has two homes. The comment lives in the file's XMP (see [`xmp`]) or in a
 //! `.comment.txt` next to it ([`crate::comment`]); the in/out points live in the file's XMP
-//! as an Adobe clip marker or in the file name (`in_HH_MM_SS` / `out_HH_MM_SS`). The user picks
-//! each with [`CommentStorage`] and [`InOutStorage`]. A file that cannot hold XMP keeps both
-//! in the other home, so switching storage never loses anything.
+//! as an Adobe clip marker or in the comment as one line (see [`in_out_line`]), wherever the
+//! comment is. The user picks each with [`CommentStorage`] and [`InOutStorage`]. A file that
+//! cannot hold XMP keeps both in the other home, so switching storage never loses anything.
+//! File names never hold in/out points; the batch action that moves them out of names written
+//! by older versions is [`crate::FileTagger::move_in_out_out_of_name`].
 
 mod bmff;
 pub(crate) mod cache;
 mod conversion;
+mod in_out_line;
 mod markers_xmp;
 pub(crate) mod rotation;
 mod xmp;
@@ -22,8 +25,9 @@ use std::sync::RwLock;
 use crate::markers::Marker;
 use crate::tags::FileSnapshot;
 
-pub(crate) use conversion::{clear_moved_xmp, Inspection};
+pub(crate) use conversion::{clear_moved_xmp, FileConversion, Inspection};
 pub use conversion::{MetadataMove, MoveOutcome};
+pub use in_out_line::format_in_out_range;
 pub use rotation::{Rotation, RotationError};
 pub use xmp::Segment;
 
@@ -58,28 +62,29 @@ impl CommentStorage {
 /// Where in/out points are saved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InOutStorage {
-    /// In the file name as `in_HH_MM_SS` / `out_HH_MM_SS`.
-    #[default]
-    FileName,
     /// Inside the video file, as an XMP clip marker, which Premiere Pro turns into a subclip.
-    /// The file name then carries no in/out.
+    #[default]
     InVideo,
+    /// In the comment, as one line (`In/Out: 00:01:05.250 – 00:02:10.000`), wherever the
+    /// comment is kept.
+    Comment,
 }
 
 impl InOutStorage {
     /// Stable name for persisting the setting.
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::FileName => "file_name",
             Self::InVideo => "xmp",
+            Self::Comment => "comment",
         }
     }
 
-    /// Parse a persisted name; unknown names fall back to the default.
+    /// Parse a persisted name; unknown names fall back to the default. `file_name`, the
+    /// storage older versions had, is one of them: file names no longer hold in/out points.
     pub fn from_name(name: &str) -> Self {
         match name {
-            "xmp" => Self::InVideo,
-            _ => Self::FileName,
+            "comment" => Self::Comment,
+            _ => Self::InVideo,
         }
     }
 }
@@ -123,7 +128,7 @@ pub struct MetadataStorage {
 // The active storage, process-wide like the installed file tagger: parsing and saving happen
 // deep inside the tagger, far from the settings that choose it.
 static COMMENT_TEXT_FILE: AtomicU8 = AtomicU8::new(0);
-static IN_OUT_XMP: AtomicU8 = AtomicU8::new(0);
+static IN_OUT_IN_COMMENT: AtomicU8 = AtomicU8::new(0);
 static MARKERS_IN_COMMENT: AtomicU8 = AtomicU8::new(0);
 
 /// Choose where markers are saved from now on. The open file's markers are written to the new
@@ -156,8 +161,8 @@ pub fn set_comment_storage(storage: CommentStorage) {
 /// Choose where in/out points are saved from now on. Loaded files keep their points and
 /// move them to the new storage when they are next saved.
 pub fn set_in_out_storage(storage: InOutStorage) {
-    IN_OUT_XMP.store(
-        u8::from(storage == InOutStorage::InVideo),
+    IN_OUT_IN_COMMENT.store(
+        u8::from(storage == InOutStorage::Comment),
         Ordering::Relaxed,
     );
 }
@@ -222,22 +227,25 @@ pub fn metadata_storage() -> MetadataStorage {
         } else {
             CommentStorage::InVideo
         },
-        in_out: if IN_OUT_XMP.load(Ordering::Relaxed) == 1 {
-            InOutStorage::InVideo
+        in_out: if IN_OUT_IN_COMMENT.load(Ordering::Relaxed) == 1 {
+            InOutStorage::Comment
         } else {
-            InOutStorage::FileName
+            InOutStorage::InVideo
         },
     }
 }
 
-/// Fill in the comment, the in/out points when the file name has none, and the marker count
-/// of a snapshot parsed from the file name.
+/// Fill in the comment, the in/out points and the marker count of a snapshot parsed from the
+/// file name.
 ///
 /// `has_text_file` says whether the folder listing shows a `.comment.txt` for this file.
 /// A text file wins over XMP: in XMP storage one only exists as a legacy comment or as the
-/// fallback for a failed XMP write, and either way it holds the newest text. In/out points
-/// in the file name win over XMP the same way. The XMP is read whatever the storage, for the
-/// marker count; a folder scan takes it from the file list or defers it.
+/// fallback for a failed XMP write, and either way it holds the newest text. A text file that
+/// holds only an in/out line wins for the in/out points, not for the comment. An in/out line
+/// in the comment wins over the XMP marker the same way: it is where in/out points go when the
+/// marker cannot hold them. The line is taken out of the comment into the snapshot's in/out
+/// points whatever the storage. The XMP is read whatever the storage, for the marker count; a
+/// folder scan takes it from the file list or defers it.
 pub(crate) fn load(
     path: &Path,
     has_text_file: bool,
@@ -245,12 +253,16 @@ pub(crate) fn load(
     storage: MetadataStorage,
     source: XmpSource<'_>,
 ) {
-    let name_has_in_out = snapshot.segment_start().is_some() || snapshot.segment_end().is_some();
-    let comment_from_xmp = storage.comment == CommentStorage::InVideo && !has_text_file;
-    let in_out_from_xmp = storage.in_out == InOutStorage::InVideo && !name_has_in_out;
+    let mut comment_has_in_out = false;
+    let mut text_has_comment = false;
     if has_text_file {
         snapshot.set_comment(crate::comment::load_comment(path));
+        comment_has_in_out = take_in_out_line(snapshot);
+        text_has_comment = !snapshot.comment().trim().is_empty();
     }
+    // A text file holding nothing but the in/out line (written while comments were kept in
+    // text files) has no comment to win with: the one in the video stays the comment.
+    let comment_from_xmp = storage.comment == CommentStorage::InVideo && !text_has_comment;
     // Read whatever the storage: the marker count always comes from the video.
     let fields = match source {
         XmpSource::Read => xmp::read(path),
@@ -269,11 +281,50 @@ pub(crate) fn load(
     };
     snapshot.set_marker_count(fields.markers);
     if comment_from_xmp {
-        snapshot.set_comment(fields.comment);
+        let (comment, segment) = in_out_line::split_in_out_line(&fields.comment);
+        snapshot.set_comment(comment);
+        if !comment_has_in_out && !segment.is_empty() {
+            snapshot.set_segment(segment);
+            comment_has_in_out = true;
+        }
     }
-    if in_out_from_xmp {
-        snapshot.set_segment_start(fields.segment.start);
-        snapshot.set_segment_end(fields.segment.end);
+    if storage.in_out == InOutStorage::InVideo && !comment_has_in_out {
+        snapshot.set_segment(fields.segment);
+    }
+}
+
+/// Move the in/out line of the snapshot's comment into its in/out points. Returns whether
+/// the comment had one.
+fn take_in_out_line(snapshot: &mut FileSnapshot) -> bool {
+    let (comment, segment) = in_out_line::split_in_out_line(snapshot.comment());
+    if segment.is_empty() {
+        return false;
+    }
+    snapshot.set_comment(comment);
+    snapshot.set_segment(segment);
+    true
+}
+
+/// The comment in the file's XMP, as it is stored (with an in/out line, if any).
+#[cfg(test)]
+pub(crate) fn xmp_comment(path: &Path) -> String {
+    xmp::read(path).comment
+}
+
+/// The in/out marker in the file's XMP.
+#[cfg(test)]
+pub(crate) fn xmp_segment(path: &Path) -> Segment {
+    xmp::read(path).segment
+}
+
+/// The comment as it is stored: the snapshot's comment, with the in/out line as the last line
+/// of the editor's part (see [`in_out_line`]) unless the points are kept in the XMP marker
+/// (`in_out_in_xmp`).
+pub(crate) fn stored_comment(snapshot: &FileSnapshot, in_out_in_xmp: bool) -> String {
+    if in_out_in_xmp {
+        snapshot.comment().to_string()
+    } else {
+        in_out_line::with_in_out_line(snapshot.comment(), snapshot.segment())
     }
 }
 
@@ -364,8 +415,10 @@ pub(crate) struct SavedToXmp {
 }
 
 /// Write the fields whose storage is XMP into the file at `path`. Whatever this could not
-/// write belongs in the other home: the caller keeps in/out in the file name and the comment
-/// in the text file (see [`save_comment_text_file`]).
+/// write belongs in the other home: the caller keeps the comment in the text file (see
+/// [`save_comment_text_file`]), and in/out points the marker could not hold go into the
+/// comment as its in/out line (see [`stored_comment`]). When the comment itself goes into the
+/// XMP, it carries that line already.
 pub(crate) fn save_to_xmp(
     path: &Path,
     snapshot: &FileSnapshot,
@@ -375,28 +428,42 @@ pub(crate) fn save_to_xmp(
     if snapshot.comment_loading() {
         return SavedToXmp::default();
     }
-    let comment = (storage.comment == CommentStorage::InVideo).then(|| snapshot.comment().trim());
-    let segment = (storage.in_out == InOutStorage::InVideo).then(|| Segment {
-        start: snapshot.segment_start(),
-        end: snapshot.segment_end(),
-    });
-    if comment.is_none() && segment.is_none() {
+    let comment_to_xmp = storage.comment == CommentStorage::InVideo;
+    let in_out_to_xmp = storage.in_out == InOutStorage::InVideo;
+    if !comment_to_xmp && !in_out_to_xmp {
         return SavedToXmp::default();
     }
-    match xmp::write(path, comment, segment) {
-        Ok(in_out) => SavedToXmp {
-            comment: comment.is_some(),
-            in_out,
-        },
-        Err(xmp::XmpWriteError::Unsupported) => SavedToXmp::default(),
+    let comment = comment_to_xmp.then(|| stored_comment(snapshot, in_out_to_xmp));
+    let segment = in_out_to_xmp.then(|| snapshot.segment());
+    let segment_stored = match xmp::write(path, comment.as_deref().map(str::trim), segment) {
+        Ok(stored) => stored,
+        Err(xmp::XmpWriteError::Unsupported) => return SavedToXmp::default(),
         Err(e) => {
             log::warn!(
-                "metadata: XMP write to {:?} failed, keeping file name and text file: {}",
+                "metadata: XMP write to {:?} failed, keeping the text file: {}",
                 path,
                 e
             );
-            SavedToXmp::default()
+            return SavedToXmp::default();
         }
+    };
+    let in_out = in_out_to_xmp && segment_stored;
+    if comment_to_xmp && in_out_to_xmp && !segment_stored {
+        // The marker cannot hold these points (an in past the clip end): the comment in the
+        // video gets them as its in/out line.
+        let with_line = stored_comment(snapshot, false);
+        if let Err(e) = xmp::write(path, Some(with_line.trim()), None) {
+            log::warn!(
+                "metadata: XMP write to {:?} failed, keeping the text file: {}",
+                path,
+                e
+            );
+            return SavedToXmp::default();
+        }
+    }
+    SavedToXmp {
+        comment: comment_to_xmp,
+        in_out,
     }
 }
 
@@ -424,7 +491,7 @@ mod tests {
     };
     const PLAIN: MetadataStorage = MetadataStorage {
         comment: CommentStorage::TextFile,
-        in_out: InOutStorage::FileName,
+        in_out: InOutStorage::Comment,
     };
 
     /// A fresh copy of a tiny 0.2 s QuickTime clip with no XMP, in its own temp folder.
@@ -457,30 +524,35 @@ mod tests {
         for storage in [CommentStorage::InVideo, CommentStorage::TextFile] {
             assert_eq!(CommentStorage::from_name(storage.as_str()), storage);
         }
-        for storage in [InOutStorage::InVideo, InOutStorage::FileName] {
+        for storage in [InOutStorage::InVideo, InOutStorage::Comment] {
             assert_eq!(InOutStorage::from_name(storage.as_str()), storage);
         }
         assert_eq!(
             CommentStorage::from_name("garbage"),
             CommentStorage::InVideo
         );
-        assert_eq!(InOutStorage::from_name("garbage"), InOutStorage::FileName);
+        assert_eq!(InOutStorage::from_name("garbage"), InOutStorage::InVideo);
+        assert_eq!(
+            InOutStorage::from_name("file_name"),
+            InOutStorage::InVideo,
+            "the file-name storage of older versions"
+        );
     }
 
     #[test]
     fn setters_change_the_active_storage() {
         // The only test touching the process-wide storage; every other one passes it explicitly.
         set_comment_storage(CommentStorage::TextFile);
-        set_in_out_storage(InOutStorage::InVideo);
+        set_in_out_storage(InOutStorage::Comment);
         assert_eq!(
             metadata_storage(),
             MetadataStorage {
                 comment: CommentStorage::TextFile,
-                in_out: InOutStorage::InVideo
+                in_out: InOutStorage::Comment
             }
         );
         set_comment_storage(CommentStorage::InVideo);
-        set_in_out_storage(InOutStorage::FileName);
+        set_in_out_storage(InOutStorage::InVideo);
         assert_eq!(metadata_storage(), MetadataStorage::default());
     }
 
@@ -534,15 +606,54 @@ mod tests {
     }
 
     #[test]
-    fn text_file_and_file_name_storage_leave_the_media_file_alone() {
+    fn text_file_and_comment_storage_leave_the_media_file_alone() {
         let file = copy_of_clip("plain");
         let bytes_before = std::fs::read(&file).expect("read");
-        let saved = save_to_xmp(&file, &snapshot("note", Some(0.05), Some(0.15)), PLAIN);
+        let note = snapshot("note", Some(0.05), Some(0.15));
+        let saved = save_to_xmp(&file, &note, PLAIN);
         assert_eq!(saved, SavedToXmp::default());
         assert_eq!(std::fs::read(&file).expect("read"), bytes_before);
 
-        save_comment_text_file(&file, "note", saved.comment);
-        assert_eq!(loaded(&file, true, PLAIN).comment(), "note");
+        save_comment_text_file(&file, &stored_comment(&note, saved.in_out), saved.comment);
+        assert_eq!(
+            crate::comment::load_comment(&file),
+            "note\nIn/Out: 00:00:00.050 – 00:00:00.150"
+        );
+        let back = loaded(&file, true, PLAIN);
+        assert_eq!(back.comment(), "note");
+        assert_eq!(
+            (back.segment_start(), back.segment_end()),
+            (Some(0.05), Some(0.15))
+        );
+    }
+
+    #[test]
+    fn comment_storage_puts_the_in_out_line_into_the_xmp_comment() {
+        let file = copy_of_clip("line-in-xmp");
+        let in_comment = MetadataStorage {
+            comment: CommentStorage::InVideo,
+            in_out: InOutStorage::Comment,
+        };
+        let saved = save_to_xmp(&file, &snapshot("note", Some(0.05), None), in_comment);
+        assert_eq!(
+            saved,
+            SavedToXmp {
+                comment: true,
+                in_out: false
+            }
+        );
+        assert_eq!(xmp::read(&file).comment, "note\nIn/Out: 00:00:00.050 – end");
+        assert!(xmp::read(&file).segment.is_empty(), "no marker");
+        let back = loaded(&file, false, in_comment);
+        assert_eq!(back.comment(), "note");
+        assert_eq!(
+            (back.segment_start(), back.segment_end()),
+            (Some(0.05), None)
+        );
+
+        // Clearing the points drops the line.
+        save_to_xmp(&file, &snapshot("note", None, None), in_comment);
+        assert_eq!(xmp::read(&file).comment, "note");
     }
 
     #[test]
@@ -559,7 +670,7 @@ mod tests {
             false,
             MetadataStorage {
                 comment: CommentStorage::InVideo,
-                in_out: InOutStorage::FileName,
+                in_out: InOutStorage::Comment,
             },
         );
         assert_eq!(comment_only.comment(), "in xmp");
@@ -590,18 +701,37 @@ mod tests {
     }
 
     #[test]
-    fn a_text_file_and_in_out_in_the_name_win_over_xmp() {
+    fn a_text_file_and_its_in_out_line_win_over_xmp() {
         let file = copy_of_clip("precedence");
         save_to_xmp(&file, &snapshot("old", Some(0.05), Some(0.15)), XMP_BOTH);
-        crate::comment::save_comment(&file, "newer");
+        crate::comment::save_comment(&file, "In/Out: 00:00:00.100 – end\nnewer");
 
+        let back = loaded(&file, true, XMP_BOTH);
+        assert_eq!(back.comment(), "newer");
+        assert_eq!(
+            (back.segment_start(), back.segment_end()),
+            (Some(0.1), None)
+        );
+
+        // Without a line, the marker in the video counts.
+        crate::comment::save_comment(&file, "newer");
+        let back = loaded(&file, true, XMP_BOTH);
+        assert_eq!(
+            (back.segment_start(), back.segment_end()),
+            (Some(0.05), Some(0.15))
+        );
+    }
+
+    #[test]
+    fn in_out_names_of_older_versions_are_not_read() {
+        let file = copy_of_clip("old-name");
         let mut from_name = FileSnapshot::parse("clip.in_00_00_07.mov");
-        load(&file, true, &mut from_name, XMP_BOTH, XmpSource::Read);
-        assert_eq!(from_name.comment(), "newer");
+        load(&file, false, &mut from_name, XMP_BOTH, XmpSource::Read);
         assert_eq!(
             (from_name.segment_start(), from_name.segment_end()),
-            (Some(7.0), None)
+            (None, None)
         );
+        assert_eq!(from_name.name_without_extension(), "clip.in_00_00_07");
     }
 
     #[test]
@@ -627,7 +757,7 @@ mod tests {
     }
 
     #[test]
-    fn an_in_point_past_the_clip_end_is_not_claimed_as_saved() {
+    fn an_in_point_past_the_clip_end_goes_into_the_comment() {
         // The fixture is 0.2 s long: an in at 1 s with no out makes an empty marker range.
         let file = copy_of_clip("past-end");
         let saved = save_to_xmp(&file, &snapshot("note", Some(1.0), None), XMP_BOTH);
@@ -637,6 +767,13 @@ mod tests {
                 comment: true,
                 in_out: false
             }
+        );
+        assert_eq!(xmp::read(&file).comment, "note\nIn/Out: 00:00:01.000 – end");
+        let back = loaded(&file, false, XMP_BOTH);
+        assert_eq!(back.comment(), "note");
+        assert_eq!(
+            (back.segment_start(), back.segment_end()),
+            (Some(1.0), None)
         );
     }
 

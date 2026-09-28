@@ -192,7 +192,7 @@ fn saving(state: &SettingsState) -> Element<'_, Message> {
     let in_out_offer = state.in_out_storage_changed().then(|| {
         let label = match settings.in_out_storage {
             InOutStorage::InVideo => fl!("settings-in-out-move-into-videos"),
-            InOutStorage::FileName => fl!("settings-in-out-move-into-file-names"),
+            InOutStorage::Comment => fl!("settings-in-out-move-into-comments"),
         };
         move_offer(
             fl!("settings-in-out-note"),
@@ -210,9 +210,9 @@ fn saving(state: &SettingsState) -> Element<'_, Message> {
                 Message::SetInOutStorage,
             ),
             form::radio_option(
-                fl!("settings-in-out-file-name"),
-                Some(form::example(fl!("settings-in-out-file-name-example"))),
-                InOutStorage::FileName,
+                fl!("settings-in-out-comment"),
+                Some(form::example(fl!("settings-in-out-comment-example"))),
+                InOutStorage::Comment,
                 in_out_storage,
                 Message::SetInOutStorage,
             ),

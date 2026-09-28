@@ -1,3 +1,13 @@
+# 0.79
+## Added
+- Settings → In/out points: keep them in the comment, as one line (`In/Out: 00:01:05.250 – 00:02:10.000`) you change with `[` and `]`, or inside the video (the default).
+- Batch action "Move in/out points out of file names": moves `in_…` / `out_…` from the names of the checked files to where in/out points are kept now, and says which files kept the points they already had.
+
+## Changed
+- In/out points in file names (`in_00_01_05`, `out_00_02_10`) are no longer read or written: they show as part of the name until you run "Move in/out points out of file names". If you kept them in names, Settings now keep them inside the video.
+- "Move in/out points" is now "In/out points: comment ⇄ video (XMP)".
+- mkv and other formats that cannot hold XMP keep in/out points in `.comment.txt` instead of the file name.
+
 # 0.78
 ## Added
 - Rotate a clip shot sideways: ↺ / ↻ in the video controls or `Ctrl+Alt+←` / `Ctrl+Alt+→`. Only the MP4/MOV rotation flag changes (no re-encoding, comment and markers stay), Premiere Pro shows the clip turned when it imports it (a clip it imported before needs its media cache cleared and a new import), and `Ctrl+Z` turns it back.

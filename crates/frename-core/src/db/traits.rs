@@ -49,7 +49,7 @@ pub struct AppSettings {
     pub monochrome_tags: bool,
     /// Where file comments are saved. Defaults to inside the video file.
     pub comment_storage: CommentStorage,
-    /// Where in/out points are saved. Defaults to the file name.
+    /// Where in/out points are saved. Defaults to inside the video.
     pub in_out_storage: InOutStorage,
     /// Where clip markers are saved. Defaults to inside the video file.
     pub marker_storage: MarkerStorage,
