@@ -1137,6 +1137,20 @@ impl FolderWorkspace {
         let (new_path, snapshot_after_save) = snapshot.save_and_reparse(&current_path);
         // A drag out of the window waiting for this save learns whether it worked.
         self.drag_out_saved(id, &snapshot, &snapshot_after_save);
+        // A rename that was due (the name the tags/comment make differs from the current one)
+        // but did not happen on disk: most likely a file with that name already exists (issue
+        // #84), or the video is read-only or open elsewhere.
+        let rename_was_due = current_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|current_name| current_name != snapshot.file_name());
+        let refused_notice = if rename_was_due && new_path == current_path {
+            Self::notice(
+                "Not saved: a file with that name already exists, or it is read-only or in use",
+            )
+        } else {
+            Task::none()
+        };
 
         let _ = self
             .directory
@@ -1164,10 +1178,11 @@ impl FolderWorkspace {
         {
             return Task::batch([
                 markers_saved,
+                refused_notice,
                 Task::done(Message::ScrollFolderListToSelected),
             ]);
         }
-        markers_saved
+        Task::batch([markers_saved, refused_notice])
     }
 
     fn handle_folder_message(&mut self, msg: folder::Message) -> Task<Message> {

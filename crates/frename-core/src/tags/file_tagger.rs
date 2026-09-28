@@ -329,6 +329,20 @@ pub struct KeptStored {
     pub stored: Segment,
 }
 
+/// Whether `new_path`, or one of the sidecars that travel with it (comment, subtitle,
+/// transcript), already exists — checked before any write a rename would otherwise make, since
+/// renaming onto an existing file (issue #84) or sidecar would silently replace it.
+pub(crate) fn target_name_taken(new_path: &Path) -> bool {
+    [
+        new_path.to_path_buf(),
+        crate::comment::comment_path(new_path),
+        crate::subtitles::subtitle_path(new_path),
+        crate::subtitles::transcript_path(new_path),
+    ]
+    .iter()
+    .any(|p| p.exists())
+}
+
 /// Why [`FileTagger::move_in_out_out_of_name`] left a file as it was.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NameInOutProblem {
@@ -364,14 +378,7 @@ pub(crate) fn move_name_in_out(
     // Checked before anything is written: a rename onto an existing file would replace it.
     let new_name = snapshot.file_name();
     let new_path = path.with_file_name(&new_name);
-    let taken = [
-        new_path.clone(),
-        crate::comment::comment_path(&new_path),
-        crate::subtitles::subtitle_path(&new_path),
-    ]
-    .iter()
-    .any(|p| p.exists());
-    if taken {
+    if target_name_taken(&new_path) {
         return left_alone(NameInOutProblem::NameTaken(new_name));
     }
     // Points stored in either home win over the name's, and are saved where Settings keep

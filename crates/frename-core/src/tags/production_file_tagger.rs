@@ -108,13 +108,26 @@ impl ProductionFileTagger {
 
     /// [`FileTaggerBackend::save`] with the comment and in/out storage given explicitly.
     fn save_with(&self, snapshot: &FileSnapshot, path: &Path, storage: MetadataStorage) -> PathBuf {
-        // XMP goes in before the rename: the metadata then travels with the file.
-        let saved = metadata::save_to_xmp(path, snapshot, storage);
         let new_file_name = snapshot.file_name();
         let new_path = path
             .parent()
             .map(|p| p.join(&new_file_name))
             .unwrap_or_else(|| PathBuf::from(&new_file_name));
+
+        // Checked before any write: a rename onto an existing file (or its comment/subtitle
+        // sidecars) would silently replace it — e.g. two clips that end up with the same tags
+        // and base name (duplicated subclips, `clip.mp4` and `clip (1).mp4` renamed alike).
+        if new_path != path && super::file_tagger::target_name_taken(&new_path) {
+            log::error!(
+                "ProductionFileTagger: not saving {:?}: {:?} (or a comment/subtitle sidecar) already exists",
+                path,
+                new_path
+            );
+            return path.to_path_buf();
+        }
+
+        // XMP goes in before the rename: the metadata then travels with the file.
+        let saved = metadata::save_to_xmp(path, snapshot, storage);
 
         if new_path != path {
             // The video first: when it cannot be renamed (Premiere holds it), its comment and
@@ -751,6 +764,39 @@ mod tests {
         crate::comment::save_comment(&other, "orphan");
         assert_eq!(move_out_of_name(&old, ADOBE), taken());
         assert_eq!(crate::comment::load_comment(&other), "orphan");
+    }
+
+    /// Issue #84: a tag change that renames a clip onto a name another clip (or its comment
+    /// sidecar) already has must not silently replace it. This is the main save path
+    /// (`save_with`, reached on every tag change), not the "move in/out out of name" action.
+    #[test]
+    fn saving_a_name_another_clip_has_does_not_overwrite_it_or_its_comment() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("save-name-taken", "old.mov");
+        crate::comment::save_comment(&path, "mine");
+
+        let mut snapshot = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
+        snapshot.set_tags(["Goat"]);
+        let target_name = snapshot.file_name();
+        let other = path.with_file_name(&target_name);
+        std::fs::write(&other, b"another clip").expect("write");
+        crate::comment::save_comment(&other, "not mine");
+
+        let result = tagger.save_with(&snapshot, &path, ADOBE);
+
+        assert_eq!(result, path, "refused: the clip is left where it was");
+        assert!(path.exists(), "the clip itself is not lost");
+        assert_eq!(
+            crate::comment::load_comment(&path),
+            "mine",
+            "nor its comment"
+        );
+        assert_eq!(
+            std::fs::read(&other).expect("read"),
+            b"another clip",
+            "the other clip is untouched"
+        );
+        assert_eq!(crate::comment::load_comment(&other), "not mine");
     }
 
     #[test]
