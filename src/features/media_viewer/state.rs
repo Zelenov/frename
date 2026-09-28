@@ -43,6 +43,20 @@ impl MediaViewerState {
         }
     }
 
+    /// Open the shown video again where it was, e.g. after its rotation changed.
+    pub fn reload_video(&mut self) -> Task<Message> {
+        match self.active {
+            ActiveMedia::Video => self.video.reload_video().map(Message::Video),
+            ActiveMedia::Unsupported | ActiveMedia::None => Task::none(),
+        }
+    }
+
+    /// How many times the video player has started loading, for tests of reopens.
+    #[cfg(test)]
+    pub fn video_loads_started(&self) -> u64 {
+        self.video.loads_started()
+    }
+
     /// Returns `true` when a video is currently being shown.
     /// Used to guard fullscreen toggle: no point going fullscreen with nothing to show.
     pub fn is_previewable(&self) -> bool {

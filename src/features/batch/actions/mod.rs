@@ -12,11 +12,13 @@
 pub mod describe_ai;
 mod fix_tags;
 pub mod generate_subtitles;
+mod in_out_from_names;
 mod markers_comment;
 pub use markers_comment::Direction as MarkersDirection;
 mod move_comments;
 mod move_in_out;
 mod reload_files;
+mod rotate;
 mod tag_commented;
 mod tag_spacing;
 
@@ -39,7 +41,9 @@ use crate::theme;
 pub enum Action {
     MoveComments,
     MoveInOut,
+    InOutFromNames,
     MarkersComment,
+    Rotate,
     TagCommented,
     FixTags,
     RespaceTags,
@@ -50,10 +54,12 @@ pub enum Action {
 
 impl Action {
     /// Every action, in list order.
-    pub const ALL: [Action; 9] = [
+    pub const ALL: [Action; 11] = [
         Action::MoveComments,
         Action::MoveInOut,
+        Action::InOutFromNames,
         Action::MarkersComment,
+        Action::Rotate,
         Action::TagCommented,
         Action::FixTags,
         Action::RespaceTags,
@@ -66,7 +72,9 @@ impl Action {
         match self {
             Self::MoveComments => move_comments::label(),
             Self::MoveInOut => move_in_out::label(),
+            Self::InOutFromNames => in_out_from_names::label(),
             Self::MarkersComment => markers_comment::label(),
+            Self::Rotate => rotate::label(),
             Self::TagCommented => tag_commented::label(),
             Self::FixTags => fix_tags::label(),
             Self::RespaceTags => tag_spacing::label(),
@@ -80,8 +88,10 @@ impl Action {
     pub fn log_id(self) -> &'static str {
         match self {
             Self::MoveComments => "Move comments",
-            Self::MoveInOut => "Move in/out points",
+            Self::MoveInOut => "In/out points: comment <-> video",
+            Self::InOutFromNames => "Move in/out points out of file names",
             Self::MarkersComment => "Markers <-> comment",
+            Self::Rotate => "Rotate videos",
             Self::TagCommented => "Tag commented videos",
             Self::FixTags => "Fix tags by priority",
             Self::RespaceTags => "Apply tag spacing",
@@ -105,7 +115,11 @@ impl Action {
 pub enum Operation {
     MoveComments(CommentStorage),
     MoveInOut(InOutStorage),
+    /// Take the in/out points older versions wrote into file names out of them.
+    InOutFromNames,
     MarkersComment(markers_comment::Direction),
+    /// Turn each video by changing its rotation flag.
+    Rotate(rotate::Turn),
     TagCommented,
     FixTags,
     /// Rename files to the tag spacing chosen in the settings.
@@ -124,7 +138,9 @@ impl Operation {
         match self {
             Self::MoveComments(to) => move_comments::run(*to, path),
             Self::MoveInOut(to) => move_in_out::run(*to, path),
+            Self::InOutFromNames => in_out_from_names::run(path),
             Self::MarkersComment(direction) => markers_comment::run(*direction, path),
+            Self::Rotate(turn) => rotate::run(*turn, path),
             Self::TagCommented => tag_commented::run(path),
             Self::FixTags => fix_tags::run(path),
             Self::RespaceTags => tag_spacing::run(path),
@@ -163,7 +179,9 @@ impl Operation {
         match self {
             Self::MoveComments(_) => Action::MoveComments,
             Self::MoveInOut(_) => Action::MoveInOut,
+            Self::InOutFromNames => Action::InOutFromNames,
             Self::MarkersComment(_) => Action::MarkersComment,
+            Self::Rotate(_) => Action::Rotate,
             Self::TagCommented => Action::TagCommented,
             Self::FixTags => Action::FixTags,
             Self::RespaceTags => Action::RespaceTags,
@@ -180,6 +198,7 @@ pub enum ActionMessage {
     MoveComments(move_comments::Message),
     MoveInOut(move_in_out::Message),
     MarkersComment(markers_comment::Message),
+    Rotate(rotate::Message),
     DescribeAi(describe_ai::Message),
     GenerateSubtitles(generate_subtitles::Message),
     /// Open the settings window, where an action's global settings live (e.g. the commented
@@ -221,6 +240,7 @@ pub struct Actions {
     move_comments: move_comments::Options,
     move_in_out: move_in_out::Options,
     markers_comment: markers_comment::Options,
+    rotate: rotate::Options,
     describe_ai: describe_ai::Options,
     generate_subtitles: generate_subtitles::Options,
 }
@@ -231,6 +251,7 @@ impl Actions {
             ActionMessage::MoveComments(message) => self.move_comments.update(message),
             ActionMessage::MoveInOut(message) => self.move_in_out.update(message),
             ActionMessage::MarkersComment(message) => self.markers_comment.update(message),
+            ActionMessage::Rotate(message) => self.rotate.update(message),
             ActionMessage::DescribeAi(message) => self.describe_ai.update(message),
             ActionMessage::GenerateSubtitles(message) => self.generate_subtitles.update(message),
             ActionMessage::OpenSettings
@@ -255,7 +276,9 @@ impl Actions {
             Operation::MoveComments(to) => self.move_comments.prepare(to),
             Operation::MoveInOut(to) => self.move_in_out.prepare(to),
             Operation::MarkersComment(direction) => self.markers_comment.prepare(direction),
-            Operation::TagCommented
+            Operation::Rotate(_)
+            | Operation::TagCommented
+            | Operation::InOutFromNames
             | Operation::FixTags
             | Operation::RespaceTags
             | Operation::ReloadFiles
@@ -269,7 +292,9 @@ impl Actions {
         match action {
             Action::MoveComments => Some(self.move_comments.operation()),
             Action::MoveInOut => Some(self.move_in_out.operation()),
+            Action::InOutFromNames => Some(Operation::InOutFromNames),
             Action::MarkersComment => Some(self.markers_comment.operation()),
+            Action::Rotate => Some(self.rotate.operation()),
             Action::TagCommented => tag_commented::operation(),
             Action::FixTags => Some(Operation::FixTags),
             Action::RespaceTags => Some(Operation::RespaceTags),
@@ -314,10 +339,12 @@ impl Actions {
             Action::GenerateSubtitles => return self.generate_subtitles.panel(checked),
             Action::MoveComments => self.move_comments.view().map(ActionMessage::MoveComments),
             Action::MoveInOut => self.move_in_out.view().map(ActionMessage::MoveInOut),
+            Action::InOutFromNames => in_out_from_names::view(),
             Action::MarkersComment => self
                 .markers_comment
                 .view()
                 .map(ActionMessage::MarkersComment),
+            Action::Rotate => self.rotate.view().map(ActionMessage::Rotate),
             Action::TagCommented => tag_commented::view(),
             Action::FixTags => fix_tags::view(),
             Action::RespaceTags => tag_spacing::view(),

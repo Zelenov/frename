@@ -154,6 +154,8 @@ jobs:
       - name: Self-test on a clean system
         run: packaging/linux/test-appimage.sh dist/frename-0.0.0-ci-x86_64.AppImage
 
+  # Clippy and tests only, kept fast and separate from the release build below so the required
+  # ci-windows check does not wait behind packaging (issue #43).
   windows:
     name: ci-windows
     runs-on: windows-2022
@@ -187,6 +189,29 @@ jobs:
 
       - name: Test (Store build)
         run: cargo test --locked -p frename --features store
+
+  # The release build and Windows packaging, in its own job so it runs in parallel with ci-windows
+  # instead of behind it (issue #43): on the samples measured, the release build and Velopack pack
+  # alone took as long as clippy+test, roughly doubling the Windows critical path when sequential.
+  windows-release:
+    name: ci-windows-release
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      # The official package, pinned; the installer (~500 MB) is cached, not the install.
+      - uses: actions/cache@v5
+        with:
+          path: C:\gst-download
+          key: gstreamer-msvc-x86_64-${{ env.GST_VERSION }}
+
+      - name: Install GStreamer
+        shell: pwsh
+        run: packaging/windows/install-gstreamer.ps1 -Version $env:GST_VERSION -Sha256 $env:GST_SHA256 -Dir C:\gstreamer -Download C:\gst-download
 
       - name: Build release
         run: cargo build --release --locked
@@ -239,7 +264,7 @@ jobs:
   # PATH, which would hide a DLL missing from the bundle.
   windows-install:
     name: ci-windows-install
-    needs: windows
+    needs: windows-release
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v5
@@ -257,7 +282,7 @@ jobs:
   # and runs the Windows App Certification Kit on it.
   windows-store:
     name: ci-windows-store
-    needs: windows
+    needs: windows-release
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v5

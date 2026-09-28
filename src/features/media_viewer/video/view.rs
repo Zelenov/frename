@@ -13,6 +13,8 @@ use crate::features::video_controls::{self, BarMarker};
 use crate::theme;
 
 const CONTROLS_HEIGHT: f32 = 32.0;
+/// Widest a note over the picture gets before it wraps (px).
+const NOTICE_MAX_WIDTH: f32 = 260.0;
 const BAR_ROW_HEIGHT: f32 = 24.0;
 /// Fixed so the video does not jump as cues of one or two lines come and go.
 const SUBTITLE_STRIP_HEIGHT: f32 = 48.0;
@@ -113,6 +115,34 @@ pub fn view<'a>(
                 .into(),
             None => video_area.into(),
         };
+        // A short note (`Frame saved`, `Rotation: 90° right`) over the bottom left of the picture:
+        // the controls bar has no room left for one in a player of the default width. In
+        // fullscreen the subtitles sit at the bottom, so it goes to the top left. Its width is
+        // capped so a long note wraps instead of running under the side list.
+        let video_area: Element<'_, Message> = match state.notice() {
+            Some(notice) => {
+                let place = container(
+                    container(text(notice).size(13).color(theme::TEXT))
+                        .max_width(NOTICE_MAX_WIDTH)
+                        .padding([4, 10])
+                        .style(theme::panel_container_style),
+                )
+                .padding(8)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .align_left(Length::Fill);
+                let place = if is_fullscreen {
+                    place.align_top(Length::Fill)
+                } else {
+                    place.align_bottom(Length::Fill)
+                };
+                stack![video_area, place]
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .into()
+            }
+            None => video_area,
+        };
 
         let cue_list_btn: Option<Element<'_, Message>> =
             subtitles.map(|_| cue_list_button(state.show_cue_list()));
@@ -168,15 +198,16 @@ pub fn view<'a>(
             state.controls(),
             markers.markers.is_some(),
             markers.state.recording().is_some(),
+            // Why ↺ ↻ are off; while the clip loads its rotation is not known yet, so they stay on.
+            state
+                .rotation()
+                .and_then(|read| read.as_ref().err())
+                .map(|error| {
+                    let reason = crate::features::rotation_text::why_not_rotated(error);
+                    fl!("rotate-cannot", reason = reason)
+                }),
         )
         .map(Message::Controls);
-
-        let notice: Option<Element<'_, Message>> = state.notice().map(|notice| {
-            container(text(notice).size(12).color(theme::TEXT_SOFT))
-                .padding([0, 8])
-                .center_y(Length::Fill)
-                .into()
-        });
 
         let fullscreen_icon = if is_fullscreen { "⊡" } else { "⛶" };
         let fullscreen_btn: Element<'_, Message> = tooltip(
@@ -197,7 +228,6 @@ pub fn view<'a>(
 
         let controls = container(
             row![controls_inner]
-                .push(notice)
                 // Same order as the tabs over the side list: Subtitles, Markers.
                 .push(cue_list_btn)
                 .push(marker_list_btn)

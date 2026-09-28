@@ -14,11 +14,10 @@ This tool is for the hour *before* the edit begins.
 
 Open a folder of videos. Watch each clip. Tag what you see. When you move to the next clip, the one you leave is renamed with its tags.
 
-**File name format:** `tag1.tag2.name.in_HH_MM_SS.out_HH_MM_SS.mp4`
+**File name format:** `tag1.tag2.name.mp4`
 
 Tags become part of the file name, so your file manager, editing app and sync tools all see them.
 Nothing is locked inside frename.
-The in/out part is there only when you mark a segment.
 
 ---
 
@@ -94,6 +93,7 @@ Next time you start frename, it reopens the last folder and clip.
 | `Alt` + drag the progress bar (paused) | Mark a range |
 | `F12` | Save the current frame as a JPEG next to the video |
 | `F5` | Fullscreen on / off (or double-click the picture) |
+| `Ctrl+Alt+←` / `Ctrl+Alt+→` | Rotate the clip 90° left / right |
 | `Escape` | Leave fullscreen |
 
 ### Settings
@@ -106,10 +106,12 @@ Next time you start frename, it reopens the last folder and clip.
 While a text box (tag search, file search, comment) has the cursor, it takes the keys it needs:
 arrows, `Delete`, `Space`, `Enter`, `Ctrl+C`, and in the comment box also `PageUp` / `PageDown`.
 Press `Esc` first to give the keys back to the app. `[` and `]` set in and out points, except while
-you type in a marker's name. The F-keys always work.
+you type in a marker's name. The F-keys always work, and so do `Ctrl+Alt+←` / `→` except in the
+comment box and a marker's name.
 
 Undo (`Ctrl+Z`) covers tagging, adding, deleting, starring and reordering tags, pasting, in/out
-points, adding, deleting, coloring and resizing markers, and the rename when you leave a clip.
+points, adding, deleting, coloring and resizing markers, rotating a clip, and the rename when you
+leave a clip.
 It does not cover comment text or marker names, a rename by hand
 (double-click), untagging with 🗑, the 🔓↑ / 🔓↓ buttons, or batch actions; opening a folder or running a batch
 action clears the undo history.
@@ -157,9 +159,19 @@ The progress bar shows what you have noted about a clip:
   single moment again, and click a band to play just that stretch.
 - **Frames:** `F12` or 📷 saves the current frame as a JPEG next to the video
   (`clip.mp4.snap.00-01-05-250.jpg`) and shows `Frame saved`.
+- **Rotation:** ↺ / ↻ (`Ctrl+Alt+←` / `→`) turn a clip shot sideways 90° at a time. Only the
+  rotation flag inside the MP4/MOV changes, right away: the picture is not re-encoded. Premiere
+  Pro shows the clip turned when it imports it. A clip Premiere imported before the turn keeps its
+  old orientation until you clear its media cache (Media Cache ▸ Delete in its preferences) and import it
+  again. Other formats cannot be turned. While you write a comment the keys
+  stay with the text. If `Ctrl+Alt+←` / `→` turns your whole screen, switch off the graphics
+  driver's rotation hotkeys or use ↺ / ↻.
 - **In and out points:** `[` and `]` mark the usable segment, highlighted on the progress bar.
-  They are saved in the file name (`in_00_01_05`, `out_00_02_10`, whole seconds) or, if you choose
-  in Settings, inside the video as a marker that Premiere Pro turns into a subclip.
+  By default they are saved inside the video as a marker that Premiere Pro turns into a subclip.
+  Settings can keep them in the comment instead, as a line after your own text
+  (`In/Out: 00:01:05.250 – 00:02:10.000`), which the comment box does not show: change it with
+  `[` and `]`. Older versions could put them in the file name (`in_00_01_05`); frename no longer
+  reads them there, and the batch action **Move in/out points out of file names** moves them.
 - **Comments:** free text per clip. By default it is saved inside the video, where Premiere Pro
   shows it in the Description column and finds it by search. Settings can keep it in a
   `.comment.txt` next to the video instead. The file list shows the first line of each comment.
@@ -169,8 +181,8 @@ The progress bar shows what you have noted about a clip:
   and ⊡ brings the tags back.
 
 Some formats, such as mkv, cannot hold comments, in/out points or markers inside them; for those,
-frename keeps comments and in/out points in `.comment.txt` and the file name whatever Settings say,
-and 📍 is off. mp4 and mov hold everything.
+frename keeps the comment, with the in/out line, in `.comment.txt` whatever Settings say, and 📍 is
+off. mp4 and mov hold everything.
 
 `.comment.txt` files and subtitles are renamed together with their video.
 
@@ -201,12 +213,17 @@ and Cancel. Each file then shows a green or red check box. Drag a checked file t
 files (an unchecked one drags only itself). Actions:
 
 - move comments between the video and `.comment.txt` files;
-- move in/out points between the file name and the video;
+- move in/out points between the comment and the video;
+- move in/out points out of file names written by older versions into the comment or the video,
+  as set in Settings (a file that already has in/out points stored keeps them, and the report
+  lists it);
 - turn comment lines that start with a time (`03:24 — Take 3 — nice light`, `0:41-0:47 — Lion`)
   into markers, or copy the markers into the comment as such lines. What follows the name after
   a second ` — ` or ` -- ` (not a plain ` - `) goes into the marker's comment, which Premiere
   shows and frename keeps but does not show. The moments of an AI description become white
   markers too (with their length) and stay in the description;
+- rotate the videos 90° right or left or 180°, or reset them to no rotation (this also removes
+  a turn a phone recorded);
 - tag commented videos with "Commented" and untag the rest;
 - put the tags in every name in tag panel order;
 - add or remove the space after each tag, as set in Settings;
@@ -253,9 +270,10 @@ pages:
 - **Interface:** the UI language (follows your system by default, or pick English or Russian;
   more languages are on the way), monochrome tags, and playing videos as soon as they open.
 - **Saving:** a space after each tag in file names (`Food. Goat. clip.mp4`), and where comments,
-  markers and in/out points are kept: inside the video or in a text file / the comment / the file
-  name. While comments are inside the video, frename can tag the videos you comment ("Commented",
-  or a tag you name). After a change here, Settings offers the batch action that updates the files
+  markers and in/out points are kept: inside the video, or in a text file (comments) or the
+  comment (markers; in/out points as one line, `In/Out: 00:01:05.250 – 00:02:10.000`). While
+  comments are inside the video, frename can tag the videos you comment ("Commented", or a tag
+  you name). After a change here, Settings offers the batch action that updates the files
   you already have.
 - **Describe with AI:** your Anthropic API key, kept in the system's password store (Windows
   Credential Manager, macOS Keychain, or a keyring such as GNOME Keyring on Linux), the model

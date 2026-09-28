@@ -7,7 +7,7 @@ use super::file_snapshot::FileSnapshot;
 use super::folder_info::FolderInfo;
 use super::production_file_tagger::is_screenshot_sidecar;
 use crate::markers::Marker;
-use crate::metadata::{MarkersError, MetadataMove};
+use crate::metadata::{MarkersError, MetadataMove, Rotation, RotationError, Segment};
 
 /// The interface that both InMemoryFileTagger and ProductionFileTagger implement.
 pub trait FileTaggerBackend: Send + Sync {
@@ -52,11 +52,22 @@ pub trait FileTaggerBackend: Send + Sync {
     }
 
     /// Move the file's comment or in/out points as `what` says, reading both of their homes.
-    /// Returns the file's path afterwards, which changes when in/out points move in or out
-    /// of the name.
+    /// Returns the file's path afterwards.
     fn move_metadata(&self, path: &Path, _what: MetadataMove) -> PathBuf {
         path.to_path_buf()
     }
+
+    /// The in/out points the file at `path` has stored in either home, the comment or the
+    /// video, whatever the storage chosen now. Backends that keep them only in memory answer
+    /// with the parsed ones.
+    fn stored_in_out(&self, path: &Path) -> Segment {
+        self.parse(path, &FolderInfo::default()).segment()
+    }
+
+    /// After in/out points were saved as the comment's line (in/out kept in the comment),
+    /// remove the video's marker, which would otherwise keep showing stale points in
+    /// Premiere. Backends that never touch the disk have none.
+    fn drop_marker_behind_line(&self, _path: &Path) {}
 
     /// Read the file's comment and in/out points again and replace the folder file list's line
     /// for it. Returns whether the line was missing or stale. Backends that never touch the
@@ -87,6 +98,16 @@ pub trait FileTaggerBackend: Send + Sync {
     ) -> Result<(), MarkersError> {
         Ok(())
     }
+
+    /// How the video at `path` is turned (see [`crate::Rotation`]). Reading never changes a
+    /// file, so every backend reads it from where the file is on disk.
+    fn video_rotation(&self, path: &Path) -> Result<Rotation, RotationError> {
+        crate::metadata::rotation::read(&self.disk_path(path))
+    }
+
+    /// Turn the video at `path` by `quarter_turns` clockwise (negative: counter-clockwise) and
+    /// return its new rotation (see [`crate::FileTagger::rotate_video`]).
+    fn rotate_video(&self, path: &Path, quarter_turns: i32) -> Result<Rotation, RotationError>;
 
     /// Save a screenshot image for the given file and position.
     /// `image_data` is raw JPEG bytes (e.g. from GStreamer). Pass `&[]` to create an empty placeholder.
