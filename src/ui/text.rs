@@ -1,6 +1,6 @@
 //! The text styles (`docs/design/design-system.md` §4.2). No other text style exists.
 
-use iced::widget::text::{IntoFragment, LineHeight};
+use iced::widget::text::{IntoFragment, LineHeight, Wrapping};
 use iced::widget::{text, Text};
 use iced::{Color, Font, Pixels};
 
@@ -95,7 +95,8 @@ pub fn video_caption<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
     styled(content, TEXT_VIDEO_CAPTION, LINE_VIDEO_CAPTION, FONT, TEXT)
 }
 
-/// The text of a tooltip.
+/// The text of a tooltip. It breaks between words, and inside a word longer than the line (a file
+/// name has no spaces): otherwise it runs past the tooltip's box, which stops at its widest.
 pub fn tooltip<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
-    styled(content, TEXT_TOOLTIP, LINE_TOOLTIP, FONT, TEXT)
+    styled(content, TEXT_TOOLTIP, LINE_TOOLTIP, FONT, TEXT).wrapping(Wrapping::WordOrGlyph)
 }
