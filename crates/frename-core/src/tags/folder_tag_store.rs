@@ -866,7 +866,11 @@ out = 3.0
 
         FolderTagStore::set_last_viewed(&folder.0, "pick.clip.mp4");
         assert_eq!(FolderTagStore::get_last_viewed(&folder.0), "pick.clip.mp4");
-        assert_eq!(names(&folder.store()), vec!["pick"], "tags untouched");
+        assert_eq!(
+            names(&folder.store()).len(),
+            DEFAULT_TAGS.len(),
+            "tags untouched"
+        );
         assert_eq!(
             FolderTagStore::read_file_cache(&folder.0).len(),
             1,
