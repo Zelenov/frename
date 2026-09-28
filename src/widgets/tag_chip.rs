@@ -24,6 +24,26 @@ pub const TRAILING_SLOT_WIDTH: f32 = 36.0;
 /// Space between label and trailing slot.
 pub const LABEL_TO_TRAILING_SPACING: f32 = 4.0;
 
+/// A mini chip (`chip.mini`, design system §13.4.2): 20 px high, 12/16 black text on the tag
+/// color, for the file list's rows. It has no marks.
+pub fn mini<'a, Message: 'a>(tag_name: &'a str, tag_color: iced::Color) -> Element<'a, Message> {
+    use crate::ui::tokens::{CHIP_MINI_HEIGHT, RADIUS_S, SPACE_TIGHT};
+    container(crate::ui::text::chip_mini(tag_name).wrapping(iced::widget::text::Wrapping::None))
+        .padding(iced::Padding {
+            left: SPACE_TIGHT,
+            right: SPACE_TIGHT,
+            ..iced::Padding::ZERO
+        })
+        .height(CHIP_MINI_HEIGHT)
+        .center_y(CHIP_MINI_HEIGHT)
+        .style(move |_theme: &_| iced::widget::container::Style {
+            background: Some(Background::Color(tag_color)),
+            border: iced::border::rounded(RADIUS_S),
+            ..Default::default()
+        })
+        .into()
+}
+
 /// Renders a display-only tag chip: colored pill with label. No interactions, no leading content.
 /// Use in the folder list (file name display).
 pub fn view_display_only<'a, Message: 'a>(

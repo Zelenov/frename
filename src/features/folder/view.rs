@@ -12,7 +12,7 @@ use crate::features::batch::{BatchState, ItemStatus};
 use crate::theme;
 use crate::ui::palette::TagPalette;
 use crate::widgets;
-use crate::widgets::search_bar::FILE_SEARCH_BAR_INPUT_ID;
+use crate::widgets::search_bar::{self, SearchBar, FILE_SEARCH_BAR_INPUT_ID};
 
 use super::Message;
 use super::{InlineRename, FOLDER_LIST_SCROLLABLE_ID, FOLDER_RENAME_INPUT_ID, FOLDER_ROW_HEIGHT};
@@ -215,13 +215,17 @@ pub fn view<'a>(
             .into()
     };
 
-    let search = widgets::search_bar::view_with_trailing(
-        FILE_SEARCH_BAR_INPUT_ID,
-        dir.name_filter(),
+    let search = search_bar::view(
+        SearchBar {
+            input_id: FILE_SEARCH_BAR_INPUT_ID,
+            placeholder: fl!("folder-search-placeholder"),
+            value: dir.name_filter(),
+            clear_tip: fl!("folder-search-clear"),
+            on_clear: Message::SetNameFilter(String::new()),
+            on_submit: Message::SetNameFilter(dir.name_filter().to_string()),
+            trailing: Some(filter_dropdown(dir)),
+        },
         Message::SetNameFilter,
-        || Message::SetNameFilter(String::new()),
-        None::<fn(String) -> Message>,
-        Some(filter_dropdown(dir)),
     );
     // The batch header joins the search bar's column rather than the outer one, so the list
     // keeps its place in the widget tree and with it its scroll position when batch mode

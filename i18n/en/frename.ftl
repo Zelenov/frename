@@ -302,6 +302,8 @@ batch-subtitles-usd-about = about ${ $amount }
 
 ## File list
 
+folder-search-placeholder = Find a file
+folder-search-clear = Clear
 folder-all = All
 folder-invert = Invert
 folder-checked = { $count } checked
@@ -377,6 +379,8 @@ markers-name-placeholder = Name
 
 ## File workspace
 
+file-workspace-search-placeholder = Find a tag — or just type
+file-workspace-search-clear = Clear
 file-workspace-comment-placeholder = Comment...
 file-workspace-comment-collapse = Back to the tags
 file-workspace-comment-expand = Expand the comment

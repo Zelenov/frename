@@ -39,7 +39,6 @@ const NOT_YET: &[(&str, &str)] = &[
     ("main.rs", "#59"),
     ("widgets/file_name_display.rs", "#59"),
     ("widgets/height_handle.rs", "#59"),
-    ("widgets/search_bar.rs", "#59"),
     ("widgets/splitter.rs", "#59"),
     ("widgets/starred_tags_panel.rs", "#59"),
     ("widgets/tag_chip.rs", "#59"),

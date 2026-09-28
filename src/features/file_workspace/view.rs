@@ -17,7 +17,7 @@ use crate::widgets::height_handle::HeightHandle;
 use crate::widgets::starred_tags_panel;
 
 use crate::features::{file_name_panel, sync_panel, tag_grid, tag_panel};
-use crate::widgets;
+use crate::widgets::search_bar::{self, SearchBar};
 
 use super::{CommentLayout, FileWorkspace, Message};
 
@@ -49,20 +49,24 @@ where
     let file_name = file_name_panel::view::view(file_name_panel_state, tag_list, tag_palette)
         .map(Message::FileNamePanel);
     let filter = tag_list.filter_query();
-    let on_create = if !filter.trim().is_empty() && !file_workspace.has_tag_with_name(filter.trim())
+    // Enter creates the tag when the text names none, otherwise it only keeps the text.
+    let on_submit = if !filter.trim().is_empty() && !file_workspace.has_tag_with_name(filter.trim())
     {
-        Some(|text: String| {
-            Message::TagPanel(tag_panel::Message::CreateTag(text.trim().to_string()))
-        })
+        Message::TagPanel(tag_panel::Message::CreateTag(filter.trim().to_string()))
     } else {
-        None
+        Message::TagPanel(tag_panel::Message::SetFilter(filter.to_string()))
     };
-    let search_bar = widgets::search_bar::view(
-        widgets::search_bar::SEARCH_BAR_INPUT_ID,
-        filter,
+    let search_bar = search_bar::view(
+        SearchBar {
+            input_id: search_bar::SEARCH_BAR_INPUT_ID,
+            placeholder: fl!("file-workspace-search-placeholder"),
+            value: filter,
+            clear_tip: fl!("file-workspace-search-clear"),
+            on_clear: Message::TagPanel(tag_panel::Message::SetFilter(String::new())),
+            on_submit,
+            trailing: None,
+        },
         |s| Message::TagPanel(tag_panel::Message::SetFilter(s)),
-        || Message::TagPanel(tag_panel::Message::SetFilter(String::new())),
-        on_create,
     );
     let tag_grid = tag_grid::view::view(
         tag_panel_state,

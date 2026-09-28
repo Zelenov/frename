@@ -343,6 +343,8 @@ batch-subtitles-usd-about = примерно ${ $amount }
 
 ## File list
 
+folder-search-placeholder = Найти файл
+folder-search-clear = Очистить
 folder-all = Все
 folder-invert = Обратить
 folder-checked = Отмечено: { $count }
@@ -418,6 +420,8 @@ markers-name-placeholder = Имя
 
 ## File workspace
 
+file-workspace-search-placeholder = Найти тег — или просто печатайте
+file-workspace-search-clear = Очистить
 file-workspace-comment-placeholder = Комментарий...
 file-workspace-comment-collapse = Назад к тегам
 file-workspace-comment-expand = Развернуть комментарий
