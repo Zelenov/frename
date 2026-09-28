@@ -3,7 +3,7 @@
 //! the job's page ([`super::job_view`]) takes the page's place; the header and the list stay.
 
 use frename_core::{File, FileId};
-use iced::widget::{column, container, row, text::IntoFragment, Column};
+use iced::widget::{column, container, responsive, row, text::IntoFragment, Column};
 use iced::{Alignment, Element, Length, Padding};
 
 use crate::features::folder_workspace::Directory;
@@ -12,7 +12,7 @@ use crate::ui::icon_button::IconButton;
 use crate::ui::icons::Icon;
 use crate::ui::tokens::*;
 use crate::ui::tooltip::{Position, Tip};
-use crate::ui::{button, layout, scroll, style, text};
+use crate::ui::{button, form, layout, scroll, style, text};
 
 use super::actions::Group;
 use super::{job_view, Action, BatchState, Message};
@@ -25,22 +25,48 @@ pub(super) const PAGE_PADDING: Padding = Padding {
     right: SPACE_XL,
 };
 
+/// How the action list fits the panel's width (§13.9).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ListForm {
+    /// Names, icons and badges beside the page.
+    Full,
+    /// Only the icons, their names in tooltips.
+    Icons,
+    /// A dropdown over the page.
+    Dropdown,
+}
+
+impl ListForm {
+    fn for_width(width: f32) -> Self {
+        if width >= BATCH_PANEL_WIDTH {
+            ListForm::Full
+        } else if width >= BATCH_ICON_LIST_FROM {
+            ListForm::Icons
+        } else {
+            ListForm::Dropdown
+        }
+    }
+}
+
 /// Render the batch panel. `directory` names the files of the job and lists the files the
 /// panel can check.
 pub fn view<'a>(state: &'a BatchState, directory: Option<&'a Directory>) -> Element<'a, Message> {
-    let page = match state.progress() {
-        Some(progress) => job_view::view(state, progress, directory),
-        None => action_page(state, directory),
-    };
-    container(column![
-        header(state),
-        layout::horizontal_line(),
-        row![action_list(state), layout::vertical_line(), page].height(Length::Fill),
-    ])
-    .width(Length::Fill)
-    .height(Length::Fill)
-    .style(style::panel)
-    .into()
+    let body = responsive(move |size| {
+        let page = match state.progress() {
+            Some(progress) => job_view::view(state, progress, directory),
+            None => action_page(state, directory),
+        };
+        match ListForm::for_width(size.width) {
+            ListForm::Full => row![action_list(state), layout::vertical_line(), page].into(),
+            ListForm::Icons => row![icon_list(state), layout::vertical_line(), page].into(),
+            ListForm::Dropdown => column![action_dropdown(state), page].into(),
+        }
+    });
+    container(column![header(state), layout::horizontal_line(), body])
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(style::panel)
+        .into()
 }
 
 /// "Batch actions", how many files are checked, and the way back to the open file.
@@ -78,39 +104,98 @@ fn header(state: &BatchState) -> Element<'_, Message> {
     .into()
 }
 
-/// Every action, under its group's caption; locked while a job runs (the running action keeps
-/// its selection).
+/// The badge of a paid action's row: the service that bills it, or that its key is missing.
+fn service_badge<'a>(state: &BatchState, action: Action) -> Option<Element<'a, Message>> {
+    state.actions().service(action).map(|(name, key_missing)| {
+        if key_missing {
+            badge(BadgeKind::Warning, fl!("batch-no-key"))
+        } else {
+            badge(BadgeKind::Neutral, name)
+        }
+    })
+}
+
+/// What picking `action` sends; nothing while a job runs (it keeps its selection).
+fn select(state: &BatchState, action: Action) -> Option<Message> {
+    (!state.is_running()).then_some(Message::SelectAction(action))
+}
+
+/// Every action, under its group's caption.
 fn action_list(state: &BatchState) -> Element<'_, Message> {
-    let locked = state.is_running();
     let mut list = Column::new().spacing(SPACE_XXS);
     let mut group = None;
     for action in Action::ALL {
         if group != Some(action.group()) {
+            let spaced = group.is_some();
             group = Some(action.group());
-            list = list.push(group_caption(
-                action.group(),
-                group != Some(Group::MoveBetweenPlaces),
-            ));
+            list = list.push(group_caption(action.group(), spaced));
         }
-        let service = state.actions().service(action).map(|(name, key_missing)| {
-            if key_missing {
-                badge(BadgeKind::Warning, fl!("batch-no-key"))
-            } else {
-                badge(BadgeKind::Neutral, name)
-            }
-        });
         list = list.push(layout::nav_item_with(
             action.icon(),
             action.label(),
             action == state.action(),
-            service,
-            (!locked).then_some(Message::SelectAction(action)),
+            service_badge(state, action),
+            select(state, action),
         ));
     }
     container(scroll::vertical(list))
         .width(ACTION_LIST_WIDTH)
         .height(Length::Fill)
         .padding(SPACE_S)
+        .into()
+}
+
+/// The action list folded to its icons; a line between groups, each name in its tooltip.
+fn icon_list(state: &BatchState) -> Element<'_, Message> {
+    let mut list = Column::new().spacing(SPACE_XXS).align_x(Alignment::Center);
+    let mut group = None;
+    for action in Action::ALL {
+        if group.is_some_and(|g| g != action.group()) {
+            list = list.push(container(layout::horizontal_line()).padding(Padding {
+                top: SPACE_XS,
+                bottom: SPACE_XS,
+                ..Padding::ZERO
+            }));
+        }
+        group = Some(action.group());
+        let tip = match state.actions().service(action) {
+            Some((service, _)) => Tip::new(action.label()).detail(service),
+            None => Tip::new(action.label()),
+        };
+        list = list.push(
+            IconButton::new(action.icon())
+                .latched(action == state.action())
+                .tip(tip, Position::Right)
+                .on_press_maybe(select(state, action)),
+        );
+    }
+    container(list)
+        .width(ACTION_LIST_ICONS_WIDTH)
+        .height(Length::Fill)
+        .padding(Padding {
+            top: SPACE_S,
+            ..Padding::ZERO
+        })
+        .into()
+}
+
+/// The action list as a dropdown at the top of the page; the chosen action's name while a job
+/// runs.
+fn action_dropdown(state: &BatchState) -> Element<'_, Message> {
+    let current: Element<'_, Message> = if state.is_running() {
+        text::strong(state.action().label()).into()
+    } else {
+        form::dropdown(Action::ALL, Some(state.action()), Message::SelectAction)
+            .width(Length::Fill)
+            .into()
+    };
+    container(current)
+        .padding(Padding {
+            top: SPACE_S,
+            bottom: 0.0,
+            ..PAGE_PADDING
+        })
+        .width(Length::Fill)
         .into()
 }
 
@@ -188,4 +273,23 @@ fn action_page<'a>(
         reason.unwrap_or_default(),
         check_all.into_iter().chain([run]),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_action_list_folds_as_the_panel_narrows() {
+        assert_eq!(ListForm::for_width(BATCH_PANEL_WIDTH), ListForm::Full);
+        assert_eq!(
+            ListForm::for_width(BATCH_PANEL_WIDTH - 1.0),
+            ListForm::Icons
+        );
+        assert_eq!(ListForm::for_width(BATCH_ICON_LIST_FROM), ListForm::Icons);
+        assert_eq!(
+            ListForm::for_width(BATCH_ICON_LIST_FROM - 1.0),
+            ListForm::Dropdown
+        );
+    }
 }

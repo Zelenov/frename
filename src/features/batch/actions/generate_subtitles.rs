@@ -1268,9 +1268,10 @@ mod tests {
         assert!(options.operation().is_none(), "waits for the price");
         options.update(Message::PriceReady(Price::Learned(0.1)));
         assert!(options.operation().is_some());
-        let panel = options.panel(&[&a]);
+        // Only the label and readiness: the page borrows the options.
+        let super::Panel { run, ready, .. } = options.panel(&[&a]);
         assert_eq!(
-            (panel.run, panel.ready),
+            (run, ready),
             (
                 fl!("batch-subtitles-transcribe-count", videos = videos(1)),
                 true

@@ -162,6 +162,13 @@ impl Action {
     }
 }
 
+/// An action as a dropdown shows it: its name.
+impl std::fmt::Display for Action {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.label())
+    }
+}
+
 /// A group of the action list, under its caption.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Group {

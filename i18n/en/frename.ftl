@@ -223,34 +223,17 @@ batch-action-tag-commented-off = Tagging commented videos is off
 batch-action-tag-commented-choose = Choose the tag…
 
 batch-title = Batch actions
-batch-on-checked = on { $count ->
-    [one] { $count } file
-   *[other] { $count } files
-} checked
-batch-run = Run on { $count ->
-    [one] { $count } file
-   *[other] { $count } files
-}
 batch-done-label-changed = changed
 batch-done-label-subtitled = subtitled
-batch-counts = ✓ { $done } { $done_label }   – { $skipped } unchanged   ✗ { $failed } failed
 batch-ai-at-least = at least
-batch-ai-spend-line = AI: { $spend }
 batch-cancel = Cancel
 batch-stopping = Stopping…
 batch-stopped = Stopped after { $finished } of { $total ->
     [one] { $total } file
    *[other] { $total } files
 }.
-batch-finished = Finished { $total ->
-    [one] { $total } file
-   *[other] { $total } files
-}.
 batch-close = Close
 batch-failed-subtitles = Not subtitled:
-batch-failed-plain = Failed:
-batch-failed-with-log = Failed (the log says why):
-batch-retry = Retry
 batch-add-credit = Add credit
 batch-open-log = Open the log
 
@@ -268,7 +251,6 @@ batch-action-in-out-from-names = Move in/out points out of file names
 batch-action-in-out-from-names-hint = Older versions could keep in/out points in the file name (clip.in_00_01_05.mp4). This takes them out of the name of each checked file and saves them where in/out points are kept now. A file that already has in/out points stored keeps those; the report lists it.
 batch-action-in-out-from-names-status-comment = Goes to: the comment
 batch-action-in-out-from-names-status-video = Goes to: inside the video (XMP); for mkv, webm and other formats that cannot hold it, the comment
-batch-action-in-out-from-names-settings = In/out settings…
 batch-action-in-out-from-names-kept = kept the stored { $stored }, dropped the name's { $name }
 batch-action-in-out-from-names-not-renamed = could not be renamed (the log says why)
 batch-action-in-out-from-names-empty = left as it is: the name would be empty
@@ -283,10 +265,6 @@ batch-action-markers-comment-hint = A line like "03:24 — Take 3 — nice light
 batch-action-tag-commented = Tag commented videos
 batch-action-tag-commented-hint = Adds the "{ $tag }" tag to each checked video with a comment of yours (AI descriptions do not count) and removes it from those without one. Files whose tag changes are renamed.
 batch-action-tag-commented-hint-off = Adds the tag for videos with a comment to each checked video with a comment of yours and removes it from those without one. The tag is turned off in the settings.
-batch-action-tag-commented-status = Tag: { $tag }
-batch-action-tag-commented-status-off = Tag: off
-batch-action-tag-commented-settings = Tag settings…
-
 batch-action-fix-tags = Fix tags by priority
 batch-action-fix-tags-hint = Puts the tags in the name of each checked file in the order of the tag panel, so the higher a tag is there, the earlier it comes in the name. Tags the folder does not know yet come first, as in the tag panel. Files whose order changes are renamed.
 
@@ -295,8 +273,6 @@ batch-action-respace-tags-hint-space = Renames each checked file to put a space 
 batch-action-respace-tags-hint-no-space = Renames each checked file to have no space after its tags, as set in the settings: Food.Goat.clip.mp4.
 batch-action-respace-tags-status-space = Spacing: a space after each tag
 batch-action-respace-tags-status-no-space = Spacing: no space after tags
-batch-action-respace-tags-settings = Spacing settings…
-
 batch-action-reload-files = Reset cache and reload
 batch-action-reload-files-hint = Reads the comment and in/out points of each checked file from the file itself again and replaces what the folder remembered for it. Use it after the files were changed in another program. Files whose remembered values were missing or out of date count as changed.
 
@@ -304,18 +280,13 @@ batch-action-describe-ai = Describe with AI
 batch-action-describe-ai-run = Describe { $videos } · about { $dollars }
 batch-action-describe-ai-estimating = Estimating… { $known } / { $total }
 batch-action-describe-ai-none = No videos to describe.
-batch-action-describe-ai-plan = { $videos }, { $minutes } · about { $dollars } with { $model }
 batch-action-describe-ai-hint = Takes about { $duration }. The folder is locked until it ends. Cancel keeps the videos already described; running it again skips them.
 batch-action-describe-ai-no-subtitles = Without subtitles (only the picture is described): { $videos }.
 batch-action-describe-ai-redo = Redo videos that already have an AI description
 batch-action-describe-ai-hint-panel = Describes what happens in each checked video, and when: a summary and time-ranged segments go into the AI description of its comment; your own text is kept. Frames and subtitles are sent to Anthropic.
 batch-ai-change = Change
-batch-ai-open-settings = Open Settings
 batch-ai-key-missing = Set an Anthropic API key in Settings
 batch-ai-key-unavailable = The system keyring could not be opened: it may be locked, or there is none (such as GNOME Keyring or KWallet).
-batch-ai-language-same-as-subtitles = Descriptions in the subtitles' language (English if none)
-batch-ai-language = Descriptions in { $language }
-
 ## AI description language names: the Settings picker and { $language } above.
 
 ai-language-same-as-subtitles = Same as subtitles
