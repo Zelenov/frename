@@ -73,7 +73,7 @@ Next time you start frename, it reopens the last folder and clip.
 | Any letter, `Backspace` | Type into the tag search |
 | `Enter` | Add the typed tag, or the selected unsaved (○) tag, to the folder's tags |
 | `Delete` | Delete the selected tag from the folder's tags |
-| `Escape` | Clear the tag and file searches |
+| `Escape` | Clear the tag and file searches, or leave a `Ctrl`/`Shift`+click selection first if one is running (see Files above) |
 | `Ctrl+C` | Copy the file's tags (and its new name to the clipboard) |
 | `Ctrl+V` | Replace the file's tags with the copied ones |
 | `Ctrl+Z` | Undo |

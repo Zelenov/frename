@@ -1476,6 +1476,7 @@ impl FolderWorkspace {
         &mut self,
         msgs: impl IntoIterator<Item = batch::Message>,
     ) -> Task<Message> {
+        // Batch mode does not edit the open file, so its rename editor goes.
         self.inline_rename = None;
         for msg in msgs {
             self.batch.update(msg);
