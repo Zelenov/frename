@@ -329,6 +329,31 @@ pub struct KeptStored {
     pub stored: Segment,
 }
 
+/// Whether `new_path`, or one of the sidecars that travel with it (comment, subtitle,
+/// transcript), already exists — checked before any write a rename would otherwise make, since
+/// renaming onto an existing file (issue #84) or its sidecar would silently replace it.
+///
+/// A `new_path` that differs from `old_path` only by case is never "taken": on Windows' case-
+/// insensitive, case-preserving filesystem it is the same file being renamed, not another one,
+/// and a rename that only fixes case (`clip.MOV` → `clip.mov`) must still go through.
+pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
+    let same_file_other_case = old_path
+        .file_name()
+        .zip(new_path.file_name())
+        .is_some_and(|(a, b)| a.eq_ignore_ascii_case(b));
+    if same_file_other_case {
+        return false;
+    }
+    [
+        new_path.to_path_buf(),
+        crate::comment::comment_path(new_path),
+        crate::subtitles::subtitle_path(new_path),
+        crate::subtitles::transcript_path(new_path),
+    ]
+    .iter()
+    .any(|p| p.exists())
+}
+
 /// Why [`FileTagger::move_in_out_out_of_name`] left a file as it was.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NameInOutProblem {
@@ -364,14 +389,7 @@ pub(crate) fn move_name_in_out(
     // Checked before anything is written: a rename onto an existing file would replace it.
     let new_name = snapshot.file_name();
     let new_path = path.with_file_name(&new_name);
-    let taken = [
-        new_path.clone(),
-        crate::comment::comment_path(&new_path),
-        crate::subtitles::subtitle_path(&new_path),
-    ]
-    .iter()
-    .any(|p| p.exists());
-    if taken {
+    if target_name_taken(path, &new_path) {
         return left_alone(NameInOutProblem::NameTaken(new_name));
     }
     // Points stored in either home win over the name's, and are saved where Settings keep
@@ -413,6 +431,19 @@ impl SaveAndReparse for FileSnapshot {
 mod tests {
     use super::*;
     use crate::{StoredTag, StoredTagStore};
+
+    /// Issue #84: a target that differs from the old path only by case must never count as
+    /// "taken" (it is the same file on Windows' case-insensitive filesystem, and a rename that
+    /// only fixes case must still go through). The check short-circuits on the name comparison
+    /// before ever consulting the filesystem, so this holds the same way on every platform,
+    /// including a case-sensitive one where the two names would otherwise be unrelated files.
+    #[test]
+    fn a_same_file_case_change_is_never_taken() {
+        let dir = std::env::temp_dir().join(format!("frename-case-only-{}", std::process::id()));
+        let old_path = dir.join("goat.mov");
+        let new_path = dir.join("goat.MOV");
+        assert!(!target_name_taken(&old_path, &new_path));
+    }
 
     /// Tags follow the folder's order; a file already in order is left alone.
     #[test]
