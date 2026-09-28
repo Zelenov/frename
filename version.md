@@ -1,3 +1,7 @@
+# 0.80
+## Changed
+- Closing frename, opening another folder, or opening a file outside the current folder now saves the open file's tags, comment and in/out instead of losing them.
+
 # 0.79
 ## Added
 - Settings → In/out points: keep them in the comment, as one line (`In/Out: 00:01:05.250 – 00:02:10.000`) you change with `[` and `]`, or inside the video (the default).

@@ -584,13 +584,29 @@ impl FrenameApp {
                         crate::features::batch::Message::Cancel,
                     )));
                 }
+                // Save the open file's tags, comment and in/out before closing: otherwise they
+                // are lost silently (issue #21). Only for the main window: `CloseRequested`
+                // also fires for the Settings window's own OS close button (the subscription
+                // isn't scoped to one window), and that must not tell folder_workspace the app
+                // itself is closing — it would wrongly drop a queued folder scan or skip
+                // reopening the video once the (unrelated) unload this triggers finishes.
+                let save = if id == self.main_window {
+                    self.folder_workspace
+                        .flush_open_file()
+                        .map(Message::FolderWorkspace)
+                } else {
+                    Task::none()
+                };
                 if !self.folder_workspace.needs_media_unload() {
-                    return window::close(id);
+                    return Task::batch([save, window::close(id)]);
                 }
                 self.pending_close = Some(id);
-                Task::done(Message::FolderWorkspace(
-                    folder_workspace::Message::MediaViewer(media_viewer::Message::Unload),
-                ))
+                Task::batch([
+                    save,
+                    Task::done(Message::FolderWorkspace(
+                        folder_workspace::Message::MediaViewer(media_viewer::Message::Unload),
+                    )),
+                ])
             }
             Message::WindowMoved(x, y) => {
                 if !self.is_maximized {
