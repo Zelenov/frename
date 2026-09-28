@@ -96,6 +96,14 @@ pub struct VideoPlayerState {
     rotation: Option<Result<Rotation, RotationError>>,
     /// Number of the latest load; a `VideoLoaded` of an older one is dropped.
     load_generation: u64,
+    /// Loads started (on a blocking thread, opening the file) whose `VideoLoaded` has not
+    /// landed yet. While GStreamer is inside that open, it holds the file open on the OS
+    /// level; `Unload` must not answer `VideoUnloaded` until this reaches zero, or a save
+    /// right after can hit a sharing violation on Windows (issue #91).
+    loads_in_flight: u64,
+    /// `Unload` arrived while a load was still in flight: `VideoUnloaded` is held back until
+    /// every such load has landed (and, being stale, been dropped) — see `loads_in_flight`.
+    unloading: bool,
 }
 
 impl Default for VideoPlayerState {
@@ -122,6 +130,8 @@ impl Default for VideoPlayerState {
             resume_at: None,
             rotation: None,
             load_generation: 0,
+            loads_in_flight: 0,
+            unloading: false,
         }
     }
 }
@@ -175,6 +185,7 @@ impl VideoPlayerState {
         self.paused = paused;
         self.load_generation = self.load_generation.wrapping_add(1);
         let generation = self.load_generation;
+        self.loads_in_flight += 1;
 
         let subtitles_task = Self::load_subtitles(path.clone());
         let video_task = Task::future(async move {
@@ -235,17 +246,31 @@ impl VideoPlayerState {
     /// Handle all video player messages.
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            // A load started before the latest one (the video was reopened meanwhile): its
-            // video, dropped here, may show an older rotation.
-            Message::VideoLoaded { generation, .. } if generation != self.load_generation => {
-                log::debug!("Dropping a video load that a newer one replaced");
-                Task::none()
-            }
             Message::VideoLoaded {
                 video: slot,
                 rotation,
-                ..
+                generation,
             } => {
+                // This load has landed: whatever file handle GStreamer held open for it is
+                // dropped by the end of this arm (with the video, if any). If `Unload` came in
+                // while this was still in flight, only now is it safe to say so (issue #91).
+                self.loads_in_flight = self.loads_in_flight.saturating_sub(1);
+                let unloaded = if self.unloading && self.loads_in_flight == 0 {
+                    self.unloading = false;
+                    // The wait `Unload` set up is over: `loading` (kept true so the view showed
+                    // its spinner rather than "nothing loaded" for the wait) is now false, same
+                    // as `Unload` itself would have set it had no load been in flight.
+                    self.loading = false;
+                    Task::done(Message::VideoUnloaded)
+                } else {
+                    Task::none()
+                };
+                // A load started before the latest one (the video was reopened meanwhile): its
+                // video, dropped here, may show an older rotation.
+                if generation != self.load_generation {
+                    log::debug!("Dropping a video load that a newer one replaced");
+                    return unloaded;
+                }
                 self.loading = false;
                 self.rotation = rotation;
                 let resume_at = self.resume_at.take();
@@ -255,17 +280,18 @@ impl VideoPlayerState {
                 let Some(video) = video else {
                     self.load_failed = true;
                     log::info!("Video load failed; showing error state");
-                    return Task::none();
+                    return unloaded;
                 };
                 self.load_failed = false;
                 let duration_secs = video.duration().as_secs_f32();
                 self.current_video = Some(video);
                 let ready = Task::done(Message::VideoReady { duration_secs });
-                match resume_at {
+                let loaded = match resume_at {
                     // Reopened: back to the moment it showed.
                     Some(position) => Task::batch([ready, self.seek_to(position, true)]),
                     None => ready,
-                }
+                };
+                Task::batch([unloaded, loaded])
             }
             Message::VideoReady { duration_secs } => {
                 let ready = Task::done(Message::Controls(video_controls::Message::VideoReady {
@@ -463,14 +489,27 @@ impl VideoPlayerState {
                 self.seek_to(start, true)
             }
             Message::Unload => {
-                // A load still under way belongs to the video being closed: drop it when it lands.
+                // A load still under way belongs to the video being closed: drop it when it
+                // lands (`VideoLoaded` above). Until then GStreamer's open on the blocking
+                // thread may still hold the file open, so `VideoUnloaded` — the caller's signal
+                // that it is safe to rename or resave the file — has to wait for it (#91).
+                let load_in_flight = self.loads_in_flight > 0;
                 self.load_generation = self.load_generation.wrapping_add(1);
                 self.resume_at = None;
                 self.current_video = None;
-                self.loading = false;
                 self.current_path = None;
                 self.subtitles = None;
-                Task::done(Message::VideoUnloaded)
+                if load_in_flight {
+                    // `loading` stays true for this same wait: the view keeps showing its
+                    // spinner instead of falling back to "nothing loaded", and `is_active()`
+                    // correctly still reports the player as busy in the meantime.
+                    log::debug!("Deferring VideoUnloaded: a load is still in flight");
+                    self.unloading = true;
+                    Task::none()
+                } else {
+                    self.loading = false;
+                    Task::done(Message::VideoUnloaded)
+                }
             }
             Message::VideoUnloaded => Task::none(),
             // Intercepted by media_viewer/folder_workspace; no-op here.
@@ -1044,6 +1083,71 @@ mod tests {
         assert!(player.loading, "a stale load does not end the latest one");
         assert!(!player.load_failed);
         assert_eq!(player.resume_at, Some(Duration::from_secs(42)));
+    }
+
+    /// Issue #91: `Unload` while a load is still opening the file on a blocking thread must
+    /// hold `VideoUnloaded` back until that load lands — GStreamer may still hold the file
+    /// open, and a save made right after `VideoUnloaded` (the caller's "safe to rename now"
+    /// signal) could hit a sharing violation on Windows.
+    #[test]
+    fn unload_waits_for_a_load_still_in_flight() {
+        let mut player = VideoPlayerState {
+            loading: true,
+            loads_in_flight: 1,
+            load_generation: 3,
+            ..VideoPlayerState::default()
+        };
+        let _ = player.update(Message::Unload);
+        assert!(player.unloading, "must wait for the in-flight load");
+        assert!(
+            player.loading,
+            "the view must keep showing its spinner, not \"nothing loaded\", during the wait"
+        );
+
+        // The load lands, stale (Unload bumped the generation): only now is it safe to say so.
+        let stale = Message::VideoLoaded {
+            video: Arc::new(Mutex::new(None)),
+            rotation: None,
+            generation: 3,
+        };
+        let _ = player.update(stale);
+        assert!(!player.unloading, "the wait ends once the stale load lands");
+        assert!(!player.loading, "the wait is over");
+        assert_eq!(player.loads_in_flight, 0);
+    }
+
+    /// Two loads in flight (reopened twice) when `Unload` arrives: it must wait for both to
+    /// land, not just the first stale one to arrive — a plain "is a load closing" flag would
+    /// answer `VideoUnloaded` while the other load could still hold the file open.
+    #[test]
+    fn unload_waits_for_every_load_still_in_flight() {
+        let mut player = VideoPlayerState {
+            loading: true,
+            loads_in_flight: 2,
+            load_generation: 5,
+            ..VideoPlayerState::default()
+        };
+        let _ = player.update(Message::Unload);
+        assert!(player.unloading);
+        assert!(player.loading, "still waiting: the spinner must stay up");
+
+        let stale = |generation| Message::VideoLoaded {
+            video: Arc::new(Mutex::new(None)),
+            rotation: None,
+            generation,
+        };
+        let _ = player.update(stale(4));
+        assert!(
+            player.unloading,
+            "one of two loads landed: still waiting on the other"
+        );
+        assert!(player.loading, "still one load left in flight");
+        assert_eq!(player.loads_in_flight, 1);
+
+        let _ = player.update(stale(3));
+        assert!(!player.unloading, "both loads landed: safe to say so now");
+        assert!(!player.loading, "the wait is over");
+        assert_eq!(player.loads_in_flight, 0);
     }
 
     #[test]
