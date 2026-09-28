@@ -1,3 +1,7 @@
+# NEXT
+## Fixed
+- Pasting tags onto a clip no longer wipes its comment.
+
 # 0.80
 ## Changed
 - Closing frename, opening another folder, or opening a file outside the current folder now saves the open file's tags, comment and in/out instead of losing them.
