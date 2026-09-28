@@ -81,4 +81,13 @@ pub enum Message {
     ToggleCueList,
     /// Autoplay setting changed: whether videos opened from now on start playing.
     SetAutoplay(bool),
+    /// Open or close **More**, the menu of the controls a narrow pane has no room for.
+    ToggleMore,
+    /// Close More: a click outside it.
+    CloseMore,
+    /// An item of More was chosen: close it, then send its messages in order (as if their
+    /// buttons had been pressed, so the parents see them as they would from the bar).
+    MorePicked(Vec<Message>),
+    /// A step of the loading spinner (internal, only while a video loads).
+    LoadingTick,
 }

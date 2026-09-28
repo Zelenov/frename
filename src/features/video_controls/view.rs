@@ -1,232 +1,309 @@
-//! UI rendering for video controls feature
+//! The groups of the controls bar (design system §13.3.5) and the timeline. Each control is a
+//! [`Command`]: the same one is drawn as an icon button in the bar or as an item of **More**
+//! when the pane is too narrow for it (see [`super::Fold`]).
 
-use iced::widget::{button, container, mouse_area, row, text, tooltip, Space};
-use iced::{Element, Length};
+use iced::widget::{button as iced_button, container, row, stack, Row};
+use iced::{Alignment, Element, Length, Padding};
 
 use super::progress_bar::{BarMarker, ProgressBar};
 use super::{Message, VideoControlsState};
-use crate::theme;
+use crate::ui::icon_button::IconButton;
+use crate::ui::icons::{icon, Icon};
+use crate::ui::menu::MenuItem;
+use crate::ui::style::{self, ButtonKind};
+use crate::ui::text;
+use crate::ui::tokens::*;
+use crate::ui::tooltip::{Position, Tip};
 
-const CONTROLS_HEIGHT: f32 = 32.0;
-/// ↺ and ↻ sit side by side as one pair, a little narrower than the other buttons.
-const ROTATE_BUTTON_WIDTH: f32 = 24.0;
+/// What a control shows: an icon, or a word that stays a word (`[`, `]`).
+#[derive(Debug, Clone, Copy)]
+pub enum Face {
+    Icon(Icon),
+    Glyph(&'static str),
+}
 
-/// Render the video player controls.
-/// `position_secs` is the live playback position read from the video at view time.
-/// `segment_start` and `segment_end` are the optional segment markers (in seconds) for the current file.
-/// `can_add_markers` is false when the file cannot hold markers; `marker_held` shows 📍 pressed;
-/// `cannot_rotate` says why the file cannot be turned (↺ ↻ are off then, with it as their
-/// tooltip).
-/// The progress bar is not part of it: the caller puts [`progress_bar`] on a row of its own
-/// above the buttons, which keep to the left, the volume to the right.
-pub fn view(
-    state: &VideoControlsState,
-    can_add_markers: bool,
-    marker_held: bool,
-    cannot_rotate: Option<String>,
-) -> Element<'_, Message> {
-    let back10_btn: Element<'_, Message> = tooltip(
-        button(
-            container(text("⏪").size(16))
-                .center_x(iced::Length::Fill)
-                .center_y(iced::Length::Fill),
-        )
-        .on_press(Message::SeekBack10)
-        .width(CONTROLS_HEIGHT)
-        .height(iced::Length::Fill)
-        .padding(0)
-        .style(theme::icon_button_style(true)),
-        text("F1"),
-        tooltip::Position::Top,
-    )
-    .into();
+/// A control of the bar, drawn as a button there or as an item of More.
+pub struct Command<M> {
+    pub face: Face,
+    /// Its name, the tooltip's first line and the menu item's label.
+    pub label: String,
+    /// A second line of the tooltip.
+    pub detail: Option<String>,
+    pub keys: &'static [&'static str],
+    /// A toggle that is on (a list shown, fullscreen).
+    pub latched: bool,
+    /// `None`: disabled.
+    pub on_press: Option<M>,
+    /// Held like a key: `down` when pressed, `up` when released. In More a click is a press
+    /// and a release.
+    pub hold: Option<(M, M)>,
+    /// Drawn pressed, with the recording dot: something holds it down.
+    pub held: bool,
+}
 
-    let play_pause_label = if state.is_playing() { "⏸" } else { "▶" };
-    let play_pause_btn: Element<'_, Message> = tooltip(
-        button(
-            container(text(play_pause_label).size(16))
-                .center_x(iced::Length::Fill)
-                .center_y(iced::Length::Fill),
-        )
-        .on_press(Message::TogglePlayPause)
-        .width(CONTROLS_HEIGHT)
-        .height(iced::Length::Fill)
-        .padding(0)
-        .style(theme::icon_button_style(true)),
-        text("Space"),
-        tooltip::Position::Top,
-    )
-    .into();
+impl<M: Clone> Command<M> {
+    fn new(face: Face, label: String, keys: &'static [&'static str], on_press: Option<M>) -> Self {
+        Self {
+            face,
+            label,
+            detail: None,
+            keys,
+            latched: false,
+            on_press,
+            hold: None,
+            held: false,
+        }
+    }
 
-    let forward10_btn: Element<'_, Message> = tooltip(
-        button(
-            container(text("⏩").size(16))
-                .center_x(iced::Length::Fill)
-                .center_y(iced::Length::Fill),
-        )
-        .on_press(Message::SeekForward10)
-        .width(CONTROLS_HEIGHT)
-        .height(iced::Length::Fill)
-        .padding(0)
-        .style(theme::icon_button_style(true)),
-        text("F3"),
-        tooltip::Position::Top,
-    )
-    .into();
+    pub fn icon(glyph: Icon, label: String, keys: &'static [&'static str], on: Option<M>) -> Self {
+        Self::new(Face::Icon(glyph), label, keys, on)
+    }
 
-    let seg_in_btn: Element<'_, Message> = tooltip(
-        button(
-            container(text("[").size(16))
-                .center_x(iced::Length::Fill)
-                .center_y(iced::Length::Fill),
-        )
-        .on_press(Message::SetSegmentStart)
-        .width(CONTROLS_HEIGHT)
-        .height(iced::Length::Fill)
-        .padding(0)
-        .style(theme::icon_button_style(true)),
-        text(fl!("video-controls-set-in")),
-        tooltip::Position::Top,
-    )
-    .into();
+    pub fn latched(mut self, latched: bool) -> Self {
+        self.latched = latched;
+        self
+    }
 
-    let seg_out_btn: Element<'_, Message> = tooltip(
-        button(
-            container(text("]").size(16))
-                .center_x(iced::Length::Fill)
-                .center_y(iced::Length::Fill),
-        )
-        .on_press(Message::SetSegmentEnd)
-        .width(CONTROLS_HEIGHT)
-        .height(iced::Length::Fill)
-        .padding(0)
-        .style(theme::icon_button_style(true)),
-        text(fl!("video-controls-set-out")),
-        tooltip::Position::Top,
-    )
-    .into();
+    pub fn detail(mut self, detail: String) -> Self {
+        self.detail = Some(detail);
+        self
+    }
 
-    // The bar is on its own row above: a gap pushes the volume to the right.
-    let bar: Element<'_, Message> = Space::new().width(Length::Fill).into();
+    /// The command with its messages in the parent's type.
+    pub fn map<N>(self, f: impl Fn(M) -> N) -> Command<N> {
+        Command {
+            face: self.face,
+            label: self.label,
+            detail: self.detail,
+            keys: self.keys,
+            latched: self.latched,
+            on_press: self.on_press.map(&f),
+            hold: self.hold.map(|(down, up)| (f(down), f(up))),
+            held: self.held,
+        }
+    }
 
-    let volume_icon: Element<'_, Message> =
-        container(text("🔊").size(13)).center_y(Length::Fill).into();
-
-    let volume_bar: Element<'_, Message> = container(
-        ProgressBar::new(0.0..=1.0, state.volume(), Message::SetVolume).fill_color(theme::VOLUME),
-    )
-    .width(Length::Fixed(72.0))
-    .center_y(Length::Fill)
-    .into();
-
-    let screenshot_btn: Element<'_, Message> = tooltip(
-        button(
-            container(text("📷").size(16))
-                .center_x(iced::Length::Fill)
-                .center_y(iced::Length::Fill),
-        )
-        .on_press(Message::TakeScreenshot)
-        .width(CONTROLS_HEIGHT)
-        .height(iced::Length::Fill)
-        .padding(0)
-        .style(theme::icon_button_style(true)),
-        text(fl!("video-controls-screenshot")),
-        tooltip::Position::Top,
-    )
-    .into();
-
-    let add_marker_btn: Element<'_, Message> = tooltip(
-        // Held like `F2`: pressed, a marker starts; released (or left), it ends there, so
-        // holding the button while the clip plays marks a range. The content takes the press,
-        // so the button's own message is only there to draw it enabled.
-        button({
-            let icon = container(text("📍").size(14))
-                .center_x(iced::Length::Fill)
-                .center_y(iced::Length::Fill);
-            let held: Element<'_, Message> = if can_add_markers {
-                mouse_area(icon)
-                    .on_press(Message::MarkerKeyPressed)
-                    .on_release(Message::MarkerKeyReleased)
-                    .on_exit(Message::MarkerKeyReleased)
-                    .into()
-            } else {
-                icon.into()
-            };
-            held
-        })
-        .on_press_maybe(can_add_markers.then_some(Message::MarkerKeyReleased))
-        .width(CONTROLS_HEIGHT)
-        .height(iced::Length::Fill)
-        .padding(0)
-        // Pressed while `F2` or the button is held: a marker is being drawn.
-        .style(move |t, status| {
-            let status = if marker_held {
-                button::Status::Pressed
-            } else {
-                status
-            };
-            theme::icon_button_style(can_add_markers)(t, status)
-        }),
-        text(if can_add_markers {
-            fl!("video-controls-add-marker")
-        } else {
-            fl!("video-controls-cannot-hold-markers")
-        }),
-        tooltip::Position::Top,
-    )
-    .into();
-
-    let can_rotate = cannot_rotate.is_none();
-    let rotate_btn =
-        |icon: &'static str, quarter_turns: i32, tip: String| -> Element<'_, Message> {
-            tooltip(
-                button(
-                    container(text(icon).size(16))
-                        .center_x(iced::Length::Fill)
-                        .center_y(iced::Length::Fill),
-                )
-                .on_press_maybe(can_rotate.then_some(Message::Rotate(quarter_turns)))
-                .width(ROTATE_BUTTON_WIDTH)
-                .height(iced::Length::Fill)
-                .padding(0)
-                .style(theme::icon_button_style(can_rotate)),
-                text(cannot_rotate.clone().unwrap_or(tip)),
-                tooltip::Position::Top,
-            )
-            .into()
+    /// The icon button in the bar, with its tooltip above it.
+    pub fn button<'a>(self) -> Element<'a, M>
+    where
+        M: 'a,
+    {
+        let base = match self.face {
+            Face::Icon(glyph) => IconButton::new(glyph),
+            Face::Glyph(word) => IconButton::glyph(word),
         };
-    let rotate_left_btn = rotate_btn("↺", -1, fl!("video-controls-rotate-left"));
-    let rotate_right_btn = rotate_btn("↻", 1, fl!("video-controls-rotate-right"));
+        let mut tip = Tip::new(self.label).keys(self.keys);
+        if let Some(detail) = self.detail {
+            tip = tip.detail(detail);
+        }
+        let base = base
+            .latched(self.latched)
+            .held(self.held)
+            .tip(tip, Position::Top);
+        let pressable: Element<'a, M> = match (self.hold, self.on_press.is_some()) {
+            (Some((down, up)), true) => base.on_hold(down, up).into(),
+            _ => base.on_press_maybe(self.on_press).into(),
+        };
+        if !self.held {
+            return pressable;
+        }
+        // Recording: a dot in the corner of the held button.
+        let dot = container(
+            container(iced::widget::space())
+                .width(DOT_SIZE)
+                .height(DOT_SIZE)
+                .style(style::dot(ERROR)),
+        )
+        .width(BAR_HEIGHT)
+        .align_right(BAR_HEIGHT)
+        .padding(SPACE_XS);
+        stack![pressable, dot].into()
+    }
 
-    // The two turns are one tight pair, and the row is packed a little closer than before
-    // they came, so the volume still fits the default player width.
-    let rotate_pair: Element<'_, Message> = row![rotate_left_btn, rotate_right_btn]
-        .height(iced::Length::Fill)
-        .into();
+    /// The command as an item of More: a click there sends its messages, in order, through
+    /// `then`.
+    pub fn menu_item(self, then: impl Fn(Vec<M>) -> M) -> MenuItem<M> {
+        let messages = match (self.hold, self.on_press) {
+            (Some((down, up)), Some(_)) => Some(vec![down, up]),
+            (_, on_press) => on_press.map(|m| vec![m]),
+        };
+        MenuItem {
+            icon: match self.face {
+                Face::Icon(glyph) => Some(glyph),
+                Face::Glyph(_) => None,
+            },
+            label: self.label,
+            keys: self.keys.to_vec(),
+            checked: self.latched,
+            on_press: messages.map(then),
+        }
+    }
+}
 
-    let controls = row![
-        back10_btn,
-        play_pause_btn,
-        forward10_btn,
-        seg_in_btn,
-        seg_out_btn,
-        screenshot_btn,
-        add_marker_btn,
-        rotate_pair,
-        bar,
-        volume_icon,
-        volume_bar
+/// Buttons of one group: their 32-px squares touch.
+pub fn group<'a, M: Clone + 'a>(commands: impl IntoIterator<Item = Command<M>>) -> Row<'a, M> {
+    Row::with_children(commands.into_iter().map(Command::button)).align_y(Alignment::Center)
+}
+
+/// Back 10 s, play or pause, forward 10 s. The play button shows what a click will do.
+pub fn transport(state: &VideoControlsState) -> [Command<Message>; 3] {
+    let (play_icon, play_label) = if state.is_playing() {
+        (Icon::Pause, fl!("video-controls-pause"))
+    } else {
+        (Icon::Play, fl!("video-controls-play"))
+    };
+    [
+        Command::icon(
+            Icon::Rewind,
+            fl!("video-controls-back"),
+            &["F1"],
+            Some(Message::SeekBack10),
+        ),
+        Command::icon(
+            play_icon,
+            play_label,
+            &["Space"],
+            Some(Message::TogglePlayPause),
+        ),
+        Command::icon(
+            Icon::FastForward,
+            fl!("video-controls-forward"),
+            &["F3"],
+            Some(Message::SeekForward10),
+        ),
     ]
-    .spacing(4)
-    .height(iced::Length::Fill)
-    .align_y(iced::Alignment::Center);
+}
 
-    container(controls)
-        .padding([0, 8])
-        .width(iced::Length::Fill)
-        .height(CONTROLS_HEIGHT)
-        .style(theme::panel_container_style)
+/// The in and out points: words, as they are on the keys.
+pub fn in_out() -> [Command<Message>; 2] {
+    [
+        Command::new(
+            Face::Glyph("["),
+            fl!("video-controls-set-in"),
+            &["["],
+            Some(Message::SetSegmentStart),
+        ),
+        Command::new(
+            Face::Glyph("]"),
+            fl!("video-controls-set-out"),
+            &["]"],
+            Some(Message::SetSegmentEnd),
+        ),
+    ]
+}
+
+/// Save this frame, and add a marker. `can_add_markers` is false when the file cannot hold
+/// markers; `marker_held` while `F2` or the button draws a range.
+pub fn mark(can_add_markers: bool, marker_held: bool) -> [Command<Message>; 2] {
+    let marker = if can_add_markers {
+        let mut marker = Command::icon(
+            Icon::MapPin,
+            fl!("video-controls-add-marker"),
+            &["F2"],
+            Some(Message::MarkerKeyReleased),
+        )
+        .detail(fl!("video-controls-add-marker-hold"));
+        // Held like `F2`: pressed, a marker starts; released (or left), it ends there, so
+        // holding the button while the clip plays marks a range.
+        marker.hold = Some((Message::MarkerKeyPressed, Message::MarkerKeyReleased));
+        marker.held = marker_held;
+        marker
+    } else {
+        Command::icon(
+            Icon::MapPin,
+            fl!("video-controls-cannot-hold-markers"),
+            &[],
+            None,
+        )
+    };
+    [
+        Command::icon(
+            Icon::Camera,
+            fl!("video-controls-screenshot"),
+            &["F12"],
+            Some(Message::TakeScreenshot),
+        ),
+        marker,
+    ]
+}
+
+/// Turn the video left or right. `cannot_rotate` says why the file cannot be turned: they are
+/// off then, with it as their tooltip's second line.
+pub fn rotate(cannot_rotate: Option<String>) -> [Command<Message>; 2] {
+    let turn = |glyph, label: String, keys, quarter_turns| {
+        let command = Command::icon(
+            glyph,
+            label,
+            keys,
+            cannot_rotate
+                .is_none()
+                .then_some(Message::Rotate(quarter_turns)),
+        );
+        match &cannot_rotate {
+            Some(reason) => command.detail(reason.clone()),
+            None => command,
+        }
+    };
+    [
+        turn(
+            Icon::RotateCcw,
+            fl!("video-controls-rotate-left"),
+            &["Ctrl", "Alt", "←"],
+            -1,
+        ),
+        turn(
+            Icon::RotateCw,
+            fl!("video-controls-rotate-right"),
+            &["Ctrl", "Alt", "→"],
+            1,
+        ),
+    ]
+}
+
+/// `00:10 / 00:30`, fixed wide so it never moves.
+pub fn time_readout<'a>(state: &VideoControlsState, position_secs: f32) -> Element<'a, Message> {
+    let readout = format!(
+        "{} / {}",
+        clock(position_secs),
+        clock(state.duration_secs())
+    );
+    container(text::mono(readout).wrapping(iced::widget::text::Wrapping::None))
+        .width(TIME_READOUT_WIDTH)
+        .align_right(TIME_READOUT_WIDTH)
         .into()
+}
+
+/// `mm:ss`, or `h:mm:ss` from an hour on.
+pub fn clock(secs: f32) -> String {
+    let total = secs.max(0.0) as u64;
+    let (hours, minutes, seconds) = (total / 3600, total / 60 % 60, total % 60);
+    if hours > 0 {
+        format!("{hours}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{minutes:02}:{seconds:02}")
+    }
+}
+
+/// The volume slider alone: in the bar after its icon, or in More.
+pub fn volume_slider(state: &VideoControlsState) -> Element<'_, Message> {
+    container(
+        ProgressBar::new(0.0..=1.0, state.volume(), Message::SetVolume)
+            .fill_color(TEXT_SECONDARY)
+            .without_playhead(),
+    )
+    .width(VOLUME_WIDTH)
+    .into()
+}
+
+/// The volume: its icon (not a button) and the slider.
+pub fn volume(state: &VideoControlsState) -> Element<'_, Message> {
+    row![
+        icon(Icon::Volume, ICON_M, TEXT_SECONDARY),
+        volume_slider(state)
+    ]
+    .spacing(SPACE_S)
+    .align_y(Alignment::Center)
+    .into()
 }
 
 /// The seek bar with the in/out range, the clip markers as pins and the label of the marker the
@@ -272,14 +349,19 @@ pub struct MarkerLabel<'a> {
     pub right_edge: Option<f32>,
 }
 
-/// Room the label's padding, border and ✎ take besides the name (px).
-const LABEL_CHROME: f32 = 48.0;
-/// A generous average width of a character of the label's 12 px text (px).
-const LABEL_CHAR_WIDTH: f32 = 6.8;
+/// Room the label's padding, edge and pencil take besides the name, and its margins.
+const LABEL_CHROME: f32 = 2.0 * SPACE_S + SPACE_TIGHT + ICON_S + 2.0 * RING + 2.0 * SPACE_XS;
+/// A generous average advance of a character of the label's 12 px text.
+const LABEL_CHAR_ADVANCE: f32 = 6.8;
+/// A name is never cut shorter than this many characters.
+const LABEL_MIN_CHARS: usize = 12;
+/// The label's edge in its marker's color: a little heavier than a line, so the color reads.
+const LABEL_EDGE: f32 = LINE * 1.5;
 
 /// `name`, cut with "…" so the label fits a player `width` px wide.
 fn fit_label(name: &str, width: f32) -> String {
-    let room = ((width - LABEL_CHROME) / LABEL_CHAR_WIDTH).max(1.0) as usize;
+    let fits = ((width - LABEL_CHROME) / LABEL_CHAR_ADVANCE).max(1.0) as usize;
+    let room = fits.max(LABEL_MIN_CHARS);
     if name.chars().count() <= room {
         return name.to_string();
     }
@@ -287,35 +369,59 @@ fn fit_label(name: &str, width: f32) -> String {
     format!("{}…", cut.trim_end())
 }
 
-/// The label over the marker's tick: its name and ✎. A click opens the marker's row in the
-/// marker list with the name field focused.
+const LABEL_PADDING: Padding = Padding {
+    top: SPACE_XXS,
+    bottom: SPACE_XXS,
+    left: SPACE_S,
+    right: SPACE_S,
+};
+
+/// The label over the marker's tick: its name and a pencil. A click opens the marker's row in
+/// the marker list with the name field focused; a read-only marker's label has no pencil and
+/// does nothing.
 fn marker_label_button(label: MarkerLabel<'_>) -> Element<'_, Message> {
     let name = if label.name.trim().is_empty() {
-        text(fl!("video-controls-add-a-name"))
-            .size(12)
-            .color(theme::TEXT_MUTED)
+        text::tooltip(fl!("video-controls-add-a-name")).color(TEXT_SECONDARY)
     } else {
         let fitted = match label.right_edge {
             Some(width) => fit_label(label.name, width),
             None => label.name.to_string(),
         };
-        text(fitted)
-            .size(12)
-            .color(theme::TEXT)
-            .wrapping(iced::widget::text::Wrapping::None)
+        text::tooltip(fitted).wrapping(iced::widget::text::Wrapping::None)
     };
     let content = row![name]
         .push(
             label
                 .guid
-                .map(|_| text("✎").size(11).color(theme::TEXT_MUTED)),
+                .map(|_| icon(Icon::Pencil, ICON_S, TEXT_SECONDARY)),
         )
-        .spacing(6)
-        .align_y(iced::Alignment::Center);
-    button(content)
+        .spacing(SPACE_TIGHT)
+        .align_y(Alignment::Center);
+    let color = label.color;
+    iced_button(content)
         .on_press_maybe(label.guid.map(|guid| Message::EditMarker(guid.to_string())))
-        .padding([2, 6])
-        .style(theme::marker_label_style(label.color))
+        .padding(LABEL_PADDING)
+        .style(move |theme, status| {
+            let hovered = matches!(
+                status,
+                iced_button::Status::Hovered | iced_button::Status::Pressed
+            );
+            iced_button::Style {
+                background: Some(iced::Background::Color(if hovered {
+                    over(BG_OVERLAY, HOVER)
+                } else {
+                    BG_OVERLAY
+                })),
+                text_color: TEXT,
+                border: iced::Border {
+                    color,
+                    width: LABEL_EDGE,
+                    radius: RADIUS_M.into(),
+                },
+                ..style::button(ButtonKind::Ghost)(theme, status)
+            }
+        })
+        .width(Length::Shrink)
         .into()
 }
 
@@ -329,6 +435,28 @@ mod tests {
         let long = "Close-up of the blue Turkish Airlines sign hanging from the ceiling";
         let fitted = fit_label(long, 300.0);
         assert!(fitted.ends_with('…'), "{fitted}");
-        assert!(fitted.chars().count() as f32 * LABEL_CHAR_WIDTH + LABEL_CHROME <= 300.0);
+        assert!(fitted.chars().count() as f32 * LABEL_CHAR_ADVANCE + LABEL_CHROME <= 300.0);
+    }
+
+    #[test]
+    fn a_name_keeps_at_least_twelve_characters() {
+        let fitted = fit_label("Close-up of the blue sign", 10.0);
+        assert_eq!(fitted.chars().count(), LABEL_MIN_CHARS);
+    }
+
+    #[test]
+    fn the_clock_shows_hours_only_from_an_hour_on() {
+        assert_eq!(clock(10.4), "00:10");
+        assert_eq!(clock(3_725.0), "1:02:05");
+        assert_eq!(clock(-1.0), "00:00");
+    }
+
+    #[test]
+    fn a_held_button_sends_its_press_and_release_from_more() {
+        let [_, marker] = mark(true, false);
+        let item = marker.menu_item(|messages| Message::SetVolume(messages.len() as f32));
+        assert!(matches!(item.on_press, Some(Message::SetVolume(n)) if n == 2.0));
+        let [_, marker] = mark(false, false);
+        assert!(marker.menu_item(|_| Message::SeekBack10).on_press.is_none());
     }
 }

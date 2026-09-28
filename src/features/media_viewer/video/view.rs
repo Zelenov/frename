@@ -1,34 +1,33 @@
-//! View for the video player sub-feature.
+//! View for the video player sub-feature (design system §13.3): the picture on black with the
+//! side list over it, the subtitle strip, the timeline and the controls bar, which gives up
+//! whole groups into **More** on a narrow pane.
 
 use frename_core::{Marker, Subtitles};
-use iced::widget::{
-    button, column, container, mouse_area, row, scrollable, stack, text, tooltip, Column,
-};
-use iced::{Alignment, Element, Length};
+use iced::widget::{column, container, mouse_area, row, space, stack, Column, Row};
+use iced::{Alignment, Element, Length, Padding};
 use iced_video_player::VideoPlayer;
 
 use super::{Message, Overlay, VideoPlayerState};
 use crate::features::markers::{self, MarkersState};
-use crate::features::video_controls::{self, BarMarker};
-use crate::theme;
+use crate::features::media_viewer::placeholder;
+use crate::features::video_controls::view::{self as controls, Command};
+use crate::features::video_controls::{self, BarMarker, Fold};
+use crate::ui::icon_button::IconButton;
+use crate::ui::icons::Icon;
+use crate::ui::menu::{self, MenuItem};
+use crate::ui::palette::marker_color;
+use crate::ui::segmented::{segmented, Segment};
+use crate::ui::style;
+use crate::ui::tokens::*;
+use crate::ui::tooltip::{self, Position, Tip};
+use crate::ui::{list, scroll, text};
 
-const CONTROLS_HEIGHT: f32 = 32.0;
-/// Widest a note over the picture gets before it wraps (px).
-const NOTICE_MAX_WIDTH: f32 = 260.0;
-const BAR_ROW_HEIGHT: f32 = 24.0;
-/// Fixed so the video does not jump as cues of one or two lines come and go.
-const SUBTITLE_STRIP_HEIGHT: f32 = 48.0;
-const SUBTITLE_STRIP_TEXT_SIZE: f32 = 14.0;
-const FULLSCREEN_CUE_TEXT_SIZE: f32 = 28.0;
-const CUE_LIST_WIDTH: f32 = 340.0;
-const CUE_LIST_TEXT_SIZE: f32 = 13.0;
-/// Every row has the same height so the list can be scrolled to a cue by arithmetic.
-/// Room for the time plus three lines of text; longer cues are clipped.
-const CUE_ROW_HEIGHT: f32 = 78.0;
-const CUE_ROW_SPACING: f32 = 2.0;
-/// Distance from one row's top to the next.
-pub const CUE_ROW_PITCH: f32 = CUE_ROW_HEIGHT + CUE_ROW_SPACING;
+/// Distance from one cue row's top to the next: every row has the same height, so the list is
+/// scrolled to a cue by arithmetic.
+pub const CUE_ROW_PITCH: f32 = CUE_ROW_HEIGHT + SPACE_XXS;
 pub const CUE_LIST_SCROLLABLE_ID: &str = "subtitle_cue_list";
+/// The share of a wide pane the side list takes (at most `SIDE_LIST_MAX_WIDTH`).
+const LIST_SHARE_OF_PANE: f32 = 0.4;
 
 /// The open file's clip markers and the list's state, as the video view shows them.
 #[derive(Clone, Copy)]
@@ -41,7 +40,7 @@ pub struct MarkersView<'a> {
     pub pane_width: f32,
 }
 
-/// Render the video player with controls below.
+/// Render the video player with its strip, timeline and controls below.
 /// `is_fullscreen` controls which icon the fullscreen button shows.
 /// `segment_start` and `segment_end` are passed to the progress bar for highlighting.
 pub fn view<'a>(
@@ -51,218 +50,335 @@ pub fn view<'a>(
     segment_end: Option<f32>,
     markers: MarkersView<'a>,
 ) -> Element<'a, Message> {
-    if let Some(video) = state.current_video() {
-        let player = VideoPlayer::new(video)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .content_fit(iced::ContentFit::Contain)
-            .on_end_of_stream(Message::EndOfStream);
-
-        let video_area = mouse_area(
-            container(player)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .style(theme::panel_container_style),
-        )
-        .on_press(Message::TogglePause)
-        .on_double_click(Message::ToggleFullscreen);
-
-        // One position for the caption, the lists and the progress bar, so they always agree.
-        let position = state.display_position();
-        let position_secs = position.as_secs_f32();
-        let subtitles = state.subtitles();
-        let active_cue = subtitles.and_then(|s| s.cue_index_at(position));
-        // The list keeps the last cue lit through the gaps, so the place is never lost.
-        let list_cue = subtitles.and_then(|s| s.last_started_index(position));
-        let can_hold_markers = markers.markers.is_some();
-        let caption = |subs| {
-            if is_fullscreen {
-                cue_text(subs, active_cue)
-            } else {
-                ""
-            }
-        };
-
-        // Fullscreen lays the subtitles over the picture; otherwise they get a strip
-        // of their own between the picture and the controls. The side list shows the
-        // markers or the subtitles when they were asked for (CC / ◆, in fullscreen too).
-        let strip = subtitles
-            .filter(|_| !is_fullscreen)
-            .map(|subs| subtitle_strip(subs, active_cue));
-        let side_list: Option<Element<'_, Message>> = if state.show_marker_list() {
-            let list = markers::view::view(markers.markers, markers.state, state.position_ms())
-                .map(Message::Markers);
-            let tabs = subtitles.map(|_| overlay_tabs(Overlay::Markers));
-            Some(side_overlay(
-                subtitles.map_or("", caption),
-                tabs,
-                Some(list),
-            ))
+    let Some(video) = state.current_video() else {
+        return if state.is_loading() {
+            placeholder::loading(state.loading_name(), state.loading_ticks())
+        } else if state.load_failed() {
+            placeholder::cannot_play(None)
         } else {
-            subtitles
-                .filter(|_| is_fullscreen || state.show_cue_list())
-                .map(|subs| {
-                    let list = state.show_cue_list().then(|| cue_list(subs, list_cue));
-                    let tabs = (list.is_some() && can_hold_markers)
-                        .then(|| overlay_tabs(Overlay::Subtitles));
-                    side_overlay(caption(subs), tabs, list)
-                })
+            placeholder::no_clip()
         };
-        let video_area: Element<'_, Message> = match side_list {
-            Some(list) => stack![video_area, list]
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .into(),
-            None => video_area.into(),
-        };
-        // A short note (`Frame saved`, `Rotation: 90° right`) over the bottom left of the picture:
-        // the controls bar has no room left for one in a player of the default width. In
-        // fullscreen the subtitles sit at the bottom, so it goes to the top left. Its width is
-        // capped so a long note wraps instead of running under the side list.
-        let video_area: Element<'_, Message> = match state.notice() {
-            Some(notice) => {
-                let place = container(
-                    container(text(notice).size(13).color(theme::TEXT))
-                        .max_width(NOTICE_MAX_WIDTH)
-                        .padding([4, 10])
-                        .style(theme::panel_container_style),
-                )
-                .padding(8)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .align_left(Length::Fill);
-                let place = if is_fullscreen {
-                    place.align_top(Length::Fill)
-                } else {
-                    place.align_bottom(Length::Fill)
-                };
-                stack![video_area, place]
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .into()
-            }
-            None => video_area,
-        };
-
-        let cue_list_btn: Option<Element<'_, Message>> =
-            subtitles.map(|_| cue_list_button(state.show_cue_list()));
-        let marker_list_btn = marker_list_button(state.show_marker_list());
-
-        // Like a subtitle line: the name of the marker the playhead is on, as its pin's head.
-        let labelled = markers
-            .markers
-            .and_then(|m| markers::view::marker_at(m, state.position_ms()));
-        let bar_markers: Vec<BarMarker> = markers
-            .markers
-            .unwrap_or_default()
-            .iter()
-            .map(|m| BarMarker {
-                start: m.start_ms as f32 / 1000.0,
-                end: m.end_ms() as f32 / 1000.0,
-                color: theme::marker_color(m.color),
-                active: labelled.is_some_and(|l| std::ptr::eq(l, m)),
-                guid: m.guid.clone(),
-            })
-            .collect();
-        let marker_label = labelled.map(|m| video_controls::view::MarkerLabel {
-            // Over a point's pin, or over the middle of a range's band.
-            at: (m.start_ms + m.end_ms()) as f32 / 2000.0,
-            name: m.name.as_str(),
-            guid: m.guid.as_deref(),
-            color: theme::marker_color(m.color),
-            // Within the player, not within the bar.
-            right_edge: (!is_fullscreen).then_some(markers.pane_width),
-        });
-        let bar_height = video_controls::bar_height(&bar_markers);
-        // The bar always has a row of its own, above the buttons.
-        let bar_row: Option<Element<'_, Message>> = Some({
-            container(
-                video_controls::view::progress_bar(
-                    state.controls(),
-                    position_secs,
-                    segment_start,
-                    segment_end,
-                    bar_markers,
-                    marker_label,
-                )
-                .map(Message::Controls),
-            )
-            .padding([0, 12])
-            .width(Length::Fill)
-            // Taller when overlapping ranges stack their bands in lanes.
-            .center_y(BAR_ROW_HEIGHT.max(bar_height))
-            .style(theme::panel_container_style)
-            .into()
-        });
-        let controls_inner = video_controls::view::view(
-            state.controls(),
-            markers.markers.is_some(),
-            markers.state.recording().is_some(),
-            // Why ↺ ↻ are off; while the clip loads its rotation is not known yet, so they stay on.
-            state
-                .rotation()
-                .and_then(|read| read.as_ref().err())
-                .map(|error| {
-                    let reason = crate::features::rotation_text::why_not_rotated(error);
-                    fl!("rotate-cannot", reason = reason)
-                }),
-        )
-        .map(Message::Controls);
-
-        let fullscreen_icon = if is_fullscreen { "⊡" } else { "⛶" };
-        let fullscreen_btn: Element<'_, Message> = tooltip(
-            button(
-                container(text(fullscreen_icon).size(14))
-                    .center_x(Length::Fill)
-                    .center_y(Length::Fill),
-            )
-            .on_press(Message::ToggleFullscreen)
-            .width(CONTROLS_HEIGHT)
-            .height(CONTROLS_HEIGHT)
-            .padding(0)
-            .style(theme::icon_button_style(true)),
-            text("F5"),
-            tooltip::Position::Top,
-        )
-        .into();
-
-        let controls = container(
-            row![controls_inner]
-                // Same order as the tabs over the side list: Subtitles, Markers.
-                .push(cue_list_btn)
-                .push(marker_list_btn)
-                .push(fullscreen_btn)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .align_y(iced::Alignment::Center),
-        )
+    };
+    let player = VideoPlayer::new(video)
         .width(Length::Fill)
-        .height(CONTROLS_HEIGHT)
-        .style(theme::panel_container_style);
+        .height(Length::Fill)
+        .content_fit(iced::ContentFit::Contain)
+        .on_end_of_stream(Message::EndOfStream);
+    let picture = mouse_area(
+        container(player)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(style::video),
+    )
+    .on_press(Message::TogglePause)
+    .on_double_click(Message::ToggleFullscreen);
 
-        column![video_area]
-            .push(strip)
-            .push(bar_row)
-            .push(controls)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
-    } else if state.is_loading() {
-        container(text("⏳").size(48).color(theme::TEXT_MUTED))
-            .center(Length::Fill)
-            .into()
-    } else if state.load_failed() {
-        container(text("✕").size(80).color(theme::ERROR))
-            .center(Length::Fill)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .style(theme::panel_container_style)
-            .into()
+    // One position for the caption, the lists and the progress bar, so they always agree.
+    let position = state.display_position();
+    let position_secs = position.as_secs_f32();
+    let subtitles = state.subtitles();
+    let active_cue = subtitles.and_then(|s| s.cue_index_at(position));
+    // Fullscreen, the whole window is the pane.
+    let pane_width = if is_fullscreen {
+        f32::INFINITY
     } else {
-        container(text("🎬").size(48).color(theme::TEXT_MUTED))
-            .center(Length::Fill)
-            .into()
+        markers.pane_width
+    };
+    let list_buttons = usize::from(subtitles.is_some()) + 1;
+    let fold = Fold::for_width(pane_width, list_buttons);
+
+    let mut layers: Vec<Element<'a, Message>> = vec![picture.into()];
+    if let Some(side) = side_overlay(state, markers, is_fullscreen, pane_width, active_cue) {
+        layers.push(side);
     }
+    if let Some(notice) = state.notice().filter(|_| !fold.notice_in_bar) {
+        layers.push(placeholder::floating_notice(notice));
+    }
+    if state.more_open() && fold.has_more() {
+        layers.push(more_popover(state, markers, fold));
+    }
+    let picture_area = stack(layers).width(Length::Fill).height(Length::Fill);
+
+    // Fullscreen lays the subtitles over the picture; otherwise they get a strip of their own.
+    let strip = subtitles
+        .filter(|_| !is_fullscreen)
+        .map(|subs| subtitle_strip(subs, active_cue));
+    let bars_style = if is_fullscreen {
+        style::video
+    } else {
+        style::panel
+    };
+    column![picture_area]
+        .push(strip)
+        .push(
+            timeline(
+                state,
+                markers,
+                is_fullscreen,
+                position_secs,
+                segment_start,
+                segment_end,
+            )
+            .style(bars_style),
+        )
+        .push(controls_bar(state, markers, fold, is_fullscreen, position_secs).style(bars_style))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
+}
+
+/// The timeline row: the seek bar with the in/out segment, the markers and the label of the
+/// marker the playhead is on.
+fn timeline<'a>(
+    state: &'a VideoPlayerState,
+    markers: MarkersView<'a>,
+    is_fullscreen: bool,
+    position_secs: f32,
+    segment_start: Option<f32>,
+    segment_end: Option<f32>,
+) -> container::Container<'a, Message> {
+    // Like a subtitle line: the name of the marker the playhead is on, as its pin's head.
+    let labelled = markers
+        .markers
+        .and_then(|m| markers::view::marker_at(m, state.position_ms()));
+    let bar_markers: Vec<BarMarker> = markers
+        .markers
+        .unwrap_or_default()
+        .iter()
+        .map(|m| BarMarker {
+            start: m.start_ms as f32 / 1000.0,
+            end: m.end_ms() as f32 / 1000.0,
+            color: marker_color(m.color),
+            active: labelled.is_some_and(|l| std::ptr::eq(l, m)),
+            guid: m.guid.clone(),
+        })
+        .collect();
+    let marker_label = labelled.map(|m| controls::MarkerLabel {
+        // Over a point's pin, or over the middle of a range's band.
+        at: (m.start_ms + m.end_ms()) as f32 / 2000.0,
+        name: m.name.as_str(),
+        guid: m.guid.as_deref(),
+        color: marker_color(m.color),
+        // Within the player, not within the bar.
+        right_edge: (!is_fullscreen).then_some(markers.pane_width),
+    });
+    // Taller when overlapping ranges stack their bands in lanes.
+    let height = TIMELINE_HEIGHT.max(video_controls::bar_height(&bar_markers));
+    container(
+        controls::progress_bar(
+            state.controls(),
+            position_secs,
+            segment_start,
+            segment_end,
+            bar_markers,
+            marker_label,
+        )
+        .map(Message::Controls),
+    )
+    .padding(Padding {
+        left: SPACE_M,
+        right: SPACE_M,
+        ..Padding::ZERO
+    })
+    .width(Length::Fill)
+    .center_y(height)
+}
+
+/// The controls the video pane's own messages drive: the lists and fullscreen.
+fn list_commands(state: &VideoPlayerState, markers: MarkersView<'_>) -> Vec<Command<Message>> {
+    let subtitles = state.subtitles().map(|_| {
+        Command::icon(
+            Icon::Captions,
+            fl!("media-viewer-video-subtitle-list"),
+            &[],
+            Some(Message::ToggleCueList),
+        )
+        .latched(state.show_cue_list())
+    });
+    let marker_list = Command::icon(
+        Icon::MapPin,
+        fl!("media-viewer-video-marker-list"),
+        &[],
+        Some(Message::ToggleMarkerList),
+    )
+    .latched(state.show_marker_list());
+    let marker_list = if markers.markers.is_some() {
+        marker_list.detail(fl!("media-viewer-video-markers-hint"))
+    } else {
+        marker_list
+    };
+    // Same order as the tabs over the side list: Subtitles, Markers.
+    subtitles.into_iter().chain([marker_list]).collect()
+}
+
+/// Why ↺ ↻ are off; while the clip loads its rotation is not known yet, so they stay on.
+fn cannot_rotate(state: &VideoPlayerState) -> Option<String> {
+    state
+        .rotation()
+        .and_then(|read| read.as_ref().err())
+        .map(|error| {
+            let reason = crate::features::rotation_text::why_not_rotated(error);
+            fl!("rotate-cannot", reason = reason)
+        })
+}
+
+fn controls_of<'a>(
+    commands: impl IntoIterator<Item = Command<video_controls::Message>>,
+) -> Row<'a, Message> {
+    controls::group(commands.into_iter().map(|c| c.map(Message::Controls)))
+}
+
+/// The controls bar (§13.3.5): transport · in/out · mark · rotate · the notice slot · time ·
+/// volume · views, the groups 12 px apart, their buttons touching.
+fn controls_bar<'a>(
+    state: &'a VideoPlayerState,
+    markers: MarkersView<'a>,
+    fold: Fold,
+    is_fullscreen: bool,
+    position_secs: f32,
+) -> container::Container<'a, Message> {
+    let controls_state = state.controls();
+    let mut groups: Vec<Element<'a, Message>> = vec![
+        controls_of(controls::transport(controls_state)).into(),
+        controls_of(controls::in_out()).into(),
+    ];
+    if fold.mark {
+        groups.push(controls_of(mark_commands(markers)).into());
+    }
+    if fold.rotate {
+        groups.push(controls_of(controls::rotate(cannot_rotate(state))).into());
+    }
+    // The free space holds the notice when it is wide enough (otherwise it floats over the
+    // picture).
+    let notice: Element<'a, Message> = match state.notice().filter(|_| fold.notice_in_bar) {
+        Some(notice) => tooltip::tip_text(
+            text::secondary(notice).wrapping(iced::widget::text::Wrapping::None),
+            notice,
+            Position::Top,
+        ),
+        None => space().into(),
+    };
+    groups.push(container(notice).width(Length::Fill).clip(true).into());
+    if fold.time {
+        groups.push(controls::time_readout(controls_state, position_secs).map(Message::Controls));
+    }
+    groups.push(if fold.volume_slider {
+        controls::volume(controls_state).map(Message::Controls)
+    } else {
+        IconButton::new(Icon::Volume)
+            .latched(state.more_open())
+            .tip(Tip::new(fl!("video-controls-volume")), Position::Top)
+            .on_press(Message::ToggleMore)
+            .into()
+    });
+    let mut views: Vec<Element<'a, Message>> = Vec::new();
+    if fold.lists {
+        views.extend(
+            list_commands(state, markers)
+                .into_iter()
+                .map(Command::button),
+        );
+    }
+    if fold.has_more() {
+        views.push(
+            IconButton::new(Icon::Ellipsis)
+                .latched(state.more_open())
+                .tip(Tip::new(fl!("video-controls-more")), Position::Top)
+                .on_press(Message::ToggleMore)
+                .into(),
+        );
+    }
+    views.push(fullscreen_command(is_fullscreen).button());
+    groups.push(Row::with_children(views).align_y(Alignment::Center).into());
+
+    container(
+        Row::with_children(groups)
+            .spacing(SPACE_M)
+            .height(Length::Fill)
+            .align_y(Alignment::Center),
+    )
+    .padding(Padding {
+        left: SPACE_S,
+        right: SPACE_S,
+        ..Padding::ZERO
+    })
+    .width(Length::Fill)
+    .height(BAR_HEIGHT)
+}
+
+fn mark_commands(markers: MarkersView<'_>) -> [Command<video_controls::Message>; 2] {
+    controls::mark(
+        markers.markers.is_some(),
+        markers.state.recording().is_some(),
+    )
+}
+
+fn fullscreen_command(is_fullscreen: bool) -> Command<Message> {
+    let glyph = if is_fullscreen {
+        Icon::Minimize
+    } else {
+        Icon::Maximize
+    };
+    Command::icon(
+        glyph,
+        fl!("media-viewer-video-fullscreen"),
+        &["F5"],
+        Some(Message::ToggleFullscreen),
+    )
+    .latched(is_fullscreen)
+}
+
+/// **More**, open over the bottom right of the picture: the controls the bar has no room for,
+/// and the volume slider when it is folded. A click outside it closes it.
+fn more_popover<'a>(
+    state: &'a VideoPlayerState,
+    markers: MarkersView<'a>,
+    fold: Fold,
+) -> Element<'a, Message> {
+    let picked = Message::MorePicked;
+    let mut items: Vec<MenuItem<Message>> = Vec::new();
+    if !fold.mark {
+        items.extend(
+            mark_commands(markers)
+                .into_iter()
+                .map(|c| c.map(Message::Controls).menu_item(picked)),
+        );
+    }
+    if !fold.rotate {
+        items.extend(
+            controls::rotate(cannot_rotate(state))
+                .into_iter()
+                .map(|c| c.map(Message::Controls).menu_item(picked)),
+        );
+    }
+    if !fold.lists {
+        items.extend(
+            list_commands(state, markers)
+                .into_iter()
+                .map(|c| c.menu_item(picked)),
+        );
+    }
+    let mut rows: Vec<Element<'a, Message>> = Vec::new();
+    if !fold.volume_slider {
+        rows.push(
+            container(controls::volume(state.controls()).map(Message::Controls))
+                .padding(SPACE_S)
+                .into(),
+        );
+    }
+    rows.extend(items.into_iter().map(menu::item));
+    let popup = container(menu::menu(rows))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .padding(SPACE_S)
+        .align_right(Length::Fill)
+        .align_bottom(Length::Fill);
+    let outside = mouse_area(container(space()).width(Length::Fill).height(Length::Fill))
+        .on_press(Message::CloseMore);
+    stack![outside, popup]
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
 }
 
 /// Text of the cue at `index`, or nothing between cues.
@@ -272,180 +388,204 @@ fn cue_text(subtitles: &Subtitles, index: Option<usize>) -> &str {
         .map_or("", |cue| cue.text.as_str())
 }
 
-/// The current cue on a strip of its own below the picture (windowed mode).
+/// The current cue on a strip of its own below the picture (windowed mode): at most two lines,
+/// at a fixed height so the picture never jumps between cues.
 fn subtitle_strip<'a>(subtitles: &'a Subtitles, active_cue: Option<usize>) -> Element<'a, Message> {
-    container(
-        text(cue_text(subtitles, active_cue))
-            .size(SUBTITLE_STRIP_TEXT_SIZE)
-            .color(theme::TEXT)
-            .align_x(Alignment::Center),
-    )
-    .center_x(Length::Fill)
-    .align_y(Alignment::Center)
-    .height(SUBTITLE_STRIP_HEIGHT)
-    .padding([4, 12])
-    .clip(true)
-    .style(theme::panel_container_style)
-    .into()
+    container(text::subtitle(cue_text(subtitles, active_cue)).align_x(Alignment::Center))
+        .center_x(Length::Fill)
+        .align_y(Alignment::Center)
+        .height(SUBTITLE_STRIP_HEIGHT)
+        .padding(Padding {
+            top: SPACE_XS,
+            bottom: SPACE_XS,
+            left: SPACE_M,
+            right: SPACE_M,
+        })
+        .clip(true)
+        .style(style::panel)
+        .into()
 }
 
-/// Controls-bar button that shows or hides the subtitle list in windowed mode.
-fn cue_list_button<'a>(shown: bool) -> Element<'a, Message> {
-    tooltip(
-        button(
-            container(
-                text("CC")
-                    .size(11)
-                    .color(if shown { theme::ACCENT } else { theme::TEXT }),
-            )
-            .center_x(Length::Fill)
-            .center_y(Length::Fill),
-        )
-        .on_press(Message::ToggleCueList)
-        .width(CONTROLS_HEIGHT)
-        .height(CONTROLS_HEIGHT)
-        .padding(0)
-        .style(theme::icon_button_style(true)),
-        text(if shown {
-            fl!("media-viewer-video-hide-subtitles")
-        } else {
-            fl!("media-viewer-video-show-subtitles")
-        }),
-        tooltip::Position::Top,
-    )
-    .into()
-}
-
-/// Controls-bar button that shows or hides the marker list, in fullscreen too.
-fn marker_list_button<'a>(shown: bool) -> Element<'a, Message> {
-    tooltip(
-        button(
-            container(
-                text("◆")
-                    .size(12)
-                    .color(if shown { theme::ACCENT } else { theme::TEXT }),
-            )
-            .center_x(Length::Fill)
-            .center_y(Length::Fill),
-        )
-        .on_press(Message::ToggleMarkerList)
-        .width(CONTROLS_HEIGHT)
-        .height(CONTROLS_HEIGHT)
-        .padding(0)
-        .style(theme::icon_button_style(true)),
-        text(fl!("media-viewer-video-markers-hint")),
-        tooltip::Position::Top,
-    )
-    .into()
-}
-
-/// `Subtitles` and `Markers` tabs over the side list, `active` lit.
-fn overlay_tabs<'a>(active: Overlay) -> Element<'a, Message> {
-    // Each tab leads with the icon of its button in the controls bar.
-    let tab = |icon: &'a str, label: String, overlay: Overlay| {
-        button(
-            row![text(icon).size(11), text(label).size(12)]
-                .spacing(6)
-                .align_y(Alignment::Center),
-        )
-        .on_press(Message::ShowOverlay(overlay))
-        .padding([3, 10])
-        .style(theme::overlay_tab_style(active == overlay))
-    };
-    row![
-        tab("CC", fl!("settings-subtitles"), Overlay::Subtitles),
-        tab("◆", fl!("media-viewer-video-tab-markers"), Overlay::Markers)
-    ]
-    .spacing(4)
-    .padding([6, 12])
-    .into()
-}
-
-/// A list laid over the picture on the right, with `tabs` above it, plus (fullscreen only)
-/// the current cue captioned over the lower part of the picture — windowed mode already
-/// shows it on the strip below. Without a list the caption alone is laid over the picture.
-/// Empty areas let clicks through to the video underneath (pause, double-click to toggle
-/// fullscreen).
-fn side_overlay<'a>(
-    current: &'a str,
-    tabs: Option<Element<'a, Message>>,
-    list: Option<Element<'a, Message>>,
-) -> Element<'a, Message> {
-    let caption: Element<'a, Message> = if current.is_empty() {
-        iced::widget::Space::new().into()
+/// How wide the side list is over a pane `pane_width` wide, and whether it covers the whole
+/// picture (a narrow pane): then it has its own close button.
+fn side_list_width(pane_width: f32) -> (f32, bool) {
+    if pane_width < SIDE_LIST_PARTIAL_FROM {
+        (pane_width, true)
     } else {
-        container(
-            text(current)
-                .size(FULLSCREEN_CUE_TEXT_SIZE)
-                .color(theme::TEXT)
-                .align_x(Alignment::Center),
+        (
+            (pane_width * LIST_SHARE_OF_PANE).min(SIDE_LIST_MAX_WIDTH),
+            false,
         )
-        .padding([8, 18])
-        .max_width(1100)
-        .style(theme::subtitle_caption_style)
-        .into()
+    }
+}
+
+/// What lies over the picture: the side list on the right when one was asked for, and
+/// (fullscreen only) the current cue captioned over the lower part of the picture the list
+/// leaves free. Empty areas let clicks through to the video (pause, double-click).
+fn side_overlay<'a>(
+    state: &'a VideoPlayerState,
+    markers: MarkersView<'a>,
+    is_fullscreen: bool,
+    pane_width: f32,
+    active_cue: Option<usize>,
+) -> Option<Element<'a, Message>> {
+    let subtitles = state.subtitles();
+    let caption = subtitles
+        .filter(|_| is_fullscreen)
+        .map_or("", |subs| cue_text(subs, active_cue));
+    let shown = if state.show_marker_list() {
+        Some(Overlay::Markers)
+    } else if state.show_cue_list() && subtitles.is_some() {
+        Some(Overlay::Subtitles)
+    } else {
+        None
     };
-    let caption_area = container(caption)
-        .width(Length::FillPortion(3))
-        .center_x(Length::FillPortion(3))
+    let caption_area = fullscreen_caption(caption);
+    let Some(shown) = shown else {
+        return (!caption.is_empty()).then(|| caption_area.width(Length::Fill).into());
+    };
+    let list: Element<'a, Message> = match (shown, subtitles) {
+        (Overlay::Subtitles, Some(subs)) => {
+            cue_list(subs, subs.last_started_index(state.display_position()))
+        }
+        _ => markers::view::view(markers.markers, markers.state, state.position_ms())
+            .map(Message::Markers),
+    };
+    let (width, covers) = side_list_width(pane_width);
+    let panel = container(
+        column![side_list_header(state, markers, shown, covers), list].height(Length::Fill),
+    )
+    .width(if covers {
+        Length::Fill
+    } else {
+        Length::Fixed(width)
+    })
+    .height(Length::Fill)
+    .style(style::overlay_list);
+    Some(if covers {
+        panel.into()
+    } else {
+        row![caption_area, panel]
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+    })
+}
+
+/// The fullscreen caption: a pill centred at the bottom of the area it is given.
+fn fullscreen_caption<'a>(caption: &'a str) -> container::Container<'a, Message> {
+    let pill: Element<'a, Message> = if caption.is_empty() {
+        space().into()
+    } else {
+        container(text::video_caption(caption).align_x(Alignment::Center))
+            .padding(Padding {
+                top: CAPTION_PADDING_Y,
+                bottom: CAPTION_PADDING_Y,
+                left: CAPTION_PADDING_X,
+                right: CAPTION_PADDING_X,
+            })
+            .max_width(CAPTION_MAX_WIDTH)
+            .style(style::caption_pill)
+            .into()
+    };
+    container(pill)
+        .width(Length::Fill)
+        .center_x(Length::Fill)
         .align_bottom(Length::Fill)
-        .padding([48, 24]);
-    let Some(list) = list else {
-        return caption_area.width(Length::Fill).into();
+        .padding(Padding {
+            bottom: CAPTION_LIFT,
+            left: SPACE_XL,
+            right: SPACE_XL,
+            ..Padding::ZERO
+        })
+}
+
+/// The side list's header: the two lists as tabs when the clip has both, otherwise the list's
+/// name; with `close` (the list covers the picture) a button that closes it.
+fn side_list_header<'a>(
+    state: &'a VideoPlayerState,
+    markers: MarkersView<'a>,
+    shown: Overlay,
+    close: bool,
+) -> Element<'a, Message> {
+    let subtitles = state.subtitles();
+    let count = |n: usize| (n > 0).then_some(n);
+    let title: Element<'a, Message> = match (subtitles, markers.markers) {
+        (Some(subs), Some(list)) => segmented([
+            Segment {
+                icon: Some(Icon::Captions),
+                label: fl!("settings-subtitles"),
+                count: count(subs.cues().len()),
+                selected: shown == Overlay::Subtitles,
+                on_press: Message::ShowOverlay(Overlay::Subtitles),
+            },
+            Segment {
+                icon: Some(Icon::MapPin),
+                label: fl!("media-viewer-video-tab-markers"),
+                count: count(list.len()),
+                selected: shown == Overlay::Markers,
+                on_press: Message::ShowOverlay(Overlay::Markers),
+            },
+        ])
+        .into(),
+        _ if shown == Overlay::Subtitles => text::title(fl!("settings-subtitles")).into(),
+        _ => text::title(fl!("media-viewer-video-tab-markers")).into(),
     };
-
-    let panel = container(column![].push(tabs).push(list).height(Length::Fill))
-        .width(Length::Fill)
-        .max_width(CUE_LIST_WIDTH)
-        .height(Length::Fill)
-        .style(theme::subtitle_list_style);
-    // Shares the width with the caption area so a narrow windowed pane is not covered
-    // whole; on a wide screen the list stops at its max width and stays flush right.
-    let panel = container(panel)
-        .align_right(Length::FillPortion(2))
-        .height(Length::Fill);
-
-    row![caption_area, panel]
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+    let toggle = match shown {
+        Overlay::Subtitles => Message::ToggleCueList,
+        _ => Message::ToggleMarkerList,
+    };
+    let close = close.then(|| {
+        IconButton::new(Icon::X)
+            .small()
+            .overlay()
+            .tip(
+                Tip::new(fl!("media-viewer-video-close-list")),
+                Position::Left,
+            )
+            .on_press(toggle)
+    });
+    container(
+        row![title, space::horizontal()]
+            .push(close)
+            .align_y(Alignment::Center),
+    )
+    .padding(Padding {
+        left: SPACE_S,
+        right: SPACE_S,
+        ..Padding::ZERO
+    })
+    .center_y(SIDE_LIST_HEADER_HEIGHT)
+    .into()
 }
 
 /// A scrollable list of every cue; the one last started is lit.
 fn cue_list<'a>(subtitles: &'a Subtitles, list_cue: Option<usize>) -> Element<'a, Message> {
     let rows = subtitles.cues().iter().enumerate().map(|(index, cue)| {
-        let is_active = list_cue == Some(index);
-        button(
-            column![
-                text(format_cue_time(cue.start))
-                    .size(11)
-                    .color(theme::TEXT_MUTED),
-                text(cue.text.as_str())
-                    .size(CUE_LIST_TEXT_SIZE)
-                    .color(if is_active {
-                        theme::TEXT
-                    } else {
-                        theme::TEXT_SOFT
-                    }),
-            ]
-            .spacing(2),
-        )
-        .on_press(Message::SeekToCue(index))
-        .width(Length::Fill)
-        .height(CUE_ROW_HEIGHT)
-        .clip(true)
-        .padding([6, 10])
-        .style(theme::cue_row_style(is_active))
-        .into()
+        let lit = list_cue == Some(index);
+        let cue_text = text::body(cue.text.as_str()).color(if lit { TEXT } else { TEXT_SECONDARY });
+        let body = column![text::mono(format_cue_time(cue.start)), cue_text].padding(Padding {
+            top: SPACE_TIGHT,
+            bottom: SPACE_TIGHT,
+            ..Padding::ZERO
+        });
+        let item = container(list::row_item(body, lit, OVERLAY_HOVER))
+            .height(CUE_ROW_HEIGHT)
+            .clip(true);
+        mouse_area(item)
+            .on_press(Message::SeekToCue(index))
+            .interaction(iced::mouse::Interaction::Pointer)
+            .into()
     });
-    scrollable(
+    scroll::vertical_with_id(
+        CUE_LIST_SCROLLABLE_ID,
         Column::with_children(rows)
-            .spacing(CUE_ROW_SPACING)
-            .padding([0, 12]),
+            .spacing(SPACE_XXS)
+            .padding(Padding {
+                left: SPACE_S,
+                ..Padding::ZERO
+            }),
     )
-    .id(iced::widget::Id::new(CUE_LIST_SCROLLABLE_ID))
-    .height(Length::Fill)
-    .style(theme::dark_scrollable_style)
     .into()
 }
 
@@ -457,5 +597,21 @@ fn format_cue_time(at: std::time::Duration) -> String {
         format!("{hours}:{minutes:02}:{seconds:02}")
     } else {
         format!("{minutes}:{seconds:02}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_wide_pane_gives_the_side_list_two_fifths_at_most_its_widest() {
+        assert_eq!(side_list_width(700.0), (280.0, false));
+        assert_eq!(side_list_width(1600.0), (SIDE_LIST_MAX_WIDTH, false));
+    }
+
+    #[test]
+    fn on_a_narrow_pane_the_side_list_covers_the_picture() {
+        assert_eq!(side_list_width(500.0), (500.0, true));
     }
 }

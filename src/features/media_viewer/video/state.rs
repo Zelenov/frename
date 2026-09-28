@@ -14,6 +14,7 @@ use super::view::{CUE_LIST_SCROLLABLE_ID, CUE_ROW_PITCH};
 use super::Message;
 use crate::features::markers;
 use crate::features::video_controls::{self, VideoControlsState};
+use crate::ui::tokens::SPINNER_TICK;
 use frename_core::{
     load_subtitles, AppDatabase, AppStateStore, FileTagger, Rotation, RotationError, Subtitles,
 };
@@ -104,6 +105,11 @@ pub struct VideoPlayerState {
     /// `Unload` arrived while a load was still in flight: `VideoUnloaded` is held back until
     /// every such load has landed (and, being stale, been dropped) — see `loads_in_flight`.
     unloading: bool,
+    /// **More** is open over the picture.
+    more_open: bool,
+    /// Steps of the spinner clock since the load started: turns the spinner, and after a while
+    /// says the file is slow to come.
+    loading_ticks: usize,
 }
 
 impl Default for VideoPlayerState {
@@ -132,6 +138,8 @@ impl Default for VideoPlayerState {
             load_generation: 0,
             loads_in_flight: 0,
             unloading: false,
+            more_open: false,
+            loading_ticks: 0,
         }
     }
 }
@@ -174,6 +182,7 @@ impl VideoPlayerState {
         // Unknown until the load reads it: a reopen after a turn or an undo may see another.
         self.rotation = None;
         self.loading = true;
+        self.loading_ticks = 0;
         self.load_failed = false;
         self.current_video = None;
         self.controls = VideoControlsState::with_volume(self.controls.volume());
@@ -518,6 +527,26 @@ impl VideoPlayerState {
                 self.autoplay = autoplay;
                 Task::none()
             }
+            Message::ToggleMore => {
+                self.more_open = !self.more_open;
+                Task::none()
+            }
+            Message::CloseMore => {
+                self.more_open = false;
+                Task::none()
+            }
+            Message::MorePicked(messages) => {
+                self.more_open = false;
+                messages
+                    .into_iter()
+                    .map(Task::done)
+                    .reduce(Task::chain)
+                    .unwrap_or_else(Task::none)
+            }
+            Message::LoadingTick => {
+                self.loading_ticks = self.loading_ticks.wrapping_add(1);
+                Task::none()
+            }
         }
     }
 
@@ -544,6 +573,24 @@ impl VideoPlayerState {
     /// Whether the marker list is open.
     pub fn show_marker_list(&self) -> bool {
         self.overlay == Overlay::Markers
+    }
+
+    /// Whether **More** is open.
+    pub fn more_open(&self) -> bool {
+        self.more_open
+    }
+
+    /// The file being loaded, by name, while it loads.
+    pub fn loading_name(&self) -> Option<String> {
+        self.loading
+            .then(|| self.current_path.as_ref()?.file_name())
+            .flatten()
+            .map(|name| name.to_string_lossy().into_owned())
+    }
+
+    /// Steps of the spinner clock since the load started.
+    pub fn loading_ticks(&self) -> usize {
+        self.loading_ticks
     }
 
     /// The note to show over the picture, if any.
@@ -668,7 +715,11 @@ impl VideoPlayerState {
     /// Subscriptions active while a video is loaded.
     pub fn subscription(&self) -> Subscription<Message> {
         if self.current_video.is_none() {
-            return Subscription::none();
+            return if self.loading {
+                time::every(SPINNER_TICK).map(|_| Message::LoadingTick)
+            } else {
+                Subscription::none()
+            };
         }
         // The tick exists only to advance the progress bar, so it is pointless while paused:
         // it used to force a full view rebuild 4x/second for as long as a video stayed open.

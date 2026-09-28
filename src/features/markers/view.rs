@@ -1,37 +1,55 @@
-//! The marker list: one row per marker, read-only like a subtitle cue, except the one row open
-//! for renaming. Every row has the same fixed height, open or not, so the list is scrolled to
-//! a row by arithmetic, as the subtitle list is.
+//! The marker list (design system §13.3.6): one row per marker, read-only like a subtitle cue,
+//! except the one row open for renaming. A row's height follows from its name's lines, so the
+//! list is scrolled to a row by arithmetic, as the subtitle list is.
 
 use frename_core::{format_marker_time, Marker, MarkerColor, AI_MARKER_COLOR, MARKER_SNAP_MS};
 use iced::widget::{
-    button, column, container, mouse_area, row, scrollable, stack, text, text_editor, tooltip,
-    Column, Space,
+    button, column, container, hover, mouse_area, row, space, stack, text_editor, Column,
 };
-use iced::{Alignment, Element, Length};
+use iced::{Alignment, Background, Border, Element, Length, Padding};
 
 use super::{MarkersState, Message};
-use crate::theme;
+use crate::ui::button::{self as ui_button};
+use crate::ui::icon_button::IconButton;
+use crate::ui::icons::{icon, Icon};
+use crate::ui::palette::marker_color;
+use crate::ui::style::{self, ButtonKind};
+use crate::ui::tokens::*;
+use crate::ui::tooltip::{self, Position, Tip};
+use crate::ui::{empty, list, scroll, text};
 
 pub const MARKER_LIST_SCROLLABLE_ID: &str = "marker_list";
 pub const MARKER_NAME_INPUT_ID: &str = "marker_name_input";
-/// A row with a one-line name: the first line and the name. A longer name wraps and makes
-/// its row taller.
-const ROW_HEIGHT: f32 = 62.0;
-const ROW_SPACING: f32 = 2.0;
-/// The name, shown or edited, in the same box: the field's text size, padding and height.
-const NAME_SIZE: f32 = 13.0;
-const NAME_PADDING: [f32; 2] = [3.0, 6.0];
-/// Height of one line of the name.
-const NAME_LINE_HEIGHT: f32 = 17.0;
-/// Room for the name's text in a row of the list, at its usual width (px).
-const NAME_TEXT_WIDTH: f32 = 290.0;
-/// A generous average width of a character of the name (px).
-const NAME_CHAR_WIDTH: f32 = 7.0;
+/// Room for a name's text in a row of the list at its widest: the list less its inset, the
+/// row's inset and the scroll gutter.
+const NAME_ROOM: f32 = SIDE_LIST_MAX_WIDTH - SPACE_S - SPACE_S - SPACE_S - SCROLL_GUTTER;
+/// A generous average advance of a character of the name.
+const NAME_CHAR_ADVANCE: f32 = 7.0;
+/// Inside a row: 6 px above and below, level with the list's other rows.
+const ROW_INSET: Padding = Padding {
+    top: SPACE_TIGHT,
+    bottom: SPACE_TIGHT,
+    left: 0.0,
+    right: 0.0,
+};
+/// The name field of the open row: a text field's inset.
+const FIELD_INSET: Padding = Padding {
+    top: CONTROL_PADDING_Y,
+    bottom: CONTROL_PADDING_Y,
+    left: SPACE_S,
+    right: SPACE_S,
+};
+
 /// How many lines the name of `marker` wraps to in the list, as an estimate: good enough to
 /// scroll a row into view.
 fn name_lines(marker: &Marker) -> usize {
-    let per_line = (NAME_TEXT_WIDTH / NAME_CHAR_WIDTH) as usize;
+    let per_line = (NAME_ROOM / NAME_CHAR_ADVANCE) as usize;
     marker.name.chars().count().div_ceil(per_line).max(1)
+}
+
+/// The height of `marker`'s row.
+fn row_height(marker: &Marker) -> f32 {
+    MARKER_ROW_HEIGHT + (name_lines(marker) - 1) as f32 * LINE_BODY
 }
 
 /// Distance from the top of the list to the top of row `index`, from the rows above it.
@@ -39,11 +57,9 @@ pub fn row_offset(markers: &[Marker], index: usize) -> f32 {
     markers
         .iter()
         .take(index)
-        .map(|m| ROW_HEIGHT + (name_lines(m) - 1) as f32 * NAME_LINE_HEIGHT + ROW_SPACING)
+        .map(|m| row_height(m) + SPACE_XXS)
         .sum()
 }
-const DOT_SIZE: f32 = 14.0;
-const ICON_SIZE: f32 = 22.0;
 
 /// How long after a point marker its label stays shown over the progress bar, as a subtitle
 /// line stays for its cue.
@@ -75,7 +91,7 @@ pub fn view<'a>(
     position_ms: u64,
 ) -> Element<'a, Message> {
     let Some(markers) = markers else {
-        return note(fl!("video-controls-cannot-hold-markers"));
+        return cannot_hold();
     };
     if markers.is_empty() {
         return empty_list();
@@ -85,37 +101,47 @@ pub fn view<'a>(
         .iter()
         .enumerate()
         .map(|(index, marker)| marker_row(marker, state, lit == Some(index)));
-    scrollable(
+    scroll::vertical_with_id(
+        MARKER_LIST_SCROLLABLE_ID,
         Column::with_children(rows)
-            .spacing(ROW_SPACING)
-            .padding([0, 12]),
+            .spacing(SPACE_XXS)
+            .padding(Padding {
+                left: SPACE_S,
+                ..Padding::ZERO
+            }),
     )
-    .id(iced::widget::Id::new(MARKER_LIST_SCROLLABLE_ID))
-    .height(Length::Fill)
-    .style(theme::dark_scrollable_style)
     .into()
 }
 
-fn note<'a>(message: String) -> Element<'a, Message> {
-    container(text(message).size(13).color(theme::TEXT_MUTED))
-        .padding([8, 16])
-        .width(Length::Fill)
-        .into()
-}
-
-/// An empty list: a note and a button that adds the first marker.
-fn empty_list<'a>() -> Element<'a, Message> {
-    column![
-        text(fl!("markers-empty")).size(13).color(theme::TEXT_MUTED),
-        button(text(fl!("markers-add")).size(13))
-            .on_press(Message::Add)
-            .padding([4, 10])
-            .style(theme::overlay_tab_style(false)),
+/// A file whose format has no place for markers: say so, and where Premiere reads them.
+fn cannot_hold<'a>() -> Element<'a, Message> {
+    row![
+        icon(Icon::CircleAlert, ICON_M, TEXT_SECONDARY),
+        column![
+            text::body(fl!("video-controls-cannot-hold-markers")),
+            text::secondary(fl!("markers-cannot-hold-hint")),
+        ],
     ]
-    .spacing(8)
-    .padding([8, 16])
-    .width(Length::Fill)
+    .spacing(SPACE_S)
+    .padding(SPACE_S)
     .into()
+}
+
+/// An empty list: a line and the button that adds the first marker.
+fn empty_list<'a>() -> Element<'a, Message> {
+    let add = ui_button::with_icon(
+        ButtonKind::Secondary,
+        Icon::MapPin,
+        fl!("markers-add"),
+        true,
+    )
+    .on_press(Message::Add);
+    let add = tooltip::tip(
+        add,
+        Tip::new(fl!("markers-add")).keys(&["F2"]),
+        Position::Bottom,
+    );
+    empty::small(fl!("markers-empty"), Some(add)).into()
 }
 
 /// `m:ss` or `m:ss–m:ss` (a ranged marker read from the file).
@@ -128,127 +154,161 @@ fn time_label(marker: &Marker) -> String {
     }
 }
 
-fn icon_button<'a>(icon: &'a str, tip: String, message: Option<Message>) -> Element<'a, Message> {
-    tooltip(
-        button(
-            container(text(icon).size(13))
-                .center_x(Length::Fill)
-                .center_y(Length::Fill),
-        )
-        .on_press_maybe(message)
-        .width(ICON_SIZE)
-        .height(ICON_SIZE)
-        .padding(0)
-        .style(theme::icon_button_style(true)),
-        text(tip).size(12),
-        tooltip::Position::Top,
-    )
-    .into()
+/// A color's name, the tooltip of its dot in the picker.
+fn color_name(color: MarkerColor) -> String {
+    match color {
+        MarkerColor::Green => fl!("markers-color-green"),
+        MarkerColor::Red => fl!("markers-color-red"),
+        MarkerColor::Orange => fl!("markers-color-orange"),
+        MarkerColor::Yellow => fl!("markers-color-yellow"),
+        MarkerColor::White => fl!("markers-color-white"),
+        MarkerColor::Blue => fl!("markers-color-blue"),
+        MarkerColor::Cyan => fl!("markers-color-cyan"),
+        MarkerColor::Lavender => fl!("markers-color-lavender"),
+        MarkerColor::Magenta => fl!("markers-color-magenta"),
+        MarkerColor::Other(_) => fl!("markers-color-other"),
+    }
 }
 
-fn dot<'a>(color: MarkerColor, selected: bool, message: Option<Message>) -> Element<'a, Message> {
-    button(Space::new().width(DOT_SIZE).height(DOT_SIZE))
+/// A round dot in a marker's color: ringed on hover, and when it is the one chosen (`ringed`).
+/// Without `message` it is not a button (a read-only marker).
+fn dot<'a>(color: MarkerColor, ringed: bool, message: Option<Message>) -> Element<'a, Message> {
+    let fill = marker_color(color);
+    let editable = message.is_some();
+    button(space().width(MARKER_DOT).height(MARKER_DOT))
         .on_press_maybe(message)
-        .width(DOT_SIZE)
-        .height(DOT_SIZE)
+        .width(MARKER_DOT)
+        .height(MARKER_DOT)
         .padding(0)
-        .style(theme::marker_dot_style(
-            theme::marker_color(color),
-            selected,
+        .style(move |_theme, status| {
+            let hovered = editable && matches!(status, button::Status::Hovered);
+            let ring = if ringed {
+                TEXT
+            } else if hovered {
+                TEXT_SECONDARY
+            } else {
+                iced::Color::TRANSPARENT
+            };
+            button::Style {
+                background: Some(Background::Color(fill)),
+                text_color: TEXT,
+                border: Border {
+                    radius: RADIUS_FULL.into(),
+                    width: RING,
+                    color: ring,
+                },
+                ..button::Style::default()
+            }
+        })
+        .into()
+}
+
+/// A 24-px action over the list: shown on hover, on the lit row and on the open row.
+fn row_action<'a>(glyph: Icon, tip: Tip, message: Message) -> Element<'a, Message> {
+    IconButton::new(glyph)
+        .small()
+        .overlay()
+        .tip(tip, Position::Left)
+        .on_press(message)
+        .into()
+}
+
+/// The color picker that replaces a row's first line: the editor's colors, then, set apart, the
+/// AI's. White is what marks a marker as the AI's, so it is picked as "AI", not as a color.
+fn color_picker<'a>(marker: &Marker, guid: &str) -> Element<'a, Message> {
+    let pick = |color: MarkerColor| {
+        dot(
+            color,
+            color == marker.color,
+            Some(Message::SetColor(guid.to_string(), color)),
+        )
+    };
+    let colors = MarkerColor::ALL
+        .into_iter()
+        .filter(|&color| color != AI_MARKER_COLOR)
+        .map(|color| tooltip::tip_text(pick(color), color_name(color), Position::Top));
+    let ai = tooltip::tip_text(
+        row![pick(AI_MARKER_COLOR), text::caption("AI")]
+            .spacing(SPACE_XS)
+            .align_y(Alignment::Center),
+        fl!("markers-ai-hint"),
+        Position::Top,
+    );
+    let divider = container(space())
+        .width(LINE)
+        .height(MARKER_DOT)
+        .style(style::divider);
+    row(colors)
+        .push(divider)
+        .push(ai)
+        .push(space::horizontal())
+        .push(row_action(
+            Icon::X,
+            Tip::new(fl!("markers-keep-color")),
+            Message::ToggleColorPicker(guid.to_string()),
         ))
+        .spacing(SPACE_XS)
+        .align_y(Alignment::Center)
+        .height(ICON_BUTTON_SMALL)
         .into()
 }
 
 fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Element<'a, Message> {
     let guid = marker.guid.as_deref();
     let open = state.edit().filter(|edit| guid == Some(edit.guid.as_str()));
-    let time = button(text(time_label(marker)).size(11).color(theme::TEXT_MUTED))
+    let time = button(text::mono(time_label(marker)))
         .on_press(Message::JumpTo(marker.start_ms))
-        .padding([2, 4])
-        .style(theme::icon_button_style(true));
+        .padding(Padding {
+            left: SPACE_XS,
+            right: SPACE_XS,
+            ..Padding::ZERO
+        })
+        .style(style::button(ButtonKind::OverlayIcon));
 
-    let first_line: Element<'a, Message> = match guid {
-        Some(guid) if state.color_picker() == Some(guid) => {
-            // The editor's colors, then, set apart, the AI's: White is what marks a marker as
-            // the AI's, so it is picked as "AI", not as a color.
-            let pick = |color: MarkerColor| {
-                dot(
-                    color,
-                    color == marker.color,
-                    Some(Message::SetColor(guid.to_string(), color)),
-                )
-            };
-            let colors = MarkerColor::ALL
-                .into_iter()
-                .filter(|&color| color != AI_MARKER_COLOR)
-                .map(pick);
-            let ai = tooltip(
-                button(
-                    row![
-                        Space::new().width(DOT_SIZE).height(DOT_SIZE),
-                        text("AI").size(11).color(theme::TEXT_SOFT)
-                    ]
-                    .spacing(4)
-                    .align_y(Alignment::Center),
-                )
-                .on_press(Message::SetColor(guid.to_string(), AI_MARKER_COLOR))
-                .padding(0)
-                .style(theme::icon_button_style(true)),
-                text(fl!("markers-ai-hint")).size(12),
-                tooltip::Position::Top,
-            );
-            let ai = stack![ai, container(pick(AI_MARKER_COLOR)).center_y(Length::Fill)];
-            row(colors)
-                .push(
-                    container(Space::new().width(1).height(DOT_SIZE))
-                        .style(|_| container::Style::default().background(theme::TEXT_MUTED)),
-                )
-                .push(ai)
-                .push(Space::new().width(Length::Fill))
-                .push(icon_button(
-                    "✕",
-                    fl!("markers-keep-color"),
-                    Some(Message::ToggleColorPicker(guid.to_string())),
-                ))
-                .spacing(4)
-                .align_y(Alignment::Center)
-                .into()
-        }
+    // The first line without its actions, and the actions, which show only on hover unless the
+    // row is lit or open.
+    let (first_line, actions): (Element<'a, Message>, Option<Element<'a, Message>>) = match guid {
+        Some(guid) if state.color_picker() == Some(guid) => (color_picker(marker, guid), None),
         Some(guid) => {
-            // A click on the row opens it for renaming: no ✎. The open row closes with ✓.
-            let edit: Option<Element<'a, Message>> = open
-                .is_some()
-                .then(|| icon_button("✓", fl!("markers-done-enter"), Some(Message::Close)));
-            row![
+            let done = open.is_some().then(|| {
+                row_action(
+                    Icon::Check,
+                    Tip::new(fl!("markers-done")).keys(&["Enter"]),
+                    Message::Close,
+                )
+            });
+            let delete = row_action(
+                Icon::X,
+                Tip::new(fl!("markers-delete")),
+                Message::Delete(guid.to_string()),
+            );
+            let actions = row![].push(done).push(delete).align_y(Alignment::Center);
+            let line = row![
                 dot(
                     marker.color,
                     false,
                     Some(Message::ToggleColorPicker(guid.to_string()))
                 ),
                 time,
-                Space::new().width(Length::Fill),
-                edit,
-                icon_button(
-                    "✕",
-                    fl!("markers-delete"),
-                    Some(Message::Delete(guid.to_string()))
-                ),
             ]
-            .spacing(4)
+            .spacing(SPACE_S)
             .align_y(Alignment::Center)
-            .into()
+            .height(ICON_BUTTON_SMALL);
+            (line.into(), Some(actions.into()))
         }
-        None => row![
-            dot(marker.color, false, None),
-            time,
-            Space::new().width(Length::Fill),
-            text(fl!("markers-read-only"))
-                .size(11)
-                .color(theme::TEXT_MUTED),
-        ]
-        .spacing(4)
-        .align_y(Alignment::Center)
-        .into(),
+        None => {
+            let line = row![
+                dot(marker.color, false, None),
+                time,
+                space::horizontal(),
+                icon(Icon::Lock, ICON_S, TEXT_SECONDARY),
+                text::caption(fl!("markers-read-only")),
+            ]
+            .spacing(SPACE_S)
+            .align_y(Alignment::Center)
+            .height(ICON_BUTTON_SMALL);
+            (line.into(), None)
+        }
     };
 
     let name: Element<'a, Message> = match open {
@@ -267,39 +327,48 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
                     text_editor::Binding::from_key_press(press)
                 }
             })
-            .size(NAME_SIZE)
-            .padding(NAME_PADDING)
+            .size(TEXT_BODY)
+            .font(FONT)
+            .padding(FIELD_INSET)
+            .style(style::text_editor)
             .into(),
-        None => container(
-            text(if marker.name.is_empty() {
-                "—"
-            } else {
-                marker.name.as_str()
-            })
-            .size(NAME_SIZE)
-            .color(if lit { theme::TEXT } else { theme::TEXT_SOFT }),
-        )
-        .padding(NAME_PADDING)
-        .into(),
+        None if marker.name.is_empty() => text::body("—").color(TEXT_SECONDARY).into(),
+        None => text::body(marker.name.as_str()).into(),
     };
-    let body = column![first_line, name].spacing(4);
-    let row_box = container(body)
-        .width(Length::Fill)
-        .height(Length::Shrink)
-        .padding([6, 10])
-        .style(move |theme| {
-            let mut style = container::Style::default();
-            let button_style = theme::cue_row_style(lit)(theme, button::Status::Active);
-            style.background = button_style.background;
-            style.border = button_style.border;
-            style
-        });
-    // A click on the row (not on one of its buttons) opens it for editing.
-    match guid.filter(|_| open.is_none()) {
-        Some(guid) => mouse_area(row_box)
+    let body = column![first_line, name]
+        .spacing(SPACE_XXS)
+        .padding(ROW_INSET);
+    let height = if open.is_some() {
+        row_height(marker) + 2.0 * CONTROL_PADDING_Y
+    } else {
+        row_height(marker)
+    };
+    let item = container(list::row_item(body, lit || open.is_some(), OVERLAY_HOVER)).height(height);
+
+    // The actions sit at the right end of the first line, over the row.
+    let item: Element<'a, Message> = match actions {
+        Some(actions) => {
+            let place = container(actions)
+                .padding(Padding {
+                    top: SPACE_TIGHT,
+                    right: SPACE_S,
+                    ..Padding::ZERO
+                })
+                .align_right(Length::Fill);
+            if lit || open.is_some() {
+                stack![item, place].into()
+            } else {
+                hover(item, place)
+            }
+        }
+        None => item.into(),
+    };
+    // A click on the row (not on one of its buttons) opens it for renaming.
+    match guid.filter(|_| open.is_none() && state.color_picker().is_none()) {
+        Some(guid) => mouse_area(item)
             .on_press(Message::Open(guid.to_string()))
             .into(),
-        None => row_box.into(),
+        None => item,
     }
 }
 
@@ -343,5 +412,16 @@ mod tests {
         assert_eq!(time_label(&marker), "0:41");
         marker.duration_ms = 6_000;
         assert_eq!(time_label(&marker), "0:41–0:47");
+    }
+
+    #[test]
+    fn a_long_name_makes_its_row_taller_and_moves_the_rows_below() {
+        let short = Marker::new(1_000);
+        let mut long = Marker::new(2_000);
+        long.name = "x".repeat(200);
+        assert_eq!(row_height(&short), MARKER_ROW_HEIGHT);
+        assert!(row_height(&long) > MARKER_ROW_HEIGHT + LINE_BODY);
+        let markers = [long.clone(), short];
+        assert_eq!(row_offset(&markers, 1), row_height(&long) + SPACE_XXS);
     }
 }

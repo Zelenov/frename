@@ -14,6 +14,7 @@ pub mod icons;
 pub mod layout;
 pub mod legacy;
 pub mod list;
+pub mod menu;
 pub mod palette;
 pub mod scroll;
 pub mod segmented;
