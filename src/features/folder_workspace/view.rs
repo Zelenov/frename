@@ -6,9 +6,10 @@
 use iced::widget::{column, container, mouse_area, row, stack, text};
 use iced::{Element, Length};
 
-use crate::features::{batch, file_workspace, folder, folder_controls, media_viewer};
+use crate::features::{batch, file_menu, file_workspace, folder, folder_controls, media_viewer};
 use crate::tag_colors::TagPalette;
 use crate::theme;
+use crate::widgets::right_press_reporter::RightPressReporter;
 use crate::widgets::splitter::{Splitter, HIT_WIDTH};
 
 use super::{FolderWorkspace, Message};
@@ -161,8 +162,16 @@ pub fn view(
         iced::widget::Space::new().into()
     };
 
-    stack![normal_layout, overlay]
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+    // The file menu over everything, once a file is right-clicked (nothing otherwise).
+    let file_menu = file_menu::view::view(state.file_menu()).map(Message::FileMenu);
+
+    // The right button's position is taken here, over the whole window: a row inside the
+    // scrolled file list does not know where it is on screen.
+    RightPressReporter::new(
+        stack![normal_layout, overlay, file_menu]
+            .width(Length::Fill)
+            .height(Length::Fill),
+        |position| Message::FileMenu(file_menu::Message::RightPressed(position)),
+    )
+    .into()
 }

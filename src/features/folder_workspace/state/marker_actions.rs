@@ -373,8 +373,13 @@ impl FolderWorkspace {
 
     /// Show a short note over the video's picture.
     pub(super) fn notice(text: &str) -> Task<Message> {
-        Task::done(Message::MediaViewer(media_viewer::Message::Video(
-            video::Message::ShowNotice(text.to_string()),
+        Task::done(Self::notice_message(text))
+    }
+
+    /// The message that shows a short note over the video's picture, for a task's outcome.
+    pub(super) fn notice_message(text: &str) -> Message {
+        Message::MediaViewer(media_viewer::Message::Video(video::Message::ShowNotice(
+            text.to_string(),
         )))
     }
 }

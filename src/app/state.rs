@@ -10,7 +10,7 @@
 use iced::{event, keyboard, window, Element, Subscription, Task};
 
 use crate::features::{
-    batch, drag_drop, drag_out, folder, folder_workspace, media_viewer,
+    batch, drag_drop, drag_out, file_menu, folder, folder_workspace, media_viewer,
     media_viewer::video as media_viewer_video, settings, tag_panel, updates,
 };
 use crate::tag_colors::TagPalette;
@@ -91,6 +91,21 @@ fn main_window_event(
         }) => Some(Message::FolderWorkspace(
             folder_workspace::Message::ToggleMediaFullscreen,
         )),
+        // F11 shows the open file in Explorer, Shift+F11 copies its path, Ctrl+F11 its name:
+        // always, like the other F-keys. A held key acts once.
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key,
+            modifiers,
+            repeat,
+            ..
+        }) if file_menu::FileAction::from_key(&key, modifiers).is_some() => {
+            if repeat {
+                return Some(Message::Noop);
+            }
+            file_menu::FileAction::from_key(&key, modifiers).map(|action| {
+                Message::FolderWorkspace(folder_workspace::Message::FileAction(action))
+            })
+        }
         // [ / ] always set segment IN/OUT (even when search bar has focus).
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
             key: keyboard::Key::Character(c),

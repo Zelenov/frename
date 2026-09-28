@@ -1637,6 +1637,7 @@ dependencies = [
  "windows-sys 0.61.2",
  "winreg",
  "winres",
+ "zbus 5.19.0",
 ]
 
 [[package]]

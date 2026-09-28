@@ -315,6 +315,16 @@ folder-rename-error-exists = A file with this name exists
 folder-markers-not-saved = Markers not saved: the file is read-only or in use (close it in Premiere, then open the file and leave it again)
 drag-out-not-saved = Not dragged: can't save the file (read-only, or open in Premiere)
 
+## File menu (right-click on a file, or F11 / Shift+F11 / Ctrl+F11)
+
+file-menu-show-in-explorer = Show in Explorer
+file-menu-show-in-file-manager = Show in file manager
+file-menu-copy-path = Copy full path
+file-menu-copy-name = Copy file name
+file-menu-copied = Copied
+file-menu-not-copied = Not copied: the clipboard is not available
+file-menu-not-shown = Could not open the file manager
+
 ## Controls bar under the file list
 
 folder-controls-filter = Filter
