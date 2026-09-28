@@ -7,7 +7,7 @@ use iced::widget::{column, container, mouse_area, row, space, text::Wrapping, Id
 use iced::{mouse, Alignment, Element, Length, Padding};
 
 use crate::features::batch::{BatchState, ItemStatus};
-use crate::ui::badge::{badge, BadgeKind};
+
 use crate::ui::icons::{icon, spinner, Icon};
 use crate::ui::tokens::*;
 use crate::ui::tooltip::{self, Position};
@@ -69,24 +69,21 @@ pub fn view<'a>(
             .align_y(Alignment::Center)
             .into(),
         None => {
+            let marker_count = snapshot.marker_count();
+            let not_saved = props.markers_not_saved.contains_key(&file.id());
             let name = widgets::file_name_display::view(
                 snapshot,
                 props.tag_color_mapping,
                 props.tag_palette,
+                name_width(props.width, lead_width, marker_count, not_saved),
             );
-            let marker_count = snapshot.marker_count();
             let name_line = row![
                 lead,
                 // A long name is cut at the row's end: the marker count and the warning stay.
                 container(name).width(Length::Fill).clip(true),
             ]
             .push((marker_count > 0).then(|| marker_badge(marker_count)))
-            .push(
-                props
-                    .markers_not_saved
-                    .contains_key(&file.id())
-                    .then(not_saved_mark),
-            )
+            .push(not_saved.then(not_saved_mark))
             .spacing(SPACE_XS)
             .align_y(Alignment::Center);
             // Indented like the name, so the comment starts under it.
@@ -115,7 +112,7 @@ pub fn view<'a>(
             .style(style::selectable(state.selected))
             .into()
     } else {
-        let item = list::row_item(body, state.selected, HOVER);
+        let item = list::row_item(body, state.selected, HOVER, Length::Fill);
         match (rename.is_some(), batch.is_some()) {
             // The editor takes the clicks while renaming.
             (true, _) => item,
@@ -138,13 +135,17 @@ pub fn view<'a>(
     tooltip::tip_text(item, snapshot.file_name(), Position::Bottom)
 }
 
-/// The status column: `SRT` when a subtitle file is next to the video; the lock when the job
+/// The status column: `captions` when a subtitle file is next to the video; the lock when the job
 /// closed this, the open file.
 fn status_cell<'a>(has_subtitles: bool, closed_by_job: bool) -> Element<'a, Message> {
     let content: Option<Element<'a, Message>> = if closed_by_job {
         Some(icon(Icon::Lock, ICON_S, TEXT_SECONDARY).into())
     } else if has_subtitles {
-        Some(badge(BadgeKind::Neutral, "SRT"))
+        Some(tooltip::tip_text(
+            icon(Icon::Captions, ICON_MARK, TEXT_SECONDARY),
+            fl!("folder-has-subtitles"),
+            Position::Bottom,
+        ))
     } else {
         None
     };
@@ -242,6 +243,18 @@ fn check_cell<'a>(
 }
 
 /// The marker count at the end of the name line.
+/// The room the name line leaves for the name in a list `list_width` px wide: the columns before
+/// it, the row's inset, the scrollbar's gutter and the marks after it go first.
+fn name_width(list_width: f32, lead_width: f32, marker_count: usize, not_saved: bool) -> f32 {
+    let marker = if marker_count > 0 {
+        SPACE_XS + ICON_S + SPACE_XXS + CAPTION_CHAR_WIDTH * marker_count.to_string().len() as f32
+    } else {
+        0.0
+    };
+    let warning = if not_saved { SPACE_XS + ICON_MARK } else { 0.0 };
+    list_width - lead_width - SPACE_XS - 2.0 * SPACE_S - SCROLL_GUTTER - marker - warning
+}
+
 fn marker_badge<'a>(count: usize) -> Element<'a, Message> {
     row![
         icon(Icon::MapPin, ICON_S, TEXT_SECONDARY),

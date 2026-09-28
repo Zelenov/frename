@@ -9,10 +9,20 @@
   - Tags: a checked tag's name is bold; stars are black so they show on every chip color. The columns no longer jump while you search. The order strip says in words what reordering does.
   - Batch actions: every action has an icon, and the paid ones show who bills them. Each page says what it changes. Run names what it will do ("Move 14 comments"), and when it is off, the reason is shown next to it. A finished job shows its outcome once, the counts as figures, and the files not done as a table.
   - Empty screens say what is missing and offer the button that fixes it, instead of showing a lone symbol.
+  - The file list's filter is a button with a menu: tick several filters, **Show all** clears them. Tags that do not fit a row become "+2" instead of being cut at the edge, and long names end in "…".
+  - Tags not yet in the folder's tags are listed first, under a caption of their own, then the folder's tags.
+  - The in/out span is a band above the timeline, where the played part no longer hides it, and a line at the top of the marker list.
+  - Subtitles in the side list take only the height their text needs.
+  - Settings → Subtitles: the cue length comes before the list of languages.
 - The main window can no longer be made smaller than 900 × 560.
+- Picking another batch action after a job finished now opens it (it used to keep showing the result).
+- A double-click to rename a clip no longer loads its video twice.
 - Pasting tags onto a clip no longer wipes its comment.
 - A rename that would give a clip the same name as another one (or its comment, subtitle or transcript) is refused instead of replacing it, with a note that it was not saved.
 - Leaving a clip and moving to the next one before its video has finished loading no longer risks the tag you just set failing to reach the file.
+
+## Removed
+- The batch action "Move in/out points out of file names", which only existed for names written by old versions.
 
 # 0.80
 ## Changed

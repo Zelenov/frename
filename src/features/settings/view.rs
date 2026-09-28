@@ -330,15 +330,6 @@ fn subtitles(state: &SettingsState) -> Element<'_, Message> {
                 key,
             ),
             layout::setting_row(
-                fl!("settings-subtitles-languages-label"),
-                layout::aligned(
-                    [grid.into()]
-                        .into_iter()
-                        .chain(status.map(|s| text::secondary(s).into()))
-                        .chain([text::secondary(hint).into()]),
-                ),
-            ),
-            layout::setting_row(
                 fl!("settings-subtitles-cue-length-label"),
                 layout::aligned([
                     form::radio_option(
@@ -356,6 +347,15 @@ fn subtitles(state: &SettingsState) -> Element<'_, Message> {
                         Message::SetSubtitleCueLength,
                     ),
                 ]),
+            ),
+            layout::setting_row(
+                fl!("settings-subtitles-languages-label"),
+                layout::aligned(
+                    [grid.into()]
+                        .into_iter()
+                        .chain(status.map(|s| text::secondary(s).into()))
+                        .chain([text::secondary(hint).into()]),
+                ),
             ),
         ],
     )

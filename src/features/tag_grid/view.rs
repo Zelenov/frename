@@ -1,12 +1,13 @@
 //! UI for the tag grid (design system §13.5.2): the folder's tags in their order, left to right,
 //! top to bottom, in columns as wide as the widest chip; the cursor is the tag the keys act on.
 
-use iced::widget::{column, container, row, stack, Column};
+use iced::widget::{column, container, row, space, stack, Column};
 use iced::{Alignment, Element, Length};
 
 use frename_core::{File, StoredTagStore, TagList};
 
 use super::cell;
+use super::groups::Shape;
 use super::layout::{self, Columns};
 use crate::features::tag_panel::{
     Message, TagPanelState, GRID_CELL_HEIGHT, GRID_GAP, GRID_ROW_STRIDE, TAG_LIST_SCROLLABLE_ID,
@@ -36,6 +37,33 @@ pub fn grid_columns<S: StoredTagStore + Clone>(
         },
         |width| layout::columns_for(tag_list, width),
     )
+}
+
+/// The cells in their groups (§13.5.2): the unsaved tags under their caption, then the folder's
+/// tags under theirs, `GRID_GROUP_GAP` apart. With no unsaved tags, one group and no caption.
+/// Where each tag lands is [`Shape`]'s to say; this draws it the same way.
+fn groups<'a>(
+    shape: Shape,
+    cells: &mut Vec<Element<'a, Message>>,
+    columns: Columns,
+) -> Column<'a, Message> {
+    let mut remaining = std::mem::take(cells).into_iter();
+    let mut grid = Column::new();
+    for (i, (start, len)) in shape.groups().enumerate() {
+        if i > 0 {
+            grid = grid.push(space().height(GRID_GROUP_GAP));
+        }
+        if shape.captioned() {
+            let caption = if start == 0 {
+                fl!("tag-grid-group-unsaved")
+            } else {
+                fl!("tag-grid-group-folder")
+            };
+            grid = grid.push(container(text::caption(caption)).height(GRID_CAPTION_HEIGHT));
+        }
+        grid = grid.push(rows(remaining.by_ref().take(len), columns));
+    }
+    grid
 }
 
 /// `cells` in rows of `columns`, `GRID_GAP` apart; cells never stretch.
@@ -75,17 +103,20 @@ where
 
     let columns = grid_columns(state, tag_list);
     let cursor = state.selected_tag_id();
-    let cells = ids.iter().filter_map(|&id| {
-        let tag = tag_list.get_tag(id)?;
-        let color = tag_palette.color(tag.color_index());
-        Some(cell::cell(tag, color, cursor == Some(id), columns))
-    });
-    let grid = scroll::vertical_with_id(TAG_LIST_SCROLLABLE_ID, rows(cells, columns)).on_scroll(
-        |viewport| Message::TagListScrolled {
+    let shape = Shape::of(tag_list, columns.count as usize);
+    let mut cells: Vec<Element<'a, Message>> = ids
+        .iter()
+        .filter_map(|&id| {
+            let tag = tag_list.get_tag(id)?;
+            let color = tag_palette.color(tag.color_index());
+            Some(cell::cell(tag, color, cursor == Some(id), columns))
+        })
+        .collect();
+    let grid = scroll::vertical_with_id(TAG_LIST_SCROLLABLE_ID, groups(shape, &mut cells, columns))
+        .on_scroll(|viewport| Message::TagListScrolled {
             scroll_y: viewport.absolute_offset().y,
             viewport_height: viewport.bounds().height,
-        },
-    );
+        });
     let with_bounds = stack![
         BoundsReporter::new(move |bounds| Message::PanelBounds {
             bounds,

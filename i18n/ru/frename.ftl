@@ -200,11 +200,6 @@ batch-run-move-in-out = Перенести точки входа и выхода
     [few] { $count } файла
    *[many] { $count } файлов
 }
-batch-run-in-out-from-names = Убрать точки входа и выхода из имён: { $count ->
-    [one] { $count } файл
-    [few] { $count } файла
-   *[many] { $count } файлов
-}
 batch-run-convert = Преобразовать: { $count ->
     [one] { $count } файл
     [few] { $count } файла
@@ -244,7 +239,6 @@ batch-change-comments = Пишет в комментарии
 batch-change-subtitles = Пишет файлы субтитров рядом с видео
 batch-change-records = Меняет только записи самого frename
 batch-option-direction = Направление
-batch-option-goes-to = Куда
 batch-option-language = Язык
 batch-option-described = Уже описанные
 batch-option-subtitled = С субтитрами
@@ -293,16 +287,6 @@ batch-action-move-in-out-hint = Переносит точки входа и вы
 batch-action-move-in-out-into-videos = Из комментариев в видео (маркер Adobe XMP)
 batch-action-move-in-out-into-comments = Из видео (маркер XMP) в комментарии
 
-batch-action-in-out-from-names = Убрать точки входа и выхода из имён файлов
-batch-action-in-out-from-names-hint = Прежние версии могли хранить точки входа и выхода в имени файла (clip.in_00_01_05.mp4). Действие убирает их из имени каждого отмеченного файла и сохраняет туда, где точки входа и выхода хранятся теперь. Если у файла точки уже сохранены, остаются они; такой файл попадёт в отчёт.
-batch-action-in-out-from-names-status-comment = Куда пойдут: в комментарий
-batch-action-in-out-from-names-status-video = Куда пойдут: внутрь видео (XMP); для mkv, webm и других форматов без XMP — в комментарий
-batch-action-in-out-from-names-kept = оставлены сохранённые { $stored }, из имени убраны { $name }
-batch-action-in-out-from-names-not-renamed = не удалось переименовать (подробности в журнале)
-batch-action-in-out-from-names-empty = оставлен как есть: имя стало бы пустым
-batch-action-in-out-from-names-taken = оставлен как есть: { $name } уже существует
-batch-in-out-from-names-listed = Файлы с ошибкой или с оставленными сохранёнными точками:
-
 batch-action-markers-comment = Маркеры ⇄ комментарий
 batch-action-markers-comment-to-markers = Строки комментария с временем в маркеры
 batch-action-markers-to-comment = Маркеры в комментарий (копия: маркеры остаются)
@@ -326,7 +310,7 @@ batch-action-describe-ai = Описать с помощью AI
 batch-action-describe-ai-run = Описать { $videos } · около { $dollars }
 batch-action-describe-ai-estimating = Оценка… { $known } / { $total }
 batch-action-describe-ai-none = Нет видео для описания.
-batch-action-describe-ai-hint = Займёт примерно { $duration }. Папка заблокирована до конца. Отмена сохраняет уже описанные видео; повторный запуск пропускает их.
+batch-action-describe-ai-hint = Папка заблокирована до конца. Отмена сохраняет уже описанные видео; повторный запуск пропускает их.
 batch-action-describe-ai-no-subtitles = Без субтитров (описана только картинка): { $videos }.
 batch-action-describe-ai-redo = Переописать видео, у которых уже есть описание от AI
 batch-action-describe-ai-hint-panel = Описывает происходящее в каждом отмеченном видео с привязкой ко времени: краткое содержание и отрезки по времени добавляются в описание от AI в его комментарии; ваш собственный текст сохраняется. Кадры и субтитры отправляются в Anthropic.
@@ -439,6 +423,8 @@ batch-subtitles-usd-under = меньше $0.01
 batch-subtitles-usd-about = примерно ${ $amount }
 
 ## File list
+folder-has-subtitles = Есть субтитры
+folder-filter-tip = Показать только…
 
 folder-search-placeholder = Найти файл
 folder-search-clear = Очистить
@@ -475,8 +461,6 @@ folder-window-open = Открыть папку…
 
 ## Controls bar under the file list
 
-folder-controls-filter = Фильтр
-folder-controls-filter-active = Фильтр ({ $count })
 folder-controls-filter-untagged = Без тегов
 folder-controls-filter-subtitles = С субтитрами
 folder-controls-filter-comments = С комментарием
@@ -539,6 +523,7 @@ media-viewer-video-fullscreen = Во весь экран
 media-viewer-video-close-list = Закрыть список
 
 ## Markers list
+markers-in-out = Точки входа и выхода
 
 markers-empty = Маркеров пока нет
 markers-add = Добавить маркер
@@ -578,6 +563,8 @@ tag-grid-create = Создать «{ $tag }»
 tag-grid-no-file = Откройте клип, чтобы ставить теги
 tag-grid-no-tags = Тегов пока нет
 tag-grid-no-tags-hint = Наберите название и нажмите Enter, чтобы создать первый.
+tag-grid-group-unsaved = Нет в тегах папки
+tag-grid-group-folder = Теги папки
 tag-grid-more = ещё { $count }
 
 ## Order strip

@@ -53,7 +53,6 @@ macro_rules! icons {
 icons! {
     ArrowDown => "arrow-down.svg",
     ArrowUp => "arrow-up.svg",
-    Brackets => "brackets.svg",
     Camera => "camera.svg",
     Captions => "captions.svg",
     Check => "check.svg",

@@ -5,8 +5,7 @@
 //! as an Adobe clip marker or in the comment as one line (see [`in_out_line`]), wherever the
 //! comment is. The user picks each with [`CommentStorage`] and [`InOutStorage`]. A file that
 //! cannot hold XMP keeps both in the other home, so switching storage never loses anything.
-//! File names never hold in/out points; the batch action that moves them out of names written
-//! by older versions is [`crate::FileTagger::move_in_out_out_of_name`].
+//! File names never hold in/out points.
 
 mod bmff;
 pub(crate) mod cache;
@@ -25,7 +24,7 @@ use std::sync::RwLock;
 use crate::markers::Marker;
 use crate::tags::FileSnapshot;
 
-pub(crate) use conversion::{clear_moved_xmp, FileConversion, Inspection};
+pub(crate) use conversion::{clear_moved_xmp, Inspection};
 pub use conversion::{MetadataMove, MoveOutcome};
 pub use in_out_line::format_in_out_range;
 pub use rotation::{Rotation, RotationError};
@@ -309,12 +308,6 @@ fn take_in_out_line(snapshot: &mut FileSnapshot) -> bool {
 #[cfg(test)]
 pub(crate) fn xmp_comment(path: &Path) -> String {
     xmp::read(path).comment
-}
-
-/// The in/out marker in the file's XMP.
-#[cfg(test)]
-pub(crate) fn xmp_segment(path: &Path) -> Segment {
-    xmp::read(path).segment
 }
 
 /// The comment as it is stored: the snapshot's comment, with the in/out line as the last line

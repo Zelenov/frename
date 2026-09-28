@@ -89,6 +89,48 @@ pub fn view<'a>(
     markers: Option<&'a [Marker]>,
     state: &'a MarkersState,
     position_ms: u64,
+    in_out: Option<(u64, u64)>,
+) -> Element<'a, Message> {
+    let list = marker_list(markers, state, position_ms);
+    match in_out {
+        Some(span) => column![in_out_line(span), list].into(),
+        None => list,
+    }
+}
+
+/// The in/out points, above the markers: not a marker (it has no name to change and is set
+/// with `[` `]`), but a span of the clip like one. A click jumps to the in point.
+fn in_out_line<'a>((start, end): (u64, u64)) -> Element<'a, Message> {
+    let times = format!("{}–{}", format_marker_time(start), format_marker_time(end));
+    let content = row![
+        container(space())
+            .width(MARKER_DOT)
+            .height(ICON_S)
+            .style(style::fill(VIDEO_SEGMENT_EDGE)),
+        text::mono(times),
+        text::secondary(fl!("markers-in-out")),
+    ]
+    .spacing(SPACE_S)
+    .align_y(Alignment::Center);
+    let item = list::row_item(content, false, OVERLAY_HOVER, Length::Fill);
+    container(
+        mouse_area(container(item).height(ROW_HEIGHT))
+            .on_press(Message::JumpTo(start))
+            .interaction(iced::mouse::Interaction::Pointer),
+    )
+    .padding(Padding {
+        left: SPACE_S,
+        right: SCROLL_GUTTER,
+        ..Padding::ZERO
+    })
+    .into()
+}
+
+/// The markers, or why there are none.
+fn marker_list<'a>(
+    markers: Option<&'a [Marker]>,
+    state: &'a MarkersState,
+    position_ms: u64,
 ) -> Element<'a, Message> {
     let Some(markers) = markers else {
         return cannot_hold();
@@ -343,7 +385,13 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
     } else {
         row_height(marker)
     };
-    let item = container(list::row_item(body, lit || open.is_some(), OVERLAY_HOVER)).height(height);
+    let item = container(list::row_item(
+        body,
+        lit || open.is_some(),
+        OVERLAY_HOVER,
+        Length::Fill,
+    ))
+    .height(height);
 
     // The actions sit at the right end of the first line, over the row.
     let item: Element<'a, Message> = match actions {

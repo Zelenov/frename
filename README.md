@@ -173,8 +173,7 @@ The progress bar shows what you have noted about a clip:
   By default they are saved inside the video as a marker that Premiere Pro turns into a subclip.
   Settings can keep them in the comment instead, as a line after your own text
   (`In/Out: 00:01:05.250 – 00:02:10.000`), which the comment box does not show: change it with
-  `[` and `]`. Older versions could put them in the file name (`in_00_01_05`); frename no longer
-  reads them there, and the batch action **Move in/out points out of file names** moves them.
+  `[` and `]`.
 - **Comments:** free text per clip. By default it is saved inside the video, where Premiere Pro
   shows it in the Description column and finds it by search. Settings can keep it in a
   `.comment.txt` next to the video instead. The file list shows the first line of each comment.
@@ -195,8 +194,9 @@ off. mp4 and mov hold everything.
 
 - **Search** the file list by name. Tags already in a name are searchable too.
 - **Filter** the list to files that are untagged, have subtitles, a comment or markers: the
-  Filter dropdown sits at the right end of the search bar. A file with markers shows 📍 and
-  their number in the list.
+  filter button at the right end of the search bar opens a menu (tick as many as you like;
+  **Show all** clears them) and shows how many are on. A file with subtitles shows the subtitles
+  icon, and a file with markers a pin and their number.
 - The list shows only videos (mp4, mov, mkv, avi, webm, and other common formats), oldest first.
 
 ## Subtitles
@@ -226,9 +226,6 @@ Actions:
 
 - move comments between the video and `.comment.txt` files;
 - move in/out points between the comment and the video;
-- move in/out points out of file names written by older versions into the comment or the video,
-  as set in Settings (a file that already has in/out points stored keeps them, and the report
-  lists it);
 - turn comment lines that start with a time (`03:24 — Take 3 — nice light`, `0:41-0:47 — Lion`)
   into markers, or copy the markers into the comment as such lines. What follows the name after
   a second ` — ` or ` -- ` (not a plain ` - `) goes into the marker's comment, which Premiere

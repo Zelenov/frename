@@ -69,6 +69,17 @@ pub fn setting_row<'a, M: 'a>(
     labelled_row(text::body(label).into(), content.into())
 }
 
+/// One option per row in a narrow place (§5.3, §13.9 "Page under 440"): the label above its
+/// controls, so a short label does not leave a column of empty space beside them.
+pub fn stacked_row<'a, M: 'a>(
+    label: impl IntoFragment<'a>,
+    content: impl Into<Element<'a, M>>,
+) -> Element<'a, M> {
+    column![text::strong(label), content.into()]
+        .spacing(SPACE_S)
+        .into()
+}
+
 /// A setting row whose label carries ⓘ with `help` (§8.11).
 pub fn setting_row_with_info<'a, M: 'a>(
     label: impl IntoFragment<'a>,
@@ -98,15 +109,17 @@ pub fn controls<'a, M: 'a>(items: impl IntoIterator<Item = Element<'a, M>>) -> C
     Column::with_children(items).spacing(SPACE_S)
 }
 
-/// A column of controls whose first line of text meets the row label's (checkboxes, radio
-/// options, a line of text over buttons), 12 px apart.
+/// A column of choices (checkboxes, radio options, a line of text over buttons), 12 px apart.
+pub fn choices<'a, M: 'a>(items: impl IntoIterator<Item = Element<'a, M>>) -> Column<'a, M> {
+    Column::with_children(items).spacing(SPACE_M)
+}
+
+/// [`choices`] whose first line of text meets the label beside them.
 pub fn aligned<'a, M: 'a>(items: impl IntoIterator<Item = Element<'a, M>>) -> Column<'a, M> {
-    Column::with_children(items)
-        .spacing(SPACE_M)
-        .padding(Padding {
-            top: CONTROL_TEXT_OFFSET,
-            ..Padding::ZERO
-        })
+    choices(items).padding(Padding {
+        top: CONTROL_TEXT_OFFSET,
+        ..Padding::ZERO
+    })
 }
 
 /// Content indented under a checkbox or a radio option, level with its label.
@@ -158,12 +171,16 @@ pub fn nav_item_with<'a, M: Clone + 'a>(
         } else {
             Color::TRANSPARENT
         }));
-    let mut content = row![mark, icon(glyph, ICON_M, color), label]
-        .spacing(SPACE_S)
-        .align_y(Alignment::Center);
-    if let Some(trailing) = trailing {
-        content = content.push(space::horizontal()).push(trailing);
-    }
+    // The label fills what is left: iced lays `Fill` children out last, so the trailing badge
+    // keeps its whole width and the label is the one that wraps.
+    let content = row![
+        mark,
+        icon(glyph, ICON_M, color),
+        container(label).width(Length::Fill)
+    ]
+    .push(trailing)
+    .spacing(SPACE_S)
+    .align_y(Alignment::Center);
     // 32 px for one line; a label that wraps (a long translation) makes the item taller.
     button(content)
         .width(Length::Fill)
@@ -193,7 +210,9 @@ pub fn button_bar<'a, M: 'a>(
     hint: impl IntoFragment<'a>,
     buttons: impl IntoIterator<Item = Element<'a, M>>,
 ) -> Element<'a, M> {
-    let bar = row![text::secondary(hint), space::horizontal()]
+    // The hint takes what the buttons leave (a `Fill` child is laid out last), so a long hint
+    // wraps instead of squeezing the buttons.
+    let bar = row![container(text::secondary(hint)).width(Length::Fill)]
         .extend(buttons)
         .spacing(SPACE_S)
         .align_y(Alignment::Center);

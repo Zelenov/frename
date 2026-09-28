@@ -22,9 +22,37 @@ use crate::ui::tokens::*;
 use crate::ui::tooltip::{self, Position, Tip};
 use crate::ui::{list, scroll, text};
 
-/// Distance from one cue row's top to the next: every row has the same height, so the list is
-/// scrolled to a cue by arithmetic.
-pub const CUE_ROW_PITCH: f32 = CUE_ROW_HEIGHT + SPACE_XXS;
+/// The in/out points in milliseconds, when both are set and in comes first.
+fn in_out_ms(start: Option<f32>, end: Option<f32>) -> Option<(u64, u64)> {
+    match (start, end) {
+        (Some(start), Some(end)) if start < end => {
+            Some(((start * 1000.0) as u64, (end * 1000.0) as u64))
+        }
+        _ => None,
+    }
+}
+
+/// How tall the side list's row of a cue with `text` is, as an estimate good enough to scroll a
+/// row into view: rows take their natural height, so short cues leave no holes.
+fn cue_row_height(text: &str) -> f32 {
+    let per_line = (CUE_TEXT_WIDTH / BODY_CHAR_WIDTH).max(1.0) as usize;
+    let lines: usize = text
+        .lines()
+        .map(|line| line.chars().count().div_ceil(per_line).max(1))
+        .sum::<usize>()
+        .max(1);
+    CUE_ROW_CHROME + LINE_BODY * lines as f32
+}
+
+/// Distance from the top of the cue list to the row of cue `index`.
+pub fn cue_offset(subtitles: &Subtitles, index: usize) -> f32 {
+    subtitles
+        .cues()
+        .iter()
+        .take(index)
+        .map(|cue| cue_row_height(&cue.text) + SPACE_XXS)
+        .sum()
+}
 pub const CUE_LIST_SCROLLABLE_ID: &str = "subtitle_cue_list";
 /// The share of a wide pane the side list takes (at most `SIDE_LIST_MAX_WIDTH`).
 const LIST_SHARE_OF_PANE: f32 = 0.4;
@@ -88,7 +116,14 @@ pub fn view<'a>(
     let fold = Fold::for_width(pane_width, list_buttons);
 
     let mut layers: Vec<Element<'a, Message>> = vec![picture.into()];
-    if let Some(side) = side_overlay(state, markers, is_fullscreen, pane_width, active_cue) {
+    if let Some(side) = side_overlay(
+        state,
+        markers,
+        is_fullscreen,
+        pane_width,
+        active_cue,
+        in_out_ms(segment_start, segment_end),
+    ) {
         layers.push(side);
     }
     if let Some(notice) = state.notice().filter(|_| !fold.notice_in_bar) {
@@ -152,7 +187,11 @@ fn timeline<'a>(
             active: labelled.is_some_and(|l| std::ptr::eq(l, m)),
             guid: m.guid.clone(),
         })
+        .chain(video_controls::in_out_band(segment_start, segment_end))
         .collect();
+    // The label gets a lane of its own when the clip has markers, so it never covers the
+    // subtitle strip above the timeline.
+    let label_lane = markers.markers.is_some_and(|m| !m.is_empty());
     let marker_label = labelled.map(|m| controls::MarkerLabel {
         // Over a point's pin, or over the middle of a range's band.
         at: (m.start_ms + m.end_ms()) as f32 / 2000.0,
@@ -163,7 +202,7 @@ fn timeline<'a>(
         right_edge: (!is_fullscreen).then_some(markers.pane_width),
     });
     // Taller when overlapping ranges stack their bands in lanes.
-    let height = TIMELINE_HEIGHT.max(video_controls::bar_height(&bar_markers));
+    let height = TIMELINE_HEIGHT.max(video_controls::bar_height(&bar_markers, label_lane));
     container(
         controls::progress_bar(
             state.controls(),
@@ -172,6 +211,7 @@ fn timeline<'a>(
             segment_end,
             bar_markers,
             marker_label,
+            label_lane,
         )
         .map(Message::Controls),
     )
@@ -428,6 +468,7 @@ fn side_overlay<'a>(
     is_fullscreen: bool,
     pane_width: f32,
     active_cue: Option<usize>,
+    in_out: Option<(u64, u64)>,
 ) -> Option<Element<'a, Message>> {
     let subtitles = state.subtitles();
     let caption = subtitles
@@ -448,7 +489,7 @@ fn side_overlay<'a>(
         (Overlay::Subtitles, Some(subs)) => {
             cue_list(subs, subs.last_started_index(state.display_position()))
         }
-        _ => markers::view::view(markers.markers, markers.state, state.position_ms())
+        _ => markers::view::view(markers.markers, markers.state, state.position_ms(), in_out)
             .map(Message::Markers),
     };
     let (width, covers) = side_list_width(pane_width);
@@ -526,8 +567,7 @@ fn side_list_header<'a>(
                 selected: shown == Overlay::Markers,
                 on_press: Message::ShowOverlay(Overlay::Markers),
             },
-        ])
-        .into(),
+        ]),
         _ if shown == Overlay::Subtitles => text::title(fl!("settings-subtitles")).into(),
         _ => text::title(fl!("media-viewer-video-tab-markers")).into(),
     };
@@ -569,9 +609,7 @@ fn cue_list<'a>(subtitles: &'a Subtitles, list_cue: Option<usize>) -> Element<'a
             bottom: SPACE_TIGHT,
             ..Padding::ZERO
         });
-        let item = container(list::row_item(body, lit, OVERLAY_HOVER))
-            .height(CUE_ROW_HEIGHT)
-            .clip(true);
+        let item = list::row_item(body, lit, OVERLAY_HOVER, Length::Shrink);
         mouse_area(item)
             .on_press(Message::SeekToCue(index))
             .interaction(iced::mouse::Interaction::Pointer)

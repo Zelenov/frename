@@ -11,6 +11,8 @@ pub const CONTROL_HEIGHT: f32 = 28.0;
 pub const BAR_HEIGHT: f32 = 32.0;
 /// Icon buttons inside rows and chips.
 pub const ICON_BUTTON_SMALL: f32 = 24.0;
+/// Around a 16-px icon in a button as high as a field (the file filter).
+pub const CONTROL_ICON_INSET: f32 = (CONTROL_HEIGHT - ICON_M) / 2.0;
 /// The button bar at the bottom of a window or titled panel.
 pub const BUTTON_BAR_HEIGHT: f32 = 56.0;
 /// A navigation item, a one-line list row.
@@ -52,6 +54,8 @@ pub const SCROLL_GUTTER: f32 = SCROLLBAR_WIDTH + SCROLLBAR_GAP;
 // Popups.
 /// Widest tooltip.
 pub const TOOLTIP_MAX_WIDTH: f32 = 280.0;
+/// The narrowest a menu is.
+pub const MENU_MIN_WIDTH: f32 = 200.0;
 /// The widest a menu gets; longer items are cut.
 pub const MENU_MAX_WIDTH: f32 = 360.0;
 /// The shadow under popups.

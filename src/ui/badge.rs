@@ -1,7 +1,7 @@
 //! Badges, key caps and timecodes (`docs/design/design-system.md` §8.16): small facts drawn next
 //! to what they are about.
 
-use iced::widget::text::IntoFragment;
+use iced::widget::text::{IntoFragment, Wrapping};
 use iced::widget::{container, mouse_area, row};
 use iced::{mouse, Alignment, Color, Element, Padding};
 
@@ -31,6 +31,8 @@ const KEY_PADDING: Padding = Padding {
 pub enum BadgeKind {
     /// `SRT`, "3 markers": raised, secondary text.
     Neutral,
+    /// A count that is on: the filters on.
+    Accent,
     /// Needs attention: "No key".
     Warning,
 }
@@ -39,6 +41,7 @@ impl BadgeKind {
     fn colors(self) -> (Color, Color) {
         match self {
             BadgeKind::Neutral => (BG_RAISED, TEXT_SECONDARY),
+            BadgeKind::Accent => (ACCENT_TINT, ACCENT_TEXT),
             BadgeKind::Warning => (WARNING_TINT, WARNING),
         }
     }
@@ -47,10 +50,15 @@ impl BadgeKind {
 /// A badge: a fact in `caption` SemiBold.
 pub fn badge<'a, M: 'a>(kind: BadgeKind, content: impl IntoFragment<'a>) -> Element<'a, M> {
     let (background, color) = kind.colors();
-    container(text::caption_strong(content).color(color))
-        .padding(BADGE_PADDING)
-        .style(style::badge(background))
-        .into()
+    // A badge is one fact on one line: it never wraps, so its surface always covers its words.
+    container(
+        text::caption_strong(content)
+            .color(color)
+            .wrapping(Wrapping::None),
+    )
+    .padding(BADGE_PADDING)
+    .style(style::badge(background))
+    .into()
 }
 
 /// One key as printed on the keyboard (`Ctrl`, `F2`); one cap per key, no "+" between them.

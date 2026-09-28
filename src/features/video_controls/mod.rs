@@ -8,5 +8,5 @@ pub mod view;
 
 pub use fold::Fold;
 pub use messages::Message;
-pub use progress_bar::{bar_height, BarMarker};
+pub use progress_bar::{bar_height, in_out_band, BarMarker};
 pub use state::VideoControlsState;

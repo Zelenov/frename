@@ -340,9 +340,9 @@ impl Options {
                 fl!("batch-ai-change"),
                 ActionMessage::OpenSubtitleSettings,
             ),
-            layout::setting_row(
+            page::option_row(
                 fl!("batch-option-subtitled"),
-                layout::aligned([form::checkbox_with_hint(
+                layout::choices([form::checkbox_with_hint(
                     form::checkbox(fl!("batch-action-generate-subtitles-replace"), self.replace)
                         .on_toggle(|on| ActionMessage::GenerateSubtitles(Message::SetReplace(on))),
                     text::secondary(fl!("batch-action-generate-subtitles-replace-hint")),

@@ -79,17 +79,23 @@ pub fn value_with_link<'a, M: Clone + 'a>(
         .into()
 }
 
-/// A setting row whose value is set somewhere else: `label`, then [`value_with_link`].
+/// An option of an action: its label above its controls. Batch pages are narrow (the panel
+/// shares its width with the action list), so a label column would leave a wide gap.
+pub fn option_row<'a, M: 'a>(
+    label: impl IntoFragment<'a>,
+    content: impl Into<Element<'a, M>>,
+) -> Element<'a, M> {
+    layout::stacked_row(label, content)
+}
+
+/// An option whose value is set somewhere else: `label`, then [`value_with_link`].
 pub fn linked_row<'a, M: Clone + 'a>(
     label: impl IntoFragment<'a>,
     value: impl IntoFragment<'a>,
     link: impl IntoFragment<'a>,
     on_press: M,
 ) -> Element<'a, M> {
-    layout::setting_row(
-        label,
-        layout::aligned([value_with_link(value, link, on_press)]),
-    )
+    option_row(label, value_with_link(value, link, on_press))
 }
 
 /// The plan of a paid action (§13.6.4 item 4): a key-value row per fact, the numbers strong.

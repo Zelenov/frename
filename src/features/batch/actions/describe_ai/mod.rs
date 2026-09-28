@@ -247,9 +247,9 @@ impl Options {
                 fl!("batch-ai-change"),
                 ActionMessage::OpenAiSettings,
             ),
-            layout::setting_row(
+            page::option_row(
                 fl!("batch-option-described"),
-                layout::aligned([
+                layout::choices([
                     form::checkbox(fl!("batch-action-describe-ai-redo"), self.redo)
                         .on_toggle(|redo| ActionMessage::DescribeAi(Message::SetRedo(redo)))
                         .into(),

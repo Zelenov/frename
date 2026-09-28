@@ -989,7 +989,7 @@ part over the segment, because the yellow over the blue would hide where the pla
 | Played part | `accent`, from the start to the playhead | same |
 | **Playhead** | a 2 px `text.primary` line 4 px taller than the track at both ends; while hovering or dragging, a 10 px `text.primary` knob on it | none: the fill's end is the only sign |
 | Hover | the hovered time in a tooltip above the pointer (`mono`); the track brightens to `border.control` | nothing |
-| In/out segment | `video.segment` `#F2C94C` at 70 % over the track, square ends with 2 px full-color lines; only in: one line; only out: one line | same, 75 % |
+| In/out segment | a band in `video.segment` `#F2C94C` in its own lane above the bar, like a range (no handles; a click plays it), and 2 px lines across the track at in and out; only in: one line; only out: one line. Not a fill on the track: the played part hid it | 75 % over the track |
 | Point marker | 2 px needle in the marker color from the head to 3 px below the track; 7 px round head at the top of the row; head has a 1 px `bg.panel` outline so heads that overlap stay readable | no outline |
 | Point marker, active | no head: the marker label is its head | same |
 | Range | 4 px band in its lane, marker color, 60 % when idle, 100 % when active | same |
@@ -1428,8 +1428,8 @@ in `text.secondary`:
 | Paid services | `sparkles` | Describe with AI | Anthropic |
 | | `captions` | Generate subtitles | Soniox |
 
-As built there are eleven actions in three groups: *Move between places* (Move comments, Move
-in/out points, Move in/out points out of file names with `brackets`, Markers ⇄ comment), *Fix
+As built there are ten actions in three groups: *Move between places* (Move comments, Move
+in/out points, Markers ⇄ comment), *Fix
 names and videos* (Rotate videos with `rotate-cw`, Tag commented, Fix tags by priority, Apply tag
 spacing, Reset cache and reload), *Paid services* (Describe with AI, Generate subtitles).
 
@@ -1860,7 +1860,7 @@ only replaces the OS title bar with A's bar.
 | **Interface** (`languages`) | Language · Tag colors (*Monochrome*) · Video (*Play videos automatically when opened*) |
 | **Saving** (`folder`) | File names (*Space after each tag*) · Comments · Markers and ranges · In/out points |
 | **Describe with AI** (`sparkles`; Russian list label «Описание от AI», heading «Описать с помощью AI») | Anthropic API key · Model · Description language |
-| **Subtitles** (`captions`) | Soniox API key · Languages · Cue length |
+| **Subtitles** (`captions`) | Soniox API key · Cue length · Languages (cue length first: the language list is long and hid it) |
 | **Updates** (`refresh-cw`) | Version (version, status, *Check for updates*, *Update and restart*, *Check for updates when frename starts*) · Settings from an older frename (installed only) |
 
 Why these groups: *Saving* holds the four settings that decide what frename writes into files
@@ -2060,6 +2060,15 @@ main window does not change in #57 and the README has no Settings screenshot.
   `Ctrl`+`Tab` and opening on a page; demo `--settings [page]`; new and changed strings in English
   and Russian; the Settings section of the README; `version.md`; the `ui-dev` skill and the styling
   section of the Elm skill pointed at this document and `src/ui`.
+- **After the owner's first look (2026-09-28):** the filter is the `list-filter` button with the
+  count badge and its menu (checkbox per filter with its count, *Show all*, stays open while
+  ticking); tags that do not fit become `+N` and names are cut with "…" (mono has a fixed
+  advance, chips are estimated); the in/out span is a band in its own lane above the bar (a fill on
+  the track hid under the played part) and a line at the top of the marker list; the timeline
+  keeps a lane for the marker label so it never covers the subtitle strip; subtitle rows have
+  their natural height; the tag grid shows the two groups of §13.5.2 with their captions; batch
+  option rows put the label above the controls (the page is always under 440); the segmented
+  control is one outlined box. The action "Move in/out points out of file names" is removed.
 - **#58 and #59 (built together):** the batch views, the video pane, the file list, the tags
   area and the window frame on the system, with the icons of §7 in their places; the allow-list
   is empty and `ui::legacy` is gone. Left for later issues: the changes marked **behaviour**,

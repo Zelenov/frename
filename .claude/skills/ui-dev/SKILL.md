@@ -2,8 +2,10 @@
 name: ui-dev
 description: >
   UI development guide for frename. Use when: adding or changing a view, adding a new feature panel,
-  creating or modifying a widget, changing layout constants, adding a new message to a feature,
-  or working with styling, drag-drop, BoundsReporter, scrolling, or the search bar.
+  creating or modifying a widget, changing layout constants or tokens, adding a new message to a
+  feature, fixing a UI bug (clipped, overlapping or squeezed elements, wrong heights, scroll jumps),
+  or working with the design system (src/ui), styling, icons, popups, drag-drop, BoundsReporter,
+  scrolling, screenshots, or the search bar.
 disable-model-invocation: false
 ---
 
@@ -46,11 +48,14 @@ there fails the build on any other English word left in a view, a widget, a batc
 
 ## Widgets
 
-Reusable components not tied to any feature go in `src/widgets/`:
-- `search_bar.rs` — search input with clear (×) and create (○) buttons
-- `tag_chip.rs` — colored tag chip with optional leading/trailing slots
-- `splitter.rs` — draggable panel splitter
-- `file_name_display.rs` — file name rendered as tag chips (wrap=false)
+Standard controls are `src/ui/` components (see Styling). frename's own widgets go in
+`src/widgets/` and take their values from `ui::tokens`:
+- `search_bar.rs` — the bar over a list: `ui::form::search_field` and what narrows the same list
+- `tag_chip.rs` — tag chips: `mini` (file list rows), the draggable chip of the file name card
+- `splitter.rs` — draggable column splitter (a 1 px line in a 12 px hit area)
+- `height_handle.rs` — the comment's height handle
+- `file_name_display.rs` — a file list row's name: mini chips, `+N`, the name cut with "…"
+- `starred_tags_panel.rs` — the starred strip (its cells are `tag_grid::cell`)
 - `bounds_reporter.rs` — invisible Fill widget that reports its layout bounds on every event
 
 **When it belongs in widgets:** used by 2+ features, or purely presentational with no feature-specific messages.
@@ -79,7 +84,7 @@ IconButton::new(Icon::Rewind)
 form::checkbox(label, on).on_toggle(Msg::Set);
 layout::setting_row(label, layout::aligned([..]));
 layout::notice(NoticeKind::Info, headline, None, [button::secondary(label).on_press(msg).into()]);
-list::row_item(content, selected, HOVER);      // the one hover + selected look, with its bar
+list::row_item(content, selected, HOVER, Length::Fill); // the one hover + selected look, with its bar
 scroll::vertical_with_id(ID, content);         // keeps the scrollbar gutter
 empty::pane(Icon::Clapperboard, fl!("…"), None, Some(button.into()));
 ```
@@ -104,38 +109,42 @@ wraps); marker colors: `ui::palette::marker_color`.
 
 ## Sizing conventions
 
-- `Length::Fill` — take all available space in the axis
-- `Length::Shrink` — natural / content size (default when not set)
-- `Length::Fixed(px)` — exact pixel size
-- Never hardcode raw pixel heights in view code — define a `const` in the module
-
-Layout constants that are shared between view and state (e.g. for hit-testing) are declared in `mod.rs` as `pub const`.
+- `Length::Fill` — take all available space in the axis; `Length::Shrink` — natural size.
+- A size is a token, never a number or a `const` of the view: `ui::lint` rejects both
+  (`const GAP: f32 = 6.0` counts). Add it to the right file of `src/ui/tokens/` with a doc comment:
+  `size.rs` for controls, lines, icons and radii; `region.rs` for the window, columns, bars and the
+  geometry of a region (§13.9); `space.rs`, `color.rs`, `content.rs` (video, tags, markers),
+  `typography.rs` (sizes, lines, fonts, character widths). Derive from other tokens where you can
+  (`SEARCH_BAR_HEIGHT = CONTROL_HEIGHT + 2.0 * SPACE_TIGHT`).
+- A multiplier that is a count ("a space on each side", `2.0 * SPACE_XS`) is fine inside a
+  function; a `Padding { … }` or `Border { … }` with numbers in a view is not: put the value in a
+  token or use a `ui` component that owns it (`ui::menu::row_of` owns a menu row's inset).
+- Geometry that the view and the state both need (scroll-into-view, arrow keys, hit-testing) lives
+  in ONE pure function or module next to the view, with unit tests: `tag_grid::groups::Shape`
+  (where each tag sits, with the group captions), `media_viewer::video::view::cue_offset`,
+  `markers::view::row_offset`. Never re-derive `index / columns` in the state.
 
 ---
 
 ## BoundsReporter
 
-`BoundsReporter` is a `Fill×Fill` invisible widget that fires a message with its `Rectangle` on every layout change. Used for cursor-to-index mapping in drag-drop.
+`BoundsReporter` is a `Fill×Fill` invisible widget that fires a message with its `Rectangle` on every
+layout change, and never takes an event.
 
-**Pattern — use it as a 0-height anchor inside a `stack!`:**
+A `stack!` takes the size of its FIRST child. Put the content that decides the size first and the
+reporter after it, so the reporter fills that size and the content grows freely:
 
 ```rust
-// In view.rs
-let anchor = container(BoundsReporter::new(Message::PanelBounds))
-    .width(Length::Fill)
-    .height(Length::Fixed(0.0));   // 0 height: doesn't affect stack height
+// Right: the chips set the height (they may wrap onto more lines); the reporter fills it.
+stack![tag_row, BoundsReporter::new(Message::PanelBounds)]
 
-let chips_cell = container(
-    stack![anchor, content_widget]
-        .width(Length::Fill),
-)
-.width(Length::Fill);
+// Wrong: a fixed-height reporter first pins the stack's height; a second line of chips then
+// draws over whatever is below (the file name card's name line was hidden this way).
+stack![container(reporter).height(CELL_HEIGHT), tag_row]
 ```
 
-The `Fixed(0.0)` prevents BoundsReporter's `Fill` height from becoming the stack's height.
-State only needs `bounds.x`, `bounds.y`, and `bounds.width` for hit-testing; `bounds.height = 0` is fine.
-
-For a full-height panel (e.g. the scrollable tag grid), `BoundsReporter` goes directly in a `stack!` without a fixed-height wrapper — the scrollable's `Fill` height drives layout.
+For a full-height panel (the scrollable tag grid) the reporter can go first: the scrollable's `Fill`
+height drives the layout either way.
 
 ---
 
@@ -159,16 +168,22 @@ return Task::done(Message::ScrollTagListToSelection);
 ## Search bar (`widgets/search_bar`)
 
 ```rust
-widgets::search_bar::view(
-    filter,                             // &str — current value
-    |s| Message::TagPanel(tag_panel::Message::SetFilter(s)),   // on_input
-    || Message::TagPanel(tag_panel::Message::SetFilter(String::new())),  // on_clear
-    on_create,  // Option<impl Fn(String)->Message> — None hides the ○ button
+search_bar::view(
+    SearchBar {
+        input_id: search_bar::SEARCH_BAR_INPUT_ID,
+        placeholder: fl!("…"),              // an example of what to type, never the label
+        value: filter,
+        clear_tip: fl!("…"),                // the x shows while there is text; Esc in its tooltip
+        on_clear: …,
+        on_submit: …,                       // always set: an unhandled Enter makes Windows beep
+        trailing: Some(filter::button(dir, open)),  // what else narrows the same list
+    },
+    |s| Message::SetFilter(s),
 )
 ```
 
-`on_create` is called at **render time** with the current value to produce the message.
-Show it only when `filter.trim()` is non-empty AND no existing tag has that name.
+The tag search's Enter creates the tag when the text names none (`on_submit`), and the grid shows
+the "Create “…”" cell; there is no create button inside the field.
 
 ---
 
@@ -232,6 +247,101 @@ column![top, body]
 **Progress from a worker thread** (`spawn_blocking`) does not redraw by itself: share it through an
 `Arc` the view reads (see `batch::ItemProgress`), and redraw with a subscription that exists only
 while the work runs: `iced::time::every(Duration::from_millis(200)).map(|_| Message::Noop)`.
+
+---
+
+## Design system work: where to look, what to do, what not to do
+
+Learned while moving the whole app onto the system (#58, #59) and fixing what the owner found in
+the first look. Read it before any UI change.
+
+### Where things are
+- The spec: `docs/design/design-system.md`. §3–12 are the rules, §13 every region of the main
+  window (13.3 video, 13.4 file list, 13.5 tags, 13.6 batch, 13.9 sizes and what folds), §14
+  Settings, §15.1 the module map of `src/ui/`. A change the spec does not cover goes into the spec
+  in the same PR.
+- The code: `src/ui/` (tokens, palette, icons, text, button, icon_button, tooltip, badge, form,
+  list, scroll, segmented, menu, empty, layout, style). Feature views compose these; custom-drawn
+  widgets (`widgets/splitter`, `widgets/tag_chip`, `video_controls/progress_bar`) take tokens.
+- Before adding a component, search `src/ui/` for it (`rg "pub fn" src/ui`). Before adding a
+  token, search `src/ui/tokens/` for one with the same meaning.
+
+### Rules
+- **One component, never a copy.** Two views that draw the same thing share one function (the tag
+  grid and the starred strip share `tag_grid::cell`; every batch page is built from
+  `batch::page`). A copy-pasted style or estimate is a bug waiting to diverge.
+- **One selected look** (`ui::list::row_item`, `style::selectable`): no per-list tints.
+- **Icons are Lucide** (`assets/icons/`, one line in `icons!`), never emoji or glyphs; icon-only
+  buttons are `IconButton` with a `Tip` naming the command and its keys. Words that are words
+  (`[`, `]`) use `IconButton::glyph`. A new icon: download it from
+  `https://cdn.jsdelivr.net/npm/lucide-static@1.48.0/icons/<name>.svg` and strip its
+  `<!-- @license -->` comment and `class=` line.
+- **Offer the action, not directions** (§1 principle 9, §8.21): a dead end gets a button that does
+  it; a link is only a side trip. Say a fact once: a notice and a row never both say it (the
+  batch hint repeated the plan's time, with an unfilled `{ $duration }`).
+- **Narrow places put the label above the control** (`layout::stacked_row`): batch pages are
+  always under 440 px, so their option rows are stacked (`batch::page::option_row`); a label
+  column there left a wide empty gap.
+- **Every string in en and ru**, in the feature's `##` section of both `.ftl` files. A Russian
+  plural uses exactly `one`/`few`/`many` (the i18n test checks CLDR categories).
+- **Remove what nothing uses** (clippy runs with `-D warnings`): no speculative tokens or
+  components "for later".
+- **Look and layout vs behaviour:** the spec marks behaviour changes; keep them out of a restyle
+  unless the owner asks, and list the ones you skip.
+
+### iced 0.14 layout traps (each one bit us)
+- **`Fill` children are laid out last.** In a row, `Shrink` children take their full width first,
+  in order, and whatever is left goes to `Fill`. So the flexible text (a label, a hint, a name)
+  goes in `container(text).width(Length::Fill)`, and fixed marks (badges, counts, icons, buttons)
+  stay `Shrink`. A `Shrink` label before a badge squeezed the badge until its fill no longer
+  covered its words; a long button-bar hint would squeeze the buttons. Badges also never wrap
+  (`Wrapping::None`).
+- **A `Fill` height inside a scroll area collapses to nothing.** `list::row_item(…, height)` takes
+  `Length::Fill` for a row in a slot of fixed height (file rows, marker rows) and `Length::Shrink`
+  for a row of natural height (subtitle cues). A `Fill` child in a `Shrink` row is still
+  stretched to the row's height (the selection bar relies on it).
+- **`text_editor` adds its padding after `min_height`.** A "full-height" editor with
+  `min_height(size.height)` is `padding.y()` taller than its box, scrolls, and its top edge goes out
+  of sight: use `min_height(size.height - PADDING.y())`.
+- **Keep the widget tree's shape stable** (see "iced 0.14 gotchas" above): an optional layer is a
+  `space()` when hidden, not a missing child (the filter menu over the file list is always a
+  `stack!` layer), or scroll positions and focus reset.
+- **`responsive(|size| …)`** gives a view its width without any state: use it for what folds by
+  width (the order strip's buttons below `ORDER_STRIP_WORDS_FROM`, the batch action list).
+- **Overlays escape their parent.** A custom widget's overlay (the marker label) draws outside
+  the widget's bounds, over its neighbours: reserve room for it inside the widget
+  (`MARKER_LABEL_LANE`) instead of letting it cover the subtitle strip.
+- **Popups:** there is no menu widget. A popup is an open flag in the feature's state, a
+  `stack!` layer with `ui::menu::menu` at its anchor, and a full-size transparent `mouse_area`
+  under it that closes it on a click beside it (see `folder::filter`, the video pane's More).
+- **Text width:** iced cannot measure text or cut it with "…". Mono text has a fixed advance
+  (`MONO_CHAR_WIDTH`), so a file name is cut exactly; other text is estimated
+  (`BODY_CHAR_WIDTH`, `CHIP_MINI_CHAR_WIDTH`). Use a realistic estimate to fit things into a row
+  (a generous one hid chips that fitted), a generous one to size columns.
+- **A segmented control is one box**: the segments have no edges of their own, only the ends are
+  rounded (on their outer corners), and a line separates them (`ui::segmented`).
+- **A click on the row already open must not open it again**: each click of a double-click is a
+  `SelectFile`, and reopening reloads the video.
+
+### Checking your work
+- `cargo build` before a screenshot: `cargo test` builds only the test binary, and the old exe
+  gives an old screenshot.
+- Screenshots: from `docs/screenshots`, `../../target/debug/frename.exe --demo main.toml --out
+  <file>.png` (`--batch`, `--mono`, `--lang ru`, `--settings <page>`). Park the mouse pointer off
+  the window first, or a hover tooltip lands in the picture:
+  `powershell -c "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(5000,5000)"`.
+  Zoom in with `magick in.png -crop WxH+X+Y -scale 300% out.png` to check padding and edges.
+  The demo cannot open the marker list, run a job, open a menu or narrow a column: check those
+  states by hand in `cargo run`, and say so.
+- README images: `docs/screenshots/render.sh`, then look at every one: the callouts in
+  `main.svg`/`batch.svg`/`mono.svg` point at fixed canvas coordinates (the window sits at 100,204)
+  and must be moved when a control moves.
+- Gate: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D
+  warnings`, `cargo test --workspace --locked --no-fail-fast` (on this Windows machine the three
+  `self_test` GStreamer tests fail on `main` too).
+- Editing `.ftl` files with a script: a multi-line entry ends at its own `}` line; remove that
+  line with the entry, or the file stops parsing and every i18n test fails at once.
+- Several worktrees building at once share one `CARGO_TARGET_DIR`, or drive C: fills up.
 
 ---
 

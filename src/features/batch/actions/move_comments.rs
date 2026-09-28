@@ -61,9 +61,9 @@ impl Options {
             label(),
             fl!("batch-action-move-comments-hint"),
             &[change],
-            [layout::setting_row(
+            [page::option_row(
                 fl!("batch-option-direction"),
-                layout::aligned([
+                layout::choices([
                     choice(
                         fl!("batch-action-move-comments-into-videos"),
                         form::description(fl!("settings-comments-in-video-hint")),

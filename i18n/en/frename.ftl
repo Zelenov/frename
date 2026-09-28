@@ -162,10 +162,6 @@ batch-run-move-in-out = Move in/out of { $count ->
     [one] { $count } file
    *[other] { $count } files
 }
-batch-run-in-out-from-names = Take in/out out of { $count ->
-    [one] { $count } name
-   *[other] { $count } names
-}
 batch-run-convert = Convert { $count ->
     [one] { $count } file
    *[other] { $count } files
@@ -199,7 +195,6 @@ batch-change-comments = Writes into the comments
 batch-change-subtitles = Writes subtitle files next to the videos
 batch-change-records = Changes only frename's own records
 batch-option-direction = Direction
-batch-option-goes-to = Goes to
 batch-option-language = Language
 batch-option-described = Described videos
 batch-option-subtitled = Subtitled videos
@@ -247,16 +242,6 @@ batch-action-move-in-out-hint = Moves the in/out points of each checked file to 
 batch-action-move-in-out-into-videos = From the comments into the videos (Adobe XMP marker)
 batch-action-move-in-out-into-comments = From the videos (XMP marker) into the comments
 
-batch-action-in-out-from-names = Move in/out points out of file names
-batch-action-in-out-from-names-hint = Older versions could keep in/out points in the file name (clip.in_00_01_05.mp4). This takes them out of the name of each checked file and saves them where in/out points are kept now. A file that already has in/out points stored keeps those; the report lists it.
-batch-action-in-out-from-names-status-comment = Goes to: the comment
-batch-action-in-out-from-names-status-video = Goes to: inside the video (XMP); for mkv, webm and other formats that cannot hold it, the comment
-batch-action-in-out-from-names-kept = kept the stored { $stored }, dropped the name's { $name }
-batch-action-in-out-from-names-not-renamed = could not be renamed (the log says why)
-batch-action-in-out-from-names-empty = left as it is: the name would be empty
-batch-action-in-out-from-names-taken = left as it is: { $name } already exists
-batch-in-out-from-names-listed = Files that failed or kept their stored in/out points:
-
 batch-action-markers-comment = Markers ⇄ comment
 batch-action-markers-comment-to-markers = Comment lines with a time into markers
 batch-action-markers-to-comment = Markers into the comment (a copy: the markers stay)
@@ -280,7 +265,7 @@ batch-action-describe-ai = Describe with AI
 batch-action-describe-ai-run = Describe { $videos } · about { $dollars }
 batch-action-describe-ai-estimating = Estimating… { $known } / { $total }
 batch-action-describe-ai-none = No videos to describe.
-batch-action-describe-ai-hint = Takes about { $duration }. The folder is locked until it ends. Cancel keeps the videos already described; running it again skips them.
+batch-action-describe-ai-hint = The folder is locked until it ends. Cancel keeps the videos already described; running it again skips them.
 batch-action-describe-ai-no-subtitles = Without subtitles (only the picture is described): { $videos }.
 batch-action-describe-ai-redo = Redo videos that already have an AI description
 batch-action-describe-ai-hint-panel = Describes what happens in each checked video, and when: a summary and time-ranged segments go into the AI description of its comment; your own text is kept. Frames and subtitles are sent to Anthropic.
@@ -386,6 +371,8 @@ batch-subtitles-usd-under = less than $0.01
 batch-subtitles-usd-about = about ${ $amount }
 
 ## File list
+folder-has-subtitles = Has subtitles
+folder-filter-tip = Show only…
 
 folder-search-placeholder = Find a file
 folder-search-clear = Clear
@@ -421,8 +408,6 @@ folder-window-open = Open a folder…
 
 ## Controls bar under the file list
 
-folder-controls-filter = Filter
-folder-controls-filter-active = Filter ({ $count })
 folder-controls-filter-untagged = Untagged
 folder-controls-filter-subtitles = Subtitles
 folder-controls-filter-comments = Comments
@@ -485,6 +470,7 @@ media-viewer-video-fullscreen = Full screen
 media-viewer-video-close-list = Close the list
 
 ## Markers list
+markers-in-out = In/out points
 
 markers-empty = No markers yet
 markers-add = Add a marker
@@ -524,6 +510,8 @@ tag-grid-create = Create “{ $tag }”
 tag-grid-no-file = Open a clip to tag it
 tag-grid-no-tags = No tags yet
 tag-grid-no-tags-hint = Type a name and press Enter to create the first one.
+tag-grid-group-unsaved = Not in the folder's tags
+tag-grid-group-folder = Folder tags
 tag-grid-more = +{ $count } more
 
 ## Order strip

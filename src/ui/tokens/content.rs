@@ -8,9 +8,7 @@ use iced::Color;
 pub const VIDEO_BG: Color = Color::BLACK;
 /// The timeline's and the volume's track (3 : 1 on the panel).
 pub const VIDEO_TRACK: Color = Color::from_rgb8(0x3A, 0x40, 0x4A);
-/// The in/out segment over the track.
-pub const VIDEO_SEGMENT: Color = Color::from_rgba(0.949, 0.788, 0.298, 0.7);
-/// The in/out segment's end lines.
+/// The in and out points: their lines across the track and the band of the span between them.
 pub const VIDEO_SEGMENT_EDGE: Color = Color::from_rgb8(0xF2, 0xC9, 0x4C);
 /// The side list over the picture.
 pub const OVERLAY_LIST: Color = Color::from_rgba(0.0, 0.0, 0.0, 0.72);

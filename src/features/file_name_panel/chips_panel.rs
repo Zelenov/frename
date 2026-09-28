@@ -82,14 +82,12 @@ where
         .vertical_spacing(TAG_CHIP_SPACING)
         .align_x(Alignment::Start);
 
+    // The chips are the stack's first layer, so they give it its height: wrapped onto more
+    // lines, the card grows instead of the second line running over the name below. The bounds
+    // reporter fills that height on top; it takes no events, so the chips still get the clicks.
     let content_bounds = BoundsReporter::new(Message::PanelBounds);
-    // Wrap BoundsReporter in a Fixed height to prevent it (Fill x Fill) from propagating
-    // Fill height up through the Shrink chain in file_name_panel → file_workspace column.
-    let content_bounds = container(content_bounds)
-        .width(Length::Fill)
-        .height(Length::Fixed(TAG_CHIP_CELL_HEIGHT));
     let chips_cell =
-        container(stack![content_bounds, tag_row].width(Length::Fill)).width(Length::Fill);
+        container(stack![tag_row, content_bounds].width(Length::Fill)).width(Length::Fill);
 
     chips_cell.into()
 }

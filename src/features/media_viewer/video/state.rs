@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use super::view::{CUE_LIST_SCROLLABLE_ID, CUE_ROW_PITCH};
+use super::view::{cue_offset, CUE_LIST_SCROLLABLE_ID};
 use super::Message;
 use crate::features::markers;
 use crate::features::video_controls::{self, VideoControlsState};
@@ -666,7 +666,7 @@ impl VideoPlayerState {
         let rows_above = cue.unwrap_or(0).saturating_sub(1);
         let offset = iced::widget::scrollable::AbsoluteOffset {
             x: None,
-            y: Some(rows_above as f32 * CUE_ROW_PITCH),
+            y: Some(cue_offset(subtitles, rows_above)),
         };
         iced::widget::operation::scroll_to::<()>(
             iced::widget::Id::new(CUE_LIST_SCROLLABLE_ID),

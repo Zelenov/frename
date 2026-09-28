@@ -29,6 +29,10 @@ pub enum Message {
     SetNameFilter(String),
     /// Clear the search and every filter: the list shows every file again.
     ShowAll,
+    /// Open or close the filter menu after the file search.
+    ToggleFilterMenu,
+    /// Close the filter menu (a click beside it).
+    CloseFilterMenu,
     /// Open the settings window (from the controls bar). Handled by the app.
     OpenSettings,
     /// Double-click on a row's name: edit that file's name in place.

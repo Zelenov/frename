@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use frename_core::{FileId, Marker, TagColorMapping};
-use iced::widget::{column, container, row, space, Column};
+use iced::widget::{column, container, row, space, stack, Column};
 use iced::{Alignment, Element, Length, Padding};
 
 use crate::features::batch::BatchState;
@@ -37,6 +37,10 @@ pub struct ListProps<'a, 'm> {
     pub batch: Option<&'a BatchState>,
     /// Files whose markers could not be written.
     pub markers_not_saved: &'a HashMap<FileId, Vec<Marker>>,
+    /// The filter menu is open over the list.
+    pub filter_menu_open: bool,
+    /// The list's width, which the names are fitted to.
+    pub width: f32,
 }
 
 /// The inset of the lock line and the batch header, level with the rows' content.
@@ -61,7 +65,7 @@ pub fn view<'a>(props: ListProps<'a, '_>) -> Element<'a, Message> {
         top = top.push(lock_line(batch));
     }
     if let Some(dir) = props.directory.filter(|_| !props.loading) {
-        top = top.push(search(dir));
+        top = top.push(search(dir, props.filter_menu_open));
         // The batch header joins the top column rather than the outer one, so the list keeps
         // its place in the widget tree and with it its scroll position when batch mode turns
         // on or off.
@@ -69,7 +73,13 @@ pub fn view<'a>(props: ListProps<'a, '_>) -> Element<'a, Message> {
             top = top.push(batch_header(dir, batch, locked_by.is_some()));
         }
     }
-    container(column![top, body])
+    // The filter menu floats over the rows. The layers are always there (a space when the menu
+    // is closed), so the list keeps its place in the widget tree and its scroll position.
+    let menu: Element<'a, Message> = match props.directory {
+        Some(dir) if props.filter_menu_open && !props.loading => filter::menu(dir),
+        _ => space().into(),
+    };
+    container(column![top, stack![body, menu]])
         .width(Length::Fill)
         .height(Length::Fill)
         .style(style::panel)
@@ -148,7 +158,7 @@ fn opening<'a>(spinner_frame: usize) -> Element<'a, Message> {
     .into()
 }
 
-fn search(dir: &Directory) -> Element<'_, Message> {
+fn search(dir: &Directory, menu_open: bool) -> Element<'_, Message> {
     search_bar::view(
         SearchBar {
             input_id: FILE_SEARCH_BAR_INPUT_ID,
@@ -157,7 +167,7 @@ fn search(dir: &Directory) -> Element<'_, Message> {
             clear_tip: fl!("folder-search-clear"),
             on_clear: Message::SetNameFilter(String::new()),
             on_submit: Message::SetNameFilter(dir.name_filter().to_string()),
-            trailing: Some(filter::view(dir)),
+            trailing: Some(filter::button(dir, menu_open)),
         },
         Message::SetNameFilter,
     )

@@ -82,7 +82,7 @@ impl Options {
             [layout::setting_row_with_info(
                 fl!("batch-option-direction"),
                 fl!("batch-action-markers-comment-hint"),
-                layout::aligned([
+                layout::choices([
                     choice(
                         fl!("batch-action-markers-comment-to-markers"),
                         form::example(fl!("settings-markers-comment-example")),

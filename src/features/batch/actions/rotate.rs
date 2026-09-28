@@ -67,7 +67,7 @@ impl Options {
             [layout::setting_row_with_info(
                 fl!("batch-option-turn"),
                 fl!("batch-action-rotate-hint"),
-                layout::aligned([
+                layout::choices([
                     choice(fl!("batch-action-rotate-right"), Turn::Right),
                     choice(fl!("batch-action-rotate-left"), Turn::Left),
                     choice(fl!("batch-action-rotate-half"), Turn::Half),

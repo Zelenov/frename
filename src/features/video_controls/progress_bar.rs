@@ -29,6 +29,22 @@ const LABEL_DIP: f32 = SPACE_XXS;
 /// Least room between the label and the edge of the window or the player.
 const LABEL_MARGIN: f32 = SPACE_XS;
 
+/// The in/out span as a band above the bar, in its own lane like a range: `None` unless both
+/// points are set and in comes first. It has no GUID, so no handles; a click on it plays it.
+pub fn in_out_band(start: Option<f32>, end: Option<f32>) -> Option<BarMarker> {
+    match (start, end) {
+        (Some(start), Some(end)) if start < end => Some(BarMarker {
+            start,
+            end,
+            color: VIDEO_SEGMENT_EDGE,
+            // Drawn in full: the span is set by hand, not an idle marker among others.
+            active: true,
+            guid: None,
+        }),
+        _ => None,
+    }
+}
+
 /// A clip marker as the bar draws it, in the bar's unit.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BarMarker {
@@ -111,6 +127,8 @@ pub struct ProgressBar<'a, Message, Theme = iced::Theme, Renderer = iced::Render
     label: Option<(f32, Element<'a, Message, Theme, Renderer>)>,
     /// Right edge (window x) the label stays left of; `None` for the window's.
     label_right_edge: Option<f32>,
+    /// A lane at the top holds the marker label (the clip has markers).
+    label_lane: bool,
     /// A range's ends were dragged (or `Alt`+click made it a point): its GUID, start and end.
     on_marker_span: Option<SpanFn<'a, Message>>,
     /// `Alt`+drag drew a new range from start to end; `None` turns `Alt`+drag off.
@@ -144,6 +162,7 @@ impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
             lane_count: 0,
             label: None,
             label_right_edge: None,
+            label_lane: false,
             on_marker_span: None,
             on_new_range: None,
             on_play_range: None,
@@ -179,6 +198,13 @@ impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
     pub fn markers(mut self, markers: impl IntoIterator<Item = BarMarker>) -> Self {
         self.markers = markers.into_iter().collect();
         (self.lanes, self.lane_count) = assign_lanes(&self.markers);
+        self
+    }
+
+    /// Keep a lane at the top for the marker label, so the label stays inside the timeline row
+    /// instead of reaching over what is above it. On for a clip with markers.
+    pub fn label_lane(mut self, on: bool) -> Self {
+        self.label_lane = on;
         self
     }
 
@@ -226,12 +252,17 @@ impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
     }
 
     fn height(&self) -> f32 {
-        height_for_lanes(self.lane_count)
+        self.label_room() + height_for_lanes(self.lane_count)
+    }
+
+    /// The label lane's height: none without markers.
+    fn label_room(&self) -> f32 {
+        label_room(self.label_lane)
     }
 
     /// Top of the bar within the widget: lower when there are lanes of bands above it.
     fn bar_top(&self) -> f32 {
-        bar_top_for_lanes(self.lane_count)
+        self.label_room() + bar_top_for_lanes(self.lane_count)
     }
 
     /// Convert cursor position to a value in min..=max, not snapped.
@@ -377,9 +408,19 @@ fn height_for_lanes(lanes: usize) -> f32 {
     TIMELINE_HEIGHT - TRACK_TOP + bar_top_for_lanes(lanes)
 }
 
-/// How tall the bar is with these markers: it grows when overlapping ranges need lanes.
-pub fn bar_height(markers: &[BarMarker]) -> f32 {
-    height_for_lanes(assign_lanes(markers).1)
+/// The label lane's height when there is one.
+fn label_room(label_lane: bool) -> f32 {
+    if label_lane {
+        MARKER_LABEL_LANE
+    } else {
+        0.0
+    }
+}
+
+/// How tall the bar is with these markers: it grows when overlapping ranges need lanes, and by
+/// the label lane when `label_lane`.
+pub fn bar_height(markers: &[BarMarker], label_lane: bool) -> f32 {
+    label_room(label_lane) + height_for_lanes(assign_lanes(markers).1)
 }
 
 /// The lane of each marker's band: each range goes into the first lane where it overlaps no
@@ -504,17 +545,15 @@ where
 
         let span = self.max - self.min;
         let to_x = |v: f32| self.x_of(bounds, v);
-        // The in/out segment lies under the played part, so the played part stays readable;
-        // its end lines are drawn over both.
+        // The in and out points are lines across the track, over the played part; the span
+        // between them is a band above the bar (see `in_out_band`), since a fill on the track
+        // would hide under the played part.
         let edges: Vec<f32> = if span > 0.0 {
-            match (self.segment_start, self.segment_end) {
-                (Some(start), Some(end)) if start < end => {
-                    let (x0, x1) = (to_x(start), to_x(end));
-                    renderer.fill_quad(quad(track(x0, (x1 - x0).max(RING)), 0.0), VIDEO_SEGMENT);
-                    vec![x0, x1]
-                }
-                (start, end) => start.into_iter().chain(end).map(to_x).collect(),
-            }
+            self.segment_start
+                .into_iter()
+                .chain(self.segment_end)
+                .map(to_x)
+                .collect()
         } else {
             Vec::new()
         };
@@ -589,9 +628,9 @@ where
                     continue;
                 }
                 let needle_top = if marker.active {
-                    bounds.y + LABEL_DIP
+                    bounds.y + self.label_room() + LABEL_DIP
                 } else {
-                    bounds.y + PIN_HEAD / 2.0
+                    bounds.y + self.label_room() + PIN_HEAD / 2.0
                 };
                 let needle = Rectangle {
                     x: x0 - RING / 2.0,
@@ -604,7 +643,7 @@ where
                     // Outlined in the panel's color, so heads that overlap stay readable.
                     let head = Rectangle {
                         x: x0 - PIN_HEAD / 2.0,
-                        y: bounds.y,
+                        y: bounds.y + self.label_room(),
                         width: PIN_HEAD,
                         height: PIN_HEAD,
                     };
@@ -767,13 +806,14 @@ where
         let span = self.max - self.min;
         let min = self.min;
         let right_edge = self.label_right_edge;
+        let label_top = self.label_room();
         let (value, content) = self.label.as_mut().filter(|_| span > 0.0)?;
         let bounds = layout.bounds() + translation;
         let x = bounds.x + ((*value - min) / span).clamp(0.0, 1.0) * bounds.width;
         Some(overlay::Element::new(Box::new(LabelOverlay {
             content,
             tree: tree.children.first_mut()?,
-            anchor: Point::new(x, bounds.y + LABEL_DIP),
+            anchor: Point::new(x, bounds.y + label_top + LABEL_DIP),
             right_edge,
         })))
     }

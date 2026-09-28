@@ -61,9 +61,9 @@ impl Options {
             label(),
             fl!("batch-action-move-in-out-hint"),
             &[change],
-            [layout::setting_row(
+            [page::option_row(
                 fl!("batch-option-direction"),
-                layout::aligned([
+                layout::choices([
                     choice(
                         fl!("batch-action-move-in-out-into-videos"),
                         form::description(fl!("settings-in-out-in-video-hint")),

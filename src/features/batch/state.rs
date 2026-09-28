@@ -248,7 +248,13 @@ impl BatchState {
                 }
                 self.active = active;
             }
-            Message::SelectAction(action) => self.action = action,
+            Message::SelectAction(action) => {
+                // Picking another action after a job leaves its result, as Close does.
+                if !self.is_running() {
+                    self.job = None;
+                }
+                self.action = action;
+            }
             Message::Action(message) => self.actions.update(message),
             Message::Prepare { operation, files } => {
                 self.action = operation.action();
@@ -568,19 +574,6 @@ impl BatchState {
         })
     }
 
-    /// Files of the current job that were changed with something to say (e.g. they kept the
-    /// in/out points they had stored), in job order.
-    pub fn done_with_reason(&self) -> Vec<(FileId, &str)> {
-        self.job.as_ref().map_or_else(Vec::new, |job| {
-            job.order
-                .iter()
-                .copied()
-                .filter(|id| job.statuses.get(id) == Some(&ItemStatus::Done))
-                .filter_map(|id| job.reasons.get(&id).map(|r| (id, r.as_str())))
-                .collect()
-        })
-    }
-
     /// The action of the current job, which the report's wording follows.
     pub fn job_action(&self) -> Option<Action> {
         self.job.as_ref().map(|job| job.operation.action())
@@ -698,6 +691,20 @@ mod tests {
 
         batch.update(Message::CloseReport);
         assert!(batch.progress().is_none());
+    }
+
+    #[test]
+    fn picking_an_action_after_a_job_leaves_its_result() {
+        let files = ids(1);
+        let mut batch = state();
+        batch.start(files);
+        let (id, _, _) = batch.begin_next().expect("the file");
+        batch.finish(id, &ItemResult::new(ItemStatus::Done, None));
+        assert!(batch.begin_next().is_none());
+        assert!(batch.progress().is_some(), "the result shows");
+        batch.update(Message::SelectAction(Action::FixTags));
+        assert!(batch.progress().is_none());
+        assert_eq!(batch.action(), Action::FixTags);
     }
 
     #[test]

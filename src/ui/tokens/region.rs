@@ -3,7 +3,9 @@
 
 use super::size::*;
 use super::space::*;
-use super::typography::LINE_BODY;
+use super::typography::{
+    BODY_CHAR_WIDTH, LINE_BODY, LINE_CAPTION, LINE_TOOLTIP, TEXT_BODY, TEXT_CHIP_MINI,
+};
 
 // The main window (§13.9): the minimum fits a 1280×680 work area with room to spare.
 pub const WINDOW_MIN_WIDTH: f32 = 900.0;
@@ -68,8 +70,15 @@ pub const RANGE_HANDLE_HEIGHT: f32 = 8.0;
 pub const TIMELINE_HIT_SLACK: f32 = 3.0;
 /// A Shift seek or a dragged handle snaps to a marker this close to the pointer.
 pub const SNAP_REACH: f32 = 8.0;
-/// A subtitle row of the side list: its time and up to three lines of the cue.
-pub const CUE_ROW_HEIGHT: f32 = 4.0 * LINE_BODY + 2.0 * SPACE_TIGHT;
+/// The lane at the top of the timeline that the active marker's label sits in, so it never
+/// covers the subtitle strip above: its line of text, padding and edge.
+pub const MARKER_LABEL_LANE: f32 = LINE_TOOLTIP + 2.0 * SPACE_XXS + 2.0 * RING;
+/// A subtitle row of the side list without its text: the time line and the row's inset. Each
+/// line of the cue adds `LINE_BODY`: rows take their natural height.
+pub const CUE_ROW_CHROME: f32 = LINE_BODY + 2.0 * SPACE_TIGHT;
+/// Room for a cue's text in a side list of the usual width: the list's inset, the gutter and the
+/// row's inset go first.
+pub const CUE_TEXT_WIDTH: f32 = SIDE_LIST_MAX_WIDTH - 3.0 * SPACE_S - SCROLL_GUTTER;
 /// A marker row with a one-line name: its first line of row buttons and the name. A longer
 /// name adds `LINE_BODY` per line.
 pub const MARKER_ROW_HEIGHT: f32 = ICON_BUTTON_SMALL + SPACE_XXS + LINE_BODY + 2.0 * SPACE_TIGHT;
@@ -82,6 +91,8 @@ pub const FILE_ROW_HEIGHT: f32 = 52.0;
 /// The check column in batch mode, and the status column (SRT, lock).
 pub const CHECK_COLUMN: f32 = 28.0;
 pub const STATUS_COLUMN: f32 = 32.0;
+/// A file name keeps at least this much beside its chips: chips give way first.
+pub const NAME_MIN_WIDTH: f32 = 80.0;
 /// The line over the list that says why it is locked.
 pub const LOCK_LINE_HEIGHT: f32 = CONTROL_HEIGHT;
 
@@ -92,6 +103,8 @@ pub const CHIP_MINI_HEIGHT: f32 = 20.0;
 pub const CHIP_MAX_WIDTH: f32 = 240.0;
 /// The order strip between the grid and the file name card.
 pub const ORDER_STRIP_HEIGHT: f32 = BAR_HEIGHT;
+/// From this width of the order strip on, its buttons show their words; narrower, only icons.
+pub const ORDER_STRIP_WORDS_FROM: f32 = 420.0;
 /// The trash at the end of the file name card.
 pub const TRASH_SIDE: f32 = 36.0;
 /// The comment box: its lowest height.
@@ -106,6 +119,9 @@ pub const CHIP_DRAG_LIFT: f32 = SPACE_TIGHT;
 pub const CHIP_DROP_ESTIMATE_WIDTH: f32 = 64.0;
 /// A generous average width of one character of a chip's 13-px label, to size grid columns.
 pub const CHIP_CHAR_WIDTH: f32 = 7.5;
+/// The average width of one character of a mini chip's 12-px label: not generous, since the file
+/// list fits chips to the row by it and a generous guess hides chips that would fit.
+pub const CHIP_MINI_CHAR_WIDTH: f32 = BODY_CHAR_WIDTH * TEXT_CHIP_MINI / TEXT_BODY;
 /// The chip's marks at its right end: the star and the action, 14 px each, 4 px apart.
 pub const CHIP_MARKS_WIDTH: f32 = 2.0 * ICON_MARK + SPACE_XS;
 /// Between the chip and the cursor ring drawn outside it.
@@ -117,6 +133,10 @@ pub const GRID_CELL_INSET: f32 = RING + CHIP_RING_GAP;
 pub const GRID_CELL_HEIGHT: f32 = CHIP_HEIGHT + 2.0 * GRID_CELL_INSET;
 /// From the top of one grid row to the top of the next.
 pub const GRID_ROW_STRIDE: f32 = GRID_CELL_HEIGHT + GRID_GAP;
+/// A group's caption over its rows ("Not in the folder's tags", "Folder tags").
+pub const GRID_CAPTION_HEIGHT: f32 = LINE_CAPTION + SPACE_XS;
+/// Between the last row of one group and the next group's caption (§13.5.2: 8 px).
+pub const GRID_GROUP_GAP: f32 = SPACE_S;
 /// Columns of the tag grid: never fewer, however narrow the area.
 pub const GRID_MIN_COLUMNS: u32 = 2;
 

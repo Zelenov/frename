@@ -175,7 +175,9 @@ where
             .on_action(Message::CommentAction)
             .placeholder(fl!("file-workspace-comment-placeholder"))
             .height(Length::Shrink)
-            .min_height(size.height)
+            // iced adds the padding after the minimum: without taking it off, the editor is a
+            // little taller than the box, scrolls, and its top edge goes out of sight.
+            .min_height((size.height - COMMENT_PADDING.y()).max(0.0))
             .size(TEXT_BODY)
             .padding(COMMENT_PADDING)
             .style(style::text_editor)

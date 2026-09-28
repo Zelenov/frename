@@ -37,23 +37,26 @@ pub fn selection_bar<'a, M: 'a>(selected: bool) -> Element<'a, M> {
 }
 
 /// A row of a list: `selected` fills it and draws the bar on its left; hover brightens it.
-/// `content` gets the row's inset (0 × 8 after the bar).
+/// `content` gets the row's inset (0 × 8 after the bar). `height` is `Fill` for a row in a slot
+/// of fixed height, `Shrink` for a row of natural height (a `Fill` height inside a scroll area
+/// has nothing to fill and collapses to nothing).
 pub fn row_item<'a, M: 'a>(
     content: impl Into<Element<'a, M>>,
     selected: bool,
     hover_layer: Color,
+    height: Length,
 ) -> Element<'a, M> {
     let body = container(content)
         .width(Length::Fill)
-        .height(Length::Fill)
+        .height(height)
         .padding(Padding {
             left: SPACE_S - SELECTION_BAR,
             right: SPACE_S,
             ..Padding::ZERO
         });
-    let item = container(row![selection_bar(selected), body].height(Length::Fill))
+    let item = container(row![selection_bar(selected), body].height(height))
         .width(Length::Fill)
-        .height(Length::Fill)
+        .height(height)
         .style(style::selectable(selected));
     hoverable(item, hover_layer, RADIUS_S)
 }

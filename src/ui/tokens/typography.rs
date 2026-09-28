@@ -16,6 +16,12 @@ pub const TEXT_TOOLTIP: f32 = 12.0;
 pub const LINE_TOOLTIP: f32 = 16.0;
 /// JetBrains Mono's x-height is larger than Inter's: 12 px mono matches 13 px Inter.
 pub const TEXT_MONO: f32 = 12.0;
+/// One character of `mono` text: JetBrains Mono advances 0.6 em, so a name can be cut exactly.
+pub const MONO_CHAR_WIDTH: f32 = TEXT_MONO * 0.6;
+/// The average width of one character of `body` text, to guess how many lines a text wraps to.
+pub const BODY_CHAR_WIDTH: f32 = 6.8;
+/// A generous average width of one character of `caption` text (counts, badges).
+pub const CAPTION_CHAR_WIDTH: f32 = 6.5;
 /// A mini chip in a file list row.
 pub const TEXT_CHIP_MINI: f32 = 12.0;
 pub const LINE_CHIP_MINI: f32 = 16.0;

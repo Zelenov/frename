@@ -276,7 +276,6 @@ fn files_not_done<'a>(
     // points out of names which files kept the points they had stored.
     let listed = match action {
         Action::GenerateSubtitles => state.skipped_with_reason(),
-        Action::InOutFromNames => state.done_with_reason(),
         _ => Vec::new(),
     };
     let rows: Vec<(FileId, Option<String>)> = failed
@@ -292,7 +291,6 @@ fn files_not_done<'a>(
     let with_reasons = rows.iter().any(|(_, reason)| reason.is_some());
     let caption = match action {
         Action::GenerateSubtitles => fl!("batch-failed-subtitles"),
-        Action::InOutFromNames => fl!("batch-in-out-from-names-listed"),
         _ => fl!("batch-files-not-done"),
     };
     let title = row![

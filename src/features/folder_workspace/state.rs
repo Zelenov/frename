@@ -31,6 +31,7 @@ use crate::features::folder;
 use crate::features::markers::MarkersState;
 use crate::features::media_viewer::{self, video as media_viewer_video, MediaViewerState};
 use crate::features::sync_panel;
+use crate::features::tag_grid::groups::Shape;
 use crate::features::tag_panel::{self, TagPanelState, TAG_LIST_SCROLLABLE_ID};
 use crate::features::video_controls;
 use crate::ui::tokens::{
@@ -81,6 +82,8 @@ pub struct FolderWorkspace {
     batch_waits_for_unload: bool,
     /// The file being renamed in place in the folder list, if any.
     inline_rename: Option<folder::InlineRename>,
+    /// The file list's filter menu is open.
+    filter_menu_open: bool,
     /// Bumped per folder, so a comment batch for a folder no longer open is dropped.
     comment_load_generation: u64,
     /// Frame of the loading spinner shown in rows whose comment is still loading.
@@ -158,6 +161,7 @@ impl FolderWorkspace {
             batch: BatchState::default(),
             batch_waits_for_unload: false,
             inline_rename: None,
+            filter_menu_open: false,
             comment_load_generation: 0,
             spinner_frame: 0,
             pending_to_file_id: None,
@@ -1234,16 +1238,27 @@ impl FolderWorkspace {
                 self.set_list_filter(|dir| dir.set_marked_only(marked_only))
             }
             folder::Message::SetNameFilter(query) => self.set_file_name_filter(query),
-            folder::Message::ShowAll => Task::batch(
-                [
-                    folder::Message::SetNameFilter(String::new()),
-                    folder::Message::SetUntaggedOnly(false),
-                    folder::Message::SetSubtitledOnly(false),
-                    folder::Message::SetCommentedOnly(false),
-                    folder::Message::SetMarkedOnly(false),
-                ]
-                .map(|m| Task::done(Message::Folder(m))),
-            ),
+            folder::Message::ToggleFilterMenu => {
+                self.filter_menu_open = !self.filter_menu_open;
+                Task::none()
+            }
+            folder::Message::CloseFilterMenu => {
+                self.filter_menu_open = false;
+                Task::none()
+            }
+            folder::Message::ShowAll => {
+                self.filter_menu_open = false;
+                Task::batch(
+                    [
+                        folder::Message::SetNameFilter(String::new()),
+                        folder::Message::SetUntaggedOnly(false),
+                        folder::Message::SetSubtitledOnly(false),
+                        folder::Message::SetCommentedOnly(false),
+                        folder::Message::SetMarkedOnly(false),
+                    ]
+                    .map(|m| Task::done(Message::Folder(m))),
+                )
+            }
             // Intercepted by the app, which owns the windows; no-op here.
             folder::Message::OpenSettings => Task::none(),
             folder::Message::StartRename(index) => self.start_rename(index),
@@ -1446,7 +1461,22 @@ impl FolderWorkspace {
             return self.ctrl_click_select(index);
         }
         self.arm_drag_out(index);
+        // The file open already stays as it is: opening it again reloads its video, so the two
+        // clicks of a double-click (rename) would load it twice.
+        if self.is_open_at(index) {
+            return Task::none();
+        }
         self.select_file_at(index)
+    }
+
+    /// Whether the file at `index` of the list is the one open in the file workspace.
+    fn is_open_at(&self, index: usize) -> bool {
+        let listed = self
+            .directory
+            .as_ref()
+            .and_then(|dir| dir.files_in_order().nth(index))
+            .map(|f| f.id());
+        listed.is_some() && listed == self.file_workspace.file().map(|f| f.id())
     }
 
     /// Ctrl+click: with no multi-selection running yet, starts one with the previously open file
@@ -1998,69 +2028,32 @@ impl FolderWorkspace {
         self.tag_panel.set_selected(filtered.get(new_i).copied());
     }
 
-    /// Up: move one visual row up; top row wraps to last row at same column.
+    /// Up: one row up in the grid as it is drawn (its groups start rows of their own); the top
+    /// row wraps to the last.
     fn move_selection_up(&mut self) {
-        let filtered = self
-            .file_workspace
-            .tag_list()
-            .filtered_display_tag_ids()
-            .to_vec();
-        if filtered.is_empty() {
-            self.tag_panel.set_selected(None);
-            return;
-        }
-        let cols = self.tag_panel.cols().max(1) as usize;
-        let count = filtered.len();
-        let cur = self
-            .tag_panel
-            .selected_tag_id()
-            .and_then(|id| filtered.iter().position(|&fid| fid == id));
-        let new_i = match cur {
-            None => count - 1,
-            Some(i) if i < cols => {
-                // top row → jump to last row, same column
-                let x = i % cols;
-                let last_row = (count - 1) / cols;
-                let new_i = last_row * cols + x;
-                if new_i >= count {
-                    new_i - cols
-                } else {
-                    new_i
-                }
-            }
-            Some(i) => i - cols,
-        };
-        self.tag_panel.set_selected(filtered.get(new_i).copied());
+        self.move_selection_by_row(Shape::up);
     }
 
-    /// Down: move one visual row down; last row wraps to first row at same column.
+    /// Down: one row down; the last row wraps to the top.
     fn move_selection_down(&mut self) {
-        let filtered = self
-            .file_workspace
-            .tag_list()
-            .filtered_display_tag_ids()
-            .to_vec();
+        self.move_selection_by_row(Shape::down);
+    }
+
+    /// Move the tag cursor to the tag `step` finds from it in the grid's shape; with no cursor,
+    /// to the first tag.
+    fn move_selection_by_row(&mut self, step: fn(&Shape, usize) -> Option<usize>) {
+        let tag_list = self.file_workspace.tag_list();
+        let filtered = tag_list.filtered_display_tag_ids().to_vec();
         if filtered.is_empty() {
             self.tag_panel.set_selected(None);
             return;
         }
-        let cols = self.tag_panel.cols().max(1) as usize;
-        let count = filtered.len();
+        let shape = Shape::of(tag_list, self.tag_panel.cols() as usize);
         let cur = self
             .tag_panel
             .selected_tag_id()
             .and_then(|id| filtered.iter().position(|&fid| fid == id));
-        let new_i = match cur {
-            None => 0,
-            Some(i) => {
-                let new_i = i + cols;
-                if new_i >= count {
-                    i % cols
-                } else {
-                    new_i
-                }
-            }
-        };
+        let new_i = cur.and_then(|i| step(&shape, i)).unwrap_or(0);
         self.tag_panel.set_selected(filtered.get(new_i).copied());
     }
 
@@ -2078,11 +2071,12 @@ impl FolderWorkspace {
             Some(i) => i,
             None => return Task::none(),
         };
-        let cols = self.tag_panel.cols() as usize;
-        let row_stride = self.tag_panel.row_height();
-        let row_extent = self.tag_panel.row_content_height().unwrap_or(row_stride);
-        let visual_row = flat_index / cols;
-        let row_top = (visual_row as f32) * row_stride;
+        let shape = Shape::of(tag_list, self.tag_panel.cols() as usize);
+        let row_extent = self
+            .tag_panel
+            .row_content_height()
+            .unwrap_or(self.tag_panel.row_height());
+        let row_top = shape.row_top(shape.position(flat_index).0);
         let row_bottom = row_top + row_extent;
 
         let (current, vh) = match (
@@ -2206,6 +2200,11 @@ impl FolderWorkspace {
     }
 
     /// The file being renamed in place in the folder list, if any.
+    /// Whether the file list's filter menu is open.
+    pub fn filter_menu_open(&self) -> bool {
+        self.filter_menu_open
+    }
+
     pub fn inline_rename(&self) -> Option<&folder::InlineRename> {
         self.inline_rename.as_ref()
     }
@@ -2474,6 +2473,23 @@ mod tests {
             .and_then(|d| d.files_in_order().nth(index))
             .map(|f| f.id())
             .expect("file at index should exist")
+    }
+
+    #[test]
+    fn a_click_on_the_open_file_does_not_open_it_again() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let open = workspace
+            .directory()
+            .and_then(|d| d.selected_index())
+            .expect("a file is open");
+        assert!(workspace.is_open_at(open));
+        assert!(!workspace.is_open_at(1 - open));
     }
 
     #[test]

@@ -47,8 +47,7 @@ pub fn item<'a, M: Clone + 'a>(item: MenuItem<M>) -> Element<'a, M> {
     };
     let content = row![
         glyph,
-        text::body(item.label).color(color),
-        space::horizontal()
+        container(text::body(item.label).color(color)).width(Length::Fill)
     ]
     .extend(item.keys.into_iter().map(|key| key_cap(key, false)))
     .push(mark)
@@ -59,6 +58,14 @@ pub fn item<'a, M: Clone + 'a>(item: MenuItem<M>) -> Element<'a, M> {
         .padding(ITEM_PADDING)
         .on_press_maybe(item.on_press)
         .style(style::button(ButtonKind::Ghost))
+        .into()
+}
+
+/// A row of a menu that is not a command (a checkbox and a count): as high as an item.
+pub fn row_of<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Element<'a, M> {
+    container(content)
+        .padding(ITEM_PADDING)
+        .width(Length::Fill)
         .into()
 }
 

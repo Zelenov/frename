@@ -315,6 +315,7 @@ pub fn progress_bar<'a>(
     segment_end: Option<f32>,
     markers: Vec<BarMarker>,
     marker_label: Option<MarkerLabel<'a>>,
+    label_lane: bool,
 ) -> Element<'a, Message> {
     // While seeking, show the drag position; otherwise use live video position
     let current_pos = if state.is_seeking() {
@@ -331,6 +332,7 @@ pub fn progress_bar<'a>(
         .on_play_range(Message::PlayRange)
         .label(marker_label.map(|label| (label.at, marker_label_button(label))))
         .label_right_edge(marker_label.and_then(|label| label.right_edge))
+        .label_lane(label_lane)
         .into()
 }
 

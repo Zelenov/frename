@@ -2,5 +2,6 @@
 //! `tag_panel`; the starred strip draws its cells the same way.
 
 pub mod cell;
+pub mod groups;
 pub mod layout;
 pub mod view;

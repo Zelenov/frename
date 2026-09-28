@@ -43,6 +43,8 @@ pub const ACCENT_HOVER: Color = Color::from_rgb8(0x2F, 0x6D, 0xF0);
 pub const ACCENT_PRESSED: Color = Color::from_rgb8(0x1D, 0x56, 0xD6);
 /// The accent as text or a line on dark: links, focus ring, selection bar.
 pub const ACCENT_TEXT: Color = Color::from_rgb8(0x6C, 0xB0, 0xFF);
+/// Behind an accent badge: `ACCENT_TEXT` at 16 %.
+pub const ACCENT_TINT: Color = Color::from_rgba(0.424, 0.690, 1.0, 0.16);
 
 // Status.
 pub const SUCCESS: Color = Color::from_rgb8(0x5C, 0xCB, 0x8F);
