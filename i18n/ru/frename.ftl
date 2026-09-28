@@ -138,22 +138,139 @@ settings-key-save-into = «Сохранить ключ» помещает его
 
 ## Batch mode
 
+batch-back-while-running = Сначала отмените действие
+batch-checked-count = { $count ->
+    [one] отмечен { $count } файл
+    [few] отмечено { $count } файла
+   *[many] отмечено { $count } файлов
+}
+batch-no-key = Нет ключа
+batch-group-move = Перенос между местами
+batch-group-fix = Исправить имена и видео
+batch-group-paid = Платные сервисы
+batch-reason-none-checked = Нет отмеченных файлов
+batch-reason-reading = Читаем длину клипов…
+batch-check-all = Отметить все { $count ->
+    [one] { $count } файл
+    [few] { $count } файла
+   *[many] { $count } файлов
+}
+batch-job-running = выполняется
+batch-job-finished = завершено
+batch-job-stopped = остановлено
+batch-progress-files = { $finished } из { $total ->
+    [one] { $total } файла
+    [few] { $total } файлов
+   *[many] { $total } файлов
+}
+batch-time-left = осталось около { $time }
+batch-time-estimating = оцениваем время…
+batch-time-spent = прошло { $time }
+batch-locked-until-end = Папка заблокирована до конца
+batch-run-again = Запустить снова для { $count ->
+    [one] { $count } файла
+    [few] { $count } файлов
+   *[many] { $count } файлов
+}
+batch-result-done = Готово: { $total ->
+    [one] { $total } файл
+    [few] { $total } файла
+   *[many] { $total } файлов
+}
+batch-result-done-detail = изменено: { $changed }, без изменений: { $unchanged }
+batch-result-problems = Готово с ошибками: не выполнено { $failed } из { $total ->
+    [one] { $total } файла
+    [few] { $total } файлов
+   *[many] { $total } файлов
+}
+batch-figure-unchanged = без изменений
+batch-figure-not-done = не выполнено
+batch-figure-not-reached = не дошли
+batch-files-not-done = Не выполнено
+batch-table-file = Файл
+batch-table-why = Почему
+
+batch-run-move-comments = Перенести { $count ->
+    [one] { $count } комментарий
+    [few] { $count } комментария
+   *[many] { $count } комментариев
+}
+batch-run-move-in-out = Перенести точки входа и выхода: { $count ->
+    [one] { $count } файл
+    [few] { $count } файла
+   *[many] { $count } файлов
+}
+batch-run-in-out-from-names = Убрать точки входа и выхода из имён: { $count ->
+    [one] { $count } файл
+    [few] { $count } файла
+   *[many] { $count } файлов
+}
+batch-run-convert = Преобразовать: { $count ->
+    [one] { $count } файл
+    [few] { $count } файла
+   *[many] { $count } файлов
+}
+batch-run-rotate = Повернуть: { $count ->
+    [one] { $count } видео
+    [few] { $count } видео
+   *[many] { $count } видео
+}
+batch-run-tag = Обновить тег: { $count ->
+    [one] { $count } файл
+    [few] { $count } файла
+   *[many] { $count } файлов
+}
+batch-run-fix-tags = Упорядочить теги: { $count ->
+    [one] { $count } файл
+    [few] { $count } файла
+   *[many] { $count } файлов
+}
+batch-run-rename = Переименовать: { $count ->
+    [one] { $count } файл
+    [few] { $count } файла
+   *[many] { $count } файлов
+}
+batch-run-reload = Перечитать: { $count ->
+    [one] { $count } файл
+    [few] { $count } файла
+   *[many] { $count } файлов
+}
+batch-service-anthropic = Anthropic
+batch-service-soniox = Soniox
+batch-change-renames = Переименовывает файлы
+batch-change-videos = Пишет в видео
+batch-change-text-files = Пишет текстовые файлы рядом с видео
+batch-change-comments = Пишет в комментарии
+batch-change-subtitles = Пишет файлы субтитров рядом с видео
+batch-change-records = Меняет только записи самого frename
+batch-option-direction = Направление
+batch-option-goes-to = Куда
+batch-option-language = Язык
+batch-option-described = Уже описанные
+batch-option-subtitled = С субтитрами
+batch-option-spacing = Пробелы
+batch-option-tag = Тег
+batch-option-turn = Поворот
+batch-plan-videos = Видео
+batch-plan-length = Длина
+batch-plan-cost = Стоимость
+batch-plan-time = Время
+batch-reason-estimate = Ждём оценку
+batch-set-key = Указать ключ…
+batch-check-key = Проверить ключ…
+batch-subtitles-languages-auto = Определяется в каждом видео
+batch-action-describe-ai-run-waiting = Описать видео
+batch-action-fix-tags-order = Порядок: как в списке тегов, неизвестные теги первыми.
+batch-action-markers-comment-hint-short = Превращает строки комментария с временем в маркеры или копирует маркеры в комментарий.
+batch-action-markers-to-comment-hint = Маркеры остаются; повторный запуск ничего не добавляет дважды.
+batch-action-rotate-hint-short = Поворачивает клипы MP4 и MOV флагом поворота, без перекодирования.
+batch-action-tag-commented-off = Тег для видео с комментарием выключен
+batch-action-tag-commented-choose = Выбрать тег…
+
 batch-title = Пакетные действия
-batch-on-checked = для { $count ->
-    [one] { $count } отмеченного файла
-    [few] { $count } отмеченных файлов
-   *[many] { $count } отмеченных файлов
-}
-batch-run = Применить к { $count ->
-    [one] { $count } файлу
-    [few] { $count } файлам
-   *[many] { $count } файлам
-}
 batch-done-label-changed = изменено
 batch-done-label-subtitled = субтитровано
-batch-counts = ✓ { $done_label }: { $done }   – без изменений: { $skipped }   ✗ с ошибкой: { $failed }
 batch-ai-at-least = как минимум
-batch-ai-spend-line = AI: { $spend }
 batch-cancel = Отмена
 batch-stopping = Остановка…
 batch-stopped = Остановлено после { $finished } из { $total ->
@@ -161,16 +278,8 @@ batch-stopped = Остановлено после { $finished } из { $total ->
     [few] { $total } файлов
    *[many] { $total } файлов
 }.
-batch-finished = Готово: { $total } { $total ->
-    [one] файл
-    [few] файла
-   *[many] файлов
-}.
 batch-close = Закрыть
 batch-failed-subtitles = Без субтитров:
-batch-failed-plain = С ошибкой:
-batch-failed-with-log = С ошибкой (подробности в журнале):
-batch-retry = Повторить
 batch-add-credit = Пополнить счёт
 batch-open-log = Открыть журнал
 
@@ -188,7 +297,6 @@ batch-action-in-out-from-names = Убрать точки входа и выхо�
 batch-action-in-out-from-names-hint = Прежние версии могли хранить точки входа и выхода в имени файла (clip.in_00_01_05.mp4). Действие убирает их из имени каждого отмеченного файла и сохраняет туда, где точки входа и выхода хранятся теперь. Если у файла точки уже сохранены, остаются они; такой файл попадёт в отчёт.
 batch-action-in-out-from-names-status-comment = Куда пойдут: в комментарий
 batch-action-in-out-from-names-status-video = Куда пойдут: внутрь видео (XMP); для mkv, webm и других форматов без XMP — в комментарий
-batch-action-in-out-from-names-settings = Настройки точек…
 batch-action-in-out-from-names-kept = оставлены сохранённые { $stored }, из имени убраны { $name }
 batch-action-in-out-from-names-not-renamed = не удалось переименовать (подробности в журнале)
 batch-action-in-out-from-names-empty = оставлен как есть: имя стало бы пустым
@@ -203,10 +311,6 @@ batch-action-markers-comment-hint = Строка вида «03:24 — Дубль
 batch-action-tag-commented = Тег видео с комментарием
 batch-action-tag-commented-hint = Ставит тег «{ $tag }» каждому отмеченному видео с вашим комментарием (описания от AI не считаются) и снимает его с видео без комментария. Файлы, у которых тег меняется, переименовываются.
 batch-action-tag-commented-hint-off = Ставит тег для видео с комментарием каждому отмеченному видео с вашим комментарием и снимает его с видео без комментария. Сейчас этот тег выключен в настройках.
-batch-action-tag-commented-status = Тег: { $tag }
-batch-action-tag-commented-status-off = Тег: выключен
-batch-action-tag-commented-settings = Настройки тега…
-
 batch-action-fix-tags = Упорядочить теги по приоритету
 batch-action-fix-tags-hint = Расставляет теги в имени каждого отмеченного файла в порядке панели тегов: чем выше тег в панели, тем раньше он в имени. Теги, которых папка ещё не знает, идут первыми, как в панели тегов. Файлы, у которых порядок меняется, переименовываются.
 
@@ -215,27 +319,20 @@ batch-action-respace-tags-hint-space = Переименовывает кажды
 batch-action-respace-tags-hint-no-space = Переименовывает каждый отмеченный файл так, чтобы после тегов не было пробелов, как задано в настройках: Food.Goat.clip.mp4.
 batch-action-respace-tags-status-space = Пробел после каждого тега
 batch-action-respace-tags-status-no-space = Без пробелов после тегов
-batch-action-respace-tags-settings = Настройки пробелов…
-
 batch-action-reload-files = Сбросить кэш и перечитать
 batch-action-reload-files-hint = Заново читает комментарий и точки входа и выхода каждого отмеченного файла из самого файла и заменяет то, что папка о нём запомнила. Нужно, если файлы менялись в другой программе. Файлы, у которых запомненное отсутствовало или устарело, считаются изменёнными.
 
 batch-action-describe-ai = Описать с помощью AI
-batch-action-describe-ai-run = Описать { $videos }
+batch-action-describe-ai-run = Описать { $videos } · около { $dollars }
 batch-action-describe-ai-estimating = Оценка… { $known } / { $total }
 batch-action-describe-ai-none = Нет видео для описания.
-batch-action-describe-ai-plan = { $videos }, { $minutes } · примерно { $dollars } моделью { $model }
 batch-action-describe-ai-hint = Займёт примерно { $duration }. Папка заблокирована до конца. Отмена сохраняет уже описанные видео; повторный запуск пропускает их.
 batch-action-describe-ai-no-subtitles = Без субтитров (описана только картинка): { $videos }.
 batch-action-describe-ai-redo = Переописать видео, у которых уже есть описание от AI
 batch-action-describe-ai-hint-panel = Описывает происходящее в каждом отмеченном видео с привязкой ко времени: краткое содержание и отрезки по времени добавляются в описание от AI в его комментарии; ваш собственный текст сохраняется. Кадры и субтитры отправляются в Anthropic.
 batch-ai-change = Изменить
-batch-ai-open-settings = Открыть настройки
 batch-ai-key-missing = Укажите ключ API Anthropic в настройках
 batch-ai-key-unavailable = Не удалось открыть системное хранилище паролей: оно может быть заблокировано или отсутствовать (например, GNOME Keyring или KWallet).
-batch-ai-language-same-as-subtitles = Описания на языке субтитров (на английском, если субтитров нет)
-batch-ai-language = Описания на языке: { $language }
-
 ## AI description language names: the Settings picker and { $language } above.
 
 ai-language-same-as-subtitles = Как в субтитрах

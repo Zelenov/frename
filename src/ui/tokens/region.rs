@@ -130,8 +130,16 @@ pub const BATCH_HEADER_HEIGHT: f32 = 48.0;
 pub const ACTION_LIST_WIDTH: f32 = 232.0;
 /// The panel's width on entering batch mode: the whole action list and a page.
 pub const BATCH_PANEL_WIDTH: f32 = 600.0;
+/// Narrower than `BATCH_PANEL_WIDTH` the action list shows only its icons, this wide; narrower
+/// than `BATCH_ICON_LIST_FROM` it becomes a dropdown over the page (§13.9).
+pub const ACTION_LIST_ICONS_WIDTH: f32 = 48.0;
+pub const BATCH_ICON_LIST_FROM: f32 = 440.0;
 /// The failed files' table scrolls after this many rows.
 pub const FAILED_ROWS_SHOWN: f32 = 8.0;
+/// A job's progress bar.
+pub const PROGRESS_HEIGHT: f32 = 6.0;
+/// A row of the failed files' table: a line of text and 6 px above and below.
+pub const TABLE_ROW_HEIGHT: f32 = LINE_BODY + 2.0 * SPACE_TIGHT;
 
 /// The widest a page of settings or options gets: longer lines are hard to read.
 pub const PAGE_MAX_WIDTH: f32 = 640.0;

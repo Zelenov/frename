@@ -30,11 +30,10 @@ use clipscribe::Model;
 use frename_core::{
     CommentStorage, File, FileId, FileSnapshot, FileTagger, FolderInfo, InOutStorage, MoveOutcome,
 };
-use iced::widget::{column, text};
 use iced::Element;
 
 use super::{ItemProgress, ItemResult, ItemStatus};
-use crate::theme;
+use crate::ui::icons::Icon;
 
 /// An entry of the action list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,11 +100,89 @@ impl Action {
         }
     }
 
-    /// The counts line's word for a file the action did its work on.
+    /// The group of the action list it is under.
+    pub fn group(self) -> Group {
+        match self {
+            Self::MoveComments | Self::MoveInOut | Self::InOutFromNames | Self::MarkersComment => {
+                Group::MoveBetweenPlaces
+            }
+            Self::Rotate
+            | Self::TagCommented
+            | Self::FixTags
+            | Self::RespaceTags
+            | Self::ReloadFiles => Group::FixFiles,
+            Self::DescribeAi | Self::GenerateSubtitles => Group::PaidServices,
+        }
+    }
+
+    /// The icon the action list shows it with (design system §13.6.3).
+    pub fn icon(self) -> Icon {
+        match self {
+            Self::MoveComments => Icon::MessageSquareText,
+            Self::MoveInOut => Icon::Scissors,
+            Self::InOutFromNames => Icon::Brackets,
+            Self::MarkersComment => Icon::MapPin,
+            Self::Rotate => Icon::RotateCw,
+            Self::TagCommented => Icon::Tag,
+            Self::FixTags => Icon::ListOrdered,
+            Self::RespaceTags => Icon::TextCursorInput,
+            Self::ReloadFiles => Icon::RotateCcw,
+            Self::DescribeAi => Icon::Sparkles,
+            Self::GenerateSubtitles => Icon::Captions,
+        }
+    }
+
+    /// The run button's label for `count` files: a verb and the count, or with nothing checked
+    /// the action's name alone (§13.6.4). The paid actions label it themselves.
+    pub fn run_label(self, count: usize) -> String {
+        if count == 0 {
+            return self.label();
+        }
+        let count = count as i64;
+        match self {
+            Self::MoveComments => fl!("batch-run-move-comments", count = count),
+            Self::MoveInOut => fl!("batch-run-move-in-out", count = count),
+            Self::InOutFromNames => fl!("batch-run-in-out-from-names", count = count),
+            Self::MarkersComment => fl!("batch-run-convert", count = count),
+            Self::Rotate => fl!("batch-run-rotate", count = count),
+            Self::TagCommented => fl!("batch-run-tag", count = count),
+            Self::FixTags => fl!("batch-run-fix-tags", count = count),
+            Self::RespaceTags => fl!("batch-run-rename", count = count),
+            Self::ReloadFiles => fl!("batch-run-reload", count = count),
+            Self::DescribeAi | Self::GenerateSubtitles => self.label(),
+        }
+    }
+
+    /// The figures' word for a file the action did its work on.
     pub fn done_label(self) -> String {
         match self {
             Self::GenerateSubtitles => fl!("batch-done-label-subtitled"),
             _ => fl!("batch-done-label-changed"),
+        }
+    }
+}
+
+/// An action as a dropdown shows it: its name.
+impl std::fmt::Display for Action {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.label())
+    }
+}
+
+/// A group of the action list, under its caption.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Group {
+    MoveBetweenPlaces,
+    FixFiles,
+    PaidServices,
+}
+
+impl Group {
+    pub fn label(self) -> String {
+        match self {
+            Self::MoveBetweenPlaces => fl!("batch-group-move"),
+            Self::FixFiles => fl!("batch-group-fix"),
+            Self::PaidServices => fl!("batch-group-paid"),
         }
     }
 }
@@ -318,23 +395,25 @@ impl Actions {
         self.describe_ai.is_probing()
     }
 
-    /// What `action` shows next to the run button (why it cannot run), if anything.
-    pub fn footer(&self, action: Action) -> Option<Element<'_, ActionMessage>> {
+    /// Which paid service `action` bills through, and whether its key is missing: the badge of
+    /// its row in the action list. `None` for the free actions.
+    pub fn service(&self, action: Action) -> Option<(String, bool)> {
         match action {
-            Action::DescribeAi => self.describe_ai.footer(),
-            Action::GenerateSubtitles => self.generate_subtitles.footer(),
+            Action::DescribeAi => Some((
+                fl!("batch-service-anthropic"),
+                self.describe_ai.key_missing(),
+            )),
+            Action::GenerateSubtitles => Some((
+                fl!("batch-service-soniox"),
+                self.generate_subtitles.key_missing(),
+            )),
             _ => None,
         }
     }
 
-    /// The panel of `action` for the `checked` files (its title, what it does, and its options),
-    /// the run button's label, and whether it can run.
-    pub fn panel(
-        &self,
-        action: Action,
-        checked: &[&File],
-    ) -> (Element<'_, ActionMessage>, String, bool) {
-        let view = match action {
+    /// The page of `action` for the `checked` files, and its run button.
+    pub fn panel(&self, action: Action, checked: &[&File]) -> Panel<'_> {
+        let page = match action {
             Action::DescribeAi => return self.describe_ai.panel(checked),
             Action::GenerateSubtitles => return self.generate_subtitles.panel(checked),
             Action::MoveComments => self.move_comments.view().map(ActionMessage::MoveComments),
@@ -350,21 +429,24 @@ impl Actions {
             Action::RespaceTags => tag_spacing::view(),
             Action::ReloadFiles => reload_files::view(),
         };
-        let label = fl!("batch-run", count = (checked.len() as i64));
-        let ready = !checked.is_empty() && self.operation(action).is_some();
-        (view, label, ready)
+        Panel {
+            page,
+            run: action.run_label(checked.len()),
+            ready: !checked.is_empty() && self.operation(action).is_some(),
+            reason: None,
+        }
     }
 }
 
-/// An action's panel as every action shows it: title, what it does, then its options.
-fn panel<'a, M: 'a>(title: String, hint: String, options: Element<'a, M>) -> Element<'a, M> {
-    column![
-        text(title).size(15),
-        text(hint).size(12).color(theme::TEXT_MUTED),
-        options
-    ]
-    .spacing(12)
-    .into()
+/// An action's page and its run button.
+pub struct Panel<'a> {
+    pub page: Element<'a, ActionMessage>,
+    /// The run button's label: a verb and the count.
+    pub run: String,
+    pub ready: bool,
+    /// Why it cannot run, for the button bar, when the page does not already say it in a
+    /// notice. The batch panel adds the reason every action shares: nothing checked.
+    pub reason: Option<String>,
 }
 
 /// What a job's AI requests to `model` cost: `$0.31 (Claude Haiku 4.5)`.

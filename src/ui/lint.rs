@@ -7,15 +7,6 @@ use std::path::{Path, PathBuf};
 /// Files not on the design system yet, each with the issue that moves it. The list only shrinks:
 /// a file here with nothing left to allow fails the test too.
 const NOT_YET: &[(&str, &str)] = &[
-    ("features/batch/actions/describe_ai/mod.rs", "#58"),
-    ("features/batch/actions/generate_subtitles.rs", "#58"),
-    ("features/batch/actions/markers_comment.rs", "#58"),
-    ("features/batch/actions/mod.rs", "#58"),
-    ("features/batch/actions/move_comments.rs", "#58"),
-    ("features/batch/actions/move_in_out.rs", "#58"),
-    ("features/batch/actions/tag_commented.rs", "#58"),
-    ("features/batch/actions/tag_spacing.rs", "#58"),
-    ("features/batch/view.rs", "#58"),
     // Only the `crate::theme` alias of `ui::legacy` is left here: it goes with legacy.
     ("main.rs", "#59"),
 ];

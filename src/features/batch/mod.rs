@@ -6,7 +6,9 @@
 //! [`actions`].
 
 mod actions;
+mod job_view;
 mod messages;
+mod page;
 mod state;
 pub mod view;
 

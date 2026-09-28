@@ -45,7 +45,7 @@ pub fn loader() -> &'static FluentLanguageLoader {
 static SYSTEM_LANGUAGE: Mutex<&str> = Mutex::new(FALLBACK);
 
 /// A message in the current UI language, checked against `i18n/en/frename.ftl` at compile time:
-/// `fl!("batch-run", count = 5)`.
+/// `fl!("batch-run-rename", count = 5)`.
 #[macro_export]
 macro_rules! fl {
     ($message_id:literal) => {{
@@ -704,7 +704,7 @@ mod tests {
     fn arguments_are_not_wrapped_in_isolation_marks() {
         let mut args = fluent_bundle::FluentArgs::new();
         args.set("count", 5);
-        let text = loader("ru").get_args_fluent("batch-run", Some(&args));
+        let text = loader("ru").get_args_fluent("batch-run-rename", Some(&args));
         assert!(!text.contains(['\u{2068}', '\u{2069}']), "{text:?}");
         assert!(text.contains('5'), "{text:?}");
     }
