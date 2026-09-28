@@ -357,6 +357,24 @@ folder-rename-error-trailing = Не может кончаться точкой �
 folder-rename-error-exists = Файл с таким именем уже есть
 folder-markers-not-saved = Маркеры не сохранены: файл доступен только для чтения или занят (закройте его в Premiere, затем откройте файл и снова закройте)
 drag-out-not-saved = Не перетащено: файл не сохранён (только чтение или открыт в Premiere)
+folder-opening = Открываем папку…
+folder-empty-title = В этой папке нет видео
+folder-empty-line = frename показывает MP4, MOV, MKV и другие видеофайлы.
+folder-open-another = Открыть другую папку…
+folder-no-match = Нет подходящих файлов
+folder-show-all = Показать все
+folder-locked = Заблокировано, пока выполняется «{ $action }»
+folder-checked-hidden = Отмечено: { $count } · скрыто: { $hidden }
+folder-checked-hidden-tip = { $hidden ->
+    [one] { $hidden } отмеченный файл скрыт поиском или фильтром; действие применится и к нему
+    [few] { $hidden } отмеченных файла скрыты поиском или фильтром; действие применится и к ним
+   *[many] { $hidden } отмеченных файлов скрыты поиском или фильтром; действие применится и к ним
+}
+folder-outcome-working = В работе
+folder-outcome-not-reached = Не обработан
+folder-window-empty-title = Откройте папку с клипами
+folder-window-empty-line = Или перетащите папку в окно. Правый клик по кнопке открывает один файл.
+folder-window-open = Открыть папку…
 
 ## Controls bar under the file list
 
@@ -366,11 +384,14 @@ folder-controls-filter-untagged = Без тегов
 folder-controls-filter-subtitles = С субтитрами
 folder-controls-filter-comments = С комментарием
 folder-controls-filter-markers = С маркерами
-folder-controls-scroll = Прокрутить к файлу
-folder-controls-open = Открыть папку (правый клик: открыть файл)
+folder-controls-scroll = Показать открытый файл в списке
+folder-controls-open = Открыть папку
 folder-controls-batch = Пакетные действия с отмеченными файлами
 folder-controls-batch-back = Назад к открытому файлу
 folder-controls-update-available = Доступно обновление: { $version }
+folder-controls-previous = Предыдущий файл
+folder-controls-next = Следующий файл
+folder-controls-open-file = Правый клик: открыть один файл
 
 ## Video
 

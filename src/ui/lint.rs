@@ -16,19 +16,13 @@ const NOT_YET: &[(&str, &str)] = &[
     ("features/batch/actions/tag_commented.rs", "#58"),
     ("features/batch/actions/tag_spacing.rs", "#58"),
     ("features/batch/view.rs", "#58"),
-    ("features/folder/mod.rs", "#59"),
-    ("features/folder/view.rs", "#59"),
-    ("features/folder_controls/view.rs", "#59"),
-    ("features/folder_workspace/state.rs", "#59"),
-    ("features/folder_workspace/view.rs", "#59"),
     ("features/markers/view.rs", "#59"),
     ("features/media_viewer/video/view.rs", "#59"),
     ("features/media_viewer/view.rs", "#59"),
     ("features/video_controls/progress_bar.rs", "#59"),
     ("features/video_controls/view.rs", "#59"),
+    // Only the `crate::theme` alias of `ui::legacy` is left here: it goes with legacy.
     ("main.rs", "#59"),
-    ("widgets/file_name_display.rs", "#59"),
-    ("widgets/splitter.rs", "#59"),
 ];
 
 /// A method whose name ends in one of these takes a size, a padding or a spacing.

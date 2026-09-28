@@ -20,6 +20,8 @@ pub const VIDEO_WIDTH_WIDE: f32 = 600.0;
 pub const FILE_LIST_WIDTH_WIDE: f32 = 360.0;
 pub const VIDEO_WIDTH: f32 = 440.0;
 pub const FILE_LIST_WIDTH: f32 = 300.0;
+/// The block of the whole-window empty screen ("Open a folder of clips"), left-aligned.
+pub const EMPTY_SCREEN_MAX_WIDTH: f32 = 420.0;
 /// A splitter's hit area; it draws a `LINE` in its middle.
 pub const SPLITTER_HIT: f32 = 12.0;
 /// The comment's height handle: its hit area, and the line it draws.

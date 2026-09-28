@@ -1,4 +1,5 @@
-//! Draggable vertical splitter widget for resizing two side-by-side panels.
+//! Draggable vertical splitter between two side-by-side panels (`docs/design/design-system.md`
+//! §8.18, §13.1): a 1-px line in the middle of its hit area, brighter while hovered or dragged.
 
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer;
@@ -7,13 +8,7 @@ use iced::advanced::{self, Clipboard, Shell};
 use iced::mouse;
 use iced::{Border, Element, Event, Length, Rectangle, Shadow, Size};
 
-use crate::theme;
-
-/// Visual width of the splitter bar.
-const BAR_WIDTH: f32 = 4.0;
-
-/// Hit-test width (wider than visual for easier grabbing).
-pub const HIT_WIDTH: f32 = 12.0;
+use crate::ui::tokens::{BORDER_CONTROL, BORDER_SUBTLE, LINE, SPLITTER_HIT};
 
 /// Internal widget state for tracking drag.
 #[derive(Default)]
@@ -42,8 +37,8 @@ impl<'a, Message> Splitter<'a, Message> {
     pub fn new(on_drag: impl Fn(f32) -> Message + 'a) -> Self {
         Self {
             on_drag: Box::new(on_drag),
-            min_left: 150.0,
-            min_right: 200.0,
+            min_left: 0.0,
+            min_right: 0.0,
         }
     }
 
@@ -74,7 +69,7 @@ where
     }
 
     fn size(&self) -> Size<Length> {
-        Size::new(Length::Fixed(HIT_WIDTH), Length::Fill)
+        Size::new(Length::Fixed(SPLITTER_HIT), Length::Fill)
     }
 
     fn layout(
@@ -83,7 +78,7 @@ where
         _renderer: &Renderer,
         limits: &layout::Limits,
     ) -> layout::Node {
-        layout::Node::new(limits.resolve(Length::Fixed(HIT_WIDTH), Length::Fill, Size::ZERO))
+        layout::Node::new(limits.resolve(Length::Fixed(SPLITTER_HIT), Length::Fill, Size::ZERO))
     }
 
     fn draw(
@@ -101,20 +96,20 @@ where
 
         let is_active = state.is_dragging || cursor.is_over(bounds);
         let color = if is_active {
-            theme::SPLITTER_ACTIVE
+            BORDER_CONTROL
         } else {
-            theme::SPLITTER
+            BORDER_SUBTLE
         };
 
-        // Draw a thin centered bar within the hit area
-        let bar_x = bounds.x + (bounds.width - BAR_WIDTH) / 2.0;
+        // The line in the middle of the hit area.
+        let bar_x = bounds.x + (bounds.width - LINE) / 2.0;
 
         renderer.fill_quad(
             renderer::Quad {
                 bounds: Rectangle {
                     x: bar_x,
                     y: bounds.y,
-                    width: BAR_WIDTH,
+                    width: LINE,
                     height: bounds.height,
                 },
                 border: Border::default(),
@@ -149,7 +144,7 @@ where
                 if state.is_dragging {
                     if let Some(pos) = cursor.position() {
                         // Clamp so both panels respect their minimum widths
-                        let max_left = viewport.width - HIT_WIDTH - self.min_right;
+                        let max_left = viewport.width - SPLITTER_HIT - self.min_right;
                         let clamped = pos.x.clamp(self.min_left, max_left);
                         shell.publish((self.on_drag)(clamped));
                     }

@@ -3,13 +3,17 @@
 //! We pass only data to each feature view (directory, current_file, selected_file, etc.).
 //! We do not tell any feature how to look (scrollable, rectangular, etc.); each feature view owns its appearance.
 
-use iced::widget::{column, container, mouse_area, row, stack, text};
-use iced::{Element, Length};
+use iced::widget::{column, container, mouse_area, row, stack};
+use iced::{Alignment, Element, Length};
 
+use crate::features::folder::view::ListProps;
+use crate::features::folder_controls::view::ToolbarProps;
 use crate::features::{batch, file_workspace, folder, folder_controls, media_viewer};
-use crate::theme;
+use crate::ui::icons::{icon, spinner, Icon};
 use crate::ui::palette::TagPalette;
-use crate::widgets::splitter::{Splitter, HIT_WIDTH};
+use crate::ui::tokens::*;
+use crate::ui::{button, style, text};
+use crate::widgets::splitter::Splitter;
 
 use super::{FolderWorkspace, Message};
 
@@ -29,26 +33,7 @@ pub fn view(
     };
 
     if state.directory().is_none() && !state.media_fullscreen() {
-        let icon = if state.is_loading() { "⏳" } else { "📂" };
-        let inner = container(
-            container(text(icon).size(120).color(theme::TEXT_MUTED))
-                .center_x(Length::Fill)
-                .center_y(Length::Fill)
-                .width(Length::Fill)
-                .height(Length::Fill),
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(theme::panel_container_style);
-
-        return if state.is_loading() {
-            inner.into()
-        } else {
-            mouse_area(inner)
-                .on_press(Message::OpenFolderPicker)
-                .on_right_press(Message::OpenFilePicker)
-                .into()
-        };
+        return empty_window(state.is_loading(), state.spinner_frame());
     }
 
     // When fullscreen overlay is active, render blank space here — otherwise the video
@@ -62,9 +47,10 @@ pub fn view(
     .width(Length::Fixed(state.left_width()))
     .height(Length::Fill);
 
+    // Each splitter keeps the columns on both sides at least as wide as their minimum.
     let left_splitter = Splitter::new(Message::LeftSplitterDragged)
-        .min_left(150.0)
-        .min_right(200.0);
+        .min_left(VIDEO_MIN_WIDTH)
+        .min_right(FILE_LIST_MIN_WIDTH + SPLITTER_HIT + TAGS_MIN_WIDTH);
 
     let (has_previous, has_next) = state.has_previous_next();
     let has_selected = state.current_file().is_some();
@@ -72,25 +58,25 @@ pub fn view(
     // Bound to a local so the folder list can borrow it instead of taking a clone per frame.
     let tag_color_mapping = state.file_workspace().tag_color_mapping();
     let folder_col: Element<'_, folder::Message> = column![
-        container(folder::view::view(
-            state.directory(),
-            state.is_loading(),
-            &tag_color_mapping,
+        container(folder::view::view(ListProps {
+            directory: state.directory(),
+            loading: state.is_loading(),
+            tag_color_mapping: &tag_color_mapping,
             tag_palette,
-            state.inline_rename(),
-            state.spinner_frame(),
-            state.batch().is_active().then_some(state.batch()),
-            state.unsaved_markers(),
-        ))
+            rename: state.inline_rename(),
+            spinner_frame: state.spinner_frame(),
+            batch: state.batch().is_active().then_some(state.batch()),
+            markers_not_saved: state.unsaved_markers(),
+        }))
         .height(Length::Fill),
-        folder_controls::view::view(
+        folder_controls::view::view(ToolbarProps {
             has_previous,
             has_next,
             has_selected,
-            state.batch().is_active(),
-            state.batch().is_running(),
+            batch_mode: state.batch().is_active(),
+            batch_running: state.batch().is_running(),
             update_available,
-        ),
+        }),
     ]
     .height(Length::Fill)
     .into();
@@ -100,10 +86,10 @@ pub fn view(
         .width(Length::Fixed(state.folder_width()))
         .height(Length::Fill);
 
-    let right_min_left = state.left_width() + HIT_WIDTH + 120.0;
+    let right_min_left = state.left_width() + SPLITTER_HIT + FILE_LIST_MIN_WIDTH;
     let right_splitter = Splitter::new(Message::RightSplitterDragged)
         .min_left(right_min_left)
-        .min_right(200.0);
+        .min_right(TAGS_MIN_WIDTH);
 
     // Batch mode shows the batch actions where the open file's tags and name are.
     let right_panel: Element<'_, Message> = if state.batch().is_active() {
@@ -142,7 +128,7 @@ pub fn view(
     )
     .width(Length::Fill)
     .height(Length::Fill)
-    .style(theme::main_container_style);
+    .style(style::panel);
 
     // Always use stack so the root element type never changes — iced preserves
     // scrollable positions only when the widget-tree structure stays identical.
@@ -162,5 +148,35 @@ pub fn view(
     stack![normal_layout, overlay]
         .width(Length::Fill)
         .height(Length::Fill)
+        .into()
+}
+
+/// The whole window when no folder is open (§13.7): what to do first and the button that does
+/// it, or the folder opening. A click anywhere picks a folder too; a right-click picks one file.
+fn empty_window<'a>(loading: bool, spinner_frame: usize) -> Element<'a, Message> {
+    if loading {
+        return container(
+            column![
+                spinner(spinner_frame, ICON_L, TEXT_SECONDARY),
+                text::secondary(fl!("folder-opening"))
+            ]
+            .spacing(SPACE_S)
+            .align_x(Alignment::Center),
+        )
+        .center(Length::Fill)
+        .style(style::panel)
+        .into();
+    }
+    let block = column![
+        icon(Icon::FolderOpen, ICON_XL, TEXT_SECONDARY),
+        text::heading(fl!("folder-window-empty-title")),
+        text::secondary(fl!("folder-window-empty-line")),
+        button::primary(fl!("folder-window-open")).on_press(Message::OpenFolderPicker),
+    ]
+    .spacing(SPACE_M)
+    .max_width(EMPTY_SCREEN_MAX_WIDTH);
+    mouse_area(container(block).center(Length::Fill).style(style::panel))
+        .on_press(Message::OpenFolderPicker)
+        .on_right_press(Message::OpenFilePicker)
         .into()
 }

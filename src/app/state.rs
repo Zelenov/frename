@@ -326,9 +326,10 @@ impl FrenameApp {
             settings_window: None,
             window_icon,
             window_pos: saved.map(|g| (g.x, g.y)).unwrap_or((0.0, 0.0)),
-            window_size: saved
-                .map(|g| (g.width, g.height))
-                .unwrap_or((1200.0, 600.0)),
+            window_size: saved.map(|g| (g.width, g.height)).unwrap_or((
+                crate::ui::tokens::WINDOW_WIDTH,
+                crate::ui::tokens::WINDOW_HEIGHT,
+            )),
             is_maximized: saved.map(|g| g.is_maximized).unwrap_or(false),
             monitor_size: saved
                 .map(|g| (g.monitor_width, g.monitor_height))

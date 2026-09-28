@@ -178,9 +178,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Restore saved window geometry (size + position + maximized), or use defaults.
     let saved = AppDatabase::new().get_window_state();
-    let window_size = saved
-        .map(|g| iced::Size::new(g.width, g.height))
-        .unwrap_or(iced::Size::new(1200.0, 600.0));
+    // A size saved by an older version or on a smaller screen is raised to the minimum.
+    let window_size = window_size(saved.map(|g| (g.width, g.height)));
     let window_position = saved
         .map(|g| window::Position::Specific(iced::Point::new(g.x, g.y)))
         .unwrap_or(window::Position::Centered);
@@ -201,6 +200,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         size: window_size,
         position: window_position,
         resizable: true,
+        min_size: Some(iced::Size::new(
+            ui::tokens::WINDOW_MIN_WIDTH,
+            ui::tokens::WINDOW_MIN_HEIGHT,
+        )),
         maximized: start_maximized,
         icon: window_icon.clone(),
         ..window::Settings::default()
@@ -239,6 +242,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::process::exit(0);
 }
 
+/// The main window's size at start: the saved one, at least the minimum (§13.9), or the default.
+fn window_size(saved: Option<(f32, f32)>) -> iced::Size {
+    use ui::tokens::{WINDOW_HEIGHT, WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH, WINDOW_WIDTH};
+    let (width, height) = saved.unwrap_or((WINDOW_WIDTH, WINDOW_HEIGHT));
+    iced::Size::new(width.max(WINDOW_MIN_WIDTH), height.max(WINDOW_MIN_HEIGHT))
+}
+
 /// The paths given with `--self-test` (every argument after it that is not a flag), when the
 /// app was started to test its GStreamer.
 fn self_test_paths(args: &[String]) -> Option<Vec<std::path::PathBuf>> {
@@ -271,6 +281,23 @@ mod tests {
 
     fn args(list: &[&str]) -> Vec<String> {
         list.iter().map(|a| a.to_string()).collect()
+    }
+
+    #[test]
+    fn the_window_opens_at_least_at_its_minimum_size() {
+        use ui::tokens::{WINDOW_HEIGHT, WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH, WINDOW_WIDTH};
+        assert_eq!(
+            window_size(None),
+            iced::Size::new(WINDOW_WIDTH, WINDOW_HEIGHT)
+        );
+        assert_eq!(
+            window_size(Some((600.0, 400.0))),
+            iced::Size::new(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
+        );
+        assert_eq!(
+            window_size(Some((1300.0, 700.0))),
+            iced::Size::new(1300.0, 700.0)
+        );
     }
 
     #[test]
