@@ -359,6 +359,7 @@ impl SettingsState {
             Message::Key(which, message) => self.apply_key(which, message),
             Message::OpenBatchAction(
                 Operation::TagCommented
+                | Operation::InOutFromNames
                 | Operation::FixTags
                 | Operation::ReloadFiles
                 | Operation::Rotate(_)
@@ -426,13 +427,13 @@ mod tests {
         assert_eq!(state.settings().comment_storage, CommentStorage::TextFile);
         assert!(state.settings().monochrome_tags);
 
-        state.apply(Message::SetInOutStorage(InOutStorage::InVideo));
-        assert_eq!(state.settings().in_out_storage, InOutStorage::InVideo);
+        state.apply(Message::SetInOutStorage(InOutStorage::Comment));
+        assert_eq!(state.settings().in_out_storage, InOutStorage::Comment);
         assert_eq!(state.settings().comment_storage, CommentStorage::TextFile);
 
         state.apply(Message::SetUiLanguage("ru".to_string()));
         assert_eq!(state.settings().ui_language, "ru");
-        assert_eq!(state.settings().in_out_storage, InOutStorage::InVideo);
+        assert_eq!(state.settings().in_out_storage, InOutStorage::Comment);
     }
 
     #[test]

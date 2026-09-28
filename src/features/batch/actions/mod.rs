@@ -12,6 +12,7 @@
 pub mod describe_ai;
 mod fix_tags;
 pub mod generate_subtitles;
+mod in_out_from_names;
 mod markers_comment;
 pub use markers_comment::Direction as MarkersDirection;
 mod move_comments;
@@ -40,6 +41,7 @@ use crate::theme;
 pub enum Action {
     MoveComments,
     MoveInOut,
+    InOutFromNames,
     MarkersComment,
     Rotate,
     TagCommented,
@@ -52,9 +54,10 @@ pub enum Action {
 
 impl Action {
     /// Every action, in list order.
-    pub const ALL: [Action; 10] = [
+    pub const ALL: [Action; 11] = [
         Action::MoveComments,
         Action::MoveInOut,
+        Action::InOutFromNames,
         Action::MarkersComment,
         Action::Rotate,
         Action::TagCommented,
@@ -69,6 +72,7 @@ impl Action {
         match self {
             Self::MoveComments => move_comments::label(),
             Self::MoveInOut => move_in_out::label(),
+            Self::InOutFromNames => in_out_from_names::label(),
             Self::MarkersComment => markers_comment::label(),
             Self::Rotate => rotate::label(),
             Self::TagCommented => tag_commented::label(),
@@ -84,7 +88,8 @@ impl Action {
     pub fn log_id(self) -> &'static str {
         match self {
             Self::MoveComments => "Move comments",
-            Self::MoveInOut => "Move in/out points",
+            Self::MoveInOut => "In/out points: comment <-> video",
+            Self::InOutFromNames => "Move in/out points out of file names",
             Self::MarkersComment => "Markers <-> comment",
             Self::Rotate => "Rotate videos",
             Self::TagCommented => "Tag commented videos",
@@ -110,6 +115,8 @@ impl Action {
 pub enum Operation {
     MoveComments(CommentStorage),
     MoveInOut(InOutStorage),
+    /// Take the in/out points older versions wrote into file names out of them.
+    InOutFromNames,
     MarkersComment(markers_comment::Direction),
     /// Turn each video by changing its rotation flag.
     Rotate(rotate::Turn),
@@ -131,6 +138,7 @@ impl Operation {
         match self {
             Self::MoveComments(to) => move_comments::run(*to, path),
             Self::MoveInOut(to) => move_in_out::run(*to, path),
+            Self::InOutFromNames => in_out_from_names::run(path),
             Self::MarkersComment(direction) => markers_comment::run(*direction, path),
             Self::Rotate(turn) => rotate::run(*turn, path),
             Self::TagCommented => tag_commented::run(path),
@@ -171,6 +179,7 @@ impl Operation {
         match self {
             Self::MoveComments(_) => Action::MoveComments,
             Self::MoveInOut(_) => Action::MoveInOut,
+            Self::InOutFromNames => Action::InOutFromNames,
             Self::MarkersComment(_) => Action::MarkersComment,
             Self::Rotate(_) => Action::Rotate,
             Self::TagCommented => Action::TagCommented,
@@ -269,6 +278,7 @@ impl Actions {
             Operation::MarkersComment(direction) => self.markers_comment.prepare(direction),
             Operation::Rotate(_)
             | Operation::TagCommented
+            | Operation::InOutFromNames
             | Operation::FixTags
             | Operation::RespaceTags
             | Operation::ReloadFiles
@@ -282,6 +292,7 @@ impl Actions {
         match action {
             Action::MoveComments => Some(self.move_comments.operation()),
             Action::MoveInOut => Some(self.move_in_out.operation()),
+            Action::InOutFromNames => Some(Operation::InOutFromNames),
             Action::MarkersComment => Some(self.markers_comment.operation()),
             Action::Rotate => Some(self.rotate.operation()),
             Action::TagCommented => tag_commented::operation(),
@@ -328,6 +339,7 @@ impl Actions {
             Action::GenerateSubtitles => return self.generate_subtitles.panel(checked),
             Action::MoveComments => self.move_comments.view().map(ActionMessage::MoveComments),
             Action::MoveInOut => self.move_in_out.view().map(ActionMessage::MoveInOut),
+            Action::InOutFromNames => in_out_from_names::view(),
             Action::MarkersComment => self
                 .markers_comment
                 .view()

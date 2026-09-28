@@ -1,5 +1,5 @@
-//! "Move in/out points": moves each file's in/out points between its name and an Adobe XMP
-//! marker in the video. Comments stay where they are.
+//! "In/out points: comment ⇄ video (XMP)": moves each file's in/out points between a line of
+//! its comment and an Adobe XMP marker in the video. The rest of the comment stays where it is.
 
 use std::path::Path;
 
@@ -58,8 +58,8 @@ impl Options {
             )
             .text_size(13),
             radio(
-                fl!("batch-action-move-in-out-into-file-names"),
-                InOutStorage::FileName,
+                fl!("batch-action-move-in-out-into-comments"),
+                InOutStorage::Comment,
                 Some(self.to),
                 Message::SetTo
             )

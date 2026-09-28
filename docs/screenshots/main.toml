@@ -1,6 +1,6 @@
 # README screenshots: the main window, batch mode (--batch) and monochrome tags (--mono). Rendered by hand with render.sh here.
 source = "../../tests/folder"
-open = "pick.wide.night.city.in_00_00_03.out_00_00_21.MVI_0410.mp4"
+open = "pick.wide.night.city.MVI_0410.mp4"
 seek = 10.0
 window = [1440, 720]
 panels = [640, 360]
@@ -20,7 +20,8 @@ name = "b-roll.city.timelapse.MVI_0403.webm"
 
 [[files]]
 from = "file_example_MP4_480_1_5MG.mp4"
-name = "pick.drone.landscape.in_00_00_02.out_00_00_14.MVI_0404.mp4"
+name = "pick.drone.landscape.MVI_0404.mp4"
+comment = "In/Out: 00:00:02.000 – 00:00:14.000"
 
 [[files]]
 from = "file_example_MOV_480_700kB.mov"
@@ -44,8 +45,9 @@ name = "MVI_0409.webm"
 
 [[files]]
 from = "file_example_MP4_480_1_5MG.mp4"
-name = "pick.wide.night.city.in_00_00_03.out_00_00_21.MVI_0410.mp4"
-comment = "City lights over Europe, keep this one"
+name = "pick.wide.night.city.MVI_0410.mp4"
+comment = """City lights over Europe, keep this one
+In/Out: 00:00:03.000 – 00:00:21.000"""
 subtitles = """1
 00:00:01,000 --> 00:00:04,000
 Night falls over the Atlantic

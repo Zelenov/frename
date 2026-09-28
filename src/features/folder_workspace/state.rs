@@ -413,12 +413,14 @@ impl FolderWorkspace {
         let Some((_, snapshot_before)) = self.file_workspace.get_snapshot() else {
             return Task::none();
         };
-        let snapshot_after = FileSnapshot::new(
+        let mut snapshot_after = FileSnapshot::new(
             names,
             snapshot_before.name_without_extension(),
             snapshot_before.extension(),
             snapshot_before.initial_file_name(),
         );
+        // Pasting changes the tags only; the in/out points are not in the name any more.
+        snapshot_after.set_segment(snapshot_before.segment());
         self.file_workspace
             .reinitialize_tags_from_snapshot(snapshot_after.clone());
         self.file_workspace.set_tag_filter(String::new());
@@ -1230,16 +1232,8 @@ impl FolderWorkspace {
         // The markers stay in the tag list: `reinitialize_tags_from_snapshot` keeps them.
         let mut snapshot = FileSnapshot::parse(typed);
         snapshot.set_comment(current.comment().to_string());
-        // With in/out stored inside the video the name never shows them, so a typed name without them
-        // does not mean "remove them".
-        let name_has_in_out =
-            snapshot.segment_start().is_some() || snapshot.segment_end().is_some();
-        if !name_has_in_out
-            && frename_core::metadata_storage().in_out == frename_core::InOutStorage::InVideo
-        {
-            snapshot.set_segment_start(current.segment_start());
-            snapshot.set_segment_end(current.segment_end());
-        }
+        // In/out points are never part of the name: renaming keeps them.
+        snapshot.set_segment(current.segment());
         let folder = file
             .file_path()
             .parent()
@@ -2253,6 +2247,27 @@ mod tests {
                 .snapshot()
                 .has_tag(tag_name),
             "tags should be saved after selecting another file"
+        );
+    }
+
+    #[test]
+    fn pasting_tags_keeps_the_in_out_points() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::SegmentStartMarked(3.0),
+        ));
+        let _ = workspace.update(Message::CopyTags);
+        let _ = workspace.update(Message::PasteTags);
+        assert_eq!(
+            workspace.file_workspace().segment_start_secs(),
+            Some(3.0),
+            "in/out points are not tags: a paste keeps them"
         );
     }
 
