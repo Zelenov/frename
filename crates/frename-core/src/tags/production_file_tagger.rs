@@ -746,4 +746,64 @@ mod tests {
             "comment kept"
         );
     }
+
+    /// Issue #125: clearing a comment and leaving the clip left the old one in the video (or in
+    /// the file list's line), so it came back. The whole path: scan, edit, save, scan again.
+    #[test]
+    fn a_cleared_comment_stays_cleared_in_the_video_and_the_file_list() {
+        let tagger = ProductionFileTagger;
+        let cases = ["tiny.mov", "wide.mov", "wide.mp4"]
+            .into_iter()
+            .flat_map(|clip| {
+                [(ADOBE, false), (TEXT, false), (ADOBE, true), (TEXT, true)]
+                    .map(|(storage, tag)| (clip, storage, tag))
+            });
+        for (clip, storage, tag) in cases {
+            let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures")
+                .join(clip);
+            let path = clip_named("cleared", &format!("goat.{}", &clip[clip.len() - 3..]));
+            std::fs::copy(fixture, &path).expect("copy fixture");
+            let mut snapshot = tagger.parse_with(&path, &FolderInfo::default(), storage);
+            snapshot.set_comment("goat".to_string());
+            if tag {
+                snapshot.set_tags(["Commented"]);
+            }
+            let path = tagger.save_with(&snapshot, &path, storage);
+            let folder = path.parent().expect("folder").to_path_buf();
+
+            // The user opens it from a scan's list, clears the comment and leaves.
+            let mut open = tagger.parse_with(&path, &scan_info(&folder), storage);
+            assert_eq!(open.comment(), "goat");
+            open.set_comment(String::new());
+            if tag {
+                // Clearing the comment unchecks the commented tag, which renames the clip.
+                open.set_tags(Vec::<String>::new());
+            }
+            let path = tagger.save_with(&open, &path, storage);
+
+            let folder = path.parent().expect("folder").to_path_buf();
+            assert_eq!(
+                tagger
+                    .parse_with(&path, &scan_info(&folder), storage)
+                    .comment(),
+                "",
+                "{clip} {storage:?} {tag}: the next scan reads it empty"
+            );
+            assert_eq!(
+                tagger
+                    .parse_with(&path, &FolderInfo::default(), storage)
+                    .comment(),
+                "",
+                "{clip} {storage:?} {tag}: the file itself is empty"
+            );
+            assert!(
+                !crate::comment::comment_path(&path).exists(),
+                "{clip} {storage:?} {tag}"
+            );
+            if storage.comment == CommentStorage::InVideo {
+                assert_eq!(metadata::xmp_comment(&path), "");
+            }
+        }
+    }
 }
