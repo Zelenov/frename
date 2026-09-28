@@ -1,3 +1,22 @@
+# 0.79
+## Added
+- Settings → In/out points: keep them in the comment, as one line (`In/Out: 00:01:05.250 – 00:02:10.000`) you change with `[` and `]`, or inside the video (the default).
+- Batch action "Move in/out points out of file names": moves `in_…` / `out_…` from the names of the checked files to where in/out points are kept now, and says which files kept the points they already had.
+
+## Changed
+- In/out points in file names (`in_00_01_05`, `out_00_02_10`) are no longer read or written: they show as part of the name until you run "Move in/out points out of file names". If you kept them in names, Settings now keep them inside the video.
+- "Move in/out points" is now "In/out points: comment ⇄ video (XMP)".
+- mkv and other formats that cannot hold XMP keep in/out points in `.comment.txt` instead of the file name.
+
+# 0.78
+## Added
+- Rotate a clip shot sideways: ↺ / ↻ in the video controls or `Ctrl+Alt+←` / `Ctrl+Alt+→`. Only the MP4/MOV rotation flag changes (no re-encoding, comment and markers stay), Premiere Pro shows the clip turned when it imports it (a clip it imported before needs its media cache cleared and a new import), and `Ctrl+Z` turns it back.
+- Batch action "Rotate videos": 90° right, 90° left, 180°, or reset to no rotation, for the checked files.
+
+## Changed
+- Clips a phone recorded in portrait now play upright instead of on their side.
+- Short notes such as "Frame saved" now appear over the picture instead of in the controls bar, and the controls bar is a little tighter.
+
 # 0.77
 ## Added
 - Drag clips from the file list into Premiere Pro, Explorer or other programs (Windows): the clip is saved first, and dropping on a folder copies it. In batch mode a checked file drags all checked files.

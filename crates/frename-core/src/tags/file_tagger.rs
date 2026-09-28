@@ -15,7 +15,7 @@ use super::folder_tag_store::FolderTagStore;
 use super::in_memory_file_tagger::InMemoryFileTagger;
 use super::tag_list::TagList;
 use crate::markers::Marker;
-use crate::metadata::{MarkersError, MetadataMove, MoveOutcome};
+use crate::metadata::{MarkersError, MetadataMove, MoveOutcome, Rotation, RotationError, Segment};
 
 static BACKEND: OnceLock<Box<dyn FileTaggerBackend>> = OnceLock::new();
 
@@ -149,6 +149,22 @@ impl FileTagger {
         Ok(MoveOutcome::Moved(Self::save(&snapshot, path)))
     }
 
+    /// "Move in/out points out of file names": take the `in_HH_MM_SS` / `out_HH_MM_SS` parts
+    /// an older version wrote into the name of the file at `path`, save the points where in/out
+    /// points are kept now (the video or the comment, see [`crate::set_in_out_storage`]), and
+    /// rename the file without those parts. When the file already has in/out points stored,
+    /// in either home, those stay and the name's are dropped; the result says so. A file whose
+    /// name would be empty or is taken is left as it is.
+    pub fn move_in_out_out_of_name(path: &Path) -> NameInOutMove {
+        move_name_in_out(
+            path,
+            |path| Self::parse(path, &FolderInfo::default()),
+            |path| backend().stored_in_out(path),
+            Self::save,
+            |path| backend().drop_marker_behind_line(path),
+        )
+    }
+
     /// The commented tag follows a comment that appeared or went, as it does when the comment
     /// is typed (see [`crate::active_commented_tag`]).
     fn follow_commented_tag(snapshot: &mut FileSnapshot, was_commented: bool) {
@@ -261,6 +277,18 @@ impl FileTagger {
         Self::save_markers(path, &markers, &dropped)
     }
 
+    /// How the video at `path` is turned: the display matrix of its first video track.
+    pub fn video_rotation(path: &Path) -> Result<Rotation, RotationError> {
+        backend().video_rotation(path)
+    }
+
+    /// Turn the video at `path` by `quarter_turns` clockwise (negative: counter-clockwise).
+    /// Only the rotation flag of its video tracks changes, in place: the picture is not
+    /// re-encoded, and the file keeps its size, times and metadata. Returns the new rotation.
+    pub fn rotate_video(path: &Path, quarter_turns: i32) -> Result<Rotation, RotationError> {
+        backend().rotate_video(path, quarter_turns)
+    }
+
     /// Save a screenshot image for the given file and position.
     pub fn save_screenshot(file_path: &Path, position_ms: u64, image_data: &[u8]) {
         backend().save_screenshot(file_path, position_ms, image_data);
@@ -270,6 +298,99 @@ impl FileTagger {
     #[allow(dead_code)]
     pub fn load_screenshot_image(file_path: &Path, position_ms: u64) -> Option<Vec<u8>> {
         backend().load_screenshot_image(file_path, position_ms)
+    }
+}
+
+/// What [`FileTagger::move_in_out_out_of_name`] did to one file.
+#[derive(Debug, Clone, PartialEq)]
+pub enum NameInOutMove {
+    /// The name held no in/out points.
+    NothingToMove,
+    /// Renamed to `path`. `kept_stored` is set when the file already had in/out points
+    /// stored, in the comment or in the video: they were kept (and saved where Settings keep
+    /// in/out points now), and the name's were dropped.
+    Moved {
+        path: PathBuf,
+        kept_stored: Option<KeptStored>,
+    },
+    /// The file is still at `path`, for this reason.
+    Failed {
+        path: PathBuf,
+        problem: NameInOutProblem,
+    },
+}
+
+/// In/out points a file had both in its name and stored; see [`NameInOutMove::kept_stored`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct KeptStored {
+    /// The name's, dropped.
+    pub from_name: Segment,
+    /// The stored ones, kept.
+    pub stored: Segment,
+}
+
+/// Why [`FileTagger::move_in_out_out_of_name`] left a file as it was.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NameInOutProblem {
+    /// The name is nothing but in/out parts: without them it would be empty.
+    NameWouldBeEmpty,
+    /// The name without the in/out parts is taken: a file (or a comment or subtitle file of
+    /// one) with this name is already in the folder, and renaming would replace it.
+    NameTaken(String),
+    /// The rename failed (the file is in use or read-only); the log says why.
+    NotRenamed,
+}
+
+/// [`FileTagger::move_in_out_out_of_name`] with the parse and save to use, and `stored`, which
+/// reads the in/out points a file has in either home (the comment or the video).
+pub(crate) fn move_name_in_out(
+    path: &Path,
+    parse: impl Fn(&Path) -> FileSnapshot,
+    stored: impl Fn(&Path) -> Segment,
+    save: impl Fn(&FileSnapshot, &Path) -> PathBuf,
+    drop_marker_behind_line: impl Fn(&Path),
+) -> NameInOutMove {
+    let left_alone = |problem: NameInOutProblem| NameInOutMove::Failed {
+        path: path.to_path_buf(),
+        problem,
+    };
+    let mut snapshot = parse(path);
+    let Some(from_name) = snapshot.take_name_in_out() else {
+        return NameInOutMove::NothingToMove;
+    };
+    if snapshot.name_without_extension().is_empty() {
+        return left_alone(NameInOutProblem::NameWouldBeEmpty);
+    }
+    // Checked before anything is written: a rename onto an existing file would replace it.
+    let new_name = snapshot.file_name();
+    let new_path = path.with_file_name(&new_name);
+    let taken = [
+        new_path.clone(),
+        crate::comment::comment_path(&new_path),
+        crate::subtitles::subtitle_path(&new_path),
+    ]
+    .iter()
+    .any(|p| p.exists());
+    if taken {
+        return left_alone(NameInOutProblem::NameTaken(new_name));
+    }
+    // Points stored in either home win over the name's, and are saved where Settings keep
+    // in/out points now: a marker in the video is read only with video storage.
+    let stored = stored(path);
+    let kept = if stored.is_empty() { from_name } else { stored };
+    snapshot.set_segment(kept);
+    let saved_path = save(&snapshot, path);
+    if saved_path == path {
+        return left_alone(NameInOutProblem::NotRenamed);
+    }
+    // Kept from the video's marker while in/out points are kept in the comment: the line has
+    // them now, and the marker would go on showing them in Premiere.
+    drop_marker_behind_line(&saved_path);
+    // The same points in both places are no conflict (a retry after a failed rename, say).
+    let conflict = !stored.is_empty() && stored != from_name;
+    NameInOutMove::Moved {
+        path: saved_path,
+        kept_stored: conflict.then_some(KeptStored { from_name, stored }),
     }
 }
 

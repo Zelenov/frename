@@ -14,21 +14,8 @@ use crate::widgets::tag_chip;
 /// Dot separator between parts (tags, name, extension).
 const DOT: &str = " . ";
 
-/// Format seconds as `MM:SS` or `HH:MM:SS`.
-fn fmt_timecode(secs: f32) -> String {
-    let total = secs as u32;
-    let h = total / 3600;
-    let m = (total % 3600) / 60;
-    let s = total % 60;
-    if h == 0 {
-        format!("{:02}:{:02}", m, s)
-    } else {
-        format!("{:02}:{:02}:{:02}", h, m, s)
-    }
-}
-
-/// Renders the file name as tag chips + optional timecodes + name.extension (no outer container).
-/// `seg_start`/`seg_end`: optional IN/OUT timecodes shown between tags and file name.
+/// Renders the file name as tag chips + name.extension (no outer container). In/out points are
+/// not part of the file name, so they are not shown here.
 /// Callers wrap in a container when they need panel style (e.g. file workspace, folder list rows).
 ///
 /// Borrows the snapshot: the folder list renders one of these per row on every redraw, so taking
@@ -40,8 +27,6 @@ pub fn view<'a, Message: 'a>(
     tag_palette: TagPalette,
     wrap: bool,
 ) -> Element<'a, Message> {
-    let seg_start = snapshot.segment_start();
-    let seg_end = snapshot.segment_end();
     let tags = snapshot.tags();
     let name_ext = name_ext_from_parts(snapshot.name_without_extension(), snapshot.extension());
 
@@ -54,18 +39,8 @@ pub fn view<'a, Message: 'a>(
         let tag_color = tag_palette.color(color_index);
         parts.push(tag_chip::view_display_only(tag_name, tag_color));
     }
-    // Timecode badges between tags and file name.
-    for secs in seg_start.into_iter().chain(seg_end) {
-        parts.push(dot_text());
-        parts.push(
-            text(fmt_timecode(secs))
-                .size(12)
-                .color(theme::TEXT_MUTED)
-                .into(),
-        );
-    }
     if !name_ext.is_empty() {
-        if !tags.is_empty() || seg_start.is_some() || seg_end.is_some() {
+        if !tags.is_empty() {
             parts.push(dot_text());
         }
         parts.push(text(name_ext).size(14).color(theme::TEXT).into());

@@ -306,13 +306,16 @@ mod tests {
     }
 
     /// A save that worked is not taken for a failed one because the file reads back a little
-    /// differently: an in point at 0 s kept in XMP reads back as none, and in/out may leave
-    /// names altogether. A rename that did not happen is a failure.
+    /// differently: an in point at 0 s kept in XMP reads back as none, and in/out points are
+    /// never in the name. A rename that did not happen is a failure.
     #[test]
     fn a_save_failed_only_when_the_tags_or_the_name_did_not_make_it() {
-        let mut wanted = FileSnapshot::parse("pick.clip.in_00_00_00.out_00_00_10.mp4");
+        let mut wanted = FileSnapshot::parse("pick.clip.mp4");
+        wanted.set_segment_start(Some(0.0));
+        wanted.set_segment_end(Some(10.0));
         assert_eq!(wanted.tags(), ["pick"]);
-        let mut read_back = FileSnapshot::parse("pick.clip.out_00_00_10.mp4");
+        let mut read_back = FileSnapshot::parse("pick.clip.mp4");
+        read_back.set_segment_end(Some(10.0));
         assert!(!save_failed(&wanted, &read_back), "in at 0 s reads as none");
         read_back.set_segment_end(Some(9.9996));
         wanted.set_segment_end(Some(10.0));

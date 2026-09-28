@@ -10,6 +10,7 @@ pub mod folder_controls;
 pub mod folder_workspace;
 pub mod markers;
 pub mod media_viewer;
+pub mod rotation_text;
 pub mod settings;
 pub mod sync_panel;
 pub mod tag_grid;

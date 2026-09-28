@@ -421,32 +421,42 @@ fn is_cloud_placeholder(_path: &Path) -> bool {
 
 /// A file's modified and created times, saved before a metadata write and put back after it,
 /// so the clip keeps its place in date-sorted lists and backups don't see it as new.
-struct FileTimes {
+pub(super) struct FileTimes {
     modified: SystemTime,
     #[cfg_attr(not(windows), allow(dead_code))]
     created: Option<SystemTime>,
 }
 
 impl FileTimes {
-    fn read(path: &Path) -> std::io::Result<Self> {
-        let metadata = std::fs::metadata(path)?;
+    pub(super) fn read(path: &Path) -> std::io::Result<Self> {
+        Self::from_metadata(std::fs::metadata(path)?)
+    }
+
+    /// The times of an open file.
+    pub(super) fn of(file: &std::fs::File) -> std::io::Result<Self> {
+        Self::from_metadata(file.metadata()?)
+    }
+
+    fn from_metadata(metadata: std::fs::Metadata) -> std::io::Result<Self> {
         Ok(Self {
             modified: metadata.modified()?,
             created: metadata.created().ok(),
         })
     }
 
-    fn restore(&self, path: &Path) -> std::io::Result<()> {
+    pub(super) fn restore(&self, path: &Path) -> std::io::Result<()> {
+        self.apply(&std::fs::OpenOptions::new().write(true).open(path)?)
+    }
+
+    /// Put the times back through an open file handle (opened for writing).
+    pub(super) fn apply(&self, file: &std::fs::File) -> std::io::Result<()> {
         let times = std::fs::FileTimes::new().set_modified(self.modified);
         #[cfg(windows)]
         let times = match self.created {
             Some(created) => std::os::windows::fs::FileTimesExt::set_created(times, created),
             None => times,
         };
-        std::fs::OpenOptions::new()
-            .write(true)
-            .open(path)?
-            .set_times(times)
+        file.set_times(times)
     }
 }
 

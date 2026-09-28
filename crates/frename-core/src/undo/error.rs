@@ -1,13 +1,15 @@
 use std::fmt;
 use std::path::PathBuf;
 
-use crate::TagId;
+use crate::{RotationError, TagId};
 
 #[derive(Debug)]
 pub enum UndoError {
     FileNotFound(PathBuf),
     TagNotFound(TagId),
     Io(std::io::Error),
+    /// A video could not be turned (back).
+    Rotation(PathBuf, RotationError),
 }
 
 impl fmt::Display for UndoError {
@@ -16,6 +18,7 @@ impl fmt::Display for UndoError {
             UndoError::FileNotFound(p) => write!(f, "File not found: {}", p.display()),
             UndoError::TagNotFound(id) => write!(f, "Tag not found: {:?}", id),
             UndoError::Io(e) => write!(f, "I/O: {}", e),
+            UndoError::Rotation(p, e) => write!(f, "{} not turned: {}", p.display(), e),
         }
     }
 }

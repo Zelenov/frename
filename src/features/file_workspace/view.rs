@@ -23,6 +23,8 @@ use super::{CommentLayout, FileWorkspace, Message};
 
 /// The scrollable around the comment box, snapped to its end while typing on the last line.
 pub const COMMENT_SCROLLABLE_ID: &str = "comment-scrollable";
+/// The comment box itself, so a shortcut can tell whether the user is writing in it.
+pub const COMMENT_EDITOR_ID: &str = "comment-editor";
 
 /// Horizontal padding for the file workspace panel (same inset from splitter and window edge).
 const PANEL_PADDING_X: f32 = 8.0;
@@ -87,6 +89,7 @@ where
     // editor.
     let comment_scroll = responsive(move |size| {
         let comment_editor = text_editor_widget(&file_workspace.comment_content)
+            .id(iced::widget::Id::new(COMMENT_EDITOR_ID))
             .on_action(Message::CommentAction)
             .placeholder(fl!("file-workspace-comment-placeholder"))
             .height(Length::Shrink)
