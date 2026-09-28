@@ -36,7 +36,8 @@ pub fn view<'a, Message: 'a>(
             parts.push(dot_text());
         }
         let color_index = color_mapping.color_index_for(tag_name);
-        let tag_color = tag_palette.color(color_index);
+        let in_list = color_mapping.contains(tag_name);
+        let tag_color = tag_palette.color(color_index, in_list);
         parts.push(tag_chip::view_display_only(tag_name, tag_color));
     }
     if !name_ext.is_empty() {

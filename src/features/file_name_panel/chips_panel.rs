@@ -53,7 +53,7 @@ where
             None => continue,
         };
         let tag_name = tag.tag().to_string();
-        let tag_color = tag_palette.color(tag.color_index());
+        let tag_color = tag_palette.color(tag.color_index(), tag.is_stored());
         let is_dragging = dragging_index == Some(idx);
         let chip = tag_chip::view_with_leading(
             tag_name,

@@ -152,7 +152,7 @@ where
                     let is_selected = selected_id == Some(id);
                     let is_stored = tag.is_stored();
                     let is_starred = tag.is_starred();
-                    let tag_color = tag_palette.color(tag.color_index());
+                    let tag_color = tag_palette.color(tag.color_index(), is_stored);
                     let checkbox_el = checkbox(is_checked)
                         .on_toggle(move |_| Message::ToggleTag(id))
                         .size(16)

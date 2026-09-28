@@ -587,7 +587,9 @@ mod tests {
     }
 
     /// The committed README scenarios stage clips CI can decode, and only tags a new folder
-    /// already has (any other tag would show up as unsaved).
+    /// already has (any other tag would show up as unsaved) — except `mono.toml`, whose point
+    /// is exactly one tag that is not in the list, so the monochrome screenshot can show it next
+    /// to a listed one (issue #53).
     #[test]
     fn the_readme_scenarios_are_valid() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -612,6 +614,9 @@ mod tests {
                     "{name}: {} is not in tests/self-test-clips.txt",
                     file.from
                 );
+                if name == "mono.toml" {
+                    continue;
+                }
                 for tag in frename_core::FileSnapshot::parse(&file.name).tags() {
                     assert!(known.contains(&tag.as_str()), "{name}: tag {tag}");
                 }

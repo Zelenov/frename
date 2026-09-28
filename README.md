@@ -280,7 +280,8 @@ The ⚙ button opens Settings. Changes apply right away; **Close** or `Esc` clos
 pages:
 
 - **Interface:** the UI language (follows your system by default, or pick English or Russian;
-  more languages are on the way), monochrome tags, and playing videos as soon as they open.
+  more languages are on the way), monochrome tags (a tag you added shows darker, one that is not
+  in your list stays the lighter gray it always was), and playing videos as soon as they open.
 - **Saving:** a space after each tag in file names (`Food. Goat. clip.mp4`), and where comments,
   markers and in/out points are kept: inside the video, or in a text file (comments) or the
   comment (markers; in/out points as one line, `In/Out: 00:01:05.250 – 00:02:10.000`). While
