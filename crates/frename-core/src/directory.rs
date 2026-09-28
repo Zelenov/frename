@@ -333,9 +333,8 @@ impl<S: AppStateStore + Clone> Directory<S> {
         if last_viewed.is_empty() {
             return None;
         }
-        let by_exact_name = |f: &&File| {
-            f.file_path().file_name().and_then(|n| n.to_str()) == Some(last_viewed)
-        };
+        let by_exact_name =
+            |f: &&File| f.file_path().file_name().and_then(|n| n.to_str()) == Some(last_viewed);
         let id = if let Some(file) = self.files_by_id.values().find(by_exact_name) {
             file.id()
         } else {
@@ -842,8 +841,14 @@ mod tests {
     fn open_last_viewed_finds_a_file_hidden_by_the_current_filter() {
         let mut dir = directory_with(&["a.mp4", "pick.b.mp4"]);
         dir.set_untagged_only(true);
-        assert_eq!(listed_names(&dir), vec!["a.mp4"], "b is hidden by the filter");
-        let opened = dir.open_last_viewed("pick.b.mp4").expect("found despite the filter");
+        assert_eq!(
+            listed_names(&dir),
+            vec!["a.mp4"],
+            "b is hidden by the filter"
+        );
+        let opened = dir
+            .open_last_viewed("pick.b.mp4")
+            .expect("found despite the filter");
         assert_eq!(opened.file_path().file_name().unwrap(), "pick.b.mp4");
     }
 }

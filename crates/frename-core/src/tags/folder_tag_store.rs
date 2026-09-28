@@ -875,7 +875,10 @@ out = 3.0
 
         // A rename updates it; the field is omitted once emptied back out.
         FolderTagStore::set_last_viewed(&folder.0, "review.clip.mp4");
-        assert_eq!(FolderTagStore::get_last_viewed(&folder.0), "review.clip.mp4");
+        assert_eq!(
+            FolderTagStore::get_last_viewed(&folder.0),
+            "review.clip.mp4"
+        );
         FolderTagStore::set_last_viewed(&folder.0, "");
         assert_eq!(FolderTagStore::get_last_viewed(&folder.0), "");
         assert!(

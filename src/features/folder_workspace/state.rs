@@ -615,7 +615,8 @@ impl FolderWorkspace {
             Some(path) => dir.open_path(path),
             None => {
                 let last_viewed = FolderTagStore::get_last_viewed(&folder);
-                dir.open_last_viewed(&last_viewed).or_else(|| dir.select_index(0))
+                dir.open_last_viewed(&last_viewed)
+                    .or_else(|| dir.select_index(0))
             }
         };
         if let Some(file) = selected {
@@ -2565,7 +2566,10 @@ mod tests {
             snapshot,
         });
 
-        assert_eq!(FolderTagStore::get_last_viewed(test_dir.path()), "file_0.mp4");
+        assert_eq!(
+            FolderTagStore::get_last_viewed(test_dir.path()),
+            "file_0.mp4"
+        );
     }
 
     /// Helper: get the FileId of the file at the given directory index.
