@@ -4186,4 +4186,104 @@ mod tests {
         }
         assert!(!workspace.batch().is_checked(ids[0]) && !workspace.batch().is_checked(ids[4]));
     }
+
+    /// A file menu action on the open file waits for its pending edits to be saved (here a
+    /// tag, which renames it), and then sees the file's new name.
+    #[test]
+    fn a_file_action_saves_the_open_files_edits_first_and_sees_the_new_name() {
+        use crate::features::file_menu::{system, FileAction};
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = workspace_with_unsaved_tag(&test_dir);
+        let id = file_id_at(&workspace, 0);
+        let path_of = |workspace: &FolderWorkspace| {
+            workspace
+                .directory()
+                .and_then(|d| d.file_by_id(id))
+                .map(|f| f.file_path().to_path_buf())
+                .expect("the file is listed")
+        };
+
+        let _ = workspace.update(Message::FileAction(FileAction::CopyName));
+        assert_eq!(
+            workspace.pending_file_action,
+            Some((id, FileAction::CopyName)),
+            "waits for the save it asked for"
+        );
+        assert_eq!(path_of(&workspace), test_dir.file_path("file_0.mp4"));
+
+        // The save runs: the same-file refresh unloads the video, then saves.
+        flush_file_opened(&mut workspace);
+        assert!(workspace.pending_file_action.is_some(), "still unloading");
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert_eq!(workspace.pending_file_action, None, "ran after the save");
+        let name = system::clipboard_text(FileAction::CopyName, &path_of(&workspace));
+        assert_eq!(name.as_deref(), Some("pick.file_0.mp4"));
+    }
+
+    /// A file with nothing to save (another file in the list, or the open one already saved)
+    /// runs the action at once.
+    #[test]
+    fn a_file_action_on_a_file_with_nothing_to_save_does_not_wait() {
+        use crate::features::file_menu::{self, FileAction};
+        let (_test_dir, mut workspace) = open_folder(2);
+        let _ = workspace.update(Message::FileAction(FileAction::ShowInFileManager));
+        assert_eq!(workspace.pending_file_action, None);
+        let other = file_id_at(&workspace, 1);
+        let _ = workspace.update(Message::FileMenu(file_menu::Message::Choose(
+            other,
+            FileAction::CopyPath,
+        )));
+        assert_eq!(workspace.pending_file_action, None);
+    }
+
+    /// The waiting action runs on its own file's save only, and not when that save was refused
+    /// (the notice of the refused save says why).
+    #[test]
+    fn a_waiting_file_action_runs_on_its_files_save_unless_it_was_refused() {
+        use crate::features::file_menu::FileAction;
+        let (_test_dir, mut workspace) = open_folder(2);
+        let (open, other) = (file_id_at(&workspace, 0), file_id_at(&workspace, 1));
+        workspace.pending_file_action = Some((open, FileAction::CopyPath));
+        assert_eq!(workspace.file_action_after_save(other, false).units(), 0);
+        assert!(
+            workspace.pending_file_action.is_some(),
+            "another file's save"
+        );
+        assert_eq!(workspace.file_action_after_save(open, false).units(), 1);
+        assert_eq!(workspace.pending_file_action, None);
+
+        workspace.pending_file_action = Some((open, FileAction::CopyPath));
+        assert_eq!(workspace.file_action_after_save(open, true).units(), 0);
+        assert_eq!(workspace.pending_file_action, None, "dropped");
+    }
+
+    /// Esc closes an open file menu and does nothing else.
+    #[test]
+    fn escape_closes_the_file_menu_first() {
+        use crate::features::file_menu;
+        let (_test_dir, mut workspace) = open_folder(2);
+        let _ = workspace.update(Message::FileNamePanel(
+            crate::features::file_name_panel::Message::OpenFileMenu,
+        ));
+        assert!(!workspace.file_menu().is_open(), "no right press: no menu");
+        let _ = workspace.update(Message::FileMenu(file_menu::Message::RightPressed(
+            iced::Point::new(10.0, 10.0),
+        )));
+        let _ = workspace.update(Message::Folder(folder::Message::OpenFileMenu(1)));
+        // The row's message becomes the menu's own `Open` (a task in the app).
+        let _ = workspace.update(Message::FileMenu(file_menu::Message::Open(file_id_at(
+            &workspace, 1,
+        ))));
+        assert!(workspace.file_menu().is_open());
+        workspace.file_workspace.set_tag_filter("pi".to_string());
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(!workspace.file_menu().is_open());
+        assert_eq!(
+            workspace.file_workspace().tag_list().filter_query(),
+            "pi",
+            "the search is cleared by the next Esc, not this one"
+        );
+    }
 }
