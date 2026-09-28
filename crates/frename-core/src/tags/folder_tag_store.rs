@@ -230,6 +230,17 @@ impl FolderTagStore {
         Ok(file.tags)
     }
 
+    /// The file to start a read-modify-write from when there may be none yet: the built-in tags,
+    /// nothing else.
+    fn fresh_file() -> TagFile {
+        TagFile {
+            version: FORMAT_VERSION,
+            last_viewed: String::new(),
+            tags: Self::default_entries(),
+            files: Vec::new(),
+        }
+    }
+
     /// Writes the tags, replacing them in the file and keeping its file list and last viewed
     /// file. Does nothing when no folder is open.
     fn write_entries(
@@ -242,10 +253,9 @@ impl FolderTagStore {
         let _lock = TAG_FILE_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let existing = read_file(folder);
-        let files = existing.as_ref().map_or_else(Vec::new, |f| f.files.clone());
-        let last_viewed = existing.map(|f| f.last_viewed).unwrap_or_default();
-        write_file(folder, entries, &files, &last_viewed)
+        let mut file = read_file(folder).unwrap_or_else(Self::fresh_file);
+        file.tags = entries.to_vec();
+        write_file(folder, &file)
     }
 
     /// The folder's file list (see the module docs), in file order. Empty when there is no tag
@@ -261,16 +271,14 @@ impl FolderTagStore {
         let _lock = TAG_FILE_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let (tags, mut files, last_viewed) = match read_file(folder) {
-            Some(file) => (file.tags, file.files, file.last_viewed),
-            None => (Self::default_entries(), Vec::new(), String::new()),
-        };
+        let mut file = read_file(folder).unwrap_or_else(Self::fresh_file);
         let replaced: std::collections::HashSet<&str> =
             upsert.iter().map(|f| f.name.as_str()).collect();
-        files.retain(|f| !remove.contains(&f.name) && !replaced.contains(f.name.as_str()));
-        files.extend(upsert);
-        files.sort_by(|a, b| a.name.cmp(&b.name));
-        let _ = write_file(folder, &tags, &files, &last_viewed);
+        file.files
+            .retain(|f| !remove.contains(&f.name) && !replaced.contains(f.name.as_str()));
+        file.files.extend(upsert);
+        file.files.sort_by(|a, b| a.name.cmp(&b.name));
+        let _ = write_file(folder, &file);
     }
 
     /// The name of the file this folder last had open (#98), or empty when none is remembered.
@@ -286,11 +294,9 @@ impl FolderTagStore {
         let _lock = TAG_FILE_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let (tags, files) = match read_file(folder) {
-            Some(file) => (file.tags, file.files),
-            None => (Self::default_entries(), Vec::new()),
-        };
-        if let Err(e) = write_file(folder, &tags, &files, name) {
+        let mut file = read_file(folder).unwrap_or_else(Self::fresh_file);
+        file.last_viewed = name.to_string();
+        if let Err(e) = write_file(folder, &file) {
             log::warn!(
                 "could not remember the last viewed file in {}: {e}",
                 folder.display()
@@ -335,13 +341,11 @@ fn read_file(folder: &Path) -> Option<TagFile> {
 /// Windows and POSIX alike: an interrupted write leaves the previous file intact.
 fn write_file(
     folder: &Path,
-    tags: &[TagEntry],
-    files: &[CachedFile],
-    last_viewed: &str,
+    file: &TagFile,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let path = folder.join(TAG_FILE_NAME);
     let temp_path = folder.join(TAG_FILE_TEMP_NAME);
-    std::fs::write(&temp_path, render(tags, files, last_viewed)?)
+    std::fs::write(&temp_path, render(file)?)
         .map_err(|e| with_path("write tag file", &temp_path, e))?;
     std::fs::rename(&temp_path, &path).map_err(|e| {
         // The scratch file would otherwise be left behind next to the user's footage.
@@ -354,17 +358,16 @@ fn write_file(
 /// Renders the file by hand rather than through a TOML serializer, for a layout that reads
 /// and diffs well: one tag per line, so reordering a tag is a one-line edit, and one block per
 /// video with its comment as a multi-line string, the way a person would write it.
-fn render(
-    tags: &[TagEntry],
-    files: &[CachedFile],
-    last_viewed: &str,
-) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+fn render(file: &TagFile) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let mut out = format!("version = {FORMAT_VERSION}\n");
-    if !last_viewed.is_empty() {
-        out.push_str(&format!("last_viewed = {}\n", basic_string(last_viewed)));
+    if !file.last_viewed.is_empty() {
+        out.push_str(&format!(
+            "last_viewed = {}\n",
+            basic_string(&file.last_viewed)
+        ));
     }
     out.push_str("\ntags = [\n");
-    for tag in tags {
+    for tag in &file.tags {
         let mut fields = vec![
             format!("id = {}", basic_string(&tag.id.to_string())),
             format!("name = {}", basic_string(&tag.name)),
@@ -378,23 +381,23 @@ fn render(
         out.push_str(&format!("  {{ {} }},\n", fields.join(", ")));
     }
     out.push_str("]\n");
-    for file in files {
+    for cached in &file.files {
         out.push_str(&format!(
             "\n[[files]]\nname = {}\nsize = {}\nmodified_ms = {}\n",
-            basic_string(&file.name),
-            file.size,
-            file.modified_ms
+            basic_string(&cached.name),
+            cached.size,
+            cached.modified_ms
         ));
-        if !file.comment.is_empty() {
-            out.push_str(&format!("comment = {}\n", text_string(&file.comment)));
+        if !cached.comment.is_empty() {
+            out.push_str(&format!("comment = {}\n", text_string(&cached.comment)));
         }
-        if let Some(start) = file.start {
+        if let Some(start) = cached.start {
             out.push_str(&format!("in = {start:?}\n"));
         }
-        if let Some(end) = file.end {
+        if let Some(end) = cached.end {
             out.push_str(&format!("out = {end:?}\n"));
         }
-        if let Some(markers) = file.markers {
+        if let Some(markers) = cached.markers {
             out.push_str(&format!("markers = {markers}\n"));
         }
     }

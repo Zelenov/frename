@@ -609,12 +609,19 @@ impl FolderWorkspace {
         self.history = WorkspaceHistory::new(HISTORY_DEPTH);
         let load_comments_task = self.load_next_comment_batch(true);
         let dir = self.directory.as_mut().expect("just set");
-        // A specific file (a dropped file, "Open with") always wins; opening the folder itself
-        // returns to the file it last had open (#98), falling back to the first one listed.
-        let selected = match target_file.as_deref() {
-            Some(path) => dir.open_path(path),
+        // A specific file (a dropped file, "Open with", the last session) always wins when it is
+        // still there; opening the folder itself, or a specific file that is gone since (a
+        // rename, most likely), returns to the file this folder last had open (#98), by name and
+        // then by name without tags, falling back to the first one listed.
+        let selected = match target_file.as_deref().and_then(|p| dir.open_path(p)) {
+            Some(file) => Some(file),
             None => {
-                let last_viewed = FolderTagStore::get_last_viewed(&folder);
+                let last_viewed = target_file
+                    .as_deref()
+                    .and_then(|p| p.file_name())
+                    .and_then(|n| n.to_str())
+                    .map(str::to_string)
+                    .unwrap_or_else(|| FolderTagStore::get_last_viewed(&folder));
                 dir.open_last_viewed(&last_viewed)
                     .or_else(|| dir.select_index(0))
             }
@@ -2537,6 +2544,24 @@ mod tests {
         assert_eq!(
             workspace.directory().and_then(|d| d.selected_index()),
             Some(0)
+        );
+    }
+
+    /// A specific target file that is gone (e.g. renamed since, including in the app-wide last
+    /// session) falls back the same way an unset target does: by name without tags, then to the
+    /// first file, rather than opening nothing.
+    #[test]
+    fn a_gone_specific_target_falls_back_like_an_unset_one() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.file_path("gone.mp4")),
+        });
+        assert_eq!(
+            workspace.directory().and_then(|d| d.selected_index()),
+            Some(0),
+            "falls back to the first file"
         );
     }
 

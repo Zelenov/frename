@@ -325,10 +325,12 @@ impl<S: AppStateStore + Clone> Directory<S> {
     }
 
     /// Open the file this folder last remembered as open (#98): by `last_viewed`'s exact name,
-    /// or, failing that, by the name a file would have without its tags (a cheap fallback for a
-    /// rename done outside frename that only changed the tag prefix). Found regardless of the
-    /// current list filter, like [`Self::open_path`] — the selected file always stays listed.
-    /// `None` when `last_viewed` is empty or matches nothing.
+    /// or, failing that, by the name and extension a file would have without its tags (a cheap
+    /// fallback for a rename done outside frename that only changed the tag prefix — the
+    /// extension must match too, or two files that happen to share a base name, such as
+    /// `pick.clip.mkv` and `review.clip.mp4`, could resolve to the wrong one). Found regardless
+    /// of the current list filter, like [`Self::open_path`] — the selected file always stays
+    /// listed. `None` when `last_viewed` is empty or matches nothing.
     pub fn open_last_viewed(&mut self, last_viewed: &str) -> Option<File> {
         if last_viewed.is_empty() {
             return None;
@@ -338,17 +340,17 @@ impl<S: AppStateStore + Clone> Directory<S> {
         let id = if let Some(file) = self.files_by_id.values().find(by_exact_name) {
             file.id()
         } else {
-            let base_name = FileSnapshot::parse(last_viewed)
-                .name_without_extension()
-                .to_string();
+            let remembered = FileSnapshot::parse(last_viewed);
+            let base_name = remembered.name_without_extension();
+            let extension = remembered.extension();
             self.files_by_id
                 .values()
-                .find(|f| f.snapshot().name_without_extension() == base_name)?
+                .find(|f| {
+                    f.snapshot().name_without_extension() == base_name
+                        && f.snapshot().extension() == extension
+                })?
                 .id()
         };
-        if self.selected_id == Some(id) {
-            return None;
-        }
         self.select_by_id(id)
     }
 
@@ -828,6 +830,17 @@ mod tests {
         let mut dir = directory_with(&["a.mp4", "pick.b.mp4"]);
         let opened = dir.open_last_viewed("b.mp4").expect("found by base name");
         assert_eq!(opened.file_path().file_name().unwrap(), "pick.b.mp4");
+    }
+
+    #[test]
+    fn open_last_viewed_s_fallback_does_not_cross_extensions() {
+        // "clip.mp4" is gone; an unrelated "clip.mkv" must not be mistaken for it just because
+        // they share a base name once their own tags are stripped.
+        let mut dir = directory_with(&["drop.clip.mkv", "keep.clip.mp4"]);
+        let opened = dir
+            .open_last_viewed("clip.mp4")
+            .expect("found by base name and extension");
+        assert_eq!(opened.file_path().file_name().unwrap(), "keep.clip.mp4");
     }
 
     #[test]
