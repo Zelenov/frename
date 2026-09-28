@@ -8,17 +8,22 @@ use super::{Message, VideoControlsState};
 use crate::theme;
 
 const CONTROLS_HEIGHT: f32 = 32.0;
+/// ↺ and ↻ sit side by side as one pair, a little narrower than the other buttons.
+const ROTATE_BUTTON_WIDTH: f32 = 24.0;
 
 /// Render the video player controls.
 /// `position_secs` is the live playback position read from the video at view time.
 /// `segment_start` and `segment_end` are the optional segment markers (in seconds) for the current file.
-/// `can_add_markers` is false when the file cannot hold markers; `marker_held` shows 📍 pressed.
+/// `can_add_markers` is false when the file cannot hold markers; `marker_held` shows 📍 pressed;
+/// `cannot_rotate` says why the file cannot be turned (↺ ↻ are off then, with it as their
+/// tooltip).
 /// The progress bar is not part of it: the caller puts [`progress_bar`] on a row of its own
 /// above the buttons, which keep to the left, the volume to the right.
 pub fn view(
     state: &VideoControlsState,
     can_add_markers: bool,
     marker_held: bool,
+    cannot_rotate: Option<String>,
 ) -> Element<'_, Message> {
     let back10_btn: Element<'_, Message> = tooltip(
         button(
@@ -171,6 +176,34 @@ pub fn view(
     )
     .into();
 
+    let can_rotate = cannot_rotate.is_none();
+    let rotate_btn =
+        |icon: &'static str, quarter_turns: i32, tip: String| -> Element<'_, Message> {
+            tooltip(
+                button(
+                    container(text(icon).size(16))
+                        .center_x(iced::Length::Fill)
+                        .center_y(iced::Length::Fill),
+                )
+                .on_press_maybe(can_rotate.then_some(Message::Rotate(quarter_turns)))
+                .width(ROTATE_BUTTON_WIDTH)
+                .height(iced::Length::Fill)
+                .padding(0)
+                .style(theme::icon_button_style(can_rotate)),
+                text(cannot_rotate.clone().unwrap_or(tip)),
+                tooltip::Position::Top,
+            )
+            .into()
+        };
+    let rotate_left_btn = rotate_btn("↺", -1, fl!("video-controls-rotate-left"));
+    let rotate_right_btn = rotate_btn("↻", 1, fl!("video-controls-rotate-right"));
+
+    // The two turns are one tight pair, and the row is packed a little closer than before
+    // they came, so the volume still fits the default player width.
+    let rotate_pair: Element<'_, Message> = row![rotate_left_btn, rotate_right_btn]
+        .height(iced::Length::Fill)
+        .into();
+
     let controls = row![
         back10_btn,
         play_pause_btn,
@@ -179,12 +212,12 @@ pub fn view(
         seg_out_btn,
         screenshot_btn,
         add_marker_btn,
+        rotate_pair,
         bar,
-        Space::new().width(8),
         volume_icon,
         volume_bar
     ]
-    .spacing(8)
+    .spacing(4)
     .height(iced::Length::Fill)
     .align_y(iced::Alignment::Center);
 

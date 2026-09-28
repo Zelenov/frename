@@ -93,6 +93,7 @@ Next time you start frename, it reopens the last folder and clip.
 | `Alt` + drag the progress bar (paused) | Mark a range |
 | `F12` | Save the current frame as a JPEG next to the video |
 | `F5` | Fullscreen on / off (or double-click the picture) |
+| `Ctrl+Alt+←` / `Ctrl+Alt+→` | Rotate the clip 90° left / right |
 | `Escape` | Leave fullscreen |
 
 ### Settings
@@ -105,10 +106,12 @@ Next time you start frename, it reopens the last folder and clip.
 While a text box (tag search, file search, comment) has the cursor, it takes the keys it needs:
 arrows, `Delete`, `Space`, `Enter`, `Ctrl+C`, and in the comment box also `PageUp` / `PageDown`.
 Press `Esc` first to give the keys back to the app. `[` and `]` set in and out points, except while
-you type in a marker's name. The F-keys always work.
+you type in a marker's name. The F-keys always work, and so do `Ctrl+Alt+←` / `→` except in the
+comment box and a marker's name.
 
 Undo (`Ctrl+Z`) covers tagging, adding, deleting, starring and reordering tags, pasting, in/out
-points, adding, deleting, coloring and resizing markers, and the rename when you leave a clip.
+points, adding, deleting, coloring and resizing markers, rotating a clip, and the rename when you
+leave a clip.
 It does not cover comment text or marker names, a rename by hand
 (double-click), untagging with 🗑, the 🔓↑ / 🔓↓ buttons, or batch actions; opening a folder or running a batch
 action clears the undo history.
@@ -156,6 +159,13 @@ The progress bar shows what you have noted about a clip:
   single moment again, and click a band to play just that stretch.
 - **Frames:** `F12` or 📷 saves the current frame as a JPEG next to the video
   (`clip.mp4.snap.00-01-05-250.jpg`) and shows `Frame saved`.
+- **Rotation:** ↺ / ↻ (`Ctrl+Alt+←` / `→`) turn a clip shot sideways 90° at a time. Only the
+  rotation flag inside the MP4/MOV changes, right away: the picture is not re-encoded. Premiere
+  Pro shows the clip turned when it imports it. A clip Premiere imported before the turn keeps its
+  old orientation until you clear its media cache (Media Cache ▸ Delete in its preferences) and import it
+  again. Other formats cannot be turned. While you write a comment the keys
+  stay with the text. If `Ctrl+Alt+←` / `→` turns your whole screen, switch off the graphics
+  driver's rotation hotkeys or use ↺ / ↻.
 - **In and out points:** `[` and `]` mark the usable segment, highlighted on the progress bar.
   By default they are saved inside the video as a marker that Premiere Pro turns into a subclip.
   Settings can keep them in the comment instead, as a line after your own text
@@ -212,6 +222,8 @@ files (an unchecked one drags only itself). Actions:
   a second ` — ` or ` -- ` (not a plain ` - `) goes into the marker's comment, which Premiere
   shows and frename keeps but does not show. The moments of an AI description become white
   markers too (with their length) and stay in the description;
+- rotate the videos 90° right or left or 180°, or reset them to no rotation (this also removes
+  a turn a phone recorded);
 - tag commented videos with "Commented" and untag the rest;
 - put the tags in every name in tag panel order;
 - add or remove the space after each tag, as set in Settings;

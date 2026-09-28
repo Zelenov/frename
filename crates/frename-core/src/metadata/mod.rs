@@ -13,6 +13,7 @@ pub(crate) mod cache;
 mod conversion;
 mod in_out_line;
 mod markers_xmp;
+pub(crate) mod rotation;
 mod xmp;
 
 use std::borrow::Cow;
@@ -27,6 +28,7 @@ use crate::tags::FileSnapshot;
 pub(crate) use conversion::{clear_moved_xmp, FileConversion, Inspection};
 pub use conversion::{MetadataMove, MoveOutcome};
 pub use in_out_line::format_in_out_range;
+pub use rotation::{Rotation, RotationError};
 pub use xmp::Segment;
 
 /// Where comments are saved.
@@ -872,6 +874,46 @@ mod tests {
             save_markers(&file, &[marker(1, "x")], &HashSet::new()),
             Err(MarkersError::CannotHoldMarkers)
         );
+    }
+
+    #[test]
+    fn comment_in_out_and_markers_survive_a_rotation() {
+        for fixture in ["wide.mp4", "wide.mov"] {
+            let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures")
+                .join(fixture);
+            let dir = std::env::temp_dir().join(format!(
+                "frename-metadata-rotation-{}-{}",
+                fixture.replace('.', "-"),
+                std::process::id()
+            ));
+            std::fs::create_dir_all(&dir).expect("temp dir");
+            let file = dir.join(fixture);
+            std::fs::copy(source, &file).expect("copy fixture");
+
+            let mut snap = FileSnapshot::parse(fixture);
+            snap.set_comment("Козёл 🐐".to_string());
+            snap.set_segment_start(Some(0.05));
+            snap.set_segment_end(Some(0.15));
+            save_to_xmp(&file, &snap, XMP_BOTH);
+            let markers = vec![marker(40, "moment")];
+            save_markers(&file, &markers, &HashSet::new()).expect("markers");
+
+            rotation::rotate(&file, 1).expect("rotate");
+            assert_eq!(rotation::read(&file).map(Rotation::degrees), Ok(90));
+
+            let mut back = FileSnapshot::parse(fixture);
+            load(&file, false, &mut back, XMP_BOTH, XmpSource::Read);
+            assert_eq!(back.comment(), "Козёл 🐐", "{fixture}");
+            assert_eq!(
+                (back.segment_start(), back.segment_end()),
+                (Some(0.05), Some(0.15)),
+                "{fixture}"
+            );
+            assert_eq!(load_markers(&file), Some(markers), "{fixture}");
+            // The movie is still one the XMP toolkit opens and knows the length of.
+            assert_eq!(clip_length_ms(&file), Some(200), "{fixture}");
+        }
     }
 
     #[test]

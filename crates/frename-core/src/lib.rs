@@ -37,7 +37,8 @@ pub use metadata::{
     active_commented_tag, cache::modified_ms, clean_commented_tag, commented_tag,
     format_in_out_range, marker_storage, metadata_storage, set_comment_storage, set_commented_tag,
     set_in_out_storage, set_marker_storage, CommentStorage, InOutStorage, MarkerStorage,
-    MarkersError, MetadataMove, MetadataStorage, MoveOutcome, Segment, DEFAULT_COMMENTED_TAG,
+    MarkersError, MetadataMove, MetadataStorage, MoveOutcome, Rotation, RotationError, Segment,
+    DEFAULT_COMMENTED_TAG,
 };
 pub use ordered::{OrderKey, OrderableEntry, OrderedCollection, OrderedThing};
 pub use subtitles::{
@@ -52,7 +53,7 @@ pub use tags::{
 };
 pub use undo::{
     AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,
-    NavigateFileCommand, PasteTagsCommand, ReorderTagCommand, SaveTagCommand,
+    NavigateFileCommand, PasteTagsCommand, ReorderTagCommand, RotateVideoCommand, SaveTagCommand,
     SetMarkerColorCommand, SetMarkerDurationCommand, SetMarkerSpanCommand, SetSegmentEndCommand,
     SetSegmentStartCommand, StarTagCommand, ToggleTagCommand, UndoContext, UndoError,
 };

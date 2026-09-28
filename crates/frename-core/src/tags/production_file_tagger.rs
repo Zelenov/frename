@@ -9,8 +9,8 @@ use super::screenshot::Screenshot;
 use super::FolderInfo;
 use crate::markers::Marker;
 use crate::metadata::{
-    self, CommentStorage, InOutStorage, MarkersError, MetadataMove, MetadataStorage, Segment,
-    XmpSource,
+    self, CommentStorage, InOutStorage, MarkersError, MetadataMove, MetadataStorage, Rotation,
+    RotationError, Segment, XmpSource,
 };
 
 pub struct ProductionFileTagger;
@@ -200,6 +200,18 @@ impl FileTaggerBackend for ProductionFileTagger {
         known: &HashSet<String>,
     ) -> Result<(), MarkersError> {
         metadata::save_markers(path, markers, known)
+    }
+
+    fn rotate_video(&self, path: &Path, quarter_turns: i32) -> Result<Rotation, RotationError> {
+        let rotated = metadata::rotation::rotate(path, quarter_turns);
+        match &rotated {
+            Ok(rotation) => log::info!(
+                "rotation: {path:?} turned {quarter_turns:+} → {}°",
+                rotation.degrees()
+            ),
+            Err(e) => log::warn!("rotation: {path:?} not turned: {e}"),
+        }
+        rotated
     }
 
     fn save_screenshot(&self, file_path: &Path, position_ms: u64, image_data: &[u8]) {

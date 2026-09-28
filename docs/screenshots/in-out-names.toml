@@ -1,13 +1,13 @@
-# PR screenshots for #69: clips whose names still carry in/out points from older versions, in
-# batch mode with "Move in/out points out of file names"
-# (--batch --action "Move in/out points out of file names"). MVI_0405 already exists without the
-# in/out part, and MVI_0406 has in/out points stored in its comment already: running the action
-# reports both.
+# PR screenshots for #69: clips whose names still carry in/out points from older versions.
+# `--batch` shows "Move in/out points out of file names" selected. MVI_0405 already exists
+# without the in/out part, and MVI_0406 has in/out points stored in its comment already:
+# running the action reports both.
 source = "../../tests/folder"
 open = "pick.wide.night.city.MVI_0410.in_00_00_03.out_00_00_21.mp4"
 seek = 10.0
 window = [1440, 720]
 panels = [640, 360]
+batch_action = "Move in/out points out of file names"
 
 [[files]]
 from = "file_example_MP4_480_1_5MG.mp4"

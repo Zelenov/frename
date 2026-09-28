@@ -362,6 +362,7 @@ impl SettingsState {
                 | Operation::InOutFromNames
                 | Operation::FixTags
                 | Operation::ReloadFiles
+                | Operation::Rotate(_)
                 | Operation::DescribeAi(_)
                 | Operation::GenerateSubtitles(_),
             ) => {}

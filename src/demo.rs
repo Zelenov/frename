@@ -22,6 +22,9 @@ use crate::features::{
 /// with the scenario's few files, so 3 s leaves a wide margin even on a slow runner.
 const SETTLE: Duration = Duration::from_secs(3);
 
+/// [`SETTLE`] for a scenario that turns the clip: short enough to catch the turn's note.
+const ROTATE_SETTLE: Duration = Duration::from_millis(1300);
+
 /// A demo that has not produced its screenshot by then has failed.
 const TIMEOUT: Duration = Duration::from_secs(90);
 
@@ -46,8 +49,6 @@ pub struct DemoRun {
     ai: bool,
     /// Capture the settings window, on this page, instead of the main one.
     settings: Option<settings::Page>,
-    /// In batch mode, select this action.
-    action: Option<batch::Action>,
     video_ready: bool,
 }
 
@@ -61,7 +62,6 @@ impl DemoRun {
             batch: args.batch,
             ai: args.ai,
             settings: args.settings,
-            action: args.action,
             video_ready: false,
         }
     }
@@ -107,13 +107,7 @@ impl DemoRun {
         if std::mem::replace(&mut self.video_ready, true) {
             return None;
         }
-        let mut steps = steps(&self.scenario, self.batch, self.ai);
-        if let Some(action) = self.action.filter(|_| self.batch) {
-            steps.push(folder_workspace::Message::Batch(
-                batch::Message::SelectAction(action),
-            ));
-        }
-        Some(steps)
+        Some(steps(&self.scenario, self.batch, self.ai))
     }
 
     /// Schedule the screenshot of `window`. `size` is its size in logical pixels, checked at
@@ -124,7 +118,14 @@ impl DemoRun {
         // The screenshot re-renders what was last drawn. A message would rebuild the UI first,
         // and a text editor's rebuilt text is not in the last drawing, so the comment box would
         // come out empty: chain the screenshot straight onto the wait, with no message between.
-        Task::future(async { tokio::time::sleep(SETTLE).await })
+        // A turn shows a note over the picture for 2 s: take the shot while it is there (the
+        // reopened clip of a demo is small and ready well before).
+        let settle = if self.scenario.rotate != 0 {
+            ROTATE_SETTLE
+        } else {
+            SETTLE
+        };
+        Task::future(async move { tokio::time::sleep(settle).await })
             .then(move |()| window::screenshot(window))
             .map(move |shot| Message::Captured(shot, expected))
     }
@@ -154,8 +155,8 @@ impl DemoRun {
 
 /// What to do once the video is ready: pause at the scenario's time, open the subtitle or marker
 /// list when the scenario asks for it, and turn on batch mode with every file checked when asked to.
-/// With `ai` in batch mode, select "Describe with AI" (the open file's AI description is in its
-/// comment box already).
+/// In batch mode, select the scenario's `batch_action`; `ai` stands for "Describe with AI" (the
+/// open file's AI description is in its comment box already).
 fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace::Message> {
     let video =
         |message| folder_workspace::Message::MediaViewer(media_viewer::Message::Video(message));
@@ -166,6 +167,9 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
     if scenario.marker_list {
         steps.push(video(video::Message::ShowMarkerList));
     }
+    if scenario.rotate != 0 {
+        steps.push(folder_workspace::Message::RotateVideo(scenario.rotate));
+    }
     if batch {
         steps.push(folder_workspace::Message::Folder(
             folder::Message::SetBatchMode(true),
@@ -173,9 +177,23 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
         steps.push(folder_workspace::Message::Folder(
             folder::Message::ToggleAllChecked,
         ));
-        if ai {
+        let name = if ai {
+            Some(batch::Action::DescribeAi.log_id())
+        } else {
+            scenario.batch_action.as_deref()
+        };
+        let action = name.and_then(|name| {
+            let found = batch::Action::ALL
+                .into_iter()
+                .find(|action| action.log_id() == name);
+            if found.is_none() {
+                log::warn!("demo: no batch action is named {name:?}");
+            }
+            found
+        });
+        if let Some(action) = action {
             steps.push(folder_workspace::Message::Batch(
-                batch::Message::SelectAction(batch::Action::DescribeAi),
+                batch::Message::SelectAction(action),
             ));
         }
     }
@@ -199,8 +217,8 @@ fn save_png(shot: &window::Screenshot, expected: (u32, u32), path: &Path) -> Res
         .map_err(|e| format!("cannot save {}: {e}", path.display()))
 }
 
-/// What `--demo <scenario> --out <png> [--batch] [--mono] [--ai] [--action <name>]
-/// [--settings [page]] [--lang <code>]` asks for.
+/// What `--demo <scenario> --out <png> [--batch] [--mono] [--ai] [--settings [page]]
+/// [--lang <code>]` asks for.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DemoArgs {
     pub scenario: PathBuf,
@@ -214,9 +232,6 @@ pub struct DemoArgs {
     /// Capture the settings window, on this page (`--settings ai`; the first page when none is
     /// named), instead of the main one.
     pub settings: Option<settings::Page>,
-    /// In batch mode, select the action with this English name (`Action::log_id`, e.g.
-    /// `--action "Move comments"`).
-    pub action: Option<batch::Action>,
     /// The UI language setting: `en` unless given, so screenshots never follow the renderer's
     /// OS language; `--lang ""` follows it (System).
     pub lang: String,
@@ -235,7 +250,6 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
     let out_at = args.iter().position(|a| a == "--out");
     let lang_at = args.iter().position(|a| a == "--lang");
     let settings_at = args.iter().position(|a| a == "--settings");
-    let action_at = args.iter().position(|a| a == "--action");
     Some(value("--demo", Some(at)).and_then(|scenario| {
         let out =
             value("--out", out_at).map_err(|_| "--demo needs --out <file.png>".to_string())?;
@@ -257,19 +271,6 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
                 ),
             },
         };
-        let action = match action_at {
-            None => None,
-            Some(_) => {
-                let name = value("--action", action_at)?;
-                let name = name.to_string_lossy();
-                Some(
-                    batch::Action::ALL
-                        .into_iter()
-                        .find(|a| a.log_id() == name)
-                        .ok_or(format!("--action: no batch action is named {name:?}"))?,
-                )
-            }
-        };
         Ok(DemoArgs {
             scenario,
             out,
@@ -277,7 +278,6 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
             mono: args.iter().any(|a| a == "--mono"),
             ai: args.iter().any(|a| a == "--ai"),
             settings,
-            action,
             lang,
         })
     }))
@@ -356,7 +356,6 @@ mod tests {
                 mono: false,
                 ai: false,
                 settings: None,
-                action: None,
                 lang: "en".to_string(),
             }))
         );
@@ -372,7 +371,6 @@ mod tests {
                 mono: true,
                 ai: false,
                 settings: None,
-                action: None,
                 lang: "ru".to_string(),
             }))
         );
@@ -392,7 +390,6 @@ mod tests {
             parsed,
             Some(Ok(DemoArgs {
                 settings: Some(settings::Page::Interface),
-                action: None,
                 ..
             }))
         ));
@@ -423,7 +420,6 @@ mod tests {
             parsed,
             Some(Ok(DemoArgs {
                 settings: Some(settings::Page::Ai),
-                action: None,
                 ..
             }))
         ));
@@ -462,6 +458,26 @@ mod tests {
              panels = [1, 1]\n[[files]]\nfrom = \"a.mp4\"\nname = \"a.mp4\"\n",
         )
         .unwrap()
+    }
+
+    #[test]
+    fn a_scenario_can_turn_the_clip_and_run_a_named_batch_action() {
+        let mut turned = scenario();
+        turned.rotate = 1;
+        assert!(matches!(
+            steps(&turned, false, false).last(),
+            Some(folder_workspace::Message::RotateVideo(1))
+        ));
+
+        let mut run = scenario();
+        run.batch_action = Some("Rotate videos".to_string());
+        let batch_steps = steps(&run, true, false);
+        assert!(matches!(
+            batch_steps.last(),
+            Some(folder_workspace::Message::Batch(
+                batch::Message::SelectAction(batch::Action::Rotate)
+            ))
+        ));
     }
 
     #[test]
@@ -524,7 +540,6 @@ mod tests {
             mono: false,
             ai: false,
             settings: None,
-            action: None,
             lang: "en".to_string(),
         };
         let mut run = DemoRun::new(scenario(), "o.png".into(), "w".into(), &args);
