@@ -358,25 +358,24 @@ impl Actions {
     /// run right now (e.g. "Generate subtitles" before its plan and key are known).
     pub fn persist(&self, action: Action) -> Vec<(String, String)> {
         match action {
+            // Each field's own `operation()` always returns its own action's variant.
             Action::MoveComments => match self.move_comments.operation() {
                 Operation::MoveComments(to) => vec![("to".to_string(), to.as_str().to_string())],
-                _ => unreachable!("move_comments::Options::operation always returns MoveComments"),
+                _ => unreachable!(),
             },
             Action::MoveInOut => match self.move_in_out.operation() {
                 Operation::MoveInOut(to) => vec![("to".to_string(), to.as_str().to_string())],
-                _ => unreachable!("move_in_out::Options::operation always returns MoveInOut"),
+                _ => unreachable!(),
             },
             Action::MarkersComment => match self.markers_comment.operation() {
                 Operation::MarkersComment(direction) => {
                     vec![("direction".to_string(), direction.as_str().to_string())]
                 }
-                _ => {
-                    unreachable!("markers_comment::Options::operation always returns MarkersComment")
-                }
+                _ => unreachable!(),
             },
             Action::Rotate => match self.rotate.operation() {
                 Operation::Rotate(turn) => vec![("turn".to_string(), turn.as_str().to_string())],
-                _ => unreachable!("rotate::Options::operation always returns Rotate"),
+                _ => unreachable!(),
             },
             Action::DescribeAi => match self.describe_ai.operation() {
                 Operation::DescribeAi(run) => vec![
@@ -384,7 +383,7 @@ impl Actions {
                     ("model".to_string(), run.model.to_string()),
                     ("redo".to_string(), run.redo.to_string()),
                 ],
-                _ => unreachable!("describe_ai::Options::operation always returns DescribeAi"),
+                _ => unreachable!(),
             },
             Action::GenerateSubtitles => vec![(
                 "replace".to_string(),
