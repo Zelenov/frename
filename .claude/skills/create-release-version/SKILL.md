@@ -19,7 +19,7 @@ Every version entry in **version.md** must include **at least one** of `## Added
 ```
 
 - **`# X.Y`** — Version as H1 (two parts, e.g. `0.67`; release tags are `vX.Y`). Must be the very first line of the block.
-- **`# NEXT`** — Unreleased notes on a feature branch. The agent pipeline replaces it with the real version right before merging (`nightly` step 7); `main` never carries `# NEXT`.
+- **No `# NEXT`.** A feature branch writes the real next version from the start (`main`'s first heading + 1) and renumbers only if another PR takes that number first (`nightly` steps 4 and 7). CI fails on `# NEXT`, and `main` never carries it.
 - **`## Added`** — New features. Omit if nothing added.
 - **`## Changed`** — Behavior/UI changes. Omit if nothing changed.
 
