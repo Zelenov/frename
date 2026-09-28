@@ -24,7 +24,7 @@ use iced::widget::operation;
 use iced::{Subscription, Task};
 
 use crate::features::batch::{self, BatchState, ItemResult, ItemStatus};
-use crate::features::drag_out::DragOutState;
+use crate::features::drag_out::{self, DragOutState};
 use crate::features::file_name_panel::{self, FileNamePanelState};
 use crate::features::file_workspace::FileWorkspace;
 use crate::features::folder;
@@ -972,12 +972,15 @@ impl FolderWorkspace {
     /// Save the edits waiting for the disk (the open file may be one of the job's), close the
     /// open file until the job ends, and start the first file.
     fn run_batch(&mut self) -> Task<Message> {
-        let _ = self.apply_pending_file_updates();
-        if let Some((id, snapshot)) = self.file_workspace.get_snapshot() {
-            let _ = self.apply_file_updated(id, snapshot);
-        }
+        let pending_saved = self.apply_pending_file_updates();
+        let open_saved = self
+            .file_workspace
+            .get_snapshot()
+            .map_or(Task::none(), |(id, snapshot)| {
+                self.apply_file_updated(id, snapshot)
+            });
         self.file_workspace.set_file(None);
-        self.next_batch_item()
+        Task::batch([pending_saved, open_saved, self.next_batch_item()])
     }
 
     /// Run the job on its next file on a blocking thread, or end the job when it has none
@@ -1137,6 +1140,17 @@ impl FolderWorkspace {
         let (new_path, snapshot_after_save) = snapshot.save_and_reparse(&current_path);
         // A drag out of the window waiting for this save learns whether it worked.
         self.drag_out_saved(id, &snapshot, &snapshot_after_save);
+        // The save did not do what the tags/comment wanted: most likely a file with that name
+        // already exists (issue #84), or the video is read-only or open elsewhere. The same
+        // check the drag-out path already uses to detect this.
+        let refused = drag_out::save_failed(&snapshot, &snapshot_after_save);
+        let refused_notice = if refused {
+            Self::notice(
+                "Not saved: a file with that name already exists, or it is read-only or in use",
+            )
+        } else {
+            Task::none()
+        };
 
         let _ = self
             .directory
@@ -1145,12 +1159,20 @@ impl FolderWorkspace {
 
         // Push NavigateFileCommand when we have a valid to_file_id (set by select_* after navigating).
         if let Some(to_file_id) = self.pending_to_file_id.take() {
+            // A refused save never reached the file: undoing back to it must restore what is
+            // really on disk (snapshot_after_save), not the picked-but-unsaved tags, or Ctrl+Z
+            // would show them as if they had been saved.
+            let snapshot_before = if refused {
+                snapshot_after_save.clone()
+            } else {
+                snapshot
+            };
             self.history.push(Box::new(NavigateFileCommand {
                 file_id: id,
                 to_file_id,
                 path_before,
                 path_after: new_path,
-                snapshot_before: snapshot,
+                snapshot_before,
                 snapshot_after: snapshot_after_save,
             }));
         }
@@ -1164,10 +1186,11 @@ impl FolderWorkspace {
         {
             return Task::batch([
                 markers_saved,
+                refused_notice,
                 Task::done(Message::ScrollFolderListToSelected),
             ]);
         }
-        markers_saved
+        Task::batch([markers_saved, refused_notice])
     }
 
     fn handle_folder_message(&mut self, msg: folder::Message) -> Task<Message> {
@@ -3202,6 +3225,43 @@ mod tests {
         assert!(
             file_renamed,
             "directory must track the renamed path Comedy.file_0.mp4"
+        );
+    }
+
+    /// Issue #84: a save that would rename one file onto the name another already has must be
+    /// refused, not silently overwrite it. `InMemoryFileTagger` mirrors `ProductionFileTagger`'s
+    /// guard for exactly this (both check real files on disk for the target name).
+    #[test]
+    fn a_rename_onto_an_existing_files_name_is_refused() {
+        let test_dir = TestDirectory::new(2);
+        // TestDirectory's own files are virtual (never written to disk); write file_1 for real,
+        // so the guard (which checks real files) has something on disk to find.
+        std::fs::write(test_dir.file_path("file_1.mp4"), []).expect("write file_1");
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let file_0_id = file_id_at(&workspace, 0);
+
+        // Computes to "file_1.mp4" — the name the other real file on disk already has.
+        let snapshot = FileSnapshot::new(Vec::<String>::new(), "file_1", ".mp4", "file_0.mp4");
+        let _ = workspace.update(Message::FileUpdated {
+            id: file_0_id,
+            snapshot,
+        });
+
+        let dir = workspace.directory().expect("directory should be loaded");
+        let file_0 = dir.file_by_id(file_0_id).expect("file_0 still tracked");
+        assert_eq!(
+            file_0.file_path(),
+            test_dir.file_path("file_0.mp4").as_path(),
+            "refused: file_0 must not take file_1's name"
+        );
+        assert!(
+            test_dir.file_path("file_1.mp4").exists(),
+            "the other file must survive untouched"
         );
     }
 

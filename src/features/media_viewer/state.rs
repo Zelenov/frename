@@ -63,6 +63,14 @@ impl MediaViewerState {
         matches!(self.active, ActiveMedia::Video)
     }
 
+    /// The video player's short note (e.g. "Frame saved", a save refused), if any. Kept and
+    /// shown even once the video that set it is no longer the active pane: a save can be
+    /// refused right as the video unloads for the next file or a batch job (issue #84), and the
+    /// note must still reach the editor, not disappear behind a hidden video component.
+    pub fn notice(&self) -> Option<&str> {
+        self.video.notice()
+    }
+
     /// The playhead of the open video in milliseconds; `None` when no video is shown.
     pub fn video_position_ms(&self) -> Option<u64> {
         matches!(self.active, ActiveMedia::Video).then(|| self.video.position_ms())
@@ -134,5 +142,34 @@ impl MediaViewerState {
             ActiveMedia::Video => self.video.subscription().map(Message::Video),
             ActiveMedia::Unsupported | ActiveMedia::None => Subscription::none(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Issue #84: a save can be refused right as the video unloads for the next file or a batch
+    /// job, so the notice must still be readable once the video is no longer the active pane —
+    /// it lives in `video`'s own state, not gated behind `active`.
+    #[test]
+    fn the_notice_survives_the_video_becoming_inactive() {
+        let mut state = MediaViewerState::default();
+        let _ = state.update(Message::Video(video::Message::ShowNotice(
+            "Not saved: a file with that name already exists".to_string(),
+        )));
+        assert_eq!(
+            state.notice(),
+            Some("Not saved: a file with that name already exists")
+        );
+
+        let _ = state.update(Message::Video(video::Message::VideoUnloaded));
+
+        assert!(!state.is_previewable(), "no video is active any more");
+        assert_eq!(
+            state.notice(),
+            Some("Not saved: a file with that name already exists"),
+            "the notice must still be readable once the video became inactive"
+        );
     }
 }
