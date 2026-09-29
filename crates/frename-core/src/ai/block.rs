@@ -174,6 +174,7 @@ mod tests {
                 end_s: 14.2,
                 description: "Entrance.".to_string(),
             }],
+            main: None,
         }
     }
 
@@ -204,6 +205,7 @@ mod tests {
         let no_segments = Description {
             summary: description().summary,
             segments: vec![],
+            main: None,
         };
         assert_eq!(format_block(&no_segments), "AI: A guide leads tourists.");
         assert_eq!(
