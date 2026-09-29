@@ -33,7 +33,7 @@ pub fn view<'a>(
             state,
             placeholder::cannot_play(Some(fl!("media-viewer-no-picture"))),
         ),
-        ActiveMedia::None => with_notice(state, placeholder::no_clip()),
+        ActiveMedia::None => with_notice(state, placeholder::blank()),
     }
 }
 

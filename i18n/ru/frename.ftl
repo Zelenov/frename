@@ -507,7 +507,6 @@ video-controls-add-a-name = Добавить имя
 video-controls-rotate-left = Повернуть влево
 video-controls-rotate-right = Повернуть вправо
 video-controls-more = Ещё
-media-viewer-no-clip = Клип не открыт
 media-viewer-loading-slow = Ждём файл… (файл из облака может загружаться долго)
 media-viewer-cannot-play = Этот клип не воспроизводится
 media-viewer-no-picture = В этом файле нет видеоизображения

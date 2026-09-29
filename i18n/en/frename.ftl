@@ -454,7 +454,6 @@ video-controls-add-a-name = Add a name
 video-controls-rotate-left = Rotate left
 video-controls-rotate-right = Rotate right
 video-controls-more = More
-media-viewer-no-clip = No clip open
 media-viewer-loading-slow = Waiting for the file… (a cloud file may take a while)
 media-viewer-cannot-play = This clip cannot be played
 media-viewer-no-picture = This file has no video picture

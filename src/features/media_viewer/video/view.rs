@@ -84,7 +84,7 @@ pub fn view<'a>(
         } else if state.load_failed() {
             placeholder::cannot_play(None)
         } else {
-            placeholder::no_clip()
+            placeholder::blank()
         };
     };
     let player = VideoPlayer::new(video)

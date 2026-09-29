@@ -1,5 +1,6 @@
-//! What the video pane shows without a picture (design system §13.3.1): no clip, loading, and a
-//! clip that cannot be played. Every one says what is going on in words.
+//! What the video pane shows without a picture (design system §13.3.1): nothing (between two
+//! clips), loading, and a clip that cannot be played. Loading and the failure say what is going
+//! on in words.
 
 use iced::widget::{column, container};
 use iced::{Alignment, Element, Length};
@@ -13,14 +14,14 @@ use crate::ui::tokens::*;
 /// Spinner steps after which a slow load says so: 3 s.
 const SLOW_LOAD_TICKS: usize = 20;
 
-/// No file is open.
-pub fn no_clip<'a, M: 'a>() -> Element<'a, M> {
-    panel(empty::pane(
-        Icon::Clapperboard,
-        fl!("media-viewer-no-clip"),
-        None,
-        None,
-    ))
+/// Nothing to show: an empty pane on the black the loading spinner and the picture use, so a
+/// switch from one clip to the next has no icon or text flash between them.
+pub fn blank<'a, M: 'a>() -> Element<'a, M> {
+    container(iced::widget::space())
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(style::video)
+        .into()
 }
 
 /// A file is being opened: the spinner and its name on black, where the picture will be.
