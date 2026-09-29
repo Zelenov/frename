@@ -436,7 +436,7 @@ batch-subtitles-usd-about = примерно ${ $amount }
 folder-has-subtitles = Есть субтитры
 folder-filter-tip = Показать только…
 
-folder-search-placeholder = Найти файл или комментарий
+folder-search-placeholder = Найти файл или слово в комментарии
 folder-search-comments-loading = Ищем в комментариях… осталось { $n }
 folder-search-clear = Очистить
 folder-all = Все
@@ -621,7 +621,7 @@ updates-current-version = frename { $version }
 updates-check-on-start = Проверять обновления при запуске frename
 settings-spend-label = Расходы
 settings-spend-line = Сегодня { $today } · за месяц { $month }
-settings-spend-since = С момента пополнения: { $spent }
+settings-spend-since = С момента пополнения на { $top_up }: { $spent }
 settings-spend-left = Остаток: { $amount } (оценка)
 settings-spend-none = Запишите пополнение, чтобы увидеть примерный остаток.
 settings-spend-note = Считается то, что потратил frename; на странице сервиса может быть больше. День вводится как ГГГГ-ММ-ДД.

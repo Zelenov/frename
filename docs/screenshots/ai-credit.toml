@@ -5,7 +5,7 @@
 source = "../../tests/folder"
 open = "pick.wide.MVI_0701.mp4"
 seek = 2.0
-window = [1280, 720]
+window = [1280, 860]
 panels = [460, 320]
 
 [[credit]]

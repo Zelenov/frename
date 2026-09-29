@@ -512,8 +512,15 @@ fn spending(which: ApiKey, spend: &SpendSection) -> Element<'_, Message> {
         month = dollars(summary.month)
     ))
     .into()];
-    if let Some(since) = summary.since_top_up {
-        lines.push(text::body(fl!("settings-spend-since", spent = dollars(since))).into());
+    if let (Some(top_up), Some(since)) = (summary.top_up, summary.since_top_up) {
+        lines.push(
+            text::body(fl!(
+                "settings-spend-since",
+                spent = dollars(since),
+                top_up = dollars(top_up.usd)
+            ))
+            .into(),
+        );
     }
     lines.push(match summary.remaining() {
         Some(left) => text::strong(fl!("settings-spend-left", amount = dollars(left))).into(),

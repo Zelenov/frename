@@ -926,11 +926,10 @@ impl FolderWorkspace {
             open_in_default_app(frename_core::log_path());
             return Task::none();
         }
-        if let batch::Message::OpenBilling(service) = msg {
-            open_in_default_app(frename_core::ai::ledger::billing_url(service));
-            return Task::none();
-        }
-        if let batch::Message::Action(batch::ActionMessage::OpenBilling(service)) = msg {
+        // From the job's report, or from a panel's warning: the same page.
+        if let batch::Message::OpenBilling(service)
+        | batch::Message::Action(batch::ActionMessage::OpenBilling(service)) = msg
+        {
             open_in_default_app(frename_core::ai::ledger::billing_url(service));
             return Task::none();
         }
@@ -1657,10 +1656,6 @@ impl FolderWorkspace {
         Task::batch([open, check])
     }
 
-    /// Apply several batch messages as one step, so the reads they trigger (AI/subtitle plans)
-    /// run once for the result instead of once per message. `Run`/`Retry`/`OpenLog`/`OpenBilling`
-    /// are `handle_batch`'s own special cases (starting a job, opening a file); never pass them
-    /// here, or they reach `BatchState::update`, which does not handle them.
     /// Keep what a file of a paid job cost in the spend ledger, and note when the service said
     /// its credit is used up (what is left of the recorded top-up is zero then). The panels
     /// then show the new figures.
@@ -1691,6 +1686,10 @@ impl FolderWorkspace {
         }
     }
 
+    /// Apply several batch messages as one step, so the reads they trigger (AI/subtitle plans)
+    /// run once for the result instead of once per message. `Run`/`Retry`/`OpenLog`/`OpenBilling`
+    /// are `handle_batch`'s own special cases (starting a job, opening a file); never pass them
+    /// here, or they reach `BatchState::update`, which does not handle them.
     fn handle_batch_many(
         &mut self,
         msgs: impl IntoIterator<Item = batch::Message>,

@@ -384,7 +384,7 @@ batch-subtitles-usd-about = about ${ $amount }
 folder-has-subtitles = Has subtitles
 folder-filter-tip = Show only…
 
-folder-search-placeholder = Find a file or a comment
+folder-search-placeholder = Find a file, or a word in a comment
 folder-search-comments-loading = Searching comments… { $n } left
 folder-search-clear = Clear
 folder-all = All
@@ -568,7 +568,7 @@ updates-current-version = frename { $version }
 updates-check-on-start = Check for updates when frename starts
 settings-spend-label = Spending
 settings-spend-line = Today { $today } · this month { $month }
-settings-spend-since = Since the top-up: { $spent }
+settings-spend-since = Since the top-up of { $top_up }: { $spent }
 settings-spend-left = Credit left: { $amount } (an estimate)
 settings-spend-none = Record a top-up to see about how much is left.
 settings-spend-note = Counts what frename spent; the provider's own page may show more. Type the day as YYYY-MM-DD.

@@ -59,10 +59,12 @@ impl AppDatabase {
         }
         if let Ok(conn) = self.conn() {
             let conn = lock_connection(&conn);
-            let _ = conn.execute(
+            if let Err(e) = conn.execute(
                 "INSERT INTO ai_spend (service, at_ms, usd) VALUES (?1, ?2, ?3)",
                 params![service_id(service), at_ms, usd],
-            );
+            ) {
+                log::warn!("ledger: could not record ${usd:.4} spent on {service:?}: {e}");
+            }
         }
     }
 
@@ -74,8 +76,12 @@ impl AppDatabase {
 
     /// [`Self::ai_spend_summary`] as of a given time.
     pub fn ai_spend_summary_at(&self, service: ApiKey, now_ms: i64) -> SpendSummary {
-        let Ok(conn) = self.conn() else {
-            return SpendSummary::default();
+        let conn = match self.conn() {
+            Ok(conn) => conn,
+            Err(e) => {
+                log::warn!("ledger: the database cannot be opened: {e}");
+                return SpendSummary::default();
+            }
         };
         let conn = lock_connection(&conn);
         let id = service_id(service);
@@ -121,15 +127,22 @@ impl AppDatabase {
         };
         let conn = lock_connection(&conn);
         let at_ms = match date {
-            // Midnight of that local day, as UTC.
+            // Midnight of that local day, as UTC. SQLite would quietly move a day that does not
+            // exist (2026-02-31) to the next month: read the date back and refuse a change.
             Some(date) => conn
                 .query_row(
-                    "SELECT CAST(strftime('%s', ?1, 'utc') AS INTEGER) * 1000",
+                    "SELECT CAST(strftime('%s', ?1, 'utc') AS INTEGER) * 1000, date(?1)",
                     [date],
-                    |row| row.get::<_, Option<i64>>(0),
+                    |row| {
+                        Ok((
+                            row.get::<_, Option<i64>>(0)?,
+                            row.get::<_, Option<String>>(1)?,
+                        ))
+                    },
                 )
                 .ok()
-                .flatten(),
+                .filter(|(_, read_back)| read_back.as_deref() == Some(date))
+                .and_then(|(at_ms, _)| at_ms),
             None => Some(now_ms()),
         };
         let Some(at_ms) = at_ms else {
@@ -198,6 +211,36 @@ mod tests {
     }
 
     #[test]
+    fn this_month_starts_on_the_first_and_today_at_midnight() {
+        let db = database("month");
+        // Mid-month, mid-day in UTC: the local day and month hold it in every time zone.
+        let now = 1_790_000_000_000 + 10 * DAY; // some day in the middle of a month
+        let conn_bounds = |unit: &str| {
+            let conn = db.conn().expect("conn");
+            let conn = lock_connection(&conn);
+            local_start_ms(&conn, now, unit).expect("start")
+        };
+        let (day, month) = (conn_bounds("day"), conn_bounds("month"));
+        assert!(
+            day <= now && now - day < 25 * HOUR,
+            "today starts within a day"
+        );
+        assert!(
+            month <= day && day - month < 31 * DAY,
+            "the month starts within 31 days"
+        );
+
+        // Spend just before each start is outside its period, just after is inside.
+        db.record_ai_spend_at(ApiKey::Anthropic, 1.0, day - 1);
+        db.record_ai_spend_at(ApiKey::Anthropic, 2.0, day);
+        db.record_ai_spend_at(ApiKey::Anthropic, 4.0, month - 1);
+        let s = db.ai_spend_summary_at(ApiKey::Anthropic, now);
+        assert!((s.today - 2.0).abs() < 1e-9, "{s:?}");
+        let expected_month = if month == day { 2.0 } else { 3.0 };
+        assert!((s.month - expected_month).abs() < 1e-9, "{s:?}");
+    }
+
+    #[test]
     fn the_estimate_is_the_top_up_minus_what_was_spent_since() {
         let db = database("topup");
         let now = now_ms();
@@ -252,7 +295,12 @@ mod tests {
         assert!(!db.set_ai_top_up(ApiKey::Anthropic, f64::NAN, None));
         assert!(!db.set_ai_top_up(ApiKey::Anthropic, 5.0, Some("28.09.2026")));
         assert!(!db.set_ai_top_up(ApiKey::Anthropic, 5.0, Some("2026-13-01")));
+        assert!(
+            !db.set_ai_top_up(ApiKey::Anthropic, 5.0, Some("2026-02-31")),
+            "a day that does not exist"
+        );
         assert_eq!(db.ai_spend_summary(ApiKey::Anthropic).top_up, None);
+        assert!(db.set_ai_top_up(ApiKey::Anthropic, 5.0, Some("2026-02-28")));
     }
 
     #[test]
