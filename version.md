@@ -1,6 +1,10 @@
-# 0.84
+# 0.85
 ## Fixed
 - Switching from one clip to the next no longer flashes the movie icon between them: the video pane stays empty, then shows the loading spinner.
+
+# 0.84
+## Fixed
+- A comment you clear no longer comes back when you return to the clip right away.
 
 # 0.83
 ## Added

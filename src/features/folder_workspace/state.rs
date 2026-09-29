@@ -763,6 +763,22 @@ impl FolderWorkspace {
         dir.file_by_id(file.id()).cloned().unwrap_or(file)
     }
 
+    /// The file as its edits left it. A save waiting for the video to unload has not reached the
+    /// directory yet, so a clip opened again in the meantime would show what it held before the
+    /// edit (a cleared comment coming back), and leaving it again would save that over the edit.
+    fn with_pending_edits(&self, file: &frename_core::File) -> frename_core::File {
+        let mut file = file.clone();
+        if let Some((_, edited)) = self
+            .pending_file_updates
+            .iter()
+            .rev()
+            .find(|(id, _)| *id == file.id())
+        {
+            file.set_file_snapshot(edited);
+        }
+        file
+    }
+
     fn apply_file_opened(&mut self, file: frename_core::File) -> Task<Message> {
         let file = self.with_comment_loaded(file);
         // Opening another file closes the in-place rename editor, like leaving the row.
@@ -785,7 +801,13 @@ impl FolderWorkspace {
             self.markers.reset();
         }
         let snapshot = self.file_workspace.get_snapshot();
-        self.file_workspace.set_file(Some(file.clone()));
+        // A same-file refresh (undo, in-place rename) brings its own, newer state.
+        let opened = if same_file {
+            file.clone()
+        } else {
+            self.with_pending_edits(&file)
+        };
+        self.file_workspace.set_file(Some(opened));
         if !same_file {
             self.markers_loaded(file.id());
         }
@@ -3327,6 +3349,102 @@ mod tests {
             tags(&workspace),
             ["Commented"],
             "a new comment after clearing checks it again"
+        );
+    }
+
+    /// Issue #125: a comment cleared in the box, then leaving the clip and coming back, showed
+    /// the old comment again.
+    #[test]
+    fn a_cleared_comment_is_still_cleared_after_leaving_the_clip_and_coming_back() {
+        use iced::widget::text_editor::{Action, Edit};
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let first = file_id_at(&workspace, 0);
+        let leave_and_return = |workspace: &mut FolderWorkspace| {
+            let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+            flush_file_opened(workspace);
+            let _ = workspace.update(Message::MediaViewer(
+                crate::features::media_viewer::Message::Unloaded,
+            ));
+            let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+            flush_file_opened(workspace);
+            let _ = workspace.update(Message::MediaViewer(
+                crate::features::media_viewer::Message::Unloaded,
+            ));
+        };
+        let comment_of = |w: &FolderWorkspace| {
+            w.directory()
+                .and_then(|d| d.file_by_id(first))
+                .map(|f| f.comment().to_string())
+                .unwrap_or_default()
+        };
+        let shown = |w: &FolderWorkspace| w.file_workspace().tag_list().comment().to_string();
+
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('o'))));
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('k'))));
+        leave_and_return(&mut workspace);
+        assert_eq!(comment_of(&workspace), "ok", "the comment was saved");
+        assert_eq!(
+            shown(&workspace),
+            "ok",
+            "and shown when the clip is opened again"
+        );
+
+        let _ = workspace.update(Message::CommentAction(Action::SelectAll));
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Delete)));
+        leave_and_return(&mut workspace);
+        assert_eq!(comment_of(&workspace), "", "the cleared comment was saved");
+        assert_eq!(
+            shown(&workspace),
+            "",
+            "and the box is empty when it is opened again"
+        );
+    }
+
+    /// The same, when the way back comes before the first clip's video has unloaded: its save is
+    /// still waiting, so the clip must not open with the comment it had before the edit.
+    #[test]
+    fn a_comment_cleared_just_before_leaving_is_not_shown_again_while_its_save_waits() {
+        use iced::widget::text_editor::{Action, Edit};
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('o'))));
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert_eq!(workspace.file_workspace().tag_list().comment(), "o");
+
+        let _ = workspace.update(Message::CommentAction(Action::SelectAll));
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Delete)));
+        // Away and straight back: no Unloaded in between.
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert_eq!(
+            workspace.file_workspace().tag_list().comment(),
+            "",
+            "the box shows the cleared comment"
         );
     }
 
