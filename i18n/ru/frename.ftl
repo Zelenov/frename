@@ -433,7 +433,8 @@ batch-subtitles-usd-about = примерно ${ $amount }
 folder-has-subtitles = Есть субтитры
 folder-filter-tip = Показать только…
 
-folder-search-placeholder = Найти файл
+folder-search-placeholder = Найти файл или слово в комментарии
+folder-search-comments-loading = Ищем в комментариях… осталось { $n }
 folder-search-clear = Очистить
 folder-all = Все
 folder-invert = Обратить

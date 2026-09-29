@@ -13,6 +13,7 @@ mod markers;
 mod metadata;
 pub mod old_settings;
 mod ordered;
+mod search;
 mod subtitles;
 mod tags;
 pub(crate) mod transliteration;
@@ -41,6 +42,7 @@ pub use metadata::{
     DEFAULT_COMMENTED_TAG,
 };
 pub use ordered::{OrderKey, OrderableEntry, OrderedCollection, OrderedThing};
+pub use search::CommentFragment;
 pub use subtitles::{
     load_subtitles, subtitle_path, transcript_path, CueLength, SubtitleCue, Subtitles,
     DEFAULT_SUBTITLE_LANGUAGES,

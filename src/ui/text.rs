@@ -3,8 +3,8 @@
 use std::borrow::Cow;
 
 use iced::widget::text::{IntoFragment, LineHeight, Wrapping};
-use iced::widget::{text, Text};
-use iced::{Color, Font, Pixels};
+use iced::widget::{rich_text, span, text, Text};
+use iced::{Color, Element, Font, Pixels};
 
 use super::tokens::*;
 
@@ -113,6 +113,57 @@ pub fn fit(line: &str, width: f32, char_width: f32) -> Cow<'_, str> {
     }
     let kept: String = line.chars().take(room.saturating_sub(1)).collect();
     Cow::Owned(format!("{}…", kept.trim_end()))
+}
+
+/// A caption `line` with the byte `ranges` of it marked (a search's hits): the marked parts in the
+/// accent color on its tint. Cut with "…" to `width` like [`fit`]; a mark that runs past the cut
+/// is cut with it. One line, like every comment line of the list.
+pub fn caption_marked<'a, M: 'a>(
+    line: &str,
+    ranges: &[std::ops::Range<usize>],
+    width: f32,
+    char_width: f32,
+) -> Element<'a, M> {
+    let room = (width / char_width).floor().max(0.0) as usize;
+    let too_long = line.chars().count() > room;
+    let end = if too_long {
+        line.char_indices()
+            .nth(room.saturating_sub(1))
+            .map_or(line.len(), |(i, _)| i)
+    } else {
+        line.len()
+    };
+    let shown = &line[..end];
+    let mut spans: Vec<iced::widget::text::Span<'a, (), Font>> = Vec::new();
+    let mut at = 0;
+    for range in ranges {
+        let (start, stop) = (range.start.min(end), range.end.min(end));
+        if start >= stop {
+            continue;
+        }
+        if start > at {
+            spans.push(span(shown[at..start].to_string()));
+        }
+        spans.push(
+            span(shown[start..stop].to_string())
+                .color(ACCENT_TEXT)
+                .background(ACCENT_TINT),
+        );
+        at = stop;
+    }
+    if at < shown.len() {
+        spans.push(span(shown[at..].trim_end().to_string()));
+    }
+    if too_long {
+        spans.push(span("…"));
+    }
+    rich_text(spans)
+        .size(TEXT_CAPTION)
+        .line_height(LineHeight::Absolute(Pixels(LINE_CAPTION)))
+        .font(FONT)
+        .color(TEXT_SECONDARY)
+        .wrapping(Wrapping::None)
+        .into()
 }
 
 #[cfg(test)]

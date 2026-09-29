@@ -25,6 +25,9 @@ const ROW_PADDING: Padding = Padding {
     right: 0.0,
 };
 
+/// How many characters of a matching comment line show before the first hit.
+const FRAGMENT_LEAD_CHARS: usize = 12;
+
 /// What a row needs to know about its file, besides the file itself.
 pub struct RowState<'a> {
     pub index: usize,
@@ -88,9 +91,13 @@ pub fn view<'a>(
             .align_y(Alignment::Center);
             // Indented like the name, so the comment starts under it.
             let comment_width = props.width - lead_width - 2.0 * SPACE_S - SCROLL_GUTTER;
+            // While searching, a file found by its comment shows the hit instead of the first line.
+            let fragment = props
+                .directory
+                .and_then(|dir| dir.comment_fragment(file, FRAGMENT_LEAD_CHARS));
             let comment_line = row![
                 space().width(lead_width),
-                comment_line(snapshot, props.spinner_frame, comment_width)
+                comment_line(snapshot, fragment, props.spinner_frame, comment_width)
             ];
             column![name_line, comment_line]
                 .spacing(SPACE_XXS)
@@ -281,11 +288,20 @@ fn not_saved_mark<'a>() -> Element<'a, Message> {
 /// still loading, or nothing. Always one line, so every row keeps its height.
 fn comment_line<'a>(
     snapshot: &'a frename_core::FileSnapshot,
+    fragment: Option<frename_core::CommentFragment>,
     spinner_frame: usize,
     width: f32,
 ) -> Element<'a, Message> {
     if snapshot.comment_loading() {
         return spinner(spinner_frame, ICON_S, TEXT_SECONDARY).into();
+    }
+    if let Some(fragment) = fragment {
+        return text::caption_marked(
+            &fragment.text,
+            &fragment.highlights,
+            width,
+            CAPTION_CHAR_WIDTH,
+        );
     }
     let first = snapshot.comment().lines().next().unwrap_or_default();
     text::caption(text::fit(first, width, CAPTION_CHAR_WIDTH).into_owned())

@@ -197,6 +197,11 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
             iced::keyboard::Modifiers::empty(),
         ));
     }
+    if let Some(query) = scenario.search.clone() {
+        steps.push(folder_workspace::Message::Folder(
+            folder::Message::SetNameFilter(query),
+        ));
+    }
     if batch {
         steps.push(folder_workspace::Message::Folder(
             folder::Message::SetBatchMode(true),

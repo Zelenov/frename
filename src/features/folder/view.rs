@@ -66,6 +66,7 @@ pub fn view<'a>(props: ListProps<'a, '_>) -> Element<'a, Message> {
     }
     if let Some(dir) = props.directory.filter(|_| !props.loading) {
         top = top.push(search(dir, props.filter_menu_open));
+        top = top.push(searching_comments(dir));
         // The batch header joins the top column rather than the outer one, so the list keeps
         // its place in the widget tree and with it its scroll position when batch mode turns
         // on or off.
@@ -171,6 +172,21 @@ fn search(dir: &Directory, menu_open: bool) -> Element<'_, Message> {
         },
         Message::SetNameFilter,
     )
+}
+
+/// While a search has words and some comments are still loading, those files match by name only:
+/// say so, and how many are left. The list updates by itself as they load.
+fn searching_comments(dir: &Directory) -> Option<Element<'_, Message>> {
+    let left = dir.loading_comment_count();
+    (dir.is_searching() && left > 0).then(|| {
+        container(text::secondary(fl!(
+            "folder-search-comments-loading",
+            n = (left as i64)
+        )))
+        .padding(STRIP_PADDING)
+        .width(Length::Fill)
+        .into()
+    })
 }
 
 /// The line over the list while a job runs: why the rows take no clicks (§13.2 "Locks").
