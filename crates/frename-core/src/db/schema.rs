@@ -150,3 +150,20 @@ CREATE TABLE IF NOT EXISTS batch_run (
     options TEXT NOT NULL DEFAULT ''
 );
 ";
+
+/// Migration 17: what frename spent on each paid service (`ai_spend`, one row per file a batch
+/// billed) and the top-up the user recorded for it (`ai_top_up`, one row per service), for the
+/// credit estimate (issue #121). `service` is `anthropic` or `soniox`.
+pub const M17_AI_LEDGER: &str = "
+CREATE TABLE IF NOT EXISTS ai_spend (
+    service TEXT NOT NULL,
+    at_ms INTEGER NOT NULL,
+    usd REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ai_spend_service_at ON ai_spend (service, at_ms);
+CREATE TABLE IF NOT EXISTS ai_top_up (
+    service TEXT PRIMARY KEY,
+    usd REAL NOT NULL,
+    at_ms INTEGER NOT NULL
+);
+";

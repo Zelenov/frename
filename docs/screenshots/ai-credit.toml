@@ -1,0 +1,31 @@
+# AI credit (#121): the batch page of "Describe with AI" with what is left of the recorded top-up
+# and the warning when the run costs more, and the spending section of Settings → AI and →
+# Subtitles (`--settings ai`, `--settings subtitles`). Not a README image; for looking at the
+# feature (`frename --demo`, with `--batch --ai`).
+source = "../../tests/folder"
+open = "pick.wide.MVI_0701.mp4"
+seek = 2.0
+window = [1280, 720]
+panels = [460, 320]
+
+[[credit]]
+service = "anthropic"
+top_up = 5.0
+spent = 4.99
+
+[[credit]]
+service = "soniox"
+top_up = 20.0
+spent = 3.4
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_0701.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "review.people.MVI_0702.mp4"
+
+[[files]]
+from = "Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm"
+name = "b-roll.city.MVI_0703.webm"

@@ -8,6 +8,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+use frename_core::ai::key::ApiKey;
 use frename_core::undo::History;
 use frename_core::{
     AppDatabase, AppStateStore, BatchRun, CreateTagCommand, DeleteTagCommand, File, FileId,
@@ -925,8 +926,12 @@ impl FolderWorkspace {
             open_in_default_app(frename_core::log_path());
             return Task::none();
         }
-        if let batch::Message::OpenBilling = msg {
-            open_in_default_app(ANTHROPIC_BILLING_URL);
+        if let batch::Message::OpenBilling(service) = msg {
+            open_in_default_app(frename_core::ai::ledger::billing_url(service));
+            return Task::none();
+        }
+        if let batch::Message::Action(batch::ActionMessage::OpenBilling(service)) = msg {
+            open_in_default_app(frename_core::ai::ledger::billing_url(service));
             return Task::none();
         }
         self.handle_batch_many([msg])
@@ -1118,6 +1123,7 @@ impl FolderWorkspace {
 
     /// Take a finished file into the list (it may have been renamed), then start the next.
     fn batch_item_done(&mut self, id: FileId, result: Box<ItemResult>) -> Task<Message> {
+        self.record_spend(&result);
         if let Some(dir) = self.directory.as_mut() {
             if let Some((path, snapshot)) = result.update.as_ref() {
                 dir.rename_file(id, path, snapshot);
@@ -1655,14 +1661,54 @@ impl FolderWorkspace {
     /// run once for the result instead of once per message. `Run`/`Retry`/`OpenLog`/`OpenBilling`
     /// are `handle_batch`'s own special cases (starting a job, opening a file); never pass them
     /// here, or they reach `BatchState::update`, which does not handle them.
+    /// Keep what a file of a paid job cost in the spend ledger, and note when the service said
+    /// its credit is used up (what is left of the recorded top-up is zero then). The panels
+    /// then show the new figures.
+    fn record_spend(&mut self, result: &ItemResult) {
+        let job_service = self.batch.job_action().and_then(|action| action.service());
+        let (spend, used_up) = result.ledger_entry(job_service);
+        let db = AppDatabase::new();
+        if let Some((service, usd)) = spend {
+            db.record_ai_spend(service, usd);
+        }
+        if let Some(service) = used_up {
+            db.mark_ai_credit_used_up(service);
+        }
+        if spend.is_some() || used_up.is_some() {
+            self.read_credit();
+        }
+    }
+
+    /// Read what each paid service cost and what is probably left of it, for the batch panels.
+    fn read_credit(&mut self) {
+        let db = AppDatabase::new();
+        for service in [ApiKey::Anthropic, ApiKey::Soniox] {
+            self.batch
+                .update(batch::Message::Action(batch::ActionMessage::CreditRead(
+                    service,
+                    db.ai_spend_summary(service),
+                )));
+        }
+    }
+
     fn handle_batch_many(
         &mut self,
         msgs: impl IntoIterator<Item = batch::Message>,
     ) -> Task<Message> {
         // Batch mode does not edit the open file, so its rename editor goes.
         self.inline_rename = None;
+        let mut credit_changed = false;
         for msg in msgs {
+            credit_changed |= matches!(
+                msg,
+                batch::Message::SetActive(true)
+                    | batch::Message::SelectAction(_)
+                    | batch::Message::Action(batch::ActionMessage::RefreshCredit)
+            );
             self.batch.update(msg);
+        }
+        if credit_changed {
+            self.read_credit();
         }
         Task::batch([self.describe_ai_reads(), self.subtitle_reads()])
     }
@@ -2455,9 +2501,6 @@ fn check_new_file_name(
     }
     Ok(())
 }
-
-/// Where an Anthropic account buys credit.
-const ANTHROPIC_BILLING_URL: &str = "https://console.anthropic.com/settings/billing";
 
 /// Open `target` with the app the system uses for it (a text editor for the log, the browser
 /// for a web address).

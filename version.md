@@ -1,3 +1,7 @@
+# 0.87
+## Added
+- Spending on the paid services: Settings → Describe with AI and → Subtitles show what frename spent today, this month and since your last top-up. Record a top-up (the amount and the day) and they show about how much is left, marked as an estimate; the batch page shows it before Run and warns when a run costs more, with a button to the billing page. After a "no credit left" stop the estimate reads zero until you record a new top-up.
+
 # 0.86
 ## Added
 - The file search also looks in comments: type a word from a comment and the clips that have it are listed, with the matching line and the word marked under each name. All words you type must be found, in the name or the comment.

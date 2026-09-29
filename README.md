@@ -306,6 +306,12 @@ pages:
 - **Describe with AI:** your Anthropic API key, kept in the system's password store (Windows
   Credential Manager, macOS Keychain, or a keyring such as GNOME Keyring on Linux), the model
   (Claude Haiku 4.5, Sonnet 5 or Opus 5, with their prices) and the language of the descriptions.
+- **Spending** (on the Describe with AI and Subtitles pages): what frename spent on the service today,
+  this month and since your last top-up. Neither service tells an API key its balance, so type what
+  you added (the amount and the day) under **Record top-up**: frename then shows about how much is
+  left, as an estimate (your top-up minus what frename spent since). Before a run, the batch page
+  shows the credit left and warns when the run costs more, with a button to the service's billing
+  page. Only what frename spent is counted.
 - **Subtitles:** your Soniox API key (kept the same way), the languages spoken in your footage, and
   whether a subtitle is a short line or a whole sentence.
 - **Updates:** **Check for updates**, then **Update and restart** when a newer version is out.

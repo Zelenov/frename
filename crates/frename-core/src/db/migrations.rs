@@ -75,6 +75,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 16,
         sql: schema::M16_BATCH_RUN,
     },
+    Migration {
+        version: 17,
+        sql: schema::M17_AI_LEDGER,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
@@ -158,7 +162,7 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 16);
+        assert_eq!(current_version(&conn).expect("version"), 17);
     }
 
     #[test]

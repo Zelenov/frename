@@ -559,6 +559,13 @@ impl FrenameApp {
                     settings::Message::Key(..) => Task::none(),
                     settings::Message::SetSubtitleLanguage(..)
                     | settings::Message::SetSubtitleCueLength(_) => self.subtitle_config(),
+                    // A recorded top-up changes what the batch panels say is left.
+                    settings::Message::TopUp(_, settings::TopUpMessage::Record) => {
+                        Task::done(Message::FolderWorkspace(folder_workspace::Message::Batch(
+                            batch::Message::Action(batch::ActionMessage::RefreshCredit),
+                        )))
+                    }
+                    settings::Message::TopUp(..) => Task::none(),
                     settings::Message::SetMonochromeTags(_)
                     | settings::Message::ShowPage(_)
                     | settings::Message::NextPage
@@ -788,6 +795,7 @@ impl FrenameApp {
     /// shows the page it showed last, or Updates when an update is ready (the dot on the
     /// settings button leads there).
     fn open_settings_on(&mut self, page: Option<settings::Page>) -> Task<Message> {
+        self.settings.refresh_spend();
         let update_ready = self.settings.updates().available_version().is_some();
         let page = settings::Page::to_open(page, update_ready);
         let show = page.map_or_else(Task::none, |page| {

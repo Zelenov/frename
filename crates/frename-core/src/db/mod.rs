@@ -8,6 +8,7 @@
 
 mod app_database;
 pub(crate) mod fake_app_storage;
+mod ledger;
 mod logging;
 mod migrations;
 mod schema;
