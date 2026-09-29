@@ -380,18 +380,13 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
     let body = column![first_line, name]
         .spacing(SPACE_XXS)
         .padding(ROW_INSET);
-    let height = if open.is_some() {
-        row_height(marker) + 2.0 * CONTROL_PADDING_Y
+    // The open row is as tall as its field, which wraps at the pane's real width and grows
+    // with what is typed: an estimate from the name's characters would leave it too short.
+    let item = if open.is_some() {
+        container(list::row_item(body, true, OVERLAY_HOVER, Length::Shrink))
     } else {
-        row_height(marker)
+        container(list::row_item(body, lit, OVERLAY_HOVER, Length::Fill)).height(row_height(marker))
     };
-    let item = container(list::row_item(
-        body,
-        lit || open.is_some(),
-        OVERLAY_HOVER,
-        Length::Fill,
-    ))
-    .height(height);
 
     // The actions sit at the right end of the first line, over the row.
     let item: Element<'a, Message> = match actions {
