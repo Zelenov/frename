@@ -301,10 +301,6 @@ batch-ai-dollars-under = under $0.01
 batch-ai-skip-described = already described
 batch-ai-skip-too-long = over 30 min
 batch-ai-skip-unreadable = unreadable
-batch-ai-skip-photos = { $n ->
-    [one] { $n } photo
-   *[other] { $n } photos
-}
 batch-ai-skipped = Skipped: { $parts }.
 batch-ai-progress-frame = frame { $done } of { $total }
 batch-ai-progress-waiting = waiting for Claude
