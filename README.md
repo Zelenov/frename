@@ -198,7 +198,11 @@ button is off. mp4 and mov hold everything.
 
 ## Finding files
 
-- **Search** the file list by name. Tags already in a name are searchable too.
+- **Search** the file list by name or by comment: type words, and a file is listed when each word
+  is in its name (tags included) or in its comment (your text, the AI description, marker lines),
+  in any case. A file found by its comment shows the matching line under its name with the words
+  marked. While comments are still loading, those files match by name only, and a line says how
+  many are left.
 - **Filter** the list to files that are untagged, have subtitles, a comment or markers: the
   filter button at the right end of the search bar opens a menu (tick as many as you like;
   **Show all** clears them) and shows how many are on. A file with subtitles shows the subtitles

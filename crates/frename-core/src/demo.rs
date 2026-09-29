@@ -51,6 +51,9 @@ pub struct DemoScenario {
     /// between it and the last Ctrl-clicked file (or `open`, if `ctrl_click` is empty).
     #[serde(default)]
     pub shift_click: Option<String>,
+    /// A word to type in the file search bar (issue #99).
+    #[serde(default)]
+    pub search: Option<String>,
     /// The staged files, oldest first: the file list shows them in this order.
     pub files: Vec<DemoFile>,
 }

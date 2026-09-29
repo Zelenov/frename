@@ -1,3 +1,10 @@
+# 0.86
+## Added
+- The file search also looks in comments: type a word from a comment and the clips that have it are listed, with the matching line and the word marked under each name. All words you type must be found, in the name or the comment.
+
+## Changed
+- The file search matches each word on its own, so `trip goat` no longer needs the two words next to each other in a name.
+
 # 0.85
 ## Fixed
 - Switching from one clip to the next no longer flashes the movie icon between them: the video pane stays empty, then shows the loading spinner.
