@@ -1,3 +1,7 @@
+# 0.84
+## Fixed
+- Switching from one clip to the next no longer flashes the movie icon between them: the video pane stays empty, then shows the loading spinner.
+
 # 0.83
 ## Added
 - Generate subtitles: choose what is written for each video, **SRT subtitles** (`clip.srt`, as before) and/or a **Premiere Pro transcript** (`clip.premiere.json`, for Import Static Transcript in Premiere's Text panel). The choice is remembered like the other batch options.
