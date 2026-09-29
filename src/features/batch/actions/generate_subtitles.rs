@@ -446,10 +446,7 @@ impl Options {
                 let mut lines = plan_lines(plan, price).into_iter();
                 column![]
                     .push(lines.next().map(text::strong))
-                    .push(
-                        super::credit_left_row(credit)
-                            .map(|(label, value)| text::secondary(format!("{label}: {value}"))),
-                    )
+                    .push(super::credit_left_row(credit).map(|row| page::plan([row])))
                     .push(page::notes(lines))
                     .spacing(SPACE_XXS)
                     .into()

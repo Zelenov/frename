@@ -5,7 +5,8 @@
 source = "../../tests/folder"
 open = "pick.wide.MVI_0701.mp4"
 seek = 2.0
-window = [1280, 860]
+window = [1280, 1000]
+batch_action = "Generate subtitles"
 panels = [460, 320]
 
 [[credit]]
@@ -16,7 +17,7 @@ spent = 4.99
 [[credit]]
 service = "soniox"
 top_up = 20.0
-spent = 3.4
+spent = 19.999
 
 [[files]]
 from = "file_example_MP4_480_1_5MG.mp4"
