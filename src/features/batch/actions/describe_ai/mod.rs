@@ -159,8 +159,10 @@ impl Options {
             ..Plan::default()
         };
         for file in checked {
+            // The file list only lists videos, so nothing else is ever checked; a file of another
+            // kind is left out quietly (it has no length to read, so the estimate would wait
+            // for it forever).
             if file.kind() != FileKind::Video {
-                plan.not_videos += 1;
                 continue;
             }
             if file.snapshot().comment_loading() {
@@ -363,7 +365,6 @@ struct Plan {
     run_seconds: f64,
     described: usize,
     too_long: usize,
-    not_videos: usize,
     unreadable: usize,
     no_subtitles: usize,
     /// Some lengths or comments are still being read.
@@ -374,15 +375,13 @@ struct Plan {
 }
 
 impl Plan {
-    /// `Skipped: 3 already described, 1 over 30 min, 200 photos.`
+    /// `Skipped: 3 already described, 1 over 30 min.`
     fn skipped_line(&self) -> Option<String> {
         let parts: Vec<Option<String>> = vec![
             (self.described > 0)
                 .then(|| format!("{} {}", self.described, fl!("batch-ai-skip-described"))),
             (self.too_long > 0)
                 .then(|| format!("{} {}", self.too_long, fl!("batch-ai-skip-too-long"))),
-            (self.not_videos > 0)
-                .then(|| fl!("batch-ai-skip-photos", n = (self.not_videos as i64))),
             (self.unreadable > 0)
                 .then(|| format!("{} {}", self.unreadable, fl!("batch-ai-skip-unreadable"))),
         ];
@@ -681,19 +680,18 @@ mod tests {
                 plan.described,
                 plan.too_long,
                 plan.unreadable,
-                plan.not_videos
             ),
-            (1, 1, 1, 1, 1)
+            (1, 1, 1, 1),
+            "the photo is not counted anywhere"
         );
         assert_eq!(
             plan.skipped_line(),
             Some(fl!(
                 "batch-ai-skipped",
                 parts = format!(
-                    "1 {}, 1 {}, {}, 1 {}",
+                    "1 {}, 1 {}, 1 {}",
                     fl!("batch-ai-skip-described"),
                     fl!("batch-ai-skip-too-long"),
-                    fl!("batch-ai-skip-photos", n = 1),
                     fl!("batch-ai-skip-unreadable"),
                 )
             ))
