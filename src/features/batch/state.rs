@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use clipscribe::AiUsage;
+use frename_core::ai::key::ApiKey;
 use frename_core::{File, FileId, FileSnapshot};
 
 use super::actions::{generate_subtitles, Actions};
@@ -100,8 +101,11 @@ pub struct ItemResult {
     /// Stop the job with this summary line once [`REPEATS_THAT_STOP`] files in a row end with
     /// it (e.g. the network is gone), instead of failing every file left the same way.
     pub stop_if_repeated: Option<String>,
-    /// The AI account has no credit left: the report offers to add some.
+    /// The service's account has no credit left: the report offers to add some, and what is
+    /// left of the recorded top-up becomes zero.
     pub out_of_credit: bool,
+    /// What this file cost on its paid service, for the spend ledger.
+    pub spend: Option<(ApiKey, f64)>,
 }
 
 /// How many files in a row may fail the same way before the job stops.
@@ -118,7 +122,18 @@ impl ItemResult {
             stop_job: None,
             stop_if_repeated: None,
             out_of_credit: false,
+            spend: None,
         }
+    }
+
+    /// What the file writes to the spend ledger: what it cost, and the service that has no credit
+    /// left when the file failed for that (`job_service` is the paid service the job's action
+    /// bills).
+    pub fn ledger_entry(
+        &self,
+        job_service: Option<ApiKey>,
+    ) -> (Option<(ApiKey, f64)>, Option<ApiKey>) {
+        (self.spend, job_service.filter(|_| self.out_of_credit))
     }
 
     /// A failure with the reason the failed list shows.
@@ -158,6 +173,9 @@ struct Job {
     out_of_credit: bool,
     /// False once the job has finished or stopped; the report stays until it is closed.
     running: bool,
+    /// When it started, and when it ended: the time it took and the time left.
+    started: Instant,
+    ended: Option<Instant>,
     /// Files whose check changed after the job: the list shows their check box again, while
     /// the report still counts them.
     dismissed: HashSet<FileId>,
@@ -184,6 +202,25 @@ pub struct Progress {
     pub usage: Option<AiUsage>,
     /// `usage` is a lower bound: some request did not report its cost.
     pub usage_unknown: bool,
+    /// Time spent so far, or in all once it ended.
+    pub elapsed: Duration,
+}
+
+impl Progress {
+    /// Files not reached: the job stopped before them.
+    pub fn not_reached(&self) -> usize {
+        self.total - self.finished
+    }
+
+    /// About how long the rest takes, from the pace of the files finished so far; `None` until
+    /// two files are finished, since the first one alone says little.
+    pub fn time_left(&self) -> Option<Duration> {
+        if self.finished < 2 || !self.running {
+            return None;
+        }
+        let per_file = self.elapsed / self.finished as u32;
+        Some(per_file * self.not_reached() as u32)
+    }
 }
 
 /// Batch mode state.
@@ -226,7 +263,13 @@ impl BatchState {
                 }
                 self.active = active;
             }
-            Message::SelectAction(action) => self.action = action,
+            Message::SelectAction(action) => {
+                // Picking another action after a job leaves its result, as Close does.
+                if !self.is_running() {
+                    self.job = None;
+                }
+                self.action = action;
+            }
             Message::Action(message) => self.actions.update(message),
             Message::Prepare { operation, files } => {
                 self.action = operation.action();
@@ -264,8 +307,18 @@ impl BatchState {
                 }
             }
             Message::CloseReport => self.job = None,
-            Message::Run | Message::Retry | Message::OpenLog | Message::OpenBilling => {}
+            Message::Run | Message::Retry | Message::OpenLog | Message::OpenBilling(_) => {}
         }
+    }
+
+    /// Preselect the last action run (#65) and restore its options; an id no action has (e.g. an
+    /// action removed since) is left as the default (the first action), its options ignored.
+    pub fn restore_last_run(&mut self, run: frename_core::BatchRun) {
+        let Some(action) = Action::from_id(&run.action) else {
+            return;
+        };
+        self.action = action;
+        self.actions.restore(action, &run.options);
     }
 
     /// Start the selected action on `files` (the checked ones, in list order). Returns false
@@ -293,6 +346,8 @@ impl BatchState {
             out_of_credit: false,
             repeated: None,
             running: true,
+            started: Instant::now(),
+            ended: None,
             dismissed: HashSet::new(),
         });
         true
@@ -309,6 +364,7 @@ impl BatchState {
             .filter(|_| !job.cancelled && job.stopped.is_none())
         else {
             job.running = false;
+            job.ended = Some(Instant::now());
             // The job may have written subtitles: the plan is made again.
             self.actions.generate_subtitles_mut().invalidate_plan();
             let job = self.job.as_mut()?;
@@ -543,8 +599,8 @@ impl BatchState {
         })
     }
 
-    /// Files of the current job that were changed with something to say (e.g. they kept the
-    /// in/out points they had stored), in job order.
+    /// Files of the current job that were done and say what they got (e.g. the subtitle files
+    /// written), in job order.
     pub fn done_with_reason(&self) -> Vec<(FileId, &str)> {
         self.job.as_ref().map_or_else(Vec::new, |job| {
             job.order
@@ -582,6 +638,7 @@ impl BatchState {
             cancelled: job.cancelled,
             usage: job.usage,
             usage_unknown: job.usage_unknown,
+            elapsed: job.ended.unwrap_or_else(Instant::now) - job.started,
         })
     }
 }
@@ -615,6 +672,30 @@ mod tests {
         });
         state.update(Message::SetActive(false));
         state
+    }
+
+    #[test]
+    fn restoring_a_known_last_run_preselects_it_and_its_options() {
+        let mut batch = BatchState::default();
+        batch.restore_last_run(frename_core::BatchRun {
+            action: "move_in_out".to_string(),
+            options: vec![("to".to_string(), "comment".to_string())],
+        });
+        assert_eq!(batch.action(), Action::MoveInOut);
+        assert_eq!(
+            batch.operation(),
+            Some(Operation::MoveInOut(InOutStorage::Comment))
+        );
+    }
+
+    #[test]
+    fn restoring_an_unknown_action_id_leaves_the_default_action() {
+        let mut batch = BatchState::default();
+        batch.restore_last_run(frename_core::BatchRun {
+            action: "an-action-removed-since".to_string(),
+            options: vec![("to".to_string(), "comment".to_string())],
+        });
+        assert_eq!(batch.action(), Action::MoveComments, "the first action");
     }
 
     #[test]
@@ -672,6 +753,20 @@ mod tests {
 
         batch.update(Message::CloseReport);
         assert!(batch.progress().is_none());
+    }
+
+    #[test]
+    fn picking_an_action_after_a_job_leaves_its_result() {
+        let files = ids(1);
+        let mut batch = state();
+        batch.start(files);
+        let (id, _, _) = batch.begin_next().expect("the file");
+        batch.finish(id, &ItemResult::new(ItemStatus::Done, None));
+        assert!(batch.begin_next().is_none());
+        assert!(batch.progress().is_some(), "the result shows");
+        batch.update(Message::SelectAction(Action::FixTags));
+        assert!(batch.progress().is_none());
+        assert_eq!(batch.action(), Action::FixTags);
     }
 
     #[test]
@@ -808,6 +903,36 @@ mod tests {
     }
 
     #[test]
+    fn a_finished_file_writes_its_cost_and_a_used_up_service_to_the_ledger() {
+        let plain = ItemResult::new(ItemStatus::Done, None);
+        assert_eq!(plain.ledger_entry(Some(ApiKey::Anthropic)), (None, None));
+
+        let billed = ItemResult {
+            spend: Some((ApiKey::Anthropic, 0.31)),
+            ..ItemResult::new(ItemStatus::Done, None)
+        };
+        assert_eq!(
+            billed.ledger_entry(Some(ApiKey::Anthropic)),
+            (Some((ApiKey::Anthropic, 0.31)), None)
+        );
+
+        let broke = ItemResult {
+            out_of_credit: true,
+            ..ItemResult::failed("no credit")
+        };
+        assert_eq!(
+            broke.ledger_entry(Some(ApiKey::Soniox)),
+            (None, Some(ApiKey::Soniox)),
+            "the service of the job's action"
+        );
+        assert_eq!(
+            broke.ledger_entry(None),
+            (None, None),
+            "an action without one"
+        );
+    }
+
+    #[test]
     fn a_file_out_of_credit_makes_the_report_offer_to_add_some() {
         let files = ids(2);
         let mut batch = state();
@@ -900,5 +1025,33 @@ mod tests {
         batch.finish(id, &offline());
         assert!(batch.begin_next().is_none());
         assert_eq!(batch.stopped(), Some("Stopped: no connection."));
+    }
+
+    #[test]
+    fn the_time_left_follows_the_pace_once_two_files_are_done() {
+        let progress = Progress {
+            total: 12,
+            finished: 1,
+            done: 1,
+            skipped: 0,
+            failed: 0,
+            running: true,
+            cancelled: false,
+            usage: None,
+            usage_unknown: false,
+            elapsed: Duration::from_secs(20),
+        };
+        assert_eq!(progress.time_left(), None, "one file says little");
+        let two = Progress {
+            finished: 2,
+            ..progress
+        };
+        assert_eq!(two.time_left(), Some(Duration::from_secs(100)));
+        assert_eq!(two.not_reached(), 10);
+        let ended = Progress {
+            running: false,
+            ..two
+        };
+        assert_eq!(ended.time_left(), None);
     }
 }

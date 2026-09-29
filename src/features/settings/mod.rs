@@ -5,7 +5,7 @@ mod page;
 mod state;
 pub mod view;
 
-pub use messages::{KeyMessage, Message};
+pub use messages::{KeyMessage, Message, TopUpMessage};
 pub use page::Page;
 pub use state::SettingsState;
 

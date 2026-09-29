@@ -8,11 +8,11 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use arboard;
+use frename_core::ai::key::ApiKey;
 use frename_core::undo::History;
 use frename_core::{
-    AppDatabase, AppStateStore, CreateTagCommand, DeleteTagCommand, File, FileId, FileSnapshot,
-    FolderAndFile, FolderTagStore, LoggingAppStateStore, Marker, NavigateFileCommand,
+    AppDatabase, AppStateStore, BatchRun, CreateTagCommand, DeleteTagCommand, File, FileId,
+    FileSnapshot, FolderAndFile, FolderTagStore, LoggingAppStateStore, Marker, NavigateFileCommand,
     PasteTagsCommand, ReorderTagCommand, SaveAndReparse, SaveTagCommand, SetSegmentEndCommand,
     SetSegmentStartCommand, StarTagCommand, ToggleTagCommand, UndoContext, UndoError,
 };
@@ -25,26 +25,29 @@ use iced::{Subscription, Task};
 
 use crate::features::batch::{self, BatchState, ItemResult, ItemStatus};
 use crate::features::drag_out::{self, DragOutState};
+use crate::features::file_menu::{self, FileAction, FileMenuState};
 use crate::features::file_name_panel::{self, FileNamePanelState};
 use crate::features::file_workspace::FileWorkspace;
 use crate::features::folder;
 use crate::features::markers::MarkersState;
 use crate::features::media_viewer::{self, video as media_viewer_video, MediaViewerState};
 use crate::features::sync_panel;
+use crate::features::tag_grid::groups::Shape;
 use crate::features::tag_panel::{self, TagPanelState, TAG_LIST_SCROLLABLE_ID};
 use crate::features::video_controls;
+use crate::ui::tokens::{
+    FILE_LIST_MAX_WIDTH, FILE_LIST_MIN_WIDTH, FILE_LIST_WIDTH, SPLITTER_HIT, VIDEO_MIN_WIDTH,
+    VIDEO_WIDTH,
+};
 use crate::widgets::search_bar::SEARCH_BAR_INPUT_ID;
-use crate::widgets::splitter::HIT_WIDTH;
 
 use super::Message;
 
 mod drag_out_actions;
+mod file_actions;
 mod marker_actions;
 mod rotation;
 
-const DEFAULT_LEFT_WIDTH: f32 = 460.0;
-const DEFAULT_FOLDER_WIDTH: f32 = 200.0;
-const MIN_FOLDER_WIDTH: f32 = 120.0;
 /// How many actions undo/redo keeps. Reset per folder, since tags are per folder.
 const HISTORY_DEPTH: usize = 50;
 
@@ -81,6 +84,8 @@ pub struct FolderWorkspace {
     batch_waits_for_unload: bool,
     /// The file being renamed in place in the folder list, if any.
     inline_rename: Option<folder::InlineRename>,
+    /// The file list's filter menu is open.
+    filter_menu_open: bool,
     /// Bumped per folder, so a comment batch for a folder no longer open is dropped.
     comment_load_generation: u64,
     /// Frame of the loading spinner shown in rows whose comment is still loading.
@@ -121,6 +126,21 @@ pub struct FolderWorkspace {
     /// starts without one (a first Shift+click), the file that was open before it. `None` outside
     /// multi-selection, so the next one starts fresh from whatever is open then.
     select_anchor: Option<FileId>,
+    /// The file context menu (right-click on a file).
+    file_menu: FileMenuState,
+    /// A file menu action waiting for its file's pending edits to reach the disk, so it acts on
+    /// the file's final name. Run by the save of that file.
+    pending_file_action: Option<(FileId, FileAction)>,
+    /// The system clipboard, kept open: on Linux what was copied lasts only while it is.
+    clipboard: Option<arboard::Clipboard>,
+}
+
+/// The video pane's and the file list's widths, kept within their limits (§13.9).
+fn column_widths(video: f32, file_list: f32) -> (f32, f32) {
+    (
+        video.max(VIDEO_MIN_WIDTH),
+        file_list.clamp(FILE_LIST_MIN_WIDTH, FILE_LIST_MAX_WIDTH),
+    )
 }
 
 impl FolderWorkspace {
@@ -134,7 +154,13 @@ impl FolderWorkspace {
                     None
                 }
             })
-            .unwrap_or((DEFAULT_LEFT_WIDTH, DEFAULT_FOLDER_WIDTH));
+            .unwrap_or((VIDEO_WIDTH, FILE_LIST_WIDTH));
+        // A width saved by an older version or on a smaller screen is raised to the minimum.
+        let (left_width, folder_width) = column_widths(left_width, folder_width);
+        let mut batch = BatchState::default();
+        if let Some(run) = AppDatabase::new().get_batch_run() {
+            batch.restore_last_run(run);
+        }
         Self {
             directory: None,
             loading: false,
@@ -145,9 +171,10 @@ impl FolderWorkspace {
             pending_file_updates: Vec::new(),
             pending_scan: None,
             closing: false,
-            batch: BatchState::default(),
+            batch,
             batch_waits_for_unload: false,
             inline_rename: None,
+            filter_menu_open: false,
             comment_load_generation: 0,
             spinner_frame: 0,
             pending_to_file_id: None,
@@ -166,6 +193,9 @@ impl FolderWorkspace {
             drag_out: DragOutState::default(),
             modifiers: iced::keyboard::Modifiers::empty(),
             select_anchor: None,
+            file_menu: FileMenuState::default(),
+            pending_file_action: None,
+            clipboard: None,
         }
     }
 
@@ -222,6 +252,9 @@ impl FolderWorkspace {
                 Task::none()
             }
             Message::Folder(folder_msg) => self.handle_folder_message(folder_msg),
+            Message::FileMenu(msg) => self.handle_file_menu(msg),
+            Message::FileAction(action) => self.file_action_on_open_file(action),
+            Message::RunFileAction(id, action) => self.run_file_action(id, action),
             Message::MediaViewer(msg) => match msg {
                 media_viewer::Message::Unloaded => self.on_media_unloaded(),
                 media_viewer::Message::ToggleFullscreen => {
@@ -256,16 +289,18 @@ impl FolderWorkspace {
             Message::SyncPanel(msg) => self.handle_sync_panel(msg),
             Message::LeftSplitterDragged(x) => {
                 self.left_width = x;
-                let folder_start = self.left_width + HIT_WIDTH;
+                let folder_start = self.left_width + SPLITTER_HIT;
                 let folder_end = folder_start + self.folder_width;
-                let new_folder_width = folder_end - x - HIT_WIDTH;
-                self.folder_width = new_folder_width.max(MIN_FOLDER_WIDTH);
+                let new_folder_width = folder_end - x - SPLITTER_HIT;
+                self.folder_width =
+                    new_folder_width.clamp(FILE_LIST_MIN_WIDTH, FILE_LIST_MAX_WIDTH);
                 AppDatabase::new().set_panel_widths(self.left_width, self.folder_width);
                 Task::none()
             }
             Message::RightSplitterDragged(x) => {
-                let new_folder_width = x - self.left_width - HIT_WIDTH;
-                self.folder_width = new_folder_width.max(MIN_FOLDER_WIDTH);
+                let new_folder_width = x - self.left_width - SPLITTER_HIT;
+                self.folder_width =
+                    new_folder_width.clamp(FILE_LIST_MIN_WIDTH, FILE_LIST_MAX_WIDTH);
                 AppDatabase::new().set_panel_widths(self.left_width, self.folder_width);
                 Task::none()
             }
@@ -313,7 +348,24 @@ impl FolderWorkspace {
             Message::SetSegmentEnd => Task::done(Message::MediaViewer(
                 media_viewer::Message::Video(media_viewer_video::Message::CaptureSegmentEnd),
             )),
+            Message::CheckCommentFocus => {
+                // Asked only while the box is on screen: about a missing widget, no answer comes.
+                if self.batch.is_active() || self.file_workspace.file().is_none() {
+                    self.file_workspace.set_comment_focused(false);
+                    return Task::none();
+                }
+                iced::widget::operation::is_focused(iced::widget::Id::new(
+                    crate::features::file_workspace::view::COMMENT_EDITOR_ID,
+                ))
+                .map(Message::CommentFocused)
+            }
+            Message::CommentFocused(focused) => {
+                self.file_workspace.set_comment_focused(focused);
+                Task::none()
+            }
             Message::CommentAction(action) => {
+                // Anything done in the box (a click, typing) means it has the keys.
+                self.file_workspace.set_comment_focused(true);
                 let typed = matches!(action, iced::widget::text_editor::Action::Edit(_));
                 self.file_workspace.apply_comment_action(action);
                 // The box grows with its text inside a scrollable: typing on the last line
@@ -340,6 +392,9 @@ impl FolderWorkspace {
                 Self::notice("Frame saved")
             }
             Message::EscapePressed => {
+                if self.file_menu.is_open() {
+                    return self.handle_file_menu(file_menu::Message::Close);
+                }
                 if self.markers.is_editing() {
                     self.markers.close();
                     return Task::none();
@@ -434,8 +489,8 @@ impl FolderWorkspace {
             return Task::none();
         };
         self.copied_tags = Some(snapshot.tags().to_vec());
-        if let Ok(mut cb) = arboard::Clipboard::new() {
-            let _ = cb.set_text(snapshot.file_name());
+        if let Err(e) = self.set_clipboard_text(snapshot.file_name()) {
+            log::warn!("could not copy the file name to the clipboard: {e}");
         }
         Task::none()
     }
@@ -597,7 +652,23 @@ impl FolderWorkspace {
         self.history = WorkspaceHistory::new(HISTORY_DEPTH);
         let load_comments_task = self.load_next_comment_batch(true);
         let dir = self.directory.as_mut().expect("just set");
-        let selected = target_file.as_deref().and_then(|p| dir.open_path(p));
+        // A specific file (a dropped file, "Open with", the last session) always wins when it is
+        // still there; opening the folder itself, or a specific file that is gone since (a
+        // rename, most likely), returns to the file this folder last had open (#98), by name and
+        // then by name without tags, falling back to the first one listed.
+        let selected = match target_file.as_deref().and_then(|p| dir.open_path(p)) {
+            Some(file) => Some(file),
+            None => {
+                let last_viewed = target_file
+                    .as_deref()
+                    .and_then(|p| p.file_name())
+                    .and_then(|n| n.to_str())
+                    .map(str::to_string)
+                    .unwrap_or_else(|| FolderTagStore::get_last_viewed(&folder));
+                dir.open_last_viewed(&last_viewed)
+                    .or_else(|| dir.select_index(0))
+            }
+        };
         if let Some(file) = selected {
             Task::batch([
                 Task::done(Message::FileOpened(file)),
@@ -693,6 +764,22 @@ impl FolderWorkspace {
         dir.file_by_id(file.id()).cloned().unwrap_or(file)
     }
 
+    /// The file as its edits left it. A save waiting for the video to unload has not reached the
+    /// directory yet, so a clip opened again in the meantime would show what it held before the
+    /// edit (a cleared comment coming back), and leaving it again would save that over the edit.
+    fn with_pending_edits(&self, file: &frename_core::File) -> frename_core::File {
+        let mut file = file.clone();
+        if let Some((_, edited)) = self
+            .pending_file_updates
+            .iter()
+            .rev()
+            .find(|(id, _)| *id == file.id())
+        {
+            file.set_file_snapshot(edited);
+        }
+        file
+    }
+
     fn apply_file_opened(&mut self, file: frename_core::File) -> Task<Message> {
         let file = self.with_comment_loaded(file);
         // Opening another file closes the in-place rename editor, like leaving the row.
@@ -715,7 +802,13 @@ impl FolderWorkspace {
             self.markers.reset();
         }
         let snapshot = self.file_workspace.get_snapshot();
-        self.file_workspace.set_file(Some(file.clone()));
+        // A same-file refresh (undo, in-place rename) brings its own, newer state.
+        let opened = if same_file {
+            file.clone()
+        } else {
+            self.with_pending_edits(&file)
+        };
+        self.file_workspace.set_file(Some(opened));
         if !same_file {
             self.markers_loaded(file.id());
         }
@@ -795,6 +888,9 @@ impl FolderWorkspace {
                 | Message::OpenFilePicker
                 | Message::PrepareBatch(_)
                 | Message::ToggleMediaFullscreen
+                | Message::FileAction(_)
+                | Message::RunFileAction(..)
+                | Message::FileMenu(file_menu::Message::Open(_))
                 | Message::Folder(
                     folder::Message::SelectFile(_)
                         | folder::Message::PreviousFile
@@ -830,8 +926,11 @@ impl FolderWorkspace {
             open_in_default_app(frename_core::log_path());
             return Task::none();
         }
-        if let batch::Message::OpenBilling = msg {
-            open_in_default_app(ANTHROPIC_BILLING_URL);
+        // From the job's report, or from a panel's warning: the same page.
+        if let batch::Message::OpenBilling(service)
+        | batch::Message::Action(batch::ActionMessage::OpenBilling(service)) = msg
+        {
+            open_in_default_app(frename_core::ai::ledger::billing_url(service));
             return Task::none();
         }
         self.handle_batch_many([msg])
@@ -863,10 +962,10 @@ impl FolderWorkspace {
                 batch::ActionMessage::ReadSonioxKeyState,
             ))));
         }
-        if let Some((generation, files, replace)) = reads.plan {
+        if let Some((generation, files, replace, formats)) = reads.plan {
             tasks.push(Task::future(async move {
                 let plan = tokio::task::spawn_blocking(move || {
-                    batch::generate_subtitles::plan(&files, replace)
+                    batch::generate_subtitles::plan(&files, replace, formats)
                 })
                 .await
                 .unwrap_or_else(|e| {
@@ -961,6 +1060,11 @@ impl FolderWorkspace {
         if !self.batch.start(files) {
             return Task::none();
         }
+        let action = self.batch.action();
+        AppDatabase::new().set_batch_run(BatchRun {
+            action: action.id().to_string(),
+            options: self.batch.actions().persist(action),
+        });
         self.media_fullscreen = false;
         if self.media_viewer.needs_unload_before_rename() {
             self.batch_waits_for_unload = true;
@@ -1018,6 +1122,7 @@ impl FolderWorkspace {
 
     /// Take a finished file into the list (it may have been renamed), then start the next.
     fn batch_item_done(&mut self, id: FileId, result: Box<ItemResult>) -> Task<Message> {
+        self.record_spend(&result);
         if let Some(dir) = self.directory.as_mut() {
             if let Some((path, snapshot)) = result.update.as_ref() {
                 dir.rename_file(id, path, snapshot);
@@ -1151,11 +1256,22 @@ impl FolderWorkspace {
         } else {
             Task::none()
         };
+        // A file menu action waiting for this save runs now, on the name the file has on disk.
+        let file_action = self.file_action_after_save(id, refused);
 
         let _ = self
             .directory
             .as_mut()
             .map(|dir| dir.rename_file(id, &new_path, &snapshot_after_save));
+
+        // Remember this as the folder's last viewed file (#98): every path here left a file that
+        // was open, whether by switching to another one, closing frename, or switching folders.
+        if let (Some(folder), Some(name)) = (
+            self.directory.as_ref().map(|dir| dir.path().to_path_buf()),
+            new_path.file_name().and_then(|n| n.to_str()),
+        ) {
+            FolderTagStore::set_last_viewed(&folder, name);
+        }
 
         // Push NavigateFileCommand when we have a valid to_file_id (set by select_* after navigating).
         if let Some(to_file_id) = self.pending_to_file_id.take() {
@@ -1187,10 +1303,11 @@ impl FolderWorkspace {
             return Task::batch([
                 markers_saved,
                 refused_notice,
+                file_action,
                 Task::done(Message::ScrollFolderListToSelected),
             ]);
         }
-        Task::batch([markers_saved, refused_notice])
+        Task::batch([markers_saved, refused_notice, file_action])
     }
 
     fn handle_folder_message(&mut self, msg: folder::Message) -> Task<Message> {
@@ -1222,9 +1339,40 @@ impl FolderWorkspace {
                 self.set_list_filter(|dir| dir.set_marked_only(marked_only))
             }
             folder::Message::SetNameFilter(query) => self.set_file_name_filter(query),
+            folder::Message::ToggleFilterMenu => {
+                self.filter_menu_open = !self.filter_menu_open;
+                Task::none()
+            }
+            folder::Message::CloseFilterMenu => {
+                self.filter_menu_open = false;
+                Task::none()
+            }
+            folder::Message::ShowAll => {
+                self.filter_menu_open = false;
+                Task::batch(
+                    [
+                        folder::Message::SetNameFilter(String::new()),
+                        folder::Message::SetUntaggedOnly(false),
+                        folder::Message::SetSubtitledOnly(false),
+                        folder::Message::SetCommentedOnly(false),
+                        folder::Message::SetMarkedOnly(false),
+                    ]
+                    .map(|m| Task::done(Message::Folder(m))),
+                )
+            }
             // Intercepted by the app, which owns the windows; no-op here.
             folder::Message::OpenSettings => Task::none(),
             folder::Message::StartRename(index) => self.start_rename(index),
+            folder::Message::OpenFileMenu(index) => {
+                let file = self
+                    .directory
+                    .as_ref()
+                    .and_then(|dir| dir.files_in_order().nth(index))
+                    .map(|file| file.id());
+                file.map_or_else(Task::none, |id| {
+                    Task::done(Message::FileMenu(file_menu::Message::Open(id)))
+                })
+            }
             folder::Message::RenameInput(text) => {
                 if let Some(rename) = self.inline_rename.as_mut() {
                     rename.text = text;
@@ -1424,7 +1572,22 @@ impl FolderWorkspace {
             return self.ctrl_click_select(index);
         }
         self.arm_drag_out(index);
+        // The file open already stays as it is: opening it again reloads its video, so the two
+        // clicks of a double-click (rename) would load it twice.
+        if self.is_open_at(index) {
+            return Task::none();
+        }
         self.select_file_at(index)
+    }
+
+    /// Whether the file at `index` of the list is the one open in the file workspace.
+    fn is_open_at(&self, index: usize) -> bool {
+        let listed = self
+            .directory
+            .as_ref()
+            .and_then(|dir| dir.files_in_order().nth(index))
+            .map(|f| f.id());
+        listed.is_some() && listed == self.file_workspace.file().map(|f| f.id())
     }
 
     /// Ctrl+click: with no multi-selection running yet, starts one with the previously open file
@@ -1493,6 +1656,36 @@ impl FolderWorkspace {
         Task::batch([open, check])
     }
 
+    /// Keep what a file of a paid job cost in the spend ledger, and note when the service said
+    /// its credit is used up (what is left of the recorded top-up is zero then). The panels
+    /// then show the new figures.
+    fn record_spend(&mut self, result: &ItemResult) {
+        let job_service = self.batch.job_action().and_then(|action| action.service());
+        let (spend, used_up) = result.ledger_entry(job_service);
+        let db = AppDatabase::new();
+        if let Some((service, usd)) = spend {
+            db.record_ai_spend(service, usd);
+        }
+        if let Some(service) = used_up {
+            db.mark_ai_credit_used_up(service);
+        }
+        if spend.is_some() || used_up.is_some() {
+            self.read_credit();
+        }
+    }
+
+    /// Read what each paid service cost and what is probably left of it, for the batch panels.
+    fn read_credit(&mut self) {
+        let db = AppDatabase::new();
+        for service in [ApiKey::Anthropic, ApiKey::Soniox] {
+            self.batch
+                .update(batch::Message::Action(batch::ActionMessage::CreditRead(
+                    service,
+                    db.ai_spend_summary(service),
+                )));
+        }
+    }
+
     /// Apply several batch messages as one step, so the reads they trigger (AI/subtitle plans)
     /// run once for the result instead of once per message. `Run`/`Retry`/`OpenLog`/`OpenBilling`
     /// are `handle_batch`'s own special cases (starting a job, opening a file); never pass them
@@ -1503,8 +1696,18 @@ impl FolderWorkspace {
     ) -> Task<Message> {
         // Batch mode does not edit the open file, so its rename editor goes.
         self.inline_rename = None;
+        let mut credit_changed = false;
         for msg in msgs {
+            credit_changed |= matches!(
+                msg,
+                batch::Message::SetActive(true)
+                    | batch::Message::SelectAction(_)
+                    | batch::Message::Action(batch::ActionMessage::RefreshCredit)
+            );
             self.batch.update(msg);
+        }
+        if credit_changed {
+            self.read_credit();
         }
         Task::batch([self.describe_ai_reads(), self.subtitle_reads()])
     }
@@ -1772,6 +1975,11 @@ impl FolderWorkspace {
     }
 
     fn handle_file_name_panel(&mut self, msg: file_name_panel::Message) -> Task<Message> {
+        if let file_name_panel::Message::OpenFileMenu = msg {
+            return self.file_workspace.file().map_or_else(Task::none, |file| {
+                Task::done(Message::FileMenu(file_menu::Message::Open(file.id())))
+            });
+        }
         if let file_name_panel::Message::RemoveTag(id) = msg {
             let was_checked = self
                 .file_workspace
@@ -1976,69 +2184,32 @@ impl FolderWorkspace {
         self.tag_panel.set_selected(filtered.get(new_i).copied());
     }
 
-    /// Up: move one visual row up; top row wraps to last row at same column.
+    /// Up: one row up in the grid as it is drawn (its groups start rows of their own); the top
+    /// row wraps to the last.
     fn move_selection_up(&mut self) {
-        let filtered = self
-            .file_workspace
-            .tag_list()
-            .filtered_display_tag_ids()
-            .to_vec();
-        if filtered.is_empty() {
-            self.tag_panel.set_selected(None);
-            return;
-        }
-        let cols = self.tag_panel.cols().max(1) as usize;
-        let count = filtered.len();
-        let cur = self
-            .tag_panel
-            .selected_tag_id()
-            .and_then(|id| filtered.iter().position(|&fid| fid == id));
-        let new_i = match cur {
-            None => count - 1,
-            Some(i) if i < cols => {
-                // top row → jump to last row, same column
-                let x = i % cols;
-                let last_row = (count - 1) / cols;
-                let new_i = last_row * cols + x;
-                if new_i >= count {
-                    new_i - cols
-                } else {
-                    new_i
-                }
-            }
-            Some(i) => i - cols,
-        };
-        self.tag_panel.set_selected(filtered.get(new_i).copied());
+        self.move_selection_by_row(Shape::up);
     }
 
-    /// Down: move one visual row down; last row wraps to first row at same column.
+    /// Down: one row down; the last row wraps to the top.
     fn move_selection_down(&mut self) {
-        let filtered = self
-            .file_workspace
-            .tag_list()
-            .filtered_display_tag_ids()
-            .to_vec();
+        self.move_selection_by_row(Shape::down);
+    }
+
+    /// Move the tag cursor to the tag `step` finds from it in the grid's shape; with no cursor,
+    /// to the first tag.
+    fn move_selection_by_row(&mut self, step: fn(&Shape, usize) -> Option<usize>) {
+        let tag_list = self.file_workspace.tag_list();
+        let filtered = tag_list.filtered_display_tag_ids().to_vec();
         if filtered.is_empty() {
             self.tag_panel.set_selected(None);
             return;
         }
-        let cols = self.tag_panel.cols().max(1) as usize;
-        let count = filtered.len();
+        let shape = Shape::of(tag_list, self.tag_panel.cols() as usize);
         let cur = self
             .tag_panel
             .selected_tag_id()
             .and_then(|id| filtered.iter().position(|&fid| fid == id));
-        let new_i = match cur {
-            None => 0,
-            Some(i) => {
-                let new_i = i + cols;
-                if new_i >= count {
-                    i % cols
-                } else {
-                    new_i
-                }
-            }
-        };
+        let new_i = cur.and_then(|i| step(&shape, i)).unwrap_or(0);
         self.tag_panel.set_selected(filtered.get(new_i).copied());
     }
 
@@ -2056,11 +2227,12 @@ impl FolderWorkspace {
             Some(i) => i,
             None => return Task::none(),
         };
-        let cols = self.tag_panel.cols() as usize;
-        let row_stride = self.tag_panel.row_height();
-        let row_extent = self.tag_panel.row_content_height().unwrap_or(row_stride);
-        let visual_row = flat_index / cols;
-        let row_top = (visual_row as f32) * row_stride;
+        let shape = Shape::of(tag_list, self.tag_panel.cols() as usize);
+        let row_extent = self
+            .tag_panel
+            .row_content_height()
+            .unwrap_or(self.tag_panel.row_height());
+        let row_top = shape.row_top(shape.position(flat_index).0);
         let row_bottom = row_top + row_extent;
 
         let (current, vh) = match (
@@ -2133,13 +2305,14 @@ impl FolderWorkspace {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        // The spinner only turns while rows are loading, so an idle list does not redraw.
+        // The spinner only turns while something waits (rows loading their comments, a folder
+        // opening, a job's file in work), so an idle list does not redraw.
         let loading_comments = self
             .directory
             .as_ref()
             .is_some_and(|d| d.loading_comment_count() > 0);
-        let spinner = if loading_comments {
-            iced::time::every(std::time::Duration::from_millis(150)).map(|_| Message::SpinnerTick)
+        let spinner = if loading_comments || self.loading || self.batch.is_running() {
+            iced::time::every(crate::ui::tokens::SPINNER_TICK).map(|_| Message::SpinnerTick)
         } else {
             Subscription::none()
         };
@@ -2152,6 +2325,7 @@ impl FolderWorkspace {
             };
         Subscription::batch([
             self.media_viewer.subscription().map(Message::MediaViewer),
+            iced::event::listen_with(focus_may_move),
             job_progress,
             self.file_name_panel
                 .subscription()
@@ -2183,6 +2357,11 @@ impl FolderWorkspace {
     }
 
     /// The file being renamed in place in the folder list, if any.
+    /// Whether the file list's filter menu is open.
+    pub fn filter_menu_open(&self) -> bool {
+        self.filter_menu_open
+    }
+
     pub fn inline_rename(&self) -> Option<&folder::InlineRename> {
         self.inline_rename.as_ref()
     }
@@ -2279,6 +2458,11 @@ impl FolderWorkspace {
         &self.file_name_panel
     }
 
+    /// The file context menu.
+    pub fn file_menu(&self) -> &FileMenuState {
+        &self.file_menu
+    }
+
     pub fn sync_locked(&self) -> bool {
         self.file_workspace.tag_list().sync_locked()
     }
@@ -2317,9 +2501,6 @@ fn check_new_file_name(
     Ok(())
 }
 
-/// Where an Anthropic account buys credit.
-const ANTHROPIC_BILLING_URL: &str = "https://console.anthropic.com/settings/billing";
-
 /// Open `target` with the app the system uses for it (a text editor for the log, the browser
 /// for a web address).
 fn open_in_default_app(target: impl AsRef<std::ffi::OsStr>) {
@@ -2333,20 +2514,56 @@ fn open_in_default_app(target: impl AsRef<std::ffi::OsStr>) {
     }
 }
 
+/// A mouse press, Tab or Esc may move the keys into or out of the comment box: ask where they
+/// are then, so the box's edge shows its focus (the edge is drawn outside the editor, which
+/// scrolls inside it).
+fn focus_may_move(
+    event: iced::Event,
+    _status: iced::event::Status,
+    _window: iced::window::Id,
+) -> Option<Message> {
+    use iced::keyboard::{key::Named, Key};
+    match event {
+        iced::Event::Mouse(iced::mouse::Event::ButtonPressed(_)) => {
+            Some(Message::CheckCommentFocus)
+        }
+        iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+            key: Key::Named(Named::Tab | Named::Escape),
+            ..
+        }) => Some(Message::CheckCommentFocus),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::SystemTime;
 
     use frename_core::{
-        AppDatabase, File, FileId, FileSnapshot, Initializable, LoggingAppStateStore,
+        AppDatabase, File, FileId, FileSnapshot, FolderTagStore, Initializable,
+        LoggingAppStateStore,
     };
     use iced::keyboard::Modifiers;
 
     use crate::features::{batch, folder, tag_panel};
 
     use super::{Directory, FolderWorkspace, ItemResult, ItemStatus, Message};
+
+    #[test]
+    fn saved_column_widths_are_kept_within_their_limits() {
+        use crate::ui::tokens::{FILE_LIST_MAX_WIDTH, FILE_LIST_MIN_WIDTH, VIDEO_MIN_WIDTH};
+        assert_eq!(
+            super::column_widths(150.0, 120.0),
+            (VIDEO_MIN_WIDTH, FILE_LIST_MIN_WIDTH)
+        );
+        assert_eq!(
+            super::column_widths(500.0, 900.0),
+            (500.0, FILE_LIST_MAX_WIDTH)
+        );
+        assert_eq!(super::column_widths(640.0, 300.0), (640.0, 300.0));
+    }
 
     /// Simulates the iced runtime processing a FileOpened task: directory already has selection, so send FileOpened(selected_file).
     fn flush_file_opened(workspace: &mut FolderWorkspace) {
@@ -2394,6 +2611,11 @@ mod tests {
             self.path.join("file_0.mp4")
         }
 
+        /// The folder itself, for reading or seeding its `.frename` file directly.
+        pub fn path(&self) -> &Path {
+            &self.path
+        }
+
         /// Path of a file in this folder, for asserting on renames.
         pub fn file_path(&self, name: &str) -> PathBuf {
             self.path.join(name)
@@ -2430,6 +2652,110 @@ mod tests {
         );
     }
 
+    /// Issue #98: opening a folder without a specific target file returns to the clip it last
+    /// had open, stored in its own `.frename` file.
+    #[test]
+    fn opening_a_folder_with_no_target_selects_the_remembered_file() {
+        let test_dir = TestDirectory::new(2);
+        FolderTagStore::set_last_viewed(test_dir.path(), "file_1.mp4");
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: None,
+        });
+        flush_file_opened(&mut workspace);
+        assert_eq!(
+            workspace
+                .file_workspace()
+                .file()
+                .and_then(|f| f.file_path().file_name())
+                .and_then(|n| n.to_str()),
+            Some("file_1.mp4")
+        );
+    }
+
+    /// Nothing remembered yet (a folder never opened before, or opened only before #98): the
+    /// first file in the list opens, same as today's other folders.
+    #[test]
+    fn opening_a_folder_with_no_target_and_nothing_remembered_opens_the_first_file() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: None,
+        });
+        assert_eq!(
+            workspace.directory().and_then(|d| d.selected_index()),
+            Some(0)
+        );
+    }
+
+    /// A specific file (a dropped file, "Open with") always wins over the remembered one.
+    #[test]
+    fn opening_a_specific_file_wins_over_the_remembered_one() {
+        let test_dir = TestDirectory::new(2);
+        FolderTagStore::set_last_viewed(test_dir.path(), "file_1.mp4");
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()), // file_0.mp4
+        });
+        assert_eq!(
+            workspace.directory().and_then(|d| d.selected_index()),
+            Some(0)
+        );
+    }
+
+    /// A specific target file that is gone (e.g. renamed since, including in the app-wide last
+    /// session) falls back the same way an unset target does: by name without tags, then to the
+    /// first file, rather than opening nothing.
+    #[test]
+    fn a_gone_specific_target_falls_back_like_an_unset_one() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.file_path("gone.mp4")),
+        });
+        assert_eq!(
+            workspace.directory().and_then(|d| d.selected_index()),
+            Some(0),
+            "falls back to the first file"
+        );
+    }
+
+    /// Leaving a file (switching to another one) remembers it as this folder's last viewed file.
+    #[test]
+    fn leaving_a_file_remembers_it_as_the_folder_s_last_viewed_file() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()), // file_0.mp4
+        });
+        flush_file_opened(&mut workspace);
+        assert_eq!(
+            FolderTagStore::get_last_viewed(test_dir.path()),
+            "",
+            "nothing remembered yet"
+        );
+        let file_0_id = file_id_at(&workspace, 0);
+
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        // Manually drive the FileUpdated that would fire from the iced runtime.
+        let snapshot = FileSnapshot::new(Vec::<String>::new(), "file_0", ".mp4", "file_0.mp4");
+        let _ = workspace.update(Message::FileUpdated {
+            id: file_0_id,
+            snapshot,
+        });
+
+        assert_eq!(
+            FolderTagStore::get_last_viewed(test_dir.path()),
+            "file_0.mp4"
+        );
+    }
+
     /// Helper: get the FileId of the file at the given directory index.
     fn file_id_at(workspace: &FolderWorkspace, index: usize) -> FileId {
         workspace
@@ -2437,6 +2763,23 @@ mod tests {
             .and_then(|d| d.files_in_order().nth(index))
             .map(|f| f.id())
             .expect("file at index should exist")
+    }
+
+    #[test]
+    fn a_click_on_the_open_file_does_not_open_it_again() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let open = workspace
+            .directory()
+            .and_then(|d| d.selected_index())
+            .expect("a file is open");
+        assert!(workspace.is_open_at(open));
+        assert!(!workspace.is_open_at(1 - open));
     }
 
     #[test]
@@ -3048,6 +3391,102 @@ mod tests {
             tags(&workspace),
             ["Commented"],
             "a new comment after clearing checks it again"
+        );
+    }
+
+    /// Issue #125: a comment cleared in the box, then leaving the clip and coming back, showed
+    /// the old comment again.
+    #[test]
+    fn a_cleared_comment_is_still_cleared_after_leaving_the_clip_and_coming_back() {
+        use iced::widget::text_editor::{Action, Edit};
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let first = file_id_at(&workspace, 0);
+        let leave_and_return = |workspace: &mut FolderWorkspace| {
+            let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+            flush_file_opened(workspace);
+            let _ = workspace.update(Message::MediaViewer(
+                crate::features::media_viewer::Message::Unloaded,
+            ));
+            let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+            flush_file_opened(workspace);
+            let _ = workspace.update(Message::MediaViewer(
+                crate::features::media_viewer::Message::Unloaded,
+            ));
+        };
+        let comment_of = |w: &FolderWorkspace| {
+            w.directory()
+                .and_then(|d| d.file_by_id(first))
+                .map(|f| f.comment().to_string())
+                .unwrap_or_default()
+        };
+        let shown = |w: &FolderWorkspace| w.file_workspace().tag_list().comment().to_string();
+
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('o'))));
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('k'))));
+        leave_and_return(&mut workspace);
+        assert_eq!(comment_of(&workspace), "ok", "the comment was saved");
+        assert_eq!(
+            shown(&workspace),
+            "ok",
+            "and shown when the clip is opened again"
+        );
+
+        let _ = workspace.update(Message::CommentAction(Action::SelectAll));
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Delete)));
+        leave_and_return(&mut workspace);
+        assert_eq!(comment_of(&workspace), "", "the cleared comment was saved");
+        assert_eq!(
+            shown(&workspace),
+            "",
+            "and the box is empty when it is opened again"
+        );
+    }
+
+    /// The same, when the way back comes before the first clip's video has unloaded: its save is
+    /// still waiting, so the clip must not open with the comment it had before the edit.
+    #[test]
+    fn a_comment_cleared_just_before_leaving_is_not_shown_again_while_its_save_waits() {
+        use iced::widget::text_editor::{Action, Edit};
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('o'))));
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert_eq!(workspace.file_workspace().tag_list().comment(), "o");
+
+        let _ = workspace.update(Message::CommentAction(Action::SelectAll));
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Delete)));
+        // Away and straight back: no Unloaded in between.
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert_eq!(
+            workspace.file_workspace().tag_list().comment(),
+            "",
+            "the box shows the cleared comment"
         );
     }
 
@@ -4119,5 +4558,105 @@ mod tests {
             assert!(workspace.batch().is_checked(id));
         }
         assert!(!workspace.batch().is_checked(ids[0]) && !workspace.batch().is_checked(ids[4]));
+    }
+
+    /// A file menu action on the open file waits for its pending edits to be saved (here a
+    /// tag, which renames it), and then sees the file's new name.
+    #[test]
+    fn a_file_action_saves_the_open_files_edits_first_and_sees_the_new_name() {
+        use crate::features::file_menu::{system, FileAction};
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = workspace_with_unsaved_tag(&test_dir);
+        let id = file_id_at(&workspace, 0);
+        let path_of = |workspace: &FolderWorkspace| {
+            workspace
+                .directory()
+                .and_then(|d| d.file_by_id(id))
+                .map(|f| f.file_path().to_path_buf())
+                .expect("the file is listed")
+        };
+
+        let _ = workspace.update(Message::FileAction(FileAction::CopyName));
+        assert_eq!(
+            workspace.pending_file_action,
+            Some((id, FileAction::CopyName)),
+            "waits for the save it asked for"
+        );
+        assert_eq!(path_of(&workspace), test_dir.file_path("file_0.mp4"));
+
+        // The save runs: the same-file refresh unloads the video, then saves.
+        flush_file_opened(&mut workspace);
+        assert!(workspace.pending_file_action.is_some(), "still unloading");
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert_eq!(workspace.pending_file_action, None, "ran after the save");
+        let name = system::clipboard_text(FileAction::CopyName, &path_of(&workspace));
+        assert_eq!(name.as_deref(), Some("pick.file_0.mp4"));
+    }
+
+    /// A file with nothing to save (another file in the list, or the open one already saved)
+    /// runs the action at once.
+    #[test]
+    fn a_file_action_on_a_file_with_nothing_to_save_does_not_wait() {
+        use crate::features::file_menu::{self, FileAction};
+        let (_test_dir, mut workspace) = open_folder(2);
+        let _ = workspace.update(Message::FileAction(FileAction::ShowInFileManager));
+        assert_eq!(workspace.pending_file_action, None);
+        let other = file_id_at(&workspace, 1);
+        let _ = workspace.update(Message::FileMenu(file_menu::Message::Choose(
+            other,
+            FileAction::CopyPath,
+        )));
+        assert_eq!(workspace.pending_file_action, None);
+    }
+
+    /// The waiting action runs on its own file's save only, and not when that save was refused
+    /// (the notice of the refused save says why).
+    #[test]
+    fn a_waiting_file_action_runs_on_its_files_save_unless_it_was_refused() {
+        use crate::features::file_menu::FileAction;
+        let (_test_dir, mut workspace) = open_folder(2);
+        let (open, other) = (file_id_at(&workspace, 0), file_id_at(&workspace, 1));
+        workspace.pending_file_action = Some((open, FileAction::CopyPath));
+        assert_eq!(workspace.file_action_after_save(other, false).units(), 0);
+        assert!(
+            workspace.pending_file_action.is_some(),
+            "another file's save"
+        );
+        assert_eq!(workspace.file_action_after_save(open, false).units(), 1);
+        assert_eq!(workspace.pending_file_action, None);
+
+        workspace.pending_file_action = Some((open, FileAction::CopyPath));
+        assert_eq!(workspace.file_action_after_save(open, true).units(), 0);
+        assert_eq!(workspace.pending_file_action, None, "dropped");
+    }
+
+    /// Esc closes an open file menu and does nothing else.
+    #[test]
+    fn escape_closes_the_file_menu_first() {
+        use crate::features::file_menu;
+        let (_test_dir, mut workspace) = open_folder(2);
+        let _ = workspace.update(Message::FileNamePanel(
+            crate::features::file_name_panel::Message::OpenFileMenu,
+        ));
+        assert!(!workspace.file_menu().is_open(), "no right press: no menu");
+        let _ = workspace.update(Message::FileMenu(file_menu::Message::RightPressed(
+            iced::Point::new(10.0, 10.0),
+        )));
+        let _ = workspace.update(Message::Folder(folder::Message::OpenFileMenu(1)));
+        // The row's message becomes the menu's own `Open` (a task in the app).
+        let _ = workspace.update(Message::FileMenu(file_menu::Message::Open(file_id_at(
+            &workspace, 1,
+        ))));
+        assert!(workspace.file_menu().is_open());
+        workspace.file_workspace.set_tag_filter("pi".to_string());
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(!workspace.file_menu().is_open());
+        assert_eq!(
+            workspace.file_workspace().tag_list().filter_query(),
+            "pi",
+            "the search is cleared by the next Esc, not this one"
+        );
     }
 }

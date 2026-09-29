@@ -829,6 +829,22 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         }
     }
 
+    /// Characters of the longest tag name in the whole list, whatever the filter: the tag grid
+    /// is sized by it, so it does not reflow while a search narrows the list.
+    pub fn longest_tag_name_chars(&self) -> usize {
+        self.display_tag_ids
+            .iter()
+            .filter_map(|(id, _, _)| self.tags_by_id.get(id))
+            .map(|t| t.tag().chars().count())
+            .max()
+            .unwrap_or_default()
+    }
+
+    /// Whether the list has any tag at all, whatever the filter.
+    pub fn has_tags(&self) -> bool {
+        !self.display_tag_ids.is_empty()
+    }
+
     /// Cached result of whether the checked-tag order matches in both collections.
     /// Updated automatically on every mutation; use this in the view instead of recomputing.
     /// All tag names in raw display order (no section sorting, no filter). Test/diagnostic use.
@@ -1398,5 +1414,22 @@ mod tests {
         // Orders differ (D before C in display, C before D in selected) → is_selected_match = false.
         assert!(!list.is_selected_match_display_order());
         assert!(!list.sync_locked());
+    }
+
+    #[test]
+    fn the_longest_name_and_having_tags_ignore_the_filter() {
+        let store = FakeAppStorage::new()
+            .add_stored_tag(
+                StoredTag::with_all(Uuid::new_v4(), "golden-hour", 1, false),
+                0,
+            )
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "wide", 2, false), 0);
+        let snapshot = FileSnapshot::new(vec![], "name", "mp4", "name.mp4");
+        let mut list = TagList::new(store, snapshot);
+        list.set_filter("wide");
+        assert_eq!(list.longest_tag_name_chars(), "golden-hour".len());
+        assert!(list.has_tags());
+        list.set_filter("nothing like it");
+        assert!(list.has_tags());
     }
 }

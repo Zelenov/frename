@@ -24,6 +24,28 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # version.md's first heading is the release: never `# NEXT`, and on a PR that changes it, newer
+      # than the base branch's (so a merge to main always publishes a new version).
+      - name: Version heading
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if grep -qE '^#[[:space:]]*NEXT' version.md; then
+            echo "::error file=version.md::'# NEXT' is not a version: write the real next version (main's first heading + 1)"; exit 1
+          fi
+          head_version=$(sed -n '1s/^#[[:space:]]*//p' version.md | tr -d '[:space:]')
+          echo "$head_version" | grep -Eq '^[0-9]+\.[0-9]+$' || { echo "::error file=version.md::first line must be '# X.Y', got '$head_version'"; exit 1; }
+          if [ -n "$BASE_REF" ]; then
+            git fetch --quiet --depth=1 origin "$BASE_REF"
+            if ! git diff --quiet FETCH_HEAD -- version.md; then
+              base_version=$(git show FETCH_HEAD:version.md | sed -n '1s/^#[[:space:]]*//p' | tr -d '[:space:]')
+              newest=$(printf '%s\n%s\n' "$base_version" "$head_version" | sort -t. -k1,1n -k2,2n | tail -1)
+              if [ "$newest" != "$head_version" ] || [ "$head_version" = "$base_version" ]; then
+                echo "::error file=version.md::version $head_version is not newer than $BASE_REF's $base_version: renumber to the next version"; exit 1
+              fi
+            fi
+          fi
+
       - name: Install GStreamer
         run: |
           sudo apt-get update

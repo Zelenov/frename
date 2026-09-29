@@ -27,10 +27,18 @@ pub enum Message {
     SetMarkedOnly(bool),
     /// Narrow the list to files whose name contains this text (empty = no filter).
     SetNameFilter(String),
+    /// Clear the search and every filter: the list shows every file again.
+    ShowAll,
+    /// Open or close the filter menu after the file search.
+    ToggleFilterMenu,
+    /// Close the filter menu (a click beside it).
+    CloseFilterMenu,
     /// Open the settings window (from the controls bar). Handled by the app.
     OpenSettings,
     /// Double-click on a row's name: edit that file's name in place.
     StartRename(usize),
+    /// Right-click on a row: open the file menu for that file.
+    OpenFileMenu(usize),
     /// Text typed into the in-place rename editor.
     RenameInput(String),
     /// Enter in the in-place rename editor: rename the file.

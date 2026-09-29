@@ -85,6 +85,11 @@ opt-level = 3
 lto = "thin"
 codegen-units = 8
 
+# "Show in file manager" on Linux: the file manager's org.freedesktop.FileManager1 D-Bus call.
+# Already built for iced (winit's theme detection), with the same features: no new crate.
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = { version = "5", default-features = false, features = ["async-io"] }
+
 # Whether another frename from the same install is running before an update
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

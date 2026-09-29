@@ -13,6 +13,7 @@ mod markers;
 mod metadata;
 pub mod old_settings;
 mod ordered;
+mod search;
 mod subtitles;
 mod tags;
 pub(crate) mod transliteration;
@@ -20,8 +21,8 @@ pub mod undo;
 
 pub use app_dir::{app_data_dir, log_path, set_app_data_dir, DATA_DIR_VAR};
 pub use db::{
-    AppDatabase, AppSettings, AppStateStore, Initializable, LoggingAppStateStore, StoredTagStore,
-    UpdateCheckState, VideoSettings, WindowGeometry,
+    AppDatabase, AppSettings, AppStateStore, BatchRun, Initializable, LoggingAppStateStore,
+    StoredTagStore, UpdateCheckState, VideoSettings, WindowGeometry,
 };
 pub use directory::Directory;
 pub use file::{File, FileId};
@@ -41,6 +42,7 @@ pub use metadata::{
     DEFAULT_COMMENTED_TAG,
 };
 pub use ordered::{OrderKey, OrderableEntry, OrderedCollection, OrderedThing};
+pub use search::CommentFragment;
 pub use subtitles::{
     load_subtitles, subtitle_path, transcript_path, CueLength, SubtitleCue, Subtitles,
     DEFAULT_SUBTITLE_LANGUAGES,
@@ -48,8 +50,8 @@ pub use subtitles::{
 pub use tags::{
     install_file_tagger, set_space_after_tags, space_after_tags, CachedFile, DefaultTag,
     FileSnapshot, FileTagger, FileTaggerBackend, FolderInfo, FolderTagStore, InMemoryFileTagger,
-    KeptStored, LoggingFileTagger, NameInOutMove, NameInOutProblem, ProductionFileTagger,
-    SaveAndReparse, Screenshot, StoredTag, Tag, TagColorMapping, TagId, TagList, DEFAULT_TAGS,
+    LoggingFileTagger, ProductionFileTagger, SaveAndReparse, Screenshot, StoredTag, Tag,
+    TagColorMapping, TagId, TagList, DEFAULT_TAGS,
 };
 pub use undo::{
     AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,

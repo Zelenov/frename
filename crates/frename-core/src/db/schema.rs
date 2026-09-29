@@ -136,8 +136,34 @@ ALTER TABLE app_settings ADD COLUMN ui_language TEXT NOT NULL DEFAULT '';
 ";
 
 /// Migration 15: file names no longer hold in/out points (#69). Who kept them there
-/// (`file_name`, the default of migration 5) now keeps them inside the video; the batch action
-/// "Move in/out points out of file names" moves the existing ones.
+/// (`file_name`, the default of migration 5) now keeps them inside the video.
 pub const M15_IN_OUT_OUT_OF_NAMES: &str = "
 UPDATE app_settings SET in_out_storage = 'xmp' WHERE in_out_storage = 'file_name';
+";
+
+/// Migration 16: the last batch action run and its options (#65), so batch mode reopens with
+/// them selected.
+pub const M16_BATCH_RUN: &str = "
+CREATE TABLE IF NOT EXISTS batch_run (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    action TEXT NOT NULL DEFAULT '',
+    options TEXT NOT NULL DEFAULT ''
+);
+";
+
+/// Migration 17: what frename spent on each paid service (`ai_spend`, one row per file a batch
+/// billed) and the top-up the user recorded for it (`ai_top_up`, one row per service), for the
+/// credit estimate (issue #121). `service` is `anthropic` or `soniox`.
+pub const M17_AI_LEDGER: &str = "
+CREATE TABLE IF NOT EXISTS ai_spend (
+    service TEXT NOT NULL,
+    at_ms INTEGER NOT NULL,
+    usd REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ai_spend_service_at ON ai_spend (service, at_ms);
+CREATE TABLE IF NOT EXISTS ai_top_up (
+    service TEXT PRIMARY KEY,
+    usd REAL NOT NULL,
+    at_ms INTEGER NOT NULL
+);
 ";

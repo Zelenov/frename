@@ -12,7 +12,6 @@
 pub mod describe_ai;
 mod fix_tags;
 pub mod generate_subtitles;
-mod in_out_from_names;
 mod markers_comment;
 pub use markers_comment::Direction as MarkersDirection;
 mod move_comments;
@@ -27,21 +26,21 @@ use std::sync::atomic::AtomicBool;
 
 use clipscribe::AiUsage;
 use clipscribe::Model;
+use frename_core::ai::key::ApiKey;
+use frename_core::ai::ledger::SpendSummary;
 use frename_core::{
     CommentStorage, File, FileId, FileSnapshot, FileTagger, FolderInfo, InOutStorage, MoveOutcome,
 };
-use iced::widget::{column, text};
 use iced::Element;
 
 use super::{ItemProgress, ItemResult, ItemStatus};
-use crate::theme;
+use crate::ui::icons::Icon;
 
 /// An entry of the action list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     MoveComments,
     MoveInOut,
-    InOutFromNames,
     MarkersComment,
     Rotate,
     TagCommented,
@@ -54,10 +53,9 @@ pub enum Action {
 
 impl Action {
     /// Every action, in list order.
-    pub const ALL: [Action; 11] = [
+    pub const ALL: [Action; 10] = [
         Action::MoveComments,
         Action::MoveInOut,
-        Action::InOutFromNames,
         Action::MarkersComment,
         Action::Rotate,
         Action::TagCommented,
@@ -72,7 +70,6 @@ impl Action {
         match self {
             Self::MoveComments => move_comments::label(),
             Self::MoveInOut => move_in_out::label(),
-            Self::InOutFromNames => in_out_from_names::label(),
             Self::MarkersComment => markers_comment::label(),
             Self::Rotate => rotate::label(),
             Self::TagCommented => tag_commented::label(),
@@ -84,12 +81,20 @@ impl Action {
         }
     }
 
+    /// The paid service the action bills, when it is one.
+    pub fn service(self) -> Option<ApiKey> {
+        match self {
+            Self::DescribeAi => Some(ApiKey::Anthropic),
+            Self::GenerateSubtitles => Some(ApiKey::Soniox),
+            _ => None,
+        }
+    }
+
     /// The action's name in English only: logs never switch language.
     pub fn log_id(self) -> &'static str {
         match self {
             Self::MoveComments => "Move comments",
             Self::MoveInOut => "In/out points: comment <-> video",
-            Self::InOutFromNames => "Move in/out points out of file names",
             Self::MarkersComment => "Markers <-> comment",
             Self::Rotate => "Rotate videos",
             Self::TagCommented => "Tag commented videos",
@@ -101,11 +106,108 @@ impl Action {
         }
     }
 
-    /// The counts line's word for a file the action did its work on.
+    /// The group of the action list it is under.
+    pub fn group(self) -> Group {
+        match self {
+            Self::MoveComments | Self::MoveInOut | Self::MarkersComment => Group::MoveBetweenPlaces,
+            Self::Rotate
+            | Self::TagCommented
+            | Self::FixTags
+            | Self::RespaceTags
+            | Self::ReloadFiles => Group::FixFiles,
+            Self::DescribeAi | Self::GenerateSubtitles => Group::PaidServices,
+        }
+    }
+
+    /// The icon the action list shows it with (design system §13.6.3).
+    pub fn icon(self) -> Icon {
+        match self {
+            Self::MoveComments => Icon::MessageSquareText,
+            Self::MoveInOut => Icon::Scissors,
+            Self::MarkersComment => Icon::MapPin,
+            Self::Rotate => Icon::RotateCw,
+            Self::TagCommented => Icon::Tag,
+            Self::FixTags => Icon::ListOrdered,
+            Self::RespaceTags => Icon::TextCursorInput,
+            Self::ReloadFiles => Icon::RotateCcw,
+            Self::DescribeAi => Icon::Sparkles,
+            Self::GenerateSubtitles => Icon::Captions,
+        }
+    }
+
+    /// The run button's label for `count` files: a verb and the count, or with nothing checked
+    /// the action's name alone (§13.6.4). The paid actions label it themselves.
+    pub fn run_label(self, count: usize) -> String {
+        if count == 0 {
+            return self.label();
+        }
+        let count = count as i64;
+        match self {
+            Self::MoveComments => fl!("batch-run-move-comments", count = count),
+            Self::MoveInOut => fl!("batch-run-move-in-out", count = count),
+            Self::MarkersComment => fl!("batch-run-convert", count = count),
+            Self::Rotate => fl!("batch-run-rotate", count = count),
+            Self::TagCommented => fl!("batch-run-tag", count = count),
+            Self::FixTags => fl!("batch-run-fix-tags", count = count),
+            Self::RespaceTags => fl!("batch-run-rename", count = count),
+            Self::ReloadFiles => fl!("batch-run-reload", count = count),
+            Self::DescribeAi | Self::GenerateSubtitles => self.label(),
+        }
+    }
+
+    /// The figures' word for a file the action did its work on.
     pub fn done_label(self) -> String {
         match self {
             Self::GenerateSubtitles => fl!("batch-done-label-subtitled"),
             _ => fl!("batch-done-label-changed"),
+        }
+    }
+
+    /// Stable id for remembering the last action run (#65): unlike `label()` it never changes
+    /// with the UI language, and unlike `log_id()` it is never shown, so it can change wording
+    /// there without breaking a saved id.
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::MoveComments => "move_comments",
+            Self::MoveInOut => "move_in_out",
+            Self::MarkersComment => "markers_comment",
+            Self::Rotate => "rotate",
+            Self::TagCommented => "tag_commented",
+            Self::FixTags => "fix_tags",
+            Self::RespaceTags => "respace_tags",
+            Self::ReloadFiles => "reload_files",
+            Self::DescribeAi => "describe_ai",
+            Self::GenerateSubtitles => "generate_subtitles",
+        }
+    }
+
+    /// Parse a persisted id; `None` for one no action has (e.g. an action removed since).
+    pub fn from_id(id: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|action| action.id() == id)
+    }
+}
+
+/// An action as a dropdown shows it: its name.
+impl std::fmt::Display for Action {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.label())
+    }
+}
+
+/// A group of the action list, under its caption.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Group {
+    MoveBetweenPlaces,
+    FixFiles,
+    PaidServices,
+}
+
+impl Group {
+    pub fn label(self) -> String {
+        match self {
+            Self::MoveBetweenPlaces => fl!("batch-group-move"),
+            Self::FixFiles => fl!("batch-group-fix"),
+            Self::PaidServices => fl!("batch-group-paid"),
         }
     }
 }
@@ -115,8 +217,6 @@ impl Action {
 pub enum Operation {
     MoveComments(CommentStorage),
     MoveInOut(InOutStorage),
-    /// Take the in/out points older versions wrote into file names out of them.
-    InOutFromNames,
     MarkersComment(markers_comment::Direction),
     /// Turn each video by changing its rotation flag.
     Rotate(rotate::Turn),
@@ -138,14 +238,20 @@ impl Operation {
         match self {
             Self::MoveComments(to) => move_comments::run(*to, path),
             Self::MoveInOut(to) => move_in_out::run(*to, path),
-            Self::InOutFromNames => in_out_from_names::run(path),
             Self::MarkersComment(direction) => markers_comment::run(*direction, path),
             Self::Rotate(turn) => rotate::run(*turn, path),
             Self::TagCommented => tag_commented::run(path),
             Self::FixTags => fix_tags::run(path),
             Self::RespaceTags => tag_spacing::run(path),
             Self::ReloadFiles => reload_files::run(path),
-            Self::DescribeAi(options) => describe_ai::run(*options, path, cancel, progress),
+            Self::DescribeAi(options) => {
+                let mut result = describe_ai::run(*options, path, cancel, progress);
+                // What the requests cost, at the model's prices, for the spend ledger.
+                result.spend = result
+                    .usage
+                    .map(|usage| (ApiKey::Anthropic, options.model().cost_usd(usage)));
+                result
+            }
             Self::GenerateSubtitles(run) => generate_subtitles::run(run, path, cancel, progress),
         }
     }
@@ -179,7 +285,6 @@ impl Operation {
         match self {
             Self::MoveComments(_) => Action::MoveComments,
             Self::MoveInOut(_) => Action::MoveInOut,
-            Self::InOutFromNames => Action::InOutFromNames,
             Self::MarkersComment(_) => Action::MarkersComment,
             Self::Rotate(_) => Action::Rotate,
             Self::TagCommented => Action::TagCommented,
@@ -214,6 +319,13 @@ pub enum ActionMessage {
     /// Have the settings read whether a Soniox key is saved; the answer comes back as
     /// `GenerateSubtitles(KeyState)`. Handled by the app.
     ReadSonioxKeyState,
+    /// Open the page where a paid service's credit is added. Handled by the workspace.
+    OpenBilling(ApiKey),
+    /// Read the spend ledger again (a top-up was recorded); the answer comes back as
+    /// `CreditRead`. Handled by the workspace.
+    RefreshCredit,
+    /// What a service cost and what is probably left, read from the ledger.
+    CreditRead(ApiKey, SpendSummary),
 }
 
 impl ActionMessage {
@@ -221,6 +333,7 @@ impl ActionMessage {
     pub fn applies_while_running(&self) -> bool {
         match self {
             Self::GenerateSubtitles(message) => message.applies_while_running(),
+            Self::CreditRead(..) => true,
             _ => matches!(
                 self,
                 Self::DescribeAi(
@@ -243,6 +356,31 @@ pub struct Actions {
     rotate: rotate::Options,
     describe_ai: describe_ai::Options,
     generate_subtitles: generate_subtitles::Options,
+    /// What each paid service cost and what is probably left of it.
+    credit: Credit,
+}
+
+/// What each paid service cost and what is probably left of it, from the spend ledger.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Credit {
+    anthropic: SpendSummary,
+    soniox: SpendSummary,
+}
+
+impl Credit {
+    pub fn of(&self, service: ApiKey) -> SpendSummary {
+        match service {
+            ApiKey::Anthropic => self.anthropic,
+            ApiKey::Soniox => self.soniox,
+        }
+    }
+
+    fn set(&mut self, service: ApiKey, summary: SpendSummary) {
+        match service {
+            ApiKey::Anthropic => self.anthropic = summary,
+            ApiKey::Soniox => self.soniox = summary,
+        }
+    }
 }
 
 impl Actions {
@@ -258,7 +396,10 @@ impl Actions {
             | ActionMessage::OpenAiSettings
             | ActionMessage::ReadKeyState
             | ActionMessage::OpenSubtitleSettings
-            | ActionMessage::ReadSonioxKeyState => {}
+            | ActionMessage::ReadSonioxKeyState
+            | ActionMessage::OpenBilling(_)
+            | ActionMessage::RefreshCredit => {}
+            ActionMessage::CreditRead(service, summary) => self.credit.set(service, summary),
         }
     }
 
@@ -278,7 +419,6 @@ impl Actions {
             Operation::MarkersComment(direction) => self.markers_comment.prepare(direction),
             Operation::Rotate(_)
             | Operation::TagCommented
-            | Operation::InOutFromNames
             | Operation::FixTags
             | Operation::RespaceTags
             | Operation::ReloadFiles
@@ -292,7 +432,6 @@ impl Actions {
         match action {
             Action::MoveComments => Some(self.move_comments.operation()),
             Action::MoveInOut => Some(self.move_in_out.operation()),
-            Action::InOutFromNames => Some(Operation::InOutFromNames),
             Action::MarkersComment => Some(self.markers_comment.operation()),
             Action::Rotate => Some(self.rotate.operation()),
             Action::TagCommented => tag_commented::operation(),
@@ -318,28 +457,148 @@ impl Actions {
         self.describe_ai.is_probing()
     }
 
-    /// What `action` shows next to the run button (why it cannot run), if anything.
-    pub fn footer(&self, action: Action) -> Option<Element<'_, ActionMessage>> {
+    /// Which paid service `action` bills through, and whether its key is missing: the badge of
+    /// its row in the action list. `None` for the free actions.
+    pub fn service(&self, action: Action) -> Option<(String, bool)> {
         match action {
-            Action::DescribeAi => self.describe_ai.footer(),
-            Action::GenerateSubtitles => self.generate_subtitles.footer(),
+            Action::DescribeAi => Some((
+                fl!("batch-service-anthropic"),
+                self.describe_ai.key_missing(),
+            )),
+            Action::GenerateSubtitles => Some((
+                fl!("batch-service-soniox"),
+                self.generate_subtitles.key_missing(),
+            )),
             _ => None,
         }
     }
 
-    /// The panel of `action` for the `checked` files (its title, what it does, and its options),
-    /// the run button's label, and whether it can run.
-    pub fn panel(
-        &self,
-        action: Action,
-        checked: &[&File],
-    ) -> (Element<'_, ActionMessage>, String, bool) {
-        let view = match action {
-            Action::DescribeAi => return self.describe_ai.panel(checked),
-            Action::GenerateSubtitles => return self.generate_subtitles.panel(checked),
+    /// `action`'s current options, as simple key/value pairs to remember for next time (#65).
+    /// Actions with nothing to choose return none. Reads each action's own options directly
+    /// (not through [`Self::operation`]), so it does not depend on the action being ready to
+    /// run right now (e.g. "Generate subtitles" before its plan and key are known).
+    pub fn persist(&self, action: Action) -> Vec<(String, String)> {
+        match action {
+            // Each field's own `operation()` always returns its own action's variant.
+            Action::MoveComments => match self.move_comments.operation() {
+                Operation::MoveComments(to) => vec![("to".to_string(), to.as_str().to_string())],
+                _ => unreachable!(),
+            },
+            Action::MoveInOut => match self.move_in_out.operation() {
+                Operation::MoveInOut(to) => vec![("to".to_string(), to.as_str().to_string())],
+                _ => unreachable!(),
+            },
+            Action::MarkersComment => match self.markers_comment.operation() {
+                Operation::MarkersComment(direction) => {
+                    vec![("direction".to_string(), direction.as_str().to_string())]
+                }
+                _ => unreachable!(),
+            },
+            Action::Rotate => match self.rotate.operation() {
+                Operation::Rotate(turn) => vec![("turn".to_string(), turn.as_str().to_string())],
+                _ => unreachable!(),
+            },
+            // `language` and `model` are not a batch-local choice: the panel only shows them,
+            // set from Settings (`FrenameApp::update`'s `WindowReady` sync, which would
+            // overwrite a restored value right on startup) — like "Generate subtitles"'s
+            // `config` below, only `redo`, the panel's own checkbox, is worth remembering.
+            Action::DescribeAi => match self.describe_ai.operation() {
+                Operation::DescribeAi(run) => vec![("redo".to_string(), run.redo.to_string())],
+                _ => unreachable!(),
+            },
+            Action::GenerateSubtitles => {
+                let formats = self.generate_subtitles.formats();
+                vec![
+                    (
+                        "replace".to_string(),
+                        self.generate_subtitles.replaces().to_string(),
+                    ),
+                    ("srt".to_string(), formats.srt.to_string()),
+                    ("premiere".to_string(), formats.premiere.to_string()),
+                ]
+            }
+            Action::TagCommented | Action::FixTags | Action::RespaceTags | Action::ReloadFiles => {
+                Vec::new()
+            }
+        }
+    }
+
+    /// Apply `options`, as [`Self::persist`] returned them for `action`, to its own options. A
+    /// key it does not recognise, or a value it cannot parse, is simply left at its default
+    /// (removed choices, or ones only another version understands, are never an error).
+    pub fn restore(&mut self, action: Action, options: &[(String, String)]) {
+        let get = |key: &str| {
+            options
+                .iter()
+                .find(|(k, _)| k == key)
+                .map(|(_, v)| v.as_str())
+        };
+        match action {
+            Action::MoveComments => {
+                if let Some(v) = get("to") {
+                    self.move_comments
+                        .update(move_comments::Message::SetTo(CommentStorage::from_name(v)));
+                }
+            }
+            Action::MoveInOut => {
+                if let Some(v) = get("to") {
+                    self.move_in_out
+                        .update(move_in_out::Message::SetTo(InOutStorage::from_name(v)));
+                }
+            }
+            Action::MarkersComment => {
+                if let Some(v) = get("direction") {
+                    self.markers_comment
+                        .update(markers_comment::Message::SetDirection(
+                            markers_comment::Direction::from_name(v),
+                        ));
+                }
+            }
+            Action::Rotate => {
+                if let Some(v) = get("turn") {
+                    self.rotate
+                        .update(rotate::Message::SetTurn(rotate::Turn::from_name(v)));
+                }
+            }
+            Action::DescribeAi => {
+                if let Some(v) = get("redo") {
+                    self.describe_ai
+                        .update(describe_ai::Message::SetRedo(v == "true"));
+                }
+            }
+            Action::GenerateSubtitles => {
+                if let Some(v) = get("replace") {
+                    self.generate_subtitles
+                        .update(generate_subtitles::Message::SetReplace(v == "true"));
+                }
+                if let Some(v) = get("srt") {
+                    self.generate_subtitles
+                        .update(generate_subtitles::Message::SetSrt(v == "true"));
+                }
+                if let Some(v) = get("premiere") {
+                    self.generate_subtitles
+                        .update(generate_subtitles::Message::SetPremiere(v == "true"));
+                }
+            }
+            Action::TagCommented | Action::FixTags | Action::RespaceTags | Action::ReloadFiles => {}
+        }
+    }
+
+    /// The page of `action` for the `checked` files, and its run button.
+    pub fn panel(&self, action: Action, checked: &[&File]) -> Panel<'_> {
+        let page = match action {
+            Action::DescribeAi => {
+                return self
+                    .describe_ai
+                    .panel(checked, self.credit.of(ApiKey::Anthropic))
+            }
+            Action::GenerateSubtitles => {
+                return self
+                    .generate_subtitles
+                    .panel(checked, self.credit.of(ApiKey::Soniox))
+            }
             Action::MoveComments => self.move_comments.view().map(ActionMessage::MoveComments),
             Action::MoveInOut => self.move_in_out.view().map(ActionMessage::MoveInOut),
-            Action::InOutFromNames => in_out_from_names::view(),
             Action::MarkersComment => self
                 .markers_comment
                 .view()
@@ -350,21 +609,59 @@ impl Actions {
             Action::RespaceTags => tag_spacing::view(),
             Action::ReloadFiles => reload_files::view(),
         };
-        let label = fl!("batch-run", count = (checked.len() as i64));
-        let ready = !checked.is_empty() && self.operation(action).is_some();
-        (view, label, ready)
+        Panel {
+            page,
+            run: action.run_label(checked.len()),
+            ready: !checked.is_empty() && self.operation(action).is_some(),
+            reason: None,
+        }
     }
 }
 
-/// An action's panel as every action shows it: title, what it does, then its options.
-fn panel<'a, M: 'a>(title: String, hint: String, options: Element<'a, M>) -> Element<'a, M> {
-    column![
-        text(title).size(15),
-        text(hint).size(12).color(theme::TEXT_MUTED),
-        options
-    ]
-    .spacing(12)
-    .into()
+/// An action's page and its run button.
+pub struct Panel<'a> {
+    pub page: Element<'a, ActionMessage>,
+    /// The run button's label: a verb and the count.
+    pub run: String,
+    pub ready: bool,
+    /// Why it cannot run, for the button bar, when the page does not already say it in a
+    /// notice. The batch panel adds the reason every action shares: nothing checked.
+    pub reason: Option<String>,
+}
+
+/// The plan row for what is probably left on `service`: `about $3.10`, or `None` when no top-up
+/// was recorded (nothing is known then). It is an estimate, and says so.
+pub fn credit_left_row(summary: SpendSummary) -> Option<(String, String)> {
+    let left = summary.remaining()?;
+    Some((
+        fl!("batch-plan-credit-left"),
+        fl!(
+            "batch-credit-left-value",
+            amount = describe_ai::dollars(left)
+        ),
+    ))
+}
+
+/// The warning shown before a run that costs about `cost` on `service` when that is probably
+/// more than what is left, with the button that opens the service's billing page.
+pub fn credit_low_notice<'a>(
+    service: ApiKey,
+    summary: SpendSummary,
+    cost: f64,
+) -> Option<Element<'a, ActionMessage>> {
+    let left = summary.remaining().filter(|_| summary.would_exceed(cost))?;
+    Some(crate::ui::layout::notice(
+        crate::ui::layout::NoticeKind::Warning,
+        fl!(
+            "batch-credit-low",
+            cost = describe_ai::dollars(cost),
+            left = describe_ai::dollars(left)
+        ),
+        None,
+        [crate::ui::button::secondary(fl!("batch-add-credit"))
+            .on_press(ActionMessage::OpenBilling(service))
+            .into()],
+    ))
 }
 
 /// What a job's AI requests to `model` cost: `$0.31 (Claude Haiku 4.5)`.
@@ -391,4 +688,227 @@ fn item_result(outcome: MoveOutcome) -> ItemResult {
 fn reparsed(path: PathBuf) -> (PathBuf, FileSnapshot) {
     let snapshot = FileTagger::parse(&path, &FolderInfo::default());
     (path, snapshot)
+}
+
+#[cfg(test)]
+mod credit_tests {
+    use super::*;
+    use frename_core::ai::ledger::TopUp;
+
+    fn summary(top_up: f64, spent: f64) -> SpendSummary {
+        SpendSummary {
+            top_up: Some(TopUp {
+                usd: top_up,
+                at_ms: 0,
+            }),
+            since_top_up: Some(spent),
+            ..SpendSummary::default()
+        }
+    }
+
+    #[test]
+    fn the_left_row_shows_only_when_a_top_up_is_known() {
+        assert!(credit_left_row(SpendSummary::default()).is_none());
+        let (label, value) = credit_left_row(summary(20.0, 4.0)).expect("a row");
+        assert_eq!(label, fl!("batch-plan-credit-left"));
+        assert!(value.contains("$16.00"), "{value}");
+    }
+
+    #[test]
+    fn a_run_is_warned_about_only_when_it_costs_more_than_what_is_left() {
+        let low = summary(5.0, 4.5);
+        assert!(credit_low_notice(ApiKey::Anthropic, low, 1.0).is_some());
+        assert!(credit_low_notice(ApiKey::Anthropic, low, 0.4).is_none());
+        assert!(
+            credit_low_notice(ApiKey::Soniox, SpendSummary::default(), 100.0).is_none(),
+            "nothing recorded, nothing known"
+        );
+    }
+
+    #[test]
+    fn only_the_paid_actions_have_a_service() {
+        assert_eq!(Action::DescribeAi.service(), Some(ApiKey::Anthropic));
+        assert_eq!(Action::GenerateSubtitles.service(), Some(ApiKey::Soniox));
+        assert_eq!(Action::Rotate.service(), None);
+    }
+
+    #[test]
+    fn the_ledger_figures_reach_the_panels_through_a_message() {
+        let mut actions = Actions::default();
+        assert_eq!(actions.credit.of(ApiKey::Soniox).remaining(), None);
+        actions.update(ActionMessage::CreditRead(
+            ApiKey::Soniox,
+            summary(10.0, 1.0),
+        ));
+        assert_eq!(actions.credit.of(ApiKey::Soniox).remaining(), Some(9.0));
+        assert_eq!(actions.credit.of(ApiKey::Anthropic).remaining(), None);
+        assert!(
+            ActionMessage::CreditRead(ApiKey::Soniox, SpendSummary::default())
+                .applies_while_running()
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_action_s_id_round_trips_and_an_unknown_one_is_none() {
+        for action in Action::ALL {
+            assert_eq!(Action::from_id(action.id()), Some(action));
+        }
+        assert_eq!(Action::from_id("no-such-action"), None);
+    }
+
+    #[test]
+    fn move_comments_and_move_in_out_persist_and_restore() {
+        let mut actions = Actions::default();
+        actions.update(ActionMessage::MoveComments(move_comments::Message::SetTo(
+            CommentStorage::TextFile,
+        )));
+        let saved = actions.persist(Action::MoveComments);
+        let mut restored = Actions::default();
+        restored.restore(Action::MoveComments, &saved);
+        assert_eq!(
+            restored.operation(Action::MoveComments),
+            Some(Operation::MoveComments(CommentStorage::TextFile))
+        );
+
+        actions.update(ActionMessage::MoveInOut(move_in_out::Message::SetTo(
+            InOutStorage::Comment,
+        )));
+        let saved = actions.persist(Action::MoveInOut);
+        let mut restored = Actions::default();
+        restored.restore(Action::MoveInOut, &saved);
+        assert_eq!(
+            restored.operation(Action::MoveInOut),
+            Some(Operation::MoveInOut(InOutStorage::Comment))
+        );
+    }
+
+    #[test]
+    fn markers_comment_and_rotate_persist_and_restore() {
+        let mut actions = Actions::default();
+        actions.update(ActionMessage::MarkersComment(
+            markers_comment::Message::SetDirection(markers_comment::Direction::MarkersToComment),
+        ));
+        let saved = actions.persist(Action::MarkersComment);
+        let mut restored = Actions::default();
+        restored.restore(Action::MarkersComment, &saved);
+        assert_eq!(
+            restored.operation(Action::MarkersComment),
+            Some(Operation::MarkersComment(
+                markers_comment::Direction::MarkersToComment
+            ))
+        );
+
+        actions.update(ActionMessage::Rotate(rotate::Message::SetTurn(
+            rotate::Turn::Half,
+        )));
+        let saved = actions.persist(Action::Rotate);
+        let mut restored = Actions::default();
+        restored.restore(Action::Rotate, &saved);
+        assert_eq!(
+            restored.operation(Action::Rotate),
+            Some(Operation::Rotate(rotate::Turn::Half))
+        );
+    }
+
+    #[test]
+    fn describe_ai_and_generate_subtitles_options_persist_and_restore() {
+        // `language`/`model` are not persisted: the panel only shows them, set from Settings
+        // (`FrenameApp::update`'s `WindowReady` sync would overwrite a restored value on
+        // startup anyway); only `redo`, the panel's own checkbox, is a batch-local choice.
+        let mut actions = Actions::default();
+        actions.update(ActionMessage::DescribeAi(describe_ai::Message::SetRedo(
+            true,
+        )));
+        let saved = actions.persist(Action::DescribeAi);
+        assert_eq!(saved, vec![("redo".to_string(), "true".to_string())]);
+        let mut restored = Actions::default();
+        restored.restore(Action::DescribeAi, &saved);
+        match restored.operation(Action::DescribeAi) {
+            Some(Operation::DescribeAi(run)) => assert!(run.redo),
+            other => panic!("expected DescribeAi, got {other:?}"),
+        }
+
+        actions.update(ActionMessage::GenerateSubtitles(
+            generate_subtitles::Message::SetReplace(true),
+        ));
+        let saved = actions.persist(Action::GenerateSubtitles);
+        assert_eq!(
+            saved,
+            vec![
+                ("replace".to_string(), "true".to_string()),
+                ("srt".to_string(), "true".to_string()),
+                ("premiere".to_string(), "false".to_string()),
+            ]
+        );
+        let mut restored = Actions::default();
+        restored.restore(Action::GenerateSubtitles, &saved);
+        assert!(restored.generate_subtitles.replaces());
+
+        actions.update(ActionMessage::GenerateSubtitles(
+            generate_subtitles::Message::SetSrt(false),
+        ));
+        actions.update(ActionMessage::GenerateSubtitles(
+            generate_subtitles::Message::SetPremiere(true),
+        ));
+        let saved = actions.persist(Action::GenerateSubtitles);
+        let mut restored = Actions::default();
+        restored.restore(Action::GenerateSubtitles, &saved);
+        let formats = restored.generate_subtitles.formats();
+        assert!(!formats.srt && formats.premiere);
+        // A run saved before the formats existed keeps the default: SRT only.
+        let mut old = Actions::default();
+        old.restore(
+            Action::GenerateSubtitles,
+            &[("replace".to_string(), "false".to_string())],
+        );
+        assert_eq!(
+            old.generate_subtitles.formats(),
+            generate_subtitles::Formats::default()
+        );
+    }
+
+    #[test]
+    fn an_unknown_option_value_falls_back_to_its_default() {
+        let mut actions = Actions::default();
+        actions.restore(Action::Rotate, &[("turn".to_string(), "??".to_string())]);
+        assert_eq!(
+            actions.operation(Action::Rotate),
+            Some(Operation::Rotate(rotate::Turn::Right)),
+            "an unknown turn falls back to the default"
+        );
+    }
+
+    #[test]
+    fn an_unrecognised_option_key_is_ignored() {
+        let mut actions = Actions::default();
+        actions.restore(
+            Action::Rotate,
+            &[
+                ("turn".to_string(), "half".to_string()),
+                ("bogus".to_string(), "x".to_string()),
+            ],
+        );
+        assert_eq!(
+            actions.operation(Action::Rotate),
+            Some(Operation::Rotate(rotate::Turn::Half))
+        );
+    }
+
+    #[test]
+    fn actions_without_a_choice_persist_nothing() {
+        let actions = Actions::default();
+        for action in [
+            Action::TagCommented,
+            Action::FixTags,
+            Action::RespaceTags,
+            Action::ReloadFiles,
+        ] {
+            assert!(actions.persist(action).is_empty());
+        }
+    }
 }

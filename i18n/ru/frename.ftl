@@ -51,7 +51,7 @@ settings-video = Видео
 settings-video-autoplay = Сразу воспроизводить открытое видео
 settings-tags = Цвет тегов
 settings-tags-monochrome = Одноцветные
-settings-tags-monochrome-hint = Все теги одного серого цвета.
+settings-tags-monochrome-hint = Добавленные вами теги — тёмно-серые, остальные — светло-серые, других цветов нет.
 settings-file-names = Имена файлов
 settings-tags-space-after = Пробел после каждого тега
 settings-tags-space-example = Food. Goat. clip.mp4
@@ -138,22 +138,138 @@ settings-key-save-into = «Сохранить ключ» помещает его
 
 ## Batch mode
 
+batch-back-while-running = Сначала отмените действие
+batch-checked-count = { $count ->
+    [one] отмечен { $count } файл
+    [few] отмечено { $count } файла
+   *[many] отмечено { $count } файлов
+}
+batch-no-key = Нет ключа
+batch-group-move = Перенос между местами
+batch-group-fix = Исправить имена и видео
+batch-group-paid = Платные сервисы
+batch-reason-none-checked = Нет отмеченных файлов
+batch-reason-reading = Читаем длину клипов…
+batch-check-all = Отметить все { $count ->
+    [one] { $count } файл
+    [few] { $count } файла
+   *[many] { $count } файлов
+}
+batch-job-running = выполняется
+batch-job-finished = завершено
+batch-job-stopped = остановлено
+batch-progress-files = { $finished } из { $total ->
+    [one] { $total } файла
+    [few] { $total } файлов
+   *[many] { $total } файлов
+}
+batch-time-left = осталось около { $time }
+batch-time-estimating = оцениваем время…
+batch-time-spent = прошло { $time }
+batch-locked-until-end = Папка заблокирована до конца
+batch-run-again = Запустить снова для { $count ->
+    [one] { $count } файла
+    [few] { $count } файлов
+   *[many] { $count } файлов
+}
+batch-result-done = Готово: { $total ->
+    [one] { $total } файл
+    [few] { $total } файла
+   *[many] { $total } файлов
+}
+batch-result-done-detail = изменено: { $changed }, без изменений: { $unchanged }
+batch-result-problems = Готово с ошибками: не выполнено { $failed } из { $total ->
+    [one] { $total } файла
+    [few] { $total } файлов
+   *[many] { $total } файлов
+}
+batch-figure-unchanged = без изменений
+batch-figure-not-done = не выполнено
+batch-figure-not-reached = не дошли
+batch-files-not-done = Не выполнено
+batch-table-file = Файл
+batch-table-why = Почему
+
+batch-run-move-comments = Перенести { $count ->
+    [one] { $count } комментарий
+    [few] { $count } комментария
+   *[many] { $count } комментариев
+}
+batch-run-move-in-out = Перенести точки входа и выхода: { $count ->
+    [one] { $count } файл
+    [few] { $count } файла
+   *[many] { $count } файлов
+}
+batch-run-convert = Преобразовать: { $count ->
+    [one] { $count } файл
+    [few] { $count } файла
+   *[many] { $count } файлов
+}
+batch-run-rotate = Повернуть: { $count ->
+    [one] { $count } видео
+    [few] { $count } видео
+   *[many] { $count } видео
+}
+batch-run-tag = Обновить тег: { $count ->
+    [one] { $count } файл
+    [few] { $count } файла
+   *[many] { $count } файлов
+}
+batch-run-fix-tags = Упорядочить теги: { $count ->
+    [one] { $count } файл
+    [few] { $count } файла
+   *[many] { $count } файлов
+}
+batch-run-rename = Переименовать: { $count ->
+    [one] { $count } файл
+    [few] { $count } файла
+   *[many] { $count } файлов
+}
+batch-run-reload = Перечитать: { $count ->
+    [one] { $count } файл
+    [few] { $count } файла
+   *[many] { $count } файлов
+}
+batch-service-anthropic = Anthropic
+batch-service-soniox = Soniox
+batch-change-renames = Переименовывает файлы
+batch-change-videos = Пишет в видео
+batch-change-text-files = Пишет текстовые файлы рядом с видео
+batch-change-comments = Пишет в комментарии
+batch-change-subtitles = Пишет файлы субтитров рядом с видео
+batch-change-records = Меняет только записи самого frename
+batch-option-direction = Направление
+batch-option-language = Язык
+batch-option-described = Уже описанные
+batch-option-subtitled = С субтитрами
+batch-option-subtitles-write = Какие файлы записать
+batch-option-spacing = Пробелы
+batch-option-tag = Тег
+batch-option-turn = Поворот
+batch-plan-videos = Видео
+batch-plan-length = Длина
+batch-plan-credit-left = Остаток на счёте
+batch-credit-left-value = { $amount } (оценка)
+batch-credit-low = Оценка этого запуска — { $cost }, больше, чем примерный остаток: { $left }.
+batch-plan-cost = Стоимость
+batch-plan-time = Время
+batch-reason-estimate = Ждём оценку
+batch-reason-subtitles-no-format = Отметьте хотя бы один файл для записи
+batch-set-key = Указать ключ…
+batch-check-key = Проверить ключ…
+batch-subtitles-languages-auto = Определяется в каждом видео
+batch-action-describe-ai-run-waiting = Описать видео
+batch-action-fix-tags-order = Порядок: как в списке тегов, неизвестные теги первыми.
+batch-action-markers-comment-hint-short = Превращает строки комментария с временем в маркеры или копирует маркеры в комментарий.
+batch-action-markers-to-comment-hint = Маркеры остаются; повторный запуск ничего не добавляет дважды.
+batch-action-rotate-hint-short = Поворачивает клипы MP4 и MOV флагом поворота, без перекодирования.
+batch-action-tag-commented-off = Тег для видео с комментарием выключен
+batch-action-tag-commented-choose = Выбрать тег…
+
 batch-title = Пакетные действия
-batch-on-checked = для { $count ->
-    [one] { $count } отмеченного файла
-    [few] { $count } отмеченных файлов
-   *[many] { $count } отмеченных файлов
-}
-batch-run = Применить к { $count ->
-    [one] { $count } файлу
-    [few] { $count } файлам
-   *[many] { $count } файлам
-}
 batch-done-label-changed = изменено
 batch-done-label-subtitled = субтитровано
-batch-counts = ✓ { $done_label }: { $done }   – без изменений: { $skipped }   ✗ с ошибкой: { $failed }
 batch-ai-at-least = как минимум
-batch-ai-spend-line = AI: { $spend }
 batch-cancel = Отмена
 batch-stopping = Остановка…
 batch-stopped = Остановлено после { $finished } из { $total ->
@@ -161,16 +277,10 @@ batch-stopped = Остановлено после { $finished } из { $total ->
     [few] { $total } файлов
    *[many] { $total } файлов
 }.
-batch-finished = Готово: { $total } { $total ->
-    [one] файл
-    [few] файла
-   *[many] файлов
-}.
 batch-close = Закрыть
 batch-failed-subtitles = Без субтитров:
-batch-failed-plain = С ошибкой:
-batch-failed-with-log = С ошибкой (подробности в журнале):
-batch-retry = Повторить
+batch-written-subtitles = Записанные файлы:
+batch-table-written = Записано
 batch-add-credit = Пополнить счёт
 batch-open-log = Открыть журнал
 
@@ -184,17 +294,6 @@ batch-action-move-in-out-hint = Переносит точки входа и вы
 batch-action-move-in-out-into-videos = Из комментариев в видео (маркер Adobe XMP)
 batch-action-move-in-out-into-comments = Из видео (маркер XMP) в комментарии
 
-batch-action-in-out-from-names = Убрать точки входа и выхода из имён файлов
-batch-action-in-out-from-names-hint = Прежние версии могли хранить точки входа и выхода в имени файла (clip.in_00_01_05.mp4). Действие убирает их из имени каждого отмеченного файла и сохраняет туда, где точки входа и выхода хранятся теперь. Если у файла точки уже сохранены, остаются они; такой файл попадёт в отчёт.
-batch-action-in-out-from-names-status-comment = Куда пойдут: в комментарий
-batch-action-in-out-from-names-status-video = Куда пойдут: внутрь видео (XMP); для mkv, webm и других форматов без XMP — в комментарий
-batch-action-in-out-from-names-settings = Настройки точек…
-batch-action-in-out-from-names-kept = оставлены сохранённые { $stored }, из имени убраны { $name }
-batch-action-in-out-from-names-not-renamed = не удалось переименовать (подробности в журнале)
-batch-action-in-out-from-names-empty = оставлен как есть: имя стало бы пустым
-batch-action-in-out-from-names-taken = оставлен как есть: { $name } уже существует
-batch-in-out-from-names-listed = Файлы с ошибкой или с оставленными сохранёнными точками:
-
 batch-action-markers-comment = Маркеры ⇄ комментарий
 batch-action-markers-comment-to-markers = Строки комментария с временем в маркеры
 batch-action-markers-to-comment = Маркеры в комментарий (копия: маркеры остаются)
@@ -203,10 +302,6 @@ batch-action-markers-comment-hint = Строка вида «03:24 — Дубль
 batch-action-tag-commented = Тег видео с комментарием
 batch-action-tag-commented-hint = Ставит тег «{ $tag }» каждому отмеченному видео с вашим комментарием (описания от AI не считаются) и снимает его с видео без комментария. Файлы, у которых тег меняется, переименовываются.
 batch-action-tag-commented-hint-off = Ставит тег для видео с комментарием каждому отмеченному видео с вашим комментарием и снимает его с видео без комментария. Сейчас этот тег выключен в настройках.
-batch-action-tag-commented-status = Тег: { $tag }
-batch-action-tag-commented-status-off = Тег: выключен
-batch-action-tag-commented-settings = Настройки тега…
-
 batch-action-fix-tags = Упорядочить теги по приоритету
 batch-action-fix-tags-hint = Расставляет теги в имени каждого отмеченного файла в порядке панели тегов: чем выше тег в панели, тем раньше он в имени. Теги, которых папка ещё не знает, идут первыми, как в панели тегов. Файлы, у которых порядок меняется, переименовываются.
 
@@ -215,27 +310,20 @@ batch-action-respace-tags-hint-space = Переименовывает кажды
 batch-action-respace-tags-hint-no-space = Переименовывает каждый отмеченный файл так, чтобы после тегов не было пробелов, как задано в настройках: Food.Goat.clip.mp4.
 batch-action-respace-tags-status-space = Пробел после каждого тега
 batch-action-respace-tags-status-no-space = Без пробелов после тегов
-batch-action-respace-tags-settings = Настройки пробелов…
-
 batch-action-reload-files = Сбросить кэш и перечитать
 batch-action-reload-files-hint = Заново читает комментарий и точки входа и выхода каждого отмеченного файла из самого файла и заменяет то, что папка о нём запомнила. Нужно, если файлы менялись в другой программе. Файлы, у которых запомненное отсутствовало или устарело, считаются изменёнными.
 
 batch-action-describe-ai = Описать с помощью AI
-batch-action-describe-ai-run = Описать { $videos }
+batch-action-describe-ai-run = Описать { $videos } · около { $dollars }
 batch-action-describe-ai-estimating = Оценка… { $known } / { $total }
 batch-action-describe-ai-none = Нет видео для описания.
-batch-action-describe-ai-plan = { $videos }, { $minutes } · примерно { $dollars } моделью { $model }
-batch-action-describe-ai-hint = Займёт примерно { $duration }. Папка заблокирована до конца. Отмена сохраняет уже описанные видео; повторный запуск пропускает их.
+batch-action-describe-ai-hint = Папка заблокирована до конца. Отмена сохраняет уже описанные видео; повторный запуск пропускает их.
 batch-action-describe-ai-no-subtitles = Без субтитров (описана только картинка): { $videos }.
 batch-action-describe-ai-redo = Переописать видео, у которых уже есть описание от AI
 batch-action-describe-ai-hint-panel = Описывает происходящее в каждом отмеченном видео с привязкой ко времени: краткое содержание и отрезки по времени добавляются в описание от AI в его комментарии; ваш собственный текст сохраняется. Кадры и субтитры отправляются в Anthropic.
 batch-ai-change = Изменить
-batch-ai-open-settings = Открыть настройки
 batch-ai-key-missing = Укажите ключ API Anthropic в настройках
 batch-ai-key-unavailable = Не удалось открыть системное хранилище паролей: оно может быть заблокировано или отсутствовать (например, GNOME Keyring или KWallet).
-batch-ai-language-same-as-subtitles = Описания на языке субтитров (на английском, если субтитров нет)
-batch-ai-language = Описания на языке: { $language }
-
 ## AI description language names: the Settings picker and { $language } above.
 
 ai-language-same-as-subtitles = Как в субтитрах
@@ -259,11 +347,6 @@ batch-ai-dollars-under = меньше $0.01
 batch-ai-skip-described = уже описано
 batch-ai-skip-too-long = длиннее 30 мин
 batch-ai-skip-unreadable = не читается
-batch-ai-skip-photos = { $n ->
-    [one] { $n } фото
-    [few] { $n } фото
-   *[many] { $n } фото
-}
 batch-ai-skipped = Пропущено: { $parts }.
 batch-ai-progress-frame = кадр { $done } из { $total }
 batch-ai-progress-waiting = ожидание ответа Claude
@@ -278,9 +361,12 @@ batch-action-generate-subtitles = Распознать субтитры
 batch-action-generate-subtitles-install-ffmpeg = чтобы читать .mkv, .m2ts, .avi …, установите ffmpeg с ffmpeg.org, добавьте его в PATH и перезапустите frename
 batch-action-generate-subtitles-replace = Заменить имеющиеся субтитры
 batch-action-generate-subtitles-replace-hint = Распознаёт заново; стоимость как показано.
+batch-action-generate-subtitles-srt = Субтитры SRT (clip.srt)
+batch-action-generate-subtitles-premiere = Транскрипт для Premiere Pro (clip.premiere.json)
+batch-action-generate-subtitles-premiere-hint = В Premiere Pro: панель «Текст» → «Транскрипция» → «Импортировать статическую транскрипцию».
 batch-action-generate-subtitles-privacy = Аудио этих видео отправляется в Soniox и затем удаляется там.
 batch-action-generate-subtitles-duration-hint = Занимает несколько минут на час аудио; папка заблокирована до конца. Закрытие frename останавливает распознавание; готовые субтитры сохраняются.
-batch-action-generate-subtitles-hint = Распознаёт речь каждого отмеченного видео через Soniox и сохраняет субтитры рядом с ним (clip.srt) — там, где их показывает frename.
+batch-action-generate-subtitles-hint = Распознаёт речь каждого отмеченного видео через Soniox и сохраняет результат рядом с ним: субтитры (clip.srt), где их показывает frename, и/или транскрипт для Premiere Pro.
 batch-subtitles-transcribe = Распознать
 batch-subtitles-transcribe-count = Распознать { $videos }
 batch-subtitles-build-free = Собрать { $count } (бесплатно)
@@ -342,7 +428,12 @@ batch-subtitles-usd-under = меньше $0.01
 batch-subtitles-usd-about = примерно ${ $amount }
 
 ## File list
+folder-has-subtitles = Есть субтитры
+folder-filter-tip = Показать только…
 
+folder-search-placeholder = Найти файл или слово в комментарии
+folder-search-comments-loading = Ищем в комментариях… осталось { $n }
+folder-search-clear = Очистить
 folder-all = Все
 folder-invert = Обратить
 folder-checked = Отмечено: { $count }
@@ -355,31 +446,70 @@ folder-rename-error-trailing = Не может кончаться точкой �
 folder-rename-error-exists = Файл с таким именем уже есть
 folder-markers-not-saved = Маркеры не сохранены: файл доступен только для чтения или занят (закройте его в Premiere, затем откройте файл и снова закройте)
 drag-out-not-saved = Не перетащено: файл не сохранён (только чтение или открыт в Premiere)
+folder-opening = Открываем папку…
+folder-empty-title = В этой папке нет видео
+folder-empty-line = frename показывает MP4, MOV, MKV и другие видеофайлы.
+folder-open-another = Открыть другую папку…
+folder-no-match = Нет подходящих файлов
+folder-show-all = Показать все
+folder-locked = Заблокировано, пока выполняется «{ $action }»
+folder-checked-hidden = Отмечено: { $count } · скрыто: { $hidden }
+folder-checked-hidden-tip = { $hidden ->
+    [one] { $hidden } отмеченный файл скрыт поиском или фильтром; действие применится и к нему
+    [few] { $hidden } отмеченных файла скрыты поиском или фильтром; действие применится и к ним
+   *[many] { $hidden } отмеченных файлов скрыты поиском или фильтром; действие применится и к ним
+}
+folder-outcome-working = В работе
+folder-outcome-not-reached = Не обработан
+folder-window-empty-title = Откройте папку с клипами
+folder-window-empty-line = Или перетащите папку в окно. Правый клик по кнопке открывает один файл.
+folder-window-open = Открыть папку…
+
+## File menu (right-click on a file, or F11 / Shift+F11 / Ctrl+F11)
+
+file-menu-show-in-explorer = Показать в проводнике
+file-menu-show-in-file-manager = Показать в файловом менеджере
+file-menu-copy-path = Копировать полный путь
+file-menu-copy-name = Копировать имя файла
+file-menu-copied = Скопировано
+file-menu-not-copied = Не скопировано: буфер обмена недоступен
+file-menu-not-shown = Не удалось открыть файловый менеджер
 
 ## Controls bar under the file list
 
-folder-controls-filter = Фильтр
-folder-controls-filter-active = Фильтр ({ $count })
 folder-controls-filter-untagged = Без тегов
 folder-controls-filter-subtitles = С субтитрами
 folder-controls-filter-comments = С комментарием
 folder-controls-filter-markers = С маркерами
-folder-controls-scroll = Прокрутить к файлу
-folder-controls-open = Открыть папку (правый клик: открыть файл)
+folder-controls-scroll = Показать открытый файл в списке
+folder-controls-open = Открыть папку
 folder-controls-batch = Пакетные действия с отмеченными файлами
 folder-controls-batch-back = Назад к открытому файлу
 folder-controls-update-available = Доступно обновление: { $version }
+folder-controls-previous = Предыдущий файл
+folder-controls-next = Следующий файл
+folder-controls-open-file = Правый клик: открыть один файл
 
 ## Video
 
-video-controls-set-in = [  Точка входа
-video-controls-set-out = ]  Точка выхода
-video-controls-screenshot = Сохранить этот кадр как JPEG (F12)
-video-controls-add-marker = Добавить маркер (F2, удерживайте для диапазона; ещё раз — назвать)
+video-controls-back = Назад на 10 с
+video-controls-play = Воспроизвести
+video-controls-pause = Пауза
+video-controls-forward = Вперёд на 10 с
+video-controls-set-in = Поставить точку входа
+video-controls-set-out = Поставить точку выхода
+video-controls-screenshot = Сохранить этот кадр
+video-controls-add-marker = Добавить маркер
+video-controls-add-marker-hold = Удерживайте для диапазона; нажмите ещё раз, чтобы назвать
 video-controls-cannot-hold-markers = Этот файл не может хранить маркеры
 video-controls-add-a-name = Добавить имя
-video-controls-rotate-left = Повернуть влево (Ctrl+Alt+←)
-video-controls-rotate-right = Повернуть вправо (Ctrl+Alt+→)
+video-controls-rotate-left = Повернуть влево
+video-controls-rotate-right = Повернуть вправо
+video-controls-more = Ещё
+media-viewer-loading-slow = Ждём файл… (файл из облака может загружаться долго)
+media-viewer-cannot-play = Этот клип не воспроизводится
+media-viewer-no-picture = В этом файле нет видеоизображения
+video-controls-volume-scroll = Громкость — прокрутите, чтобы изменить
 rotate-cannot = Нельзя повернуть: { $reason }
 rotate-reason-missing = файла больше нет на месте
 rotate-flag-right = 90° вправо
@@ -400,27 +530,73 @@ batch-action-rotate-right = На 90° вправо (по часовой стре
 batch-action-rotate-left = На 90° влево (против часовой стрелки)
 batch-action-rotate-half = На 180°
 batch-action-rotate-reset = Сбросить: без поворота (0°)
-media-viewer-video-show-subtitles = Показать список субтитров
-media-viewer-video-hide-subtitles = Скрыть список субтитров
-media-viewer-video-markers-hint = Маркеры (Shift+F1 / Shift+F3 — переход, Shift+перетаскивание — привязка)
+media-viewer-video-subtitle-list = Список субтитров
+media-viewer-video-marker-list = Список маркеров
+media-viewer-video-markers-hint = Shift+F1 / Shift+F3 — переход между маркерами; Shift+перетаскивание — привязка
 media-viewer-video-tab-markers = Маркеры
+media-viewer-video-fullscreen = Во весь экран
+media-viewer-video-close-list = Закрыть список
 
 ## Markers list
+markers-in-out = Точки входа и выхода
 
 markers-empty = Маркеров пока нет
-markers-add = 📍 Добавить маркер (F2)
+markers-add = Добавить маркер
 markers-ai-hint = Маркер AI: заменяется при повторном описании этого клипа
 markers-keep-color = Оставить цвет
-markers-done-enter = Готово (Enter)
+markers-done = Готово
 markers-delete = Удалить маркер
+markers-cannot-hold-hint = Premiere читает маркеры из файлов MP4 и MOV.
+markers-color-green = Зелёный
+markers-color-red = Красный
+markers-color-orange = Оранжевый
+markers-color-yellow = Жёлтый
+markers-color-white = Белый
+markers-color-blue = Синий
+markers-color-cyan = Голубой
+markers-color-lavender = Лавандовый
+markers-color-magenta = Пурпурный
+markers-color-other = Другой цвет
 markers-read-only = только чтение
 markers-name-placeholder = Имя
 
 ## File workspace
 
+file-workspace-search-placeholder = Найти тег — или просто печатайте
+file-workspace-search-clear = Очистить
 file-workspace-comment-placeholder = Комментарий...
 file-workspace-comment-collapse = Назад к тегам
 file-workspace-comment-expand = Развернуть комментарий
+
+## Tag grid
+
+tag-grid-star = Звезда: держать наверху
+tag-grid-unstar = Убрать звезду
+tag-grid-save = Добавить в теги папки
+tag-grid-delete = Удалить «{ $tag }» из тегов папки
+tag-grid-create = Создать «{ $tag }»
+tag-grid-no-file = Откройте клип, чтобы ставить теги
+tag-grid-no-tags = Тегов пока нет
+tag-grid-no-tags-hint = Наберите название и нажмите Enter, чтобы создать первый.
+tag-grid-group-unsaved = Нет в тегах папки
+tag-grid-group-folder = Теги папки
+tag-grid-more = ещё { $count }
+
+## Order strip
+
+sync-panel-locked = Перестановка ниже меняет порядок папки
+sync-panel-unlocked = Перестановка ниже меняет только этот клип
+sync-panel-unlock = Открепить
+sync-panel-lock = Закрепить
+sync-panel-differs = Порядок не как в папке
+sync-panel-use-for-folder = Сделать порядком папки
+sync-panel-sort-like-folder = Упорядочить как в папке
+sync-panel-no-undo = Это пока нельзя отменить
+
+## File name card
+
+file-name-panel-no-tags = У клипа нет тегов
+file-name-panel-untag = Снять тег
 
 ## Updates (Settings)
 
@@ -438,3 +614,13 @@ updates-update-and-restart = Обновить и перезапустить
 updates-wait-for-batch = Подождите завершения пакетного действия
 updates-current-version = frename { $version }
 updates-check-on-start = Проверять обновления при запуске frename
+settings-spend-label = Расходы
+settings-spend-line = Сегодня { $today } · за месяц { $month }
+settings-spend-since = С момента пополнения на { $top_up }: { $spent }
+settings-spend-left = Остаток: { $amount } (оценка)
+settings-spend-none = Запишите пополнение, чтобы увидеть примерный остаток.
+settings-spend-note = Считается то, что потратил frename; на странице сервиса может быть больше. День вводится как ГГГГ-ММ-ДД.
+settings-topup-amount-placeholder = Добавлено, $
+settings-topup-date-placeholder = День, пусто: сегодня
+settings-topup-record = Записать пополнение
+settings-topup-refused = Введите сумму числом и день в виде ГГГГ-ММ-ДД.

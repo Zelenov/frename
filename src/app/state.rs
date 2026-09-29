@@ -10,10 +10,10 @@
 use iced::{event, keyboard, window, Element, Subscription, Task};
 
 use crate::features::{
-    batch, drag_drop, drag_out, folder, folder_workspace, media_viewer,
+    batch, drag_drop, drag_out, file_menu, folder, folder_workspace, media_viewer,
     media_viewer::video as media_viewer_video, settings, tag_panel, updates,
 };
-use crate::tag_colors::TagPalette;
+use crate::ui::palette::TagPalette;
 use frename_core::ai::key::{self as api_key, ApiKey};
 use frename_core::{AppDatabase, AppStateStore, WindowGeometry};
 
@@ -91,6 +91,21 @@ fn main_window_event(
         }) => Some(Message::FolderWorkspace(
             folder_workspace::Message::ToggleMediaFullscreen,
         )),
+        // F11 shows the open file in Explorer, Shift+F11 copies its path, Ctrl+F11 its name:
+        // always, like the other F-keys. A held key acts once.
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key,
+            modifiers,
+            repeat,
+            ..
+        }) if file_menu::FileAction::from_key(&key, modifiers).is_some() => {
+            if repeat {
+                return Some(Message::Noop);
+            }
+            file_menu::FileAction::from_key(&key, modifiers).map(|action| {
+                Message::FolderWorkspace(folder_workspace::Message::FileAction(action))
+            })
+        }
         // [ / ] always set segment IN/OUT (even when search bar has focus).
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
             key: keyboard::Key::Character(c),
@@ -326,9 +341,10 @@ impl FrenameApp {
             settings_window: None,
             window_icon,
             window_pos: saved.map(|g| (g.x, g.y)).unwrap_or((0.0, 0.0)),
-            window_size: saved
-                .map(|g| (g.width, g.height))
-                .unwrap_or((1200.0, 600.0)),
+            window_size: saved.map(|g| (g.width, g.height)).unwrap_or((
+                crate::ui::tokens::WINDOW_WIDTH,
+                crate::ui::tokens::WINDOW_HEIGHT,
+            )),
             is_maximized: saved.map(|g| g.is_maximized).unwrap_or(false),
             monitor_size: saved
                 .map(|g| (g.monitor_width, g.monitor_height))
@@ -543,6 +559,13 @@ impl FrenameApp {
                     settings::Message::Key(..) => Task::none(),
                     settings::Message::SetSubtitleLanguage(..)
                     | settings::Message::SetSubtitleCueLength(_) => self.subtitle_config(),
+                    // A recorded top-up changes what the batch panels say is left.
+                    settings::Message::TopUp(_, settings::TopUpMessage::Record) => {
+                        Task::done(Message::FolderWorkspace(folder_workspace::Message::Batch(
+                            batch::Message::Action(batch::ActionMessage::RefreshCredit),
+                        )))
+                    }
+                    settings::Message::TopUp(..) => Task::none(),
                     settings::Message::SetMonochromeTags(_)
                     | settings::Message::ShowPage(_)
                     | settings::Message::NextPage
@@ -772,6 +795,7 @@ impl FrenameApp {
     /// shows the page it showed last, or Updates when an update is ready (the dot on the
     /// settings button leads there).
     fn open_settings_on(&mut self, page: Option<settings::Page>) -> Task<Message> {
+        self.settings.refresh_spend();
         let update_ready = self.settings.updates().available_version().is_some();
         let page = settings::Page::to_open(page, update_ready);
         let show = page.map_or_else(Task::none, |page| {
@@ -813,12 +837,9 @@ impl FrenameApp {
 
     /// The theme of a window: the design system's in Settings; the main window keeps iced's dark
     /// theme until it moves onto the system (#59).
-    pub fn theme(&self, window_id: window::Id) -> iced::Theme {
-        if self.settings_window == Some(window_id) {
-            crate::ui::theme()
-        } else {
-            iced::Theme::Dark
-        }
+    /// Every window is on the design system.
+    pub fn theme(&self, _window_id: window::Id) -> iced::Theme {
+        crate::ui::theme()
     }
 
     /// Feature subscriptions (file drop, window opened, global keyboard to search bar).
