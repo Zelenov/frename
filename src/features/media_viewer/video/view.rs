@@ -269,7 +269,8 @@ fn controls_of<'a>(
 }
 
 /// The controls bar (§13.3.5): transport · in/out · mark · rotate · the notice slot · time ·
-/// volume · views, the groups 12 px apart, their buttons touching.
+/// volume · views, the groups 12 px apart, their buttons touching (the views' 2 px apart, so lit
+/// ones do not weld).
 fn controls_bar<'a>(
     state: &'a VideoPlayerState,
     markers: MarkersView<'a>,
@@ -340,7 +341,13 @@ fn controls_bar<'a>(
         );
     }
     views.push(fullscreen_command(is_fullscreen).button());
-    groups.push(Row::with_children(views).align_y(Alignment::Center).into());
+    // Lit views buttons (lists, fullscreen) sit side by side: with no gap their fills weld.
+    groups.push(
+        Row::with_children(views)
+            .spacing(SPACE_XXS)
+            .align_y(Alignment::Center)
+            .into(),
+    );
 
     container(
         Row::with_children(groups)
