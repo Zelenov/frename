@@ -302,7 +302,7 @@ impl FolderWorkspace {
     }
 
     /// Keep the last marker passed by the playhead in view while the marker
-    /// list is shown, except while a row is open for editing. Scrolls only when the lit row
+    /// list is shown, except while a row is open for editing. Scrolls only when the followed row
     /// changed, so a list scrolled by hand is not fought on every tick.
     pub(super) fn follow_marker_list(&mut self, force: bool) -> Task<Message> {
         if !self.media_viewer.marker_list_shown() {
@@ -318,13 +318,13 @@ impl FolderWorkspace {
         ) else {
             return Task::none();
         };
-        let lit = markers::view::passed_index(markers, position_ms);
-        if !self.markers.follow(lit) && !force {
+        let passed = markers::view::passed_index(markers, position_ms);
+        if !self.markers.follow(passed) && !force {
             return Task::none();
         }
         scroll_marker_list_to(markers::view::row_offset(
             markers,
-            lit.unwrap_or(0).saturating_sub(1),
+            passed.unwrap_or(0).saturating_sub(1),
         ))
     }
 

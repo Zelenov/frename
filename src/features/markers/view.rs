@@ -449,6 +449,14 @@ mod tests {
     }
 
     #[test]
+    fn a_point_marker_is_lit_for_two_seconds_and_then_not_at_all() {
+        let markers = [Marker::new(5_000)];
+        assert_eq!(lit_index(&markers, 7_000), Some(0));
+        assert_eq!(lit_index(&markers, 7_001), None);
+        assert_eq!(lit_index(&markers, 90_000), None);
+    }
+
+    #[test]
     fn overlapping_markers_light_the_one_the_bar_labels() {
         let mut long = Marker::new(1_000);
         long.duration_ms = 20_000;

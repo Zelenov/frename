@@ -1,6 +1,6 @@
 # 0.88
 ## Fixed
-- The marker list highlights a marker only while the playhead is on it, as the label over the timeline does: the last marker no longer stays lit until the end of the clip.
+- The marker list lights a marker only while the playhead is on it; the last marker no longer stays lit until the end of the clip.
 
 # 0.87
 ## Added
