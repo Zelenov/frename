@@ -1,3 +1,7 @@
+# 0.84
+## Fixed
+- A comment you clear no longer comes back when you return to the clip right away.
+
 # 0.83
 ## Added
 - Generate subtitles: choose what is written for each video, **SRT subtitles** (`clip.srt`, as before) and/or a **Premiere Pro transcript** (`clip.premiere.json`, for Import Static Transcript in Premiere's Text panel). The choice is remembered like the other batch options.
