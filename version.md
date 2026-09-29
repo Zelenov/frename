@@ -1,6 +1,6 @@
 # 0.84
-## Changed
-- A comment you clear is now really cleared: going back to the clip right after leaving it no longer shows the old comment, and leaving it again no longer saves the old comment over the cleared one.
+## Fixed
+- A comment you clear no longer comes back when you return to the clip right away.
 
 # 0.83
 ## Added

@@ -801,8 +801,13 @@ impl FolderWorkspace {
             self.markers.reset();
         }
         let snapshot = self.file_workspace.get_snapshot();
-        self.file_workspace
-            .set_file(Some(self.with_pending_edits(&file)));
+        // A same-file refresh (undo, in-place rename) brings its own, newer state.
+        let opened = if same_file {
+            file.clone()
+        } else {
+            self.with_pending_edits(&file)
+        };
+        self.file_workspace.set_file(Some(opened));
         if !same_file {
             self.markers_loaded(file.id());
         }

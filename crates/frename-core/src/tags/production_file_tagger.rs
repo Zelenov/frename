@@ -747,8 +747,9 @@ mod tests {
         );
     }
 
-    /// Issue #125: clearing a comment and leaving the clip left the old one in the video (or in
-    /// the file list's line), so it came back. The whole path: scan, edit, save, scan again.
+    /// Issue #125 asked whether a cleared comment is really gone from the video, the text file
+    /// and the file list. It is: a guard for that path (scan, edit, save, scan again), not a
+    /// reproduction of the bug, which was in the workspace (see the folder workspace tests).
     #[test]
     fn a_cleared_comment_stays_cleared_in_the_video_and_the_file_list() {
         let tagger = ProductionFileTagger;
