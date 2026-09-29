@@ -3,7 +3,7 @@
 //! We pass only data to each feature view (directory, current_file, selected_file, etc.).
 //! We do not tell any feature how to look (scrollable, rectangular, etc.); each feature view owns its appearance.
 
-use iced::widget::{column, container, mouse_area, row, stack};
+use iced::widget::{column, container, mouse_area, opaque, row, stack};
 use iced::{Alignment, Element, Length};
 
 use crate::features::folder::view::ListProps;
@@ -137,13 +137,16 @@ pub fn view(
     // scrollable positions only when the widget-tree structure stays identical.
     // The overlay is the fullscreen media view when active, or an invisible space.
     let overlay: Element<'_, Message> = if state.media_fullscreen() {
-        container(
-            media_viewer::view::view(state.media_viewer(), true, seg_start, seg_end, markers)
-                .map(Message::MediaViewer),
+        // `opaque`: the layers below get no cursor, so their tooltips and mouse cursors
+        // (buttons, text fields) do not show through the fullscreen video.
+        opaque(
+            container(
+                media_viewer::view::view(state.media_viewer(), true, seg_start, seg_end, markers)
+                    .map(Message::MediaViewer),
+            )
+            .width(Length::Fill)
+            .height(Length::Fill),
         )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
     } else {
         iced::widget::Space::new().into()
     };
