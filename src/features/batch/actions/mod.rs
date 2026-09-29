@@ -26,6 +26,8 @@ use std::sync::atomic::AtomicBool;
 
 use clipscribe::AiUsage;
 use clipscribe::Model;
+use frename_core::ai::key::ApiKey;
+use frename_core::ai::ledger::SpendSummary;
 use frename_core::{
     CommentStorage, File, FileId, FileSnapshot, FileTagger, FolderInfo, InOutStorage, MoveOutcome,
 };
@@ -76,6 +78,15 @@ impl Action {
             Self::ReloadFiles => reload_files::label(),
             Self::DescribeAi => describe_ai::label(),
             Self::GenerateSubtitles => generate_subtitles::label(),
+        }
+    }
+
+    /// The paid service the action bills, when it is one.
+    pub fn service(self) -> Option<ApiKey> {
+        match self {
+            Self::DescribeAi => Some(ApiKey::Anthropic),
+            Self::GenerateSubtitles => Some(ApiKey::Soniox),
+            _ => None,
         }
     }
 
@@ -233,7 +244,14 @@ impl Operation {
             Self::FixTags => fix_tags::run(path),
             Self::RespaceTags => tag_spacing::run(path),
             Self::ReloadFiles => reload_files::run(path),
-            Self::DescribeAi(options) => describe_ai::run(*options, path, cancel, progress),
+            Self::DescribeAi(options) => {
+                let mut result = describe_ai::run(*options, path, cancel, progress);
+                // What the requests cost, at the model's prices, for the spend ledger.
+                result.spend = result
+                    .usage
+                    .map(|usage| (ApiKey::Anthropic, options.model().cost_usd(usage)));
+                result
+            }
             Self::GenerateSubtitles(run) => generate_subtitles::run(run, path, cancel, progress),
         }
     }
@@ -301,6 +319,13 @@ pub enum ActionMessage {
     /// Have the settings read whether a Soniox key is saved; the answer comes back as
     /// `GenerateSubtitles(KeyState)`. Handled by the app.
     ReadSonioxKeyState,
+    /// Open the page where a paid service's credit is added. Handled by the workspace.
+    OpenBilling(ApiKey),
+    /// Read the spend ledger again (a top-up was recorded); the answer comes back as
+    /// `CreditRead`. Handled by the workspace.
+    RefreshCredit,
+    /// What a service cost and what is probably left, read from the ledger.
+    CreditRead(ApiKey, SpendSummary),
 }
 
 impl ActionMessage {
@@ -308,6 +333,7 @@ impl ActionMessage {
     pub fn applies_while_running(&self) -> bool {
         match self {
             Self::GenerateSubtitles(message) => message.applies_while_running(),
+            Self::CreditRead(..) => true,
             _ => matches!(
                 self,
                 Self::DescribeAi(
@@ -330,6 +356,31 @@ pub struct Actions {
     rotate: rotate::Options,
     describe_ai: describe_ai::Options,
     generate_subtitles: generate_subtitles::Options,
+    /// What each paid service cost and what is probably left of it.
+    credit: Credit,
+}
+
+/// What each paid service cost and what is probably left of it, from the spend ledger.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Credit {
+    anthropic: SpendSummary,
+    soniox: SpendSummary,
+}
+
+impl Credit {
+    pub fn of(&self, service: ApiKey) -> SpendSummary {
+        match service {
+            ApiKey::Anthropic => self.anthropic,
+            ApiKey::Soniox => self.soniox,
+        }
+    }
+
+    fn set(&mut self, service: ApiKey, summary: SpendSummary) {
+        match service {
+            ApiKey::Anthropic => self.anthropic = summary,
+            ApiKey::Soniox => self.soniox = summary,
+        }
+    }
 }
 
 impl Actions {
@@ -345,7 +396,10 @@ impl Actions {
             | ActionMessage::OpenAiSettings
             | ActionMessage::ReadKeyState
             | ActionMessage::OpenSubtitleSettings
-            | ActionMessage::ReadSonioxKeyState => {}
+            | ActionMessage::ReadSonioxKeyState
+            | ActionMessage::OpenBilling(_)
+            | ActionMessage::RefreshCredit => {}
+            ActionMessage::CreditRead(service, summary) => self.credit.set(service, summary),
         }
     }
 
@@ -533,8 +587,16 @@ impl Actions {
     /// The page of `action` for the `checked` files, and its run button.
     pub fn panel(&self, action: Action, checked: &[&File]) -> Panel<'_> {
         let page = match action {
-            Action::DescribeAi => return self.describe_ai.panel(checked),
-            Action::GenerateSubtitles => return self.generate_subtitles.panel(checked),
+            Action::DescribeAi => {
+                return self
+                    .describe_ai
+                    .panel(checked, self.credit.of(ApiKey::Anthropic))
+            }
+            Action::GenerateSubtitles => {
+                return self
+                    .generate_subtitles
+                    .panel(checked, self.credit.of(ApiKey::Soniox))
+            }
             Action::MoveComments => self.move_comments.view().map(ActionMessage::MoveComments),
             Action::MoveInOut => self.move_in_out.view().map(ActionMessage::MoveInOut),
             Action::MarkersComment => self
@@ -567,6 +629,41 @@ pub struct Panel<'a> {
     pub reason: Option<String>,
 }
 
+/// The plan row for what is probably left on `service`: `about $3.10`, or `None` when no top-up
+/// was recorded (nothing is known then). It is an estimate, and says so.
+pub fn credit_left_row(summary: SpendSummary) -> Option<(String, String)> {
+    let left = summary.remaining()?;
+    Some((
+        fl!("batch-plan-credit-left"),
+        fl!(
+            "batch-credit-left-value",
+            amount = describe_ai::dollars(left)
+        ),
+    ))
+}
+
+/// The warning shown before a run that costs about `cost` on `service` when that is probably
+/// more than what is left, with the button that opens the service's billing page.
+pub fn credit_low_notice<'a>(
+    service: ApiKey,
+    summary: SpendSummary,
+    cost: f64,
+) -> Option<Element<'a, ActionMessage>> {
+    let left = summary.remaining().filter(|_| summary.would_exceed(cost))?;
+    Some(crate::ui::layout::notice(
+        crate::ui::layout::NoticeKind::Warning,
+        fl!(
+            "batch-credit-low",
+            cost = describe_ai::dollars(cost),
+            left = describe_ai::dollars(left)
+        ),
+        None,
+        [crate::ui::button::secondary(fl!("batch-add-credit"))
+            .on_press(ActionMessage::OpenBilling(service))
+            .into()],
+    ))
+}
+
 /// What a job's AI requests to `model` cost: `$0.31 (Claude Haiku 4.5)`.
 pub fn spend_line(model: Model, usage: AiUsage) -> String {
     format!(
@@ -591,6 +688,65 @@ fn item_result(outcome: MoveOutcome) -> ItemResult {
 fn reparsed(path: PathBuf) -> (PathBuf, FileSnapshot) {
     let snapshot = FileTagger::parse(&path, &FolderInfo::default());
     (path, snapshot)
+}
+
+#[cfg(test)]
+mod credit_tests {
+    use super::*;
+    use frename_core::ai::ledger::TopUp;
+
+    fn summary(top_up: f64, spent: f64) -> SpendSummary {
+        SpendSummary {
+            top_up: Some(TopUp {
+                usd: top_up,
+                at_ms: 0,
+            }),
+            since_top_up: Some(spent),
+            ..SpendSummary::default()
+        }
+    }
+
+    #[test]
+    fn the_left_row_shows_only_when_a_top_up_is_known() {
+        assert!(credit_left_row(SpendSummary::default()).is_none());
+        let (label, value) = credit_left_row(summary(20.0, 4.0)).expect("a row");
+        assert_eq!(label, fl!("batch-plan-credit-left"));
+        assert!(value.contains("$16.00"), "{value}");
+    }
+
+    #[test]
+    fn a_run_is_warned_about_only_when_it_costs_more_than_what_is_left() {
+        let low = summary(5.0, 4.5);
+        assert!(credit_low_notice(ApiKey::Anthropic, low, 1.0).is_some());
+        assert!(credit_low_notice(ApiKey::Anthropic, low, 0.4).is_none());
+        assert!(
+            credit_low_notice(ApiKey::Soniox, SpendSummary::default(), 100.0).is_none(),
+            "nothing recorded, nothing known"
+        );
+    }
+
+    #[test]
+    fn only_the_paid_actions_have_a_service() {
+        assert_eq!(Action::DescribeAi.service(), Some(ApiKey::Anthropic));
+        assert_eq!(Action::GenerateSubtitles.service(), Some(ApiKey::Soniox));
+        assert_eq!(Action::Rotate.service(), None);
+    }
+
+    #[test]
+    fn the_ledger_figures_reach_the_panels_through_a_message() {
+        let mut actions = Actions::default();
+        assert_eq!(actions.credit.of(ApiKey::Soniox).remaining(), None);
+        actions.update(ActionMessage::CreditRead(
+            ApiKey::Soniox,
+            summary(10.0, 1.0),
+        ));
+        assert_eq!(actions.credit.of(ApiKey::Soniox).remaining(), Some(9.0));
+        assert_eq!(actions.credit.of(ApiKey::Anthropic).remaining(), None);
+        assert!(
+            ActionMessage::CreditRead(ApiKey::Soniox, SpendSummary::default())
+                .applies_while_running()
+        );
+    }
 }
 
 #[cfg(test)]

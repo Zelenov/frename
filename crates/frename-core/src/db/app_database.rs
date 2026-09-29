@@ -47,7 +47,7 @@ static CONNECTIONS: OnceLock<Mutex<HashMap<PathBuf, Arc<Mutex<Connection>>>>> = 
 
 /// Locks a connection, recovering the guard if another thread panicked while holding it.
 /// A poisoned lock means a previous caller panicked mid-query, not that the connection is unusable.
-fn lock_connection(conn: &Arc<Mutex<Connection>>) -> MutexGuard<'_, Connection> {
+pub(super) fn lock_connection(conn: &Arc<Mutex<Connection>>) -> MutexGuard<'_, Connection> {
     conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
@@ -89,7 +89,7 @@ impl AppDatabase {
     }
 
     /// Returns the shared connection for this database's path, opening it on first use.
-    fn conn(&self) -> Result<Arc<Mutex<Connection>>, rusqlite::Error> {
+    pub(super) fn conn(&self) -> Result<Arc<Mutex<Connection>>, rusqlite::Error> {
         let cache = CONNECTIONS.get_or_init(|| Mutex::new(HashMap::new()));
         let mut cache = cache
             .lock()

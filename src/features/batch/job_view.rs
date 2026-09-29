@@ -216,11 +216,15 @@ fn notice<'a>(state: &BatchState, outcome: &Outcome, progress: &Progress) -> Ele
             None,
         ),
     };
-    let fix = (state.out_of_credit()).then(|| {
-        button::secondary(fl!("batch-add-credit"))
-            .on_press(Message::OpenBilling)
-            .into()
-    });
+    let fix = state
+        .out_of_credit()
+        .then(|| state.job_action().unwrap_or(state.action()).service())
+        .flatten()
+        .map(|service| {
+            button::secondary(fl!("batch-add-credit"))
+                .on_press(Message::OpenBilling(service))
+                .into()
+        });
     layout::notice(outcome.kind(), headline, detail, fix)
 }
 

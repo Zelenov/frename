@@ -348,14 +348,17 @@ pub fn prepare(args: &DemoArgs, work: &Path) -> Result<DemoRun, String> {
     let folder = work.join("folder");
     let file = frename_core::demo::stage(&scenario, scenario_dir, &folder)
         .map_err(|e| format!("cannot stage the demo folder: {e}"))?;
-    frename_core::demo::seed(
-        &frename_core::AppDatabase::new(),
-        &scenario,
-        &folder,
-        &file,
-        args.mono,
-        &args.lang,
-    );
+    let db = frename_core::AppDatabase::new();
+    for credit in &scenario.credit {
+        let service = match credit.service.as_str() {
+            "anthropic" => ApiKey::Anthropic,
+            "soniox" => ApiKey::Soniox,
+            other => return Err(format!("no service is named {other:?}")),
+        };
+        db.set_ai_top_up(service, credit.top_up, None);
+        db.record_ai_spend(service, credit.spent);
+    }
+    frename_core::demo::seed(&db, &scenario, &folder, &file, args.mono, &args.lang);
     Ok(DemoRun::new(
         scenario,
         args.out.clone(),

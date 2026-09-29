@@ -13,6 +13,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use frename_core::ai::key::{self, ApiKey, KeyState};
+use frename_core::ai::ledger::SpendSummary;
 use frename_core::{subtitle_path, CueLength, File, FileId, FileTagger};
 use iced::widget::column;
 use iced::Element;
@@ -352,7 +353,7 @@ impl Options {
     }
 
     /// The page for `checked` and its run button.
-    pub fn panel(&self, checked: &[&File]) -> Panel<'_> {
+    pub fn panel(&self, checked: &[&File], credit: SpendSummary) -> Panel<'_> {
         let plan = self.plan_for(checked);
         let (run, ready) = match plan {
             None => (fl!("batch-subtitles-transcribe"), false),
@@ -379,14 +380,14 @@ impl Options {
             (plan.is_none() && !checked.is_empty()).then(|| fl!("batch-reason-estimate"))
         };
         Panel {
-            page: self.view(plan),
+            page: self.view(plan, credit),
             run,
             ready,
             reason,
         }
     }
 
-    fn view(&self, plan: Option<&Plan>) -> Element<'_, ActionMessage> {
+    fn view(&self, plan: Option<&Plan>, credit: SpendSummary) -> Element<'_, ActionMessage> {
         let languages = if self.config.languages.is_empty() {
             fl!("batch-subtitles-languages-auto")
         } else {
@@ -445,6 +446,7 @@ impl Options {
                 let mut lines = plan_lines(plan, price).into_iter();
                 column![]
                     .push(lines.next().map(text::strong))
+                    .push(super::credit_left_row(credit).map(|row| page::plan([row])))
                     .push(page::notes(lines))
                     .spacing(SPACE_XXS)
                     .into()
@@ -461,7 +463,26 @@ impl Options {
             settings
                 .into_iter()
                 .chain([estimate, notes])
+                .chain(self.credit_notice(plan, credit))
                 .chain(self.key_notice()),
+        )
+    }
+
+    /// The warning before a run that costs more than what is probably left.
+    fn credit_notice(
+        &self,
+        plan: Option<&Plan>,
+        credit: SpendSummary,
+    ) -> Option<Element<'_, ActionMessage>> {
+        let plan = plan.filter(|p| p.transcribe > 0 && p.audio_s > 0.0)?;
+        let price = match self.key {
+            Some(KeyState::Saved) => self.price()?,
+            _ => Price::Typical,
+        };
+        super::credit_low_notice(
+            ApiKey::Soniox,
+            credit,
+            price.usd_per_hour() * plan.audio_s / 3600.0,
         )
     }
 
@@ -851,11 +872,15 @@ pub fn run(job: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress)
         finished.store(true, Ordering::Relaxed);
         result
     });
-    if let Some(seconds) = result.as_ref().ok().and_then(Outcome::uploaded_s) {
+    let uploaded_s = result.as_ref().ok().and_then(Outcome::uploaded_s);
+    if let Some(seconds) = uploaded_s {
         job.uploaded_ms
             .fetch_add((seconds * 1000.0) as u64, Ordering::Relaxed);
     }
-    item_result(&path, result, token.is_cancelled())
+    let mut item = item_result(&path, result, token.is_cancelled());
+    // What was sent, at the price the estimate used, for the spend ledger.
+    item.spend = uploaded_s.map(|seconds| (ApiKey::Soniox, job.usd_per_hour * seconds / 3600.0));
+    item
 }
 
 /// One file through sonisub. A saved transcript next to it needs no key.
@@ -905,6 +930,7 @@ fn item_result(path: &Path, result: anyhow::Result<Outcome>, cancelled: bool) ->
     let reason = failure_reason(&e);
     let mut result = ItemResult::failed(reason.clone());
     if let Some(api) = api_error(&e).filter(|api| api.is_fatal()) {
+        result.out_of_credit = api.error_type == "organization_balance_exhausted";
         let key_rejected = matches!(api.status, Some(401))
             || api.error_type == "unauthenticated"
             || api.error_type == "permission_denied";
@@ -1251,7 +1277,7 @@ mod tests {
             }),
         });
         assert!(options.operation().is_none());
-        let super::Panel { ready, reason, .. } = options.panel(&[&a]);
+        let super::Panel { ready, reason, .. } = options.panel(&[&a], SpendSummary::default());
         assert!(!ready);
         assert_eq!(reason, Some(fl!("batch-reason-subtitles-no-format")));
 
@@ -1394,6 +1420,38 @@ mod tests {
                 message = "message from Soniox"
             ))
         );
+    }
+
+    #[test]
+    fn an_empty_balance_says_the_credit_is_used_up_and_other_errors_do_not() {
+        let path = Path::new("clip.mp4");
+        let empty = item_result(
+            path,
+            Err(soniox_error(402, "organization_balance_exhausted")),
+            false,
+        );
+        assert!(empty.out_of_credit);
+        let budget = item_result(
+            path,
+            Err(soniox_error(402, "organization_monthly_budget_exhausted")),
+            false,
+        );
+        assert!(
+            !budget.out_of_credit,
+            "a budget set by the user is not the balance"
+        );
+        let other = item_result(path, Err(soniox_error(400, "invalid_audio_file")), false);
+        assert!(!other.out_of_credit);
+    }
+
+    #[test]
+    fn a_saved_transcript_costs_nothing() {
+        let folder = Folder::new("free");
+        let video = folder.video("clip.mp4");
+        folder.file("clip.soniox.json", TRANSCRIPT);
+        let result = run_now(&job(HashMap::new(), false), &video);
+        assert_eq!(result.status, ItemStatus::Done, "{:?}", result.reason);
+        assert_eq!(result.spend, None, "nothing was sent to Soniox");
     }
 
     #[test]
@@ -1565,7 +1623,7 @@ mod tests {
         options.update(Message::PriceReady(Price::Learned(0.1)));
         assert!(options.operation().is_some());
         // Only the label and readiness: the page borrows the options.
-        let super::Panel { run, ready, .. } = options.panel(&[&a]);
+        let super::Panel { run, ready, .. } = options.panel(&[&a], SpendSummary::default());
         assert_eq!(
             (run, ready),
             (
