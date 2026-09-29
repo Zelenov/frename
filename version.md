@@ -1,3 +1,7 @@
+# 0.88
+## Fixed
+- The marker list highlights a marker only while the playhead is on it, as the label over the timeline does: the last marker no longer stays lit until the end of the clip.
+
 # 0.87
 ## Added
 - Spending on the paid services: Settings → Describe with AI and → Subtitles show what frename spent today, this month and since your last top-up. Record a top-up (the amount and the day) and they show about how much is left, marked as an estimate; the batch page shows it before Run and warns when a run costs more, with a button to the billing page. After a "no credit left" stop the estimate reads zero until you record a new top-up.

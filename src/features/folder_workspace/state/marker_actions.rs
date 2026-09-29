@@ -301,7 +301,7 @@ impl FolderWorkspace {
         ])
     }
 
-    /// Keep the lit row (the last marker at or before the playhead) in view while the marker
+    /// Keep the last marker passed by the playhead in view while the marker
     /// list is shown, except while a row is open for editing. Scrolls only when the lit row
     /// changed, so a list scrolled by hand is not fought on every tick.
     pub(super) fn follow_marker_list(&mut self, force: bool) -> Task<Message> {
@@ -318,7 +318,7 @@ impl FolderWorkspace {
         ) else {
             return Task::none();
         };
-        let lit = markers::view::lit_index(markers, position_ms);
+        let lit = markers::view::passed_index(markers, position_ms);
         if !self.markers.follow(lit) && !force {
             return Task::none();
         }
