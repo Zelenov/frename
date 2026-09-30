@@ -142,6 +142,14 @@ impl MarkerColor {
             Self::Other(_) => "Other",
         }
     }
+
+    /// The picker color called `name`, ignoring case; `None` for any other word.
+    pub fn from_name(name: &str) -> Option<Self> {
+        let name = name.trim();
+        Self::ALL
+            .into_iter()
+            .find(|c| c.name().eq_ignore_ascii_case(name))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -163,13 +171,17 @@ pub fn format_marker_time(ms: u64) -> String {
     }
 }
 
-/// The marker as one comment line: `<time>[–<time>] — <name>[ — <comment>]`. Line breaks of
-/// the marker's comment become spaces.
+/// The marker as one comment line: `<time>[–<time>][ [color]] — <name>[ — <comment>]`. The
+/// color is written only when it is not the default green and is one the picker offers (a
+/// color frename does not know has no name). Line breaks of the marker's comment become spaces.
 pub fn format_marker_line(marker: &Marker) -> String {
     let mut line = format_marker_time(marker.start_ms);
     if marker.duration_ms > 0 {
         line.push('–');
         line.push_str(&format_marker_time(marker.end_ms()));
+    }
+    if !matches!(marker.color, MarkerColor::Green | MarkerColor::Other(_)) {
+        line.push_str(&format!(" [{}]", marker.color.name().to_lowercase()));
     }
     line.push_str(" — ");
     line.push_str(marker.name.trim());
@@ -192,6 +204,8 @@ pub struct MarkerLine {
     pub duration_ms: u64,
     pub name: String,
     pub comment: String,
+    /// The `[color]` after the time; green when the line has none.
+    pub color: MarkerColor,
 }
 
 /// A time is `h:mm:ss`, `m:ss` or `mm:ss` with optional `.mmm`, or the old screenshot form
@@ -204,7 +218,7 @@ fn line_re() -> &'static Regex {
         // A range is two times joined by a dash with no spaces. The time must be followed by a
         // separator, so `12:30 call the client back` is not a marker.
         Regex::new(&format!(
-            r"^\s*(?P<start>{TIME})(?:[–-](?P<end>{TIME}))?\s*(?:—|–|--|-|:)(?P<rest>.*)$"
+            r"^\s*(?P<start>{TIME})(?:[–-](?P<end>{TIME}))?(?:\s*\[(?P<color>[^\[\]]*)\])?\s*(?:—|–|--|-|:)(?P<rest>.*)$"
         ))
         .expect("marker line regex")
     })
@@ -273,6 +287,11 @@ pub(crate) fn parse_time(text: &str) -> Option<u64> {
 pub fn parse_marker_line(line: &str) -> Option<MarkerLine> {
     let caps = line_re().captures(line)?;
     let (start_ms, duration_ms) = captured_span(&caps)?;
+    // A bracket after the time is a color; a word that is none makes the line no marker.
+    let color = match caps.name("color") {
+        Some(word) => MarkerColor::from_name(word.as_str())?,
+        None => MarkerColor::Green,
+    };
     let rest = caps["rest"].trim();
     let (name, comment) =
         if let Some(comment) = rest.strip_prefix("— ").or_else(|| rest.strip_prefix("-- ")) {
@@ -289,6 +308,7 @@ pub fn parse_marker_line(line: &str) -> Option<MarkerLine> {
         duration_ms,
         name: name.trim().to_string(),
         comment: comment.trim().to_string(),
+        color,
     })
 }
 
@@ -303,6 +323,7 @@ pub fn parse_ai_line(line: &str) -> Option<MarkerLine> {
         duration_ms,
         name: caps["rest"].trim().to_string(),
         comment: String::new(),
+        color: MarkerColor::Green,
     })
 }
 
@@ -489,9 +510,11 @@ pub fn comment_to_markers(
         marker.duration_ms = parsed.duration_ms;
         marker.name = parsed.name;
         marker.comment = parsed.comment;
-        if in_block {
-            marker.color = AI_MARKER_COLOR;
-        }
+        marker.color = if in_block {
+            AI_MARKER_COLOR
+        } else {
+            parsed.color
+        };
         added.push(marker);
     }
     CommentToMarkers {
@@ -561,6 +584,7 @@ mod tests {
             duration_ms,
             name: name.to_string(),
             comment: comment.to_string(),
+            color: MarkerColor::Green,
         }
     }
 
@@ -762,6 +786,70 @@ mod tests {
         assert_eq!(again, comment);
     }
 
+    #[test]
+    fn every_color_survives_markers_to_comment_to_markers() {
+        let markers: Vec<Marker> = MarkerColor::ALL
+            .into_iter()
+            .enumerate()
+            .map(|(i, color)| {
+                let mut m = marker(1_000 * (i as u64 + 1), 0, "Take", "");
+                m.color = color;
+                m
+            })
+            .collect();
+        let (comment, _) = markers_to_comment("", &markers);
+        assert!(comment.contains("0:02 [red] — Take"), "{comment}");
+        assert!(
+            comment.contains("0:01 — Take"),
+            "green has no tag: {comment}"
+        );
+        let back = comment_to_markers(&comment, &[], None);
+        let mut colors: Vec<_> = back.added.iter().map(|m| (m.start_ms, m.color)).collect();
+        colors.sort_by_key(|c| c.0);
+        let want: Vec<_> = markers.iter().map(|m| (m.start_ms, m.color)).collect();
+        assert_eq!(colors, want);
+        let (again, _) = markers_to_comment("", &back.added);
+        assert_eq!(again, comment, "a second run changes nothing");
+    }
+
+    #[test]
+    fn a_color_tag_reads_in_any_case_and_after_a_range() {
+        let mut want = line(41_000, 6_000, "Lion", "roars");
+        want.color = MarkerColor::Lavender;
+        assert_eq!(
+            parse_marker_line("0:41-0:47 [LaVender] — Lion — roars"),
+            Some(want)
+        );
+    }
+
+    #[test]
+    fn old_and_hand_written_lines_have_the_default_color() {
+        assert_eq!(
+            parse_marker_line("03:24 — shaky").map(|l| l.color),
+            Some(MarkerColor::Green)
+        );
+    }
+
+    #[test]
+    fn a_bracketed_word_in_the_name_is_not_a_color() {
+        let mut m = marker(3_000, 0, "[B-roll] shot", "");
+        assert_eq!(format_marker_line(&m), "0:03 — [B-roll] shot");
+        assert_eq!(
+            parse_marker_line("0:03 — [B-roll] shot"),
+            Some(line(3_000, 0, "[B-roll] shot", ""))
+        );
+        // A name that is spelled like a color keeps it, and the color stays separate.
+        m.name = "[red] shot".to_string();
+        m.color = MarkerColor::Blue;
+        let parsed = parse_marker_line(&format_marker_line(&m)).expect("parses");
+        assert_eq!(
+            (parsed.name.as_str(), parsed.color),
+            ("[red] shot", MarkerColor::Blue)
+        );
+        // An unknown word before the separator makes the line no marker.
+        assert_eq!(parse_marker_line("0:03 [B-roll] — shot"), None);
+    }
+
     const AI_COMMENT: &str = "Mine\n0:02 — Take 3\n\nAI: A walk.\n0:00–0:14 Street, handheld.\n0:14–0:41 Market — spices.\n1:02 A dog barks.";
 
     fn spans(markers: &[Marker]) -> Vec<(u64, u64, &str, MarkerColor)> {
@@ -839,7 +927,7 @@ mod tests {
         assert_eq!(added, 1);
         assert_eq!(
             result,
-            format!("Mine\n0:00–0:14 — Street at night\n\n{block}")
+            format!("Mine\n0:00–0:14 [white] — Street at night\n\n{block}")
         );
     }
 
@@ -897,7 +985,7 @@ mod tests {
         lion.color = MarkerColor::Red;
         assert_eq!(
             markers_into_comment("", &[lion]),
-            "0:41–0:47 — Lion — roars"
+            "0:41–0:47 [red] — Lion — roars"
         );
     }
 

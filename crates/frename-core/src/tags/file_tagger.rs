@@ -524,6 +524,7 @@ AI: A walk.
             duration_ms: 150,
             name: name.to_string(),
             comment: String::new(),
+            color: crate::MarkerColor::Green,
         };
         let mut mine = Marker::new(100);
         mine.name = "Mine".to_string();
