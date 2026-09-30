@@ -69,18 +69,27 @@ const NAME_HOLD_MS: u64 = 2_000;
 /// name it): from just before its start to its end, or to [`NAME_HOLD_MS`] after a point
 /// marker. A marker already started wins over the next one coming up, then the latest start.
 pub fn marker_at(markers: &[Marker], position_ms: u64) -> Option<&Marker> {
+    lit_index(markers, position_ms).map(|index| &markers[index])
+}
+
+/// Index of the lit row: the marker the playhead is on, by the rule of [`marker_at`], so the
+/// list and the progress bar agree. `None` between markers and after the last one.
+pub fn lit_index(markers: &[Marker], position_ms: u64) -> Option<usize> {
     markers
         .iter()
-        .filter(|m| {
+        .enumerate()
+        .filter(|(_, m)| {
             let from = m.start_ms.saturating_sub(MARKER_SNAP_MS);
             let to = m.end_ms().max(m.start_ms + NAME_HOLD_MS);
             (from..=to).contains(&position_ms)
         })
-        .max_by_key(|m| (m.start_ms <= position_ms, m.start_ms))
+        .max_by_key(|(_, m)| (m.start_ms <= position_ms, m.start_ms))
+        .map(|(index, _)| index)
 }
 
-/// Index of the lit row: the last marker at or before `position_ms`.
-pub fn lit_index(markers: &[Marker], position_ms: u64) -> Option<usize> {
+/// Index of the last marker at or before `position_ms`, however long ago: where the list is
+/// kept scrolled to. Not the highlight (see [`lit_index`]).
+pub fn passed_index(markers: &[Marker], position_ms: u64) -> Option<usize> {
     markers.iter().rposition(|m| m.start_ms <= position_ms)
 }
 
@@ -425,12 +434,45 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_lit_row_is_the_last_marker_at_or_before_the_playhead() {
-        let markers = [Marker::new(1_000), Marker::new(5_000)];
+    fn the_lit_row_is_the_marker_the_playhead_is_on() {
+        let mut range = Marker::new(20_000);
+        range.duration_ms = 6_000;
+        let markers = [Marker::new(1_000), Marker::new(5_000), range];
         assert_eq!(lit_index(&markers, 0), None);
         assert_eq!(lit_index(&markers, 1_000), Some(0));
-        assert_eq!(lit_index(&markers, 4_999), Some(0));
-        assert_eq!(lit_index(&markers, 9_000), Some(1));
+        assert_eq!(lit_index(&markers, 2_999), Some(0));
+        assert_eq!(lit_index(&markers, 3_001), None, "between two markers");
+        assert_eq!(lit_index(&markers, 5_500), Some(1));
+        assert_eq!(lit_index(&markers, 23_000), Some(2), "inside a range");
+        assert_eq!(lit_index(&markers, 26_000), Some(2), "at its end");
+        assert_eq!(lit_index(&markers, 26_001), None, "after the last one");
+    }
+
+    #[test]
+    fn a_point_marker_is_lit_for_two_seconds_and_then_not_at_all() {
+        let markers = [Marker::new(5_000)];
+        assert_eq!(lit_index(&markers, 7_000), Some(0));
+        assert_eq!(lit_index(&markers, 7_001), None);
+        assert_eq!(lit_index(&markers, 90_000), None);
+    }
+
+    #[test]
+    fn overlapping_markers_light_the_one_the_bar_labels() {
+        let mut long = Marker::new(1_000);
+        long.duration_ms = 20_000;
+        let markers = [long, Marker::new(5_000)];
+        for ms in [500, 1_000, 4_999, 5_000, 6_000, 8_000, 21_000] {
+            let lit = lit_index(&markers, ms).map(|i| &markers[i]);
+            assert_eq!(lit, marker_at(&markers, ms), "at {ms}");
+        }
+    }
+
+    #[test]
+    fn the_list_follows_the_last_marker_passed() {
+        let markers = [Marker::new(1_000), Marker::new(5_000)];
+        assert_eq!(passed_index(&markers, 0), None);
+        assert_eq!(passed_index(&markers, 4_999), Some(0));
+        assert_eq!(passed_index(&markers, 90_000), Some(1));
     }
 
     #[test]
