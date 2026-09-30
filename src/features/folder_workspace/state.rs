@@ -327,14 +327,15 @@ impl FolderWorkspace {
             Message::PasteTags => self.paste_tags(),
             // The comment box has the keys while it is focused: its text is not the app's to undo.
             Message::Undo | Message::Redo if self.file_workspace.comment_focused() => Task::none(),
-            Message::Undo => {
+            Message::Undo if self.history.can_undo() => {
                 self.markers.close();
                 self.perform_undo()
             }
-            Message::Redo => {
+            Message::Redo if self.history.can_redo() => {
                 self.markers.close();
                 self.perform_redo()
             }
+            Message::Undo | Message::Redo => Task::none(),
             Message::RotateVideo(quarter_turns) => self.rotate_video(quarter_turns),
             Message::RotateVideoWhileTyping(quarter_turns) => {
                 self.rotate_video_unless_writing(quarter_turns)
@@ -462,6 +463,7 @@ impl FolderWorkspace {
             }
         };
         self.file_workspace.set_tag_filter(new_value);
+        self.file_workspace.set_comment_focused(false);
         operation::focus(iced::widget::Id::from(SEARCH_BAR_INPUT_ID)).map(|_: ()| Message::Noop)
     }
 
@@ -874,13 +876,15 @@ impl FolderWorkspace {
         // Undo and redo follow what they step over: a marker or a turn of the open video is
         // undone in batch mode (when no job runs), a tag change is not.
         if self.batch.is_active() {
-            let steps_over_media = match message {
-                Message::Undo => self.history.undo_edits_open_video(),
-                Message::Redo => self.history.redo_edits_open_video(),
-                _ => true,
+            let not_media = match message {
+                Message::Undo => !self.history.undo_edits_open_video(),
+                Message::Redo => !self.history.redo_edits_open_video(),
+                _ => false,
             };
-            let undoes = matches!(message, Message::Undo | Message::Redo);
-            if undoes && (!steps_over_media || self.batch.is_running()) {
+            if not_media && matches!(message, Message::Undo | Message::Redo) {
+                return true;
+            }
+            if self.batch.is_running() && matches!(message, Message::Undo | Message::Redo) {
                 return true;
             }
         }
@@ -1475,6 +1479,7 @@ impl FolderWorkspace {
             error: None,
         });
         let input = iced::widget::Id::from(folder::FOLDER_RENAME_INPUT_ID);
+        self.file_workspace.set_comment_focused(false);
         Task::batch([
             select,
             operation::focus(input.clone()),
@@ -2135,7 +2140,7 @@ impl FolderWorkspace {
         match result {
             Ok(()) if file_notice.is_some() => Task::batch([
                 self.refresh_after_undo_redo(),
-                file_notice.map_or_else(Task::none, |text| Self::notice(&text)),
+                Self::notice(&file_notice.unwrap_or_default()),
             ]),
             // A turn changes no tags, name or selection, so the open file needs no refresh; one
             // would unload the video to save it while the reopen below is still opening it.
@@ -4241,6 +4246,28 @@ mod tests {
         let _ = workspace.update(Message::FileUpdated { id, snapshot });
         let saved = frename_core::FileTagger::load_markers(&test_dir.target_file()).expect("saved");
         assert_eq!(saved.len(), 1, "the file holds the marker");
+
+        // Redo goes forward the same way: the delete, then the move to the next file.
+        let _ = workspace.update(Message::Redo);
+        assert!(marker_names(&workspace).is_empty());
+        let task = workspace.update(Message::Redo);
+        assert_eq!(workspace.directory().unwrap().selected_index(), Some(1));
+        assert_eq!(task.units(), 2);
+    }
+
+    /// A marker row opened by code takes the keys from the comment box, so Undo is not dropped
+    /// for a focus the box no longer has.
+    #[test]
+    fn opening_a_marker_row_ends_the_comment_boxs_hold_on_undo() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        workspace.file_workspace.set_comment_focused(true);
+        let guid = first_marker_guid(&workspace);
+        send_marker(&mut workspace, M::Open(guid), 1_000);
+        let _ = workspace.update(Message::Undo);
+        assert!(marker_names(&workspace).is_empty());
     }
 
     /// Issue #138: while the comment box has the keys, Ctrl+Z is the box's, not the app's.

@@ -1,6 +1,7 @@
 # 0.90
 ## Fixed
-- Undo (`Ctrl+Z`) brings back a deleted marker in batch mode and while a marker row is open (it closes the row first); a turn of the video is undone in batch mode too.
+- Undo (`Ctrl+Z`) brings back a deleted marker in batch mode, and works while a marker's name is open for editing (the name field closes first).
+- A turn of the video is undone in batch mode too.
 - `Ctrl+Z`, `Ctrl+Y`, `Ctrl+C` and `Ctrl+V` work on a Russian or any other non-Latin keyboard layout.
 - While the comment box has the keys, `Ctrl+Z` no longer undoes marker or tag changes behind your back.
 - When Undo steps back to the previous clip (the history is shared by the whole folder), a note says so; Undo again undoes the change in that clip.
