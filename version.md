@@ -1,3 +1,7 @@
+# 0.90
+## Fixed
+- The marker list no longer cuts off the bottom of its last marker: rows are as tall as their text, however long the name wraps.
+
 # 0.89
 ## Fixed
 - Marker colors are no longer lost when markers are copied into the comment: a line reads `0:41 [red] — Lion` (green has no tag), and reading the comment back gives the same colors. Older lines still read as green.

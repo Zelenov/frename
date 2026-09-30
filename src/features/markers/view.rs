@@ -1,6 +1,6 @@
 //! The marker list (design system §13.3.6): one row per marker, read-only like a subtitle cue,
-//! except the one row open for renaming. A row's height follows from its name's lines, so the
-//! list is scrolled to a row by arithmetic, as the subtitle list is.
+//! except the one row open for renaming. A row is as tall as its name's lines; the list is
+//! scrolled to a row by an estimate of the rows above it ([`row_offset`]), as the subtitle list is.
 
 use frename_core::{format_marker_time, Marker, MarkerColor, AI_MARKER_COLOR, MARKER_SNAP_MS};
 use iced::widget::{
@@ -158,6 +158,7 @@ fn marker_list<'a>(
             .spacing(SPACE_XXS)
             .padding(Padding {
                 left: SPACE_S,
+                bottom: SPACE_S,
                 ..Padding::ZERO
             }),
     )
@@ -389,18 +390,15 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
     let body = column![first_line, name]
         .spacing(SPACE_XXS)
         .padding(ROW_INSET);
-    let height = if open.is_some() {
-        row_height(marker) + 2.0 * CONTROL_PADDING_Y
-    } else {
-        row_height(marker)
-    };
+    // The row is as tall as its content, not as the estimate of [`row_height`]: a name that wraps
+    // to more lines than estimated (a narrow list, a long name) must not be cut off, and the list
+    // sizes its scroll range from what is rendered.
     let item = container(list::row_item(
         body,
         lit || open.is_some(),
         OVERLAY_HOVER,
-        Length::Fill,
-    ))
-    .height(height);
+        Length::Shrink,
+    ));
 
     // The actions sit at the right end of the first line, over the row.
     let item: Element<'a, Message> = match actions {
