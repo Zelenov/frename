@@ -1167,10 +1167,10 @@ mod tests {
         assert!(history.undo_edits_open_video());
         assert!(!history.undo_switches_file());
         history.push(Box::new(NavigateFileCommand {
-            file_id: File::from_path("/x/a.mp4".into(), SystemTime::UNIX_EPOCH).id(),
-            to_file_id: File::from_path("/x/b.mp4".into(), SystemTime::UNIX_EPOCH).id(),
-            path_before: "/x/a.mp4".into(),
-            path_after: "/x/a.mp4".into(),
+            file_id: File::from_path(PathBuf::from("/x/a.mp4"), SystemTime::UNIX_EPOCH).id(),
+            to_file_id: File::from_path(PathBuf::from("/x/b.mp4"), SystemTime::UNIX_EPOCH).id(),
+            path_before: PathBuf::from("/x/a.mp4"),
+            path_after: PathBuf::from("/x/a.mp4"),
             snapshot_before: FileSnapshot::default(),
             snapshot_after: FileSnapshot::default(),
         }));
