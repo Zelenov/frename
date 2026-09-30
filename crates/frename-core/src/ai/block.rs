@@ -149,6 +149,7 @@ pub fn segment_lines(description: &Description) -> Vec<crate::MarkerLine> {
                 duration_ms: ms(segment.end_s).saturating_sub(start_ms),
                 name: one_line(&segment.description),
                 comment: String::new(),
+                color: crate::MarkerColor::Green,
             }
         })
         .collect()
@@ -195,6 +196,7 @@ mod tests {
                 duration_ms: 14_200,
                 name: "Entrance.".to_string(),
                 comment: String::new(),
+                color: crate::MarkerColor::Green,
             }]
         );
     }

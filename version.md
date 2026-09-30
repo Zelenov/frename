@@ -1,3 +1,7 @@
+# 0.89
+## Fixed
+- Marker colors are no longer lost when markers are copied into the comment: a line reads `0:41 [red] — Lion` (green has no tag), and reading the comment back gives the same colors. Older lines still read as green.
+
 # 0.88
 ## Fixed
 - The marker list lights a marker only while the playhead is on it; the last marker no longer stays lit until the end of the clip.

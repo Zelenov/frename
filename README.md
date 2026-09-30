@@ -241,7 +241,8 @@ Actions:
 - turn comment lines that start with a time (`03:24 — Take 3 — nice light`, `0:41-0:47 — Lion`)
   into markers, or copy the markers into the comment as such lines. What follows the name after
   a second ` — ` or ` -- ` (not a plain ` - `) goes into the marker's comment, which Premiere
-  shows and frename keeps but does not show. The moments of an AI description become white
+  shows and frename keeps but does not show. A marker's color is a word in brackets after the time
+  (`0:41 [red] — Lion`; green, the default, has none). The moments of an AI description become white
   markers too (with their length) and stay in the description;
 - rotate the videos 90° right or left or 180°, or reset them to no rotation (this also removes
   a turn a phone recorded);
