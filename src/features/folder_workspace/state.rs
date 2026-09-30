@@ -4189,8 +4189,7 @@ mod tests {
         let test_dir = TestDirectory::new(1);
         let mut workspace = marker_workspace(&test_dir, 1);
         send_marker(&mut workspace, M::Add, 1_000);
-        send_marker(&mut workspace, M::Add, 5_000);
-        send_marker(&mut workspace, M::Close, 5_000);
+        send_marker(&mut workspace, M::AddRange(5_000, 7_000), 5_000);
         let guids: Vec<String> = workspace
             .file_workspace()
             .markers()
