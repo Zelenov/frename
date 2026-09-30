@@ -17,6 +17,10 @@ where
     SD: AppStateStore + Clone,
     ST: StoredTagStore + Clone,
 {
+    fn edits_open_video(&self) -> bool {
+        true
+    }
+
     fn undo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
         if let Some(removed) = remove(ctx, &self.marker) {
             self.marker = removed;
@@ -40,6 +44,10 @@ where
     SD: AppStateStore + Clone,
     ST: StoredTagStore + Clone,
 {
+    fn edits_open_video(&self) -> bool {
+        true
+    }
+
     fn undo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
         ctx.tag_list.add_marker(self.marker.clone());
         Ok(())
@@ -72,6 +80,10 @@ where
     SD: AppStateStore + Clone,
     ST: StoredTagStore + Clone,
 {
+    fn edits_open_video(&self) -> bool {
+        true
+    }
+
     fn undo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
         let old = self.old;
         ctx.tag_list.update_marker(&self.guid, |m| m.color = old);
@@ -97,6 +109,10 @@ where
     SD: AppStateStore + Clone,
     ST: StoredTagStore + Clone,
 {
+    fn edits_open_video(&self) -> bool {
+        true
+    }
+
     fn undo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
         let old = self.old_ms;
         ctx.tag_list
@@ -127,6 +143,10 @@ where
     SD: AppStateStore + Clone,
     ST: StoredTagStore + Clone,
 {
+    fn edits_open_video(&self) -> bool {
+        true
+    }
+
     fn undo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
         set_span(ctx, &self.guid, self.old);
         Ok(())

@@ -1156,4 +1156,27 @@ mod tests {
         history.redo(&mut ctx).expect("redo");
         assert_eq!(degrees(), Ok(270));
     }
+
+    #[test]
+    fn a_step_says_whether_it_edits_the_open_video_or_moves_to_another_file() {
+        let mut history: History<FakeAppStorage, FakeAppStorage> = History::new(50);
+        assert!(!history.undo_edits_open_video());
+        history.push(Box::new(AddMarkerCommand {
+            marker: Marker::new(1_000),
+        }));
+        assert!(history.undo_edits_open_video());
+        assert!(!history.undo_switches_file());
+        history.push(Box::new(NavigateFileCommand {
+            file_id: File::from_path(PathBuf::from("/x/a.mp4"), SystemTime::UNIX_EPOCH).id(),
+            to_file_id: File::from_path(PathBuf::from("/x/b.mp4"), SystemTime::UNIX_EPOCH).id(),
+            path_before: PathBuf::from("/x/a.mp4"),
+            path_after: PathBuf::from("/x/a.mp4"),
+            snapshot_before: FileSnapshot::default(),
+            snapshot_after: FileSnapshot::default(),
+        }));
+        assert!(!history.undo_edits_open_video());
+        assert!(history.undo_switches_file());
+        assert!(!history.redo_edits_open_video());
+        assert!(!history.redo_switches_file());
+    }
 }

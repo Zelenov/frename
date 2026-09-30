@@ -205,12 +205,11 @@ impl FolderWorkspace {
         }
         match message {
             // While a marker row is open, keys belong to its fields: `[b-roll]` is typed, not in
-            // and out, and undo would remove the very marker being edited.
+            // and out. Undo and redo are the exception: they close the row first (below), so
+            // they never leave a row open on a marker they remove.
             Message::SetSegmentStart
             | Message::SetSegmentEnd
             | Message::TagPanel(tag_panel::Message::ToggleSelectedTag)
-            | Message::Undo
-            | Message::Redo
             | Message::CopyTags
             | Message::PasteTags
             | Message::RotateVideoWhileTyping(_)
@@ -326,8 +325,17 @@ impl FolderWorkspace {
             }
             Message::CopyTags => self.copy_tags(),
             Message::PasteTags => self.paste_tags(),
-            Message::Undo => self.perform_undo(),
-            Message::Redo => self.perform_redo(),
+            // The comment box has the keys while it is focused: its text is not the app's to undo.
+            Message::Undo | Message::Redo if self.file_workspace.comment_focused() => Task::none(),
+            Message::Undo if self.history.can_undo() => {
+                self.markers.close();
+                self.perform_undo()
+            }
+            Message::Redo if self.history.can_redo() => {
+                self.markers.close();
+                self.perform_redo()
+            }
+            Message::Undo | Message::Redo => Task::none(),
             Message::RotateVideo(quarter_turns) => self.rotate_video(quarter_turns),
             Message::RotateVideoWhileTyping(quarter_turns) => {
                 self.rotate_video_unless_writing(quarter_turns)
@@ -455,6 +463,7 @@ impl FolderWorkspace {
             }
         };
         self.file_workspace.set_tag_filter(new_value);
+        self.file_workspace.set_comment_focused(false);
         operation::focus(iced::widget::Id::from(SEARCH_BAR_INPUT_ID)).map(|_: ()| Message::Noop)
     }
 
@@ -851,8 +860,6 @@ impl FolderWorkspace {
                 | Message::SaveSelectedTag
                 | Message::CopyTags
                 | Message::PasteTags
-                | Message::Undo
-                | Message::Redo
                 | Message::SetSegmentStart
                 | Message::SetSegmentEnd
                 | Message::FocusSearchBarAndKey(_)
@@ -865,6 +872,21 @@ impl FolderWorkspace {
         );
         if edits_open_file && self.batch.is_active() {
             return true;
+        }
+        // Undo and redo follow what they step over: a marker or a turn of the open video is
+        // undone in batch mode (when no job runs), a tag change is not.
+        if self.batch.is_active() {
+            let not_media = match message {
+                Message::Undo => !self.history.undo_edits_open_video(),
+                Message::Redo => !self.history.redo_edits_open_video(),
+                _ => false,
+            };
+            if not_media && matches!(message, Message::Undo | Message::Redo) {
+                return true;
+            }
+            if self.batch.is_running() && matches!(message, Message::Undo | Message::Redo) {
+                return true;
+            }
         }
         // The video and its marker list stay in batch mode, unlike the tags: markers and turns of
         // the open video are off only while a job runs (the job has closed the file then).
@@ -1457,6 +1479,7 @@ impl FolderWorkspace {
             error: None,
         });
         let input = iced::widget::Id::from(folder::FOLDER_RENAME_INPUT_ID);
+        self.file_workspace.set_comment_focused(false);
         Task::batch([
             select,
             operation::focus(input.clone()),
@@ -2065,6 +2088,7 @@ impl FolderWorkspace {
             return Task::none();
         }
         let turns_a_video = self.history.undo_turns_a_video();
+        let switches_file = self.history.undo_switches_file();
         // Inner block: limits the lifetime of dir/tl borrows so we can use self after.
         let result: Result<(), UndoError> = {
             let dir = self.directory.as_mut().expect("checked above");
@@ -2075,7 +2099,11 @@ impl FolderWorkspace {
             };
             self.history.undo(&mut ctx)
         };
-        self.after_undo_redo(result, turns_a_video)
+        self.after_undo_redo(
+            result,
+            turns_a_video,
+            switches_file.then(|| fl!("undo-back-on-clip")),
+        )
     }
 
     fn perform_redo(&mut self) -> Task<Message> {
@@ -2083,6 +2111,7 @@ impl FolderWorkspace {
             return Task::none();
         }
         let turns_a_video = self.history.redo_turns_a_video();
+        let switches_file = self.history.redo_switches_file();
         let result: Result<(), UndoError> = {
             let dir = self.directory.as_mut().expect("checked above");
             let tl = self.file_workspace.tag_list_mut();
@@ -2092,17 +2121,27 @@ impl FolderWorkspace {
             };
             self.history.redo(&mut ctx)
         };
-        self.after_undo_redo(result, turns_a_video)
+        self.after_undo_redo(
+            result,
+            turns_a_video,
+            switches_file.then(|| fl!("redo-on-clip")),
+        )
     }
 
     /// Refresh after an undo or redo step, or say why it failed. A step that turned a video
-    /// reopens it when it is the one shown.
+    /// reopens it when it is the one shown. A step that moved to another file says so with
+    /// `file_notice`, so a stack shared by all files does not look like an undo that did nothing.
     fn after_undo_redo(
         &mut self,
         result: Result<(), UndoError>,
         turns_a_video: bool,
+        file_notice: Option<String>,
     ) -> Task<Message> {
         match result {
+            Ok(()) if file_notice.is_some() => Task::batch([
+                self.refresh_after_undo_redo(),
+                Self::notice(&file_notice.unwrap_or_default()),
+            ]),
             // A turn changes no tags, name or selection, so the open file needs no refresh; one
             // would unload the video to save it while the reopen below is still opening it.
             Ok(()) if turns_a_video => self.follow_rotation(),
@@ -3928,8 +3967,8 @@ mod tests {
         send_marker(&mut workspace, M::Add, 1_300);
         assert!(workspace.markers().is_editing());
         send_marker(&mut workspace, type_name("Take 3"), 1_300);
-        // Keys of the workspace are off while the row is open: undo would remove the marker.
-        let _ = workspace.update(Message::Undo);
+        // Keys of the workspace are off while the row is open: `[` is typed, not an in point.
+        let _ = workspace.update(Message::SetSegmentStart);
         assert_eq!(marker_names(&workspace), [(1_000, "Take 3".to_string())]);
         // F2 with the row open closes it and adds the next moment without opening it.
         send_marker(&mut workspace, M::Add, 5_000);
@@ -4078,6 +4117,172 @@ mod tests {
             ),
         ));
         assert_eq!(marker_names(&workspace).len(), 1);
+    }
+
+    fn first_marker_guid(workspace: &FolderWorkspace) -> String {
+        workspace.file_workspace().markers().unwrap()[0]
+            .guid
+            .clone()
+            .unwrap()
+    }
+
+    /// Issue #138: Undo was dropped in batch mode, though markers are edited there.
+    #[test]
+    fn a_deleted_marker_is_undone_and_redone_in_batch_mode() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        assert!(workspace.batch.is_active());
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = first_marker_guid(&workspace);
+        send_marker(&mut workspace, M::Delete(guid), 1_000);
+        assert!(marker_names(&workspace).is_empty());
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_names(&workspace).len(), 1);
+        let _ = workspace.update(Message::Redo);
+        assert!(marker_names(&workspace).is_empty());
+    }
+
+    /// In batch mode the tags are hidden, so their undo stays off.
+    #[test]
+    fn a_tag_change_is_not_undone_in_batch_mode() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let tag_list = workspace.file_workspace().tag_list();
+        let tag_id = tag_list
+            .filtered_display_tag_ids()
+            .iter()
+            .find(|id| tag_list.get_tag(**id).is_some_and(|t| t.tag() == "pick"))
+            .copied()
+            .expect("pick is a built-in tag");
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
+        let checked = |w: &FolderWorkspace| {
+            w.file_workspace()
+                .tag_list()
+                .get_tag(tag_id)
+                .map(|t| t.is_checked())
+        };
+        assert_eq!(checked(&workspace), Some(true));
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(checked(&workspace), Some(true), "batch mode keeps tags out");
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(false)));
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(checked(&workspace), Some(false));
+    }
+
+    #[test]
+    fn a_turn_is_undone_in_batch_mode() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        let _ = workspace.update(Message::RotateVideo(1));
+        let degrees = || {
+            frename_core::FileTagger::video_rotation(&test_dir.target_file()).map(|r| r.degrees())
+        };
+        assert_eq!(degrees(), Ok(90));
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(degrees(), Ok(0));
+    }
+
+    /// Issue #138: undo was dropped while a marker row was open, though the ✕ of the other rows
+    /// still deletes. It closes the row and undoes.
+    #[test]
+    fn undo_with_a_marker_row_open_closes_the_row_and_undoes() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        send_marker(&mut workspace, M::AddRange(5_000, 7_000), 5_000);
+        let guids: Vec<String> = workspace
+            .file_workspace()
+            .markers()
+            .unwrap()
+            .iter()
+            .map(|m| m.guid.clone().unwrap())
+            .collect();
+        assert_eq!(guids.len(), 2);
+        // Row A is open; row B's ✕ deletes B.
+        send_marker(&mut workspace, M::Open(guids[0].clone()), 1_000);
+        send_marker(&mut workspace, M::Delete(guids[1].clone()), 1_000);
+        assert!(workspace.markers().is_editing());
+        assert_eq!(marker_names(&workspace).len(), 1);
+        let _ = workspace.update(Message::Undo);
+        assert!(!workspace.markers().is_editing(), "the row is closed");
+        assert_eq!(marker_names(&workspace).len(), 2, "B is back");
+        let _ = workspace.update(Message::Redo);
+        assert_eq!(marker_names(&workspace).len(), 1);
+    }
+
+    /// Issue #138: the history is one stack for the folder, so after leaving the file the first
+    /// Undo goes back to it (and says so); the second brings the marker back.
+    #[test]
+    fn a_marker_deleted_before_leaving_the_file_is_back_after_two_undos() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = marker_workspace(&test_dir, 2);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = first_marker_guid(&workspace);
+        send_marker(&mut workspace, M::Delete(guid), 1_000);
+        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+
+        let _ = workspace.update(Message::Folder(folder::Message::NextFile));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        assert_eq!(workspace.directory().unwrap().selected_index(), Some(1));
+
+        let task = workspace.update(Message::Undo);
+        assert_eq!(workspace.directory().unwrap().selected_index(), Some(0));
+        // The file is reopened, and a note says the step was a move, not an edit.
+        assert_eq!(task.units(), 2);
+        flush_file_opened(&mut workspace);
+        assert!(marker_names(&workspace).is_empty());
+
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_names(&workspace).len(), 1);
+
+        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        let saved = frename_core::FileTagger::load_markers(&test_dir.target_file()).expect("saved");
+        assert_eq!(saved.len(), 1, "the file holds the marker");
+
+        // Redo goes forward the same way: the delete, then the move to the next file.
+        let _ = workspace.update(Message::Redo);
+        assert!(marker_names(&workspace).is_empty());
+        let task = workspace.update(Message::Redo);
+        assert_eq!(workspace.directory().unwrap().selected_index(), Some(1));
+        assert_eq!(task.units(), 2);
+    }
+
+    /// A marker row opened by code takes the keys from the comment box, so Undo is not dropped
+    /// for a focus the box no longer has.
+    #[test]
+    fn opening_a_marker_row_ends_the_comment_boxs_hold_on_undo() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        workspace.file_workspace.set_comment_focused(true);
+        let guid = first_marker_guid(&workspace);
+        send_marker(&mut workspace, M::Open(guid), 1_000);
+        let _ = workspace.update(Message::Undo);
+        assert!(marker_names(&workspace).is_empty());
+    }
+
+    /// Issue #138: while the comment box has the keys, Ctrl+Z is the box's, not the app's.
+    #[test]
+    fn undo_is_not_the_apps_while_the_comment_box_has_the_keys() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        workspace.file_workspace.set_comment_focused(true);
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_names(&workspace).len(), 1);
+        workspace.file_workspace.set_comment_focused(false);
+        let _ = workspace.update(Message::Undo);
+        assert!(marker_names(&workspace).is_empty());
     }
 
     #[test]
