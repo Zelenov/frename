@@ -28,18 +28,25 @@ fn ctrl_v_paste_tags_handler(
     _window_id: window::Id,
 ) -> Option<Message> {
     if let iced::Event::Keyboard(keyboard::Event::KeyPressed {
-        key: keyboard::Key::Character(c),
+        key,
+        physical_key,
         modifiers,
         ..
     }) = ev
     {
-        if c.as_ref() == "v" && modifiers.command() {
+        if latin_key(&key, physical_key) == Some('v') && modifiers.command() {
             return Some(Message::FolderWorkspace(
                 folder_workspace::Message::PasteTags,
             ));
         }
     }
     None
+}
+
+/// The Latin letter a key stands for, so Ctrl+Z, Y, C and V work on any keyboard layout: with a
+/// Russian layout the key is `я` but the physical key is still Z.
+fn latin_key(key: &keyboard::Key, physical_key: keyboard::key::Physical) -> Option<char> {
+    key.to_latin(physical_key).map(|c| c.to_ascii_lowercase())
 }
 
 /// Global keyboard and window events of the main window: shortcuts, typing into the search bar,
@@ -172,23 +179,22 @@ fn main_window_event(
                 Some(Message::Noop)
             }
         }
-        iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. })
-            if matches!(status, event::Status::Ignored) =>
-        {
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key,
+            physical_key,
+            modifiers,
+            ..
+        }) if matches!(status, event::Status::Ignored) => {
             if modifiers.command() {
-                return match key.as_ref() {
-                    keyboard::Key::Character("c") => Some(Message::FolderWorkspace(
+                return match latin_key(&key, physical_key) {
+                    Some('c') => Some(Message::FolderWorkspace(
                         folder_workspace::Message::CopyTags,
                     )),
-                    keyboard::Key::Character("z") if modifiers.shift() => {
+                    Some('z') if modifiers.shift() => {
                         Some(Message::FolderWorkspace(folder_workspace::Message::Redo))
                     }
-                    keyboard::Key::Character("z") => {
-                        Some(Message::FolderWorkspace(folder_workspace::Message::Undo))
-                    }
-                    keyboard::Key::Character("y") => {
-                        Some(Message::FolderWorkspace(folder_workspace::Message::Redo))
-                    }
+                    Some('z') => Some(Message::FolderWorkspace(folder_workspace::Message::Undo)),
+                    Some('y') => Some(Message::FolderWorkspace(folder_workspace::Message::Redo)),
                     _ => None,
                 };
             }
@@ -965,5 +971,73 @@ mod tests {
     #[test]
     fn test_app_creation() {
         let _app = FrenameApp::new(window::Id::unique(), None);
+    }
+
+    fn ctrl_key(
+        key: &str,
+        code: keyboard::key::Code,
+        shift: bool,
+    ) -> (iced::Event, event::Status, window::Id) {
+        let mut modifiers = keyboard::Modifiers::CTRL;
+        modifiers.set(keyboard::Modifiers::SHIFT, shift);
+        let key = keyboard::Key::Character(key.into());
+        let event = iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: key.clone(),
+            modified_key: key,
+            physical_key: keyboard::key::Physical::Code(code),
+            location: keyboard::Location::Standard,
+            modifiers,
+            text: None,
+            repeat: false,
+        });
+        (event, event::Status::Ignored, window::Id::unique())
+    }
+
+    fn shortcut(
+        key: &str,
+        code: keyboard::key::Code,
+        shift: bool,
+    ) -> Option<folder_workspace::Message> {
+        let (ev, status, id) = ctrl_key(key, code, shift);
+        match main_window_event(ev, status, id) {
+            Some(Message::FolderWorkspace(m)) => Some(m),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn undo_redo_and_copy_work_on_a_russian_layout() {
+        use keyboard::key::Code;
+        assert!(matches!(
+            shortcut("я", Code::KeyZ, false),
+            Some(folder_workspace::Message::Undo)
+        ));
+        assert!(matches!(
+            shortcut("я", Code::KeyZ, true),
+            Some(folder_workspace::Message::Redo)
+        ));
+        assert!(matches!(
+            shortcut("н", Code::KeyY, false),
+            Some(folder_workspace::Message::Redo)
+        ));
+        assert!(matches!(
+            shortcut("с", Code::KeyC, false),
+            Some(folder_workspace::Message::CopyTags)
+        ));
+        assert!(matches!(
+            shortcut("z", Code::KeyZ, false),
+            Some(folder_workspace::Message::Undo)
+        ));
+    }
+
+    #[test]
+    fn paste_works_on_a_russian_layout() {
+        let (ev, status, id) = ctrl_key("м", keyboard::key::Code::KeyV, false);
+        assert!(matches!(
+            ctrl_v_paste_tags_handler(ev, status, id),
+            Some(Message::FolderWorkspace(
+                folder_workspace::Message::PasteTags
+            ))
+        ));
     }
 }

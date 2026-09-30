@@ -284,6 +284,8 @@ impl FolderWorkspace {
 
     /// Open the row of the marker for editing, with its name focused, in the marker list.
     fn open_marker_row(&mut self, guid: String) -> Task<Message> {
+        // The name field takes the keys from the comment box.
+        self.file_workspace.set_comment_focused(false);
         let Some(markers) = self.file_workspace.markers() else {
             return Task::none();
         };
