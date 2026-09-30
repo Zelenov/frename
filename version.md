@@ -1,6 +1,6 @@
 # 0.90
 ## Fixed
-- The marker list no longer cuts off the bottom of its last marker: rows are as tall as their text, however long the name wraps.
+- The last marker in the marker list is no longer cut off at the bottom, however long its name is.
 
 # 0.89
 ## Fixed
