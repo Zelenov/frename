@@ -1,3 +1,7 @@
+# 0.93
+## Fixed
+- In the batch window's action list and in Settings' navigation, the mouse cursor no longer drops to an arrow between two items.
+
 # 0.92
 ## Fixed
 - With markers kept in the comment (Settings → Saving) and comments in text files, markers are written into the comment as you add, rename, recolor, move or delete them, not only when you leave the clip. A comment file that cannot be written marks the file with the red ✕ and is tried again at your next change.
