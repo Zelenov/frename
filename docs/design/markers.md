@@ -157,7 +157,7 @@ ignores `SetSegmentStart` while `inline_rename` is open:
 - `EscapePressed` closes the row first (before leaving fullscreen or clearing the search);
 - `F2` closes the open row (its text kept) and adds a new marker at the playhead without opening
   it, so the next moment can be caught while typing;
-- `Undo`, `Redo`, `CopyTags`, `PasteTags` and `Shift+F2` are ignored (the fields have no undo of their own; an
+- `Undo`, `Redo`, `CopyTags`, `PasteTags` and `Shift+F2` are ignored (the fields have no undo of their own, and what was typed becomes one undo step when the row closes, #139; an
   app undo would remove the very marker being edited);
 - if the open row's marker disappears anyway, the row closes.
 `Enter` in the name field also closes the row. `F2` sits between the seek keys, and `F1`/`F3` with
@@ -341,7 +341,7 @@ actions leave it alone.
 - **Rename**: markers live inside the video, so they move with it on disk. In memory, the renamed
   file's snapshot must carry the edited markers over (see "In memory").
 - **Undo**: add, delete, color and duration are undo commands in `frename-core/src/undo`, scoped to
-  the open file like in/out. Typing in name and comment is not undoable, like the comment box.
+  the open file like in/out. A marker's name is one undo step per row (#139); the comment box is one step per focus session.
 - **Leaving the file with an open row** (e.g. a click on another file): the typed text is in state
   already (every keystroke is a message), so it is saved and the row closes.
 

@@ -1,3 +1,12 @@
+# 0.94
+## Added
+- Undo (`Ctrl+Z`) and Redo (`Ctrl+Y`) also cover a rename by hand (double-click), the comment (what you type until the box loses the keys is one step), a marker's name (one step per row), and Sync up, Sync down and the lock.
+
+## Fixed
+- Two quick moves to other clips, before the video has let go of the first, are two undo steps, not one.
+- Dropping a tag chip on 🗑 can be undone.
+- `Shift+F2` on a marker another tool wrote without an id says that marker is read-only, not "No marker here".
+
 # 0.93
 ## Fixed
 - In the batch window's action list and in Settings' navigation, the mouse cursor no longer drops to an arrow between two items.

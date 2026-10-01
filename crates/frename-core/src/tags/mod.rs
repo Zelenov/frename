@@ -28,4 +28,4 @@ pub use screenshot::Screenshot;
 pub use stored_tag::StoredTag;
 pub use tag::{Tag, TagId};
 pub use tag_color_mapping::TagColorMapping;
-pub use tag_list::TagList;
+pub use tag_list::{TagList, TagOrderState};

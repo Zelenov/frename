@@ -40,6 +40,8 @@ pub struct MarkerEdit {
     pub guid: String,
     /// The name field's text and cursor.
     pub name: iced::widget::text_editor::Content,
+    /// The marker's name when the row opened, to record the editing as one undo step.
+    pub original_name: String,
 }
 
 #[derive(Debug, Default)]
@@ -74,6 +76,7 @@ impl MarkersState {
         self.edit = Some(MarkerEdit {
             guid,
             name: content,
+            original_name: name.to_string(),
         });
         self.color_picker = None;
         self.last_added = None;

@@ -7,7 +7,7 @@ use std::path::Path;
 
 use frename_core::{
     AddMarkerCommand, DeleteMarkerCommand, FileId, FileTagger, Marker, MarkersError,
-    SetMarkerColorCommand, SetMarkerSpanCommand, MARKER_SNAP_MS,
+    SetMarkerColorCommand, SetMarkerNameCommand, SetMarkerSpanCommand, MARKER_SNAP_MS,
 };
 use iced::widget::operation;
 use iced::Task;
@@ -99,6 +99,28 @@ impl FolderWorkspace {
         }
     }
 
+    /// Close the open marker row. The name typed in it is one undo step, pushed here, not one
+    /// per key.
+    pub(super) fn close_marker_row(&mut self) {
+        let Some(edit) = self.markers.edit() else {
+            return;
+        };
+        let (guid, original) = (edit.guid.clone(), edit.original_name.clone());
+        let now = self
+            .file_workspace
+            .tag_list()
+            .marker(&guid)
+            .map(|m| m.name.clone());
+        if let Some(new) = now.filter(|name| *name != original) {
+            self.history.push(Box::new(SetMarkerNameCommand {
+                guid,
+                old: original,
+                new,
+            }));
+        }
+        self.markers.close();
+    }
+
     fn apply_marker(&mut self, msg: markers::Message, position_ms: u64) -> Task<Message> {
         use markers::Message as M;
         if self.file_workspace.file().is_none() {
@@ -130,7 +152,7 @@ impl FolderWorkspace {
             M::JumpTo(ms) => seek_exact(ms),
             M::Open(guid) => self.open_marker_row(guid),
             M::Close => {
-                self.markers.close();
+                self.close_marker_row();
                 Task::none()
             }
             M::NameAction(action) => {
@@ -186,7 +208,7 @@ impl FolderWorkspace {
         };
         let near = nearest(markers, position_ms).map(|m| m.guid.clone());
         if self.markers.is_editing() {
-            self.markers.close();
+            self.close_marker_row();
             return match near {
                 Some(_) => Task::none(),
                 None => self.add_marker(position_ms, false, held),
@@ -305,23 +327,25 @@ impl FolderWorkspace {
         if self.markers.is_editing() {
             return Task::none();
         }
-        let guid = self
+        let near = self
             .file_workspace
             .markers()
             .and_then(|markers| nearest(markers, position_ms))
-            .and_then(|m| m.guid.clone());
-        match guid {
-            Some(guid) => {
+            .map(|m| m.guid.clone());
+        match near {
+            Some(Some(guid)) => {
                 self.delete_marker(&guid);
                 Self::notice("Marker deleted")
             }
+            // Read-only: another tool wrote it without a GUID, so it could not be found again.
+            Some(None) => Self::notice("That marker is read-only"),
             None => Self::notice("No marker here"),
         }
     }
 
     fn delete_marker(&mut self, guid: &str) {
         if self.markers.edit().is_some_and(|e| e.guid == guid) {
-            self.markers.close();
+            self.close_marker_row();
         }
         if let Some(marker) = self.file_workspace.tag_list_mut().remove_marker(guid) {
             self.history.push(Box::new(DeleteMarkerCommand { marker }));
@@ -356,7 +380,10 @@ impl FolderWorkspace {
 
     /// Open the row of the marker for editing, with its name focused, in the marker list.
     fn open_marker_row(&mut self, guid: String) -> Task<Message> {
-        // The name field takes the keys from the comment box.
+        // The name field takes the keys from the comment box; a row left open for this one is
+        // closed first, so what was typed in it is a step.
+        self.close_marker_row();
+        self.end_comment_session();
         self.file_workspace.set_comment_focused(false);
         let Some(markers) = self.file_workspace.markers() else {
             return Task::none();

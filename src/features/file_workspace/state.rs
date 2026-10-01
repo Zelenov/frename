@@ -185,6 +185,14 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.store_comment(trimmed);
     }
 
+    /// Show the tag list's comment in the comment box again, after an undo or redo changed it.
+    pub fn sync_comment_editor(&mut self) {
+        let comment = self.tag_list.comment();
+        if self.comment_content.text().trim_end_matches('\n') != comment {
+            self.comment_content = text_editor::Content::with_text(comment);
+        }
+    }
+
     /// Put the comment in the tag list. When the editor's own text (all but the AI
     /// description) goes from empty to non-empty the commented tag is checked, and when it is
     /// cleared the tag is unchecked; any other edit leaves the tag to the user. An AI
