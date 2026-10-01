@@ -121,15 +121,12 @@ impl Options {
 /// same moment are merged into one.
 pub fn run(direction: Direction, path: &Path) -> ItemResult {
     // Both ways also merge markers the clip already has on one moment; the report says how many.
-    let merged = FileTagger::load_markers(path).map_or(0, |markers| {
-        frename_core::merge_duplicate_markers(&markers).1
-    });
     let outcome = match direction {
-        Direction::CommentToMarkers => FileTagger::comment_to_markers(path),
-        Direction::MarkersToComment => FileTagger::markers_to_comment(path),
+        Direction::CommentToMarkers => FileTagger::comment_to_markers_reporting(path),
+        Direction::MarkersToComment => FileTagger::markers_to_comment_reporting(path),
     };
     match outcome {
-        Ok(outcome) => {
+        Ok((outcome, merged)) => {
             let mut result = super::item_result(outcome);
             if merged > 0 && result.status == ItemStatus::Done {
                 result.reason = Some(fl!("batch-markers-merged", count = merged));

@@ -457,9 +457,12 @@ pub struct CommentToMarkers {
 }
 
 /// Turn the timecoded lines of `comment` into markers. A line for a moment that already has a
-/// marker (same start within [`MARKER_SNAP_MS`] and same length) adds nothing, still leaves the
-/// comment, and updates that marker's name, comment and color in place when they differ. With the
-/// clip length known, a line past its end stays in the comment.
+/// marker (same start within [`SAME_MOMENT_MS`] and same length) adds nothing, leaves the
+/// comment, and updates that marker's name, comment and color in place when they differ (the
+/// first line for a moment sets them, further lines join the text; a marker without a GUID
+/// cannot be changed, so a line that says something else stays). A line whose name an existing
+/// marker has within [`MARKER_SNAP_MS`] is that marker too. With the clip length known, a line
+/// past its end stays in the comment.
 ///
 /// The segment lines of the comment's AI block become markers in [`AI_MARKER_COLOR`], points
 /// and ranges alike, and stay in the comment: the block is the AI's text, and a new AI run
@@ -505,45 +508,40 @@ pub fn comment_to_markers(
         } else {
             lines_moved += 1;
         }
-        // An AI segment only meets the AI's markers, the editor's line only the editor's.
-        let at_this_moment = |m: &&Marker| {
-            (m.color == AI_MARKER_COLOR) == in_block
-                && same_moment(
-                    m.start_ms,
-                    m.duration_ms,
-                    parsed.start_ms,
-                    parsed.duration_ms,
-                )
-        };
         // Another line for a moment already given: its text joins the marker's, so a line is
         // never dropped without a trace. An AI segment only ever adds its marker once.
-        if let Some(pending) = added.iter_mut().find(|m| at_this_moment(&&**m)) {
+        if let Some(pending) = added.iter_mut().find(|m| is_at(m, &parsed, in_block)) {
             if !in_block {
-                pending.name = merge_text(&pending.name, &parsed.name);
-                pending.comment = merge_text(&pending.comment, &parsed.comment);
+                join_text(pending, &parsed);
             }
             continue;
         }
-        if let Some(found) = existing.iter().find(at_this_moment) {
-            // The editor's own line renames and recolors the marker (the first line for a moment
-            // sets it, later ones join it); an AI segment never does. A marker without a GUID
-            // cannot be told apart, so it is left as it is.
-            if let (false, Some(guid)) = (in_block, found.guid.as_ref()) {
-                match updated.iter_mut().find(|m| m.guid.as_ref() == Some(guid)) {
-                    Some(pending) => {
-                        pending.name = merge_text(&pending.name, &parsed.name);
-                        pending.comment = merge_text(&pending.comment, &parsed.comment);
+        // A marker the line can change is preferred: one without a GUID is read-only.
+        let found = existing
+            .iter()
+            .filter(|m| is_at(m, &parsed, in_block))
+            .max_by_key(|m| m.guid.is_some());
+        if let Some(found) = found {
+            if !in_block {
+                match found.guid.as_ref() {
+                    // It cannot be renamed: a line saying something else stays in the comment.
+                    None if !has_text(found, &parsed) => {
+                        lines_moved -= 1;
+                        kept.push(line);
                     }
-                    None => {
-                        let renamed = parsed.name != found.name.trim()
-                            || parsed.comment != found.comment
-                            || parsed.color != found.color;
-                        if renamed {
-                            let mut marker = found.clone();
-                            marker.name = parsed.name.clone();
-                            marker.comment = parsed.comment.clone();
-                            marker.color = parsed.color;
-                            updated.push(marker);
+                    None => {}
+                    // The first line for a moment sets the marker, later ones join it.
+                    Some(guid) => {
+                        match updated.iter_mut().find(|m| m.guid.as_ref() == Some(guid)) {
+                            Some(pending) => join_text(pending, &parsed),
+                            None if !has_text(found, &parsed) || parsed.color != found.color => {
+                                let mut marker = found.clone();
+                                marker.name = parsed.name.clone();
+                                marker.comment = parsed.comment.clone();
+                                marker.color = parsed.color;
+                                updated.push(marker);
+                            }
+                            None => {}
                         }
                     }
                 }
@@ -627,6 +625,26 @@ pub fn markers_to_comment(comment: &str, markers: &[Marker]) -> (String, usize) 
     (result, added)
 }
 
+/// Whether the marker `m` is the one a line is about: the AI's segments only meet the AI's
+/// markers, the editor's lines the editor's, and the moment is the same.
+fn is_at(m: &Marker, line: &MarkerLine, in_block: bool) -> bool {
+    (m.color == AI_MARKER_COLOR) == in_block
+        && same_moment(m.start_ms, m.duration_ms, line.start_ms, line.duration_ms)
+}
+
+/// The text of a line added to a marker's own (see [`merge_text`]).
+fn join_text(marker: &mut Marker, line: &MarkerLine) {
+    marker.name = merge_text(&marker.name, &line.name);
+    marker.comment = merge_text(&marker.comment, &line.comment);
+}
+
+/// Whether the marker already says what the line says (a stored comment may end in spaces or
+/// carry the `\r\n` of Premiere).
+fn has_text(marker: &Marker, line: &MarkerLine) -> bool {
+    marker.name.trim() == line.name
+        && marker.comment.replace("\r\n", "\n").trim() == line.comment.trim()
+}
+
 /// How far apart two starts may be and still be one moment: about a frame. Much less than
 /// [`MARKER_SNAP_MS`], so two cues a few tenths of a second apart stay two markers.
 const SAME_MOMENT_MS: u64 = 40;
@@ -638,8 +656,9 @@ fn same_moment(a_start_ms: u64, a_duration_ms: u64, b_start_ms: u64, b_duration_
 }
 
 /// The markers of a clip with the ones on the same moment (same start within
-/// [`MARKER_SNAP_MS`], same length) merged into one, and how many were merged away. The first
-/// keeps its GUID and color. Names: when one holds the other the longer stays, otherwise both
+/// [`SAME_MOMENT_MS`], same length) merged into one, and how many were merged away. The first
+/// keeps its GUID and color. A marker without a GUID is read-only (it cannot be saved), so it
+/// never merges. Names: when one holds the other the longer stays, otherwise both
 /// are kept as `name — other name`; comments are joined the same way, so nothing is lost
 /// silently.
 pub fn merge_duplicate_markers(markers: &[Marker]) -> (Vec<Marker>, usize) {
@@ -647,7 +666,9 @@ pub fn merge_duplicate_markers(markers: &[Marker]) -> (Vec<Marker>, usize) {
     let mut count = 0;
     for marker in markers {
         let same = merged.iter_mut().find(|m| {
-            same_moment(m.start_ms, m.duration_ms, marker.start_ms, marker.duration_ms)
+            m.guid.is_some()
+                && marker.guid.is_some()
+                && same_moment(m.start_ms, m.duration_ms, marker.start_ms, marker.duration_ms)
                 // The AI's segments are not the editor's markers: they never merge into one.
                 && (m.color == AI_MARKER_COLOR) == (marker.color == AI_MARKER_COLOR)
         });
@@ -663,7 +684,9 @@ pub fn merge_duplicate_markers(markers: &[Marker]) -> (Vec<Marker>, usize) {
     (merged, count)
 }
 
-/// Two texts of one marker as one: the longer when it holds the other, else both.
+/// Two texts of one marker as one: the longer when it holds the other, else both as
+/// `a — b`. That joiner also separates a line's name from its comment, so after one round
+/// through the comment the second text reads back as the marker's comment, and stays so.
 fn merge_text(a: &str, b: &str) -> String {
     let (a, b) = (a.trim(), b.trim());
     if b.is_empty() || a.contains(b) {
@@ -1271,5 +1294,38 @@ mod tests {
         );
         let (again, _) = markers_to_comment("", &back.added);
         assert_eq!(again, line, "the same line again");
+    }
+
+    /// A marker without a GUID is read-only: it cannot be saved, so it never merges and a line
+    /// that says something else about its moment stays in the comment.
+    #[test]
+    fn markers_without_a_guid_are_never_merged_or_renamed() {
+        let mut read_only = marker(10_000, 0, "Bar", "");
+        read_only.guid = None;
+        let with_guid = marker(10_000, 0, "Foo", "");
+        let (kept, away) = merge_duplicate_markers(&[read_only.clone(), with_guid.clone()]);
+        assert_eq!((kept.len(), away), (2, 0));
+
+        let result = comment_to_markers("0:10 — Zebra\nnote", &[read_only.clone()], None);
+        assert_eq!(result.lines_moved, 0, "not consumed");
+        assert_eq!(result.comment, "0:10 — Zebra\nnote");
+        assert!(result.added.is_empty() && result.updated.is_empty());
+        // A line that only repeats the marker is consumed as before.
+        let same = comment_to_markers("0:10 — Bar", &[read_only], None);
+        assert_eq!((same.lines_moved, same.comment.as_str()), (1, ""));
+        // With a marker that can be saved at the same moment, that one is renamed.
+        let both = [marker(10_000, 0, "Bar", ""), with_guid];
+        let mut first = both[0].clone();
+        first.guid = None;
+        let result = comment_to_markers("0:10 — Zebra", &[first, both[1].clone()], None);
+        assert_eq!(result.updated.len(), 1);
+        assert_eq!(result.updated[0].guid, both[1].guid);
+    }
+
+    #[test]
+    fn a_comment_with_trailing_space_or_crlf_is_not_a_change() {
+        let existing = [marker(10_000, 0, "Lion", "roars \r\n")];
+        let result = comment_to_markers("0:10 — Lion — roars", &existing, None);
+        assert!(result.updated.is_empty(), "{:?}", result.updated);
     }
 }

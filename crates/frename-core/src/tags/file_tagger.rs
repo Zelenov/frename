@@ -100,12 +100,17 @@ impl FileTagger {
     }
 
     /// "Comment → markers": turn the lines of the file's comment that start with a time
-    /// (`03:24 — shaky`) into clip markers and take them out of the comment. Markers the clip
-    /// already has on one moment are merged too, and a line for a moment that has a marker
-    /// renames it in place (see
-    /// [`crate::comment_to_markers`]). The comment changes only after the markers were written,
-    /// so a failed write leaves the file as it was. Lines past the end of the clip stay.
+    /// (`03:24 — shaky`) into clip markers and take them out of the comment (see
+    /// [`crate::comment_to_markers`]): a line for a moment that has a marker renames it in
+    /// place, and markers the clip already has on one moment are merged. The comment changes
+    /// only after the markers were written, so a failed write leaves the comment as it was (the
+    /// markers may already be merged). Lines past the end of the clip stay.
     pub fn comment_to_markers(path: &Path) -> Result<MoveOutcome, MarkersError> {
+        Self::comment_to_markers_reporting(path).map(|(outcome, _)| outcome)
+    }
+
+    /// [`Self::comment_to_markers`], and how many duplicate markers it merged away.
+    pub fn comment_to_markers_reporting(path: &Path) -> Result<(MoveOutcome, usize), MarkersError> {
         let mut snapshot = Self::parse(path, &FolderInfo::default());
         let markers =
             Self::load_markers(path).ok_or_else(|| crate::metadata::cannot_hold_markers(path))?;
@@ -135,48 +140,51 @@ impl FileTagger {
         let markers_changed =
             !result.added.is_empty() || !result.updated.is_empty() || merged_away > 0;
         if result.lines_moved == 0 && !markers_changed {
-            return Ok(MoveOutcome::NothingToMove);
+            return Ok((MoveOutcome::NothingToMove, 0));
         }
         if markers_changed {
             Self::save_markers(path, &all, &known_guids(&markers))?;
         }
         if result.lines_moved == 0 {
             // Only AI segments became markers: the comment keeps its block as it is.
-            return Ok(MoveOutcome::Moved(path.to_path_buf()));
+            return Ok((MoveOutcome::Moved(path.to_path_buf()), merged_away));
         }
         let was_commented = !snapshot.comment().trim().is_empty();
         snapshot.set_comment(result.comment);
         Self::follow_commented_tag(&mut snapshot, was_commented);
-        Ok(MoveOutcome::Moved(Self::save(&snapshot, path)))
+        Ok((MoveOutcome::Moved(Self::save(&snapshot, path)), merged_away))
     }
 
     /// "Markers → comment": append a line per clip marker to the file's comment, leaving out
-    /// lines it already has and rewriting the line of a renamed marker (see
-    /// [`crate::markers_to_comment`]). Markers the clip has twice on one moment are merged first,
-    /// in the video as well. The markers stay in the file.
+    /// lines it already has (see [`crate::markers_to_comment`]). Markers the clip has twice on
+    /// one moment are merged first, in the video as well. The markers stay in the file.
     pub fn markers_to_comment(path: &Path) -> Result<MoveOutcome, MarkersError> {
+        Self::markers_to_comment_reporting(path).map(|(outcome, _)| outcome)
+    }
+
+    /// [`Self::markers_to_comment`], and how many duplicate markers it merged away.
+    pub fn markers_to_comment_reporting(path: &Path) -> Result<(MoveOutcome, usize), MarkersError> {
         let mut snapshot = Self::parse(path, &FolderInfo::default());
-        let Some(markers) = Self::load_markers(path) else {
-            return Ok(MoveOutcome::NothingToMove);
+        let Some(loaded) = Self::load_markers(path) else {
+            return Ok((MoveOutcome::NothingToMove, 0));
         };
-        // Markers on one moment are one marker, in the video as well as in the lines.
-        let loaded = markers;
         let (markers, merged_away) = crate::markers::merge_duplicate_markers(&loaded);
         if merged_away > 0 {
             Self::save_markers(path, &markers, &known_guids(&loaded))?;
         }
         let (comment, added) = crate::markers::markers_to_comment(snapshot.comment(), &markers);
         if added == 0 {
-            return Ok(if merged_away > 0 {
+            let outcome = if merged_away > 0 {
                 MoveOutcome::Moved(path.to_path_buf())
             } else {
                 MoveOutcome::NothingToMove
-            });
+            };
+            return Ok((outcome, merged_away));
         }
         let was_commented = !snapshot.comment().trim().is_empty();
         snapshot.set_comment(comment);
         Self::follow_commented_tag(&mut snapshot, was_commented);
-        Ok(MoveOutcome::Moved(Self::save(&snapshot, path)))
+        Ok((MoveOutcome::Moved(Self::save(&snapshot, path)), merged_away))
     }
 
     /// The commented tag follows a comment that appeared or went, as it does when the comment

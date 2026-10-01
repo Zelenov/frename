@@ -1,6 +1,6 @@
 # 0.93
 ## Fixed
-- Moving markers between the video and the comment no longer leaves two markers on one moment: a comment line for a moment that already has a marker renames it (keeping it the same marker for Premiere), a renamed marker rewrites its line instead of adding a second one, and markers a clip already has on the same moment are merged (different names are kept as `name — other name`). To repair a clip that already has doubled markers, run either "Markers ⇄ comment" action on it; the result lists the clips where markers were merged.
+- Moving markers between the video and the comment no longer leaves two markers on one moment: a comment line for a moment that already has a marker renames it (it stays the same marker for Premiere), and more lines for that moment join its text. A clip that already has doubled markers is repaired by running either "Markers ⇄ comment" action on it; the result lists the clips where markers were merged. Names that differ are kept as `name — other name`, which reads back as a name and a comment after the next move.
 
 # 0.92
 ## Fixed
