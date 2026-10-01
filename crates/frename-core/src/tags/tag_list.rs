@@ -40,6 +40,17 @@ pub struct TagOrderState {
     sync_locked: bool,
 }
 
+impl TagOrderState {
+    /// Whether `other` has the same orders and lock.
+    pub fn same_as(&self, other: &TagOrderState) -> bool {
+        let ids =
+            |c: &OrderedCollection<TagId, ()>| c.iter().map(|(id, _, _)| *id).collect::<Vec<_>>();
+        self.sync_locked == other.sync_locked
+            && ids(&self.display) == ids(&other.display)
+            && ids(&self.selected) == ids(&other.selected)
+    }
+}
+
 /// A collection of available tags. Generic over the store type S (load and add stored tags).
 #[derive(Clone, Debug)]
 pub struct TagList<S> {
@@ -825,11 +836,11 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.display_tag_ids = state.display;
         self.selected_tag_ids = state.selected;
-        self.persist_display_order()?;
+        let saved = self.persist_display_order();
         self.rebuild_filtered_display_tag_ids();
         self.update_is_selected_match_display_order();
         self.set_sync_locked(state.sync_locked);
-        Ok(())
+        saved
     }
 
     /// Sync Down: apply the order from `display_tag_ids` (grid/DB) onto

@@ -1265,4 +1265,21 @@ mod tests {
         assert_ne!(tag_list.filtered_display_tag_ids(), grid_before);
         assert!(tag_list.sync_locked());
     }
+
+    #[test]
+    fn probe_stale_ids() {
+        let store = make_store_with_tags(&["Action", "Comedy"]);
+        let mut tag_list = TagList::new(store, snapshot_with_tags(&["Action", "Zed", "Comedy"]));
+        let ids_before: Vec<_> = tag_list.filtered_display_tag_ids().to_vec();
+        let n = (0..5).filter_map(|i| tag_list.checked_tag_id_at(i)).count();
+        let st = tag_list.order_state();
+        let snap = tag_list.file_snapshot();
+        tag_list.reinitialize_from_snapshot(snap);
+        let ids_mid: Vec<_> = tag_list.filtered_display_tag_ids().to_vec();
+        tag_list.restore_order_state(st).unwrap();
+        let ids_after: Vec<_> = tag_list.filtered_display_tag_ids().to_vec();
+        let n2 = (0..5).filter_map(|i| tag_list.checked_tag_id_at(i)).count();
+        eprintln!("PROBE before {} mid {} after {} checked {} -> {}", ids_before.len(), ids_mid.len(), ids_after.len(), n, n2);
+        eprintln!("PROBE same ids mid vs after {}", ids_mid == ids_after);
+    }
 }

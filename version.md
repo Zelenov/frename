@@ -4,6 +4,7 @@
 
 ## Fixed
 - Two quick moves to other clips, before the video has let go of the first, are two undo steps, not one.
+- Dropping a tag chip on 🗑 can be undone.
 - `Shift+F2` on a marker another tool wrote without an id says that marker is read-only, not "No marker here".
 
 # 0.93
