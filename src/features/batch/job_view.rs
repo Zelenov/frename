@@ -327,23 +327,25 @@ fn files_not_done<'a>(
     Some(column![title, table].spacing(SPACE_S).into())
 }
 
-/// The videos that got subtitle files and which ones, when the action says (a Premiere
-/// transcript was written), as a table.
+/// The videos that got something worth listing and what, when the action says: the subtitle
+/// files written (a Premiere transcript), or the duplicate markers merged away, as a table.
 fn files_written<'a>(
     state: &'a BatchState,
     action: Action,
     directory: Option<&'a Directory>,
 ) -> Option<Element<'a, Message>> {
-    if action != Action::GenerateSubtitles {
-        return None;
-    }
+    let (title, caption) = match action {
+        Action::GenerateSubtitles => (fl!("batch-written-subtitles"), fl!("batch-table-written")),
+        Action::MarkersComment => (fl!("batch-merged-markers"), fl!("batch-table-merged")),
+        _ => return None,
+    };
     let written = state.done_with_reason();
     if written.is_empty() {
         return None;
     }
     let header = table_row(
         text::caption(fl!("batch-table-file")).into(),
-        Some(text::caption(fl!("batch-table-written")).into()),
+        Some(text::caption(caption).into()),
     );
     let lines = Column::with_children(written.into_iter().map(|(id, files)| {
         table_row(
@@ -358,11 +360,7 @@ fn files_written<'a>(
     let table = column![]
         .push(header)
         .push(container(scroll::vertical(lines)).max_height(shown));
-    Some(
-        column![text::title(fl!("batch-written-subtitles")), table]
-            .spacing(SPACE_S)
-            .into(),
-    )
+    Some(column![text::title(title), table].spacing(SPACE_S).into())
 }
 
 /// A row of the table: the file name, then why, with a line under it.

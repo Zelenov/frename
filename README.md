@@ -250,9 +250,10 @@ Actions:
   shows and frename keeps but does not show. A marker's color is a word in brackets after the time
   (`0:41 [red] — Lion`; green, the default, has none). The moments of an AI description become white
   markers too (with their length) and stay in the description. There is one marker per moment: a
-  line for a moment that already has a marker renames it instead of adding another, and either
-  direction merges markers a clip already has on the same moment (same start and length; when
-  their names differ, both are kept as `name — other name`);
+  line for a moment that already has a marker renames it instead of adding another. A clip that
+  already has two markers on one moment (same start and length) is repaired by running either
+  of these two actions on it, even with no lines to move: the markers are merged (different
+  names are kept as `name — other name`) and the result lists the clips where it happened;
 - rotate the videos 90° right or left or 180°, or reset them to no rotation (this also removes
   a turn a phone recorded);
 - tag commented videos with "Commented" and untag the rest;

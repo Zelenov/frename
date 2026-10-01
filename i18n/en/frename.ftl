@@ -236,6 +236,12 @@ batch-close = Close
 batch-failed-subtitles = Not subtitled:
 batch-written-subtitles = Files written:
 batch-table-written = Written
+batch-merged-markers = Duplicate markers merged:
+batch-table-merged = Merged
+batch-markers-merged = { $count ->
+    [one] { $count } duplicate marker merged
+   *[other] { $count } duplicate markers merged
+}
 batch-add-credit = Add credit
 batch-open-log = Open the log
 

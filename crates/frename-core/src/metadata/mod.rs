@@ -1070,4 +1070,26 @@ mod tests {
         std::fs::create_dir_all(crate::comment::comment_path(&file)).expect("folder");
         assert!(write_marker_lines_with(&file, &[crate::Marker::new(5_000)], true).is_err());
     }
+
+    /// Issue #145: merging two markers on one moment must reach the file. A marker left out of
+    /// the list leaves the file only when its GUID is among the `known` ones (the real XMP path;
+    /// the in-memory test backend of the file tagger ignores `known`).
+    #[test]
+    fn merged_away_markers_leave_the_video_when_their_guids_are_known() {
+        let file = copy_of_clip("merged-away");
+        let both = [
+            marker(63_558, "Субтитр: нет субтитра"),
+            marker(63_558, "нет субтитра"),
+        ];
+        save_markers(&file, &both, &HashSet::new()).expect("save");
+        let loaded = load_markers(&file).expect("markers");
+        assert_eq!(loaded.len(), 2);
+        let (merged, away) = crate::merge_duplicate_markers(&loaded);
+        assert_eq!(away, 1);
+        let known: HashSet<String> = loaded.iter().filter_map(|m| m.guid.clone()).collect();
+        save_markers(&file, &merged, &known).expect("save merged");
+        let after = load_markers(&file).expect("markers");
+        assert_eq!(after.len(), 1);
+        assert_eq!(after[0].name, "Субтитр: нет субтитра");
+    }
 }

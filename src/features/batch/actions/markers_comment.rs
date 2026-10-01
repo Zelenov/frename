@@ -8,7 +8,7 @@ use frename_core::FileTagger;
 use iced::Element;
 
 use super::super::page::{self, Change};
-use super::super::ItemResult;
+use super::super::{ItemResult, ItemStatus};
 use crate::ui::{form, layout};
 
 /// The log is always English, unlike the UI text `label()` returns.
@@ -117,19 +117,75 @@ impl Options {
     }
 }
 
-/// Convert the file at `path` in `direction`.
+/// Convert the file at `path` in `direction`. Either way, markers the clip already has on the
+/// same moment are merged into one.
 pub fn run(direction: Direction, path: &Path) -> ItemResult {
+    // Both ways also merge markers the clip already has on one moment; the report says how many.
+    let merged = FileTagger::load_markers(path).map_or(0, |markers| {
+        frename_core::merge_duplicate_markers(&markers).1
+    });
     let outcome = match direction {
         Direction::CommentToMarkers => FileTagger::comment_to_markers(path),
         Direction::MarkersToComment => FileTagger::markers_to_comment(path),
     };
     match outcome {
-        Ok(outcome) => super::item_result(outcome),
+        Ok(outcome) => {
+            let mut result = super::item_result(outcome);
+            if merged > 0 && result.status == ItemStatus::Done {
+                result.reason = Some(fl!("batch-markers-merged", count = merged));
+            }
+            result
+        }
         // The format cannot hold markers, the file is damaged, or the write failed (it is
         // read-only or open in Premiere): the comment is left as it was.
         Err(error) => {
             log::warn!("{LOG_LABEL}: {path:?} not changed: {error}");
             ItemResult::failed(error.to_string())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use super::*;
+
+    fn clip_with_duplicates(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("frename-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let file = dir.join("clip.mov");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("crates/frename-core/tests/fixtures/tiny.mov");
+        std::fs::copy(fixture, &file).expect("copy fixture");
+        let marker = |name: &str| {
+            let mut m = frename_core::Marker::new(5_000);
+            m.name = name.to_string();
+            m
+        };
+        FileTagger::save_markers(
+            &file,
+            &[marker("Lion"), marker("Lion roars")],
+            &HashSet::new(),
+        )
+        .expect("markers");
+        file
+    }
+
+    /// Issue #145: a file whose duplicates were merged says how many in the result.
+    #[test]
+    fn a_file_whose_duplicate_markers_were_merged_says_so() {
+        for direction in [Direction::MarkersToComment, Direction::CommentToMarkers] {
+            let file = clip_with_duplicates(direction.as_str());
+            let result = run(direction, &file);
+            assert_eq!(result.status, ItemStatus::Done, "{direction:?}");
+            assert_eq!(
+                result.reason.as_deref(),
+                Some("1 duplicate marker merged"),
+                "{direction:?}"
+            );
+            assert_eq!(FileTagger::load_markers(&file).map(|m| m.len()), Some(1));
+            let _ = std::fs::remove_dir_all(file.parent().expect("folder"));
         }
     }
 }
