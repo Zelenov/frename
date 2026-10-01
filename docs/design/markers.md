@@ -157,7 +157,7 @@ ignores `SetSegmentStart` while `inline_rename` is open:
 - `EscapePressed` closes the row first (before leaving fullscreen or clearing the search);
 - `F2` closes the open row (its text kept) and adds a new marker at the playhead without opening
   it, so the next moment can be caught while typing;
-- `Undo`, `Redo`, `CopyTags`, `PasteTags` and `Shift+F2` are ignored (the fields have no undo of their own; an
+- `Undo`, `Redo`, `CopyTags`, `PasteTags` and `Shift+F2` are ignored (the fields have no undo of their own, and what was typed becomes one undo step when the row closes, #139; an
   app undo would remove the very marker being edited);
 - if the open row's marker disappears anyway, the row closes.
 `Enter` in the name field also closes the row. `F2` sits between the seek keys, and `F1`/`F3` with

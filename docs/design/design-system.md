@@ -1347,7 +1347,7 @@ glyphs:
 | Same, lock off | `lock-open` "Reordering below changes this clip only" and "Lock" |
 | The orders differ | `triangle-alert` in `warning` "Order differs from the folder" and two secondary buttons: `arrow-up` "Use for the folder" and `arrow-down` "Sort like the folder" |
 
-Neither button can be undone today: each has a tooltip that says so, until undo covers them.
+Both buttons, and the lock, are undoable (#139); a press that changes nothing pushes no step.
 
 #### 13.5.6 File name card
 - A `bg.raised` card, radius 6, padding 8.
@@ -1360,8 +1360,7 @@ Neither button can be undone today: each has a tooltip that says so, until undo 
   - a middle click removes the tag from the clip (undoable).
 - **Trash** at the right end: a 36 px square, `trash` 20 in `text.secondary`, dashed
   `border.control` edge; while a chip is dragged over it: `DANGER_TINT` fill, `error` edge and icon,
-  and "Untag" in `caption` SemiBold `error` under it (on the card's second line). A drop there untags the clip (undoable, like the middle click: today it is
-  not).
+  and "Untag" in `caption` SemiBold `error` under it (on the card's second line). A drop there untags the clip (undoable, like the middle click).
 - **Second line:** the IN and OUT timecodes (§8.16: `mono` in a `bg.overlay` pill with "IN"/"OUT" in
   `caption` `text.secondary` inside, and `x` to clear), then the file name part without tags in
   `mono`.
