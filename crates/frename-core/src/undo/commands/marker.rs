@@ -97,37 +97,6 @@ where
     }
 }
 
-/// Records a marker's duration change (its end set to the playhead, or cleared).
-pub struct SetMarkerDurationCommand {
-    pub guid: String,
-    pub old_ms: u64,
-    pub new_ms: u64,
-}
-
-impl<SD, ST> Undoable<SD, ST> for SetMarkerDurationCommand
-where
-    SD: AppStateStore + Clone,
-    ST: StoredTagStore + Clone,
-{
-    fn edits_open_video(&self) -> bool {
-        true
-    }
-
-    fn undo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
-        let old = self.old_ms;
-        ctx.tag_list
-            .update_marker(&self.guid, |m| m.duration_ms = old);
-        Ok(())
-    }
-
-    fn redo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
-        let new = self.new_ms;
-        ctx.tag_list
-            .update_marker(&self.guid, |m| m.duration_ms = new);
-        Ok(())
-    }
-}
-
 /// Records moving a marker's start and end together: a drag of a range's handle, or a range
 /// turned back into a point.
 pub struct SetMarkerSpanCommand {
@@ -166,4 +135,41 @@ where
         m.start_ms = start;
         m.duration_ms = duration;
     });
+}
+
+/// Records editing a marker's name: one step per row open-to-close, not per key.
+pub struct SetMarkerNameCommand {
+    pub guid: String,
+    pub old: String,
+    pub new: String,
+}
+
+impl SetMarkerNameCommand {
+    fn set<SD, ST>(&self, ctx: &mut UndoContext<'_, SD, ST>, name: &str)
+    where
+        ST: StoredTagStore + Clone,
+    {
+        ctx.tag_list
+            .update_marker(&self.guid, |m| m.name = name.to_string());
+    }
+}
+
+impl<SD, ST> Undoable<SD, ST> for SetMarkerNameCommand
+where
+    SD: AppStateStore + Clone,
+    ST: StoredTagStore + Clone,
+{
+    fn edits_open_video(&self) -> bool {
+        true
+    }
+
+    fn undo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
+        self.set(ctx, &self.old);
+        Ok(())
+    }
+
+    fn redo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
+        self.set(ctx, &self.new);
+        Ok(())
+    }
 }

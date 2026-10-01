@@ -31,6 +31,15 @@ use crate::{db::StoredTagStore, OrderedThing};
 /// Number of tag colors in the UI palette (must match the UI crate).
 const TAG_PALETTE_LEN: u8 = 16;
 
+/// The order of the tags (the grid's and the file name's) and the lock, as Sync up, Sync down
+/// and the lock change them; kept to undo and redo those.
+#[derive(Clone)]
+pub struct TagOrderState {
+    display: OrderedCollection<TagId, ()>,
+    selected: OrderedCollection<TagId, ()>,
+    sync_locked: bool,
+}
+
 /// A collection of available tags. Generic over the store type S (load and add stored tags).
 #[derive(Clone, Debug)]
 pub struct TagList<S> {
@@ -796,6 +805,30 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         self.persist_display_order()?;
         self.rebuild_filtered_display_tag_ids();
         self.update_is_selected_match_display_order();
+        Ok(())
+    }
+
+    /// The tag orders and the lock now (for [`Self::restore_order_state`]).
+    pub fn order_state(&self) -> TagOrderState {
+        TagOrderState {
+            display: self.display_tag_ids.clone(),
+            selected: self.selected_tag_ids.clone(),
+            sync_locked: self.sync_locked,
+        }
+    }
+
+    /// Put the tag orders and the lock back as [`Self::order_state`] saw them, saving the
+    /// grid's order.
+    pub fn restore_order_state(
+        &mut self,
+        state: TagOrderState,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.display_tag_ids = state.display;
+        self.selected_tag_ids = state.selected;
+        self.persist_display_order()?;
+        self.rebuild_filtered_display_tag_ids();
+        self.update_is_selected_match_display_order();
+        self.set_sync_locked(state.sync_locked);
         Ok(())
     }
 

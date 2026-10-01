@@ -51,11 +51,12 @@ pub use tags::{
     install_file_tagger, set_space_after_tags, space_after_tags, CachedFile, DefaultTag,
     FileSnapshot, FileTagger, FileTaggerBackend, FolderInfo, FolderTagStore, InMemoryFileTagger,
     LoggingFileTagger, ProductionFileTagger, SaveAndReparse, Screenshot, StoredTag, Tag,
-    TagColorMapping, TagId, TagList, DEFAULT_TAGS,
+    TagColorMapping, TagId, TagList, TagOrderState, DEFAULT_TAGS,
 };
 pub use undo::{
     AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,
-    NavigateFileCommand, PasteTagsCommand, ReorderTagCommand, RotateVideoCommand, SaveTagCommand,
-    SetMarkerColorCommand, SetMarkerDurationCommand, SetMarkerSpanCommand, SetSegmentEndCommand,
-    SetSegmentStartCommand, StarTagCommand, ToggleTagCommand, UndoContext, UndoError,
+    NavigateFileCommand, PasteTagsCommand, RenameFileCommand, ReorderTagCommand,
+    RotateVideoCommand, SaveTagCommand, SetCommentCommand, SetMarkerColorCommand,
+    SetMarkerNameCommand, SetMarkerSpanCommand, SetSegmentEndCommand, SetSegmentStartCommand,
+    StarTagCommand, SyncTagOrderCommand, ToggleTagCommand, UndoContext, UndoError,
 };

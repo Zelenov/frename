@@ -76,7 +76,7 @@ fn line(glyph: Icon, color: Color, sentence: String) -> iced::widget::Row<'stati
     row![icon(glyph, ICON_MARK, color), sentence]
 }
 
-/// A button that copies one order onto the other; neither can be undone yet, so they say so.
+/// A button that copies one order onto the other.
 /// Without `words` it is an icon button whose tooltip carries its words.
 fn order_button(
     glyph: Icon,
@@ -85,18 +85,13 @@ fn order_button(
     words: bool,
 ) -> Element<'static, Message> {
     if words {
-        tooltip::tip_text(
-            button::with_icon(ButtonKind::Secondary, glyph, label, true).on_press(message),
-            fl!("sync-panel-no-undo"),
-            Position::Top,
-        )
+        button::with_icon(ButtonKind::Secondary, glyph, label, true)
+            .on_press(message)
+            .into()
     } else {
         IconButton::new(glyph)
             .control()
-            .tip(
-                Tip::new(label).detail(fl!("sync-panel-no-undo")),
-                Position::Top,
-            )
+            .tip(Tip::new(label), Position::Top)
             .on_press(message)
             .into()
     }

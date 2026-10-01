@@ -118,12 +118,12 @@ you type in a marker's name. The F-keys always work, and so do `Ctrl+Alt+←` / 
 comment box and a marker's name.
 
 Undo (`Ctrl+Z`) covers tagging, adding, deleting, starring and reordering tags, pasting, in/out
-points, adding, deleting, coloring and resizing markers, rotating a clip, and the rename when you
-leave a clip. The history is shared by the whole folder, so after moving to another clip
-the first undo goes back to the clip you left (a note says so) and the next one undoes its last
+points, adding, deleting, coloring, resizing and naming markers, rotating a clip, the comment (one
+step for what you typed until the box lost the keys), a rename by hand (double-click), Sync up,
+Sync down and the lock, and the rename when you leave a clip. The history is shared by the whole
+folder, so after moving to another clip the first undo goes back to the clip you left (a note says so) and the next one undoes its last
 change. In batch mode only markers and rotation are undone.
-It does not cover comment text or marker names, a rename by hand
-(double-click), untagging with 🗑, the 🔓↑ / 🔓↓ buttons, or batch actions; opening a folder or running a batch
+It does not cover batch actions; opening a folder or running a batch
 action clears the undo history.
 
 ---
