@@ -29,42 +29,65 @@ impl FolderWorkspace {
         msg: markers::Message,
         position_ms: u64,
     ) -> Task<Message> {
+        let before = self.file_workspace.markers().map(<[Marker]>::to_vec);
         let task = self.apply_marker(msg, position_ms);
-        self.write_markers_to_comment_now();
+        if self.file_workspace.markers().map(<[Marker]>::to_vec) != before {
+            return Task::batch([task, self.write_markers_to_comment_now()]);
+        }
         task
     }
 
     /// With markers kept in the comment and the comment in a `.comment.txt`, write the open
     /// clip's marker lines into it now, not when the clip is left, so a crash loses nothing
-    /// done here. A clip whose markers are still the video's, untouched, is left as it is.
-    pub(super) fn write_markers_to_comment_now(&mut self) {
+    /// done here. A write that fails keeps the markers like a failed write into the video does:
+    /// the file is marked in the list and the next edit tries again. A clip whose markers are
+    /// still the video's, untouched, is left as it is; one edited back to that state loses its
+    /// lines again, so the two places agree.
+    pub(super) fn write_markers_to_comment_now(&mut self) -> Task<Message> {
         if frename_core::marker_storage() != frename_core::MarkerStorage::Comment {
-            return;
+            return Task::none();
         }
         let (Some(file), Some(markers)) =
             (self.file_workspace.file(), self.file_workspace.markers())
         else {
-            return;
+            return Task::none();
         };
-        if self
+        let (id, path) = (file.id(), file.file_path().to_path_buf());
+        let untouched = self
             .markers_in_video
-            .get(&file.id())
-            .is_some_and(|read| read.as_slice() == markers)
-        {
-            return;
+            .get(&id)
+            .is_some_and(|read| read.as_slice() == markers);
+        let lines: &[Marker] = if untouched { &[] } else { markers };
+        match frename_core::write_marker_lines(&path, lines) {
+            Ok(true) if !untouched => {
+                self.unsaved_markers.remove(&id);
+                Task::none()
+            }
+            Ok(_) => Task::none(),
+            Err(e) => {
+                log::warn!("markers of {path:?} not written into the comment file: {e}");
+                self.unsaved_markers.insert(id, markers.to_vec());
+                Self::notice("Markers not saved: the comment file is read-only or in use")
+            }
         }
-        frename_core::write_marker_lines(file.file_path(), markers);
     }
 
-    /// The markers of the file `id` moved into its comment: take them out of the video's XMP,
-    /// so the two places never disagree. A failed write leaves them there; the comment wins.
+    /// The markers of the file `id` are in its comment: take them out of the video's XMP, so the
+    /// two places never disagree. A failed write leaves them there; the comment wins on the
+    /// next open, and the next save tries again.
     pub(super) fn move_markers_out_of_video(&mut self, id: FileId, path: &Path) {
-        let Some(read) = self.markers_in_video.remove(&id) else {
+        if !self.clear_from_video.contains(&id) {
             return;
-        };
-        let known = read.iter().filter_map(|m| m.guid.clone()).collect();
-        if let Err(e) = FileTagger::save_markers(path, &[], &known) {
-            log::warn!("markers of {path:?} moved into the comment, not out of the video: {e:?}");
+        }
+        let known = self.known_marker_guids.clone();
+        match FileTagger::save_markers(path, &[], &known) {
+            Ok(()) => {
+                self.clear_from_video.remove(&id);
+                self.markers_in_video.remove(&id);
+            }
+            Err(e) => {
+                log::warn!("markers of {path:?} are in the comment, not out of the video: {e:?}");
+            }
         }
     }
 

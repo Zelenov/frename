@@ -56,6 +56,20 @@ pub fn save_comment(file_path: &Path, comment: &str) {
     }
 }
 
+/// Like [`save_comment`], but says when the file could not be written or removed.
+pub fn try_save_comment(file_path: &Path, comment: &str) -> std::io::Result<()> {
+    let trimmed = comment.trim();
+    let path = comment_path(file_path);
+    if trimmed.is_empty() {
+        match std::fs::remove_file(&path) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+            _ => Ok(()),
+        }
+    } else {
+        std::fs::write(path, format!("{UTF8_BOM}{trimmed}"))
+    }
+}
+
 /// Remove the comment file for a file, if there is one.
 pub fn remove_comment_file(file_path: &Path) {
     let path = comment_path(file_path);

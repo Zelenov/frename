@@ -1,7 +1,7 @@
 # 0.92
 ## Fixed
-- Markers kept in the comment (Settings → Saving) are written into the comment file as you add, rename, recolor, move or delete them, not only when you leave the clip.
-- A clip whose markers are still inside the video shows them when markers are kept in the comment; the first change moves all of them into the comment, so the two places no longer disagree.
+- With markers kept in the comment (Settings → Saving) and comments in text files, markers are written into the comment as you add, rename, recolor, move or delete them, not only when you leave the clip. A comment file that cannot be written marks the file with the red ✕ and is tried again at your next change.
+- With markers kept in the comment, a clip whose markers are still inside the video shows them; changing one moves them all into the comment.
 
 # 0.91
 ## Fixed
