@@ -372,7 +372,10 @@ impl FolderWorkspace {
                 self.set_fullscreen(!self.media_fullscreen)
             }
             Message::RestoreListScrolls { markers_y, cues_y } => {
-                self.markers.restored(markers_y);
+                // Only a list on screen reports back; armed otherwise it would fire much later.
+                if self.media_viewer.marker_list_shown() {
+                    self.markers.restored(markers_y);
+                }
                 Task::batch([
                     marker_actions::scroll_marker_list_to(markers_y),
                     self.media_viewer
@@ -1542,14 +1545,22 @@ impl FolderWorkspace {
     /// Switch fullscreen on or off (only when a video is shown). The view builds the lists anew
     /// then, at offset 0, so the offsets they had are carried to a task that puts them back.
     fn set_fullscreen(&mut self, on: bool) -> Task<Message> {
-        if !self.media_viewer.is_previewable() {
+        if on && !self.media_viewer.is_previewable() {
             return Task::none();
         }
         self.media_fullscreen = on;
-        Task::done(Message::RestoreListScrolls {
+        if !self.media_viewer.is_previewable() {
+            return Task::none();
+        }
+        Task::done(self.restore_lists_message())
+    }
+
+    /// The task message that puts the lists back at the offsets they have now.
+    fn restore_lists_message(&self) -> Message {
+        Message::RestoreListScrolls {
             markers_y: self.markers.scroll_y(),
             cues_y: self.media_viewer.cue_scroll_y(),
-        })
+        }
     }
 
     /// Open the in-place rename editor on the row at `index` (selecting that file first when
@@ -5462,6 +5473,15 @@ mod tests {
         ));
         assert_eq!(workspace.markers.scroll_y(), 120.0);
 
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Video(
+                crate::features::media_viewer::video::Message::CueListScrolled(80.0, 300.0),
+            ),
+        ));
+        assert!(matches!(
+            workspace.restore_lists_message(),
+            Message::RestoreListScrolls { markers_y, cues_y } if markers_y == 120.0 && cues_y == 80.0
+        ));
         for expect_fullscreen in [true, false] {
             let task = workspace.update(Message::ToggleMediaFullscreen);
             assert_eq!(workspace.media_fullscreen, expect_fullscreen);
@@ -5487,7 +5507,7 @@ mod tests {
             2,
             "marker list and subtitle list are scrolled back"
         );
-        assert_eq!(workspace.media_viewer.cue_scroll_y(), 0.0);
+        assert_eq!(workspace.media_viewer.cue_scroll_y(), 80.0);
         let _ = workspace.update(Message::MediaViewer(
             crate::features::media_viewer::Message::Video(
                 crate::features::media_viewer::video::Message::Markers(M::Scrolled(120.0, 300.0)),

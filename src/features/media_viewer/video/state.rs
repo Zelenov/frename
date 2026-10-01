@@ -91,7 +91,7 @@ pub struct VideoPlayerState {
     /// Where the subtitle list is scrolled to; put back when fullscreen rebuilds the list.
     cue_scroll_y: f32,
     /// Set when the list was just put back at this offset; see `CueListScrolled`.
-    cue_restored_to: Option<f32>,
+    cue_restore: crate::ui::scroll::ScrollRestore,
     /// A clicked range is playing: pause when playback reaches its end. Any seek or pause by
     /// the user forgets it.
     play_until: Option<RangePlay>,
@@ -137,7 +137,7 @@ impl Default for VideoPlayerState {
             position: Duration::ZERO,
             followed_cue: None,
             cue_scroll_y: 0.0,
-            cue_restored_to: None,
+            cue_restore: Default::default(),
             play_until: None,
             resume_at: None,
             rotation: None,
@@ -177,7 +177,6 @@ impl VideoPlayerState {
         self.rotation.as_ref()
     }
 
-    /// How many loads have started (see `load_generation`), for tests of reopens.
     /// Scroll the subtitle list to `y`.
     fn scroll_cue_list_to(y: f32) -> Task<Message> {
         iced::widget::operation::scroll_to::<()>(
@@ -190,6 +189,7 @@ impl VideoPlayerState {
         .discard()
     }
 
+    /// How many loads have started (see `load_generation`), for tests of reopens.
     #[cfg(test)]
     pub fn loads_started(&self) -> u64 {
         self.load_generation
@@ -209,7 +209,7 @@ impl VideoPlayerState {
         self.position = Duration::ZERO;
         self.followed_cue = None;
         self.cue_scroll_y = 0.0;
-        self.cue_restored_to = None;
+        self.cue_restore = Default::default();
         self.play_until = None;
         self.paused = paused;
         self.load_generation = self.load_generation.wrapping_add(1);
@@ -510,12 +510,11 @@ impl VideoPlayerState {
             }
             Message::CueListScrolled(y, viewport) => {
                 self.cue_scroll_y = y;
-                if self.cue_restored_to != Some(y) {
+                if !self.cue_restore.report(y) {
                     return Task::none();
                 }
                 // The list was just put back here: if the lit cue is out of the new viewport,
                 // bring it in, as the follow does.
-                self.cue_restored_to = None;
                 let Some(subtitles) = self.subtitles.as_ref() else {
                     return Task::none();
                 };
@@ -535,7 +534,10 @@ impl VideoPlayerState {
                 Self::scroll_cue_list_to(wanted)
             }
             Message::RestoreCueScroll(y) => {
-                self.cue_restored_to = Some(y);
+                // Only a list on screen reports back; armed otherwise it would fire much later.
+                if self.show_cue_list() && self.subtitles.is_some() {
+                    self.cue_restore.arm(y);
+                }
                 Self::scroll_cue_list_to(y)
             }
             Message::SeekToCue(index) => {
@@ -615,11 +617,12 @@ impl VideoPlayerState {
     pub fn subtitles(&self) -> Option<&Subtitles> {
         self.subtitles.as_deref()
     }
-    /// Whether the subtitle list is open.
+    /// Where the subtitle list is scrolled to.
     pub fn cue_scroll_y(&self) -> f32 {
         self.cue_scroll_y
     }
 
+    /// Whether the subtitle list is open.
     pub fn show_cue_list(&self) -> bool {
         self.overlay == Overlay::Subtitles
     }
@@ -1300,9 +1303,7 @@ mod tests {
         let _ = state.update(Message::CueListScrolled(80.0, 300.0));
         assert_eq!(state.cue_scroll_y(), 80.0);
         let _ = state.update(Message::RestoreCueScroll(80.0));
-        assert_eq!(state.cue_restored_to, Some(80.0));
-        // The report of the restore (no subtitles to keep in view) ends the wait.
-        let _ = state.update(Message::CueListScrolled(80.0, 300.0));
-        assert_eq!(state.cue_restored_to, None);
+        // Nothing is armed for a list that is not shown.
+        assert!(!state.cue_restore.report(80.0));
     }
 }
