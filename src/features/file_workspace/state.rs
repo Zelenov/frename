@@ -31,6 +31,9 @@ pub struct FileWorkspace<S> {
     comment_expanded: bool,
     /// The comment box has the keys: its edge draws the focus ring.
     comment_focused: bool,
+    /// Markers kept in the comment, read from the video's XMP instead because the comment has
+    /// none yet (the clip got them in the other storage, from Premiere or from the AI).
+    markers_from_video: Option<Vec<frename_core::Marker>>,
 }
 
 /// The comment box's heights: at first, lowest, tallest.
@@ -48,6 +51,7 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
             comment_height: COMMENT_HEIGHT,
             comment_expanded: false,
             comment_focused: false,
+            markers_from_video: None,
         }
     }
 
@@ -76,11 +80,23 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
                 let mut snapshot = f.snapshot().clone();
                 // Markers kept in the comment come out of it while the file is open: they are
                 // edited as markers, and saving writes them back as lines.
+                self.markers_from_video = None;
                 let markers = match frename_core::marker_storage() {
                     frename_core::MarkerStorage::Comment => {
-                        let (text, markers) =
+                        let (text, mut markers) =
                             frename_core::markers_from_comment(snapshot.comment());
                         snapshot.set_comment(text);
+                        // A comment without marker lines, on a clip whose video holds some:
+                        // they are shown, and move into the comment on the first edit.
+                        if markers.is_empty() {
+                            if let Some(held) =
+                                frename_core::FileTagger::load_markers(f.file_path())
+                                    .filter(|held| !held.is_empty())
+                            {
+                                self.markers_from_video = Some(held.clone());
+                                markers = held;
+                            }
+                        }
                         Some(markers)
                     }
                     frename_core::MarkerStorage::InVideo => {
@@ -93,6 +109,12 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
                 self.tag_list.set_markers(markers);
             }
         }
+    }
+
+    /// The markers the open clip's video holds that are shown because the comment has none, as
+    /// they were read; see [`Self::set_file`].
+    pub fn markers_from_video(&self) -> Option<&[frename_core::Marker]> {
+        self.markers_from_video.as_deref()
     }
 
     /// The current file when ready. Returns None if nothing set or still loading.

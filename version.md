@@ -1,3 +1,8 @@
+# 0.92
+## Fixed
+- Markers kept in the comment (Settings → Saving) are written into the comment file as you add, rename, recolor, move or delete them, not only when you leave the clip.
+- A clip whose markers are still inside the video shows them when markers are kept in the comment; the first change moves all of them into the comment, so the two places no longer disagree.
+
 # 0.91
 ## Fixed
 - The last marker in the marker list is no longer cut off at the bottom, however long its name is.
