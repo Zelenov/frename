@@ -68,6 +68,8 @@ pub enum Message {
     SeekExact(u64),
     /// Show a short note over the picture (e.g. `Frame saved`) for a moment.
     ShowNotice(String),
+    /// A note that must be read, not glanced at (what a crash left): it stays long.
+    ShowLongNotice(String),
     /// Hide the note with this number, unless a newer one replaced it (internal).
     ClearNotice(u64),
     /// Subtitle file next to `video_path` was read; `None` when there is none.
