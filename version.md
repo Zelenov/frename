@@ -1,7 +1,7 @@
 # 0.93
 ## Added
 - Your unsaved work on the open clip (tags, comment, in/out points, markers) is saved to a recovery file a second after each change. After a crash, a killed program or a power cut, the next start applies it, opens that clip and says so ("frename closed unexpectedly. Restored your unsaved work on …").
-- A clip that changed in the meantime is never overwritten: the message says so and names the folder where a readable copy of your work is kept.
+- A clip that changed in the meantime is never overwritten: the message says so and names the folder where a readable copy of your work is kept. Undo history is not restored.
 
 # 0.92
 ## Fixed

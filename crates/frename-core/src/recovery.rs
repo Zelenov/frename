@@ -287,7 +287,8 @@ impl InstanceLock {
         Self::acquire_in(&journal_dir())
     }
 
-    // `File::try_lock` is stable since Rust 1.89; the toolchain is pinned to a newer one.
+    // `File::try_lock` is stable since Rust 1.89; the workspace's `rust-version` says 1.75 but
+    // `rust-toolchain.toml` pins a newer one, which is what builds and CI use.
     #[allow(clippy::incompatible_msrv)]
     fn acquire_in(dir: &Path) -> Option<Self> {
         std::fs::create_dir_all(dir).ok()?;
@@ -421,7 +422,8 @@ pub fn saved_what_was_wanted(wanted: &FileSnapshot, saved: &FileSnapshot) -> boo
         && same_point(wanted.segment_end(), saved.segment_end())
 }
 
-/// Save the entry's state to its clip, the way leaving the clip would: markers first (while the
+/// Save the entry's state to its clip, the way leaving the clip would (keep the marker handling
+/// in step with `FolderWorkspace::apply_file_updated`, the live save): markers first (while the
 /// file still has its name), then the name, tags and comment. `Some(path)` of the clip after,
 /// when what was wanted is really on disk; `None` when the save did not take.
 fn apply(entry: &Entry) -> Option<PathBuf> {
@@ -444,9 +446,17 @@ fn apply(entry: &Entry) -> Option<PathBuf> {
                         .chain(markers.iter())
                         .filter_map(|m| m.guid.clone())
                         .collect();
-                    if let Err(e) = FileTagger::save_markers(path, &markers, &known) {
-                        log::warn!("recovery: markers of {path:?} not written: {e}");
-                        return None;
+                    match FileTagger::save_markers(path, &markers, &known) {
+                        Ok(()) => {}
+                        // The clip holds none (its format, a damaged file): the other edits
+                        // still go in, as when leaving the clip.
+                        Err(
+                            crate::MarkersError::CannotHoldMarkers | crate::MarkersError::Damaged,
+                        ) => {}
+                        Err(e) => {
+                            log::warn!("recovery: markers of {path:?} not written: {e}");
+                            return None;
+                        }
                     }
                 }
             }

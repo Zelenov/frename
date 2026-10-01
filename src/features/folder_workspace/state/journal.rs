@@ -10,6 +10,7 @@ use iced::Task;
 
 use super::FolderWorkspace;
 use crate::features::folder_workspace::Message;
+use crate::features::media_viewer::{self, video};
 
 impl FolderWorkspace {
     /// The open clip as it is now, as a journal entry.
@@ -28,6 +29,8 @@ impl FolderWorkspace {
     /// opened again while its save still waits for the video to unload has edits that are not
     /// on disk: they count as unsaved from the start.
     pub(super) fn journal_reset_baseline(&mut self) {
+        // A write still running belongs to the clip left: its result is dropped when it lands.
+        self.journal_epoch += 1;
         self.journal_baseline = self.journal_entry();
         self.journal_written = None;
         self.journal_force = self
@@ -40,9 +43,15 @@ impl FolderWorkspace {
     /// the entry out again when they are gone (undone, or saved). The write (it ends in an
     /// `fsync`) runs off the interface's thread.
     pub(super) fn journal_tick(&mut self) -> Task<Message> {
+        // One write at a time: a slow disk must not pile up writes to the same file.
+        if self.journal_in_flight {
+            return Task::none();
+        }
         let Some((id, entry)) = self.journal_next_write() else {
             return Task::none();
         };
+        self.journal_in_flight = true;
+        let epoch = self.journal_epoch;
         Task::perform(
             async move {
                 tokio::task::spawn_blocking(move || {
@@ -52,7 +61,7 @@ impl FolderWorkspace {
                 .await
                 .ok()
             },
-            move |outcome| Message::JournalWritten(id, outcome),
+            move |outcome| Message::JournalWritten(id, epoch, outcome),
         )
     }
 
@@ -94,9 +103,14 @@ impl FolderWorkspace {
     pub(super) fn journal_written(
         &mut self,
         id: FileId,
+        epoch: u64,
         outcome: Option<(Entry, Result<(), String>)>,
     ) {
+        self.journal_in_flight = false;
         match outcome {
+            // The clip was saved, or another one opened, while this wrote: its edits are
+            // applied, so the entry it just wrote must not outlive them.
+            Some((entry, Ok(()))) if epoch != self.journal_epoch => recovery::remove(&entry.path),
             Some((entry, Ok(()))) => {
                 // The clip may have changed again while it wrote; the next tick sees that.
                 self.journal_written = Some((id, entry));
@@ -110,10 +124,13 @@ impl FolderWorkspace {
     /// its job. `path_before` is where the clip was, `new_path` where it is. When it is the open
     /// clip, what it is now is the new reference.
     pub(super) fn journal_saved(&mut self, id: FileId, path_before: &Path, new_path: &Path) {
+        self.journal_epoch += 1;
         recovery::remove(path_before);
-        if self.journal_written.as_ref().is_some_and(|(w, _)| *w == id) {
-            if let Some((_, entry)) = self.journal_written.take() {
+        if let Some((written_id, entry)) = self.journal_written.take() {
+            if written_id == id {
                 recovery::remove(&entry.path);
+            } else {
+                self.journal_written = Some((written_id, entry));
             }
         }
         self.journal_force = false;
@@ -129,12 +146,15 @@ impl FolderWorkspace {
         self.startup_notes.push(note);
     }
 
-    /// Show the start-up messages over the open clip's picture, once a clip is open.
+    /// Show the start-up messages over the open clip's picture, once a clip is open: all in one
+    /// long note (a note replaces the one before it, and this one must be read).
     pub(super) fn show_startup_notes(&mut self) -> Task<Message> {
-        if self.file_workspace.file().is_none() {
+        if self.file_workspace.file().is_none() || self.startup_notes.is_empty() {
             return Task::none();
         }
-        let notes: Vec<String> = std::mem::take(&mut self.startup_notes);
-        Task::batch(notes.iter().map(|note| Self::notice(note)))
+        let text = std::mem::take(&mut self.startup_notes).join(" ");
+        Task::done(Message::MediaViewer(media_viewer::Message::Video(
+            video::Message::ShowLongNotice(text),
+        )))
     }
 }

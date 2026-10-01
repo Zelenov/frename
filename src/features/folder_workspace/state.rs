@@ -127,6 +127,10 @@ pub struct FolderWorkspace {
     journal_written: Option<(FileId, frename_core::recovery::Entry)>,
     /// The open clip was reopened with edits still waiting to be saved: journal it as it is.
     journal_force: bool,
+    /// A journal write is running (one at a time), and which clip's state it belongs to: bumped
+    /// when a clip is saved or another opens, so a write that lands later is dropped.
+    journal_in_flight: bool,
+    journal_epoch: u64,
     /// Messages from the start (edits restored after a crash), shown once a clip is open.
     startup_notes: Vec<String>,
     /// Files whose markers were shown from the video and then edited into the comment: the
@@ -211,6 +215,8 @@ impl FolderWorkspace {
             journal_baseline: None,
             journal_written: None,
             journal_force: false,
+            journal_in_flight: false,
+            journal_epoch: 0,
             startup_notes: Vec::new(),
             clear_from_video: HashSet::new(),
             drag_out: DragOutState::default(),
@@ -262,8 +268,8 @@ impl FolderWorkspace {
                 results,
             } => self.comment_batch_loaded(generation, results),
             Message::JournalTick => Task::batch([self.journal_tick(), self.show_startup_notes()]),
-            Message::JournalWritten(id, outcome) => {
-                self.journal_written(id, outcome);
+            Message::JournalWritten(id, epoch, outcome) => {
+                self.journal_written(id, epoch, outcome);
                 Task::none()
             }
             Message::SpinnerTick => {
@@ -1316,15 +1322,6 @@ impl FolderWorkspace {
         // already exists (issue #84), or the video is read-only or open elsewhere. The same
         // check the drag-out path already uses to detect this.
         let refused = drag_out::save_failed(&snapshot, &snapshot_after_save);
-        // Applied and read back from the file: the journal's copy of these edits is no longer
-        // needed. A refused save, markers that did not get written, or a comment or in/out
-        // point that is not on disk keep it.
-        if !refused
-            && !self.unsaved_markers.contains_key(&id)
-            && frename_core::recovery::saved_what_was_wanted(&snapshot, &snapshot_after_save)
-        {
-            self.journal_saved(id, &path_before, &new_path);
-        }
         let refused_notice = if refused {
             Self::notice(
                 "Not saved: a file with that name already exists, or it is read-only or in use",
@@ -1353,6 +1350,15 @@ impl FolderWorkspace {
             if !refused {
                 self.move_markers_out_of_video(id, &new_path);
             }
+        }
+        // Applied and read back from the file: the journal's copy of these edits is no longer
+        // needed. A refused save, markers that did not get written, or a comment or in/out
+        // point that is not on disk keep it.
+        if !refused
+            && !self.unsaved_markers.contains_key(&id)
+            && frename_core::recovery::saved_what_was_wanted(&snapshot, &snapshot_after_save)
+        {
+            self.journal_saved(id, &path_before, &new_path);
         }
         // A file menu action waiting for this save runs now, on the name the file has on disk.
         let file_action = self.file_action_after_save(id, refused);
@@ -4583,7 +4589,8 @@ mod tests {
     fn tick(workspace: &mut FolderWorkspace) {
         if let Some((id, entry)) = workspace.journal_next_write() {
             let result = frename_core::recovery::write(&entry).map_err(|e| e.to_string());
-            workspace.journal_written(id, Some((entry, result)));
+            let epoch = workspace.journal_epoch;
+            workspace.journal_written(id, epoch, Some((entry, result)));
         }
     }
 
@@ -4654,6 +4661,52 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert_eq!(journal_files(&test_dir), 0, "a restored entry is gone");
+    }
+
+    #[test]
+    fn a_write_that_lands_after_the_save_does_not_bring_the_entry_back() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = journal_workspace(&test_dir);
+        pick_tag(&mut workspace);
+        // The tick starts a write...
+        let epoch = workspace.journal_epoch;
+        let (id, entry) = workspace.journal_next_write().expect("a write is due");
+        let result = frename_core::recovery::write(&entry).map_err(|e| e.to_string());
+        // ...the clip is left and saved before the result is delivered...
+        let (saved_id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        let _ = workspace.update(Message::FileUpdated {
+            id: saved_id,
+            snapshot,
+        });
+        // ...then the write's result arrives: the entry it wrote must go.
+        workspace.journal_written(id, epoch, Some((entry, result)));
+        assert_eq!(
+            journal_files(&test_dir),
+            0,
+            "saved edits leave no entry behind"
+        );
+    }
+
+    #[test]
+    fn only_one_journal_write_runs_at_a_time() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = journal_workspace(&test_dir);
+        pick_tag(&mut workspace);
+        let _first = workspace.journal_tick();
+        assert!(workspace.journal_in_flight);
+        let second = workspace.journal_tick();
+        assert_eq!(second.units(), 0, "no second write while one runs");
+    }
+
+    #[test]
+    fn the_start_up_messages_come_as_one_long_note() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = journal_workspace(&test_dir);
+        workspace.add_startup_note("Restored one.".to_string());
+        workspace.add_startup_note("Kept two.".to_string());
+        let task = workspace.show_startup_notes();
+        assert_eq!(task.units(), 1, "one note, not one per message");
+        assert!(workspace.startup_notes.is_empty());
     }
 
     #[test]

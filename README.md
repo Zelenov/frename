@@ -121,7 +121,7 @@ Your unsaved work on the open clip (tags, comment, in/out points, markers) is al
 recovery file, a second after each change. If frename or the computer stops without closing it,
 the next start applies that work, opens that clip and says so. If the clip changed meanwhile, it
 is left alone: the message names the folder (`recovery/kept`, next to the settings) with a
-readable copy of your work to retype from.
+readable copy of your work to retype from. Undo history is not restored.
 
 Undo (`Ctrl+Z`) covers tagging, adding, deleting, starring and reordering tags, pasting, in/out
 points, adding, deleting, coloring and resizing markers, rotating a clip, and the rename when you

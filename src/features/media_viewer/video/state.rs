@@ -21,6 +21,8 @@ use frename_core::{
 
 /// How long a note over the picture stays.
 const NOTICE_DURATION: Duration = Duration::from_secs(2);
+/// How long a note that must be read stays: the report of a crash and what was restored.
+const LONG_NOTICE_DURATION: Duration = Duration::from_secs(20);
 
 /// What the list over the right of the picture shows. One list at a time, so a windowed
 /// video is not covered twice. Kept across files, like volume.
@@ -473,15 +475,8 @@ impl VideoPlayerState {
                 self.play_until = None;
                 self.seek_to(Duration::from_millis(ms), true)
             }
-            Message::ShowNotice(text) => {
-                self.notice_count += 1;
-                let number = self.notice_count;
-                self.notice = Some((text, number));
-                Task::future(async move {
-                    tokio::time::sleep(NOTICE_DURATION).await;
-                    Message::ClearNotice(number)
-                })
-            }
+            Message::ShowNotice(text) => self.show_notice(text, NOTICE_DURATION),
+            Message::ShowLongNotice(text) => self.show_notice(text, LONG_NOTICE_DURATION),
             Message::ClearNotice(number) => {
                 if self.notice.as_ref().is_some_and(|(_, n)| *n == number) {
                     self.notice = None;
@@ -594,6 +589,16 @@ impl VideoPlayerState {
     }
 
     /// The note to show over the picture, if any.
+    fn show_notice(&mut self, text: String, duration: Duration) -> Task<Message> {
+        self.notice_count += 1;
+        let number = self.notice_count;
+        self.notice = Some((text, number));
+        Task::future(async move {
+            tokio::time::sleep(duration).await;
+            Message::ClearNotice(number)
+        })
+    }
+
     pub fn notice(&self) -> Option<&str> {
         self.notice.as_ref().map(|(text, _)| text.as_str())
     }

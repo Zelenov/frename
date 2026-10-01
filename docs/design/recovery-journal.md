@@ -20,8 +20,14 @@ that gap. Written by the agent; nothing here waited for an answer.
   back to the baseline (undone), the entry is removed. So a crash loses at most about a second.
   A running batch job does not journal (it writes its own files).
 - **When it goes:** `apply_file_updated` (leaving the clip, closing, a folder change) removes the
-  entry once the save was not refused. A refused save (a file with that name exists, read-only)
-  keeps it. A normal close therefore leaves nothing behind.
+  entry once the save is applied *and read back*: not refused, no marker write waiting in
+  `unsaved_markers`, and tags, name, comment and in/out points on disk are what was wanted
+  (`recovery::saved_what_was_wanted`, deliberately stricter than the live refusal check
+  `drag_out::save_failed`). Otherwise it stays. A normal close therefore leaves nothing behind.
+  A journal write is one at a time, off the interface's thread; a write that lands after the
+  clip was saved is dropped and its entry removed (an epoch counter).
+- **Only one frename:** the journal is held with an exclusive lock on `recovery/instance.lock`
+  for the life of the process; a second frename leaves it alone.
 - **After a crash:** at start, before any clip is open (so nothing locks the clips),
   `restore_all` applies each entry through the normal save path (markers, then name, tags,
   comment) when the clip is still the one it was made on (same size and time). The clip is then
@@ -39,7 +45,9 @@ that gap. Written by the agent; nothing here waited for an answer.
   changes the file) writes a fresh entry that still matches the clip.
 - The restore runs at start, not when the clip is opened: no video is open yet, so Windows does
   not lock it, and the existing save paths can be reused as they are.
-- The `what` in the message (`5 tags, 3 markers, comment`) is English in every UI language.
+- The message pieces are counts and reasons from the core, worded and pluralised in the app
+  (en + ru). The restore message stays 20 s (all messages in one note), then goes.
+- The entry kept aside gets a readable `.txt` beside it to retype from.
 
 ## Not built (left for the owner / a next session)
 
