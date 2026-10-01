@@ -122,7 +122,8 @@ fn select(state: &BatchState, action: Action) -> Option<Message> {
 
 /// Every action, under its group's caption.
 fn action_list(state: &BatchState) -> Element<'_, Message> {
-    let mut list = Column::new().spacing(SPACE_XXS);
+    // No spacing: each item brings its own, clickable gap (`layout::nav_slot`).
+    let mut list = Column::new();
     let mut group = None;
     for action in Action::ALL {
         if group != Some(action.group()) {
@@ -147,13 +148,14 @@ fn action_list(state: &BatchState) -> Element<'_, Message> {
 
 /// The action list folded to its icons; a line between groups, each name in its tooltip.
 fn icon_list(state: &BatchState) -> Element<'_, Message> {
-    let mut list = Column::new().spacing(SPACE_XXS).align_x(Alignment::Center);
+    let mut list = Column::new().align_x(Alignment::Center);
     let mut group = None;
     for action in Action::ALL {
         if group.is_some_and(|g| g != action.group()) {
+            // The 2 px below it that the column's spacing used to put before the next item.
             list = list.push(container(layout::horizontal_line()).padding(Padding {
                 top: SPACE_XS,
-                bottom: SPACE_XS,
+                bottom: SPACE_XS + SPACE_XXS,
                 ..Padding::ZERO
             }));
         }
@@ -162,12 +164,14 @@ fn icon_list(state: &BatchState) -> Element<'_, Message> {
             Some((service, _)) => Tip::new(action.label()).detail(service),
             None => Tip::new(action.label()),
         };
-        list = list.push(
+        let message = select(state, action);
+        list = list.push(layout::nav_slot(
             IconButton::new(action.icon())
                 .latched(action == state.action())
                 .tip(tip, Position::Right)
-                .on_press_maybe(select(state, action)),
-        );
+                .on_press_maybe(message.clone()),
+            message.is_some(),
+        ));
     }
     container(list)
         .width(ACTION_LIST_ICONS_WIDTH)
@@ -204,7 +208,8 @@ fn group_caption<'a>(group: Group, spaced: bool) -> Element<'a, Message> {
     container(text::caption(group.label()))
         .padding(Padding {
             top: if spaced { SPACE_M } else { 0.0 },
-            bottom: SPACE_XS,
+            // The 2 px below it that the column's spacing used to put before the first item.
+            bottom: SPACE_XS + SPACE_XXS,
             left: SPACE_S,
             right: 0.0,
         })
