@@ -125,6 +125,8 @@ pub struct FolderWorkspace {
     /// holds of it: edits are written there once the clip differs from this.
     journal_baseline: Option<(FileId, frename_core::recovery::Entry)>,
     journal_written: Option<(FileId, frename_core::recovery::Entry)>,
+    /// The open clip was reopened with edits still waiting to be saved: journal it as it is.
+    journal_force: bool,
     /// Messages from the start (edits restored after a crash), shown once a clip is open.
     startup_notes: Vec<String>,
     /// Files whose markers were shown from the video and then edited into the comment: the
@@ -208,6 +210,7 @@ impl FolderWorkspace {
             markers_in_video: HashMap::new(),
             journal_baseline: None,
             journal_written: None,
+            journal_force: false,
             startup_notes: Vec::new(),
             clear_from_video: HashSet::new(),
             drag_out: DragOutState::default(),
@@ -258,9 +261,10 @@ impl FolderWorkspace {
                 generation,
                 results,
             } => self.comment_batch_loaded(generation, results),
-            Message::JournalTick => {
-                self.journal_tick();
-                self.show_startup_notes()
+            Message::JournalTick => Task::batch([self.journal_tick(), self.show_startup_notes()]),
+            Message::JournalWritten(id, outcome) => {
+                self.journal_written(id, outcome);
+                Task::none()
             }
             Message::SpinnerTick => {
                 self.spinner_frame = self.spinner_frame.wrapping_add(1);
@@ -1312,9 +1316,14 @@ impl FolderWorkspace {
         // already exists (issue #84), or the video is read-only or open elsewhere. The same
         // check the drag-out path already uses to detect this.
         let refused = drag_out::save_failed(&snapshot, &snapshot_after_save);
-        // Applied: the journal's copy of these edits is no longer needed. A refused save keeps it.
-        if !refused {
-            self.journal_saved(id, &path_before);
+        // Applied and read back from the file: the journal's copy of these edits is no longer
+        // needed. A refused save, markers that did not get written, or a comment or in/out
+        // point that is not on disk keep it.
+        if !refused
+            && !self.unsaved_markers.contains_key(&id)
+            && frename_core::recovery::saved_what_was_wanted(&snapshot, &snapshot_after_save)
+        {
+            self.journal_saved(id, &path_before, &new_path);
         }
         let refused_notice = if refused {
             Self::notice(
@@ -4570,6 +4579,14 @@ mod tests {
         marker_workspace(test_dir, test_dir.directory().files_in_order().count())
     }
 
+    /// One second passes: what the tick would write is written (here, at once).
+    fn tick(workspace: &mut FolderWorkspace) {
+        if let Some((id, entry)) = workspace.journal_next_write() {
+            let result = frename_core::recovery::write(&entry).map_err(|e| e.to_string());
+            workspace.journal_written(id, Some((entry, result)));
+        }
+    }
+
     fn journal_files(test_dir: &TestDirectory) -> usize {
         std::fs::read_dir(test_dir.file_path("recovery"))
             .map(|dir| {
@@ -4595,11 +4612,11 @@ mod tests {
     fn unsaved_edits_reach_the_journal_on_the_tick_and_go_when_saved() {
         let test_dir = TestDirectory::new(2);
         let mut workspace = journal_workspace(&test_dir);
-        let _ = workspace.update(Message::JournalTick);
+        tick(&mut workspace);
         assert_eq!(journal_files(&test_dir), 0, "nothing changed yet");
 
         pick_tag(&mut workspace);
-        let _ = workspace.update(Message::JournalTick);
+        tick(&mut workspace);
         assert_eq!(journal_files(&test_dir), 1, "a tag is journaled");
 
         // Saving (leaving the clip) applies the edits: the entry goes.
@@ -4613,10 +4630,10 @@ mod tests {
         let test_dir = TestDirectory::new(1);
         let mut workspace = journal_workspace(&test_dir);
         pick_tag(&mut workspace);
-        let _ = workspace.update(Message::JournalTick);
+        tick(&mut workspace);
         assert_eq!(journal_files(&test_dir), 1);
         let _ = workspace.update(Message::Undo);
-        let _ = workspace.update(Message::JournalTick);
+        tick(&mut workspace);
         assert_eq!(journal_files(&test_dir), 0, "back to what is on disk");
     }
 
@@ -4625,12 +4642,14 @@ mod tests {
         let test_dir = TestDirectory::new(1);
         let mut workspace = journal_workspace(&test_dir);
         pick_tag(&mut workspace);
-        let _ = workspace.update(Message::JournalTick);
+        tick(&mut workspace);
         drop(workspace); // the process dies here: no save, no close
-        let reports = frename_core::recovery::restore_all();
+        let lock = frename_core::recovery::InstanceLock::acquire().expect("the only instance");
+        // A second frename must not treat this one's live entries as leftovers.
+        let reports = frename_core::recovery::restore_all(&lock);
         match reports.as_slice() {
             [frename_core::recovery::Restored::Applied { summary, .. }] => {
-                assert!(summary.contains("tag"), "{summary}");
+                assert_eq!(summary.tags, 1);
             }
             other => panic!("{other:?}"),
         }
@@ -4642,7 +4661,7 @@ mod tests {
         let test_dir = TestDirectory::new(1);
         let mut workspace = journal_workspace(&test_dir);
         pick_tag(&mut workspace);
-        let _ = workspace.update(Message::JournalTick);
+        tick(&mut workspace);
         assert_eq!(journal_files(&test_dir), 1);
         // The window closes: the open clip's edits are saved once its video has unloaded.
         let _ = workspace.flush_open_file();

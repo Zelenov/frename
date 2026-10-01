@@ -2,6 +2,8 @@
 //! written to disk a second after they change, so a crash, a kill or a power cut loses at most
 //! that second, and deleted once the edits are really applied to the clip.
 
+use std::path::Path;
+
 use frename_core::recovery::{self, Entry};
 use frename_core::FileId;
 use iced::Task;
@@ -12,61 +14,113 @@ use crate::features::folder_workspace::Message;
 impl FolderWorkspace {
     /// The open clip as it is now, as a journal entry.
     fn journal_entry(&self) -> Option<(FileId, Entry)> {
-        let (id, snapshot) = self.file_workspace.get_snapshot()?;
         let path = self.file_workspace.file()?.file_path().to_path_buf();
-        Some((id, Entry::new(&path, &snapshot)?))
+        self.journal_entry_at(&path)
     }
 
-    /// The clip just opened is the reference: only what differs from it is unsaved.
+    /// The open clip's state as an entry for the clip at `path`.
+    fn journal_entry_at(&self, path: &Path) -> Option<(FileId, Entry)> {
+        let (id, snapshot) = self.file_workspace.get_snapshot()?;
+        Some((id, Entry::new(path, &snapshot)?))
+    }
+
+    /// The clip just opened is the reference: only what differs from it is unsaved. A clip
+    /// opened again while its save still waits for the video to unload has edits that are not
+    /// on disk: they count as unsaved from the start.
     pub(super) fn journal_reset_baseline(&mut self) {
         self.journal_baseline = self.journal_entry();
         self.journal_written = None;
+        self.journal_force = self
+            .journal_baseline
+            .as_ref()
+            .is_some_and(|(id, _)| self.pending_file_updates.iter().any(|(p, _)| p == id));
     }
 
     /// Once a second: write the open clip's edits into the journal when they changed, and take
-    /// the entry out again when they are gone (undone, or saved).
-    pub(super) fn journal_tick(&mut self) {
+    /// the entry out again when they are gone (undone, or saved). The write (it ends in an
+    /// `fsync`) runs off the interface's thread.
+    pub(super) fn journal_tick(&mut self) -> Task<Message> {
+        let Some((id, entry)) = self.journal_next_write() else {
+            return Task::none();
+        };
+        Task::perform(
+            async move {
+                tokio::task::spawn_blocking(move || {
+                    let result = recovery::write(&entry).map_err(|e| e.to_string());
+                    (entry, result)
+                })
+                .await
+                .ok()
+            },
+            move |outcome| Message::JournalWritten(id, outcome),
+        )
+    }
+
+    /// What the journal needs written now, if anything; an entry that is not needed any more is
+    /// removed here.
+    pub(super) fn journal_next_write(&mut self) -> Option<(FileId, Entry)> {
         // A running job locks the folder and writes its files itself.
         if self.batch.is_running() {
-            return;
+            return None;
         }
-        let Some((id, now)) = self.journal_entry() else {
-            return;
-        };
+        let (id, now) = self.journal_entry()?;
         let Some((baseline_id, baseline)) = self.journal_baseline.as_ref() else {
             self.journal_baseline = Some((id, now));
-            return;
+            return None;
         };
         if *baseline_id != id {
             self.journal_baseline = Some((id, now));
             self.journal_written = None;
-            return;
+            self.journal_force = false;
+            return None;
         }
-        let dirty = !baseline.same_state(&now) || self.unsaved_markers.contains_key(&id);
+        let dirty = self.journal_force
+            || !baseline.same_state(&now)
+            || self.unsaved_markers.contains_key(&id);
         let written = self
             .journal_written
             .as_ref()
             .is_some_and(|(written_id, entry)| *written_id == id && *entry == now);
-        if dirty && !written {
-            match recovery::write(&now) {
-                Ok(()) => self.journal_written = Some((id, now)),
-                Err(e) => log::warn!("recovery: the journal could not be written: {e}"),
+        if dirty {
+            return (!written).then_some((id, now));
+        }
+        if let Some((_, entry)) = self.journal_written.take() {
+            recovery::remove(&entry.path);
+        }
+        None
+    }
+
+    /// A journal write finished: remember what the journal holds now.
+    pub(super) fn journal_written(
+        &mut self,
+        id: FileId,
+        outcome: Option<(Entry, Result<(), String>)>,
+    ) {
+        match outcome {
+            Some((entry, Ok(()))) => {
+                // The clip may have changed again while it wrote; the next tick sees that.
+                self.journal_written = Some((id, entry));
             }
-        } else if !dirty && self.journal_written.is_some() {
-            recovery::remove(&now.path);
-            self.journal_written = None;
+            Some((_, Err(e))) => log::warn!("recovery: the journal could not be written: {e}"),
+            None => log::warn!("recovery: the journal write did not finish"),
         }
     }
 
-    /// The edits of the clip at `path` are applied (saved): its journal entry has done its job.
-    /// When it is the open clip, what it is now is the new reference.
-    pub(super) fn journal_saved(&mut self, id: FileId, path_before: &std::path::Path) {
+    /// The edits of the clip `id` were applied (saved and read back): its journal entry has done
+    /// its job. `path_before` is where the clip was, `new_path` where it is. When it is the open
+    /// clip, what it is now is the new reference.
+    pub(super) fn journal_saved(&mut self, id: FileId, path_before: &Path, new_path: &Path) {
         recovery::remove(path_before);
         if self.journal_written.as_ref().is_some_and(|(w, _)| *w == id) {
-            self.journal_written = None;
+            if let Some((_, entry)) = self.journal_written.take() {
+                recovery::remove(&entry.path);
+            }
         }
+        self.journal_force = false;
         if self.file_workspace.file().is_some_and(|f| f.id() == id) {
-            self.journal_baseline = self.journal_entry();
+            // The open clip's own path still names the clip as it was (the rename reaches it
+            // with the next open), so the reference is taken for the new name.
+            self.journal_baseline = self.journal_entry_at(new_path);
         }
     }
 

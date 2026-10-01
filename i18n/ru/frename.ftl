@@ -628,4 +628,21 @@ settings-topup-record = Записать пополнение
 settings-topup-refused = Введите сумму числом и день в виде ГГГГ-ММ-ДД.
 
 recovery-restored = frename закрылся неожиданно. Несохранённая работа над { $clip } восстановлена ({ $what }).
-recovery-kept = frename закрылся неожиданно. Несохранённая работа над { $clip } не применена ({ $why }); она сохранена в { $folder }.
+recovery-kept = frename закрылся неожиданно. Несохранённая работа над { $clip } ({ $what }) не применена: { $why }. Читаемая копия, чтобы набрать заново, лежит в { $folder }.
+recovery-unreadable = frename закрылся неожиданно, а файл восстановления не удалось прочитать. Он сохранён в { $folder }.
+recovery-why-gone = ролика нет или он переименован
+recovery-why-changed = ролик изменился после ваших правок
+recovery-why-not-written = файл с таким именем уже есть, либо ролик только для чтения или занят
+recovery-tags = { $count ->
+    [one] { $count } тег
+    [few] { $count } тега
+   *[many] { $count } тегов
+}
+recovery-markers = { $count ->
+    [one] { $count } маркер
+    [few] { $count } маркера
+   *[many] { $count } маркеров
+}
+recovery-comment = комментарий
+recovery-in-out = точки входа и выхода
+recovery-edits = правки

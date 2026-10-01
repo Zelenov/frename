@@ -576,4 +576,19 @@ settings-topup-record = Record top-up
 settings-topup-refused = Type the amount as a number and the day as YYYY-MM-DD.
 
 recovery-restored = frename closed unexpectedly. Restored your unsaved work on { $clip } ({ $what }).
-recovery-kept = frename closed unexpectedly. Your unsaved work on { $clip } was not applied ({ $why }); it is kept in { $folder }.
+recovery-kept = frename closed unexpectedly. Your unsaved work on { $clip } ({ $what }) was not applied: { $why }. A readable copy to retype from is in { $folder }.
+recovery-unreadable = frename closed unexpectedly, and a recovery file could not be read. It is kept in { $folder }.
+recovery-why-gone = the clip is gone or was renamed
+recovery-why-changed = the clip changed after your edits
+recovery-why-not-written = a file with that name exists, or the clip is read-only or in use
+recovery-tags = { $count ->
+    [one] { $count } tag
+   *[other] { $count } tags
+}
+recovery-markers = { $count ->
+    [one] { $count } marker
+   *[other] { $count } markers
+}
+recovery-comment = comment
+recovery-in-out = in/out points
+recovery-edits = edits

@@ -49,25 +49,59 @@ fn latin_key(key: &keyboard::Key, physical_key: keyboard::key::Physical) -> Opti
     key.to_latin(physical_key).map(|c| c.to_ascii_lowercase())
 }
 
-/// Apply the edits an earlier crash left in the recovery journal; the messages to show and the
-/// first restored clip (to open it, so the message appears over it).
-fn restore_after_crash() -> (Vec<String>, Option<frename_core::FolderAndFile>) {
-    use frename_core::recovery::Restored;
+/// What a restore holds, in words: `5 tags, 3 markers, comment`.
+fn recovery_what(summary: frename_core::recovery::Summary) -> String {
+    let mut parts = Vec::new();
+    if summary.tags > 0 {
+        parts.push(fl!("recovery-tags", count = summary.tags));
+    }
+    if summary.markers > 0 {
+        parts.push(fl!("recovery-markers", count = summary.markers));
+    }
+    if summary.comment {
+        parts.push(fl!("recovery-comment"));
+    }
+    if summary.in_out {
+        parts.push(fl!("recovery-in-out"));
+    }
+    if parts.is_empty() {
+        parts.push(fl!("recovery-edits"));
+    }
+    parts.join(", ")
+}
+
+/// Apply the edits an earlier crash left in the recovery journal, when this is the only frename
+/// running; the messages to show and the first restored clip (to open it, so the message
+/// appears over it). The restore is synchronous on purpose: it must run before any video is
+/// open (Windows locks a playing clip), and it is a few small file operations.
+fn restore_after_crash(
+    lock: Option<&frename_core::recovery::InstanceLock>,
+) -> (Vec<String>, Option<frename_core::FolderAndFile>) {
+    use frename_core::recovery::{KeptWhy, Restored};
     let mut notes = Vec::new();
     let mut open = None;
-    for report in frename_core::recovery::restore_all() {
+    let Some(lock) = lock else {
+        log::info!("recovery: another frename is running; leaving the journal to it");
+        return (notes, open);
+    };
+    for report in frename_core::recovery::restore_all(lock) {
         let file_name = |path: &std::path::Path| {
             path.file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default()
         };
+        let folder_of = |path: &std::path::Path| {
+            path.parent()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default()
+        };
         match report {
             Restored::Applied { path, summary } => {
-                log::info!("recovery: restored {summary} on {path:?}");
+                log::info!("recovery: restored {summary:?} on {path:?}");
                 notes.push(fl!(
                     "recovery-restored",
                     clip = file_name(&path),
-                    what = summary
+                    what = recovery_what(summary)
                 ));
                 if open.is_none() {
                     open = path
@@ -75,20 +109,29 @@ fn restore_after_crash() -> (Vec<String>, Option<frename_core::FolderAndFile>) {
                         .map(|folder| frename_core::FolderAndFile::new(folder, Some(&path)));
                 }
             }
-            Restored::Kept { clip, kept, why } => {
-                log::warn!("recovery: edits on {clip:?} kept at {kept:?}: {why}");
+            Restored::Kept {
+                clip,
+                kept,
+                why,
+                summary,
+            } => {
+                log::warn!("recovery: edits on {clip:?} kept at {kept:?}: {why:?}");
+                let why = match why {
+                    KeptWhy::ClipGone => fl!("recovery-why-gone"),
+                    KeptWhy::ClipChanged => fl!("recovery-why-changed"),
+                    KeptWhy::NotWritten => fl!("recovery-why-not-written"),
+                };
                 notes.push(fl!(
                     "recovery-kept",
                     clip = file_name(&clip),
+                    what = recovery_what(summary),
                     why = why,
-                    folder = kept
-                        .parent()
-                        .map(|p| p.display().to_string())
-                        .unwrap_or_default()
+                    folder = folder_of(&kept)
                 ));
             }
             Restored::Ignored { kept } => {
                 log::warn!("recovery: an unreadable journal file was set aside at {kept:?}");
+                notes.push(fl!("recovery-unreadable", folder = folder_of(&kept)));
             }
         }
     }
@@ -369,6 +412,8 @@ pub struct FrenameApp {
     initial_path: Option<frename_core::FolderAndFile>,
     /// The clip whose edits were restored after a crash: opened first when no clip was asked for.
     restored_clip: Option<frename_core::FolderAndFile>,
+    /// Held while frename runs: tells the next start (and a second frename) whose the journal is.
+    _recovery_lock: Option<frename_core::recovery::InstanceLock>,
     /// A downloaded update to apply once the main window has closed.
     pending_update: Option<updates::Release>,
 }
@@ -388,7 +433,8 @@ impl FrenameApp {
         crate::i18n::apply(&settings.settings().ui_language);
         // Edits left in the recovery journal mean the last run ended abnormally: apply them now,
         // before any clip is open (nothing locks the clips yet).
-        let (recovery_notes, restored_clip) = restore_after_crash();
+        let recovery_lock = frename_core::recovery::InstanceLock::acquire();
+        let (recovery_notes, restored_clip) = restore_after_crash(recovery_lock.as_ref());
         let mut folder_workspace = folder_workspace::FolderWorkspace::new();
         for note in recovery_notes {
             folder_workspace.add_startup_note(note);
@@ -397,6 +443,7 @@ impl FrenameApp {
             drag_drop_state: drag_drop::DragDropState::default(),
             folder_workspace,
             restored_clip,
+            _recovery_lock: recovery_lock,
             settings,
             pending_close: None,
             main_window,

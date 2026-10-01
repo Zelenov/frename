@@ -73,6 +73,11 @@ pub enum Message {
     /// A second passed: write the open clip's unsaved edits into the recovery journal, if they
     /// changed (see `frename_core::recovery`).
     JournalTick,
+    /// A journal write finished (what was written, or why not).
+    JournalWritten(
+        frename_core::FileId,
+        Option<(frename_core::recovery::Entry, Result<(), String>)>,
+    ),
     /// Undo the last undoable action (Ctrl+Z).
     Undo,
     /// Redo the last undone action (Ctrl+Y / Ctrl+Shift+Z).
