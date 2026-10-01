@@ -22,12 +22,84 @@ use crate::features::media_viewer::{self, video};
 const PREVIOUS_SLACK_MS: u64 = 750;
 
 impl FolderWorkspace {
-    /// Apply a marker key or marker list message; `position_ms` is the playhead.
+    /// Apply a marker key or marker list message; `position_ms` is the playhead. Markers kept in
+    /// a comment file are in it when this returns.
     pub(super) fn handle_marker(
         &mut self,
         msg: markers::Message,
         position_ms: u64,
     ) -> Task<Message> {
+        let before = self.file_workspace.markers().map(<[Marker]>::to_vec);
+        // A held `F2` grows its marker with the playhead without a message of its own: the
+        // press and the release always write.
+        let held_key = matches!(msg, markers::Message::KeyDown | markers::Message::KeyUp);
+        let task = self.apply_marker(msg, position_ms);
+        if held_key || self.file_workspace.markers().map(<[Marker]>::to_vec) != before {
+            return Task::batch([task, self.write_markers_to_comment_now()]);
+        }
+        task
+    }
+
+    /// With markers kept in the comment and the comment in a `.comment.txt`, write the open
+    /// clip's marker lines into it now, not when the clip is left, so a crash loses nothing
+    /// done here. A write that fails keeps the markers like a failed write into the video does:
+    /// the file is marked in the list and the next edit tries again. A clip whose markers are
+    /// still the video's, untouched, is left as it is; one edited back to that state loses its
+    /// lines again, so the two places agree.
+    pub(super) fn write_markers_to_comment_now(&mut self) -> Task<Message> {
+        if frename_core::marker_storage() != frename_core::MarkerStorage::Comment {
+            return Task::none();
+        }
+        let (Some(file), Some(markers)) =
+            (self.file_workspace.file(), self.file_workspace.markers())
+        else {
+            return Task::none();
+        };
+        let (id, path) = (file.id(), file.file_path().to_path_buf());
+        let untouched = self
+            .markers_in_video
+            .get(&id)
+            .is_some_and(|read| read.as_slice() == markers);
+        let lines: &[Marker] = if untouched { &[] } else { markers };
+        match frename_core::write_marker_lines(&path, lines) {
+            Ok(true) => {
+                self.unsaved_markers.remove(&id);
+                Task::none()
+            }
+            Ok(false) => Task::none(),
+            Err(e) => {
+                log::warn!("markers of {path:?} not written into the comment file: {e}");
+                // Said once, not at every edit that fails the same way.
+                let first = self.unsaved_markers.insert(id, markers.to_vec()).is_none();
+                if first {
+                    Self::notice("Markers not saved: the comment file is read-only or in use")
+                } else {
+                    Task::none()
+                }
+            }
+        }
+    }
+
+    /// The markers of the file `id` are in its comment: take them out of the video's XMP, so the
+    /// two places never disagree. A failed write leaves them there; the comment wins on the
+    /// next open, and the next save tries again.
+    pub(super) fn move_markers_out_of_video(&mut self, id: FileId, path: &Path) {
+        if !self.clear_from_video.contains(&id) {
+            return;
+        }
+        let known = self.known_marker_guids.clone();
+        match FileTagger::save_markers(path, &[], &known) {
+            Ok(()) => {
+                self.clear_from_video.remove(&id);
+                self.markers_in_video.remove(&id);
+            }
+            Err(e) => {
+                log::warn!("markers of {path:?} are in the comment, not out of the video: {e:?}");
+            }
+        }
+    }
+
+    fn apply_marker(&mut self, msg: markers::Message, position_ms: u64) -> Task<Message> {
         use markers::Message as M;
         if self.file_workspace.file().is_none() {
             return Task::none();
@@ -333,6 +405,14 @@ impl FolderWorkspace {
     /// The open file's markers were just read from it (another file was opened): remember their
     /// GUIDs, and show the markers whose write failed last time instead, if any.
     pub(super) fn markers_loaded(&mut self, id: FileId) {
+        match self.file_workspace.markers_from_video() {
+            Some(held) => {
+                self.markers_in_video.insert(id, held.to_vec());
+            }
+            None => {
+                self.markers_in_video.remove(&id);
+            }
+        }
         let read = self.file_workspace.markers().unwrap_or_default();
         self.known_marker_guids
             .extend(read.iter().filter_map(|m| m.guid.clone()));
