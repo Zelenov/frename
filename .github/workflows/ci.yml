@@ -21,6 +21,7 @@ jobs:
   linux:
     name: ci-linux
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
 
@@ -47,9 +48,9 @@ jobs:
           fi
 
       - name: Install GStreamer
+        timeout-minutes: 15
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+          bash .github/scripts/apt-install.sh libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
             gstreamer1.0-libav xvfb imagemagick mesa-vulkan-drivers
 
@@ -106,13 +107,14 @@ jobs:
   linux-appimage:
     name: ci-linux-appimage
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
 
       - name: Install GStreamer and packaging tools
+        timeout-minutes: 15
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+          bash .github/scripts/apt-install.sh libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
             gstreamer1.0-libav patchelf file imagemagick xvfb mesa-vulkan-drivers
 
