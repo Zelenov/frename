@@ -155,17 +155,24 @@ pub fn use_storage_on_this_thread(
     metadata: MetadataStorage,
     markers: MarkerStorage,
 ) -> StorageGuard {
-    THIS_THREAD.with(|cell| cell.set(Some((metadata, markers))));
-    StorageGuard
+    let previous = THIS_THREAD.with(|cell| cell.replace(Some((metadata, markers))));
+    StorageGuard {
+        previous,
+        _not_send: std::marker::PhantomData,
+    }
 }
 
-/// Ends [`use_storage_on_this_thread`] when dropped.
+/// Ends [`use_storage_on_this_thread`] when dropped, bringing back what it replaced. It belongs
+/// to the thread that made it.
 #[doc(hidden)]
-pub struct StorageGuard;
+pub struct StorageGuard {
+    previous: Option<(MetadataStorage, MarkerStorage)>,
+    _not_send: std::marker::PhantomData<*const ()>,
+}
 
 impl Drop for StorageGuard {
     fn drop(&mut self) {
-        THIS_THREAD.with(|cell| cell.set(None));
+        THIS_THREAD.with(|cell| cell.set(self.previous));
     }
 }
 

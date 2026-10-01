@@ -30,8 +30,11 @@ impl FolderWorkspace {
         position_ms: u64,
     ) -> Task<Message> {
         let before = self.file_workspace.markers().map(<[Marker]>::to_vec);
+        // A held `F2` grows its marker with the playhead without a message of its own: the
+        // press and the release always write.
+        let held_key = matches!(msg, markers::Message::KeyDown | markers::Message::KeyUp);
         let task = self.apply_marker(msg, position_ms);
-        if self.file_workspace.markers().map(<[Marker]>::to_vec) != before {
+        if held_key || self.file_workspace.markers().map(<[Marker]>::to_vec) != before {
             return Task::batch([task, self.write_markers_to_comment_now()]);
         }
         task
@@ -59,15 +62,20 @@ impl FolderWorkspace {
             .is_some_and(|read| read.as_slice() == markers);
         let lines: &[Marker] = if untouched { &[] } else { markers };
         match frename_core::write_marker_lines(&path, lines) {
-            Ok(true) if !untouched => {
+            Ok(true) => {
                 self.unsaved_markers.remove(&id);
                 Task::none()
             }
-            Ok(_) => Task::none(),
+            Ok(false) => Task::none(),
             Err(e) => {
                 log::warn!("markers of {path:?} not written into the comment file: {e}");
-                self.unsaved_markers.insert(id, markers.to_vec());
-                Self::notice("Markers not saved: the comment file is read-only or in use")
+                // Said once, not at every edit that fails the same way.
+                let first = self.unsaved_markers.insert(id, markers.to_vec()).is_none();
+                if first {
+                    Self::notice("Markers not saved: the comment file is read-only or in use")
+                } else {
+                    Task::none()
+                }
             }
         }
     }

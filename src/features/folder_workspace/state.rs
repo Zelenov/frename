@@ -121,7 +121,9 @@ pub struct FolderWorkspace {
     /// as read. Untouched, they stay in the video; edited, they move into the comment.
     markers_in_video: HashMap<FileId, Vec<Marker>>,
     /// Files whose markers were shown from the video and then edited into the comment: the
-    /// video's own are taken out once a save shows the comment holds them.
+    /// video's own are taken out once a save shows the comment holds them. Kept apart from
+    /// `markers_in_video`, which is replaced whenever the clip is opened again: a save still
+    /// waiting for the video to unload must find it after a reopen.
     clear_from_video: HashSet<FileId>,
     /// A press on a file row that may become a drag out of the window.
     drag_out: DragOutState,
@@ -1269,15 +1271,14 @@ impl FolderWorkspace {
                     .get(&id)
                     .is_some_and(|read| read.as_slice() == markers) =>
             {
+                self.unsaved_markers.remove(&id);
                 Task::none()
             }
             (Some(markers), frename_core::MarkerStorage::Comment) => {
-                let count = markers.len();
+                let wanted = markers.to_vec();
                 let comment = frename_core::markers_into_comment(snapshot.comment(), markers);
                 snapshot.set_comment(comment);
-                // Kept in the comment now: a failed write into the video no longer holds them.
-                moved_markers = Some(count);
-                self.unsaved_markers.remove(&id);
+                moved_markers = Some(wanted);
                 if self.markers_in_video.contains_key(&id) {
                     self.clear_from_video.insert(id);
                 }
@@ -1306,14 +1307,24 @@ impl FolderWorkspace {
         // Markers shown from the video are taken out of it only once the save shows the comment
         // holds all of them: a refused save, or a comment that did not get written, must not
         // leave them nowhere.
-        let comment_holds_markers = moved_markers.is_some_and(|count| {
-            frename_core::markers_from_comment(snapshot_after_save.comment())
-                .1
-                .len()
-                == count
+        let comment_holds_markers = moved_markers.as_ref().is_some_and(|wanted| {
+            let lines = |markers: &[Marker]| {
+                let mut lines: Vec<String> = markers
+                    .iter()
+                    .map(frename_core::format_marker_line)
+                    .collect();
+                lines.sort();
+                lines
+            };
+            let saved = frename_core::markers_from_comment(snapshot_after_save.comment()).1;
+            lines(wanted) == lines(&saved)
         });
-        if !refused && comment_holds_markers {
-            self.move_markers_out_of_video(id, &new_path);
+        if comment_holds_markers {
+            // Kept in the comment now: a failed write into the video no longer holds them.
+            self.unsaved_markers.remove(&id);
+            if !refused {
+                self.move_markers_out_of_video(id, &new_path);
+            }
         }
         // A file menu action waiting for this save runs now, on the name the file has on disk.
         let file_action = self.file_action_after_save(id, refused);
@@ -4328,8 +4339,9 @@ mod tests {
         assert!(marker_names(&workspace).is_empty());
     }
 
-    /// Issue #143: markers kept in the comment (a `.comment.txt`) are in the file as soon as they
-    /// are edited, without leaving the clip.
+    // Issue #143: markers kept in the comment (a `.comment.txt`) are in the file as soon as they
+    // are edited, without leaving the clip.
+
     /// Comments in text files, markers kept as `markers` says, for this test only.
     fn comment_file_storage(markers: frename_core::MarkerStorage) -> frename_core::StorageGuard {
         frename_core::use_storage_on_this_thread(
@@ -4477,6 +4489,22 @@ mod tests {
             "written now"
         );
         assert!(comment_file_text(&test_dir).contains("0:05"));
+    }
+
+    /// A held `F2` grows its marker with the playhead; the release writes the range.
+    #[test]
+    fn a_held_f2_range_reaches_the_comment_file_on_release() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let _storage = comment_file_storage(frename_core::MarkerStorage::Comment);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::KeyDown, 41_000);
+        assert!(comment_file_text(&test_dir).contains("0:41"), "the press");
+        workspace
+            .markers
+            .backdate_recording(crate::features::markers::state_for_tests::RANGE_HOLD);
+        send_marker(&mut workspace, M::KeyUp, 47_000);
+        assert!(comment_file_text(&test_dir).contains("0:41–0:47"));
     }
 
     /// An edit undone back to what the video holds leaves no lines behind in the comment.

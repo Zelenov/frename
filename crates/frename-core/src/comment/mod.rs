@@ -44,10 +44,7 @@ pub fn load_comment(file_path: &Path) -> String {
 /// Save (or delete) the comment file for a file.
 /// If `comment` is empty/whitespace, removes the comment file (if any).
 pub fn save_comment(file_path: &Path, comment: &str) {
-    let trimmed = comment.trim();
-    if trimmed.is_empty() {
-        remove_comment_file(file_path);
-    } else if let Err(e) = std::fs::write(comment_path(file_path), format!("{UTF8_BOM}{trimmed}")) {
+    if let Err(e) = try_save_comment(file_path, comment) {
         log::error!(
             "comment: failed to write comment file for {:?}: {}",
             file_path,
