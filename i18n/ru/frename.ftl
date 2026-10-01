@@ -593,7 +593,6 @@ sync-panel-lock = Закрепить
 sync-panel-differs = Порядок не как в папке
 sync-panel-use-for-folder = Сделать порядком папки
 sync-panel-sort-like-folder = Упорядочить как в папке
-sync-panel-no-undo = Это пока нельзя отменить
 
 ## File name card
 

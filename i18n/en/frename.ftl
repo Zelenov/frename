@@ -541,7 +541,6 @@ sync-panel-lock = Lock
 sync-panel-differs = Order differs from the folder
 sync-panel-use-for-folder = Use for the folder
 sync-panel-sort-like-folder = Sort like the folder
-sync-panel-no-undo = This cannot be undone yet
 
 ## File name card
 

@@ -62,6 +62,28 @@ pub fn row_offset(markers: &[Marker], index: usize) -> f32 {
         .sum()
 }
 
+/// The offset to scroll the list to once it was put back at `offset` in a viewport `viewport`
+/// tall: `offset`, unless the lit marker (the last one the playhead passed) is out of view, then
+/// the offset the follow uses for it. `None` when the list is right as it is.
+pub fn offset_showing_lit(
+    markers: &[Marker],
+    passed: Option<usize>,
+    offset: f32,
+    viewport: f32,
+) -> Option<f32> {
+    let index = passed?;
+    let top = row_offset(markers, index);
+    let bottom = row_offset(markers, index + 1) - SPACE_XXS;
+    let wanted = crate::ui::scroll::keep_row_in_view(
+        offset,
+        viewport,
+        top,
+        bottom,
+        row_offset(markers, index.saturating_sub(1)),
+    );
+    (wanted != offset).then_some(wanted)
+}
+
 /// How long after a point marker its label stays shown over the progress bar, as a subtitle
 /// line stays for its cue.
 const NAME_HOLD_MS: u64 = 2_000;
@@ -163,6 +185,7 @@ fn marker_list<'a>(
                 ..Padding::ZERO
             }),
     )
+    .on_scroll(|viewport| Message::Scrolled(viewport.absolute_offset().y, viewport.bounds().height))
     .into()
 }
 
@@ -507,5 +530,25 @@ mod tests {
         assert!(row_height(&long) > MARKER_ROW_HEIGHT + LINE_BODY);
         let markers = [long.clone(), short];
         assert_eq!(row_offset(&markers, 1), row_height(&long) + SPACE_XXS);
+    }
+
+    #[test]
+    fn a_restored_list_keeps_its_offset_unless_the_lit_marker_is_out_of_view() {
+        let markers: Vec<Marker> = (0..30).map(|i| Marker::new(i * 1_000)).collect();
+        let row = row_offset(&markers, 1);
+        let lit = Some(20);
+        let top = row_offset(&markers, 20);
+        // Shown: kept.
+        assert_eq!(
+            offset_showing_lit(&markers, lit, top - row, 3.0 * row),
+            None
+        );
+        // Below the fold (the viewport got shorter): the follow's offset, one row of context.
+        assert_eq!(
+            offset_showing_lit(&markers, lit, 0.0, 3.0 * row),
+            Some(row_offset(&markers, 19))
+        );
+        // No marker passed yet: nothing to show.
+        assert_eq!(offset_showing_lit(&markers, None, 0.0, 3.0 * row), None);
     }
 }

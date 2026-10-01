@@ -76,6 +76,11 @@ impl MediaViewerState {
         matches!(self.active, ActiveMedia::Video).then(|| self.video.position_ms())
     }
 
+    /// Where the subtitle list is scrolled to.
+    pub fn cue_scroll_y(&self) -> f32 {
+        self.video.cue_scroll_y()
+    }
+
     /// Whether the marker list is open over the video.
     pub fn marker_list_shown(&self) -> bool {
         matches!(self.active, ActiveMedia::Video) && self.video.show_marker_list()
