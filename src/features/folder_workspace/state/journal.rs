@@ -15,7 +15,19 @@ use crate::features::media_viewer::{self, video};
 impl FolderWorkspace {
     /// The open clip as it is now, as a journal entry.
     fn journal_entry(&self) -> Option<(FileId, Entry)> {
-        let path = self.file_workspace.file()?.file_path().to_path_buf();
+        let (id, _) = self.file_workspace.get_snapshot()?;
+        // Where the clip is on disk now: an in-place rename reaches the open file's own path
+        // only with its next open, but the directory knows at once.
+        let path = self
+            .directory
+            .as_ref()
+            .and_then(|dir| dir.file_by_id(id))
+            .map(|file| file.file_path().to_path_buf())
+            .or_else(|| {
+                self.file_workspace
+                    .file()
+                    .map(|f| f.file_path().to_path_buf())
+            })?;
         self.journal_entry_at(&path)
     }
 
@@ -153,7 +165,12 @@ impl FolderWorkspace {
             // What was saved is the reference, not what the clip is now: edits made since are
             // not on disk, so they are unsaved. The new name, as the rename reaches the open
             // clip only with its next open.
-            self.journal_baseline = Entry::new(new_path, saved).map(|entry| (id, entry));
+            match Entry::new(new_path, saved) {
+                Some(entry) => self.journal_baseline = Some((id, entry)),
+                // The clip cannot be read just now: keep the old reference, and journal what
+                // differs from it rather than treat everything since as clean.
+                None => self.journal_force = true,
+            }
         }
     }
 

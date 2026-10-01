@@ -121,15 +121,17 @@ pub struct FolderWorkspace {
     /// Files shown with the markers their video holds, while markers are kept in the comment:
     /// as read. Untouched, they stay in the video; edited, they move into the comment.
     markers_in_video: HashMap<FileId, Vec<Marker>>,
-    /// The open clip's state when it was opened or last saved, and what the recovery journal
-    /// holds of it: edits are written there once the clip differs from this.
+    /// The open clip's state when it was opened or last saved: edits are journaled once the clip
+    /// differs from this.
     journal_baseline: Option<(FileId, frename_core::recovery::Entry)>,
+    /// What the recovery journal holds of the open clip.
     journal_written: Option<(FileId, frename_core::recovery::Entry)>,
     /// The open clip was reopened with edits still waiting to be saved: journal it as it is.
     journal_force: bool,
-    /// The clip whose journal entry is being written (one write at a time), and whether that
-    /// clip was saved meanwhile: then the entry is removed when the write lands.
+    /// The clip whose journal entry is being written (one write at a time).
     journal_in_flight: Option<FileId>,
+    /// That clip was saved while its entry was being written: the entry is removed when the
+    /// write lands.
     journal_saved_while_writing: bool,
     /// Messages from the start (edits restored after a crash), shown once a clip is open.
     startup_notes: Vec<String>,
@@ -267,6 +269,8 @@ impl FolderWorkspace {
                 generation,
                 results,
             } => self.comment_batch_loaded(generation, results),
+            // The tick doubles as the pump for the start-up notes: it runs while a clip is open,
+            // which is when they can be shown.
             Message::JournalTick => Task::batch([self.journal_tick(), self.show_startup_notes()]),
             Message::JournalWritten(id, outcome) => {
                 self.journal_written(id, outcome);
@@ -4703,6 +4707,31 @@ mod tests {
             journal_files(&test_dir),
             1,
             "unsaved edits keep their entry"
+        );
+    }
+
+    #[test]
+    fn journaling_goes_on_after_the_open_clip_is_renamed_in_place() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = journal_workspace(&test_dir);
+        // The clip is renamed on disk and in the directory; the open file keeps its old path
+        // until it is opened again.
+        let old = test_dir.target_file();
+        let new = test_dir.file_path("renamed.mp4");
+        std::fs::rename(&old, &new).expect("rename");
+        let id = file_id_at(&workspace, 0);
+        let snapshot = frename_core::FileTagger::parse(&new, &frename_core::FolderInfo::default());
+        workspace
+            .directory
+            .as_mut()
+            .expect("directory")
+            .rename_file(id, &new, &snapshot);
+        pick_tag(&mut workspace);
+        tick(&mut workspace);
+        assert_eq!(
+            journal_files(&test_dir),
+            1,
+            "the edits are journaled at the new path"
         );
     }
 

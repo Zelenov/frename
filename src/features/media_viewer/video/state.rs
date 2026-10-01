@@ -588,7 +588,7 @@ impl VideoPlayerState {
         self.loading_ticks
     }
 
-    /// The note to show over the picture, if any.
+    /// Show `text` over the picture for `duration`; a newer note replaces it.
     fn show_notice(&mut self, text: String, duration: Duration) -> Task<Message> {
         self.notice_count += 1;
         let number = self.notice_count;
@@ -599,6 +599,7 @@ impl VideoPlayerState {
         })
     }
 
+    /// The note to show over the picture, if any.
     pub fn notice(&self) -> Option<&str> {
         self.notice.as_ref().map(|(text, _)| text.as_str())
     }
