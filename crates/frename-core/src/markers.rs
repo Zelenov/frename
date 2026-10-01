@@ -654,11 +654,13 @@ fn join_text(marker: &mut Marker, line: &MarkerLine) {
     marker.comment = merge_text(&marker.comment, &line.comment);
 }
 
-/// Whether the marker already says what the line says (a stored comment may end in spaces or
-/// carry the `\r\n` of Premiere).
+/// Whether the marker already says what the line says. A line holds a comment on one line,
+/// its words separated by single spaces (see [`format_marker_line`]), so the marker's comment
+/// (which may break lines, or carry the `\r\n` of Premiere) is compared the same way.
 fn has_text(marker: &Marker, line: &MarkerLine) -> bool {
-    marker.name.trim() == line.name
-        && marker.comment.replace("\r\n", "\n").trim() == line.comment.trim()
+    let one_line = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    one_line(&marker.name) == one_line(&line.name)
+        && one_line(&marker.comment) == one_line(&line.comment)
 }
 
 /// How far apart two starts may be and still be one moment: about a frame. Much less than
@@ -1363,5 +1365,23 @@ mod tests {
         assert_eq!(renamed.updated[0].name, "Zebra");
         assert_eq!(renamed.updated[0].comment, "roars");
         assert_eq!(renamed.updated[0].color, MarkerColor::Other(12_345));
+    }
+
+    #[test]
+    fn a_marker_with_a_multi_line_comment_is_not_flattened_by_its_own_line() {
+        let existing = [marker(10_000, 0, "Lion", "roars\nloudly")];
+        let (line, _) = markers_to_comment("", &existing);
+        assert_eq!(line, "0:10 — Lion — roars loudly");
+        let result = comment_to_markers(&line, &existing, None);
+        assert!(result.updated.is_empty(), "{:?}", result.updated);
+        assert_eq!(result.comment, "");
+    }
+
+    #[test]
+    fn a_green_line_does_not_recolor_an_unknown_color_even_when_it_renames() {
+        let mut existing = marker(10_000, 0, "Lion", "");
+        existing.color = MarkerColor::Other(7);
+        let result = comment_to_markers("0:10 — Zebra", &[existing], None);
+        assert_eq!(result.updated[0].color, MarkerColor::Other(7));
     }
 }
