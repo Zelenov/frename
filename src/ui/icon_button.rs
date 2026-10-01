@@ -182,6 +182,7 @@ impl<'a, M: Clone + 'a> From<IconButton<M>> for Element<'a, M> {
         };
         let kind = b.kind();
         let held = b.held;
+        let shown_tip = b.shown_tip();
         let pressable = button(face)
             .width(b.side)
             .height(b.side)
@@ -212,7 +213,7 @@ impl<'a, M: Clone + 'a> From<IconButton<M>> for Element<'a, M> {
         } else {
             pressable.into()
         };
-        match b.shown_tip() {
+        match shown_tip {
             Some((tip, position)) => tooltip::tip(body, tip, position),
             None => body,
         }
