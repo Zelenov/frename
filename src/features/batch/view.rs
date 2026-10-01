@@ -152,10 +152,10 @@ fn icon_list(state: &BatchState) -> Element<'_, Message> {
     let mut group = None;
     for action in Action::ALL {
         if group.is_some_and(|g| g != action.group()) {
-            // The 2 px below it that the column's spacing used to put before the next item.
+            // The gap below it that the column's spacing used to put before the next item.
             list = list.push(container(layout::horizontal_line()).padding(Padding {
                 top: SPACE_XS,
-                bottom: SPACE_XS + SPACE_XXS,
+                bottom: SPACE_XS + layout::NAV_GAP,
                 ..Padding::ZERO
             }));
         }
@@ -170,7 +170,7 @@ fn icon_list(state: &BatchState) -> Element<'_, Message> {
                 .latched(action == state.action())
                 .tip(tip, Position::Right)
                 .on_press_maybe(message.clone()),
-            message.is_some(),
+            message,
         ));
     }
     container(list)
@@ -208,8 +208,8 @@ fn group_caption<'a>(group: Group, spaced: bool) -> Element<'a, Message> {
     container(text::caption(group.label()))
         .padding(Padding {
             top: if spaced { SPACE_M } else { 0.0 },
-            // The 2 px below it that the column's spacing used to put before the first item.
-            bottom: SPACE_XS + SPACE_XXS,
+            // The gap below it that the column's spacing used to put before the first item.
+            bottom: SPACE_XS + layout::NAV_GAP,
             left: SPACE_S,
             right: 0.0,
         })

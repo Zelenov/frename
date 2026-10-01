@@ -1,6 +1,6 @@
 # 0.93
 ## Fixed
-- In the batch window's action list and in Settings' navigation, the mouse cursor no longer drops to an arrow in the thin gap between two items: the gap is part of the item above it.
+- In the batch window's action list and in Settings' navigation, the mouse cursor no longer drops to an arrow between two items.
 
 # 0.92
 ## Fixed
