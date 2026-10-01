@@ -23,7 +23,8 @@ thing, an untranslated string, a state the user cannot get out of.
 
 ## 0. Before hunting
 
-1. List open and closed issues labelled `bug`, `regression` and `idea` (including `rejected`), so
+1. List open and closed issues labelled `bug`, `regression` and `idea` (including `rejected`, and
+   issues the owner closed: they count as rejected, see `nightly` → Trust), so
    nothing is filed twice and nothing rejected comes back.
 2. Triage the agent's own open `idea` issues (body starts with `🤖 agent:`, no `rejected`, no
    `hold`): one that describes a defect by the definition above becomes a bug: remove `idea`, add

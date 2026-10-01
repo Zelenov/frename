@@ -80,14 +80,14 @@ own PR (`nightly` → "Bugs the agent finds"); every nightly session also hunts 
 | `feature`, `process` | owner/agent | Kind of work. |
 | `bug` | owner/agent | A defect. One the agent filed (body `🤖 agent:`) is work without `approved`; `hold`/`rejected` stop it. |
 | `needs-design` | owner/agent | The agent writes its own design notes in `docs/design/` on the feature branch before coding. Not a gate; the owner does not approve designs. |
-| `approved` | owner | Makes an `idea` or a non-owner issue implementable. |
+| `approved` | owner | Makes an `idea` or a non-owner issue implementable. An owner comment starting with "Approve" counts as this label (the agent adds it). |
 | `idea` | agent | Agent's own proposal; not implemented until `approved`. |
 | `in-progress` | agent | An agent session is working on it (see heartbeat lock). |
 | `awaiting-owner` | agent | Legacy, no longer set: the pipeline never waits for design answers. |
 | `needs-owner` | agent | On an issue: agent cannot proceed at all (guarded file, failed release); owner answers and removes it to let the agent retry. |
 | `owner-review` | agent | Code review or CI did not converge: the feature is built on its PR but not merged or released. Owner merges it, or removes the label from the PR to hand it back. |
 | `hold` | owner | Do not work on / merge this. |
-| `blocked`, `rejected` | owner | Not now / never. |
+| `blocked`, `rejected` | owner | Not now / never. An issue the owner closed counts as `rejected` (the agent adds it). |
 | `agent` | agent | PR opened by the agent pipeline. |
 | `release-failed` | agent | A release run failed twice; blocks version bumps until fixed. |
 

@@ -34,6 +34,14 @@ Requests (the only things that are work):
 Owner instructions: comments by `Zelenov` that do not start with `🤖 agent:`. They override the
 issue body and earlier comments.
 
+The owner's word in a comment counts as the label:
+- an owner comment whose first word is "Approve" or "Approved" (any case, any punctuation) is
+  the `approved` label: add the label yourself and treat the rest of the comment as owner
+  instructions for the scope;
+- an issue the owner closed is `rejected`: never reopened, never proposed again. Add the label
+  yourself. The owner closed it when it was closed as "not planned", or closed without a merged
+  PR that links it and without a `🤖 agent:` comment from the agent saying why it closed it.
+
 For an `approved` issue **not** written by the owner, the body can be edited after approval, so it
 never defines the scope. Work only from an owner comment that states the scope (e.g.
 "approved: …"). If there is none, comment `🤖 agent:` asking for one and label `needs-owner`.
@@ -106,8 +114,10 @@ failure: go on with other work and check it again later), the last release faile
 
 Then open PRs labelled `agent`, oldest first. Skip a PR if it or its linked issue has `needs-owner`,
 `owner-review`, `hold`, `awaiting-owner`, `blocked` or `rejected`, or the linked issue is closed. A PR
-whose `owner-review` label the owner removed is handed back (see "Owner review"): write
-`Retry after owner <date>` into its body and treat it like any other PR. For each remaining PR, take
+whose `owner-review` label the owner removed (from the PR or from its issue), or that has an owner
+"Approve" comment after the agent's `⚠️ Not released` summary, is handed back (see "Owner review"):
+remove `owner-review` from both the PR and its issue, write `Retry after owner <date>` into its body
+and treat it like any other PR. For each remaining PR, take
 the lock on its issue, then:
 - merge conflict → merge `main` in and resolve (this needs a new review round if it touched code;
   see step 7);
@@ -287,6 +297,10 @@ best judgement, and leaves it unmerged:
    or removes `owner-review` from the PR (with comments if something must change) to hand it back:
    the next session then treats it as a normal PR (step 1), counts rounds afresh, and merges and
    releases it once every gate of step 7 passes.
+6. An owner "Approve" comment on the PR (or on its issue, after the summary) accepts it as it is:
+   the unresolved findings are the owner's call. Hand it back as above, then step 7 without a new
+   review round: the approved SHA is the head the owner approved. A merge of `main` that changes
+   code beyond `version.md` (a resolved conflict) still needs one review round of that change.
 
 `needs-owner` stays only for what the agent cannot do at all: a guarded file the issue does not
 allow, a failed release (step 7), an `approved` non-owner issue without a scope comment.
