@@ -49,6 +49,52 @@ fn latin_key(key: &keyboard::Key, physical_key: keyboard::key::Physical) -> Opti
     key.to_latin(physical_key).map(|c| c.to_ascii_lowercase())
 }
 
+/// Apply the edits an earlier crash left in the recovery journal; the messages to show and the
+/// first restored clip (to open it, so the message appears over it).
+fn restore_after_crash() -> (Vec<String>, Option<frename_core::FolderAndFile>) {
+    use frename_core::recovery::Restored;
+    let mut notes = Vec::new();
+    let mut open = None;
+    for report in frename_core::recovery::restore_all() {
+        let file_name = |path: &std::path::Path| {
+            path.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        };
+        match report {
+            Restored::Applied { path, summary } => {
+                log::info!("recovery: restored {summary} on {path:?}");
+                notes.push(fl!(
+                    "recovery-restored",
+                    clip = file_name(&path),
+                    what = summary
+                ));
+                if open.is_none() {
+                    open = path
+                        .parent()
+                        .map(|folder| frename_core::FolderAndFile::new(folder, Some(&path)));
+                }
+            }
+            Restored::Kept { clip, kept, why } => {
+                log::warn!("recovery: edits on {clip:?} kept at {kept:?}: {why}");
+                notes.push(fl!(
+                    "recovery-kept",
+                    clip = file_name(&clip),
+                    why = why,
+                    folder = kept
+                        .parent()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_default()
+                ));
+            }
+            Restored::Ignored { kept } => {
+                log::warn!("recovery: an unreadable journal file was set aside at {kept:?}");
+            }
+        }
+    }
+    (notes, open)
+}
+
 /// Global keyboard and window events of the main window: shortcuts, typing into the search bar,
 /// and window geometry. The subscription filters them to the main window, so keys pressed in the
 /// settings window do not reach the workspace.
@@ -321,6 +367,8 @@ pub struct FrenameApp {
     demo: Option<crate::demo::DemoRun>,
     /// A folder or file given on the command line, opened instead of the last session.
     initial_path: Option<frename_core::FolderAndFile>,
+    /// The clip whose edits were restored after a crash: opened first when no clip was asked for.
+    restored_clip: Option<frename_core::FolderAndFile>,
     /// A downloaded update to apply once the main window has closed.
     pending_update: Option<updates::Release>,
 }
@@ -338,9 +386,17 @@ impl FrenameApp {
         frename_core::set_commented_tag(settings.settings().effective_commented_tag());
         frename_core::set_space_after_tags(settings.settings().space_after_tags);
         crate::i18n::apply(&settings.settings().ui_language);
+        // Edits left in the recovery journal mean the last run ended abnormally: apply them now,
+        // before any clip is open (nothing locks the clips yet).
+        let (recovery_notes, restored_clip) = restore_after_crash();
+        let mut folder_workspace = folder_workspace::FolderWorkspace::new();
+        for note in recovery_notes {
+            folder_workspace.add_startup_note(note);
+        }
         Self {
             drag_drop_state: drag_drop::DragDropState::default(),
-            folder_workspace: folder_workspace::FolderWorkspace::new(),
+            folder_workspace,
+            restored_clip,
             settings,
             pending_close: None,
             main_window,
@@ -387,7 +443,7 @@ impl FrenameApp {
                 let model = Task::done(describe_ai_message(batch::describe_ai::Message::SetModel(
                     clipscribe::Model::from_id(&self.settings.settings().ai_model),
                 )));
-                let open = match self.initial_path.take() {
+                let open = match self.initial_path.take().or(self.restored_clip.take()) {
                     Some(pair) => folder_workspace::Message::ScanFolder(pair),
                     None => folder_workspace::Message::LoadLastSession,
                 };

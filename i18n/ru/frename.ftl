@@ -626,3 +626,6 @@ settings-topup-amount-placeholder = Добавлено, $
 settings-topup-date-placeholder = День, пусто: сегодня
 settings-topup-record = Записать пополнение
 settings-topup-refused = Введите сумму числом и день в виде ГГГГ-ММ-ДД.
+
+recovery-restored = frename закрылся неожиданно. Несохранённая работа над { $clip } восстановлена ({ $what }).
+recovery-kept = frename закрылся неожиданно. Несохранённая работа над { $clip } не применена ({ $why }); она сохранена в { $folder }.

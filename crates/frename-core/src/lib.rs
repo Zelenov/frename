@@ -13,6 +13,7 @@ mod markers;
 mod metadata;
 pub mod old_settings;
 mod ordered;
+pub mod recovery;
 mod search;
 mod subtitles;
 mod tags;

@@ -117,6 +117,11 @@ Press `Esc` first to give the keys back to the app. `[` and `]` set in and out p
 you type in a marker's name. The F-keys always work, and so do `Ctrl+Alt+←` / `→` except in the
 comment box and a marker's name.
 
+Your unsaved work on the open clip (tags, comment, in/out points, markers) is also kept in a small
+recovery file, a second after each change. If frename or the computer stops without closing it,
+the next start applies that work to the clip and says so; a clip that changed meanwhile is left
+alone and the saved copy stays in the `recovery/kept` folder next to the settings.
+
 Undo (`Ctrl+Z`) covers tagging, adding, deleting, starring and reordering tags, pasting, in/out
 points, adding, deleting, coloring and resizing markers, rotating a clip, and the rename when you
 leave a clip. The history is shared by the whole folder, so after moving to another clip

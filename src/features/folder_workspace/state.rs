@@ -45,6 +45,7 @@ use super::Message;
 
 mod drag_out_actions;
 mod file_actions;
+mod journal;
 mod marker_actions;
 mod rotation;
 
@@ -120,6 +121,12 @@ pub struct FolderWorkspace {
     /// Files shown with the markers their video holds, while markers are kept in the comment:
     /// as read. Untouched, they stay in the video; edited, they move into the comment.
     markers_in_video: HashMap<FileId, Vec<Marker>>,
+    /// The open clip's state when it was opened or last saved, and what the recovery journal
+    /// holds of it: edits are written there once the clip differs from this.
+    journal_baseline: Option<(FileId, frename_core::recovery::Entry)>,
+    journal_written: Option<(FileId, frename_core::recovery::Entry)>,
+    /// Messages from the start (edits restored after a crash), shown once a clip is open.
+    startup_notes: Vec<String>,
     /// Files whose markers were shown from the video and then edited into the comment: the
     /// video's own are taken out once a save shows the comment holds them. Kept apart from
     /// `markers_in_video`, which is replaced whenever the clip is opened again: a save still
@@ -199,6 +206,9 @@ impl FolderWorkspace {
             known_marker_guids: HashSet::new(),
             unsaved_markers: HashMap::new(),
             markers_in_video: HashMap::new(),
+            journal_baseline: None,
+            journal_written: None,
+            startup_notes: Vec::new(),
             clear_from_video: HashSet::new(),
             drag_out: DragOutState::default(),
             modifiers: iced::keyboard::Modifiers::empty(),
@@ -248,6 +258,10 @@ impl FolderWorkspace {
                 generation,
                 results,
             } => self.comment_batch_loaded(generation, results),
+            Message::JournalTick => {
+                self.journal_tick();
+                self.show_startup_notes()
+            }
             Message::SpinnerTick => {
                 self.spinner_frame = self.spinner_frame.wrapping_add(1);
                 Task::none()
@@ -832,6 +846,7 @@ impl FolderWorkspace {
         self.file_workspace.set_file(Some(opened));
         if !same_file {
             self.markers_loaded(file.id());
+            self.journal_reset_baseline();
         }
         log::info!("Opening file: {}", file.file_path().display());
         let Some((id, snap)) = snapshot else {
@@ -1297,6 +1312,10 @@ impl FolderWorkspace {
         // already exists (issue #84), or the video is read-only or open elsewhere. The same
         // check the drag-out path already uses to detect this.
         let refused = drag_out::save_failed(&snapshot, &snapshot_after_save);
+        // Applied: the journal's copy of these edits is no longer needed. A refused save keeps it.
+        if !refused {
+            self.journal_saved(id, &path_before);
+        }
         let refused_notice = if refused {
             Self::notice(
                 "Not saved: a file with that name already exists, or it is read-only or in use",
@@ -2416,7 +2435,14 @@ impl FolderWorkspace {
             } else {
                 Subscription::none()
             };
+        // The recovery journal follows the open clip's edits, a second after they change.
+        let journal = if self.file_workspace.file().is_some() {
+            iced::time::every(std::time::Duration::from_secs(1)).map(|_| Message::JournalTick)
+        } else {
+            Subscription::none()
+        };
         Subscription::batch([
+            journal,
             self.media_viewer.subscription().map(Message::MediaViewer),
             iced::event::listen_with(focus_may_move),
             job_progress,
@@ -4534,6 +4560,94 @@ mod tests {
             "{}",
             comment_file_text(&test_dir)
         );
+    }
+
+    /// Issue #140: the open clip's unsaved edits are in the recovery journal a second after they
+    /// change, and the entry goes once they are saved or undone.
+    fn journal_workspace(test_dir: &TestDirectory) -> FolderWorkspace {
+        frename_core::recovery::use_dir_on_this_thread(test_dir.file_path("recovery"));
+        // The clips are real files: a journal entry says which file it was made on.
+        marker_workspace(test_dir, test_dir.directory().files_in_order().count())
+    }
+
+    fn journal_files(test_dir: &TestDirectory) -> usize {
+        std::fs::read_dir(test_dir.file_path("recovery"))
+            .map(|dir| {
+                dir.filter_map(Result::ok)
+                    .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
+                    .count()
+            })
+            .unwrap_or(0)
+    }
+
+    fn pick_tag(workspace: &mut FolderWorkspace) {
+        let tag_list = workspace.file_workspace().tag_list();
+        let id = tag_list
+            .filtered_display_tag_ids()
+            .iter()
+            .find(|id| tag_list.get_tag(**id).is_some_and(|t| t.tag() == "pick"))
+            .copied()
+            .expect("pick is a built-in tag");
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(id)));
+    }
+
+    #[test]
+    fn unsaved_edits_reach_the_journal_on_the_tick_and_go_when_saved() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = journal_workspace(&test_dir);
+        let _ = workspace.update(Message::JournalTick);
+        assert_eq!(journal_files(&test_dir), 0, "nothing changed yet");
+
+        pick_tag(&mut workspace);
+        let _ = workspace.update(Message::JournalTick);
+        assert_eq!(journal_files(&test_dir), 1, "a tag is journaled");
+
+        // Saving (leaving the clip) applies the edits: the entry goes.
+        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        assert_eq!(journal_files(&test_dir), 0, "saved");
+    }
+
+    #[test]
+    fn undoing_everything_takes_the_entry_out_again() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = journal_workspace(&test_dir);
+        pick_tag(&mut workspace);
+        let _ = workspace.update(Message::JournalTick);
+        assert_eq!(journal_files(&test_dir), 1);
+        let _ = workspace.update(Message::Undo);
+        let _ = workspace.update(Message::JournalTick);
+        assert_eq!(journal_files(&test_dir), 0, "back to what is on disk");
+    }
+
+    #[test]
+    fn a_crash_after_a_tick_is_restored_at_the_next_start() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = journal_workspace(&test_dir);
+        pick_tag(&mut workspace);
+        let _ = workspace.update(Message::JournalTick);
+        drop(workspace); // the process dies here: no save, no close
+        let reports = frename_core::recovery::restore_all();
+        match reports.as_slice() {
+            [frename_core::recovery::Restored::Applied { summary, .. }] => {
+                assert!(summary.contains("tag"), "{summary}");
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(journal_files(&test_dir), 0, "a restored entry is gone");
+    }
+
+    #[test]
+    fn a_normal_close_leaves_no_journal_behind() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = journal_workspace(&test_dir);
+        pick_tag(&mut workspace);
+        let _ = workspace.update(Message::JournalTick);
+        assert_eq!(journal_files(&test_dir), 1);
+        // The window closes: the open clip's edits are saved once its video has unloaded.
+        let _ = workspace.flush_open_file();
+        let _ = workspace.on_media_unloaded();
+        assert_eq!(journal_files(&test_dir), 0);
     }
 
     #[test]

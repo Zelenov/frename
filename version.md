@@ -1,3 +1,7 @@
+# 0.93
+## Added
+- Your unsaved work on the open clip (tags, comment, in/out points, markers) is saved to a recovery file a second after each change. After a crash, a killed program or a power cut, the next start restores it ("frename closed unexpectedly. Restored your unsaved work on …") and opens that clip; a clip that changed in the meantime is not overwritten, and the saved copy is kept in the `recovery/kept` folder.
+
 # 0.92
 ## Fixed
 - With markers kept in the comment (Settings → Saving) and comments in text files, markers are written into the comment as you add, rename, recolor, move or delete them, not only when you leave the clip. A comment file that cannot be written marks the file with the red ✕ and is tried again at your next change.

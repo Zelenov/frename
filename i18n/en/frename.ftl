@@ -574,3 +574,6 @@ settings-topup-amount-placeholder = Added, $
 settings-topup-date-placeholder = Day, empty: today
 settings-topup-record = Record top-up
 settings-topup-refused = Type the amount as a number and the day as YYYY-MM-DD.
+
+recovery-restored = frename closed unexpectedly. Restored your unsaved work on { $clip } ({ $what }).
+recovery-kept = frename closed unexpectedly. Your unsaved work on { $clip } was not applied ({ $why }); it is kept in { $folder }.
