@@ -3,10 +3,11 @@
 use std::path::PathBuf;
 
 use frename_core::ai::key::{ApiKey, KeyState};
+use frename_core::ai::ledger::SpendSummary;
 use frename_core::{old_settings, AppDatabase, AppSettings, AppStateStore};
 use iced::Task;
 
-use super::{KeyMessage, Message, Page, SETTINGS_SCROLLABLE_ID};
+use super::{KeyMessage, Message, Page, TopUpMessage, SETTINGS_SCROLLABLE_ID};
 use crate::features::batch::Operation;
 use crate::features::updates;
 
@@ -38,6 +39,8 @@ pub struct SettingsState {
     import: OldSettingsImport,
     /// The API key sections; never persisted here (the keys live in the credential store).
     keys: Keys,
+    /// What each paid service cost and the top-up form (issue #121).
+    spends: Spends,
     /// The languages Soniox offers as hints; asked for each time the window opens with a key.
     subtitle_languages: LanguageList,
 }
@@ -58,6 +61,36 @@ pub enum LanguageList {
 pub struct Keys {
     anthropic: KeySection,
     soniox: KeySection,
+}
+
+/// One spending section per service.
+#[derive(Debug, Clone, Default)]
+pub struct Spends {
+    anthropic: SpendSection,
+    soniox: SpendSection,
+}
+
+/// What a service cost (read from the spend ledger) and the top-up being typed.
+#[derive(Debug, Clone, Default)]
+pub struct SpendSection {
+    pub summary: SpendSummary,
+    /// The amount typed, in dollars.
+    pub amount: String,
+    /// The day typed (`YYYY-MM-DD`); empty means today.
+    pub date: String,
+    /// The last "Record" was refused: the amount or the day is not usable.
+    pub refused: bool,
+}
+
+impl SpendSection {
+    /// The amount typed as a number of dollars (a comma may stand for the point).
+    pub fn parsed_amount(&self) -> Option<f64> {
+        let amount = self.amount.trim().replace(',', ".");
+        amount
+            .parse::<f64>()
+            .ok()
+            .filter(|a| a.is_finite() && *a >= 0.0)
+    }
 }
 
 /// The API key field and what is known about the saved key.
@@ -93,6 +126,7 @@ impl Default for SettingsState {
             updates: updates::UpdatesState::default(),
             import,
             keys: Keys::default(),
+            spends: Spends::default(),
             subtitle_languages: LanguageList::default(),
         }
     }
@@ -125,6 +159,10 @@ impl SettingsState {
                 self.apply_key(which, message);
                 Task::none()
             }
+            Message::TopUp(which, message) => {
+                self.apply_top_up(which, message);
+                Task::none()
+            }
             Message::SubtitleLanguagesListed(result) => {
                 self.subtitle_languages = match result {
                     Ok(list) => LanguageList::Listed(list),
@@ -148,6 +186,7 @@ impl SettingsState {
     /// Show `page`, from its top.
     pub fn show_page(&mut self, page: Page) -> Task<Message> {
         self.page = page;
+        self.refresh_spend();
         iced::widget::operation::snap_to(
             iced::widget::Id::new(SETTINGS_SCROLLABLE_ID),
             iced::widget::scrollable::RelativeOffset::START,
@@ -182,6 +221,58 @@ impl SettingsState {
     /// Where the import of an old frename's settings stands.
     pub fn old_settings_import(&self) -> &OldSettingsImport {
         &self.import
+    }
+
+    /// The spending section of `which`.
+    pub fn spend(&self, which: ApiKey) -> &SpendSection {
+        match which {
+            ApiKey::Anthropic => &self.spends.anthropic,
+            ApiKey::Soniox => &self.spends.soniox,
+        }
+    }
+
+    fn spend_mut(&mut self, which: ApiKey) -> &mut SpendSection {
+        match which {
+            ApiKey::Anthropic => &mut self.spends.anthropic,
+            ApiKey::Soniox => &mut self.spends.soniox,
+        }
+    }
+
+    /// Read what each service cost from the ledger again (the window opens, a page is shown, a
+    /// top-up was recorded).
+    pub fn refresh_spend(&mut self) {
+        let db = AppDatabase::new();
+        for which in [ApiKey::Anthropic, ApiKey::Soniox] {
+            self.spend_mut(which).summary = db.ai_spend_summary(which);
+        }
+    }
+
+    fn apply_top_up(&mut self, which: ApiKey, message: TopUpMessage) {
+        let section = self.spend_mut(which);
+        match message {
+            TopUpMessage::Amount(amount) => {
+                section.amount = amount;
+                section.refused = false;
+            }
+            TopUpMessage::Date(date) => {
+                section.date = date;
+                section.refused = false;
+            }
+            TopUpMessage::Record => {
+                let Some(amount) = section.parsed_amount() else {
+                    section.refused = true;
+                    return;
+                };
+                let date = section.date.trim();
+                let date = (!date.is_empty()).then_some(date);
+                if AppDatabase::new().set_ai_top_up(which, amount, date) {
+                    *section = SpendSection::default();
+                    self.refresh_spend();
+                } else {
+                    section.refused = true;
+                }
+            }
+        }
     }
 
     /// The section of the `which` API key.
@@ -359,7 +450,6 @@ impl SettingsState {
             Message::Key(which, message) => self.apply_key(which, message),
             Message::OpenBatchAction(
                 Operation::TagCommented
-                | Operation::InOutFromNames
                 | Operation::FixTags
                 | Operation::ReloadFiles
                 | Operation::Rotate(_)
@@ -375,6 +465,7 @@ impl SettingsState {
             | Message::Updates(_)
             | Message::ImportOldSettings
             | Message::OldSettingsFolderPicked(_)
+            | Message::TopUp(..)
             | Message::SubtitleLanguagesListed(_) => {}
         }
     }
@@ -408,8 +499,34 @@ mod tests {
             updates: updates::UpdatesState::default(),
             import: OldSettingsImport::None,
             keys: Keys::default(),
+            spends: Spends::default(),
             subtitle_languages: LanguageList::default(),
         }
+    }
+
+    #[test]
+    fn the_top_up_amount_is_a_number_of_dollars_with_a_point_or_a_comma() {
+        let section = |amount: &str| SpendSection {
+            amount: amount.to_string(),
+            ..SpendSection::default()
+        };
+        assert_eq!(section(" 20 ").parsed_amount(), Some(20.0));
+        assert_eq!(section("12,50").parsed_amount(), Some(12.5));
+        assert_eq!(section("").parsed_amount(), None);
+        assert_eq!(section("twenty").parsed_amount(), None);
+        assert_eq!(section("-5").parsed_amount(), None);
+        assert_eq!(section("inf").parsed_amount(), None);
+    }
+
+    #[test]
+    fn a_top_up_typed_wrong_is_refused_until_the_form_is_touched() {
+        let mut state = test_state();
+        state.apply_top_up(ApiKey::Soniox, TopUpMessage::Amount("oops".into()));
+        state.apply_top_up(ApiKey::Soniox, TopUpMessage::Record);
+        assert!(state.spend(ApiKey::Soniox).refused);
+        assert!(!state.spend(ApiKey::Anthropic).refused, "per service");
+        state.apply_top_up(ApiKey::Soniox, TopUpMessage::Amount("5".into()));
+        assert!(!state.spend(ApiKey::Soniox).refused);
     }
 
     #[test]

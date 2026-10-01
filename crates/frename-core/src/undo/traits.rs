@@ -11,6 +11,17 @@ pub trait Undoable<SD, ST>: Send {
     fn turns_a_video(&self) -> bool {
         false
     }
+
+    /// Whether it moves to another file (a navigation), so undoing it is not undoing an edit.
+    fn switches_file(&self) -> bool {
+        false
+    }
+
+    /// Whether it only changes the open video (its markers or its turn), which stay editable in
+    /// batch mode, unlike tags and the file name.
+    fn edits_open_video(&self) -> bool {
+        false
+    }
 }
 
 /// Trait for anything that can receive pushed commands.

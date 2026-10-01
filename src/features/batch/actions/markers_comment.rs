@@ -5,10 +5,11 @@
 use std::path::Path;
 
 use frename_core::FileTagger;
-use iced::widget::{column, radio};
 use iced::Element;
 
+use super::super::page::{self, Change};
 use super::super::ItemResult;
+use crate::ui::{form, layout};
 
 /// The log is always English, unlike the UI text `label()` returns.
 const LOG_LABEL: &str = "Markers <-> comment";
@@ -44,6 +45,24 @@ impl Default for Options {
     }
 }
 
+impl Direction {
+    /// Stable name for persisting the last run's option (#65).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::CommentToMarkers => "comment_to_markers",
+            Self::MarkersToComment => "markers_to_comment",
+        }
+    }
+
+    /// Parse a persisted name; unknown names fall back to the default.
+    pub fn from_name(name: &str) -> Self {
+        match name {
+            "markers_to_comment" => Self::MarkersToComment,
+            _ => Self::CommentToMarkers,
+        }
+    }
+}
+
 impl Options {
     /// Preset the direction, when Settings opens the action.
     pub fn prepare(&mut self, direction: Direction) {
@@ -61,27 +80,39 @@ impl Options {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        let choices = column![
-            radio(
-                fl!("batch-action-markers-comment-to-markers"),
-                Direction::CommentToMarkers,
+        let choice = |label: String, description: Element<'static, Message>, direction| {
+            form::radio_option(
+                label,
+                Some(description),
+                direction,
                 Some(self.direction),
-                Message::SetDirection
+                Message::SetDirection,
             )
-            .text_size(13),
-            radio(
-                fl!("batch-action-markers-to-comment"),
-                Direction::MarkersToComment,
-                Some(self.direction),
-                Message::SetDirection
-            )
-            .text_size(13),
-        ]
-        .spacing(8);
-        super::panel(
+        };
+        let changes: &[Change] = match self.direction {
+            Direction::CommentToMarkers => &[Change::IntoVideos, Change::IntoComments],
+            Direction::MarkersToComment => &[Change::IntoComments],
+        };
+        page::page(
             label(),
-            fl!("batch-action-markers-comment-hint"),
-            choices.into(),
+            fl!("batch-action-markers-comment-hint-short"),
+            changes,
+            [page::option_row_with_info(
+                fl!("batch-option-direction"),
+                fl!("batch-action-markers-comment-hint"),
+                layout::choices([
+                    choice(
+                        fl!("batch-action-markers-comment-to-markers"),
+                        form::example(fl!("settings-markers-comment-example")),
+                        Direction::CommentToMarkers,
+                    ),
+                    choice(
+                        fl!("batch-action-markers-to-comment"),
+                        form::description(fl!("batch-action-markers-to-comment-hint")),
+                        Direction::MarkersToComment,
+                    ),
+                ]),
+            )],
         )
     }
 }

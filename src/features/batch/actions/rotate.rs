@@ -5,13 +5,12 @@
 use std::path::Path;
 
 use frename_core::FileTagger;
-use iced::widget::column;
 use iced::Element;
 
+use super::super::page::{self, Change};
 use super::super::{ItemResult, ItemStatus};
 use crate::features::rotation_text::why_not_rotated;
-use crate::ui::form;
-use crate::ui::tokens::SPACE_S;
+use crate::ui::{form, layout};
 
 /// The log is always English, unlike the UI text `label()` returns.
 const LOG_LABEL: &str = "Rotate videos";
@@ -33,6 +32,28 @@ pub enum Turn {
 #[derive(Debug, Clone)]
 pub enum Message {
     SetTurn(Turn),
+}
+
+impl Turn {
+    /// Stable name for persisting the last run's option (#65).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Right => "right",
+            Self::Left => "left",
+            Self::Half => "half",
+            Self::Reset => "reset",
+        }
+    }
+
+    /// Parse a persisted name; unknown names fall back to the default.
+    pub fn from_name(name: &str) -> Self {
+        match name {
+            "left" => Self::Left,
+            "half" => Self::Half,
+            "reset" => Self::Reset,
+            _ => Self::Right,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -61,14 +82,21 @@ impl Options {
         let choice = |label: String, turn: Turn| {
             form::radio_option(label, None, turn, Some(self.turn), Message::SetTurn)
         };
-        let choices = column![
-            choice(fl!("batch-action-rotate-right"), Turn::Right),
-            choice(fl!("batch-action-rotate-left"), Turn::Left),
-            choice(fl!("batch-action-rotate-half"), Turn::Half),
-            choice(fl!("batch-action-rotate-reset"), Turn::Reset),
-        ]
-        .spacing(SPACE_S);
-        super::panel(label(), fl!("batch-action-rotate-hint"), choices.into())
+        page::page(
+            label(),
+            fl!("batch-action-rotate-hint-short"),
+            &[Change::IntoVideos],
+            [page::option_row_with_info(
+                fl!("batch-option-turn"),
+                fl!("batch-action-rotate-hint"),
+                layout::choices([
+                    choice(fl!("batch-action-rotate-right"), Turn::Right),
+                    choice(fl!("batch-action-rotate-left"), Turn::Left),
+                    choice(fl!("batch-action-rotate-half"), Turn::Half),
+                    choice(fl!("batch-action-rotate-reset"), Turn::Reset),
+                ]),
+            )],
+        )
     }
 }
 

@@ -35,4 +35,6 @@ pub enum Message {
     ToggleColorPicker(String),
     SetColor(String, MarkerColor),
     Delete(String),
+    /// The list scrolled: its offset from the top and its viewport's height.
+    Scrolled(f32, f32),
 }

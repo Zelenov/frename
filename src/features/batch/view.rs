@@ -1,93 +1,248 @@
-//! UI for the batch panel: the action list, the chosen action's options, and the job panel
-//! every action shares.
+//! The batch panel (`docs/design/design-system.md` §13.6.1–13.6.4): its header, the action list,
+//! and the chosen action's page with its button bar. While a job runs or its result is shown,
+//! the job's page ([`super::job_view`]) takes the page's place; the header and the list stay.
 
 use frename_core::{File, FileId};
-use iced::widget::{
-    button, column, container, progress_bar, row, scrollable, text, tooltip, Space,
-};
-use iced::{Element, Length};
+use iced::widget::{column, container, responsive, row, text::IntoFragment, Column};
+use iced::{Alignment, Element, Length, Padding};
 
 use crate::features::folder_workspace::Directory;
-use crate::theme;
+use crate::ui::badge::{badge, BadgeKind};
+use crate::ui::icon_button::IconButton;
+use crate::ui::icons::Icon;
+use crate::ui::tokens::*;
+use crate::ui::tooltip::{Position, Tip};
+use crate::ui::{button, form, layout, scroll, style, text};
 
-use super::actions::spend_line;
-use super::state::Progress;
-use super::{Action, BatchState, Message};
+use super::actions::Group;
+use super::{job_view, Action, BatchState, Message};
 
-const ACTION_LIST_WIDTH: f32 = 190.0;
-const FAILED_LIST_HEIGHT: f32 = 120.0;
+/// The page's inset: 16 above and below, 24 at the sides.
+pub(super) const PAGE_PADDING: Padding = Padding {
+    top: SPACE_L,
+    bottom: SPACE_L,
+    left: SPACE_XL,
+    right: SPACE_XL,
+};
 
-/// Render the batch panel. `directory` names the files of the job.
-pub fn view<'a>(state: &'a BatchState, directory: Option<&'a Directory>) -> Element<'a, Message> {
-    let actions = column(
-        Action::ALL
-            .iter()
-            .map(|action| action_entry(*action, state.action())),
-    )
-    .spacing(2)
-    .width(Length::Fixed(ACTION_LIST_WIDTH));
+/// How the action list fits the panel's width (§13.9).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ListForm {
+    /// Names, icons and badges beside the page.
+    Full,
+    /// Only the icons, their names in tooltips.
+    Icons,
+    /// A dropdown over the page.
+    Dropdown,
+}
 
-    let options = container(action_options(state, directory))
-        .padding([4, 16])
-        .width(Length::Fill)
-        .height(Length::Fill);
-
-    // The panel's title: without it the list reads as loose buttons, not as actions on the
-    // checked files.
-    let heading = row![
-        text(fl!("batch-title")).size(18),
-        text(fl!(
-            "batch-on-checked",
-            count = (state.checked_count() as i64)
-        ))
-        .size(13)
-        .color(theme::TEXT_MUTED),
-    ]
-    .spacing(10)
-    .align_y(iced::Alignment::End);
-    // Back to the open file; locked while a job runs, like the batch button in the controls bar.
-    let close = tooltip(
-        button(text("✕").size(14))
-            .on_press_maybe((!state.is_running()).then_some(Message::SetActive(false)))
-            .padding([2, 8])
-            .style(theme::icon_button_style(!state.is_running())),
-        container(text(fl!("folder-controls-batch-back")))
-            .padding([2, 6])
-            .style(theme::elevated_container_style),
-        tooltip::Position::Left,
-    );
-    let title =
-        row![heading, Space::new().width(Length::Fill), close].align_y(iced::Alignment::Center);
-
-    let mut content = column![
-        container(title).padding([4, 10]),
-        row![actions, options].height(Length::Fill),
-    ]
-    .spacing(8);
-    if let Some(progress) = state.progress() {
-        content = content.push(job_panel(state, progress, directory));
+impl ListForm {
+    fn for_width(width: f32) -> Self {
+        if width >= BATCH_PANEL_WIDTH {
+            ListForm::Full
+        } else if width >= BATCH_ICON_LIST_FROM {
+            ListForm::Icons
+        } else {
+            ListForm::Dropdown
+        }
     }
+}
 
-    container(content)
-        .padding(8)
+/// Render the batch panel. `directory` names the files of the job and lists the files the
+/// panel can check.
+pub fn view<'a>(state: &'a BatchState, directory: Option<&'a Directory>) -> Element<'a, Message> {
+    let body = responsive(move |size| {
+        let page = match state.progress() {
+            Some(progress) => job_view::view(state, progress, directory),
+            None => action_page(state, directory),
+        };
+        match ListForm::for_width(size.width) {
+            ListForm::Full => row![action_list(state), layout::vertical_line(), page].into(),
+            ListForm::Icons => row![icon_list(state), layout::vertical_line(), page].into(),
+            ListForm::Dropdown => column![action_dropdown(state), page].into(),
+        }
+    });
+    container(column![header(state), layout::horizontal_line(), body])
         .width(Length::Fill)
         .height(Length::Fill)
-        .style(theme::panel_container_style)
+        .style(style::panel)
         .into()
 }
 
-/// One entry of the action list.
-fn action_entry(action: Action, selected: Action) -> Element<'static, Message> {
-    button(text(action.label()).size(13))
-        .on_press(Message::SelectAction(action))
+/// "Batch actions", how many files are checked, and the way back to the open file.
+fn header(state: &BatchState) -> Element<'_, Message> {
+    let back = IconButton::new(Icon::X)
+        .small()
+        .tip(
+            Tip::new(if state.is_running() {
+                fl!("batch-back-while-running")
+            } else {
+                fl!("folder-controls-batch-back")
+            }),
+            Position::Left,
+        )
+        .on_press_maybe((!state.is_running()).then_some(Message::SetActive(false)));
+    container(
+        row![
+            text::heading(fl!("batch-title")),
+            text::secondary(fl!(
+                "batch-checked-count",
+                count = (state.checked_count() as i64)
+            )),
+            iced::widget::space::horizontal(),
+            back,
+        ]
+        .spacing(SPACE_S)
+        .align_y(Alignment::Center),
+    )
+    .padding(Padding {
+        left: SPACE_L,
+        right: SPACE_S,
+        ..Padding::ZERO
+    })
+    .center_y(BATCH_HEADER_HEIGHT)
+    .into()
+}
+
+/// The badge of a paid action's row: the service that bills it, or that its key is missing.
+fn service_badge<'a>(state: &BatchState, action: Action) -> Option<Element<'a, Message>> {
+    state.actions().service(action).map(|(name, key_missing)| {
+        if key_missing {
+            badge(BadgeKind::Warning, fl!("batch-no-key"))
+        } else {
+            badge(BadgeKind::Neutral, name)
+        }
+    })
+}
+
+/// What picking `action` sends; nothing while a job runs (it keeps its selection).
+fn select(state: &BatchState, action: Action) -> Option<Message> {
+    (!state.is_running()).then_some(Message::SelectAction(action))
+}
+
+/// Every action, under its group's caption.
+fn action_list(state: &BatchState) -> Element<'_, Message> {
+    // No spacing: each item brings its own, clickable gap (`layout::nav_slot`).
+    let mut list = Column::new();
+    let mut group = None;
+    for action in Action::ALL {
+        if group != Some(action.group()) {
+            let spaced = group.is_some();
+            group = Some(action.group());
+            list = list.push(group_caption(action.group(), spaced));
+        }
+        list = list.push(layout::nav_item_with(
+            action.icon(),
+            action.label(),
+            action == state.action(),
+            service_badge(state, action),
+            select(state, action),
+        ));
+    }
+    container(scroll::vertical(list))
+        .width(ACTION_LIST_WIDTH)
+        .height(Length::Fill)
+        .padding(SPACE_S)
+        .into()
+}
+
+/// The action list folded to its icons; a line between groups, each name in its tooltip.
+fn icon_list(state: &BatchState) -> Element<'_, Message> {
+    let mut list = Column::new().align_x(Alignment::Center);
+    let mut group = None;
+    for action in Action::ALL {
+        if group.is_some_and(|g| g != action.group()) {
+            // The gap below it that the column's spacing used to put before the next item.
+            list = list.push(container(layout::horizontal_line()).padding(Padding {
+                top: SPACE_XS,
+                bottom: SPACE_XS + layout::NAV_GAP,
+                ..Padding::ZERO
+            }));
+        }
+        group = Some(action.group());
+        let tip = match state.actions().service(action) {
+            Some((service, _)) => Tip::new(action.label()).detail(service),
+            None => Tip::new(action.label()),
+        };
+        let message = select(state, action);
+        list = list.push(layout::nav_slot(
+            IconButton::new(action.icon())
+                .latched(action == state.action())
+                .tip(tip, Position::Right)
+                .on_press_maybe(message.clone()),
+            message,
+        ));
+    }
+    container(list)
+        .width(ACTION_LIST_ICONS_WIDTH)
+        .height(Length::Fill)
+        .padding(Padding {
+            top: SPACE_S,
+            ..Padding::ZERO
+        })
+        .into()
+}
+
+/// The action list as a dropdown at the top of the page; the chosen action's name while a job
+/// runs.
+fn action_dropdown(state: &BatchState) -> Element<'_, Message> {
+    let current: Element<'_, Message> = if state.is_running() {
+        text::strong(state.action().label()).into()
+    } else {
+        form::dropdown(Action::ALL, Some(state.action()), Message::SelectAction)
+            .width(Length::Fill)
+            .into()
+    };
+    container(current)
+        .padding(Padding {
+            top: SPACE_S,
+            bottom: 0.0,
+            ..PAGE_PADDING
+        })
         .width(Length::Fill)
-        .padding([6, 10])
-        .style(theme::list_item_button_style(action == selected, true))
         .into()
 }
 
-/// The selected action's panel, and the button that runs it on the checked files.
-fn action_options<'a>(
+/// A group's caption; groups after the first get room above them.
+fn group_caption<'a>(group: Group, spaced: bool) -> Element<'a, Message> {
+    container(text::caption(group.label()))
+        .padding(Padding {
+            top: if spaced { SPACE_M } else { 0.0 },
+            // The gap below it that the column's spacing used to put before the first item.
+            bottom: SPACE_XS + layout::NAV_GAP,
+            left: SPACE_S,
+            right: 0.0,
+        })
+        .into()
+}
+
+/// A page's content, scrolled and no wider than a readable line.
+pub(super) fn page_body<'a>(content: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
+    scroll::vertical(
+        container(content)
+            .max_width(PAGE_MAX_WIDTH + PAGE_PADDING.left + PAGE_PADDING.right)
+            .padding(PAGE_PADDING),
+    )
+    .into()
+}
+
+/// The page, then the button bar, as every page of the panel has them.
+pub(super) fn with_button_bar<'a>(
+    body: Element<'a, Message>,
+    hint: impl IntoFragment<'a>,
+    buttons: impl IntoIterator<Item = Element<'a, Message>>,
+) -> Element<'a, Message> {
+    column![
+        container(body).height(Length::Fill),
+        layout::button_bar(hint, buttons)
+    ]
+    .width(Length::Fill)
+    .into()
+}
+
+/// The chosen action's page for the checked files, and its button bar: why Run is off (with
+/// the button that fixes it) on the left, Run on the right.
+fn action_page<'a>(
     state: &'a BatchState,
     directory: Option<&'a Directory>,
 ) -> Element<'a, Message> {
@@ -96,203 +251,50 @@ fn action_options<'a>(
             .filter(|f| state.is_checked(f.id()))
             .collect()
     });
-    let (panel, label, ready) = state.actions().panel(state.action(), &checked);
+    let panel = state.actions().panel(state.action(), &checked);
     // Clip lengths still being read hold their files open, which a rename would fail on.
-    let can_run = ready && !state.is_running() && !state.actions().is_reading_files();
-    let run = button(text(label).size(13))
+    let reading = state.actions().is_reading_files();
+    let reason = if checked.is_empty() {
+        Some(fl!("batch-reason-none-checked"))
+    } else if reading && panel.reason.is_none() {
+        Some(fl!("batch-reason-reading"))
+    } else {
+        panel.reason
+    };
+    let can_run = panel.ready && !reading && !state.is_running();
+    let listed: Vec<FileId> = directory
+        .map(|dir| dir.files_in_order().map(|f| f.id()).collect())
+        .unwrap_or_default();
+    let check_all = (checked.is_empty() && !listed.is_empty()).then(|| {
+        button::secondary(fl!("batch-check-all", count = (listed.len() as i64)))
+            .on_press(Message::CheckAll(listed))
+            .into()
+    });
+    let run = button::primary(panel.run)
         .on_press_maybe(can_run.then_some(Message::Run))
-        .padding([6, 14]);
-
-    // The options scroll; the run button, and why it may be off, stay in view below them, even
-    // in a small window or under a job's report.
-    let options = scrollable(panel.map(Message::Action))
-        .height(Length::Fill)
-        .style(theme::dark_scrollable_style);
-    column![options]
-        .extend(
-            state
-                .actions()
-                .footer(state.action())
-                .map(|footer| footer.map(Message::Action)),
-        )
-        .push(run)
-        .spacing(12)
-        .into()
+        .into();
+    with_button_bar(
+        page_body(panel.page.map(Message::Action)),
+        reason.unwrap_or_default(),
+        check_all.into_iter().chain([run]),
+    )
 }
 
-/// The job panel shared by every action: progress, the file in work, the outcome counts, and
-/// Cancel while it runs; a summary, the failed files and Close once it has ended.
-fn job_panel<'a>(
-    state: &'a BatchState,
-    progress: Progress,
-    directory: Option<&'a Directory>,
-) -> Element<'a, Message> {
-    let name = |id: FileId| -> String {
-        directory
-            .and_then(|d| d.file_by_id(id))
-            .and_then(|f| f.file_path().file_name())
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default()
-    };
-    let action = state.job_action().unwrap_or(state.action());
-    let counts = text(fl!(
-        "batch-counts",
-        done = (progress.done as i64),
-        done_label = action.done_label(),
-        skipped = (progress.skipped as i64),
-        failed = (progress.failed as i64)
-    ))
-    .size(12)
-    .color(theme::TEXT_SOFT);
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let mut panel = column![].spacing(6);
-    if progress.running {
-        let (item_fraction, step) = state.item_now();
-        let current = match (
-            state.current().map(name).unwrap_or_default(),
-            step.is_empty(),
-        ) {
-            (name, true) => name,
-            (name, false) => format!("{name} — {step}"),
-        };
-        let (label, cancel) = if progress.cancelled {
-            (fl!("batch-stopping"), None)
-        } else {
-            (fl!("batch-cancel"), Some(Message::Cancel))
-        };
-        panel = panel
-            .push(
-                row![
-                    text(format!("{} / {}", progress.finished, progress.total))
-                        .size(13)
-                        .wrapping(iced::widget::text::Wrapping::None),
-                    // A long name is cut at the panel's edge instead of running past it.
-                    container(
-                        text(current)
-                            .size(12)
-                            .color(theme::TEXT_MUTED)
-                            .wrapping(iced::widget::text::Wrapping::None),
-                    )
-                    .width(Length::Fill)
-                    .clip(true),
-                ]
-                .spacing(10),
-            )
-            .push(
-                progress_bar(
-                    0.0..=progress.total.max(1) as f32,
-                    progress.finished as f32 + item_fraction,
-                )
-                .girth(6),
-            )
-            .push(
-                row![
-                    counts,
-                    Space::new().width(Length::Fill),
-                    button(text(label).size(13)).on_press_maybe(cancel)
-                ]
-                .align_y(iced::Alignment::Center),
-            );
-    } else {
-        let mut summary = if let Some(stopped) = state.stopped() {
-            stopped.to_string()
-        } else if progress.finished < progress.total {
-            fl!(
-                "batch-stopped",
-                finished = (progress.finished as i64),
-                total = (progress.total as i64)
-            )
-        } else {
-            fl!("batch-finished", total = (progress.total as i64))
-        };
-        if let Some(usage) = progress.usage {
-            let spend = spend_line(state.job_ai_model(), usage);
-            let spend = if progress.usage_unknown {
-                format!("{} {spend}", fl!("batch-ai-at-least"))
-            } else {
-                spend
-            };
-            summary.push_str(&format!("   {}", fl!("batch-ai-spend-line", spend = spend)));
-        }
-        if let Some(report) = state.report() {
-            summary.push_str(&format!("   {report}"));
-        }
-        panel = panel.push(text(summary).size(13)).push(
-            row![counts, Space::new().width(Length::Fill),]
-                .extend((!state.retryable().is_empty()).then(|| {
-                    button(text(fl!("batch-retry")).size(13))
-                        .on_press(Message::Retry)
-                        .into()
-                }))
-                .push(button(text(fl!("batch-close")).size(13)).on_press(Message::CloseReport))
-                .spacing(6)
-                .align_y(iced::Alignment::Center),
+    #[test]
+    fn the_action_list_folds_as_the_panel_narrows() {
+        assert_eq!(ListForm::for_width(BATCH_PANEL_WIDTH), ListForm::Full);
+        assert_eq!(
+            ListForm::for_width(BATCH_PANEL_WIDTH - 1.0),
+            ListForm::Icons
         );
-        let failed = state.failed();
-        // Generating subtitles also says why each video it left alone got none, and moving in/out
-        // points out of names which files kept the points they had stored.
-        let listed = match action {
-            Action::GenerateSubtitles => state.skipped_with_reason(),
-            Action::InOutFromNames => state.done_with_reason(),
-            _ => Vec::new(),
-        };
-        if !failed.is_empty() || !listed.is_empty() {
-            let heading = if action == Action::GenerateSubtitles {
-                fl!("batch-failed-subtitles")
-            } else if action == Action::InOutFromNames {
-                fl!("batch-in-out-from-names-listed")
-            } else if failed.iter().all(|(_, reason)| reason.is_some()) {
-                fl!("batch-failed-plain")
-            } else {
-                fl!("batch-failed-with-log")
-            };
-            let failed_lines = failed.into_iter().map(|(id, reason)| {
-                let line = match reason {
-                    Some(reason) => format!("{} — {reason}", name(id)),
-                    None => name(id),
-                };
-                text(line).size(12).color(theme::ERROR).into()
-            });
-            let listed_lines = listed.into_iter().map(|(id, reason)| {
-                text(format!("{} — {reason}", name(id)))
-                    .size(12)
-                    .color(theme::TEXT_SOFT)
-                    .into()
-            });
-            let names = column(failed_lines.chain(listed_lines));
-            panel = panel
-                .push(
-                    row![
-                        text(heading).size(12).color(theme::TEXT_MUTED),
-                        Space::new().width(Length::Fill),
-                    ]
-                    .extend(state.out_of_credit().then(|| {
-                        button(text(fl!("batch-add-credit")).size(12))
-                            .on_press(Message::OpenBilling)
-                            .padding([2, 8])
-                            .into()
-                    }))
-                    .push(
-                        button(text(fl!("batch-open-log")).size(12))
-                            .on_press(Message::OpenLog)
-                            .padding([2, 8]),
-                    )
-                    .spacing(6)
-                    .align_y(iced::Alignment::Center),
-                )
-                .push(
-                    container(
-                        scrollable(names)
-                            .width(Length::Fill)
-                            .style(theme::dark_scrollable_style),
-                    )
-                    .max_height(FAILED_LIST_HEIGHT),
-                );
-        }
+        assert_eq!(ListForm::for_width(BATCH_ICON_LIST_FROM), ListForm::Icons);
+        assert_eq!(
+            ListForm::for_width(BATCH_ICON_LIST_FROM - 1.0),
+            ListForm::Dropdown
+        );
     }
-    container(panel)
-        .padding(10)
-        .width(Length::Fill)
-        .style(theme::elevated_container_style)
-        .into()
 }

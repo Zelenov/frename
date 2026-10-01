@@ -51,8 +51,25 @@ pub struct DemoScenario {
     /// between it and the last Ctrl-clicked file (or `open`, if `ctrl_click` is empty).
     #[serde(default)]
     pub shift_click: Option<String>,
+    /// A word to type in the file search bar (issue #99).
+    #[serde(default)]
+    pub search: Option<String>,
+    /// What was spent on the paid services, for the credit estimate (issue #121).
+    #[serde(default)]
+    pub credit: Vec<DemoCredit>,
     /// The staged files, oldest first: the file list shows them in this order.
     pub files: Vec<DemoFile>,
+}
+
+/// A top-up recorded now for a service, and what was spent since.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DemoCredit {
+    /// `anthropic` or `soniox`.
+    pub service: String,
+    pub top_up: f64,
+    #[serde(default)]
+    pub spent: f64,
 }
 
 /// One staged file.

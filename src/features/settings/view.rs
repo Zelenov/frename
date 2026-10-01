@@ -10,10 +10,10 @@ use iced::{Alignment, Element, Length};
 
 use crate::ui::layout::{self, NoticeKind};
 use crate::ui::tokens::*;
-use crate::ui::{button, form, text};
+use crate::ui::{button, form, scroll, text};
 
-use super::state::{KeySection, LanguageList, OldSettingsImport};
-use super::{KeyMessage, Message, Page, SettingsState, SETTINGS_SCROLLABLE_ID};
+use super::state::{KeySection, LanguageList, OldSettingsImport, SpendSection};
+use super::{KeyMessage, Message, Page, SettingsState, TopUpMessage, SETTINGS_SCROLLABLE_ID};
 
 use crate::features::batch::{describe_ai, MarkersDirection, Operation};
 use crate::features::updates;
@@ -40,7 +40,7 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
     };
     layout::window_with_navigation(
         layout::sidebar(navigation),
-        layout::scroll(SETTINGS_SCROLLABLE_ID, page),
+        scroll::vertical_with_id(SETTINGS_SCROLLABLE_ID, page),
         layout::button_bar(
             fl!("settings-apply-note"),
             [button::secondary(fl!("settings-close"))
@@ -265,6 +265,10 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
                 ]),
             ),
             layout::setting_row(
+                fl!("settings-spend-label"),
+                spending(ApiKey::Anthropic, state.spend(ApiKey::Anthropic)),
+            ),
+            layout::setting_row(
                 fl!("settings-ai-language-label"),
                 form::dropdown(
                     SummaryLanguage::ALL.map(SummaryLanguageOption),
@@ -330,13 +334,8 @@ fn subtitles(state: &SettingsState) -> Element<'_, Message> {
                 key,
             ),
             layout::setting_row(
-                fl!("settings-subtitles-languages-label"),
-                layout::aligned(
-                    [grid.into()]
-                        .into_iter()
-                        .chain(status.map(|s| text::secondary(s).into()))
-                        .chain([text::secondary(hint).into()]),
-                ),
+                fl!("settings-spend-label"),
+                spending(ApiKey::Soniox, state.spend(ApiKey::Soniox)),
             ),
             layout::setting_row(
                 fl!("settings-subtitles-cue-length-label"),
@@ -356,6 +355,15 @@ fn subtitles(state: &SettingsState) -> Element<'_, Message> {
                         Message::SetSubtitleCueLength,
                     ),
                 ]),
+            ),
+            layout::setting_row(
+                fl!("settings-subtitles-languages-label"),
+                layout::aligned(
+                    [grid.into()]
+                        .into_iter()
+                        .chain(status.map(|s| text::secondary(s).into()))
+                        .chain([text::secondary(hint).into()]),
+                ),
             ),
         ],
     )
@@ -490,6 +498,64 @@ fn key_block(which: ApiKey, key: &KeySection, texts: KeyTexts) -> Element<'_, Me
     if let Some(error) = &key.error {
         items.push(text::error(error.as_str()).into());
     }
+    layout::controls(items).into()
+}
+
+/// What frename spent on a service and the top-up form for the estimate of what is left
+/// (issue #121). The estimate is marked as one: neither provider tells a normal key its balance.
+fn spending(which: ApiKey, spend: &SpendSection) -> Element<'_, Message> {
+    let summary = &spend.summary;
+    let dollars = describe_ai::dollars;
+    let mut lines = vec![text::body(fl!(
+        "settings-spend-line",
+        today = dollars(summary.today),
+        month = dollars(summary.month)
+    ))
+    .into()];
+    if let (Some(top_up), Some(since)) = (summary.top_up, summary.since_top_up) {
+        lines.push(
+            text::body(fl!(
+                "settings-spend-since",
+                spent = dollars(since),
+                top_up = dollars(top_up.usd)
+            ))
+            .into(),
+        );
+    }
+    lines.push(match summary.remaining() {
+        Some(left) => text::strong(fl!("settings-spend-left", amount = dollars(left))).into(),
+        None => text::secondary(fl!("settings-spend-none")).into(),
+    });
+    let message = move |m: TopUpMessage| Message::TopUp(which, m);
+    let record = spend.parsed_amount().map(|_| message(TopUpMessage::Record));
+    let amount = if spend.refused {
+        form::invalid_text_field(&fl!("settings-topup-amount-placeholder"), &spend.amount)
+    } else {
+        form::text_field(&fl!("settings-topup-amount-placeholder"), &spend.amount)
+    }
+    .on_input(move |input| message(TopUpMessage::Amount(input)))
+    .on_submit_maybe(record.clone())
+    .width(FIELD_WIDTH_S);
+    let date = form::text_field(&fl!("settings-topup-date-placeholder"), &spend.date)
+        .on_input(move |input| message(TopUpMessage::Date(input)))
+        .on_submit_maybe(record.clone())
+        .width(FIELD_WIDTH_M);
+    let mut items = lines;
+    items.push(
+        row![amount, date]
+            .spacing(SPACE_S)
+            .align_y(Alignment::Center)
+            .into(),
+    );
+    items.push(layout::buttons([button::secondary(fl!(
+        "settings-topup-record"
+    ))
+    .on_press_maybe(record)
+    .into()]));
+    if spend.refused {
+        items.push(text::error(fl!("settings-topup-refused")).into());
+    }
+    items.push(text::secondary(fl!("settings-spend-note")).into());
     layout::controls(items).into()
 }
 

@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use crate::db::AppStateStore;
+use crate::search::{self, CommentFragment};
 use crate::{File, FileId, FileKind, FileSnapshot, FileTagger, FolderAndFile, FolderInfo};
 
 /// A scanned directory. Generic over the store type S; store is used only for session persistence.
@@ -33,8 +34,8 @@ pub struct Directory<S> {
     marked_only: bool,
     /// Name filter as the user typed it (for display in the search bar).
     name_filter: String,
-    /// Same filter lowercased once, so matching a file never allocates.
-    name_filter_lower: String,
+    /// The words of the filter, lowercased once, so matching a file never allocates.
+    name_filter_words: Vec<String>,
     store: S,
 }
 
@@ -57,7 +58,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
             commented_only: false,
             marked_only: false,
             name_filter: String::new(),
-            name_filter_lower: String::new(),
+            name_filter_words: Vec::new(),
             store,
         }
     }
@@ -228,22 +229,45 @@ impl<S: AppStateStore + Clone> Directory<S> {
         &self.name_filter
     }
 
-    /// Set the name filter. Matching is case-insensitive on the file name as it is on disk,
-    /// so the tags in the name are searchable too.
+    /// Set the name filter. It is words, and a file passes when each word is in its name (as it
+    /// is on disk, so the tags in the name are searchable too) or in its comment, ignoring case.
+    /// A comment still loading is not known yet: such a file passes on its name alone.
     pub fn set_name_filter(&mut self, query: String) {
-        self.name_filter_lower = query.trim().to_lowercase();
+        self.name_filter_words = search::words(&query);
         self.name_filter = query;
     }
 
-    /// Whether a file's name passes the current name filter.
+    /// Whether the search has words.
+    pub fn is_searching(&self) -> bool {
+        !self.name_filter_words.is_empty()
+    }
+
+    /// Whether a file passes the current name filter.
     fn matches_name_filter(&self, file: &File) -> bool {
-        if self.name_filter_lower.is_empty() {
-            return true;
+        let name = file.file_path().file_name().and_then(|n| n.to_str());
+        let comment = (!file.snapshot().comment_loading()).then(|| file.comment());
+        self.name_filter_words.iter().all(|word| {
+            name.is_some_and(|n| search::contains_ignore_case(n, word))
+                || comment.is_some_and(|c| search::contains_ignore_case(c, word))
+        })
+    }
+
+    /// Why a file matches the search when its name alone does not: the line of its comment with
+    /// the words in it, cut to show the first hit within `lead_chars` characters. `None` without
+    /// a search, when the name has every word, or while the comment is loading.
+    pub fn comment_fragment(&self, file: &File, lead_chars: usize) -> Option<CommentFragment> {
+        if self.name_filter_words.is_empty() || file.snapshot().comment_loading() {
+            return None;
         }
-        file.file_path()
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| contains_ignore_case(name, &self.name_filter_lower))
+        let name = file.file_path().file_name().and_then(|n| n.to_str())?;
+        let by_name = self
+            .name_filter_words
+            .iter()
+            .all(|word| search::contains_ignore_case(name, word));
+        if by_name {
+            return None;
+        }
+        search::fragment(file.comment(), &self.name_filter_words, lead_chars)
     }
 
     /// Whether a file is part of the listed set under the current filters.
@@ -321,6 +345,36 @@ impl<S: AppStateStore + Clone> Directory<S> {
         if self.selected_id == Some(id) {
             return None;
         }
+        self.select_by_id(id)
+    }
+
+    /// Open the file this folder last remembered as open (#98): by `last_viewed`'s exact name,
+    /// or, failing that, by the name and extension a file would have without its tags (a cheap
+    /// fallback for a rename done outside frename that only changed the tag prefix — the
+    /// extension must match too, or two files that happen to share a base name, such as
+    /// `pick.clip.mkv` and `review.clip.mp4`, could resolve to the wrong one). Found regardless
+    /// of the current list filter, like [`Self::open_path`] — the selected file always stays
+    /// listed. `None` when `last_viewed` is empty or matches nothing.
+    pub fn open_last_viewed(&mut self, last_viewed: &str) -> Option<File> {
+        if last_viewed.is_empty() {
+            return None;
+        }
+        let by_exact_name =
+            |f: &&File| f.file_path().file_name().and_then(|n| n.to_str()) == Some(last_viewed);
+        let id = if let Some(file) = self.files_by_id.values().find(by_exact_name) {
+            file.id()
+        } else {
+            let remembered = FileSnapshot::parse(last_viewed);
+            let base_name = remembered.name_without_extension();
+            let extension = remembered.extension();
+            self.files_by_id
+                .values()
+                .find(|f| {
+                    f.snapshot().name_without_extension() == base_name
+                        && f.snapshot().extension().eq_ignore_ascii_case(extension)
+                })?
+                .id()
+        };
         self.select_by_id(id)
     }
 
@@ -413,27 +467,6 @@ impl<S: AppStateStore + Clone> Directory<S> {
             self.selected_file().map(|f| f.file_path().to_path_buf()),
         ));
     }
-}
-
-/// Case-insensitive "contains", without allocating a lowercased copy of the haystack.
-/// `needle_lower` must already be lowercase; an empty needle matches everything.
-/// Called for every file on every keystroke, which is why it does not allocate.
-fn contains_ignore_case(haystack: &str, needle_lower: &str) -> bool {
-    if needle_lower.is_empty() {
-        return true;
-    }
-    haystack.char_indices().any(|(start, _)| {
-        let mut rest = haystack[start..].chars().flat_map(char::to_lowercase);
-        let mut needle = needle_lower.chars();
-        loop {
-            match (needle.next(), rest.next()) {
-                (None, _) => return true,
-                (Some(_), None) => return false,
-                (Some(wanted), Some(found)) if wanted != found => return false,
-                _ => {}
-            }
-        }
-    })
 }
 
 /// Reads the folder in one pass and returns its files in modification-date order.
@@ -685,6 +718,115 @@ mod tests {
     }
 
     #[test]
+    fn the_search_finds_a_word_in_the_name_or_the_comment() {
+        let mut dir = directory_with(&["goat_a.mp4", "b.mp4", "c.mp4"]);
+        comment_file_at(&mut dir, 1, "A Goat on the hill");
+        dir.set_name_filter("goat".to_string());
+        assert_eq!(listed_names(&dir), vec!["goat_a.mp4", "b.mp4"]);
+    }
+
+    #[test]
+    fn every_word_must_match_somewhere_in_any_field() {
+        let mut dir = directory_with(&["trip_a.mp4", "trip_b.mp4", "other.mp4"]);
+        comment_file_at(&mut dir, 0, "goat");
+        comment_file_at(&mut dir, 1, "sheep");
+        comment_file_at(&mut dir, 2, "goat trip");
+        // "trip" is in the name of two, "goat" in the comment of two: one has both by name and
+        // comment, one has both in its comment.
+        dir.set_name_filter("  TRIP   goat ".to_string());
+        assert_eq!(listed_names(&dir), vec!["trip_a.mp4", "other.mp4"]);
+        dir.set_name_filter("goat sheep".to_string());
+        assert!(listed_names(&dir).is_empty());
+    }
+
+    #[test]
+    fn the_search_reads_the_ai_description_and_marker_lines_of_the_comment() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4"]);
+        comment_file_at(
+            &mut dir,
+            0,
+            "Notes\nAI: A goat crosses a road.\n0:00–0:05 Road.\n— Claude Haiku 4.5, 2026-09-26 —",
+        );
+        comment_file_at(&mut dir, 1, "0:41–0:47 — Lion");
+        dir.set_name_filter("crosses".to_string());
+        assert_eq!(listed_names(&dir), vec!["a.mp4"]);
+        dir.set_name_filter("lion".to_string());
+        assert_eq!(listed_names(&dir), vec!["b.mp4"]);
+    }
+
+    #[test]
+    fn a_comment_still_loading_matches_by_name_only() {
+        let mut dir = directory_with(&["goat_a.mp4", "b.mp4"]);
+        let file = dir.files_in_order().nth(1).expect("b");
+        let (id, path) = (file.id(), file.file_path().to_path_buf());
+        let mut snapshot = file.snapshot().clone();
+        snapshot.set_comment_loading(true);
+        dir.rename_file(id, &path, &snapshot);
+        dir.set_name_filter("goat".to_string());
+        assert_eq!(listed_names(&dir), vec!["goat_a.mp4"]);
+        assert_eq!(dir.loading_comment_count(), 1);
+        // Once it is loaded, the search sees its comment.
+        snapshot.set_comment_loading(false);
+        snapshot.set_comment("goat".to_string());
+        dir.rename_file(id, &path, &snapshot);
+        assert_eq!(listed_names(&dir), vec!["goat_a.mp4", "b.mp4"]);
+    }
+
+    #[test]
+    fn the_search_folds_cyrillic_case() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4"]);
+        comment_file_at(&mut dir, 0, "Коза на лугу");
+        dir.set_name_filter("КОЗА".to_string());
+        assert_eq!(listed_names(&dir), vec!["a.mp4"]);
+    }
+
+    #[test]
+    fn a_file_that_matches_by_comment_says_where() {
+        let mut dir = directory_with(&["goat_a.mp4", "b.mp4"]);
+        comment_file_at(&mut dir, 1, "First line\nThe goat runs");
+        dir.set_name_filter("goat".to_string());
+        let by_name = dir.files_in_order().next().expect("goat_a").clone();
+        assert_eq!(dir.comment_fragment(&by_name, 20), None, "its name says it");
+        let by_comment = dir.files_in_order().nth(1).expect("b").clone();
+        let fragment = dir.comment_fragment(&by_comment, 20).expect("a fragment");
+        assert_eq!(fragment.text, "The goat runs");
+        assert_eq!(&fragment.text[fragment.highlights[0].clone()], "goat");
+        dir.set_name_filter(String::new());
+        assert_eq!(dir.comment_fragment(&by_comment, 20), None, "no search");
+    }
+
+    /// Typing stays instant with a big folder: a few thousand clips with real-sized comments.
+    #[test]
+    fn searching_thousands_of_clips_stays_fast() {
+        let names: Vec<String> = (0..3000).map(|i| format!("clip_{i:05}.mp4")).collect();
+        let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+        let mut dir = directory_with(&refs);
+        let filler = "The quick brown fox jumps over the lazy dog. ".repeat(20);
+        let ids: Vec<(crate::FileId, PathBuf, FileSnapshot)> = dir
+            .files_in_order()
+            .enumerate()
+            .map(|(i, f)| {
+                let mut snapshot = f.snapshot().clone();
+                snapshot.set_comment(format!("{filler} clip number {i} ends here"));
+                (f.id(), f.file_path().to_path_buf(), snapshot)
+            })
+            .collect();
+        for (id, path, snapshot) in &ids {
+            dir.rename_file(*id, path, snapshot);
+        }
+        let started = std::time::Instant::now();
+        for query in ["z", "zzz", "lazy dog ends", "number 2999 here"] {
+            dir.set_name_filter(query.to_string());
+            let _ = dir.listed_count();
+        }
+        let took = started.elapsed();
+        assert!(
+            took < std::time::Duration::from_secs(2),
+            "four searches over 3000 clips took {took:?}"
+        );
+    }
+
+    #[test]
     fn comment_filter_lists_only_commented_files() {
         let mut dir = directory_with(&["a.mp4", "b.mp4", "c.mp4"]);
         comment_file_at(&mut dir, 1, "goat");
@@ -785,5 +927,64 @@ mod tests {
         tag_file_at(&mut dir, 0, &["Action"]);
         dir.set_untagged_only(true);
         assert_eq!(dir.untagged_count(), 2);
+    }
+
+    #[test]
+    fn open_last_viewed_selects_the_file_with_that_exact_name() {
+        let mut dir = directory_with(&["a.mp4", "b.mp4"]);
+        let opened = dir.open_last_viewed("b.mp4").expect("found");
+        assert_eq!(opened.file_path().file_name().unwrap(), "b.mp4");
+    }
+
+    #[test]
+    fn open_last_viewed_falls_back_to_the_name_without_tags_after_a_rename() {
+        // Remembered as "b.mp4"; a tag added since (outside or inside frename) renamed it.
+        let mut dir = directory_with(&["a.mp4", "pick.b.mp4"]);
+        let opened = dir.open_last_viewed("b.mp4").expect("found by base name");
+        assert_eq!(opened.file_path().file_name().unwrap(), "pick.b.mp4");
+    }
+
+    #[test]
+    fn open_last_viewed_s_fallback_does_not_cross_extensions() {
+        // "clip.mp4" is gone; an unrelated "clip.mkv" must not be mistaken for it just because
+        // they share a base name once their own tags are stripped.
+        let mut dir = directory_with(&["drop.clip.mkv", "keep.clip.mp4"]);
+        let opened = dir
+            .open_last_viewed("clip.mp4")
+            .expect("found by base name and extension");
+        assert_eq!(opened.file_path().file_name().unwrap(), "keep.clip.mp4");
+    }
+
+    #[test]
+    fn open_last_viewed_s_fallback_ignores_extension_case() {
+        // A camera-style uppercase extension, renamed outside frename with a lowercased one:
+        // still the same clip.
+        let mut dir = directory_with(&["pick.IMG_0424.mov"]);
+        let opened = dir
+            .open_last_viewed("IMG_0424.MOV")
+            .expect("found despite the extension's case");
+        assert_eq!(opened.file_path().file_name().unwrap(), "pick.IMG_0424.mov");
+    }
+
+    #[test]
+    fn open_last_viewed_is_none_when_empty_or_nothing_matches() {
+        let mut dir = directory_with(&["a.mp4"]);
+        assert!(dir.open_last_viewed("").is_none());
+        assert!(dir.open_last_viewed("gone.mp4").is_none());
+    }
+
+    #[test]
+    fn open_last_viewed_finds_a_file_hidden_by_the_current_filter() {
+        let mut dir = directory_with(&["a.mp4", "pick.b.mp4"]);
+        dir.set_untagged_only(true);
+        assert_eq!(
+            listed_names(&dir),
+            vec!["a.mp4"],
+            "b is hidden by the filter"
+        );
+        let opened = dir
+            .open_last_viewed("pick.b.mp4")
+            .expect("found despite the filter");
+        assert_eq!(opened.file_path().file_name().unwrap(), "pick.b.mp4");
     }
 }

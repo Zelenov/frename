@@ -54,4 +54,8 @@ where
     fn turns_a_video(&self) -> bool {
         true
     }
+
+    fn edits_open_video(&self) -> bool {
+        true
+    }
 }

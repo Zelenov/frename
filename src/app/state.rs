@@ -10,10 +10,10 @@
 use iced::{event, keyboard, window, Element, Subscription, Task};
 
 use crate::features::{
-    batch, drag_drop, drag_out, folder, folder_workspace, media_viewer,
+    batch, drag_drop, drag_out, file_menu, folder, folder_workspace, media_viewer,
     media_viewer::video as media_viewer_video, settings, tag_panel, updates,
 };
-use crate::tag_colors::TagPalette;
+use crate::ui::palette::TagPalette;
 use frename_core::ai::key::{self as api_key, ApiKey};
 use frename_core::{AppDatabase, AppStateStore, WindowGeometry};
 
@@ -28,18 +28,25 @@ fn ctrl_v_paste_tags_handler(
     _window_id: window::Id,
 ) -> Option<Message> {
     if let iced::Event::Keyboard(keyboard::Event::KeyPressed {
-        key: keyboard::Key::Character(c),
+        key,
+        physical_key,
         modifiers,
         ..
     }) = ev
     {
-        if c.as_ref() == "v" && modifiers.command() {
+        if latin_key(&key, physical_key) == Some('v') && modifiers.command() {
             return Some(Message::FolderWorkspace(
                 folder_workspace::Message::PasteTags,
             ));
         }
     }
     None
+}
+
+/// The Latin letter a key stands for, so Ctrl+Z, Y, C and V work on any keyboard layout: with a
+/// Russian layout the key is `я` but the physical key is still Z.
+fn latin_key(key: &keyboard::Key, physical_key: keyboard::key::Physical) -> Option<char> {
+    key.to_latin(physical_key).map(|c| c.to_ascii_lowercase())
 }
 
 /// Global keyboard and window events of the main window: shortcuts, typing into the search bar,
@@ -91,6 +98,21 @@ fn main_window_event(
         }) => Some(Message::FolderWorkspace(
             folder_workspace::Message::ToggleMediaFullscreen,
         )),
+        // F11 shows the open file in Explorer, Shift+F11 copies its path, Ctrl+F11 its name:
+        // always, like the other F-keys. A held key acts once.
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key,
+            modifiers,
+            repeat,
+            ..
+        }) if file_menu::FileAction::from_key(&key, modifiers).is_some() => {
+            if repeat {
+                return Some(Message::Noop);
+            }
+            file_menu::FileAction::from_key(&key, modifiers).map(|action| {
+                Message::FolderWorkspace(folder_workspace::Message::FileAction(action))
+            })
+        }
         // [ / ] always set segment IN/OUT (even when search bar has focus).
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
             key: keyboard::Key::Character(c),
@@ -157,23 +179,22 @@ fn main_window_event(
                 Some(Message::Noop)
             }
         }
-        iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. })
-            if matches!(status, event::Status::Ignored) =>
-        {
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key,
+            physical_key,
+            modifiers,
+            ..
+        }) if matches!(status, event::Status::Ignored) => {
             if modifiers.command() {
-                return match key.as_ref() {
-                    keyboard::Key::Character("c") => Some(Message::FolderWorkspace(
+                return match latin_key(&key, physical_key) {
+                    Some('c') => Some(Message::FolderWorkspace(
                         folder_workspace::Message::CopyTags,
                     )),
-                    keyboard::Key::Character("z") if modifiers.shift() => {
+                    Some('z') if modifiers.shift() => {
                         Some(Message::FolderWorkspace(folder_workspace::Message::Redo))
                     }
-                    keyboard::Key::Character("z") => {
-                        Some(Message::FolderWorkspace(folder_workspace::Message::Undo))
-                    }
-                    keyboard::Key::Character("y") => {
-                        Some(Message::FolderWorkspace(folder_workspace::Message::Redo))
-                    }
+                    Some('z') => Some(Message::FolderWorkspace(folder_workspace::Message::Undo)),
+                    Some('y') => Some(Message::FolderWorkspace(folder_workspace::Message::Redo)),
                     _ => None,
                 };
             }
@@ -326,9 +347,10 @@ impl FrenameApp {
             settings_window: None,
             window_icon,
             window_pos: saved.map(|g| (g.x, g.y)).unwrap_or((0.0, 0.0)),
-            window_size: saved
-                .map(|g| (g.width, g.height))
-                .unwrap_or((1200.0, 600.0)),
+            window_size: saved.map(|g| (g.width, g.height)).unwrap_or((
+                crate::ui::tokens::WINDOW_WIDTH,
+                crate::ui::tokens::WINDOW_HEIGHT,
+            )),
             is_maximized: saved.map(|g| g.is_maximized).unwrap_or(false),
             monitor_size: saved
                 .map(|g| (g.monitor_width, g.monitor_height))
@@ -543,6 +565,13 @@ impl FrenameApp {
                     settings::Message::Key(..) => Task::none(),
                     settings::Message::SetSubtitleLanguage(..)
                     | settings::Message::SetSubtitleCueLength(_) => self.subtitle_config(),
+                    // A recorded top-up changes what the batch panels say is left.
+                    settings::Message::TopUp(_, settings::TopUpMessage::Record) => {
+                        Task::done(Message::FolderWorkspace(folder_workspace::Message::Batch(
+                            batch::Message::Action(batch::ActionMessage::RefreshCredit),
+                        )))
+                    }
+                    settings::Message::TopUp(..) => Task::none(),
                     settings::Message::SetMonochromeTags(_)
                     | settings::Message::ShowPage(_)
                     | settings::Message::NextPage
@@ -772,6 +801,7 @@ impl FrenameApp {
     /// shows the page it showed last, or Updates when an update is ready (the dot on the
     /// settings button leads there).
     fn open_settings_on(&mut self, page: Option<settings::Page>) -> Task<Message> {
+        self.settings.refresh_spend();
         let update_ready = self.settings.updates().available_version().is_some();
         let page = settings::Page::to_open(page, update_ready);
         let show = page.map_or_else(Task::none, |page| {
@@ -813,12 +843,9 @@ impl FrenameApp {
 
     /// The theme of a window: the design system's in Settings; the main window keeps iced's dark
     /// theme until it moves onto the system (#59).
-    pub fn theme(&self, window_id: window::Id) -> iced::Theme {
-        if self.settings_window == Some(window_id) {
-            crate::ui::theme()
-        } else {
-            iced::Theme::Dark
-        }
+    /// Every window is on the design system.
+    pub fn theme(&self, _window_id: window::Id) -> iced::Theme {
+        crate::ui::theme()
     }
 
     /// Feature subscriptions (file drop, window opened, global keyboard to search bar).
@@ -944,5 +971,73 @@ mod tests {
     #[test]
     fn test_app_creation() {
         let _app = FrenameApp::new(window::Id::unique(), None);
+    }
+
+    fn ctrl_key(
+        key: &str,
+        code: keyboard::key::Code,
+        shift: bool,
+    ) -> (iced::Event, event::Status, window::Id) {
+        let mut modifiers = keyboard::Modifiers::CTRL;
+        modifiers.set(keyboard::Modifiers::SHIFT, shift);
+        let key = keyboard::Key::Character(key.into());
+        let event = iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: key.clone(),
+            modified_key: key,
+            physical_key: keyboard::key::Physical::Code(code),
+            location: keyboard::Location::Standard,
+            modifiers,
+            text: None,
+            repeat: false,
+        });
+        (event, event::Status::Ignored, window::Id::unique())
+    }
+
+    fn shortcut(
+        key: &str,
+        code: keyboard::key::Code,
+        shift: bool,
+    ) -> Option<folder_workspace::Message> {
+        let (ev, status, id) = ctrl_key(key, code, shift);
+        match main_window_event(ev, status, id) {
+            Some(Message::FolderWorkspace(m)) => Some(m),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn undo_redo_and_copy_work_on_a_russian_layout() {
+        use keyboard::key::Code;
+        assert!(matches!(
+            shortcut("я", Code::KeyZ, false),
+            Some(folder_workspace::Message::Undo)
+        ));
+        assert!(matches!(
+            shortcut("я", Code::KeyZ, true),
+            Some(folder_workspace::Message::Redo)
+        ));
+        assert!(matches!(
+            shortcut("н", Code::KeyY, false),
+            Some(folder_workspace::Message::Redo)
+        ));
+        assert!(matches!(
+            shortcut("с", Code::KeyC, false),
+            Some(folder_workspace::Message::CopyTags)
+        ));
+        assert!(matches!(
+            shortcut("z", Code::KeyZ, false),
+            Some(folder_workspace::Message::Undo)
+        ));
+    }
+
+    #[test]
+    fn paste_works_on_a_russian_layout() {
+        let (ev, status, id) = ctrl_key("м", keyboard::key::Code::KeyV, false);
+        assert!(matches!(
+            ctrl_v_paste_tags_handler(ev, status, id),
+            Some(Message::FolderWorkspace(
+                folder_workspace::Message::PasteTags
+            ))
+        ));
     }
 }

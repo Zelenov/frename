@@ -4,12 +4,8 @@ use iced::{event, mouse, Rectangle, Subscription};
 
 use frename_core::{StoredTagStore, TagId, TagList};
 
-use super::Message;
+use super::{Message, GRID_ROW_STRIDE};
 
-/// Row height for cursor-to-row mapping. Must match view::TAG_ROW_HEIGHT.
-const TAG_ROW_HEIGHT: f32 = 28.0;
-
-const DEFAULT_ROW_HEIGHT: f32 = 28.0;
 const DEFAULT_COLS: u32 = 1;
 
 /// Tag panel state (UI-only; the selected file and tag toggles live in the file workspace).
@@ -39,14 +35,12 @@ impl Default for TagPanelState {
             drop_target_index: None,
             bounds: None,
             scroll_y: 0.0,
-            row_height: DEFAULT_ROW_HEIGHT,
+            row_height: GRID_ROW_STRIDE,
             cols: DEFAULT_COLS,
             row_content_height: None,
         }
     }
 }
-
-const PADDING: f32 = 4.0;
 
 impl TagPanelState {
     /// Panel content bounds when set by BoundsReporter (for dynamic column count in grid).
@@ -151,11 +145,11 @@ impl TagPanelState {
         if row_count == 0 {
             return None;
         }
-        let content_y = bounds.y + PADDING;
+        let content_y = bounds.y;
         let row_height = if self.row_height > 0.0 {
             self.row_height
         } else {
-            TAG_ROW_HEIGHT
+            GRID_ROW_STRIDE
         };
         let cols = self.cols.max(1) as usize;
         if cursor_x < bounds.x || cursor_x >= bounds.x + bounds.width || cursor_y < content_y {

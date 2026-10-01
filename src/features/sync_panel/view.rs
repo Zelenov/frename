@@ -1,97 +1,98 @@
-//! View for the sync panel.
-//!
-//! When orders differ: Sync Up and Sync Down buttons are active.
-//! When orders equal:  Lock or Unlock button is shown (reflects `locked` state).
+//! The order strip between the tag grid and the file name card (design system §13.5.5): in
+//! words, whether reordering the file's tags also reorders the folder's, and, when the two orders
+//! differ, the buttons that make them the same again.
 
-use iced::widget::{button, container, row, text};
-use iced::{Background, Color, Element, Length};
+use iced::widget::{container, row};
+use iced::{Alignment, Color, Element, Length};
 
 use super::Message;
+use crate::ui::button;
+use crate::ui::icon_button::IconButton;
+use crate::ui::icons::{icon, Icon};
+use crate::ui::style::ButtonKind;
+use crate::ui::text;
+use crate::ui::tokens::*;
+use crate::ui::tooltip::{self, Position, Tip};
 
-pub const PANEL_HEIGHT: f32 = 36.0;
-
-const BG_BRIDGE: Color = Color::from_rgb(0.098, 0.098, 0.098); // #191919
-const BG_BLOCK: Color = Color::from_rgb(0.18, 0.18, 0.18); // #2e2e2e
-const BG_BLOCK_HOV: Color = Color::from_rgb(0.24, 0.24, 0.24);
-const BG_BLOCK_PRS: Color = Color::from_rgb(0.30, 0.30, 0.30);
-const BG_BLOCK_DIM: Color = Color::from_rgb(0.12, 0.12, 0.12); // grayed-out
-
-const TEXT_ACTIVE: Color = Color::WHITE;
-const TEXT_DIM: Color = Color::from_rgb(0.35, 0.35, 0.35);
-
-/// Render the sync panel.
+/// Render the order strip.
 ///
-/// `is_synced` – checked-tag order in grid/DB matches file name panel order.
-/// `locked`    – when synced, whether lock mode is active.
+/// `is_synced` – the file's tags are in the folder's order.
+/// `locked`    – when synced, whether reordering the file reorders the folder too.
 pub fn view(is_synced: bool, locked: bool) -> Element<'static, Message> {
-    let blocks: Element<'static, Message> = if is_synced {
-        let lock_icon: &'static str = if locked { "🔒" } else { "🔓" };
-        row![make_block(lock_icon, Message::ToggleLock, true)]
-            .spacing(8.0)
-            .height(Length::Fill)
-            .into()
-    } else {
-        row![
-            make_block("🔓↑", Message::SyncUp, true),
-            make_block("🔓↓", Message::SyncDown, true),
-        ]
-        .spacing(8.0)
-        .height(Length::Fill)
-        .into()
-    };
-
-    container(
-        container(blocks)
-            .center_x(Length::Fill)
-            .height(Length::Fill),
-    )
-    .width(Length::Fill)
-    .height(PANEL_HEIGHT)
-    .style(|_: &iced::Theme| iced::widget::container::Style {
-        background: Some(Background::Color(BG_BRIDGE)),
-        ..Default::default()
+    // Below `ORDER_STRIP_WORDS_FROM` the buttons keep only their icons, their words move into
+    // the tooltip, and the sentence gives up the rest of the width.
+    iced::widget::responsive(move |size| {
+        strip(is_synced, locked, size.width >= ORDER_STRIP_WORDS_FROM)
     })
+    .height(ORDER_STRIP_HEIGHT)
     .into()
 }
 
-fn make_block(icon: &'static str, msg: Message, active: bool) -> Element<'static, Message> {
-    if active {
-        button(
-            container(text(icon).size(13).color(TEXT_ACTIVE))
-                .center_x(Length::Fill)
-                .center_y(Length::Fill),
-        )
-        .on_press(msg)
-        .width(PANEL_HEIGHT)
-        .height(Length::Fill)
-        .padding(0)
-        .style(move |_theme, status| {
-            let bg = match status {
-                iced::widget::button::Status::Hovered => BG_BLOCK_HOV,
-                iced::widget::button::Status::Pressed => BG_BLOCK_PRS,
-                _ => BG_BLOCK,
-            };
-            iced::widget::button::Style {
-                background: Some(Background::Color(bg)),
-                text_color: TEXT_ACTIVE,
-                border: iced::Border::default(),
-                shadow: iced::Shadow::default(),
-                snap: true,
-            }
-        })
-        .into()
+fn strip(is_synced: bool, locked: bool, words: bool) -> Element<'static, Message> {
+    let content = if is_synced {
+        let (glyph, sentence, toggle) = if locked {
+            (
+                Icon::Lock,
+                fl!("sync-panel-locked"),
+                fl!("sync-panel-unlock"),
+            )
+        } else {
+            (
+                Icon::LockOpen,
+                fl!("sync-panel-unlocked"),
+                fl!("sync-panel-lock"),
+            )
+        };
+        line(glyph, TEXT_SECONDARY, sentence)
+            .push(button::ghost(toggle).on_press(Message::ToggleLock))
     } else {
-        container(
-            container(text(icon).size(13).color(TEXT_DIM))
-                .center_x(Length::Fill)
-                .center_y(Length::Fill),
-        )
-        .width(PANEL_HEIGHT)
-        .height(Length::Fill)
-        .style(|_: &iced::Theme| iced::widget::container::Style {
-            background: Some(Background::Color(BG_BLOCK_DIM)),
-            ..Default::default()
-        })
+        line(Icon::TriangleAlert, WARNING, fl!("sync-panel-differs"))
+            .push(order_button(
+                Icon::ArrowUp,
+                fl!("sync-panel-use-for-folder"),
+                Message::SyncUp,
+                words,
+            ))
+            .push(order_button(
+                Icon::ArrowDown,
+                fl!("sync-panel-sort-like-folder"),
+                Message::SyncDown,
+                words,
+            ))
+    };
+    container(content.spacing(SPACE_S).align_y(Alignment::Center))
+        .width(Length::Fill)
+        .center_y(ORDER_STRIP_HEIGHT)
         .into()
+}
+
+/// The icon and the sentence, cut at the strip's end rather than wrapped; the whole sentence is
+/// its tooltip, for when it is cut.
+fn line(glyph: Icon, color: Color, sentence: String) -> iced::widget::Row<'static, Message> {
+    let shown = text::secondary(sentence.clone()).wrapping(iced::widget::text::Wrapping::None);
+    let sentence = container(tooltip::tip_text(shown, sentence, Position::Top))
+        .width(Length::Fill)
+        .clip(true);
+    row![icon(glyph, ICON_MARK, color), sentence]
+}
+
+/// A button that copies one order onto the other.
+/// Without `words` it is an icon button whose tooltip carries its words.
+fn order_button(
+    glyph: Icon,
+    label: String,
+    message: Message,
+    words: bool,
+) -> Element<'static, Message> {
+    if words {
+        button::with_icon(ButtonKind::Secondary, glyph, label, true)
+            .on_press(message)
+            .into()
+    } else {
+        IconButton::new(glyph)
+            .control()
+            .tip(Tip::new(label), Position::Top)
+            .on_press(message)
+            .into()
     }
 }

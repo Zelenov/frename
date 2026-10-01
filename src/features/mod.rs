@@ -3,6 +3,7 @@
 pub mod batch;
 pub mod drag_drop;
 pub mod drag_out;
+pub mod file_menu;
 pub mod file_name_panel;
 pub mod file_workspace;
 pub mod folder;

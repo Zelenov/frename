@@ -4,17 +4,23 @@
 use std::path::Path;
 
 use frename_core::FileTagger;
-use iced::widget::column;
 use iced::Element;
 
+use super::super::page::{self, Change};
 use super::super::ItemResult;
+use crate::ui::text;
 
 pub fn label() -> String {
     fl!("batch-action-fix-tags")
 }
 
 pub fn view<'a, M: 'a>() -> Element<'a, M> {
-    super::panel(label(), fl!("batch-action-fix-tags-hint"), column![].into())
+    page::page(
+        label(),
+        fl!("batch-action-fix-tags-hint"),
+        &[Change::Renames],
+        [text::secondary(fl!("batch-action-fix-tags-order")).into()],
+    )
 }
 
 /// Sort the tags of the file at `path` in the folder's order.

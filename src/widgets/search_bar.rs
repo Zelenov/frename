@@ -1,10 +1,12 @@
-//! Reusable search bar widget. Stateless: parent holds value and provides on_input and on_clear.
-//! Icon inside the bar (search left, clear right when non-empty); user-typed content is the only text.
+//! The search bar over a list (`docs/design/design-system.md` §13.4.1, §13.5.1): a search field
+//! across the column and, after it, what else narrows the same list (the file filter). Stateless:
+//! the parent holds the text.
 
-use iced::widget::{container, mouse_area, row, text, text_input, tooltip};
-use iced::{mouse, Element, Length};
+use iced::widget::{container, row, Id};
+use iced::{Alignment, Element, Length, Padding};
 
-use crate::theme;
+use crate::ui::form;
+use crate::ui::tokens::*;
 
 /// Widget id for the tag search bar text input (for focus and global key capture).
 pub const SEARCH_BAR_INPUT_ID: &str = "search-bar-input";
@@ -13,111 +15,48 @@ pub const SEARCH_BAR_INPUT_ID: &str = "search-bar-input";
 /// focus operation would target both of them.
 pub const FILE_SEARCH_BAR_INPUT_ID: &str = "file-search-bar-input";
 
-/// Render a search bar: search icon left, text input, optional create-tag "○" button (when text is
-/// a new tag name), optional clear "×" button (when non-empty).
-///
-/// `on_create` – when `Some(f)`, a "○" button appears at the right end. Pressing it or hitting
-/// Enter calls `f(current_input_text)` to produce the message. Pass `Some(...)` only when the
-/// current `value` does not match any existing tag name.
-pub fn view<'a, Message: Clone + 'a>(
-    input_id: &'static str,
-    value: &'a str,
-    on_input: impl Fn(String) -> Message + 'a,
-    on_clear: impl Fn() -> Message + 'a,
-    on_create: Option<impl Fn(String) -> Message + 'a>,
-) -> Element<'a, Message> {
-    view_with_trailing(input_id, value, on_input, on_clear, on_create, None)
+/// A 40-px bar: 6 px around a 28-px field.
+const PADDING: Padding = Padding {
+    top: SPACE_TIGHT,
+    bottom: SPACE_TIGHT,
+    left: SPACE_S,
+    right: SPACE_S,
+};
+
+/// What a search bar shows and does.
+pub struct SearchBar<'a, M> {
+    /// The field's id, for focus.
+    pub input_id: &'static str,
+    /// An example of what to type ("Find a file").
+    pub placeholder: String,
+    pub value: &'a str,
+    /// The tooltip of the clear button.
+    pub clear_tip: String,
+    pub on_clear: M,
+    /// Enter: always handled, so Windows does not beep on an unhandled Enter.
+    pub on_submit: M,
+    /// After the field, 6 px apart: what else narrows the same list.
+    pub trailing: Option<Element<'a, M>>,
 }
 
-/// [`view`] with `trailing` at the right end, after the clear button (e.g. a filter
-/// dropdown that narrows the same list the text does).
-pub fn view_with_trailing<'a, Message: Clone + 'a>(
-    input_id: &'static str,
-    value: &'a str,
-    on_input: impl Fn(String) -> Message + 'a,
-    on_clear: impl Fn() -> Message + 'a,
-    on_create: Option<impl Fn(String) -> Message + 'a>,
-    trailing: Option<Element<'a, Message>>,
-) -> Element<'a, Message> {
-    // Evaluate the closure now (at render time) so we have a cloneable Message for both
-    // on_submit and the "○" button press.
-    let create_msg: Option<Message> = on_create.map(|f| f(value.to_string()));
-
-    let search_icon = text("🔍").size(12).color(theme::TEXT_MUTED);
-    // Compute submit message before moving on_input into the widget.
-    let submit_msg = create_msg
-        .clone()
-        .unwrap_or_else(|| on_input(value.to_string()));
-    let mut input = text_input("", value)
-        .id(iced::widget::Id::from(input_id))
+/// Render `bar`; typing sends `on_input`.
+pub fn view<'a, M: Clone + 'a>(
+    bar: SearchBar<'a, M>,
+    on_input: impl Fn(String) -> M + 'a,
+) -> Element<'a, M> {
+    let field = form::text_field(&bar.placeholder, bar.value)
+        .id(Id::from(bar.input_id))
         .on_input(on_input)
-        .padding([8, 8])
-        .size(14)
-        .style(
-            |_theme: &iced::Theme, _status: iced::widget::text_input::Status| {
-                iced::widget::text_input::Style {
-                    background: iced::Background::Color(theme::BG_ELEVATED),
-                    border: iced::Border {
-                        radius: 0.0.into(),
-                        width: 0.0,
-                        color: theme::BG_ELEVATED,
-                    },
-                    icon: theme::TEXT_MUTED,
-                    placeholder: theme::TEXT_MUTED,
-                    value: theme::TEXT,
-                    selection: theme::ACCENT,
-                }
-            },
-        );
-    // Always set on_submit so text_input captures Enter (prevents Windows Default Beep).
-    input = input.on_submit(submit_msg);
-
-    let clear_icon: Option<Element<'a, Message>> = if value.is_empty() {
-        None
-    } else {
-        let icon = text("×").size(16).color(theme::TEXT_MUTED);
-        Some(
-            tooltip(
-                mouse_area(container(icon).padding(4))
-                    .on_press(on_clear())
-                    .interaction(mouse::Interaction::Pointer),
-                text("Esc"),
-                tooltip::Position::Bottom,
-            )
-            .gap(10)
-            .into(),
-        )
-    };
-
-    // "○" create button: only when create_msg is Some (text is non-empty and not an existing tag)
-    let create_icon: Option<Element<'a, Message>> = create_msg.map(|msg| {
-        let icon = text("○").size(14).color(theme::TEXT_MUTED);
-        tooltip(
-            mouse_area(container(icon).padding(4))
-                .on_press(msg)
-                .interaction(mouse::Interaction::Pointer),
-            text("Enter"),
-            tooltip::Position::Bottom,
-        )
-        .gap(10)
-        .into()
-    });
-
-    let mut row_elems: Vec<Element<'a, Message>> = vec![search_icon.into(), input.into()];
-    if let Some(create) = create_icon {
-        row_elems.push(create);
-    }
-    if let Some(clear) = clear_icon {
-        row_elems.push(clear);
-    }
-    if let Some(trailing) = trailing {
-        row_elems.push(trailing);
-    }
-    let inner = row(row_elems).spacing(6).align_y(iced::Alignment::Center);
-
-    container(inner)
-        .padding([6, 8])
-        .width(Length::Fill)
-        .style(theme::elevated_container_bordered_style)
-        .into()
+        .on_submit(bar.on_submit);
+    let search = form::search_field(field, !bar.value.is_empty(), bar.on_clear, bar.clear_tip);
+    container(
+        row![container(search).width(Length::Fill)]
+            .push(bar.trailing)
+            .spacing(SPACE_TIGHT)
+            .align_y(Alignment::Center),
+    )
+    .padding(PADDING)
+    .width(Length::Fill)
+    .height(SEARCH_BAR_HEIGHT)
+    .into()
 }

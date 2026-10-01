@@ -8,6 +8,7 @@
 
 mod app_database;
 pub(crate) mod fake_app_storage;
+mod ledger;
 mod logging;
 mod migrations;
 mod schema;
@@ -16,6 +17,6 @@ mod traits;
 pub use app_database::AppDatabase;
 pub use logging::LoggingAppStateStore;
 pub use traits::{
-    AppSettings, AppStateStore, Initializable, StoredTagStore, UpdateCheckState, VideoSettings,
-    WindowGeometry,
+    AppSettings, AppStateStore, BatchRun, Initializable, StoredTagStore, UpdateCheckState,
+    VideoSettings, WindowGeometry,
 };

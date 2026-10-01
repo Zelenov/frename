@@ -7,7 +7,7 @@ use super::file_snapshot::FileSnapshot;
 use super::folder_info::FolderInfo;
 use super::production_file_tagger::is_screenshot_sidecar;
 use crate::markers::Marker;
-use crate::metadata::{MarkersError, MetadataMove, Rotation, RotationError, Segment};
+use crate::metadata::{MarkersError, MetadataMove, Rotation, RotationError};
 
 /// The interface that both InMemoryFileTagger and ProductionFileTagger implement.
 pub trait FileTaggerBackend: Send + Sync {
@@ -56,18 +56,6 @@ pub trait FileTaggerBackend: Send + Sync {
     fn move_metadata(&self, path: &Path, _what: MetadataMove) -> PathBuf {
         path.to_path_buf()
     }
-
-    /// The in/out points the file at `path` has stored in either home, the comment or the
-    /// video, whatever the storage chosen now. Backends that keep them only in memory answer
-    /// with the parsed ones.
-    fn stored_in_out(&self, path: &Path) -> Segment {
-        self.parse(path, &FolderInfo::default()).segment()
-    }
-
-    /// After in/out points were saved as the comment's line (in/out kept in the comment),
-    /// remove the video's marker, which would otherwise keep showing stale points in
-    /// Premiere. Backends that never touch the disk have none.
-    fn drop_marker_behind_line(&self, _path: &Path) {}
 
     /// Read the file's comment and in/out points again and replace the folder file list's line
     /// for it. Returns whether the line was missing or stale. Backends that never touch the

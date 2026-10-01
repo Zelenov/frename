@@ -1,0 +1,33 @@
+# Search in comments (#99): "goat" typed in the file search bar finds the clips whose comment has
+# the word, and the list shows the hit under the name. Not a README image; for looking at the
+# feature (`frename --demo`).
+source = "../../tests/folder"
+open = "pick.wide.MVI_0701.mp4"
+seek = 2.0
+window = [1280, 720]
+panels = [460, 320]
+search = "goat"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_0701.mp4"
+comment = "Farm visit, morning light. A goat walks in from the left and stops at the gate."
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "review.people.MVI_0702.mp4"
+comment = "Interview, the farmer's family at the table."
+
+[[files]]
+from = "Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm"
+name = "b-roll.MVI_0703_goat.webm"
+comment = "Hills at noon."
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "wide.city.MVI_0704.mp4"
+comment = "Long establishing shot of the market.\nAt 0:40 a Goat and a sheep cross the road together."
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "skip.handheld.MVI_0705.mov"

@@ -197,6 +197,11 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
             iced::keyboard::Modifiers::empty(),
         ));
     }
+    if let Some(query) = scenario.search.clone() {
+        steps.push(folder_workspace::Message::Folder(
+            folder::Message::SetNameFilter(query),
+        ));
+    }
     if batch {
         steps.push(folder_workspace::Message::Folder(
             folder::Message::SetBatchMode(true),
@@ -343,14 +348,17 @@ pub fn prepare(args: &DemoArgs, work: &Path) -> Result<DemoRun, String> {
     let folder = work.join("folder");
     let file = frename_core::demo::stage(&scenario, scenario_dir, &folder)
         .map_err(|e| format!("cannot stage the demo folder: {e}"))?;
-    frename_core::demo::seed(
-        &frename_core::AppDatabase::new(),
-        &scenario,
-        &folder,
-        &file,
-        args.mono,
-        &args.lang,
-    );
+    let db = frename_core::AppDatabase::new();
+    for credit in &scenario.credit {
+        let service = match credit.service.as_str() {
+            "anthropic" => ApiKey::Anthropic,
+            "soniox" => ApiKey::Soniox,
+            other => return Err(format!("no service is named {other:?}")),
+        };
+        db.set_ai_top_up(service, credit.top_up, None);
+        db.record_ai_spend(service, credit.spent);
+    }
+    frename_core::demo::seed(&db, &scenario, &folder, &file, args.mono, &args.lang);
     Ok(DemoRun::new(
         scenario,
         args.out.clone(),
@@ -587,7 +595,9 @@ mod tests {
     }
 
     /// The committed README scenarios stage clips CI can decode, and only tags a new folder
-    /// already has (any other tag would show up as unsaved).
+    /// already has (any other tag would show up as unsaved) — except `mono.toml`, whose point
+    /// is exactly one tag that is not in the list, so the monochrome screenshot can show it next
+    /// to a listed one (issue #53).
     #[test]
     fn the_readme_scenarios_are_valid() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -612,6 +622,9 @@ mod tests {
                     "{name}: {} is not in tests/self-test-clips.txt",
                     file.from
                 );
+                if name == "mono.toml" {
+                    continue;
+                }
                 for tag in frename_core::FileSnapshot::parse(&file.name).tags() {
                     assert!(known.contains(&tag.as_str()), "{name}: tag {tag}");
                 }

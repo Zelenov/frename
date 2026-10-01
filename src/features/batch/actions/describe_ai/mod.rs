@@ -13,14 +13,18 @@ use clipscribe::{
     self as describe, AiError, AiUsage, Model, Stage, SummaryLanguage, MAX_DURATION_S,
 };
 use frename_core::ai::block;
-use frename_core::ai::key::{self, KeyState};
+use frename_core::ai::key::{self, ApiKey, KeyState};
+use frename_core::ai::ledger::SpendSummary;
 use frename_core::{File, FileId, FileKind, FileTagger, FolderInfo, MarkerStorage};
-use iced::widget::{button, checkbox, column, row, text};
-use iced::{Element, Length};
+use iced::widget::column;
+use iced::Element;
 
+use super::super::page::{self, Change};
 use super::super::{ItemProgress, ItemResult, ItemStatus};
-use super::ActionMessage;
-use crate::theme;
+use super::{ActionMessage, Panel};
+use crate::ui::layout::{self, NoticeKind};
+use crate::ui::tokens::SPACE_S;
+use crate::ui::{button, form, text};
 
 pub fn label() -> String {
     fl!("batch-action-describe-ai")
@@ -155,8 +159,10 @@ impl Options {
             ..Plan::default()
         };
         for file in checked {
+            // The file list only lists videos, so nothing else is ever checked; a file of another
+            // kind is left out quietly (it has no length to read, so the estimate would wait
+            // for it forever).
             if file.kind() != FileKind::Video {
-                plan.not_videos += 1;
                 continue;
             }
             if file.snapshot().comment_loading() {
@@ -190,126 +196,162 @@ impl Options {
         plan
     }
 
-    /// The panel for `checked`, and the run button's label and whether it can run
-    /// (`Describe 12 videos` once the estimate and the key are known). The plan is made once.
-    pub fn panel(&self, checked: &[&File]) -> (Element<'_, ActionMessage>, String, bool) {
-        let plan = self.plan(checked);
-        let label = fl!(
-            "batch-action-describe-ai-run",
-            videos = videos(plan.send.len())
-        );
-        let ready = !plan.estimating && !plan.send.is_empty() && self.key == Some(KeyState::Saved);
-        (self.view(&plan), label, ready)
+    /// Whether the settings said no key is saved: the action list shows "No key".
+    pub fn key_missing(&self) -> bool {
+        self.key == Some(KeyState::Missing)
     }
 
-    fn view(&self, plan: &Plan) -> Element<'_, ActionMessage> {
-        let mut lines = column![].spacing(6);
-        let muted = |line: String| text(line).size(12).color(theme::TEXT_MUTED);
-        if plan.estimating {
-            let known = plan.probed + plan.described;
-            lines = lines.push(
-                text(fl!(
-                    "batch-action-describe-ai-estimating",
-                    known = (known as i64),
-                    total = (plan.checked_videos as i64)
-                ))
-                .size(13),
-            );
+    /// The page for `checked` and its run button (`Describe 12 videos · about $0.35` once the
+    /// estimate and the key are known). The plan is made once.
+    pub fn panel(&self, checked: &[&File], credit: SpendSummary) -> Panel<'_> {
+        let plan = self.plan(checked);
+        let ready = !plan.estimating && !plan.send.is_empty() && self.key == Some(KeyState::Saved);
+        let reason = if plan.estimating {
+            Some(fl!("batch-reason-estimate"))
+        } else if plan.send.is_empty() && !checked.is_empty() {
+            Some(fl!("batch-action-describe-ai-none"))
         } else {
-            if plan.send.is_empty() {
-                lines = lines.push(text(fl!("batch-action-describe-ai-none")).size(13));
-            } else {
-                lines = lines
-                    .push(
-                        text(fl!(
-                            "batch-action-describe-ai-plan",
-                            videos = videos(plan.send.len()),
-                            minutes = minutes(plan.seconds),
-                            dollars = dollars(self.model.cost_usd(plan.usage)),
-                            model = self.model.label
-                        ))
-                        .size(13),
-                    )
-                    .push(muted(fl!(
-                        "batch-action-describe-ai-hint",
-                        duration = duration_text(plan.run_seconds)
-                    )));
-            }
-            // Also when nothing is sent: it says why.
-            if let Some(skipped) = plan.skipped_line() {
-                lines = lines.push(muted(skipped));
-            }
-            if plan.no_subtitles > 0 {
-                lines = lines.push(muted(fl!(
-                    "batch-action-describe-ai-no-subtitles",
-                    videos = videos(plan.no_subtitles)
-                )));
-            }
+            None
+        };
+        Panel {
+            page: self.view(&plan, credit),
+            run: self.run_label(&plan),
+            ready,
+            reason,
         }
-        lines = lines
-            .push(
-                row![
-                    text(language_line(self.language))
-                        .size(12)
-                        .color(theme::TEXT_MUTED)
-                        .width(Length::Fill),
-                    link_button(fl!("batch-ai-change"), ActionMessage::OpenAiSettings),
-                ]
-                .spacing(8)
-                .align_y(iced::Alignment::Center),
+    }
+
+    /// The run button's label: the videos and the cost, or only the verb while estimating.
+    fn run_label(&self, plan: &Plan) -> String {
+        if plan.estimating {
+            fl!("batch-action-describe-ai-run-waiting")
+        } else if plan.send.is_empty() {
+            label()
+        } else {
+            fl!(
+                "batch-action-describe-ai-run",
+                videos = videos(plan.send.len()),
+                dollars = dollars(self.model.cost_usd(plan.usage))
             )
-            .push(
-                checkbox(self.redo)
-                    .label(fl!("batch-action-describe-ai-redo"))
-                    .text_size(13)
-                    .on_toggle(|redo| ActionMessage::DescribeAi(Message::SetRedo(redo))),
-            );
-        super::panel(
+        }
+    }
+
+    fn view(&self, plan: &Plan, credit: SpendSummary) -> Element<'_, ActionMessage> {
+        let settings = [
+            page::linked_row(
+                fl!("settings-ai-model-label"),
+                self.model.label,
+                fl!("batch-ai-change"),
+                ActionMessage::OpenAiSettings,
+            ),
+            page::linked_row(
+                fl!("batch-option-language"),
+                language_name(self.language),
+                fl!("batch-ai-change"),
+                ActionMessage::OpenAiSettings,
+            ),
+            page::option_row(
+                fl!("batch-option-described"),
+                layout::choices([
+                    form::checkbox(fl!("batch-action-describe-ai-redo"), self.redo)
+                        .on_toggle(|redo| ActionMessage::DescribeAi(Message::SetRedo(redo)))
+                        .into(),
+                ]),
+            ),
+        ];
+        page::page(
             label(),
             fl!("batch-action-describe-ai-hint-panel"),
-            lines.into(),
+            &[Change::IntoComments],
+            settings
+                .into_iter()
+                .chain(std::iter::once(self.estimate(plan, credit)))
+                .chain(self.credit_notice(plan, credit))
+                .chain(self.key_notice()),
         )
     }
 
-    /// Why the key keeps the run button off, shown next to it so it is never scrolled away.
-    pub fn footer(&self) -> Option<Element<'_, ActionMessage>> {
-        match self.key {
-            Some(KeyState::Missing) => Some(
-                row![
-                    text(fl!("batch-ai-key-missing"))
-                        .size(13)
-                        .color(theme::ERROR)
-                        .width(Length::Fill),
-                    link_button(fl!("batch-ai-open-settings"), ActionMessage::OpenAiSettings),
-                ]
-                .spacing(8)
-                .align_y(iced::Alignment::Center)
-                .into(),
-            ),
-            Some(KeyState::Unavailable) => Some(
-                row![
-                    text(fl!("batch-ai-key-unavailable"))
-                        .size(13)
-                        .color(theme::ERROR)
-                        .width(Length::Fill),
-                    // Opening the settings reads the key's state again.
-                    link_button(fl!("batch-ai-open-settings"), ActionMessage::OpenAiSettings),
-                ]
-                .spacing(8)
-                .align_y(iced::Alignment::Center)
-                .into(),
-            ),
-            Some(KeyState::Saved) | None => None,
+    /// The plan's figures and what is skipped, or how far the estimate is.
+    fn estimate(&self, plan: &Plan, credit: SpendSummary) -> Element<'_, ActionMessage> {
+        if plan.estimating {
+            return text::body(fl!(
+                "batch-action-describe-ai-estimating",
+                known = ((plan.probed + plan.described) as i64),
+                total = (plan.checked_videos as i64)
+            ))
+            .into();
         }
+        let mut notes: Vec<String> = Vec::new();
+        if !plan.send.is_empty() {
+            notes.push(fl!("batch-action-describe-ai-hint"));
+        }
+        // Also when nothing is sent: it says why.
+        notes.extend(plan.skipped_line());
+        if plan.no_subtitles > 0 {
+            notes.push(fl!(
+                "batch-action-describe-ai-no-subtitles",
+                videos = videos(plan.no_subtitles)
+            ));
+        }
+        let rows = (!plan.send.is_empty()).then(|| {
+            page::plan(
+                [
+                    (fl!("batch-plan-videos"), videos(plan.send.len())),
+                    (fl!("batch-plan-length"), minutes(plan.seconds)),
+                    (
+                        fl!("batch-plan-cost"),
+                        dollars(self.model.cost_usd(plan.usage)),
+                    ),
+                ]
+                .into_iter()
+                .chain(super::credit_left_row(credit))
+                .chain([(fl!("batch-plan-time"), duration_text(plan.run_seconds))]),
+            )
+        });
+        column![]
+            .push(rows)
+            .push(page::notes(notes))
+            .spacing(SPACE_S)
+            .into()
     }
-}
 
-fn link_button(label: String, message: ActionMessage) -> Element<'static, ActionMessage> {
-    button(text(label).size(12))
-        .on_press(message)
-        .padding([3, 10])
-        .style(theme::icon_button_style(true))
-        .into()
+    /// The warning before a run that costs more than what is probably left.
+    fn credit_notice(
+        &self,
+        plan: &Plan,
+        credit: SpendSummary,
+    ) -> Option<Element<'_, ActionMessage>> {
+        if plan.estimating || plan.send.is_empty() {
+            return None;
+        }
+        super::credit_low_notice(ApiKey::Anthropic, credit, self.model.cost_usd(plan.usage))
+    }
+
+    /// Why the key keeps the run button off, with the button that fixes it.
+    fn key_notice(&self) -> Option<Element<'_, ActionMessage>> {
+        let (kind, headline, fix) = match self.key {
+            Some(KeyState::Missing) => (
+                NoticeKind::Error,
+                fl!("batch-ai-key-missing"),
+                fl!("batch-set-key"),
+            ),
+            // Opening the settings reads the key's state again.
+            Some(KeyState::Unavailable) => (
+                NoticeKind::Warning,
+                fl!("batch-ai-key-unavailable"),
+                fl!("batch-check-key"),
+            ),
+            Some(KeyState::Saved) | None => return None,
+        };
+        Some(layout::notice(
+            kind,
+            headline,
+            None,
+            [button::secondary(fix)
+                .on_press(ActionMessage::OpenAiSettings)
+                .into()],
+        ))
+    }
 }
 
 /// What a run on the checked files would do.
@@ -323,7 +365,6 @@ struct Plan {
     run_seconds: f64,
     described: usize,
     too_long: usize,
-    not_videos: usize,
     unreadable: usize,
     no_subtitles: usize,
     /// Some lengths or comments are still being read.
@@ -334,15 +375,13 @@ struct Plan {
 }
 
 impl Plan {
-    /// `Skipped: 3 already described, 1 over 30 min, 200 photos.`
+    /// `Skipped: 3 already described, 1 over 30 min.`
     fn skipped_line(&self) -> Option<String> {
         let parts: Vec<Option<String>> = vec![
             (self.described > 0)
                 .then(|| format!("{} {}", self.described, fl!("batch-ai-skip-described"))),
             (self.too_long > 0)
                 .then(|| format!("{} {}", self.too_long, fl!("batch-ai-skip-too-long"))),
-            (self.not_videos > 0)
-                .then(|| fl!("batch-ai-skip-photos", n = (self.not_videos as i64))),
             (self.unreadable > 0)
                 .then(|| format!("{} {}", self.unreadable, fl!("batch-ai-skip-unreadable"))),
         ];
@@ -364,14 +403,6 @@ fn minutes(seconds: f64) -> String {
     }
 }
 
-/// "Descriptions in Russian", or in the subtitles' language.
-fn language_line(language: SummaryLanguage) -> String {
-    match language {
-        SummaryLanguage::SameAsSubtitles => fl!("batch-ai-language-same-as-subtitles"),
-        language => fl!("batch-ai-language", language = language_name(language)),
-    }
-}
-
 /// `language`'s name, translated: used here and in the Settings picker. `SummaryLanguage`'s own
 /// `Display` is English only (it is the value stored in the settings), so every place that shows
 /// the name to the user goes through this instead.
@@ -388,7 +419,7 @@ pub fn language_name(language: SummaryLanguage) -> String {
 }
 
 /// "25 min", "2 h 10 min", "under a minute".
-fn duration_text(seconds: f64) -> String {
+pub fn duration_text(seconds: f64) -> String {
     let minutes = (seconds / 60.0).round() as u64;
     match minutes {
         0 => fl!("batch-ai-duration-under-minute"),
@@ -649,19 +680,18 @@ mod tests {
                 plan.described,
                 plan.too_long,
                 plan.unreadable,
-                plan.not_videos
             ),
-            (1, 1, 1, 1, 1)
+            (1, 1, 1, 1),
+            "the photo is not counted anywhere"
         );
         assert_eq!(
             plan.skipped_line(),
             Some(fl!(
                 "batch-ai-skipped",
                 parts = format!(
-                    "1 {}, 1 {}, {}, 1 {}",
+                    "1 {}, 1 {}, 1 {}",
                     fl!("batch-ai-skip-described"),
                     fl!("batch-ai-skip-too-long"),
-                    fl!("batch-ai-skip-photos", n = 1),
                     fl!("batch-ai-skip-unreadable"),
                 )
             ))
@@ -679,8 +709,8 @@ mod tests {
     }
 
     fn run_button(options: &Options, checked: &[&File]) -> (String, bool) {
-        let (_, label, ready) = options.panel(checked);
-        (label, ready)
+        let panel = options.panel(checked, SpendSummary::default());
+        (panel.run, panel.ready)
     }
 
     #[test]
@@ -707,10 +737,15 @@ mod tests {
         let checked: Vec<&File> = files.iter().collect();
         let mut options = Options::default();
         options.update(Message::Probed(vec![(files[0].id(), probe(Some(10.0)))]));
+        let cost = dollars(options.model.cost_usd(options.plan(&checked).usage));
         assert_eq!(
             run_button(&options, &checked),
             (
-                fl!("batch-action-describe-ai-run", videos = videos(1)),
+                fl!(
+                    "batch-action-describe-ai-run",
+                    videos = videos(1),
+                    dollars = cost
+                ),
                 false
             ),
             "key not read yet"

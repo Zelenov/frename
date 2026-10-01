@@ -132,7 +132,7 @@ Label the issue `in-progress` and create the heartbeat.
 A `regression` issue means a published release broke something. Fix it first. When the cause is a
 specific merged PR and a real fix is not small and obvious, revert that PR's code but keep its
 `version.md` block: `git revert --no-commit <sha> && git checkout HEAD -- version.md`, then add a new
-`# NEXT` block whose `## Changed` says "Reverted: …". Never delete, move or reuse a published
+version block (`M` + 1, as in step 4) whose `## Changed` says "Reverted: …". Never delete, move or reuse a published
 release tag.
 
 ### Empty queue
@@ -183,8 +183,10 @@ discusses the implementation afterwards.
 - Every behaviour change in `frename-core` gets unit tests; bug fixes get a test that failed before.
 - UI changes: see "Looking at the UI" in `CLAUDE.md`, and "Screenshots in the PR" below.
 - User-facing change → update `README.md` (per `readme` skill) and add release notes to
-  `version.md` (per `create-release-version` skill) as a new first block headed `# NEXT`. The real
-  version number is set at merge time (step 7), never earlier.
+  `version.md` (per `create-release-version` skill) as a new first block headed with the **real next
+  version**: `M` + 1, where `M` is the first heading on `main` when the branch starts (`0.80` →
+  `# 0.81`; second number plus one, compared as numbers, `0.99` → `0.100`). Never write `# NEXT`:
+  CI fails on it. If `main` gets that version first, step 7 renumbers.
 - Commit in small logical steps; messages in English.
 
 ### Screenshots in the PR
@@ -246,8 +248,8 @@ best judgement, and leaves it unmerged:
 1. Implement everything that can be built without the owner. Only what truly cannot (a secret
    that is not available, a guarded file the issue does not allow, a check only the owner can do
    such as Premiere Pro behaviour) is left out, and listed.
-2. Keep the branch green where possible: local gate, pushed, CI run. Keep `# NEXT` in `version.md`;
-   never set a version number.
+2. Keep the branch green where possible: local gate, pushed, CI run. Keep its version block as it is
+   (the owner renumbers it, or the next session does in step 7, when it merges).
 3. Mark the PR ready for review (not draft), add the label `owner-review` to the PR and the issue,
    remove `in-progress`. Put at the top of the PR body:
    `🤖 agent: ⚠️ Not released — <code review|CI> did not converge.` followed by: what was
@@ -267,10 +269,12 @@ allow, a failed release (step 7), an `approved` non-owner issue without a scope 
 
 Right before merging:
 1. Merge `main` into the branch if it is behind.
-2. Set the version. Let `M` be the first heading of `version.md` on `main` (e.g. `0.67`; it must be
-   published, see the merge conditions). The new version is `M` with the second number plus one,
-   compared as numbers (`0.99` → `0.100`). Replace this PR's `# NEXT` heading with it. Commit, push;
-   work on something else while its CI runs.
+2. Check the version. Let `M` be the first heading of `version.md` on `main` (e.g. `0.80`; it must
+   be published, see the merge conditions). This PR's heading must be exactly `M` + 1. If another PR
+   took that number first (the merge of `main` in item 1 then shows `main`'s new block below yours,
+   or a conflict in `version.md`), keep `main`'s blocks unchanged and renumber only yours to
+   `M` + 1, on top. Commit, push; work on something else while its CI runs. CI's version check
+   (`ci-linux`) fails on `# NEXT` or on a heading that is not newer than `main`'s.
 3. Check the review is current: `git diff origin/main...<approved sha>` and
    `git diff origin/main...HEAD` must be identical except the `version.md` heading line. Any other
    difference (including anything done while resolving a merge conflict) → new review round (step 6).
@@ -280,7 +284,7 @@ Merge (squash, with `expectedHeadSha` = the checked head) only when all hold:
   `needs-owner` or `owner-review`, and the issue is open;
 - every reviewer of the last round approved, and the review is current (above);
 - if the PR changes `version.md`: `M` is published, no `release-failed` issue is open, its first
-  line is `# X.Y`, a version newer than `M`, and `# NEXT` appears nowhere in the file. Otherwise `version.md` is identical to `main` (release fixes and internal
+  line is `# X.Y` equal to `M` + 1, and `# NEXT` appears nowhere in the file. Otherwise `version.md` is identical to `main` (release fixes and internal
   changes do not bump the version);
 - every CI check is green on the head commit;
 - no merge conflict.

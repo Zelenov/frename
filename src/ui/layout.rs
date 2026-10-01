@@ -2,13 +2,14 @@
 //! button bar, notices and help.
 
 use iced::widget::text::IntoFragment;
-use iced::widget::{button, column, container, row, scrollable, space, tooltip, Column};
+use iced::widget::{button, column, container, mouse_area, row, space, Column};
 use iced::{Alignment, Color, Element, Length, Padding};
 
 use super::icons::{icon, Icon};
 use super::style::{self, ButtonKind};
 use super::text;
 use super::tokens::*;
+use super::tooltip::{self, Position};
 
 /// Where the first line of a control sits below the top of a 28-px control: labels and choice
 /// groups move down by it so their text lines up with a field's text.
@@ -52,26 +53,12 @@ pub fn window_with_navigation<'a, M: 'a>(
 
 /// The navigation column of a window: its items, 2 px apart, on the window's darkest surface.
 pub fn sidebar<'a, M: 'a>(items: impl IntoIterator<Item = Element<'a, M>>) -> Element<'a, M> {
-    container(Column::with_children(items).spacing(SPACE_XXS))
+    // No spacing: each item brings its own gap ([`nav_slot`]), which is clickable.
+    container(Column::with_children(items))
         .width(NAV_WIDTH)
         .height(Length::Fill)
         .padding(SPACE_S)
         .style(style::window)
-        .into()
-}
-
-/// `content` scrolling vertically; `id` lets a task scroll it.
-pub fn scroll<'a, M: 'a>(id: &'static str, content: impl Into<Element<'a, M>>) -> Element<'a, M> {
-    let bar = scrollable::Scrollbar::new()
-        .width(SCROLLBAR_WIDTH)
-        .scroller_width(SCROLLBAR_WIDTH)
-        .spacing(SCROLLBAR_GAP);
-    scrollable(content)
-        .direction(scrollable::Direction::Vertical(bar))
-        .id(iced::widget::Id::new(id))
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(style::scrollable)
         .into()
 }
 
@@ -81,6 +68,31 @@ pub fn setting_row<'a, M: 'a>(
     content: impl Into<Element<'a, M>>,
 ) -> Element<'a, M> {
     labelled_row(text::body(label).into(), content.into())
+}
+
+/// One option per row in a narrow place (§5.3, §13.9 "Page under 440"): the label above its
+/// controls, so a short label does not leave a column of empty space beside them.
+pub fn stacked_row<'a, M: 'a>(
+    label: impl IntoFragment<'a>,
+    content: impl Into<Element<'a, M>>,
+) -> Element<'a, M> {
+    stacked(text::strong(label).into(), content.into())
+}
+
+/// A [`stacked_row`] whose label carries ⓘ with `help` (§8.11).
+pub fn stacked_row_with_info<'a, M: 'a>(
+    label: impl IntoFragment<'a>,
+    help: impl IntoFragment<'a>,
+    content: impl Into<Element<'a, M>>,
+) -> Element<'a, M> {
+    let label = row![text::strong(label), info(help)]
+        .spacing(SPACE_XS)
+        .align_y(Alignment::Center);
+    stacked(label.into(), content.into())
+}
+
+fn stacked<'a, M: 'a>(label: Element<'a, M>, content: Element<'a, M>) -> Element<'a, M> {
+    column![label, content].spacing(SPACE_S).into()
 }
 
 /// A setting row whose label carries ⓘ with `help` (§8.11).
@@ -112,15 +124,17 @@ pub fn controls<'a, M: 'a>(items: impl IntoIterator<Item = Element<'a, M>>) -> C
     Column::with_children(items).spacing(SPACE_S)
 }
 
-/// A column of controls whose first line of text meets the row label's (checkboxes, radio
-/// options, a line of text over buttons), 12 px apart.
+/// A column of choices (checkboxes, radio options, a line of text over buttons), 12 px apart.
+pub fn choices<'a, M: 'a>(items: impl IntoIterator<Item = Element<'a, M>>) -> Column<'a, M> {
+    Column::with_children(items).spacing(SPACE_M)
+}
+
+/// [`choices`] whose first line of text meets the label beside them.
 pub fn aligned<'a, M: 'a>(items: impl IntoIterator<Item = Element<'a, M>>) -> Column<'a, M> {
-    Column::with_children(items)
-        .spacing(SPACE_M)
-        .padding(Padding {
-            top: CONTROL_TEXT_OFFSET,
-            ..Padding::ZERO
-        })
+    choices(items).padding(Padding {
+        top: CONTROL_TEXT_OFFSET,
+        ..Padding::ZERO
+    })
 }
 
 /// Content indented under a checkbox or a radio option, level with its label.
@@ -134,6 +148,7 @@ pub fn indented<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Element<'a, M>
 }
 
 /// An item of a navigation list: the page shown is marked by a bar, a fill and bold text.
+/// `dot` puts the update dot at its end.
 pub fn nav_item<'a, M: Clone + 'a>(
     glyph: Icon,
     label: impl IntoFragment<'a>,
@@ -141,15 +156,49 @@ pub fn nav_item<'a, M: Clone + 'a>(
     dot: bool,
     on_press: M,
 ) -> Element<'a, M> {
-    let color = if selected {
-        ACCENT_TEXT
-    } else {
-        TEXT_SECONDARY
+    nav_item_with(glyph, label, selected, dot.then(update_dot), Some(on_press))
+}
+
+/// The gap between two items of a navigation list.
+pub const NAV_GAP: f32 = SPACE_XXS;
+
+/// An item of a navigation list with the gap ([`NAV_GAP`]) below it that keeps the items apart.
+/// The gap belongs to the item (a column's `spacing` belongs to neither neighbour): over it the
+/// pointer stays a hand and a click sends the item's `on_press`, so moving down the list never
+/// drops to an arrow. Without `on_press` (a disabled item) the gap is nothing. The item's
+/// highlight stays on the item itself, as the visual gap always did.
+pub fn nav_slot<'a, M: Clone + 'a>(
+    item: impl Into<Element<'a, M>>,
+    on_press: Option<M>,
+) -> Element<'a, M> {
+    let slot = column![item.into(), space().height(NAV_GAP)];
+    match on_press {
+        Some(message) => mouse_area(slot)
+            .on_press(message)
+            .interaction(iced::mouse::Interaction::Pointer)
+            .into(),
+        None => slot.into(),
+    }
+}
+
+/// [`nav_item`] with `trailing` at its right end (a badge), and without `on_press` disabled.
+pub fn nav_item_with<'a, M: Clone + 'a>(
+    glyph: Icon,
+    label: impl IntoFragment<'a>,
+    selected: bool,
+    trailing: Option<Element<'a, M>>,
+    on_press: Option<M>,
+) -> Element<'a, M> {
+    let enabled = on_press.is_some();
+    let color = match (enabled, selected) {
+        (false, _) => TEXT_DISABLED,
+        (true, true) => ACCENT_TEXT,
+        (true, false) => TEXT_SECONDARY,
     };
-    let label = if selected {
-        text::strong(label)
-    } else {
-        text::secondary(label)
+    let label = match (enabled, selected) {
+        (false, _) => text::body(label).color(TEXT_DISABLED),
+        (true, true) => text::strong(label),
+        (true, false) => text::secondary(label),
     };
     let mark = container(space())
         .width(SELECTION_BAR)
@@ -159,14 +208,20 @@ pub fn nav_item<'a, M: Clone + 'a>(
         } else {
             Color::TRANSPARENT
         }));
-    let mut content = row![mark, icon(glyph, ICON_M, color), label]
-        .spacing(SPACE_S)
-        .align_y(Alignment::Center);
-    if dot {
-        content = content.push(space::horizontal()).push(update_dot());
-    }
+    // The label fills what is left: iced lays `Fill` children out last, so the trailing badge
+    // keeps its whole width and the label is the one that wraps.
+    let content = row![
+        mark,
+        icon(glyph, ICON_M, color),
+        container(label).width(Length::Fill)
+    ]
+    .push(trailing)
+    .spacing(SPACE_S)
+    .align_y(Alignment::Center);
     // 32 px for one line; a label that wraps (a long translation) makes the item taller.
-    button(content)
+    // Clipped: a long label never draws past the item's background.
+    let item = button(content)
+        .clip(true)
         .width(Length::Fill)
         .padding(Padding {
             top: ROW_PADDING_Y,
@@ -175,8 +230,8 @@ pub fn nav_item<'a, M: Clone + 'a>(
             right: SPACE_M,
         })
         .style(style::button(ButtonKind::Nav(selected)))
-        .on_press(on_press)
-        .into()
+        .on_press_maybe(on_press.clone());
+    nav_slot(item, on_press)
 }
 
 /// The dot that says "an update is ready".
@@ -184,7 +239,7 @@ pub fn update_dot<'a, M: 'a>() -> Element<'a, M> {
     container(space())
         .width(DOT_SIZE)
         .height(DOT_SIZE)
-        .style(style::fill(ACCENT_TEXT))
+        .style(style::dot(ACCENT_TEXT))
         .into()
 }
 
@@ -194,7 +249,9 @@ pub fn button_bar<'a, M: 'a>(
     hint: impl IntoFragment<'a>,
     buttons: impl IntoIterator<Item = Element<'a, M>>,
 ) -> Element<'a, M> {
-    let bar = row![text::secondary(hint), space::horizontal()]
+    // The hint takes what the buttons leave (a `Fill` child is laid out last), so a long hint
+    // wraps instead of squeezing the buttons.
+    let bar = row![container(text::secondary(hint)).width(Length::Fill)]
         .extend(buttons)
         .spacing(SPACE_S)
         .align_y(Alignment::Center);
@@ -212,7 +269,8 @@ pub fn button_bar<'a, M: 'a>(
     .into()
 }
 
-fn horizontal_line<'a, M: 'a>() -> Element<'a, M> {
+/// A 1-px line between two regions one above the other.
+pub fn horizontal_line<'a, M: 'a>() -> Element<'a, M> {
     container(space())
         .width(Length::Fill)
         .height(LINE)
@@ -322,33 +380,9 @@ pub fn inline_status<'a, M: 'a>(
 
 /// ⓘ: help that is never needed to choose, shown on hover (§8.11).
 pub fn info<'a, M: 'a>(help: impl IntoFragment<'a>) -> Element<'a, M> {
-    with_tooltip(
+    tooltip::tip_text(
         icon(Icon::Info, ICON_S, TEXT_SECONDARY),
         help,
-        tooltip::Position::Bottom,
+        Position::Bottom,
     )
-}
-
-/// `content` with a tooltip (§8.13).
-pub fn with_tooltip<'a, M: 'a>(
-    content: impl Into<Element<'a, M>>,
-    tip: impl IntoFragment<'a>,
-    position: tooltip::Position,
-) -> Element<'a, M> {
-    tooltip(
-        content,
-        container(text::tooltip(tip))
-            .max_width(TOOLTIP_MAX_WIDTH)
-            .padding(Padding {
-                top: SPACE_XS + SPACE_XXS,
-                bottom: SPACE_XS + SPACE_XXS,
-                left: SPACE_S,
-                right: SPACE_S,
-            })
-            .style(style::tooltip),
-        position,
-    )
-    .gap(SPACE_XS + SPACE_XXS)
-    .delay(TOOLTIP_DELAY)
-    .into()
 }

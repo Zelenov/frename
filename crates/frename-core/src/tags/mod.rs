@@ -17,9 +17,7 @@ mod tag_list;
 
 pub use default_tags::{DefaultTag, DEFAULT_TAGS};
 pub use file_snapshot::{set_space_after_tags, space_after_tags, FileSnapshot};
-pub use file_tagger::{
-    install_file_tagger, FileTagger, KeptStored, NameInOutMove, NameInOutProblem, SaveAndReparse,
-};
+pub use file_tagger::{install_file_tagger, FileTagger, SaveAndReparse};
 pub use file_tagger_backend::FileTaggerBackend;
 pub use file_tagger_logging::LoggingFileTagger;
 pub use folder_info::FolderInfo;
@@ -30,4 +28,4 @@ pub use screenshot::Screenshot;
 pub use stored_tag::StoredTag;
 pub use tag::{Tag, TagId};
 pub use tag_color_mapping::TagColorMapping;
-pub use tag_list::TagList;
+pub use tag_list::{TagList, TagOrderState};

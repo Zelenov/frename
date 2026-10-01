@@ -12,13 +12,10 @@ pub mod view;
 pub use messages::Message;
 pub use state::FileNamePanelState;
 
-/// Layout constants shared by view and state (drop-index grid).
-pub const TAG_CHIP_ROW_HEIGHT: f32 = 28.0;
-pub const TAG_CHIP_SPACING: f32 = 4.0;
-pub const TAG_CHIP_ESTIMATED_WIDTH: f32 = 64.0;
-const DRAG_LIFT_PX: f32 = 6.0;
-pub const TAG_CHIP_CELL_HEIGHT: f32 = TAG_CHIP_ROW_HEIGHT + DRAG_LIFT_PX;
-/// Side length of the trash zone (square panel to the right).
-pub const TRASH_SIDE: f32 = 36.0;
-/// Spacing between tag content and trash zone.
-pub const TRASH_SPACING: f32 = 8.0;
+use crate::ui::tokens::{CHIP_DRAG_LIFT, CHIP_DROP_ESTIMATE_WIDTH, CHIP_HEIGHT, SPACE_XS};
+
+/// Layout shared by view and state (the drop-index grid): chips `TAG_CHIP_SPACING` apart, each in
+/// a cell that leaves room for the lift of a dragged chip.
+pub const TAG_CHIP_SPACING: f32 = SPACE_XS;
+pub const TAG_CHIP_ESTIMATED_WIDTH: f32 = CHIP_DROP_ESTIMATE_WIDTH;
+pub const TAG_CHIP_CELL_HEIGHT: f32 = CHIP_HEIGHT + CHIP_DRAG_LIFT;

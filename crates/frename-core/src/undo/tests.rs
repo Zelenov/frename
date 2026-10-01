@@ -11,9 +11,9 @@ mod tests {
     use crate::db::fake_app_storage::FakeAppStorage;
     use crate::undo::{
         AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,
-        NavigateFileCommand, PasteTagsCommand, ReorderTagCommand, SaveTagCommand,
-        SetMarkerColorCommand, SetMarkerDurationCommand, SetMarkerSpanCommand, StarTagCommand,
-        ToggleTagCommand, UndoContext,
+        NavigateFileCommand, PasteTagsCommand, RenameFileCommand, ReorderTagCommand,
+        SaveTagCommand, SetCommentCommand, SetMarkerColorCommand, SetMarkerNameCommand,
+        SetMarkerSpanCommand, StarTagCommand, SyncTagOrderCommand, ToggleTagCommand, UndoContext,
     };
     use crate::{Directory, File, FileId, FileSnapshot, Marker, MarkerColor, StoredTag, TagList};
     use uuid::Uuid;
@@ -1023,10 +1023,10 @@ mod tests {
             new: MarkerColor::Red,
         }));
         tag_list.update_marker(&guid, |m| m.duration_ms = 1_500);
-        history.push(Box::new(SetMarkerDurationCommand {
+        history.push(Box::new(SetMarkerSpanCommand {
             guid: guid.clone(),
-            old_ms: 0,
-            new_ms: 1_500,
+            old: (0, 0),
+            new: (0, 1_500),
         }));
 
         run(&mut history, &mut tag_list, true);
@@ -1155,5 +1155,151 @@ mod tests {
         assert!(history.redo_turns_a_video());
         history.redo(&mut ctx).expect("redo");
         assert_eq!(degrees(), Ok(270));
+    }
+
+    #[test]
+    fn a_step_says_whether_it_edits_the_open_video_or_moves_to_another_file() {
+        let mut history: History<FakeAppStorage, FakeAppStorage> = History::new(50);
+        assert!(!history.undo_edits_open_video());
+        history.push(Box::new(AddMarkerCommand {
+            marker: Marker::new(1_000),
+        }));
+        assert!(history.undo_edits_open_video());
+        assert!(!history.undo_switches_file());
+        history.push(Box::new(NavigateFileCommand {
+            file_id: File::from_path(PathBuf::from("/x/a.mp4"), SystemTime::UNIX_EPOCH).id(),
+            to_file_id: File::from_path(PathBuf::from("/x/b.mp4"), SystemTime::UNIX_EPOCH).id(),
+            path_before: PathBuf::from("/x/a.mp4"),
+            path_after: PathBuf::from("/x/a.mp4"),
+            snapshot_before: FileSnapshot::default(),
+            snapshot_after: FileSnapshot::default(),
+        }));
+        assert!(!history.undo_edits_open_video());
+        assert!(history.undo_switches_file());
+        assert!(!history.redo_edits_open_video());
+        assert!(!history.redo_switches_file());
+    }
+
+    // --- Issue #139: rename, comment, marker name, sync ---
+
+    #[test]
+    fn rename_command_puts_the_old_and_new_name_back() {
+        let mut tag_list = TagList::new(FakeAppStorage::new(), snapshot_with_tags(&["a"]));
+        let before = tag_list.file_snapshot();
+        let name_before = before.file_name();
+        let after = FileSnapshot::new(vec!["a".into()], "renamed", "mp4", "renamed.mp4");
+        let name_after = after.file_name();
+        assert_ne!(name_before, name_after);
+        tag_list.reinitialize_from_snapshot(after.clone());
+        let mut history = History::new(50);
+        history.push(Box::new(RenameFileCommand {
+            snapshot_before: before,
+            snapshot_after: after,
+        }));
+
+        run(&mut history, &mut tag_list, true);
+        assert_eq!(tag_list.file_snapshot().file_name(), name_before);
+        run(&mut history, &mut tag_list, false);
+        assert_eq!(tag_list.file_snapshot().file_name(), name_after);
+    }
+
+    #[test]
+    fn comment_command_restores_the_comment_and_redoes_it() {
+        let mut tag_list = TagList::new(FakeAppStorage::new(), snapshot_with_tags(&[]));
+        let before = tag_list.file_snapshot();
+        tag_list.set_comment("a note".to_string());
+        let after = tag_list.file_snapshot();
+        let mut history = History::new(50);
+        history.push(Box::new(SetCommentCommand {
+            snapshot_before: before,
+            snapshot_after: after,
+        }));
+
+        run(&mut history, &mut tag_list, true);
+        assert_eq!(tag_list.comment(), "");
+        run(&mut history, &mut tag_list, false);
+        assert_eq!(tag_list.comment(), "a note");
+    }
+
+    #[test]
+    fn marker_name_command_undoes_and_redoes_the_name() {
+        let mut tag_list = marker_list();
+        let marker = Marker::new(0);
+        let guid = marker.guid.clone().unwrap();
+        tag_list.add_marker(marker);
+        tag_list.update_marker(&guid, |m| m.name = "hello".to_string());
+        let mut history = History::new(50);
+        history.push(Box::new(SetMarkerNameCommand {
+            guid: guid.clone(),
+            old: String::new(),
+            new: "hello".to_string(),
+        }));
+
+        run(&mut history, &mut tag_list, true);
+        assert_eq!(tag_list.marker(&guid).unwrap().name, "");
+        run(&mut history, &mut tag_list, false);
+        assert_eq!(tag_list.marker(&guid).unwrap().name, "hello");
+    }
+
+    #[test]
+    fn sync_command_restores_the_orders_and_the_lock() {
+        let store = make_store_with_tags(&["Action", "Comedy", "Summer"]);
+        let mut tag_list = TagList::new(store, snapshot_with_tags(&["Action", "Comedy", "Summer"]));
+        tag_list.set_sync_locked(false);
+        let id_action = tag_list.checked_tag_id_at(0).unwrap();
+        // Make the file name's order differ from the grid's, then sync it into the grid.
+        tag_list.reorder_tag_to_index(id_action, 2);
+        let before = tag_list.order_state();
+        let grid_before = tag_list.filtered_display_tag_ids().to_vec();
+        tag_list.sync_selected_to_display().unwrap();
+        tag_list.set_sync_locked(true);
+        let after = tag_list.order_state();
+        assert_ne!(tag_list.filtered_display_tag_ids(), grid_before);
+
+        let mut history = History::new(50);
+        history.push(Box::new(SyncTagOrderCommand { before, after }));
+        run(&mut history, &mut tag_list, true);
+        assert_eq!(tag_list.filtered_display_tag_ids(), grid_before);
+        assert!(!tag_list.sync_locked());
+        run(&mut history, &mut tag_list, false);
+        assert_ne!(tag_list.filtered_display_tag_ids(), grid_before);
+        assert!(tag_list.sync_locked());
+    }
+
+    #[test]
+    fn probe_stale_ids() {
+        let store = make_store_with_tags(&["Action", "Comedy"]);
+        let mut tag_list = TagList::new(store, snapshot_with_tags(&["Action", "Zed", "Comedy"]));
+        let ids_before: Vec<_> = tag_list.filtered_display_tag_ids().to_vec();
+        let n = (0..5).filter_map(|i| tag_list.checked_tag_id_at(i)).count();
+        let st = tag_list.order_state();
+        let snap = tag_list.file_snapshot();
+        tag_list.reinitialize_from_snapshot(snap);
+        let ids_mid: Vec<_> = tag_list.filtered_display_tag_ids().to_vec();
+        tag_list.restore_order_state(st).unwrap();
+        let ids_after: Vec<_> = tag_list.filtered_display_tag_ids().to_vec();
+        let n2 = (0..5).filter_map(|i| tag_list.checked_tag_id_at(i)).count();
+        eprintln!(
+            "PROBE before {} mid {} after {} checked {} -> {}",
+            ids_before.len(),
+            ids_mid.len(),
+            ids_after.len(),
+            n,
+            n2
+        );
+        eprintln!("PROBE same ids mid vs after {}", ids_mid == ids_after);
+    }
+
+    #[test]
+    fn order_state_survives_a_rebuild_with_an_unsaved_tag() {
+        let store = make_store_with_tags(&["Action", "Comedy"]);
+        let snapshot = snapshot_with_tags(&["Action", "Comedy", "Zed"]);
+        let mut tag_list = TagList::new(store, snapshot.clone());
+        let state = tag_list.order_state();
+        // A rebuild gives the unsaved tag a new id.
+        tag_list.reinitialize_from_snapshot(snapshot);
+        tag_list.restore_order_state(state).unwrap();
+        assert_eq!(tag_list.file_snapshot().tags(), ["Action", "Comedy", "Zed"]);
+        assert_eq!(tag_list.filtered_display_tag_ids().len(), 3);
     }
 }

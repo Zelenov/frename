@@ -77,8 +77,21 @@ pub enum Message {
     },
     /// User picked a cue in the subtitle list: seek to its start.
     SeekToCue(usize),
+    /// The subtitle list scrolled: its offset from the top and its viewport's height.
+    CueListScrolled(f32, f32),
+    /// Put the subtitle list back at this offset (fullscreen went on or off).
+    RestoreCueScroll(f32),
     /// Show or hide the subtitle list over the picture.
     ToggleCueList,
     /// Autoplay setting changed: whether videos opened from now on start playing.
     SetAutoplay(bool),
+    /// Open or close **More**, the menu of the controls a narrow pane has no room for.
+    ToggleMore,
+    /// Close More: a click outside it.
+    CloseMore,
+    /// An item of More was chosen: close it, then send its messages in order (as if their
+    /// buttons had been pressed, so the parents see them as they would from the bar).
+    MorePicked(Vec<Message>),
+    /// A step of the loading spinner (internal, only while a video loads).
+    LoadingTick,
 }
