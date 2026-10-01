@@ -277,10 +277,7 @@ impl FolderWorkspace {
             Message::MediaViewer(msg) => match msg {
                 media_viewer::Message::Unloaded => self.on_media_unloaded(),
                 media_viewer::Message::ToggleFullscreen => {
-                    if self.media_viewer.is_previewable() {
-                        self.media_fullscreen = !self.media_fullscreen;
-                    }
-                    Task::none()
+                    self.set_fullscreen(!self.media_fullscreen)
                 }
                 media_viewer::Message::SegmentStartMarked(secs) => self.set_segment_start(secs),
                 media_viewer::Message::SegmentEndMarked(secs) => self.set_segment_end(secs),
@@ -370,12 +367,20 @@ impl FolderWorkspace {
             Message::RotateVideoWhileTyping(quarter_turns) => {
                 self.rotate_video_unless_writing(quarter_turns)
             }
-            Message::ToggleMediaFullscreen => {
-                // Only toggle when a video is shown.
-                if self.media_viewer.is_previewable() {
-                    self.media_fullscreen = !self.media_fullscreen;
+            Message::ToggleMediaFullscreen => self.set_fullscreen(!self.media_fullscreen),
+            Message::RestoreListScrolls { markers_y, cues_y } => {
+                // Only a list on screen reports back; armed otherwise it would fire much later.
+                if self.media_viewer.marker_list_shown() {
+                    self.markers.restored(markers_y);
                 }
-                Task::none()
+                Task::batch([
+                    marker_actions::scroll_marker_list_to(markers_y),
+                    self.media_viewer
+                        .update(media_viewer::Message::Video(
+                            media_viewer_video::Message::RestoreCueScroll(cues_y),
+                        ))
+                        .map(Message::MediaViewer),
+                ])
             }
             Message::SetSegmentStart | Message::SetSegmentEnd if self.inline_rename.is_some() => {
                 Task::none()
@@ -448,8 +453,7 @@ impl FolderWorkspace {
                     return Task::none();
                 }
                 if self.media_fullscreen {
-                    self.media_fullscreen = false;
-                    return Task::none();
+                    return self.set_fullscreen(false);
                 }
                 if self.batch.is_active() {
                     // A running job ignores `SetActive` (see `BatchState::update`), so batch mode
@@ -1532,6 +1536,27 @@ impl FolderWorkspace {
             folder::Message::InvertChecks => {
                 Task::done(Message::Batch(batch::Message::Invert(self.listed_ids())))
             }
+        }
+    }
+
+    /// Switch fullscreen on or off (only when a video is shown). The view builds the lists anew
+    /// then, at offset 0, so the offsets they had are carried to a task that puts them back.
+    fn set_fullscreen(&mut self, on: bool) -> Task<Message> {
+        if on && !self.media_viewer.is_previewable() {
+            return Task::none();
+        }
+        self.media_fullscreen = on;
+        if !self.media_viewer.is_previewable() {
+            return Task::none();
+        }
+        Task::done(self.restore_lists_message())
+    }
+
+    /// The task message that puts the lists back at the offsets they have now.
+    fn restore_lists_message(&self) -> Message {
+        Message::RestoreListScrolls {
+            markers_y: self.markers.scroll_y(),
+            cues_y: self.media_viewer.cue_scroll_y(),
         }
     }
 
@@ -5429,5 +5454,62 @@ mod tests {
         let _ = workspace.update(Message::Undo);
         assert_eq!(marker_names(&workspace)[0], (1_000, String::new()));
         assert_eq!(marker_names(&workspace).len(), 2, "no marker was undone");
+    }
+
+    /// Issue #142: fullscreen builds the lists anew, so their scroll offsets are kept in the
+    /// state, carried by the toggle's task and put back, both ways.
+    #[test]
+    fn the_list_scrolls_are_kept_across_fullscreen() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Video(
+                crate::features::media_viewer::video::Message::Markers(M::Scrolled(120.0, 400.0)),
+            ),
+        ));
+        assert_eq!(workspace.markers.scroll_y(), 120.0);
+
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Video(
+                crate::features::media_viewer::video::Message::CueListScrolled(80.0, 300.0),
+            ),
+        ));
+        assert!(matches!(
+            workspace.restore_lists_message(),
+            Message::RestoreListScrolls { markers_y, cues_y } if markers_y == 120.0 && cues_y == 80.0
+        ));
+        for expect_fullscreen in [true, false] {
+            let task = workspace.update(Message::ToggleMediaFullscreen);
+            assert_eq!(workspace.media_fullscreen, expect_fullscreen);
+            assert_eq!(
+                task.units(),
+                1,
+                "the toggle asks for the lists to be put back"
+            );
+        }
+        // The fresh list reports offset 0 before the restore runs: the offset carried by the
+        // task is what is put back, and the report of the restore ends the wait.
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Video(
+                crate::features::media_viewer::video::Message::Markers(M::Scrolled(0.0, 400.0)),
+            ),
+        ));
+        let task = workspace.update(Message::RestoreListScrolls {
+            markers_y: 120.0,
+            cues_y: 80.0,
+        });
+        assert_eq!(
+            task.units(),
+            2,
+            "marker list and subtitle list are scrolled back"
+        );
+        assert_eq!(workspace.media_viewer.cue_scroll_y(), 80.0);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Video(
+                crate::features::media_viewer::video::Message::Markers(M::Scrolled(120.0, 300.0)),
+            ),
+        ));
+        assert_eq!(workspace.markers.scroll_y(), 120.0);
     }
 }

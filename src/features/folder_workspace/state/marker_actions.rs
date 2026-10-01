@@ -126,7 +126,7 @@ impl FolderWorkspace {
         if self.file_workspace.file().is_none() {
             return Task::none();
         }
-        if !matches!(msg, M::Add | M::KeyDown | M::KeyUp) {
+        if !matches!(msg, M::Add | M::KeyDown | M::KeyUp | M::Scrolled(..)) {
             self.markers.forget_added();
         }
         match msg {
@@ -193,6 +193,23 @@ impl FolderWorkspace {
             M::Delete(guid) => {
                 self.delete_marker(&guid);
                 Task::none()
+            }
+            M::Scrolled(y, viewport) => {
+                // The list was just put back (fullscreen): keep the lit marker in view.
+                if !self.markers.set_scroll_y(y) || !self.media_viewer.marker_list_shown() {
+                    return Task::none();
+                }
+                let (Some(markers), Some(position_ms)) = (
+                    self.file_workspace.markers(),
+                    self.media_viewer.video_position_ms(),
+                ) else {
+                    return Task::none();
+                };
+                let passed = markers::view::passed_index(markers, position_ms);
+                match markers::view::offset_showing_lit(markers, passed, y, viewport) {
+                    Some(wanted) => scroll_marker_list_to(wanted),
+                    None => Task::none(),
+                }
             }
         }
     }
@@ -518,7 +535,7 @@ fn seek_exact(ms: u64) -> Task<Message> {
 
 /// Scroll the marker list to `y`: the top of the row before the one to show, so it keeps a
 /// row of context above it (see [`markers::view::row_offset`]).
-fn scroll_marker_list_to(y: f32) -> Task<Message> {
+pub(super) fn scroll_marker_list_to(y: f32) -> Task<Message> {
     let offset = iced::widget::scrollable::AbsoluteOffset {
         x: None,
         y: Some(y),

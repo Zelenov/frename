@@ -77,6 +77,10 @@ pub enum Message {
     },
     /// User picked a cue in the subtitle list: seek to its start.
     SeekToCue(usize),
+    /// The subtitle list scrolled: its offset from the top and its viewport's height.
+    CueListScrolled(f32, f32),
+    /// Put the subtitle list back at this offset (fullscreen went on or off).
+    RestoreCueScroll(f32),
     /// Show or hide the subtitle list over the picture.
     ToggleCueList,
     /// Autoplay setting changed: whether videos opened from now on start playing.
