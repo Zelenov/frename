@@ -1,0 +1,25 @@
+# Marker list (#141): the last marker's name wraps to several lines; the playhead is past it, so
+# the list is scrolled to the bottom and the whole last row must show. Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.MVI_0801.mp4"
+seek = 20.0
+window = [1280, 720]
+panels = [460, 320]
+marker_list = true
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_0801.mp4"
+markers = [
+  "0:01 — Wide shot of the harbour",
+  "0:03 [red] — Boat leaves the dock",
+  "0:05 — Gulls",
+  "0:07 [blue] — Sunset through the crane",
+  "0:08 — Vendor arranges the fish",
+  "0:09 — Close-up of the scales",
+  "0:10 — Crowd",
+  "0:11 — Stall with crates",
+  "0:12 — Scale reading",
+  "0:13 — Receipt",
+  "0:14 — Long pan over the fish market, then the vendor laughs and waves at the camera, keep the laugh, and the pan continues past the stall to the quay where the nets are hung out to dry in the wind",
+]

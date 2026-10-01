@@ -1,6 +1,6 @@
 //! The marker list (design system §13.3.6): one row per marker, read-only like a subtitle cue,
-//! except the one row open for renaming. A row's height follows from its name's lines, so the
-//! list is scrolled to a row by arithmetic, as the subtitle list is.
+//! except the one row open for renaming. A row is as tall as its name's lines; the list is
+//! scrolled to a row by an estimate of the rows above it ([`row_offset`]), as the subtitle list is.
 
 use frename_core::{format_marker_time, Marker, MarkerColor, AI_MARKER_COLOR, MARKER_SNAP_MS};
 use iced::widget::{
@@ -20,7 +20,7 @@ use crate::ui::{empty, list, scroll, text};
 
 pub const MARKER_LIST_SCROLLABLE_ID: &str = "marker_list";
 pub const MARKER_NAME_INPUT_ID: &str = "marker_name_input";
-/// Room for a name's text in a row of the list at its widest: the list less its inset, the
+/// (Scroll estimate only.) Room for a name's text in a row of the list at its widest: the list less its inset, the
 /// row's inset and the scroll gutter.
 const NAME_ROOM: f32 = SIDE_LIST_MAX_WIDTH - SPACE_S - SPACE_S - SPACE_S - SCROLL_GUTTER;
 /// A generous average advance of a character of the name.
@@ -47,7 +47,8 @@ fn name_lines(marker: &Marker) -> usize {
     marker.name.chars().count().div_ceil(per_line).max(1)
 }
 
-/// The height of `marker`'s row.
+/// Estimated height of `marker`'s row, for scrolling to a row only: the row itself is as tall as
+/// its content.
 fn row_height(marker: &Marker) -> f32 {
     MARKER_ROW_HEIGHT + (name_lines(marker) - 1) as f32 * LINE_BODY
 }
@@ -158,6 +159,7 @@ fn marker_list<'a>(
             .spacing(SPACE_XXS)
             .padding(Padding {
                 left: SPACE_S,
+                bottom: SPACE_S,
                 ..Padding::ZERO
             }),
     )
@@ -389,18 +391,10 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
     let body = column![first_line, name]
         .spacing(SPACE_XXS)
         .padding(ROW_INSET);
-    let height = if open.is_some() {
-        row_height(marker) + 2.0 * CONTROL_PADDING_Y
-    } else {
-        row_height(marker)
-    };
-    let item = container(list::row_item(
-        body,
-        lit || open.is_some(),
-        OVERLAY_HOVER,
-        Length::Fill,
-    ))
-    .height(height);
+    // The row is as tall as its content, not as the estimate of [`row_height`]: a name that wraps
+    // to more lines than estimated (a narrow list, a long name) must not be cut off, and the list
+    // sizes its scroll range from what is rendered.
+    let item = list::row_item(body, lit || open.is_some(), OVERLAY_HOVER, Length::Shrink);
 
     // The actions sit at the right end of the first line, over the row.
     let item: Element<'a, Message> = match actions {
@@ -418,7 +412,7 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
                 hover(item, place)
             }
         }
-        None => item.into(),
+        None => item,
     };
     // A click on the row (not on one of its buttons) opens it for renaming.
     match guid.filter(|_| open.is_none() && state.color_picker().is_none()) {

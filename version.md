@@ -1,3 +1,7 @@
+# 0.91
+## Fixed
+- The last marker in the marker list is no longer cut off at the bottom, however long its name is.
+
 # 0.90
 ## Fixed
 - Undo (`Ctrl+Z`) brings back a deleted marker in batch mode, and works while a marker's name is open for editing (the name field closes first).
