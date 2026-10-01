@@ -1279,7 +1279,27 @@ mod tests {
         tag_list.restore_order_state(st).unwrap();
         let ids_after: Vec<_> = tag_list.filtered_display_tag_ids().to_vec();
         let n2 = (0..5).filter_map(|i| tag_list.checked_tag_id_at(i)).count();
-        eprintln!("PROBE before {} mid {} after {} checked {} -> {}", ids_before.len(), ids_mid.len(), ids_after.len(), n, n2);
+        eprintln!(
+            "PROBE before {} mid {} after {} checked {} -> {}",
+            ids_before.len(),
+            ids_mid.len(),
+            ids_after.len(),
+            n,
+            n2
+        );
         eprintln!("PROBE same ids mid vs after {}", ids_mid == ids_after);
+    }
+
+    #[test]
+    fn order_state_survives_a_rebuild_with_an_unsaved_tag() {
+        let store = make_store_with_tags(&["Action", "Comedy"]);
+        let snapshot = snapshot_with_tags(&["Action", "Comedy", "Zed"]);
+        let mut tag_list = TagList::new(store, snapshot.clone());
+        let state = tag_list.order_state();
+        // A rebuild gives the unsaved tag a new id.
+        tag_list.reinitialize_from_snapshot(snapshot);
+        tag_list.restore_order_state(state).unwrap();
+        assert_eq!(tag_list.file_snapshot().tags(), ["Action", "Comedy", "Zed"]);
+        assert_eq!(tag_list.filtered_display_tag_ids().len(), 3);
     }
 }

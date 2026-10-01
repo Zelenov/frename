@@ -347,15 +347,25 @@ impl FolderWorkspace {
             Message::PasteTags => self.paste_tags(),
             // The comment box has the keys while it is focused: its text is not the app's to undo.
             Message::Undo | Message::Redo if self.file_workspace.comment_focused() => Task::none(),
-            Message::Undo if self.history.can_undo() => {
+            // What was typed or named is a step first, so it is the one undone.
+            Message::Undo => {
                 self.close_marker_row();
-                self.perform_undo()
+                self.end_comment_session();
+                if self.history.can_undo() {
+                    self.perform_undo()
+                } else {
+                    Task::none()
+                }
             }
-            Message::Redo if self.history.can_redo() => {
+            Message::Redo => {
                 self.close_marker_row();
-                self.perform_redo()
+                self.end_comment_session();
+                if self.history.can_redo() {
+                    self.perform_redo()
+                } else {
+                    Task::none()
+                }
             }
-            Message::Undo | Message::Redo => Task::none(),
             Message::RotateVideo(quarter_turns) => self.rotate_video(quarter_turns),
             Message::RotateVideoWhileTyping(quarter_turns) => {
                 self.rotate_video_unless_writing(quarter_turns)
@@ -5376,5 +5386,20 @@ mod tests {
         assert_eq!(before.len(), 1);
         let _ = workspace.handle_marker(crate::features::markers::Message::DeleteAtPlayhead, 1_000);
         assert_eq!(marker_names(&workspace), before, "it is not deleted");
+    }
+
+    #[test]
+    fn undo_closes_a_renamed_marker_row_even_with_nothing_else_to_undo() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = first_marker_guid(&workspace);
+        // Nothing earlier in the history: as if the marker came from the file.
+        workspace.history = super::WorkspaceHistory::new(super::HISTORY_DEPTH);
+        send_marker(&mut workspace, M::Open(guid), 1_000);
+        send_marker(&mut workspace, type_name("x"), 1_000);
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_names(&workspace), [(1_000, String::new())]);
     }
 }
