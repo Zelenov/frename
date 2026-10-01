@@ -9,7 +9,7 @@ This file adds what an agent needs to build, test and ship without a human in th
 - `crates/frename-core/` — pure logic, no iced: tags, files, XMP metadata, undo, SQLite.
 - Describing clips with Claude (frames, prompt, models, cost, client) is the `clipscribe` crate,
   its own repo `Zelenov/clipscribe`, pinned by commit in `Cargo.toml` and `frename-core`.
-- `.claude/skills/` — project skills (app-guide, core-dev, ui-dev, ui-core, undo-dev, …).
+- `.claude/skills/` — project skills (app-guide, core-dev, ui-dev, ui-core, undo-dev, bug-hunt, …).
 - `docs/design/` — design documents for features that needed one.
 - `version.md` — release notes; its first line `# X.Y` is the version. A change to it on `main`
   publishes a release (`.github/workflows/release.yml`). To pause a release PR, convert it to a
@@ -67,6 +67,9 @@ Reviewers follow `.claude/skills/review-gate/SKILL.md`. User-facing text follows
 In autonomous mode the "implement only what is explicitly requested" rule of `AGENTS.md` means:
 the issue is the request. Do exactly what the issue asks (the agent's design notes only fill in details), nothing beyond it.
 Ideas of your own become new issues labelled `idea`, never extra code in the current PR.
+Bugs you find become issues labelled `bug` and are fixed without waiting for approval, each in its
+own PR (`nightly` → "Bugs the agent finds"); every nightly session also hunts for them
+(`.claude/skills/bug-hunt/SKILL.md`).
 
 ## Labels
 
@@ -75,6 +78,7 @@ Ideas of your own become new issues labelled `idea`, never extra code in the cur
 | `P1` `P2` `P3` | owner/agent | Priority (lower number first). |
 | `regression` | owner | A release broke something; picked before everything else. |
 | `feature`, `process` | owner/agent | Kind of work. |
+| `bug` | owner/agent | A defect. One the agent filed (body `🤖 agent:`) is work without `approved`; `hold`/`rejected` stop it. |
 | `needs-design` | owner/agent | The agent writes its own design notes in `docs/design/` on the feature branch before coding. Not a gate; the owner does not approve designs. |
 | `approved` | owner | Makes an `idea` or a non-owner issue implementable. |
 | `idea` | agent | Agent's own proposal; not implemented until `approved`. |
