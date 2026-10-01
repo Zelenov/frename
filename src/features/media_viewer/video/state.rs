@@ -88,6 +88,8 @@ pub struct VideoPlayerState {
     /// Cue the list last scrolled to; the list follows only when this changes, so a
     /// user scrolling it by hand is not fought on every tick.
     followed_cue: Option<usize>,
+    /// Where the subtitle list is scrolled to; put back when fullscreen rebuilds the list.
+    cue_scroll_y: f32,
     /// A clicked range is playing: pause when playback reaches its end. Any seek or pause by
     /// the user forgets it.
     play_until: Option<RangePlay>,
@@ -132,6 +134,7 @@ impl Default for VideoPlayerState {
             notice_count: 0,
             position: Duration::ZERO,
             followed_cue: None,
+            cue_scroll_y: 0.0,
             play_until: None,
             resume_at: None,
             rotation: None,
@@ -190,6 +193,7 @@ impl VideoPlayerState {
         self.subtitles = None;
         self.position = Duration::ZERO;
         self.followed_cue = None;
+        self.cue_scroll_y = 0.0;
         self.play_until = None;
         self.paused = paused;
         self.load_generation = self.load_generation.wrapping_add(1);
@@ -488,6 +492,18 @@ impl VideoPlayerState {
                 }
                 Task::none()
             }
+            Message::CueListScrolled(y) => {
+                self.cue_scroll_y = y;
+                Task::none()
+            }
+            Message::RestoreCueScroll => iced::widget::operation::scroll_to::<()>(
+                iced::widget::Id::new(CUE_LIST_SCROLLABLE_ID),
+                iced::widget::scrollable::AbsoluteOffset {
+                    x: None,
+                    y: Some(self.cue_scroll_y),
+                },
+            )
+            .discard(),
             Message::SeekToCue(index) => {
                 let Some(cue) = self.subtitles.as_ref().and_then(|s| s.cues().get(index)) else {
                     return Task::none();

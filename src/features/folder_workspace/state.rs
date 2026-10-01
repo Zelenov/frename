@@ -30,7 +30,7 @@ use crate::features::file_menu::{self, FileAction, FileMenuState};
 use crate::features::file_name_panel::{self, FileNamePanelState};
 use crate::features::file_workspace::FileWorkspace;
 use crate::features::folder;
-use crate::features::markers::MarkersState;
+use crate::features::markers::{self, MarkersState};
 use crate::features::media_viewer::{self, video as media_viewer_video, MediaViewerState};
 use crate::features::sync_panel;
 use crate::features::tag_grid::groups::Shape;
@@ -279,7 +279,14 @@ impl FolderWorkspace {
                 media_viewer::Message::ToggleFullscreen => {
                     if self.media_viewer.is_previewable() {
                         self.media_fullscreen = !self.media_fullscreen;
+                        return Task::done(Message::RestoreListScrolls);
                     }
+                    Task::none()
+                }
+                media_viewer::Message::Video(media_viewer_video::Message::Markers(
+                    markers::Message::Scrolled(y),
+                )) => {
+                    self.markers.set_scroll_y(y);
                     Task::none()
                 }
                 media_viewer::Message::SegmentStartMarked(secs) => self.set_segment_start(secs),
@@ -374,9 +381,16 @@ impl FolderWorkspace {
                 // Only toggle when a video is shown.
                 if self.media_viewer.is_previewable() {
                     self.media_fullscreen = !self.media_fullscreen;
+                    return Task::done(Message::RestoreListScrolls);
                 }
                 Task::none()
             }
+            Message::RestoreListScrolls => Task::batch([
+                marker_actions::scroll_marker_list_to(self.markers.scroll_y()),
+                Task::done(Message::MediaViewer(media_viewer::Message::Video(
+                    media_viewer_video::Message::RestoreCueScroll,
+                ))),
+            ]),
             Message::SetSegmentStart | Message::SetSegmentEnd if self.inline_rename.is_some() => {
                 Task::none()
             }
@@ -449,7 +463,7 @@ impl FolderWorkspace {
                 }
                 if self.media_fullscreen {
                     self.media_fullscreen = false;
-                    return Task::none();
+                    return Task::done(Message::RestoreListScrolls);
                 }
                 if self.batch.is_active() {
                     // A running job ignores `SetActive` (see `BatchState::update`), so batch mode
@@ -5429,5 +5443,44 @@ mod tests {
         let _ = workspace.update(Message::Undo);
         assert_eq!(marker_names(&workspace)[0], (1_000, String::new()));
         assert_eq!(marker_names(&workspace).len(), 2, "no marker was undone");
+    }
+
+    /// Issue #142: fullscreen builds the lists anew, so their scroll offsets are kept in the
+    /// state and put back by a task after each toggle, both ways.
+    #[test]
+    fn the_marker_list_scroll_is_kept_across_fullscreen() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let scrolled = |w: &mut FolderWorkspace, y: f32| {
+            let _ = w.update(Message::MediaViewer(
+                crate::features::media_viewer::Message::Video(
+                    crate::features::media_viewer::video::Message::Markers(M::Scrolled(y)),
+                ),
+            ));
+        };
+        scrolled(&mut workspace, 120.0);
+        assert_eq!(workspace.markers.scroll_y(), 120.0);
+
+        for expect_fullscreen in [true, false] {
+            let task = workspace.update(Message::ToggleMediaFullscreen);
+            assert_eq!(workspace.media_fullscreen, expect_fullscreen);
+            assert_eq!(
+                task.units(),
+                1,
+                "the toggle asks for the lists to be put back"
+            );
+        }
+        assert_eq!(
+            workspace.markers.scroll_y(),
+            120.0,
+            "the offset is not lost"
+        );
+        let task = workspace.update(Message::RestoreListScrolls);
+        assert_eq!(
+            task.units(),
+            2,
+            "marker list and subtitle list are scrolled back"
+        );
     }
 }

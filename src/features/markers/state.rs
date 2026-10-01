@@ -56,6 +56,9 @@ pub struct MarkersState {
     followed: Option<usize>,
     /// The marker `F2` is held on; it grows with the playhead.
     recording: Option<Recording>,
+    /// Where the list is scrolled to (from the top). The list's own offset is lost when the
+    /// view builds it somewhere else in the tree (fullscreen on or off), so it is put back.
+    scroll_y: f32,
 }
 
 impl MarkersState {
@@ -158,6 +161,14 @@ impl MarkersState {
     /// Record the row the list follows; returns whether it changed.
     pub fn follow(&mut self, row: Option<usize>) -> bool {
         std::mem::replace(&mut self.followed, row) != row
+    }
+
+    pub fn scroll_y(&self) -> f32 {
+        self.scroll_y
+    }
+
+    pub fn set_scroll_y(&mut self, y: f32) {
+        self.scroll_y = y;
     }
 
     /// Start over for another file.

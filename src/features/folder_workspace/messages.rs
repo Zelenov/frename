@@ -78,6 +78,9 @@ pub enum Message {
     ScrollFolderListToSelected,
     /// Internal: update cached folder list scroll Y after programmatic scroll.
     FolderListScrollAdjusted(f32),
+    /// Fullscreen went on or off: put the marker list and the subtitle list back where they
+    /// were scrolled to (the view built them anew).
+    RestoreListScrolls,
     /// Toggle fullscreen mode for the media viewer (F5).
     ToggleMediaFullscreen,
     /// Escape pressed globally: exits fullscreen if active, otherwise clears the search bar filter.

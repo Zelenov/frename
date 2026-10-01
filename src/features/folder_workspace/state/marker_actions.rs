@@ -126,7 +126,7 @@ impl FolderWorkspace {
         if self.file_workspace.file().is_none() {
             return Task::none();
         }
-        if !matches!(msg, M::Add | M::KeyDown | M::KeyUp) {
+        if !matches!(msg, M::Add | M::KeyDown | M::KeyUp | M::Scrolled(_)) {
             self.markers.forget_added();
         }
         match msg {
@@ -192,6 +192,10 @@ impl FolderWorkspace {
             }
             M::Delete(guid) => {
                 self.delete_marker(&guid);
+                Task::none()
+            }
+            M::Scrolled(y) => {
+                self.markers.set_scroll_y(y);
                 Task::none()
             }
         }
@@ -518,7 +522,7 @@ fn seek_exact(ms: u64) -> Task<Message> {
 
 /// Scroll the marker list to `y`: the top of the row before the one to show, so it keeps a
 /// row of context above it (see [`markers::view::row_offset`]).
-fn scroll_marker_list_to(y: f32) -> Task<Message> {
+pub(super) fn scroll_marker_list_to(y: f32) -> Task<Message> {
     let offset = iced::widget::scrollable::AbsoluteOffset {
         x: None,
         y: Some(y),

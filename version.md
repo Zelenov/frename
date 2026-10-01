@@ -1,3 +1,7 @@
+# 0.95
+## Fixed
+- The marker list and the subtitle list keep their scroll position when you switch fullscreen on or off.
+
 # 0.94
 ## Added
 - Undo (`Ctrl+Z`) and Redo (`Ctrl+Y`) also cover a rename by hand (double-click), the comment (what you type until the box loses the keys is one step), a marker's name (one step per row), and Sync up, Sync down and the lock.

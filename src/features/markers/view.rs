@@ -163,6 +163,7 @@ fn marker_list<'a>(
                 ..Padding::ZERO
             }),
     )
+    .on_scroll(|viewport| Message::Scrolled(viewport.absolute_offset().y))
     .into()
 }
 
