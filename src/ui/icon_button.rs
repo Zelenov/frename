@@ -35,6 +35,7 @@ pub struct IconButton<M> {
     on_press: Option<M>,
     hold: Option<(M, M)>,
     tip: Option<(Tip, Position)>,
+    tips: bool,
 }
 
 impl<M: Clone> IconButton<M> {
@@ -61,6 +62,7 @@ impl<M: Clone> IconButton<M> {
             on_press: None,
             hold: None,
             tip: None,
+            tips: true,
         }
     }
 
@@ -127,6 +129,17 @@ impl<M: Clone> IconButton<M> {
     pub fn tip(mut self, tip: impl Into<Tip>, position: Position) -> Self {
         self.tip = Some((tip.into(), position));
         self
+    }
+
+    /// `false`: no tooltip, whatever `tip` says (fullscreen is for watching).
+    pub fn tips(mut self, on: bool) -> Self {
+        self.tips = on;
+        self
+    }
+
+    /// The tooltip to show, if any: none when `tips` is off.
+    fn shown_tip(&self) -> Option<(Tip, Position)> {
+        self.tip.clone().filter(|_| self.tips)
     }
 
     fn kind(&self) -> ButtonKind {
@@ -199,9 +212,31 @@ impl<'a, M: Clone + 'a> From<IconButton<M>> for Element<'a, M> {
         } else {
             pressable.into()
         };
-        match b.tip {
+        match b.shown_tip() {
             Some((tip, position)) => tooltip::tip(body, tip, position),
             None => body,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn button() -> IconButton<()> {
+        IconButton::new(Icon::Play).tip(Tip::new("Play"), Position::Top)
+    }
+
+    #[test]
+    fn a_button_shows_its_tooltip() {
+        let (tip, position) = button().shown_tip().expect("a tooltip");
+        assert_eq!(tip.label, "Play");
+        assert_eq!(position, Position::Top);
+    }
+
+    #[test]
+    fn with_tips_off_a_button_has_no_tooltip() {
+        assert!(button().tips(false).shown_tip().is_none());
+        assert!(button().tips(false).tips(true).shown_tip().is_some());
     }
 }

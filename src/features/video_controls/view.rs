@@ -83,8 +83,8 @@ impl<M: Clone> Command<M> {
         }
     }
 
-    /// The icon button in the bar, with its tooltip above it.
-    pub fn button<'a>(self) -> Element<'a, M>
+    /// The icon button in the bar, with its tooltip above it, unless `tips` is off (fullscreen).
+    pub fn button<'a>(self, tips: bool) -> Element<'a, M>
     where
         M: 'a,
     {
@@ -99,7 +99,8 @@ impl<M: Clone> Command<M> {
         let base = base
             .latched(self.latched)
             .held(self.held)
-            .tip(tip, Position::Top);
+            .tip(tip, Position::Top)
+            .tips(tips);
         let pressable: Element<'a, M> = match (self.hold, self.on_press.is_some()) {
             (Some((down, up)), true) => base.on_hold(down, up).into(),
             _ => base.on_press_maybe(self.on_press).into(),
@@ -140,9 +141,13 @@ impl<M: Clone> Command<M> {
     }
 }
 
-/// Buttons of one group: their 32-px squares touch.
-pub fn group<'a, M: Clone + 'a>(commands: impl IntoIterator<Item = Command<M>>) -> Row<'a, M> {
-    Row::with_children(commands.into_iter().map(Command::button)).align_y(Alignment::Center)
+/// Buttons of one group: their 32-px squares touch. `tips` off: no tooltips (fullscreen).
+pub fn group<'a, M: Clone + 'a>(
+    commands: impl IntoIterator<Item = Command<M>>,
+    tips: bool,
+) -> Row<'a, M> {
+    Row::with_children(commands.into_iter().map(|command| command.button(tips)))
+        .align_y(Alignment::Center)
 }
 
 /// Back 10 s, play or pause, forward 10 s. The play button shows what a click will do.

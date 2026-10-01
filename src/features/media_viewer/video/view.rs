@@ -264,8 +264,9 @@ fn cannot_rotate(state: &VideoPlayerState) -> Option<String> {
 
 fn controls_of<'a>(
     commands: impl IntoIterator<Item = Command<video_controls::Message>>,
+    tips: bool,
 ) -> Row<'a, Message> {
-    controls::group(commands.into_iter().map(|c| c.map(Message::Controls)))
+    controls::group(commands.into_iter().map(|c| c.map(Message::Controls)), tips)
 }
 
 /// The controls bar (§13.3.5): transport · in/out · mark · rotate · the notice slot · time ·
@@ -278,24 +279,29 @@ fn controls_bar<'a>(
     position_secs: f32,
 ) -> container::Container<'a, Message> {
     let controls_state = state.controls();
+    // Fullscreen is for watching: the buttons show no tooltips there.
+    let tips = !is_fullscreen;
     let mut groups: Vec<Element<'a, Message>> = vec![
-        controls_of(controls::transport(controls_state)).into(),
-        controls_of(controls::in_out()).into(),
+        controls_of(controls::transport(controls_state), tips).into(),
+        controls_of(controls::in_out(), tips).into(),
     ];
     if fold.mark {
-        groups.push(controls_of(mark_commands(markers)).into());
+        groups.push(controls_of(mark_commands(markers), tips).into());
     }
     if fold.rotate {
-        groups.push(controls_of(controls::rotate(cannot_rotate(state))).into());
+        groups.push(controls_of(controls::rotate(cannot_rotate(state)), tips).into());
     }
     // The free space holds the notice when it is wide enough (otherwise it floats over the
     // picture).
     let notice: Element<'a, Message> = match state.notice().filter(|_| fold.notice_in_bar) {
-        Some(notice) => tooltip::tip_text(
-            text::secondary(notice).wrapping(iced::widget::text::Wrapping::None),
-            notice,
-            Position::Top,
-        ),
+        Some(notice) => {
+            let line = text::secondary(notice).wrapping(iced::widget::text::Wrapping::None);
+            if tips {
+                tooltip::tip_text(line, notice, Position::Top)
+            } else {
+                line.into()
+            }
+        }
         None => space().into(),
     };
     groups.push(container(notice).width(Length::Fill).clip(true).into());
@@ -312,6 +318,7 @@ fn controls_bar<'a>(
                 IconButton::new(Icon::Volume)
                     .latched(state.more_open())
                     .tip(Tip::new(fl!("video-controls-volume-scroll")), Position::Top)
+                    .tips(tips)
                     .on_press(Message::ToggleMore),
             )
             .on_scroll(move |delta| {
@@ -327,7 +334,7 @@ fn controls_bar<'a>(
         views.extend(
             list_commands(state, markers)
                 .into_iter()
-                .map(Command::button),
+                .map(|command| command.button(tips)),
         );
     }
     if fold.has_more() {
@@ -335,11 +342,12 @@ fn controls_bar<'a>(
             IconButton::new(Icon::Ellipsis)
                 .latched(state.more_open())
                 .tip(Tip::new(fl!("video-controls-more")), Position::Top)
+                .tips(tips)
                 .on_press(Message::ToggleMore)
                 .into(),
         );
     }
-    views.push(fullscreen_command(is_fullscreen).button());
+    views.push(fullscreen_command(is_fullscreen).button(tips));
     groups.push(Row::with_children(views).align_y(Alignment::Center).into());
 
     container(
