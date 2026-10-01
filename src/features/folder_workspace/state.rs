@@ -367,10 +367,7 @@ impl FolderWorkspace {
             Message::RotateVideoWhileTyping(quarter_turns) => {
                 self.rotate_video_unless_writing(quarter_turns)
             }
-            Message::ToggleMediaFullscreen => {
-                // Only toggle when a video is shown.
-                self.set_fullscreen(!self.media_fullscreen)
-            }
+            Message::ToggleMediaFullscreen => self.set_fullscreen(!self.media_fullscreen),
             Message::RestoreListScrolls { markers_y, cues_y } => {
                 // Only a list on screen reports back; armed otherwise it would fire much later.
                 if self.media_viewer.marker_list_shown() {

@@ -2,6 +2,8 @@
 //! scrollbar on the right, always, so the scrollbar never lies over content and nothing jumps
 //! when the content starts or stops overflowing.
 
+use std::time::{Duration, Instant};
+
 use iced::widget::scrollable::{Direction, Scrollbar};
 use iced::widget::{container, scrollable, Id, Scrollable};
 use iced::{Element, Length, Padding};
@@ -43,21 +45,36 @@ pub fn keep_row_in_view(offset: f32, viewport: f32, top: f32, bottom: f32, fallb
 #[derive(Debug, Default)]
 pub struct ScrollRestore {
     offset: f32,
-    armed: bool,
+    armed_at: Option<Instant>,
 }
+
+/// How long after a restore a report still counts as its own: a list whose content fits its
+/// viewport reports nothing, so the wait must not outlive the toggle.
+const RESTORE_WINDOW: Duration = Duration::from_millis(750);
 
 impl ScrollRestore {
     /// The list is being put back at `offset`.
     pub fn arm(&mut self, offset: f32) {
         self.offset = offset;
-        self.armed = true;
+        self.armed_at = Some(Instant::now());
     }
 
     /// A scroll report at `offset`; true when it is the one that ends the restore.
     pub fn report(&mut self, offset: f32) -> bool {
-        let ends = self.armed && (offset != 0.0 || self.offset == 0.0);
+        self.report_at(offset, Instant::now())
+    }
+
+    fn report_at(&mut self, offset: f32, now: Instant) -> bool {
+        let Some(armed_at) = self.armed_at else {
+            return false;
+        };
+        if now.duration_since(armed_at) > RESTORE_WINDOW {
+            self.armed_at = None;
+            return false;
+        }
+        let ends = offset != 0.0 || self.offset == 0.0;
         if ends {
-            self.armed = false;
+            self.armed_at = None;
         }
         ends
     }
@@ -83,6 +100,18 @@ mod tests {
         assert!(!restore.report(0.0), "the fresh list's own report");
         assert!(restore.report(90.0), "clamped: shorter than asked for");
         assert!(!restore.report(90.0), "done");
+    }
+
+    #[test]
+    fn a_report_long_after_the_restore_is_not_its_own() {
+        let mut restore = ScrollRestore::default();
+        restore.arm(120.0);
+        let later = Instant::now() + RESTORE_WINDOW * 2;
+        assert!(
+            !restore.report_at(40.0, later),
+            "a list that fits never reported"
+        );
+        assert!(!restore.report(40.0), "and the wait is over");
     }
 
     #[test]
