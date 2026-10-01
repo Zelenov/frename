@@ -300,7 +300,12 @@ impl InstanceLock {
             .ok()?;
         match file.try_lock() {
             Ok(()) => Some(Self { _file: file }),
-            Err(_) => None,
+            // Another frename holds it.
+            Err(std::fs::TryLockError::WouldBlock) => None,
+            Err(std::fs::TryLockError::Error(e)) => {
+                log::warn!("recovery: the journal lock could not be taken: {e}");
+                None
+            }
         }
     }
 }

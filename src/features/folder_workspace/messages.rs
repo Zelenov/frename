@@ -76,7 +76,6 @@ pub enum Message {
     /// A journal write finished (what was written, or why not).
     JournalWritten(
         frename_core::FileId,
-        u64,
         Option<(frename_core::recovery::Entry, Result<(), String>)>,
     ),
     /// Undo the last undoable action (Ctrl+Z).

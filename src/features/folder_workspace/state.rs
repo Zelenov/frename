@@ -127,10 +127,10 @@ pub struct FolderWorkspace {
     journal_written: Option<(FileId, frename_core::recovery::Entry)>,
     /// The open clip was reopened with edits still waiting to be saved: journal it as it is.
     journal_force: bool,
-    /// A journal write is running (one at a time), and which clip's state it belongs to: bumped
-    /// when a clip is saved or another opens, so a write that lands later is dropped.
-    journal_in_flight: bool,
-    journal_epoch: u64,
+    /// The clip whose journal entry is being written (one write at a time), and whether that
+    /// clip was saved meanwhile: then the entry is removed when the write lands.
+    journal_in_flight: Option<FileId>,
+    journal_saved_while_writing: bool,
     /// Messages from the start (edits restored after a crash), shown once a clip is open.
     startup_notes: Vec<String>,
     /// Files whose markers were shown from the video and then edited into the comment: the
@@ -215,8 +215,8 @@ impl FolderWorkspace {
             journal_baseline: None,
             journal_written: None,
             journal_force: false,
-            journal_in_flight: false,
-            journal_epoch: 0,
+            journal_in_flight: None,
+            journal_saved_while_writing: false,
             startup_notes: Vec::new(),
             clear_from_video: HashSet::new(),
             drag_out: DragOutState::default(),
@@ -268,8 +268,8 @@ impl FolderWorkspace {
                 results,
             } => self.comment_batch_loaded(generation, results),
             Message::JournalTick => Task::batch([self.journal_tick(), self.show_startup_notes()]),
-            Message::JournalWritten(id, epoch, outcome) => {
-                self.journal_written(id, epoch, outcome);
+            Message::JournalWritten(id, outcome) => {
+                self.journal_written(id, outcome);
                 Task::none()
             }
             Message::SpinnerTick => {
@@ -1286,6 +1286,7 @@ impl FolderWorkspace {
 
         // Markers first, while the file still has the path they were read from; they travel
         // with it through the rename. Kept in the comment, they go back into it as lines.
+        let saved_state = snapshot.clone();
         let mut snapshot = snapshot;
         let mut moved_markers = None;
         let markers_saved = match (snapshot.markers(), frename_core::marker_storage()) {
@@ -1358,7 +1359,7 @@ impl FolderWorkspace {
             && !self.unsaved_markers.contains_key(&id)
             && frename_core::recovery::saved_what_was_wanted(&snapshot, &snapshot_after_save)
         {
-            self.journal_saved(id, &path_before, &new_path);
+            self.journal_saved(id, &path_before, &new_path, &saved_state);
         }
         // A file menu action waiting for this save runs now, on the name the file has on disk.
         let file_action = self.file_action_after_save(id, refused);
@@ -4589,8 +4590,7 @@ mod tests {
     fn tick(workspace: &mut FolderWorkspace) {
         if let Some((id, entry)) = workspace.journal_next_write() {
             let result = frename_core::recovery::write(&entry).map_err(|e| e.to_string());
-            let epoch = workspace.journal_epoch;
-            workspace.journal_written(id, epoch, Some((entry, result)));
+            workspace.journal_written(id, Some((entry, result)));
         }
     }
 
@@ -4669,8 +4669,8 @@ mod tests {
         let mut workspace = journal_workspace(&test_dir);
         pick_tag(&mut workspace);
         // The tick starts a write...
-        let epoch = workspace.journal_epoch;
         let (id, entry) = workspace.journal_next_write().expect("a write is due");
+        workspace.journal_in_flight = Some(id);
         let result = frename_core::recovery::write(&entry).map_err(|e| e.to_string());
         // ...the clip is left and saved before the result is delivered...
         let (saved_id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
@@ -4679,11 +4679,30 @@ mod tests {
             snapshot,
         });
         // ...then the write's result arrives: the entry it wrote must go.
-        workspace.journal_written(id, epoch, Some((entry, result)));
+        workspace.journal_written(id, Some((entry, result)));
         assert_eq!(
             journal_files(&test_dir),
             0,
             "saved edits leave no entry behind"
+        );
+    }
+
+    #[test]
+    fn a_write_that_lands_after_another_clip_opened_keeps_the_entry_of_the_left_one() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = journal_workspace(&test_dir);
+        pick_tag(&mut workspace);
+        let (id, entry) = workspace.journal_next_write().expect("a write is due");
+        workspace.journal_in_flight = Some(id);
+        let result = frename_core::recovery::write(&entry).map_err(|e| e.to_string());
+        // The user opens the next clip; the left one's save waits for its video to unload.
+        let _ = workspace.update(Message::Folder(folder::Message::NextFile));
+        flush_file_opened(&mut workspace);
+        workspace.journal_written(id, Some((entry, result)));
+        assert_eq!(
+            journal_files(&test_dir),
+            1,
+            "unsaved edits keep their entry"
         );
     }
 
@@ -4693,7 +4712,7 @@ mod tests {
         let mut workspace = journal_workspace(&test_dir);
         pick_tag(&mut workspace);
         let _first = workspace.journal_tick();
-        assert!(workspace.journal_in_flight);
+        assert!(workspace.journal_in_flight.is_some());
         let second = workspace.journal_tick();
         assert_eq!(second.units(), 0, "no second write while one runs");
     }

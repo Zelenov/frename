@@ -29,8 +29,6 @@ impl FolderWorkspace {
     /// opened again while its save still waits for the video to unload has edits that are not
     /// on disk: they count as unsaved from the start.
     pub(super) fn journal_reset_baseline(&mut self) {
-        // A write still running belongs to the clip left: its result is dropped when it lands.
-        self.journal_epoch += 1;
         self.journal_baseline = self.journal_entry();
         self.journal_written = None;
         self.journal_force = self
@@ -44,14 +42,14 @@ impl FolderWorkspace {
     /// `fsync`) runs off the interface's thread.
     pub(super) fn journal_tick(&mut self) -> Task<Message> {
         // One write at a time: a slow disk must not pile up writes to the same file.
-        if self.journal_in_flight {
+        if self.journal_in_flight.is_some() {
             return Task::none();
         }
         let Some((id, entry)) = self.journal_next_write() else {
             return Task::none();
         };
-        self.journal_in_flight = true;
-        let epoch = self.journal_epoch;
+        self.journal_in_flight = Some(id);
+        self.journal_saved_while_writing = false;
         Task::perform(
             async move {
                 tokio::task::spawn_blocking(move || {
@@ -61,7 +59,7 @@ impl FolderWorkspace {
                 .await
                 .ok()
             },
-            move |outcome| Message::JournalWritten(id, epoch, outcome),
+            move |outcome| Message::JournalWritten(id, outcome),
         )
     }
 
@@ -73,6 +71,7 @@ impl FolderWorkspace {
             return None;
         }
         let (id, now) = self.journal_entry()?;
+        // The baseline is set when a clip opens; these only catch a tick before that.
         let Some((baseline_id, baseline)) = self.journal_baseline.as_ref() else {
             self.journal_baseline = Some((id, now));
             return None;
@@ -103,17 +102,25 @@ impl FolderWorkspace {
     pub(super) fn journal_written(
         &mut self,
         id: FileId,
-        epoch: u64,
         outcome: Option<(Entry, Result<(), String>)>,
     ) {
-        self.journal_in_flight = false;
+        self.journal_in_flight = None;
+        let saved_meanwhile = std::mem::take(&mut self.journal_saved_while_writing);
         match outcome {
-            // The clip was saved, or another one opened, while this wrote: its edits are
-            // applied, so the entry it just wrote must not outlive them.
-            Some((entry, Ok(()))) if epoch != self.journal_epoch => recovery::remove(&entry.path),
+            // The clip was saved while its entry was being written: the edits are applied, so
+            // the entry just written must not outlive them.
+            Some((entry, Ok(()))) if saved_meanwhile => recovery::remove(&entry.path),
             Some((entry, Ok(()))) => {
+                // Another clip may be open by now: this one's entry stays on disk until its
+                // own save removes it (that save may still be waiting for the video to unload).
                 // The clip may have changed again while it wrote; the next tick sees that.
-                self.journal_written = Some((id, entry));
+                if self
+                    .journal_baseline
+                    .as_ref()
+                    .is_some_and(|(open, _)| *open == id)
+                {
+                    self.journal_written = Some((id, entry));
+                }
             }
             Some((_, Err(e))) => log::warn!("recovery: the journal could not be written: {e}"),
             None => log::warn!("recovery: the journal write did not finish"),
@@ -123,8 +130,16 @@ impl FolderWorkspace {
     /// The edits of the clip `id` were applied (saved and read back): its journal entry has done
     /// its job. `path_before` is where the clip was, `new_path` where it is. When it is the open
     /// clip, what it is now is the new reference.
-    pub(super) fn journal_saved(&mut self, id: FileId, path_before: &Path, new_path: &Path) {
-        self.journal_epoch += 1;
+    pub(super) fn journal_saved(
+        &mut self,
+        id: FileId,
+        path_before: &Path,
+        new_path: &Path,
+        saved: &frename_core::FileSnapshot,
+    ) {
+        if self.journal_in_flight == Some(id) {
+            self.journal_saved_while_writing = true;
+        }
         recovery::remove(path_before);
         if let Some((written_id, entry)) = self.journal_written.take() {
             if written_id == id {
@@ -135,9 +150,10 @@ impl FolderWorkspace {
         }
         self.journal_force = false;
         if self.file_workspace.file().is_some_and(|f| f.id() == id) {
-            // The open clip's own path still names the clip as it was (the rename reaches it
-            // with the next open), so the reference is taken for the new name.
-            self.journal_baseline = self.journal_entry_at(new_path);
+            // What was saved is the reference, not what the clip is now: edits made since are
+            // not on disk, so they are unsaved. The new name, as the rename reaches the open
+            // clip only with its next open.
+            self.journal_baseline = Entry::new(new_path, saved).map(|entry| (id, entry));
         }
     }
 
