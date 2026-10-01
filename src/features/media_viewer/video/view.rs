@@ -635,7 +635,9 @@ fn cue_list<'a>(subtitles: &'a Subtitles, list_cue: Option<usize>) -> Element<'a
                 ..Padding::ZERO
             }),
     )
-    .on_scroll(|viewport| Message::CueListScrolled(viewport.absolute_offset().y))
+    .on_scroll(|viewport| {
+        Message::CueListScrolled(viewport.absolute_offset().y, viewport.bounds().height)
+    })
     .into()
 }
 

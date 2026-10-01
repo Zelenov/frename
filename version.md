@@ -1,6 +1,6 @@
 # 0.95
 ## Fixed
-- The marker list and the subtitle list keep their scroll position when you switch fullscreen on or off.
+- The marker list and the subtitle list keep their scroll position when you switch fullscreen on or off (the lit marker or cue is brought into view if it would be hidden).
 
 # 0.94
 ## Added

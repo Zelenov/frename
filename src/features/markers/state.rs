@@ -59,6 +59,9 @@ pub struct MarkersState {
     /// Where the list is scrolled to (from the top). The list's own offset is lost when the
     /// view builds it somewhere else in the tree (fullscreen on or off), so it is put back.
     scroll_y: f32,
+    /// Set when the list was just put back at this offset: the next scroll report to reach it
+    /// carries the new viewport's height, to see whether the lit marker is still shown.
+    restored_to: Option<f32>,
 }
 
 impl MarkersState {
@@ -167,8 +170,20 @@ impl MarkersState {
         self.scroll_y
     }
 
-    pub fn set_scroll_y(&mut self, y: f32) {
+    /// Record where the list is scrolled to; true when this is the report of a restore (see
+    /// [`Self::restored`]), which is then done.
+    pub fn set_scroll_y(&mut self, y: f32) -> bool {
         self.scroll_y = y;
+        if self.restored_to == Some(y) {
+            self.restored_to = None;
+            return true;
+        }
+        false
+    }
+
+    /// The list is being put back at `y`.
+    pub fn restored(&mut self, y: f32) {
+        self.restored_to = Some(y);
     }
 
     /// Start over for another file.

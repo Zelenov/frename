@@ -26,6 +26,16 @@ pub fn vertical<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Scrollable<'a,
         .style(style::scrollable)
 }
 
+/// Where a list scrolled to `offset`, in a viewport `viewport` tall, should be so that the row
+/// spanning `top..bottom` is shown: `offset` itself when it is, else `fallback`.
+pub fn keep_row_in_view(offset: f32, viewport: f32, top: f32, bottom: f32, fallback: f32) -> f32 {
+    if top >= offset && bottom <= offset + viewport {
+        offset
+    } else {
+        fallback
+    }
+}
+
 /// [`vertical`] with the id a task scrolls it by.
 pub fn vertical_with_id<'a, M: 'a>(
     id: &'static str,
