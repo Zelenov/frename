@@ -380,7 +380,9 @@ impl FolderWorkspace {
 
     /// Open the row of the marker for editing, with its name focused, in the marker list.
     fn open_marker_row(&mut self, guid: String) -> Task<Message> {
-        // The name field takes the keys from the comment box.
+        // The name field takes the keys from the comment box; a row left open for this one is
+        // closed first, so what was typed in it is a step.
+        self.close_marker_row();
         self.end_comment_session();
         self.file_workspace.set_comment_focused(false);
         let Some(markers) = self.file_workspace.markers() else {

@@ -36,7 +36,7 @@ Two parts:
 
 - `Marker` has `start_ms` and `duration_ms`; `end_ms()` gives the end. Premiere reads and writes
   the length, and frename already reads, keeps and writes it (`markers_xmp.rs`).
-- Undo: `SetMarkerDurationCommand` is in core (its UI was removed before 0.70).
+- Undo: `SetMarkerDurationCommand` was in core (its UI was removed before 0.70); removed in #139, `SetMarkerSpanCommand` covers it.
 - The progress bar draws a band for a marker with a length (`BarMarker { start, end }`).
 - `marker_at` already treats the playhead as "on" a ranged marker from its start to its end, so
   the label (the pin's head) stays up for the whole range.

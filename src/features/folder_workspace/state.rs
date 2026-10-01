@@ -94,10 +94,10 @@ pub struct FolderWorkspace {
     /// The ID of the file navigated to (captured after dir.select_*).
     /// Taken by apply_file_opened, which pairs it with the file left.
     pending_to_file_id: Option<FileId>,
-    /// For each file left by a navigation whose save has not run yet, the file navigated to.
-    /// apply_file_updated pushes the NavigateFileCommand from it. Kept per file, not as one
-    /// value, so two navigations before the video unloads each get their own step.
-    navigation_targets: HashMap<FileId, FileId>,
+    /// The navigations whose save has not run yet, as (file left, file navigated to), oldest
+    /// first. apply_file_updated pushes the NavigateFileCommand from the first of its file. A
+    /// list, not one value, so navigations before the video unloads each get their own step.
+    navigation_targets: Vec<(FileId, FileId)>,
     left_width: f32,
     folder_width: f32,
     /// Last reported tag list scroll offset and viewport height (for scroll-into-view).
@@ -194,7 +194,7 @@ impl FolderWorkspace {
             comment_load_generation: 0,
             spinner_frame: 0,
             pending_to_file_id: None,
-            navigation_targets: HashMap::new(),
+            navigation_targets: Vec::new(),
             left_width,
             folder_width,
             tag_list_scroll_y: None,
@@ -858,7 +858,7 @@ impl FolderWorkspace {
         let snapshot = self.file_workspace.get_snapshot();
         let navigated_to = self.pending_to_file_id.take();
         if let (Some((left, _)), Some(to)) = (snapshot.as_ref(), navigated_to) {
-            self.navigation_targets.insert(*left, to);
+            self.navigation_targets.push((*left, to));
         }
         // A same-file refresh (undo, in-place rename) brings its own, newer state.
         let opened = if same_file {
@@ -1381,7 +1381,12 @@ impl FolderWorkspace {
         }
 
         // Push NavigateFileCommand when we have a valid to_file_id (set by select_* after navigating).
-        if let Some(to_file_id) = self.navigation_targets.remove(&id) {
+        let target = self
+            .navigation_targets
+            .iter()
+            .position(|(left, _)| *left == id)
+            .map(|i| self.navigation_targets.remove(i).1);
+        if let Some(to_file_id) = target {
             // A refused save never reached the file: undoing back to it must restore what is
             // really on disk (snapshot_after_save), not the picked-but-unsaved tags, or Ctrl+Z
             // would show them as if they had been saved.
@@ -5401,5 +5406,28 @@ mod tests {
         send_marker(&mut workspace, type_name("x"), 1_000);
         let _ = workspace.update(Message::Undo);
         assert_eq!(marker_names(&workspace), [(1_000, String::new())]);
+    }
+
+    #[test]
+    fn opening_another_marker_row_makes_the_first_rows_name_a_step() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        send_marker(&mut workspace, M::AddRange(5_000, 7_000), 5_000);
+        let guids: Vec<String> = workspace
+            .file_workspace()
+            .markers()
+            .unwrap()
+            .iter()
+            .map(|m| m.guid.clone().unwrap())
+            .collect();
+        send_marker(&mut workspace, M::Open(guids[0].clone()), 1_000);
+        send_marker(&mut workspace, type_name("first"), 1_000);
+        send_marker(&mut workspace, M::Open(guids[1].clone()), 5_000);
+        send_marker(&mut workspace, M::Close, 5_000);
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_names(&workspace)[0], (1_000, String::new()));
+        assert_eq!(marker_names(&workspace).len(), 2, "no marker was undone");
     }
 }

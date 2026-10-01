@@ -341,7 +341,7 @@ actions leave it alone.
 - **Rename**: markers live inside the video, so they move with it on disk. In memory, the renamed
   file's snapshot must carry the edited markers over (see "In memory").
 - **Undo**: add, delete, color and duration are undo commands in `frename-core/src/undo`, scoped to
-  the open file like in/out. Typing in name and comment is not undoable, like the comment box.
+  the open file like in/out. A marker's name is one undo step per row (#139); the comment box is one step per focus session.
 - **Leaving the file with an open row** (e.g. a click on another file): the typed text is in state
   already (every keystroke is a message), so it is saved and the row closes.
 
