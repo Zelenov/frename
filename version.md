@@ -1,3 +1,7 @@
+# 0.93
+## Fixed
+- Moving markers between the video and the comment no longer leaves two markers on one moment: a comment line for a moment that already has a marker renames it (keeping it the same marker for Premiere), a renamed marker rewrites its line instead of adding a second one, and markers a clip already has on the same moment are merged (different names are kept as `name — other name`).
+
 # 0.92
 ## Fixed
 - With markers kept in the comment (Settings → Saving) and comments in text files, markers are written into the comment as you add, rename, recolor, move or delete them, not only when you leave the clip. A comment file that cannot be written marks the file with the red ✕ and is tried again at your next change.

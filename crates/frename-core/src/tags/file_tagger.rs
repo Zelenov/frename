@@ -115,11 +115,28 @@ impl FileTagger {
                 result.past_end
             );
         }
-        if result.lines_moved == 0 && result.added.is_empty() {
+        // Markers a line renamed or recolored keep their place and GUID.
+        let mut all: Vec<Marker> = markers
+            .iter()
+            .map(|m| {
+                result
+                    .updated
+                    .iter()
+                    .find(|u| u.guid == m.guid)
+                    .unwrap_or(m)
+                    .clone()
+            })
+            .chain(result.added.iter().cloned())
+            .collect();
+        // Markers on one moment are one marker (see [`crate::merge_duplicate_markers`]).
+        let (merged, merged_away) = crate::markers::merge_duplicate_markers(&all);
+        all = merged;
+        let markers_changed =
+            !result.added.is_empty() || !result.updated.is_empty() || merged_away > 0;
+        if result.lines_moved == 0 && !markers_changed {
             return Ok(MoveOutcome::NothingToMove);
         }
-        if !result.added.is_empty() {
-            let all: Vec<Marker> = markers.into_iter().chain(result.added).collect();
+        if markers_changed {
             Self::save_markers(path, &all, &HashSet::new())?;
         }
         if result.lines_moved == 0 {
@@ -139,9 +156,18 @@ impl FileTagger {
         let Some(markers) = Self::load_markers(path) else {
             return Ok(MoveOutcome::NothingToMove);
         };
+        // Markers on one moment are one marker, in the video as well as in the lines.
+        let (markers, merged_away) = crate::markers::merge_duplicate_markers(&markers);
+        if merged_away > 0 {
+            Self::save_markers(path, &markers, &HashSet::new())?;
+        }
         let (comment, added) = crate::markers::markers_to_comment(snapshot.comment(), &markers);
         if added == 0 {
-            return Ok(MoveOutcome::NothingToMove);
+            return Ok(if merged_away > 0 {
+                MoveOutcome::Moved(path.to_path_buf())
+            } else {
+                MoveOutcome::NothingToMove
+            });
         }
         let was_commented = !snapshot.comment().trim().is_empty();
         snapshot.set_comment(comment);
@@ -591,5 +617,42 @@ AI: A walk.
             ),
             "removing the editor's text with the block kept removes the tag"
         );
+    }
+
+    fn clip_with_markers(name: &str, markers: &[Marker]) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("frename-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let file = dir.join("clip.mov");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
+        std::fs::copy(fixture, &file).expect("copy fixture");
+        FileTagger::save_markers(&file, markers, &HashSet::new()).expect("markers");
+        file
+    }
+
+    fn named(start_ms: u64, name: &str) -> Marker {
+        let mut m = Marker::new(start_ms);
+        m.name = name.to_string();
+        m
+    }
+
+    /// Issue #145: the owner's two lines on one frame become one marker in either direction, and
+    /// no number of rounds adds another.
+    #[test]
+    fn two_markers_on_one_frame_are_merged_by_both_move_actions() {
+        let both = [
+            named(63_558, "Субтитр: нет субтитра «Цельное дерево»"),
+            named(63_558, "нет субтитра «Цельное дерево»"),
+        ];
+        let file = clip_with_markers("dup-to-comment", &both);
+        FileTagger::markers_to_comment(&file).expect("move");
+        let markers = FileTagger::load_markers(&file).expect("markers");
+        assert_eq!(markers.len(), 1);
+        assert_eq!(markers[0].name, "Субтитр: нет субтитра «Цельное дерево»");
+        let _ = std::fs::remove_dir_all(file.parent().unwrap());
+
+        let file = clip_with_markers("dup-from-comment", &both);
+        FileTagger::comment_to_markers(&file).expect("move");
+        assert_eq!(FileTagger::load_markers(&file).expect("markers").len(), 1);
+        let _ = std::fs::remove_dir_all(file.parent().unwrap());
     }
 }

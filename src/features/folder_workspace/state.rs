@@ -4536,6 +4536,27 @@ mod tests {
         );
     }
 
+    /// Issue #145: F2 on a frame that already has a marker opens that marker; it adds no second.
+    #[test]
+    fn f2_on_a_frame_with_a_marker_opens_it_instead_of_adding_another() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 63_558);
+        send_marker(&mut workspace, M::Close, 63_558);
+        assert!(!workspace.markers().is_editing());
+        send_marker(&mut workspace, M::Add, 63_558);
+        assert_eq!(marker_names(&workspace).len(), 1);
+        assert!(workspace.markers().is_editing());
+        send_marker(&mut workspace, M::Close, 63_558);
+        send_marker(&mut workspace, M::Add, 63_558 + 100);
+        assert_eq!(
+            marker_names(&workspace).len(),
+            1,
+            "a frame away is the same moment"
+        );
+    }
+
     #[test]
     fn escape_closes_an_open_marker_row_first() {
         use crate::features::markers::Message as M;
