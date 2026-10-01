@@ -4553,7 +4553,7 @@ mod tests {
         assert_eq!(
             marker_names(&workspace).len(),
             1,
-            "a frame away is the same moment"
+            "within the snap is the same marker"
         );
     }
 

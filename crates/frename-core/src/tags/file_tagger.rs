@@ -136,7 +136,7 @@ impl FileTagger {
             .chain(result.added.iter().cloned())
             .collect();
         // Markers on one moment are one marker (see [`crate::merge_duplicate_markers`]).
-        let (all, merged_away) = crate::markers::merge_duplicate_markers(&renamed);
+        let (all, merged_away) = crate::merge_duplicate_markers(&renamed);
         let markers_changed =
             !result.added.is_empty() || !result.updated.is_empty() || merged_away > 0;
         if result.lines_moved == 0 && !markers_changed {
@@ -168,7 +168,7 @@ impl FileTagger {
         let Some(loaded) = Self::load_markers(path) else {
             return Ok((MoveOutcome::NothingToMove, 0));
         };
-        let (markers, merged_away) = crate::markers::merge_duplicate_markers(&loaded);
+        let (markers, merged_away) = crate::merge_duplicate_markers(&loaded);
         if merged_away > 0 {
             Self::save_markers(path, &markers, &known_guids(&loaded))?;
         }

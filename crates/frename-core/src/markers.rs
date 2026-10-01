@@ -474,9 +474,10 @@ pub fn comment_to_markers(
 ) -> CommentToMarkers {
     let block = crate::ai::block::ai_block_range(comment);
     let mut added: Vec<Marker> = Vec::new();
-    let mut updated: Vec<Marker> = Vec::new();
+    // The existing markers some line was about, as the lines leave them.
+    let mut touched: Vec<Marker> = Vec::new();
     let mut kept: Vec<&str> = Vec::new();
-    let mut lines_moved = 0;
+    let mut lines_moved: usize = 0;
     let mut past_end = 0;
     let mut ai_lines = 0;
     let mut offset = 0;
@@ -516,32 +517,42 @@ pub fn comment_to_markers(
             }
             continue;
         }
-        // A marker the line can change is preferred: one without a GUID is read-only.
+        // A marker the line can change is preferred (the first one if several): one without a
+        // GUID is read-only.
         let found = existing
             .iter()
             .filter(|m| is_at(m, &parsed, in_block))
-            .max_by_key(|m| m.guid.is_some());
+            .min_by_key(|m| m.guid.is_none());
         if let Some(found) = found {
             if !in_block {
                 match found.guid.as_ref() {
                     // It cannot be renamed: a line saying something else stays in the comment.
                     None if !has_text(found, &parsed) => {
-                        lines_moved -= 1;
+                        lines_moved = lines_moved.saturating_sub(1);
                         kept.push(line);
                     }
                     None => {}
-                    // The first line for a moment sets the marker, later ones join it.
                     Some(guid) => {
-                        match updated.iter_mut().find(|m| m.guid.as_ref() == Some(guid)) {
-                            Some(pending) => join_text(pending, &parsed),
-                            None if !has_text(found, &parsed) || parsed.color != found.color => {
+                        match touched.iter_mut().find(|m| m.guid.as_ref() == Some(guid)) {
+                            // Later lines for the moment join what the first one set.
+                            Some(marker) => join_text(marker, &parsed),
+                            // The first line for a moment sets the marker. What the line cannot
+                            // say stays: a color frename has no word for, a comment it has none of.
+                            None => {
                                 let mut marker = found.clone();
-                                marker.name = parsed.name.clone();
-                                marker.comment = parsed.comment.clone();
-                                marker.color = parsed.color;
-                                updated.push(marker);
+                                if !has_text(found, &parsed) {
+                                    marker.name = parsed.name.clone();
+                                    if !parsed.comment.is_empty() {
+                                        marker.comment = parsed.comment.clone();
+                                    }
+                                }
+                                let unnamed_color = matches!(found.color, MarkerColor::Other(_))
+                                    && parsed.color == MarkerColor::Green;
+                                if !unnamed_color {
+                                    marker.color = parsed.color;
+                                }
+                                touched.push(marker);
                             }
-                            None => {}
                         }
                     }
                 }
@@ -567,6 +578,11 @@ pub fn comment_to_markers(
         };
         added.push(marker);
     }
+    // Only the markers a line really changed are updates.
+    let updated = touched
+        .into_iter()
+        .filter(|marker| existing.iter().all(|m| m != marker))
+        .collect();
     CommentToMarkers {
         added,
         updated,
@@ -1327,5 +1343,25 @@ mod tests {
         let existing = [marker(10_000, 0, "Lion", "roars \r\n")];
         let result = comment_to_markers("0:10 — Lion — roars", &existing, None);
         assert!(result.updated.is_empty(), "{:?}", result.updated);
+    }
+
+    #[test]
+    fn a_matching_first_line_does_not_let_a_later_line_replace_the_name() {
+        let existing = [marker(10_000, 0, "Lion roars", "")];
+        let result = comment_to_markers("0:10 — Lion roars\n0:10 — Lion", &existing, None);
+        assert_eq!(result.comment, "");
+        assert!(result.updated.is_empty(), "{:?}", result.updated);
+    }
+
+    #[test]
+    fn a_color_frename_has_no_word_for_and_a_comment_the_line_lacks_survive_a_line() {
+        let mut existing = marker(10_000, 0, "Lion", "roars");
+        existing.color = MarkerColor::Other(12_345);
+        let result = comment_to_markers("0:10 — Lion", &[existing.clone()], None);
+        assert!(result.updated.is_empty(), "{:?}", result.updated);
+        let renamed = comment_to_markers("0:10 — Zebra", &[existing], None);
+        assert_eq!(renamed.updated[0].name, "Zebra");
+        assert_eq!(renamed.updated[0].comment, "roars");
+        assert_eq!(renamed.updated[0].color, MarkerColor::Other(12_345));
     }
 }

@@ -249,11 +249,11 @@ Actions:
   a second ` — ` or ` -- ` (not a plain ` - `) goes into the marker's comment, which Premiere
   shows and frename keeps but does not show. A marker's color is a word in brackets after the time
   (`0:41 [red] — Lion`; green, the default, has none). The moments of an AI description become white
-  markers too (with their length) and stay in the description. There is one marker per moment:
-  a comment line for a moment that already has a marker renames it instead of adding another. A
-  clip that already has doubled markers is repaired by running either of these two actions on
-  it; the result lists the clips where markers were merged. Different names are kept as
-  `name — other name`, which reads back as a name and a comment after the next move;
+  markers too (with their length) and stay in the description. One marker per moment: a comment
+  line for a moment that already has a marker renames it. Running either of these actions on a
+  clip with doubled markers repairs it and lists the clips it merged in (different names stay as
+  `name — other name`, which reads back as a name and a comment). Markers made by other tools
+  that Premiere would not recognise are left alone;
 - rotate the videos 90° right or left or 180°, or reset them to no rotation (this also removes
   a turn a phone recorded);
 - tag commented videos with "Commented" and untag the rest;
