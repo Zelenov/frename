@@ -1044,7 +1044,7 @@ F2's auto-repeat is ignored; what an open marker row blocks is listed under the 
 
 While a marker row is open, `[` `]`, `Shift`+`Space`, `Ctrl`+`Z`/`Y`, `Ctrl`+`C`/`V` and
 `Shift`+`F2` are ignored so typing a name cannot change the clip; `F1` `F3` `F12` keep working.
-Renaming a marker is written live and is not undoable (today; #62 may change it).
+Renaming a marker is written live; the name typed in a row is one undo step (#139).
 
 #### 13.3.5 Controls bar
 
@@ -1221,7 +1221,7 @@ chips are clipped mid-letter.
 | Hover | `state.hover` (today no hover at all) |
 | Selected = open | `state.selected`, a 2 px `accent.text` bar on the left edge |
 | Selected, file closed by a running job | `state.selected` without the bar, `lock` 12 in the status column |
-| Renaming | started by a double-click on the row (off in batch mode); the row becomes a text field (§8.6) with the whole file name, the part before the extension selected; an error goes on the second line in `error` with `circle-alert` 12 (Name is empty · Not allowed: \ / : * ? " < > \| · Cannot end with a dot or space · A file with this name exists; today it shares the field's line); Enter renames, Esc cancels. A rename re-reads the tags and in/out points from the new name; it is not undoable (today) |
+| Renaming | started by a double-click on the row (off in batch mode); the row becomes a text field (§8.6) with the whole file name, the part before the extension selected; an error goes on the second line in `error` with `circle-alert` 12 (Name is empty · Not allowed: \ / : * ? " < > \| · Cannot end with a dot or space · A file with this name exists; today it shares the field's line); Enter renames, Esc cancels. A rename re-reads the tags and in/out points from the new name; it is one undo step (#139) |
 | Checked (batch) | the checkbox; no other change |
 | Locked (batch job running) | rows unchanged, pointer cursor off, checkboxes disabled (§13.2 "Locks") |
 
@@ -1347,7 +1347,7 @@ glyphs:
 | Same, lock off | `lock-open` "Reordering below changes this clip only" and "Lock" |
 | The orders differ | `triangle-alert` in `warning` "Order differs from the folder" and two secondary buttons: `arrow-up` "Use for the folder" and `arrow-down` "Sort like the folder" |
 
-Neither button can be undone today: each has a tooltip that says so, until undo covers them.
+Both buttons, and the lock, are undoable (#139); a press that changes nothing pushes no step.
 
 #### 13.5.6 File name card
 - A `bg.raised` card, radius 6, padding 8.
@@ -1360,8 +1360,7 @@ Neither button can be undone today: each has a tooltip that says so, until undo 
   - a middle click removes the tag from the clip (undoable).
 - **Trash** at the right end: a 36 px square, `trash` 20 in `text.secondary`, dashed
   `border.control` edge; while a chip is dragged over it: `DANGER_TINT` fill, `error` edge and icon,
-  and "Untag" in `caption` SemiBold `error` under it (on the card's second line). A drop there untags the clip (undoable, like the middle click: today it is
-  not).
+  and "Untag" in `caption` SemiBold `error` under it (on the card's second line). A drop there untags the clip (undoable, like the middle click).
 - **Second line:** the IN and OUT timecodes (§8.16: `mono` in a `bg.overlay` pill with "IN"/"OUT" in
   `caption` `text.secondary` inside, and `x` to clear), then the file name part without tags in
   `mono`.

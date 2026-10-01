@@ -1,6 +1,6 @@
 //! The marker list (design system §13.3.6): one row per marker, read-only like a subtitle cue,
-//! except the one row open for renaming. A row's height follows from its name's lines, so the
-//! list is scrolled to a row by arithmetic, as the subtitle list is.
+//! except the one row open for renaming. A row is as tall as its name's lines; the list is
+//! scrolled to a row by an estimate of the rows above it ([`row_offset`]), as the subtitle list is.
 
 use frename_core::{format_marker_time, Marker, MarkerColor, AI_MARKER_COLOR, MARKER_SNAP_MS};
 use iced::widget::{
@@ -20,7 +20,7 @@ use crate::ui::{empty, list, scroll, text};
 
 pub const MARKER_LIST_SCROLLABLE_ID: &str = "marker_list";
 pub const MARKER_NAME_INPUT_ID: &str = "marker_name_input";
-/// Room for a name's text in a row of the list at its widest: the list less its inset, the
+/// (Scroll estimate only.) Room for a name's text in a row of the list at its widest: the list less its inset, the
 /// row's inset and the scroll gutter.
 const NAME_ROOM: f32 = SIDE_LIST_MAX_WIDTH - SPACE_S - SPACE_S - SPACE_S - SCROLL_GUTTER;
 /// A generous average advance of a character of the name.
@@ -47,7 +47,8 @@ fn name_lines(marker: &Marker) -> usize {
     marker.name.chars().count().div_ceil(per_line).max(1)
 }
 
-/// The height of `marker`'s row.
+/// Estimated height of `marker`'s row, for scrolling to a row only: the row itself is as tall as
+/// its content.
 fn row_height(marker: &Marker) -> f32 {
     MARKER_ROW_HEIGHT + (name_lines(marker) - 1) as f32 * LINE_BODY
 }
@@ -61,6 +62,28 @@ pub fn row_offset(markers: &[Marker], index: usize) -> f32 {
         .sum()
 }
 
+/// The offset to scroll the list to once it was put back at `offset` in a viewport `viewport`
+/// tall: `offset`, unless the lit marker (the last one the playhead passed) is out of view, then
+/// the offset the follow uses for it. `None` when the list is right as it is.
+pub fn offset_showing_lit(
+    markers: &[Marker],
+    passed: Option<usize>,
+    offset: f32,
+    viewport: f32,
+) -> Option<f32> {
+    let index = passed?;
+    let top = row_offset(markers, index);
+    let bottom = row_offset(markers, index + 1) - SPACE_XXS;
+    let wanted = crate::ui::scroll::keep_row_in_view(
+        offset,
+        viewport,
+        top,
+        bottom,
+        row_offset(markers, index.saturating_sub(1)),
+    );
+    (wanted != offset).then_some(wanted)
+}
+
 /// How long after a point marker its label stays shown over the progress bar, as a subtitle
 /// line stays for its cue.
 const NAME_HOLD_MS: u64 = 2_000;
@@ -69,18 +92,27 @@ const NAME_HOLD_MS: u64 = 2_000;
 /// name it): from just before its start to its end, or to [`NAME_HOLD_MS`] after a point
 /// marker. A marker already started wins over the next one coming up, then the latest start.
 pub fn marker_at(markers: &[Marker], position_ms: u64) -> Option<&Marker> {
+    lit_index(markers, position_ms).map(|index| &markers[index])
+}
+
+/// Index of the lit row: the marker the playhead is on, by the rule of [`marker_at`], so the
+/// list and the progress bar agree. `None` between markers and after the last one.
+pub fn lit_index(markers: &[Marker], position_ms: u64) -> Option<usize> {
     markers
         .iter()
-        .filter(|m| {
+        .enumerate()
+        .filter(|(_, m)| {
             let from = m.start_ms.saturating_sub(MARKER_SNAP_MS);
             let to = m.end_ms().max(m.start_ms + NAME_HOLD_MS);
             (from..=to).contains(&position_ms)
         })
-        .max_by_key(|m| (m.start_ms <= position_ms, m.start_ms))
+        .max_by_key(|(_, m)| (m.start_ms <= position_ms, m.start_ms))
+        .map(|(index, _)| index)
 }
 
-/// Index of the lit row: the last marker at or before `position_ms`.
-pub fn lit_index(markers: &[Marker], position_ms: u64) -> Option<usize> {
+/// Index of the last marker at or before `position_ms`, however long ago: where the list is
+/// kept scrolled to. Not the highlight (see [`lit_index`]).
+pub fn passed_index(markers: &[Marker], position_ms: u64) -> Option<usize> {
     markers.iter().rposition(|m| m.start_ms <= position_ms)
 }
 
@@ -149,9 +181,11 @@ fn marker_list<'a>(
             .spacing(SPACE_XXS)
             .padding(Padding {
                 left: SPACE_S,
+                bottom: SPACE_S,
                 ..Padding::ZERO
             }),
     )
+    .on_scroll(|viewport| Message::Scrolled(viewport.absolute_offset().y, viewport.bounds().height))
     .into()
 }
 
@@ -380,18 +414,10 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
     let body = column![first_line, name]
         .spacing(SPACE_XXS)
         .padding(ROW_INSET);
-    let height = if open.is_some() {
-        row_height(marker) + 2.0 * CONTROL_PADDING_Y
-    } else {
-        row_height(marker)
-    };
-    let item = container(list::row_item(
-        body,
-        lit || open.is_some(),
-        OVERLAY_HOVER,
-        Length::Fill,
-    ))
-    .height(height);
+    // The row is as tall as its content, not as the estimate of [`row_height`]: a name that wraps
+    // to more lines than estimated (a narrow list, a long name) must not be cut off, and the list
+    // sizes its scroll range from what is rendered.
+    let item = list::row_item(body, lit || open.is_some(), OVERLAY_HOVER, Length::Shrink);
 
     // The actions sit at the right end of the first line, over the row.
     let item: Element<'a, Message> = match actions {
@@ -409,7 +435,7 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
                 hover(item, place)
             }
         }
-        None => item.into(),
+        None => item,
     };
     // A click on the row (not on one of its buttons) opens it for renaming.
     match guid.filter(|_| open.is_none() && state.color_picker().is_none()) {
@@ -425,12 +451,45 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_lit_row_is_the_last_marker_at_or_before_the_playhead() {
-        let markers = [Marker::new(1_000), Marker::new(5_000)];
+    fn the_lit_row_is_the_marker_the_playhead_is_on() {
+        let mut range = Marker::new(20_000);
+        range.duration_ms = 6_000;
+        let markers = [Marker::new(1_000), Marker::new(5_000), range];
         assert_eq!(lit_index(&markers, 0), None);
         assert_eq!(lit_index(&markers, 1_000), Some(0));
-        assert_eq!(lit_index(&markers, 4_999), Some(0));
-        assert_eq!(lit_index(&markers, 9_000), Some(1));
+        assert_eq!(lit_index(&markers, 2_999), Some(0));
+        assert_eq!(lit_index(&markers, 3_001), None, "between two markers");
+        assert_eq!(lit_index(&markers, 5_500), Some(1));
+        assert_eq!(lit_index(&markers, 23_000), Some(2), "inside a range");
+        assert_eq!(lit_index(&markers, 26_000), Some(2), "at its end");
+        assert_eq!(lit_index(&markers, 26_001), None, "after the last one");
+    }
+
+    #[test]
+    fn a_point_marker_is_lit_for_two_seconds_and_then_not_at_all() {
+        let markers = [Marker::new(5_000)];
+        assert_eq!(lit_index(&markers, 7_000), Some(0));
+        assert_eq!(lit_index(&markers, 7_001), None);
+        assert_eq!(lit_index(&markers, 90_000), None);
+    }
+
+    #[test]
+    fn overlapping_markers_light_the_one_the_bar_labels() {
+        let mut long = Marker::new(1_000);
+        long.duration_ms = 20_000;
+        let markers = [long, Marker::new(5_000)];
+        for ms in [500, 1_000, 4_999, 5_000, 6_000, 8_000, 21_000] {
+            let lit = lit_index(&markers, ms).map(|i| &markers[i]);
+            assert_eq!(lit, marker_at(&markers, ms), "at {ms}");
+        }
+    }
+
+    #[test]
+    fn the_list_follows_the_last_marker_passed() {
+        let markers = [Marker::new(1_000), Marker::new(5_000)];
+        assert_eq!(passed_index(&markers, 0), None);
+        assert_eq!(passed_index(&markers, 4_999), Some(0));
+        assert_eq!(passed_index(&markers, 90_000), Some(1));
     }
 
     #[test]
@@ -471,5 +530,25 @@ mod tests {
         assert!(row_height(&long) > MARKER_ROW_HEIGHT + LINE_BODY);
         let markers = [long.clone(), short];
         assert_eq!(row_offset(&markers, 1), row_height(&long) + SPACE_XXS);
+    }
+
+    #[test]
+    fn a_restored_list_keeps_its_offset_unless_the_lit_marker_is_out_of_view() {
+        let markers: Vec<Marker> = (0..30).map(|i| Marker::new(i * 1_000)).collect();
+        let row = row_offset(&markers, 1);
+        let lit = Some(20);
+        let top = row_offset(&markers, 20);
+        // Shown: kept.
+        assert_eq!(
+            offset_showing_lit(&markers, lit, top - row, 3.0 * row),
+            None
+        );
+        // Below the fold (the viewport got shorter): the follow's offset, one row of context.
+        assert_eq!(
+            offset_showing_lit(&markers, lit, 0.0, 3.0 * row),
+            Some(row_offset(&markers, 19))
+        );
+        // No marker passed yet: nothing to show.
+        assert_eq!(offset_showing_lit(&markers, None, 0.0, 3.0 * row), None);
     }
 }

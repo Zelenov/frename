@@ -1,6 +1,48 @@
-# 0.88
+# 0.97
 ## Changed
 - Describe with AI: frames are chosen where the picture changes the most instead of a fixed interval, and a description's moments now cover only what stands out (a static or uniform clip can get none) instead of always tiling the whole clip, and a moment that only repeats the summary is left out.
+
+# 0.95
+## Fixed
+- The marker list and the subtitle list keep their scroll position when you switch fullscreen on or off (the lit marker or cue is brought into view if it would be hidden).
+
+# 0.94
+## Added
+- Undo (`Ctrl+Z`) and Redo (`Ctrl+Y`) also cover a rename by hand (double-click), the comment (what you type until the box loses the keys is one step), a marker's name (one step per row), and Sync up, Sync down and the lock.
+
+## Fixed
+- Two quick moves to other clips, before the video has let go of the first, are two undo steps, not one.
+- Dropping a tag chip on 🗑 can be undone.
+- `Shift+F2` on a marker another tool wrote without an id says that marker is read-only, not "No marker here".
+
+# 0.93
+## Fixed
+- In the batch window's action list and in Settings' navigation, the mouse cursor no longer drops to an arrow between two items.
+
+# 0.92
+## Fixed
+- With markers kept in the comment (Settings → Saving) and comments in text files, markers are written into the comment as you add, rename, recolor, move or delete them, not only when you leave the clip. A comment file that cannot be written marks the file with the red ✕ and is tried again at your next change.
+- With markers kept in the comment, a clip whose markers are still inside the video shows them; changing one moves them all into the comment.
+
+# 0.91
+## Fixed
+- The last marker in the marker list is no longer cut off at the bottom, however long its name is.
+
+# 0.90
+## Fixed
+- Undo (`Ctrl+Z`) brings back a deleted marker in batch mode, and works while a marker's name is open for editing (the name field closes first).
+- A turn of the video is undone in batch mode too.
+- `Ctrl+Z`, `Ctrl+Y`, `Ctrl+C` and `Ctrl+V` work on a Russian or any other non-Latin keyboard layout.
+- While the comment box has the keys, `Ctrl+Z` no longer undoes marker or tag changes behind your back.
+- When Undo steps back to the previous clip (the history is shared by the whole folder), a note says so; Undo again undoes the change in that clip.
+
+# 0.89
+## Fixed
+- Marker colors are no longer lost when markers are copied into the comment: a line reads `0:41 [red] — Lion` (green has no tag), and reading the comment back gives the same colors. Older lines still read as green.
+
+# 0.88
+## Fixed
+- The marker list lights a marker only while the playhead is on it; the last marker no longer stays lit until the end of the clip.
 
 # 0.87
 ## Added

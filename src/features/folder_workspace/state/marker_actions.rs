@@ -7,7 +7,7 @@ use std::path::Path;
 
 use frename_core::{
     AddMarkerCommand, DeleteMarkerCommand, FileId, FileTagger, Marker, MarkersError,
-    SetMarkerColorCommand, SetMarkerSpanCommand, MARKER_SNAP_MS,
+    SetMarkerColorCommand, SetMarkerNameCommand, SetMarkerSpanCommand, MARKER_SNAP_MS,
 };
 use iced::widget::operation;
 use iced::Task;
@@ -22,17 +22,111 @@ use crate::features::media_viewer::{self, video};
 const PREVIOUS_SLACK_MS: u64 = 750;
 
 impl FolderWorkspace {
-    /// Apply a marker key or marker list message; `position_ms` is the playhead.
+    /// Apply a marker key or marker list message; `position_ms` is the playhead. Markers kept in
+    /// a comment file are in it when this returns.
     pub(super) fn handle_marker(
         &mut self,
         msg: markers::Message,
         position_ms: u64,
     ) -> Task<Message> {
+        let before = self.file_workspace.markers().map(<[Marker]>::to_vec);
+        // A held `F2` grows its marker with the playhead without a message of its own: the
+        // press and the release always write.
+        let held_key = matches!(msg, markers::Message::KeyDown | markers::Message::KeyUp);
+        let task = self.apply_marker(msg, position_ms);
+        if held_key || self.file_workspace.markers().map(<[Marker]>::to_vec) != before {
+            return Task::batch([task, self.write_markers_to_comment_now()]);
+        }
+        task
+    }
+
+    /// With markers kept in the comment and the comment in a `.comment.txt`, write the open
+    /// clip's marker lines into it now, not when the clip is left, so a crash loses nothing
+    /// done here. A write that fails keeps the markers like a failed write into the video does:
+    /// the file is marked in the list and the next edit tries again. A clip whose markers are
+    /// still the video's, untouched, is left as it is; one edited back to that state loses its
+    /// lines again, so the two places agree.
+    pub(super) fn write_markers_to_comment_now(&mut self) -> Task<Message> {
+        if frename_core::marker_storage() != frename_core::MarkerStorage::Comment {
+            return Task::none();
+        }
+        let (Some(file), Some(markers)) =
+            (self.file_workspace.file(), self.file_workspace.markers())
+        else {
+            return Task::none();
+        };
+        let (id, path) = (file.id(), file.file_path().to_path_buf());
+        let untouched = self
+            .markers_in_video
+            .get(&id)
+            .is_some_and(|read| read.as_slice() == markers);
+        let lines: &[Marker] = if untouched { &[] } else { markers };
+        match frename_core::write_marker_lines(&path, lines) {
+            Ok(true) => {
+                self.unsaved_markers.remove(&id);
+                Task::none()
+            }
+            Ok(false) => Task::none(),
+            Err(e) => {
+                log::warn!("markers of {path:?} not written into the comment file: {e}");
+                // Said once, not at every edit that fails the same way.
+                let first = self.unsaved_markers.insert(id, markers.to_vec()).is_none();
+                if first {
+                    Self::notice("Markers not saved: the comment file is read-only or in use")
+                } else {
+                    Task::none()
+                }
+            }
+        }
+    }
+
+    /// The markers of the file `id` are in its comment: take them out of the video's XMP, so the
+    /// two places never disagree. A failed write leaves them there; the comment wins on the
+    /// next open, and the next save tries again.
+    pub(super) fn move_markers_out_of_video(&mut self, id: FileId, path: &Path) {
+        if !self.clear_from_video.contains(&id) {
+            return;
+        }
+        let known = self.known_marker_guids.clone();
+        match FileTagger::save_markers(path, &[], &known) {
+            Ok(()) => {
+                self.clear_from_video.remove(&id);
+                self.markers_in_video.remove(&id);
+            }
+            Err(e) => {
+                log::warn!("markers of {path:?} are in the comment, not out of the video: {e:?}");
+            }
+        }
+    }
+
+    /// Close the open marker row. The name typed in it is one undo step, pushed here, not one
+    /// per key.
+    pub(super) fn close_marker_row(&mut self) {
+        let Some(edit) = self.markers.edit() else {
+            return;
+        };
+        let (guid, original) = (edit.guid.clone(), edit.original_name.clone());
+        let now = self
+            .file_workspace
+            .tag_list()
+            .marker(&guid)
+            .map(|m| m.name.clone());
+        if let Some(new) = now.filter(|name| *name != original) {
+            self.history.push(Box::new(SetMarkerNameCommand {
+                guid,
+                old: original,
+                new,
+            }));
+        }
+        self.markers.close();
+    }
+
+    fn apply_marker(&mut self, msg: markers::Message, position_ms: u64) -> Task<Message> {
         use markers::Message as M;
         if self.file_workspace.file().is_none() {
             return Task::none();
         }
-        if !matches!(msg, M::Add | M::KeyDown | M::KeyUp) {
+        if !matches!(msg, M::Add | M::KeyDown | M::KeyUp | M::Scrolled(..)) {
             self.markers.forget_added();
         }
         match msg {
@@ -58,7 +152,7 @@ impl FolderWorkspace {
             M::JumpTo(ms) => seek_exact(ms),
             M::Open(guid) => self.open_marker_row(guid),
             M::Close => {
-                self.markers.close();
+                self.close_marker_row();
                 Task::none()
             }
             M::NameAction(action) => {
@@ -100,6 +194,23 @@ impl FolderWorkspace {
                 self.delete_marker(&guid);
                 Task::none()
             }
+            M::Scrolled(y, viewport) => {
+                // The list was just put back (fullscreen): keep the lit marker in view.
+                if !self.markers.set_scroll_y(y) || !self.media_viewer.marker_list_shown() {
+                    return Task::none();
+                }
+                let (Some(markers), Some(position_ms)) = (
+                    self.file_workspace.markers(),
+                    self.media_viewer.video_position_ms(),
+                ) else {
+                    return Task::none();
+                };
+                let passed = markers::view::passed_index(markers, position_ms);
+                match markers::view::offset_showing_lit(markers, passed, y, viewport) {
+                    Some(wanted) => scroll_marker_list_to(wanted),
+                    None => Task::none(),
+                }
+            }
         }
     }
 
@@ -114,7 +225,7 @@ impl FolderWorkspace {
         };
         let near = nearest(markers, position_ms).map(|m| m.guid.clone());
         if self.markers.is_editing() {
-            self.markers.close();
+            self.close_marker_row();
             return match near {
                 Some(_) => Task::none(),
                 None => self.add_marker(position_ms, false, held),
@@ -233,23 +344,25 @@ impl FolderWorkspace {
         if self.markers.is_editing() {
             return Task::none();
         }
-        let guid = self
+        let near = self
             .file_workspace
             .markers()
             .and_then(|markers| nearest(markers, position_ms))
-            .and_then(|m| m.guid.clone());
-        match guid {
-            Some(guid) => {
+            .map(|m| m.guid.clone());
+        match near {
+            Some(Some(guid)) => {
                 self.delete_marker(&guid);
                 Self::notice("Marker deleted")
             }
+            // Read-only: another tool wrote it without a GUID, so it could not be found again.
+            Some(None) => Self::notice("That marker is read-only"),
             None => Self::notice("No marker here"),
         }
     }
 
     fn delete_marker(&mut self, guid: &str) {
         if self.markers.edit().is_some_and(|e| e.guid == guid) {
-            self.markers.close();
+            self.close_marker_row();
         }
         if let Some(marker) = self.file_workspace.tag_list_mut().remove_marker(guid) {
             self.history.push(Box::new(DeleteMarkerCommand { marker }));
@@ -284,6 +397,11 @@ impl FolderWorkspace {
 
     /// Open the row of the marker for editing, with its name focused, in the marker list.
     fn open_marker_row(&mut self, guid: String) -> Task<Message> {
+        // The name field takes the keys from the comment box; a row left open for this one is
+        // closed first, so what was typed in it is a step.
+        self.close_marker_row();
+        self.end_comment_session();
+        self.file_workspace.set_comment_focused(false);
         let Some(markers) = self.file_workspace.markers() else {
             return Task::none();
         };
@@ -301,8 +419,8 @@ impl FolderWorkspace {
         ])
     }
 
-    /// Keep the lit row (the last marker at or before the playhead) in view while the marker
-    /// list is shown, except while a row is open for editing. Scrolls only when the lit row
+    /// Keep the last marker passed by the playhead in view while the marker
+    /// list is shown, except while a row is open for editing. Scrolls only when the followed row
     /// changed, so a list scrolled by hand is not fought on every tick.
     pub(super) fn follow_marker_list(&mut self, force: bool) -> Task<Message> {
         if !self.media_viewer.marker_list_shown() {
@@ -318,19 +436,27 @@ impl FolderWorkspace {
         ) else {
             return Task::none();
         };
-        let lit = markers::view::lit_index(markers, position_ms);
-        if !self.markers.follow(lit) && !force {
+        let passed = markers::view::passed_index(markers, position_ms);
+        if !self.markers.follow(passed) && !force {
             return Task::none();
         }
         scroll_marker_list_to(markers::view::row_offset(
             markers,
-            lit.unwrap_or(0).saturating_sub(1),
+            passed.unwrap_or(0).saturating_sub(1),
         ))
     }
 
     /// The open file's markers were just read from it (another file was opened): remember their
     /// GUIDs, and show the markers whose write failed last time instead, if any.
     pub(super) fn markers_loaded(&mut self, id: FileId) {
+        match self.file_workspace.markers_from_video() {
+            Some(held) => {
+                self.markers_in_video.insert(id, held.to_vec());
+            }
+            None => {
+                self.markers_in_video.remove(&id);
+            }
+        }
         let read = self.file_workspace.markers().unwrap_or_default();
         self.known_marker_guids
             .extend(read.iter().filter_map(|m| m.guid.clone()));
@@ -409,7 +535,7 @@ fn seek_exact(ms: u64) -> Task<Message> {
 
 /// Scroll the marker list to `y`: the top of the row before the one to show, so it keeps a
 /// row of context above it (see [`markers::view::row_offset`]).
-fn scroll_marker_list_to(y: f32) -> Task<Message> {
+pub(super) fn scroll_marker_list_to(y: f32) -> Task<Message> {
     let offset = iced::widget::scrollable::AbsoluteOffset {
         x: None,
         y: Some(y),

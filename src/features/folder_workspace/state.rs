@@ -13,8 +13,9 @@ use frename_core::undo::History;
 use frename_core::{
     AppDatabase, AppStateStore, BatchRun, CreateTagCommand, DeleteTagCommand, File, FileId,
     FileSnapshot, FolderAndFile, FolderTagStore, LoggingAppStateStore, Marker, NavigateFileCommand,
-    PasteTagsCommand, ReorderTagCommand, SaveAndReparse, SaveTagCommand, SetSegmentEndCommand,
-    SetSegmentStartCommand, StarTagCommand, ToggleTagCommand, UndoContext, UndoError,
+    PasteTagsCommand, RenameFileCommand, ReorderTagCommand, SaveAndReparse, SaveTagCommand,
+    SetCommentCommand, SetSegmentEndCommand, SetSegmentStartCommand, StarTagCommand,
+    SyncTagOrderCommand, ToggleTagCommand, UndoContext, UndoError,
 };
 use rfd;
 
@@ -91,8 +92,12 @@ pub struct FolderWorkspace {
     /// Frame of the loading spinner shown in rows whose comment is still loading.
     spinner_frame: usize,
     /// The ID of the file navigated to (captured after dir.select_*).
-    /// Consumed by apply_file_updated to build NavigateFileCommand.
+    /// Taken by apply_file_opened, which pairs it with the file left.
     pending_to_file_id: Option<FileId>,
+    /// The navigations whose save has not run yet, as (file left, file navigated to), oldest
+    /// first. apply_file_updated pushes the NavigateFileCommand from the first of its file. A
+    /// list, not one value, so navigations before the video unloads each get their own step.
+    navigation_targets: Vec<(FileId, FileId)>,
     left_width: f32,
     folder_width: f32,
     /// Last reported tag list scroll offset and viewport height (for scroll-into-view).
@@ -105,6 +110,9 @@ pub struct FolderWorkspace {
     copied_tags: Option<Vec<String>>,
     /// Undo/redo history for all undoable actions.
     history: WorkspaceHistory,
+    /// The open file's tags and comment when the comment box was first typed in; the typing up
+    /// to the box losing the keys (or the file changing) is one undo step.
+    comment_session: Option<FileSnapshot>,
     /// Whether the media viewer is currently shown fullscreen (F5).
     media_fullscreen: bool,
     /// The marker list's own state: the row being edited and what `F2` did last.
@@ -117,6 +125,14 @@ pub struct FolderWorkspace {
     /// Markers whose write into their file failed (the file read-only or open in Premiere),
     /// kept until the file is saved again. By `FileId`, which the next folder scan renews.
     unsaved_markers: HashMap<FileId, Vec<Marker>>,
+    /// Files shown with the markers their video holds, while markers are kept in the comment:
+    /// as read. Untouched, they stay in the video; edited, they move into the comment.
+    markers_in_video: HashMap<FileId, Vec<Marker>>,
+    /// Files whose markers were shown from the video and then edited into the comment: the
+    /// video's own are taken out once a save shows the comment holds them. Kept apart from
+    /// `markers_in_video`, which is replaced whenever the clip is opened again: a save still
+    /// waiting for the video to unload must find it after a reopen.
+    clear_from_video: HashSet<FileId>,
     /// A press on a file row that may become a drag out of the window.
     drag_out: DragOutState,
     /// Ctrl/Shift held right now, as of the last `ModifiersChanged`/window-unfocus event: a
@@ -178,6 +194,7 @@ impl FolderWorkspace {
             comment_load_generation: 0,
             spinner_frame: 0,
             pending_to_file_id: None,
+            navigation_targets: Vec::new(),
             left_width,
             folder_width,
             tag_list_scroll_y: None,
@@ -186,10 +203,13 @@ impl FolderWorkspace {
             folder_viewport_height: None,
             copied_tags: None,
             history: WorkspaceHistory::new(HISTORY_DEPTH),
+            comment_session: None,
             media_fullscreen: false,
             markers: MarkersState::default(),
             known_marker_guids: HashSet::new(),
             unsaved_markers: HashMap::new(),
+            markers_in_video: HashMap::new(),
+            clear_from_video: HashSet::new(),
             drag_out: DragOutState::default(),
             modifiers: iced::keyboard::Modifiers::empty(),
             select_anchor: None,
@@ -205,12 +225,11 @@ impl FolderWorkspace {
         }
         match message {
             // While a marker row is open, keys belong to its fields: `[b-roll]` is typed, not in
-            // and out, and undo would remove the very marker being edited.
+            // and out. Undo and redo are the exception: they close the row first (below), so
+            // they never leave a row open on a marker they remove.
             Message::SetSegmentStart
             | Message::SetSegmentEnd
             | Message::TagPanel(tag_panel::Message::ToggleSelectedTag)
-            | Message::Undo
-            | Message::Redo
             | Message::CopyTags
             | Message::PasteTags
             | Message::RotateVideoWhileTyping(_)
@@ -258,10 +277,7 @@ impl FolderWorkspace {
             Message::MediaViewer(msg) => match msg {
                 media_viewer::Message::Unloaded => self.on_media_unloaded(),
                 media_viewer::Message::ToggleFullscreen => {
-                    if self.media_viewer.is_previewable() {
-                        self.media_fullscreen = !self.media_fullscreen;
-                    }
-                    Task::none()
+                    self.set_fullscreen(!self.media_fullscreen)
                 }
                 media_viewer::Message::SegmentStartMarked(secs) => self.set_segment_start(secs),
                 media_viewer::Message::SegmentEndMarked(secs) => self.set_segment_end(secs),
@@ -326,18 +342,45 @@ impl FolderWorkspace {
             }
             Message::CopyTags => self.copy_tags(),
             Message::PasteTags => self.paste_tags(),
-            Message::Undo => self.perform_undo(),
-            Message::Redo => self.perform_redo(),
+            // The comment box has the keys while it is focused: its text is not the app's to undo.
+            Message::Undo | Message::Redo if self.file_workspace.comment_focused() => Task::none(),
+            // What was typed or named is a step first, so it is the one undone.
+            Message::Undo => {
+                self.close_marker_row();
+                self.end_comment_session();
+                if self.history.can_undo() {
+                    self.perform_undo()
+                } else {
+                    Task::none()
+                }
+            }
+            Message::Redo => {
+                self.close_marker_row();
+                self.end_comment_session();
+                if self.history.can_redo() {
+                    self.perform_redo()
+                } else {
+                    Task::none()
+                }
+            }
             Message::RotateVideo(quarter_turns) => self.rotate_video(quarter_turns),
             Message::RotateVideoWhileTyping(quarter_turns) => {
                 self.rotate_video_unless_writing(quarter_turns)
             }
-            Message::ToggleMediaFullscreen => {
-                // Only toggle when a video is shown.
-                if self.media_viewer.is_previewable() {
-                    self.media_fullscreen = !self.media_fullscreen;
+            Message::ToggleMediaFullscreen => self.set_fullscreen(!self.media_fullscreen),
+            Message::RestoreListScrolls { markers_y, cues_y } => {
+                // Only a list on screen reports back; armed otherwise it would fire much later.
+                if self.media_viewer.marker_list_shown() {
+                    self.markers.restored(markers_y);
                 }
-                Task::none()
+                Task::batch([
+                    marker_actions::scroll_marker_list_to(markers_y),
+                    self.media_viewer
+                        .update(media_viewer::Message::Video(
+                            media_viewer_video::Message::RestoreCueScroll(cues_y),
+                        ))
+                        .map(Message::MediaViewer),
+                ])
             }
             Message::SetSegmentStart | Message::SetSegmentEnd if self.inline_rename.is_some() => {
                 Task::none()
@@ -351,6 +394,7 @@ impl FolderWorkspace {
             Message::CheckCommentFocus => {
                 // Asked only while the box is on screen: about a missing widget, no answer comes.
                 if self.batch.is_active() || self.file_workspace.file().is_none() {
+                    self.end_comment_session();
                     self.file_workspace.set_comment_focused(false);
                     return Task::none();
                 }
@@ -360,6 +404,9 @@ impl FolderWorkspace {
                 .map(Message::CommentFocused)
             }
             Message::CommentFocused(focused) => {
+                if !focused {
+                    self.end_comment_session();
+                }
                 self.file_workspace.set_comment_focused(focused);
                 Task::none()
             }
@@ -367,6 +414,9 @@ impl FolderWorkspace {
                 // Anything done in the box (a click, typing) means it has the keys.
                 self.file_workspace.set_comment_focused(true);
                 let typed = matches!(action, iced::widget::text_editor::Action::Edit(_));
+                if typed && self.comment_session.is_none() {
+                    self.comment_session = self.file_workspace.get_snapshot().map(|(_, s)| s);
+                }
                 self.file_workspace.apply_comment_action(action);
                 // The box grows with its text inside a scrollable: typing on the last line
                 // keeps that line in view.
@@ -396,15 +446,14 @@ impl FolderWorkspace {
                     return self.handle_file_menu(file_menu::Message::Close);
                 }
                 if self.markers.is_editing() {
-                    self.markers.close();
+                    self.close_marker_row();
                     return Task::none();
                 }
                 if self.inline_rename.take().is_some() {
                     return Task::none();
                 }
                 if self.media_fullscreen {
-                    self.media_fullscreen = false;
-                    return Task::none();
+                    return self.set_fullscreen(false);
                 }
                 if self.batch.is_active() {
                     // A running job ignores `SetActive` (see `BatchState::update`), so batch mode
@@ -455,6 +504,8 @@ impl FolderWorkspace {
             }
         };
         self.file_workspace.set_tag_filter(new_value);
+        self.end_comment_session();
+        self.file_workspace.set_comment_focused(false);
         operation::focus(iced::widget::Id::from(SEARCH_BAR_INPUT_ID)).map(|_: ()| Message::Noop)
     }
 
@@ -596,6 +647,8 @@ impl FolderWorkspace {
         self.markers.reset();
         // File ids are renewed by the scan, so markers kept for them cannot be matched again.
         self.unsaved_markers.clear();
+        self.markers_in_video.clear();
+        self.clear_from_video.clear();
         // Batches for the folder being left must not land in the next one.
         self.comment_load_generation += 1;
         let folder = pair.folder().to_path_buf();
@@ -608,6 +661,7 @@ impl FolderWorkspace {
         // apply before this same call runs). This clear is just belt-and-braces against a stale
         // entry from a directory this scan is about to replace.
         self.pending_file_updates.clear();
+        self.navigation_targets.clear();
 
         Task::future(async move {
             match Directory::open(&folder, store).await {
@@ -678,6 +732,7 @@ impl FolderWorkspace {
         } else {
             self.file_workspace.set_file(None);
             self.pending_file_updates.clear();
+            self.navigation_targets.clear();
             load_comments_task
         }
     }
@@ -781,6 +836,8 @@ impl FolderWorkspace {
     }
 
     fn apply_file_opened(&mut self, file: frename_core::File) -> Task<Message> {
+        // The typing in the comment box belongs to the file it was typed in.
+        self.end_comment_session();
         let file = self.with_comment_loaded(file);
         // Opening another file closes the in-place rename editor, like leaving the row.
         if self
@@ -799,9 +856,14 @@ impl FolderWorkspace {
             .is_some_and(|f| f.id() == file.id());
         if !same_file {
             self.media_fullscreen = false;
+            self.close_marker_row();
             self.markers.reset();
         }
         let snapshot = self.file_workspace.get_snapshot();
+        let navigated_to = self.pending_to_file_id.take();
+        if let (Some((left, _)), Some(to)) = (snapshot.as_ref(), navigated_to) {
+            self.navigation_targets.push((*left, to));
+        }
         // A same-file refresh (undo, in-place rename) brings its own, newer state.
         let opened = if same_file {
             file.clone()
@@ -851,8 +913,6 @@ impl FolderWorkspace {
                 | Message::SaveSelectedTag
                 | Message::CopyTags
                 | Message::PasteTags
-                | Message::Undo
-                | Message::Redo
                 | Message::SetSegmentStart
                 | Message::SetSegmentEnd
                 | Message::FocusSearchBarAndKey(_)
@@ -865,6 +925,21 @@ impl FolderWorkspace {
         );
         if edits_open_file && self.batch.is_active() {
             return true;
+        }
+        // Undo and redo follow what they step over: a marker or a turn of the open video is
+        // undone in batch mode (when no job runs), a tag change is not.
+        if self.batch.is_active() {
+            let not_media = match message {
+                Message::Undo => !self.history.undo_edits_open_video(),
+                Message::Redo => !self.history.redo_edits_open_video(),
+                _ => false,
+            };
+            if not_media && matches!(message, Message::Undo | Message::Redo) {
+                return true;
+            }
+            if self.batch.is_running() && matches!(message, Message::Undo | Message::Redo) {
+                return true;
+            }
         }
         // The video and its marker list stay in batch mode, unlike the tags: markers and turns of
         // the open video are off only while a job runs (the job has closed the file then).
@@ -1228,12 +1303,26 @@ impl FolderWorkspace {
         // Markers first, while the file still has the path they were read from; they travel
         // with it through the rename. Kept in the comment, they go back into it as lines.
         let mut snapshot = snapshot;
+        let mut moved_markers = None;
         let markers_saved = match (snapshot.markers(), frename_core::marker_storage()) {
+            // Shown from the video and not touched: they stay where they are.
+            (Some(markers), frename_core::MarkerStorage::Comment)
+                if self
+                    .markers_in_video
+                    .get(&id)
+                    .is_some_and(|read| read.as_slice() == markers) =>
+            {
+                self.unsaved_markers.remove(&id);
+                Task::none()
+            }
             (Some(markers), frename_core::MarkerStorage::Comment) => {
+                let wanted = markers.to_vec();
                 let comment = frename_core::markers_into_comment(snapshot.comment(), markers);
                 snapshot.set_comment(comment);
-                // Kept in the comment now: a failed write into the video no longer holds them.
-                self.unsaved_markers.remove(&id);
+                moved_markers = Some(wanted);
+                if self.markers_in_video.contains_key(&id) {
+                    self.clear_from_video.insert(id);
+                }
                 Task::none()
             }
             (Some(markers), frename_core::MarkerStorage::InVideo) => {
@@ -1256,6 +1345,28 @@ impl FolderWorkspace {
         } else {
             Task::none()
         };
+        // Markers shown from the video are taken out of it only once the save shows the comment
+        // holds all of them: a refused save, or a comment that did not get written, must not
+        // leave them nowhere.
+        let comment_holds_markers = moved_markers.as_ref().is_some_and(|wanted| {
+            let lines = |markers: &[Marker]| {
+                let mut lines: Vec<String> = markers
+                    .iter()
+                    .map(frename_core::format_marker_line)
+                    .collect();
+                lines.sort();
+                lines
+            };
+            let saved = frename_core::markers_from_comment(snapshot_after_save.comment()).1;
+            lines(wanted) == lines(&saved)
+        });
+        if comment_holds_markers {
+            // Kept in the comment now: a failed write into the video no longer holds them.
+            self.unsaved_markers.remove(&id);
+            if !refused {
+                self.move_markers_out_of_video(id, &new_path);
+            }
+        }
         // A file menu action waiting for this save runs now, on the name the file has on disk.
         let file_action = self.file_action_after_save(id, refused);
 
@@ -1274,7 +1385,12 @@ impl FolderWorkspace {
         }
 
         // Push NavigateFileCommand when we have a valid to_file_id (set by select_* after navigating).
-        if let Some(to_file_id) = self.pending_to_file_id.take() {
+        let target = self
+            .navigation_targets
+            .iter()
+            .position(|(left, _)| *left == id)
+            .map(|i| self.navigation_targets.remove(i).1);
+        if let Some(to_file_id) = target {
             // A refused save never reached the file: undoing back to it must restore what is
             // really on disk (snapshot_after_save), not the picked-but-unsaved tags, or Ctrl+Z
             // would show them as if they had been saved.
@@ -1423,6 +1539,27 @@ impl FolderWorkspace {
         }
     }
 
+    /// Switch fullscreen on or off (only when a video is shown). The view builds the lists anew
+    /// then, at offset 0, so the offsets they had are carried to a task that puts them back.
+    fn set_fullscreen(&mut self, on: bool) -> Task<Message> {
+        if on && !self.media_viewer.is_previewable() {
+            return Task::none();
+        }
+        self.media_fullscreen = on;
+        if !self.media_viewer.is_previewable() {
+            return Task::none();
+        }
+        Task::done(self.restore_lists_message())
+    }
+
+    /// The task message that puts the lists back at the offsets they have now.
+    fn restore_lists_message(&self) -> Message {
+        Message::RestoreListScrolls {
+            markers_y: self.markers.scroll_y(),
+            cues_y: self.media_viewer.cue_scroll_y(),
+        }
+    }
+
     /// Open the in-place rename editor on the row at `index` (selecting that file first when
     /// needed), with the name before the extension selected, as Windows Explorer does.
     fn start_rename(&mut self, index: usize) -> Task<Message> {
@@ -1457,6 +1594,8 @@ impl FolderWorkspace {
             error: None,
         });
         let input = iced::widget::Id::from(folder::FOLDER_RENAME_INPUT_ID);
+        self.end_comment_session();
+        self.file_workspace.set_comment_focused(false);
         Task::batch([
             select,
             operation::focus(input.clone()),
@@ -1520,6 +1659,10 @@ impl FolderWorkspace {
         }
 
         self.inline_rename = None;
+        self.history.push(Box::new(RenameFileCommand {
+            snapshot_before: current,
+            snapshot_after: snapshot.clone(),
+        }));
         self.file_workspace
             .reinitialize_tags_from_snapshot(snapshot);
         // Same-file refresh: persists the workspace snapshot (renaming on disk) without
@@ -2024,7 +2167,16 @@ impl FolderWorkspace {
         self.file_name_panel
             .update(msg, self.file_workspace.tag_list());
         if let Some(id) = self.file_name_panel.take_dropped_dragged_tag_id() {
+            let was_checked = self
+                .file_workspace
+                .tag_list()
+                .get_tag(id)
+                .is_some_and(|t| t.is_checked());
             self.file_workspace.toggle_tag_by_id(id);
+            self.history.push(Box::new(ToggleTagCommand {
+                tag_id: id,
+                was_checked,
+            }));
         } else if let (Some(did), Some(idx)) = (dragged_id, drop_index) {
             let from_index = self.file_workspace.tag_list().checked_index_of(did);
             self.file_workspace.reorder_tag_to_index(did, idx);
@@ -2039,11 +2191,31 @@ impl FolderWorkspace {
         Task::none()
     }
 
+    /// The comment box lost the keys (or the file is about to change): what was typed in it
+    /// since it got them is one undo step.
+    fn end_comment_session(&mut self) {
+        let Some(snapshot_before) = self.comment_session.take() else {
+            return;
+        };
+        let Some((_, snapshot_after)) = self.file_workspace.get_snapshot() else {
+            return;
+        };
+        if snapshot_before.comment() != snapshot_after.comment() {
+            self.history.push(Box::new(SetCommentCommand {
+                snapshot_before,
+                snapshot_after,
+            }));
+        }
+    }
+
     fn handle_sync_panel(&mut self, msg: sync_panel::Message) -> Task<Message> {
+        let before = self.file_workspace.tag_list().order_state();
+        let mut changed = true;
         match msg {
             sync_panel::Message::SyncUp => {
                 if let Err(e) = self.file_workspace.sync_selected_to_display() {
                     log::error!("SyncUp failed: {}", e);
+                    changed = false;
                 } else {
                     self.file_workspace.tag_list_mut().set_sync_locked(true);
                 }
@@ -2057,14 +2229,21 @@ impl FolderWorkspace {
                 tl.set_sync_locked(!tl.sync_locked());
             }
         }
+        let after = self.file_workspace.tag_list().order_state();
+        if changed && !before.same_as(&after) {
+            self.history
+                .push(Box::new(SyncTagOrderCommand { before, after }));
+        }
         Task::none()
     }
 
     fn perform_undo(&mut self) -> Task<Message> {
+        self.end_comment_session();
         if !self.history.can_undo() || self.directory.is_none() {
             return Task::none();
         }
         let turns_a_video = self.history.undo_turns_a_video();
+        let switches_file = self.history.undo_switches_file();
         // Inner block: limits the lifetime of dir/tl borrows so we can use self after.
         let result: Result<(), UndoError> = {
             let dir = self.directory.as_mut().expect("checked above");
@@ -2075,7 +2254,11 @@ impl FolderWorkspace {
             };
             self.history.undo(&mut ctx)
         };
-        self.after_undo_redo(result, turns_a_video)
+        self.after_undo_redo(
+            result,
+            turns_a_video,
+            switches_file.then(|| fl!("undo-back-on-clip")),
+        )
     }
 
     fn perform_redo(&mut self) -> Task<Message> {
@@ -2083,6 +2266,7 @@ impl FolderWorkspace {
             return Task::none();
         }
         let turns_a_video = self.history.redo_turns_a_video();
+        let switches_file = self.history.redo_switches_file();
         let result: Result<(), UndoError> = {
             let dir = self.directory.as_mut().expect("checked above");
             let tl = self.file_workspace.tag_list_mut();
@@ -2092,17 +2276,33 @@ impl FolderWorkspace {
             };
             self.history.redo(&mut ctx)
         };
-        self.after_undo_redo(result, turns_a_video)
+        self.after_undo_redo(
+            result,
+            turns_a_video,
+            switches_file.then(|| fl!("redo-on-clip")),
+        )
     }
 
     /// Refresh after an undo or redo step, or say why it failed. A step that turned a video
-    /// reopens it when it is the one shown.
+    /// reopens it when it is the one shown. A step that moved to another file says so with
+    /// `file_notice`, so a stack shared by all files does not look like an undo that did nothing.
     fn after_undo_redo(
         &mut self,
         result: Result<(), UndoError>,
         turns_a_video: bool,
+        file_notice: Option<String>,
     ) -> Task<Message> {
-        match result {
+        self.file_workspace.sync_comment_editor();
+        let comment_write = if result.is_ok() {
+            self.write_markers_to_comment_now()
+        } else {
+            Task::none()
+        };
+        let task = match result {
+            Ok(()) if file_notice.is_some() => Task::batch([
+                self.refresh_after_undo_redo(),
+                Self::notice(&file_notice.unwrap_or_default()),
+            ]),
             // A turn changes no tags, name or selection, so the open file needs no refresh; one
             // would unload the video to save it while the reopen below is still opening it.
             Ok(()) if turns_a_video => self.follow_rotation(),
@@ -2111,7 +2311,8 @@ impl FolderWorkspace {
                 log::warn!("Undo/redo failed: {}", e);
                 Self::undo_failed_notice(&e)
             }
-        }
+        };
+        Task::batch([task, comment_write])
     }
 
     fn refresh_after_undo_redo(&self) -> Task<Message> {
@@ -3928,8 +4129,8 @@ mod tests {
         send_marker(&mut workspace, M::Add, 1_300);
         assert!(workspace.markers().is_editing());
         send_marker(&mut workspace, type_name("Take 3"), 1_300);
-        // Keys of the workspace are off while the row is open: undo would remove the marker.
-        let _ = workspace.update(Message::Undo);
+        // Keys of the workspace are off while the row is open: `[` is typed, not an in point.
+        let _ = workspace.update(Message::SetSegmentStart);
         assert_eq!(marker_names(&workspace), [(1_000, "Take 3".to_string())]);
         // F2 with the row open closes it and adds the next moment without opening it.
         send_marker(&mut workspace, M::Add, 5_000);
@@ -4078,6 +4279,369 @@ mod tests {
             ),
         ));
         assert_eq!(marker_names(&workspace).len(), 1);
+    }
+
+    fn first_marker_guid(workspace: &FolderWorkspace) -> String {
+        workspace.file_workspace().markers().unwrap()[0]
+            .guid
+            .clone()
+            .unwrap()
+    }
+
+    /// Issue #138: Undo was dropped in batch mode, though markers are edited there.
+    #[test]
+    fn a_deleted_marker_is_undone_and_redone_in_batch_mode() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        assert!(workspace.batch.is_active());
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = first_marker_guid(&workspace);
+        send_marker(&mut workspace, M::Delete(guid), 1_000);
+        assert!(marker_names(&workspace).is_empty());
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_names(&workspace).len(), 1);
+        let _ = workspace.update(Message::Redo);
+        assert!(marker_names(&workspace).is_empty());
+    }
+
+    /// In batch mode the tags are hidden, so their undo stays off.
+    #[test]
+    fn a_tag_change_is_not_undone_in_batch_mode() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let tag_list = workspace.file_workspace().tag_list();
+        let tag_id = tag_list
+            .filtered_display_tag_ids()
+            .iter()
+            .find(|id| tag_list.get_tag(**id).is_some_and(|t| t.tag() == "pick"))
+            .copied()
+            .expect("pick is a built-in tag");
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
+        let checked = |w: &FolderWorkspace| {
+            w.file_workspace()
+                .tag_list()
+                .get_tag(tag_id)
+                .map(|t| t.is_checked())
+        };
+        assert_eq!(checked(&workspace), Some(true));
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(checked(&workspace), Some(true), "batch mode keeps tags out");
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(false)));
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(checked(&workspace), Some(false));
+    }
+
+    #[test]
+    fn a_turn_is_undone_in_batch_mode() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        let _ = workspace.update(Message::RotateVideo(1));
+        let degrees = || {
+            frename_core::FileTagger::video_rotation(&test_dir.target_file()).map(|r| r.degrees())
+        };
+        assert_eq!(degrees(), Ok(90));
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(degrees(), Ok(0));
+    }
+
+    /// Issue #138: undo was dropped while a marker row was open, though the ✕ of the other rows
+    /// still deletes. It closes the row and undoes.
+    #[test]
+    fn undo_with_a_marker_row_open_closes_the_row_and_undoes() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        send_marker(&mut workspace, M::AddRange(5_000, 7_000), 5_000);
+        let guids: Vec<String> = workspace
+            .file_workspace()
+            .markers()
+            .unwrap()
+            .iter()
+            .map(|m| m.guid.clone().unwrap())
+            .collect();
+        assert_eq!(guids.len(), 2);
+        // Row A is open; row B's ✕ deletes B.
+        send_marker(&mut workspace, M::Open(guids[0].clone()), 1_000);
+        send_marker(&mut workspace, M::Delete(guids[1].clone()), 1_000);
+        assert!(workspace.markers().is_editing());
+        assert_eq!(marker_names(&workspace).len(), 1);
+        let _ = workspace.update(Message::Undo);
+        assert!(!workspace.markers().is_editing(), "the row is closed");
+        assert_eq!(marker_names(&workspace).len(), 2, "B is back");
+        let _ = workspace.update(Message::Redo);
+        assert_eq!(marker_names(&workspace).len(), 1);
+    }
+
+    /// Issue #138: the history is one stack for the folder, so after leaving the file the first
+    /// Undo goes back to it (and says so); the second brings the marker back.
+    #[test]
+    fn a_marker_deleted_before_leaving_the_file_is_back_after_two_undos() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = marker_workspace(&test_dir, 2);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = first_marker_guid(&workspace);
+        send_marker(&mut workspace, M::Delete(guid), 1_000);
+        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+
+        let _ = workspace.update(Message::Folder(folder::Message::NextFile));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        assert_eq!(workspace.directory().unwrap().selected_index(), Some(1));
+
+        let task = workspace.update(Message::Undo);
+        assert_eq!(workspace.directory().unwrap().selected_index(), Some(0));
+        // The file is reopened, and a note says the step was a move, not an edit.
+        assert_eq!(task.units(), 2);
+        flush_file_opened(&mut workspace);
+        assert!(marker_names(&workspace).is_empty());
+
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_names(&workspace).len(), 1);
+
+        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        let saved = frename_core::FileTagger::load_markers(&test_dir.target_file()).expect("saved");
+        assert_eq!(saved.len(), 1, "the file holds the marker");
+
+        // Redo goes forward the same way: the delete, then the move to the next file.
+        let _ = workspace.update(Message::Redo);
+        assert!(marker_names(&workspace).is_empty());
+        let task = workspace.update(Message::Redo);
+        assert_eq!(workspace.directory().unwrap().selected_index(), Some(1));
+        assert_eq!(task.units(), 2);
+    }
+
+    /// A marker row opened by code takes the keys from the comment box, so Undo is not dropped
+    /// for a focus the box no longer has.
+    #[test]
+    fn opening_a_marker_row_ends_the_comment_boxs_hold_on_undo() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        workspace.file_workspace.set_comment_focused(true);
+        let guid = first_marker_guid(&workspace);
+        send_marker(&mut workspace, M::Open(guid), 1_000);
+        let _ = workspace.update(Message::Undo);
+        assert!(marker_names(&workspace).is_empty());
+    }
+
+    /// Issue #138: while the comment box has the keys, Ctrl+Z is the box's, not the app's.
+    #[test]
+    fn undo_is_not_the_apps_while_the_comment_box_has_the_keys() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        workspace.file_workspace.set_comment_focused(true);
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_names(&workspace).len(), 1);
+        workspace.file_workspace.set_comment_focused(false);
+        let _ = workspace.update(Message::Undo);
+        assert!(marker_names(&workspace).is_empty());
+    }
+
+    // Issue #143: markers kept in the comment (a `.comment.txt`) are in the file as soon as they
+    // are edited, without leaving the clip.
+
+    /// Comments in text files, markers kept as `markers` says, for this test only.
+    fn comment_file_storage(markers: frename_core::MarkerStorage) -> frename_core::StorageGuard {
+        frename_core::use_storage_on_this_thread(
+            frename_core::MetadataStorage {
+                comment: frename_core::CommentStorage::TextFile,
+                in_out: frename_core::InOutStorage::InVideo,
+            },
+            markers,
+        )
+    }
+
+    fn comment_file_text(test_dir: &TestDirectory) -> String {
+        let path = format!("{}.comment.txt", test_dir.target_file().display());
+        std::fs::read_to_string(path).unwrap_or_default()
+    }
+
+    #[test]
+    fn a_marker_edit_reaches_the_comment_file_without_leaving_the_clip() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let _storage = comment_file_storage(frename_core::MarkerStorage::Comment);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        assert_eq!(comment_file_text(&test_dir), "");
+
+        send_marker(&mut workspace, M::Add, 65_000);
+        assert!(comment_file_text(&test_dir).contains("1:05"), "added");
+
+        // Named, recolored and moved: the line follows each step.
+        let guid = first_marker_guid(&workspace);
+        send_marker(&mut workspace, M::Open(guid.clone()), 65_000);
+        send_marker(&mut workspace, type_name("Lion"), 65_000);
+        send_marker(&mut workspace, M::Close, 65_000);
+        assert!(comment_file_text(&test_dir).contains("Lion"), "named");
+        send_marker(
+            &mut workspace,
+            M::SetColor(guid.clone(), frename_core::MarkerColor::Red),
+            65_000,
+        );
+        assert!(comment_file_text(&test_dir).contains("[red]"), "recolored");
+        send_marker(&mut workspace, M::SetSpan(guid.clone(), 70_000, 70_000), 0);
+        let text = comment_file_text(&test_dir);
+        assert!(text.contains("1:10") && !text.contains("1:05"), "{text}");
+
+        // Undo and delete update it too.
+        let _ = workspace.update(Message::Undo);
+        assert!(comment_file_text(&test_dir).contains("1:05"));
+        send_marker(&mut workspace, M::Delete(guid), 0);
+        assert!(!comment_file_text(&test_dir).contains("Lion"), "deleted");
+    }
+
+    #[test]
+    fn the_comments_own_text_is_untouched_by_a_marker_edit() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let _storage = comment_file_storage(frename_core::MarkerStorage::Comment);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let path = format!("{}.comment.txt", test_dir.target_file().display());
+        std::fs::write(&path, "A note\nAI: Two lions.").expect("comment");
+        send_marker(&mut workspace, M::Add, 1_000);
+        let text = comment_file_text(&test_dir);
+        assert!(
+            text.contains("A note") && text.contains("AI: Two lions."),
+            "{text}"
+        );
+    }
+
+    /// A clip whose markers are still in the video, while markers are kept in the comment: they
+    /// are shown, left alone until one is edited, then all move into the comment and out of the
+    /// video.
+    #[test]
+    fn markers_held_by_the_video_move_into_the_comment_on_the_first_edit() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        // Written in the video with the other storage.
+        let in_video = comment_file_storage(frename_core::MarkerStorage::InVideo);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        send_marker(&mut workspace, M::AddRange(5_000, 8_000), 0);
+        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        let file = test_dir.target_file();
+        assert_eq!(
+            frename_core::FileTagger::load_markers(&file).map(|m| m.len()),
+            Some(2)
+        );
+
+        // Now markers are kept in the comment: the clip shows its two, and opening wrote nothing.
+        drop(in_video);
+        let _storage = comment_file_storage(frename_core::MarkerStorage::Comment);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(file.clone()),
+        });
+        flush_file_opened(&mut workspace);
+        assert_eq!(marker_names(&workspace).len(), 2);
+        assert_eq!(comment_file_text(&test_dir), "");
+
+        // Leaving it unedited changes nothing either.
+        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        assert_eq!(comment_file_text(&test_dir), "");
+        assert_eq!(
+            frename_core::FileTagger::load_markers(&file).map(|m| m.len()),
+            Some(2)
+        );
+
+        // One edit: both are in the comment, and the video's own are gone once it is saved.
+        let guid = first_marker_guid(&workspace);
+        send_marker(&mut workspace, M::Open(guid), 1_000);
+        send_marker(&mut workspace, type_name("Edited"), 1_000);
+        let text = comment_file_text(&test_dir);
+        assert!(text.contains("Edited") && text.contains("0:05"), "{text}");
+        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        assert!(frename_core::FileTagger::load_markers(&file)
+            .unwrap_or_default()
+            .is_empty());
+        assert_eq!(
+            comment_file_text(&test_dir),
+            text,
+            "saving again changes nothing"
+        );
+    }
+
+    /// Issue #143 (d): a comment file that cannot be written keeps the markers and marks the
+    /// file, like a failed write into the video does; the next edit tries again.
+    #[test]
+    fn a_comment_file_that_cannot_be_written_keeps_the_markers_and_marks_the_file() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let _storage = comment_file_storage(frename_core::MarkerStorage::Comment);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let path = format!("{}.comment.txt", test_dir.target_file().display());
+        std::fs::create_dir_all(&path).expect("a folder where the comment file goes");
+        let id = file_id_at(&workspace, 0);
+        send_marker(&mut workspace, M::Add, 1_000);
+        assert!(workspace.unsaved_markers().contains_key(&id));
+        assert_eq!(marker_names(&workspace).len(), 1, "still shown");
+
+        std::fs::remove_dir_all(&path).expect("free the path");
+        send_marker(&mut workspace, M::AddRange(5_000, 8_000), 0);
+        assert!(
+            !workspace.unsaved_markers().contains_key(&id),
+            "written now"
+        );
+        assert!(comment_file_text(&test_dir).contains("0:05"));
+    }
+
+    /// A held `F2` grows its marker with the playhead; the release writes the range.
+    #[test]
+    fn a_held_f2_range_reaches_the_comment_file_on_release() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let _storage = comment_file_storage(frename_core::MarkerStorage::Comment);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::KeyDown, 41_000);
+        assert!(comment_file_text(&test_dir).contains("0:41"), "the press");
+        workspace
+            .markers
+            .backdate_recording(crate::features::markers::state_for_tests::RANGE_HOLD);
+        send_marker(&mut workspace, M::KeyUp, 47_000);
+        assert!(comment_file_text(&test_dir).contains("0:41–0:47"));
+    }
+
+    /// An edit undone back to what the video holds leaves no lines behind in the comment.
+    #[test]
+    fn markers_edited_back_to_the_videos_own_leave_no_comment_lines() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let in_video = comment_file_storage(frename_core::MarkerStorage::InVideo);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        drop(in_video);
+        let _storage = comment_file_storage(frename_core::MarkerStorage::Comment);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        send_marker(&mut workspace, M::AddRange(5_000, 8_000), 0);
+        assert!(comment_file_text(&test_dir).contains("0:05"));
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_names(&workspace).len(), 1);
+        assert!(
+            !comment_file_text(&test_dir).contains("0:0"),
+            "{}",
+            comment_file_text(&test_dir)
+        );
     }
 
     #[test]
@@ -4658,5 +5222,294 @@ mod tests {
             "pi",
             "the search is cleared by the next Esc, not this one"
         );
+    }
+
+    // --- Issue #139: every single-file edit is undoable ---
+
+    fn open_file_name(workspace: &FolderWorkspace) -> String {
+        workspace
+            .file_workspace()
+            .get_snapshot()
+            .expect("a file is open")
+            .1
+            .file_name()
+    }
+
+    fn comment_of(workspace: &FolderWorkspace) -> (String, String) {
+        (
+            workspace.file_workspace().tag_list().comment().to_string(),
+            workspace
+                .file_workspace()
+                .comment_content
+                .text()
+                .trim_end_matches('\n')
+                .to_string(),
+        )
+    }
+
+    #[test]
+    fn an_inline_rename_undoes_and_redoes() {
+        let (_test_dir, mut workspace) = open_folder(1);
+        let _ = workspace.update(Message::Folder(folder::Message::StartRename(0)));
+        let _ = workspace.update(Message::Folder(folder::Message::RenameInput(
+            "renamed.mp4".to_string(),
+        )));
+        let _ = workspace.update(Message::Folder(folder::Message::SubmitRename));
+        assert_eq!(open_file_name(&workspace), "renamed.mp4");
+
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(open_file_name(&workspace), "file_0.mp4");
+        let _ = workspace.update(Message::Redo);
+        assert_eq!(open_file_name(&workspace), "renamed.mp4");
+    }
+
+    #[test]
+    fn typing_in_the_comment_box_is_one_undo_step_per_focus_session() {
+        use iced::widget::text_editor::{Action, Edit};
+        let (_test_dir, mut workspace) = open_folder(1);
+        for c in ['h', 'i'] {
+            let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert(c))));
+        }
+        // Ctrl+Z belongs to the box while it has the keys.
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(comment_of(&workspace).0, "hi");
+
+        let _ = workspace.update(Message::CommentFocused(false));
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(comment_of(&workspace), (String::new(), String::new()));
+        let _ = workspace.update(Message::Redo);
+        assert_eq!(comment_of(&workspace), ("hi".to_string(), "hi".to_string()));
+    }
+
+    #[test]
+    fn a_comment_typed_before_leaving_the_file_is_a_step_of_that_file() {
+        use iced::widget::text_editor::{Action, Edit};
+        let (_test_dir, mut workspace) = open_folder(2);
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('x'))));
+        assert!(!workspace.history.can_undo(), "still being typed");
+        let _ = workspace.update(Message::Folder(folder::Message::NextFile));
+        flush_file_opened(&mut workspace);
+        assert!(workspace.history.can_undo(), "the typing is a step now");
+        assert_eq!(comment_of(&workspace).0, "", "the next file has its own");
+    }
+
+    #[test]
+    fn a_marker_name_is_one_undo_step_per_row() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = first_marker_guid(&workspace);
+        send_marker(&mut workspace, M::Open(guid), 1_000);
+        send_marker(&mut workspace, type_name("hel"), 1_000);
+        send_marker(&mut workspace, type_name("lo"), 1_000);
+        send_marker(&mut workspace, M::Close, 1_000);
+        assert_eq!(marker_names(&workspace), [(1_000, "hello".to_string())]);
+
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_names(&workspace), [(1_000, String::new())]);
+        let _ = workspace.update(Message::Redo);
+        assert_eq!(marker_names(&workspace), [(1_000, "hello".to_string())]);
+    }
+
+    #[test]
+    fn a_marker_name_typed_in_an_open_row_is_undone_by_ctrl_z() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = first_marker_guid(&workspace);
+        send_marker(&mut workspace, M::Open(guid), 1_000);
+        send_marker(&mut workspace, type_name("name"), 1_000);
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_names(&workspace), [(1_000, String::new())]);
+    }
+
+    #[test]
+    fn sync_up_and_the_lock_undo_and_redo() {
+        use crate::features::sync_panel;
+        let (_test_dir, mut workspace) = open_folder(1);
+        let locked = |w: &FolderWorkspace| w.file_workspace().tag_list().sync_locked();
+        let _ = workspace.update(Message::SyncPanel(sync_panel::Message::ToggleLock));
+        assert!(!locked(&workspace));
+        let _ = workspace.update(Message::SyncPanel(sync_panel::Message::SyncUp));
+        assert!(locked(&workspace));
+        let _ = workspace.update(Message::SyncPanel(sync_panel::Message::ToggleLock));
+        assert!(!locked(&workspace));
+
+        let _ = workspace.update(Message::Undo);
+        assert!(locked(&workspace), "the unlock is undone");
+        let _ = workspace.update(Message::Undo);
+        assert!(!locked(&workspace), "Sync up and its lock are undone");
+        let _ = workspace.update(Message::Undo);
+        assert!(locked(&workspace), "the first unlock is undone");
+        let _ = workspace.update(Message::Redo);
+        assert!(!locked(&workspace));
+        let _ = workspace.update(Message::Redo);
+        assert!(locked(&workspace), "redo of Sync up locks again");
+    }
+
+    #[test]
+    fn an_edit_after_an_undo_clears_redo() {
+        let (_test_dir, mut workspace) = open_folder(1);
+        let _ = workspace.update(Message::Folder(folder::Message::StartRename(0)));
+        let _ = workspace.update(Message::Folder(folder::Message::RenameInput(
+            "a.mp4".to_string(),
+        )));
+        let _ = workspace.update(Message::Folder(folder::Message::SubmitRename));
+        let _ = workspace.update(Message::Undo);
+        assert!(workspace.history.can_redo());
+
+        let _ = workspace.update(Message::Folder(folder::Message::StartRename(0)));
+        let _ = workspace.update(Message::Folder(folder::Message::RenameInput(
+            "b.mp4".to_string(),
+        )));
+        let _ = workspace.update(Message::Folder(folder::Message::SubmitRename));
+        assert!(
+            !workspace.history.can_redo(),
+            "a redo of `a` would be stale"
+        );
+    }
+
+    /// Two navigations before the video unloads: each leaves a file with a save still waiting,
+    /// and each gets its own step, from the file left to the file reached.
+    #[test]
+    fn two_quick_navigations_are_two_undo_steps() {
+        let (_test_dir, mut workspace) = open_folder(3);
+        let first = file_id_at(&workspace, 0);
+        let second = file_id_at(&workspace, 1);
+        let snapshot_of = |w: &FolderWorkspace| w.file_workspace().get_snapshot().expect("open");
+
+        let (id0, snap0) = snapshot_of(&workspace);
+        assert_eq!(id0, first);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        let (id1, snap1) = snapshot_of(&workspace);
+        assert_eq!(id1, second);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(2)));
+        flush_file_opened(&mut workspace);
+
+        let _ = workspace.update(Message::FileUpdated {
+            id: id0,
+            snapshot: snap0,
+        });
+        let _ = workspace.update(Message::FileUpdated {
+            id: id1,
+            snapshot: snap1,
+        });
+        assert_eq!(workspace.directory().unwrap().selected_index(), Some(2));
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(workspace.directory().unwrap().selected_index(), Some(1));
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(workspace.directory().unwrap().selected_index(), Some(0));
+    }
+
+    /// Shift+F2 on a marker without a GUID (written by another tool) says it is read-only.
+    #[test]
+    fn shift_f2_on_a_read_only_marker_says_so() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let mut marker = frename_core::Marker::new(1_000);
+        marker.guid = None;
+        workspace.file_workspace.tag_list_mut().add_marker(marker);
+        let before = marker_names(&workspace);
+        assert_eq!(before.len(), 1);
+        let _ = workspace.handle_marker(crate::features::markers::Message::DeleteAtPlayhead, 1_000);
+        assert_eq!(marker_names(&workspace), before, "it is not deleted");
+    }
+
+    #[test]
+    fn undo_closes_a_renamed_marker_row_even_with_nothing_else_to_undo() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = first_marker_guid(&workspace);
+        // Nothing earlier in the history: as if the marker came from the file.
+        workspace.history = super::WorkspaceHistory::new(super::HISTORY_DEPTH);
+        send_marker(&mut workspace, M::Open(guid), 1_000);
+        send_marker(&mut workspace, type_name("x"), 1_000);
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_names(&workspace), [(1_000, String::new())]);
+    }
+
+    #[test]
+    fn opening_another_marker_row_makes_the_first_rows_name_a_step() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        send_marker(&mut workspace, M::AddRange(5_000, 7_000), 5_000);
+        let guids: Vec<String> = workspace
+            .file_workspace()
+            .markers()
+            .unwrap()
+            .iter()
+            .map(|m| m.guid.clone().unwrap())
+            .collect();
+        send_marker(&mut workspace, M::Open(guids[0].clone()), 1_000);
+        send_marker(&mut workspace, type_name("first"), 1_000);
+        send_marker(&mut workspace, M::Open(guids[1].clone()), 5_000);
+        send_marker(&mut workspace, M::Close, 5_000);
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_names(&workspace)[0], (1_000, String::new()));
+        assert_eq!(marker_names(&workspace).len(), 2, "no marker was undone");
+    }
+
+    /// Issue #142: fullscreen builds the lists anew, so their scroll offsets are kept in the
+    /// state, carried by the toggle's task and put back, both ways.
+    #[test]
+    fn the_list_scrolls_are_kept_across_fullscreen() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Video(
+                crate::features::media_viewer::video::Message::Markers(M::Scrolled(120.0, 400.0)),
+            ),
+        ));
+        assert_eq!(workspace.markers.scroll_y(), 120.0);
+
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Video(
+                crate::features::media_viewer::video::Message::CueListScrolled(80.0, 300.0),
+            ),
+        ));
+        assert!(matches!(
+            workspace.restore_lists_message(),
+            Message::RestoreListScrolls { markers_y, cues_y } if markers_y == 120.0 && cues_y == 80.0
+        ));
+        for expect_fullscreen in [true, false] {
+            let task = workspace.update(Message::ToggleMediaFullscreen);
+            assert_eq!(workspace.media_fullscreen, expect_fullscreen);
+            assert_eq!(
+                task.units(),
+                1,
+                "the toggle asks for the lists to be put back"
+            );
+        }
+        // The fresh list reports offset 0 before the restore runs: the offset carried by the
+        // task is what is put back, and the report of the restore ends the wait.
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Video(
+                crate::features::media_viewer::video::Message::Markers(M::Scrolled(0.0, 400.0)),
+            ),
+        ));
+        let task = workspace.update(Message::RestoreListScrolls {
+            markers_y: 120.0,
+            cues_y: 80.0,
+        });
+        assert_eq!(
+            task.units(),
+            2,
+            "marker list and subtitle list are scrolled back"
+        );
+        assert_eq!(workspace.media_viewer.cue_scroll_y(), 80.0);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Video(
+                crate::features::media_viewer::video::Message::Markers(M::Scrolled(120.0, 300.0)),
+            ),
+        ));
+        assert_eq!(workspace.markers.scroll_y(), 120.0);
     }
 }

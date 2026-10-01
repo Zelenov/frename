@@ -37,9 +37,9 @@ pub use markers::{
 pub use metadata::{
     active_commented_tag, cache::modified_ms, clean_commented_tag, commented_tag,
     format_in_out_range, marker_storage, metadata_storage, set_comment_storage, set_commented_tag,
-    set_in_out_storage, set_marker_storage, CommentStorage, InOutStorage, MarkerStorage,
-    MarkersError, MetadataMove, MetadataStorage, MoveOutcome, Rotation, RotationError, Segment,
-    DEFAULT_COMMENTED_TAG,
+    set_in_out_storage, set_marker_storage, use_storage_on_this_thread, write_marker_lines,
+    CommentStorage, InOutStorage, MarkerStorage, MarkersError, MetadataMove, MetadataStorage,
+    MoveOutcome, Rotation, RotationError, Segment, StorageGuard, DEFAULT_COMMENTED_TAG,
 };
 pub use ordered::{OrderKey, OrderableEntry, OrderedCollection, OrderedThing};
 pub use search::CommentFragment;
@@ -51,11 +51,12 @@ pub use tags::{
     install_file_tagger, set_space_after_tags, space_after_tags, CachedFile, DefaultTag,
     FileSnapshot, FileTagger, FileTaggerBackend, FolderInfo, FolderTagStore, InMemoryFileTagger,
     LoggingFileTagger, ProductionFileTagger, SaveAndReparse, Screenshot, StoredTag, Tag,
-    TagColorMapping, TagId, TagList, DEFAULT_TAGS,
+    TagColorMapping, TagId, TagList, TagOrderState, DEFAULT_TAGS,
 };
 pub use undo::{
     AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,
-    NavigateFileCommand, PasteTagsCommand, ReorderTagCommand, RotateVideoCommand, SaveTagCommand,
-    SetMarkerColorCommand, SetMarkerDurationCommand, SetMarkerSpanCommand, SetSegmentEndCommand,
-    SetSegmentStartCommand, StarTagCommand, ToggleTagCommand, UndoContext, UndoError,
+    NavigateFileCommand, PasteTagsCommand, RenameFileCommand, ReorderTagCommand,
+    RotateVideoCommand, SaveTagCommand, SetCommentCommand, SetMarkerColorCommand,
+    SetMarkerNameCommand, SetMarkerSpanCommand, SetSegmentEndCommand, SetSegmentStartCommand,
+    StarTagCommand, SyncTagOrderCommand, ToggleTagCommand, UndoContext, UndoError,
 };

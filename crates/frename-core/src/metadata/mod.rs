@@ -139,13 +139,85 @@ pub fn set_marker_storage(storage: MarkerStorage) {
     );
 }
 
+std::thread_local! {
+    /// Storage for the current thread only, which tests use so that they do not disturb the
+    /// others running at the same time (the statics above are shared by the whole process).
+    static THIS_THREAD: std::cell::Cell<Option<(MetadataStorage, MarkerStorage)>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Use `metadata` and `markers` as the storage on the current thread only, instead of the
+/// process-wide choice, until the returned guard is dropped. For tests of code that reads the
+/// storage; the app never calls it.
+#[doc(hidden)]
+#[must_use = "the storage is the process-wide one again when the guard is dropped"]
+pub fn use_storage_on_this_thread(
+    metadata: MetadataStorage,
+    markers: MarkerStorage,
+) -> StorageGuard {
+    let previous = THIS_THREAD.with(|cell| cell.replace(Some((metadata, markers))));
+    StorageGuard {
+        previous,
+        _not_send: std::marker::PhantomData,
+    }
+}
+
+/// Ends [`use_storage_on_this_thread`] when dropped, bringing back what it replaced. It belongs
+/// to the thread that made it.
+#[doc(hidden)]
+pub struct StorageGuard {
+    previous: Option<(MetadataStorage, MarkerStorage)>,
+    _not_send: std::marker::PhantomData<*const ()>,
+}
+
+impl Drop for StorageGuard {
+    fn drop(&mut self) {
+        THIS_THREAD.with(|cell| cell.set(self.previous));
+    }
+}
+
 /// The storage chosen by [`set_marker_storage`].
 pub fn marker_storage() -> MarkerStorage {
+    if let Some((_, markers)) = THIS_THREAD.with(|cell| cell.get()) {
+        return markers;
+    }
     if MARKERS_IN_COMMENT.load(Ordering::Relaxed) == 1 {
         MarkerStorage::Comment
     } else {
         MarkerStorage::InVideo
     }
+}
+
+/// Markers kept in the comment while the comment is a `.comment.txt` file: bring that file's
+/// marker lines in line with `markers` and leave the rest of its text as it is, so a marker edit
+/// is on disk at once and does not wait for the clip to be left. `Ok(false)` when markers or
+/// comments are stored elsewhere (nothing is done) and `Ok(true)` when the file is in line,
+/// written or already so; `Err` when it could not be written. A comment kept in the video
+/// cannot be written while the video plays: it is saved when the clip is left.
+pub fn write_marker_lines(path: &Path, markers: &[crate::Marker]) -> std::io::Result<bool> {
+    write_marker_lines_with(
+        path,
+        markers,
+        marker_storage() == MarkerStorage::Comment
+            && metadata_storage().comment == CommentStorage::TextFile,
+    )
+}
+
+fn write_marker_lines_with(
+    path: &Path,
+    markers: &[crate::Marker],
+    applies: bool,
+) -> std::io::Result<bool> {
+    if !applies {
+        return Ok(false);
+    }
+    let current = crate::comment::load_comment(path);
+    let (text, _) = crate::markers_from_comment(&current);
+    let updated = crate::markers_into_comment(&text, markers);
+    if updated.trim() != current.trim() {
+        crate::comment::try_save_comment(path, &updated)?;
+    }
+    Ok(true)
 }
 
 /// Choose where comments are saved from now on. Comments already loaded keep their text and
@@ -220,6 +292,9 @@ pub fn active_commented_tag() -> Option<String> {
 
 /// The storage chosen by [`set_comment_storage`] and [`set_in_out_storage`].
 pub fn metadata_storage() -> MetadataStorage {
+    if let Some((metadata, _)) = THIS_THREAD.with(|cell| cell.get()) {
+        return metadata;
+    }
     MetadataStorage {
         comment: if COMMENT_TEXT_FILE.load(Ordering::Relaxed) == 1 {
             CommentStorage::TextFile
@@ -916,5 +991,83 @@ mod tests {
             Some("Commented".to_string())
         );
         assert_eq!(clean_commented_tag(" . "), None);
+    }
+
+    #[test]
+    fn marker_lines_are_written_into_the_comment_file_and_the_rest_is_kept() {
+        let file = temp_clip_path("marker-lines");
+        crate::comment::save_comment(&file, "In/Out: 00:00:01.000 – 00:00:09.000\nA note");
+        let mut marker = crate::Marker::new(5_000);
+        marker.name = "Lion".to_string();
+        assert!(write_marker_lines_with(&file, &[marker.clone()], true).unwrap());
+        let text = crate::comment::load_comment(&file);
+        assert!(
+            text.contains("A note") && text.contains("In/Out:"),
+            "{text}"
+        );
+        assert!(text.lines().any(|l| l.contains("Lion")), "{text}");
+        // Idempotent, and a delete takes the line out again.
+        assert!(write_marker_lines_with(&file, &[marker], true).unwrap());
+        assert_eq!(crate::comment::load_comment(&file), text);
+        assert!(write_marker_lines_with(&file, &[], true).unwrap());
+        let after = crate::comment::load_comment(&file);
+        assert!(
+            !after.contains("Lion") && after.contains("A note"),
+            "{after}"
+        );
+    }
+
+    #[test]
+    fn marker_lines_are_left_alone_when_markers_are_stored_in_the_video() {
+        let file = temp_clip_path("marker-lines-off");
+        crate::comment::save_comment(&file, "A note");
+        assert!(!write_marker_lines_with(&file, &[crate::Marker::new(5_000)], false).unwrap());
+        assert_eq!(crate::comment::load_comment(&file), "A note");
+    }
+
+    fn temp_clip_path(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("frename-meta-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        dir.join("clip.mp4")
+    }
+
+    #[test]
+    fn the_storage_decides_whether_marker_lines_are_written() {
+        let file = temp_clip_path("marker-lines-gate");
+        let marker = [crate::Marker::new(5_000)];
+        let text_file = MetadataStorage {
+            comment: CommentStorage::TextFile,
+            in_out: InOutStorage::InVideo,
+        };
+        {
+            let _storage = use_storage_on_this_thread(text_file, MarkerStorage::InVideo);
+            assert!(
+                !write_marker_lines(&file, &marker).unwrap(),
+                "markers in the video"
+            );
+        }
+        {
+            let in_video = MetadataStorage {
+                comment: CommentStorage::InVideo,
+                ..text_file
+            };
+            let _storage = use_storage_on_this_thread(in_video, MarkerStorage::Comment);
+            assert!(
+                !write_marker_lines(&file, &marker).unwrap(),
+                "comment in the video"
+            );
+        }
+        assert_eq!(crate::comment::load_comment(&file), "");
+        let _storage = use_storage_on_this_thread(text_file, MarkerStorage::Comment);
+        assert!(write_marker_lines(&file, &marker).unwrap());
+        assert!(crate::comment::load_comment(&file).contains("0:05"));
+    }
+
+    #[test]
+    fn a_comment_file_that_cannot_be_written_is_an_error() {
+        let file = temp_clip_path("marker-lines-unwritable");
+        // A folder where the comment file should be: it cannot be written.
+        std::fs::create_dir_all(crate::comment::comment_path(&file)).expect("folder");
+        assert!(write_marker_lines_with(&file, &[crate::Marker::new(5_000)], true).is_err());
     }
 }

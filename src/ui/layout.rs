@@ -2,7 +2,7 @@
 //! button bar, notices and help.
 
 use iced::widget::text::IntoFragment;
-use iced::widget::{button, column, container, row, space, Column};
+use iced::widget::{button, column, container, mouse_area, row, space, Column};
 use iced::{Alignment, Color, Element, Length, Padding};
 
 use super::icons::{icon, Icon};
@@ -53,7 +53,8 @@ pub fn window_with_navigation<'a, M: 'a>(
 
 /// The navigation column of a window: its items, 2 px apart, on the window's darkest surface.
 pub fn sidebar<'a, M: 'a>(items: impl IntoIterator<Item = Element<'a, M>>) -> Element<'a, M> {
-    container(Column::with_children(items).spacing(SPACE_XXS))
+    // No spacing: each item brings its own gap ([`nav_slot`]), which is clickable.
+    container(Column::with_children(items))
         .width(NAV_WIDTH)
         .height(Length::Fill)
         .padding(SPACE_S)
@@ -158,6 +159,28 @@ pub fn nav_item<'a, M: Clone + 'a>(
     nav_item_with(glyph, label, selected, dot.then(update_dot), Some(on_press))
 }
 
+/// The gap between two items of a navigation list.
+pub const NAV_GAP: f32 = SPACE_XXS;
+
+/// An item of a navigation list with the gap ([`NAV_GAP`]) below it that keeps the items apart.
+/// The gap belongs to the item (a column's `spacing` belongs to neither neighbour): over it the
+/// pointer stays a hand and a click sends the item's `on_press`, so moving down the list never
+/// drops to an arrow. Without `on_press` (a disabled item) the gap is nothing. The item's
+/// highlight stays on the item itself, as the visual gap always did.
+pub fn nav_slot<'a, M: Clone + 'a>(
+    item: impl Into<Element<'a, M>>,
+    on_press: Option<M>,
+) -> Element<'a, M> {
+    let slot = column![item.into(), space().height(NAV_GAP)];
+    match on_press {
+        Some(message) => mouse_area(slot)
+            .on_press(message)
+            .interaction(iced::mouse::Interaction::Pointer)
+            .into(),
+        None => slot.into(),
+    }
+}
+
 /// [`nav_item`] with `trailing` at its right end (a badge), and without `on_press` disabled.
 pub fn nav_item_with<'a, M: Clone + 'a>(
     glyph: Icon,
@@ -197,7 +220,7 @@ pub fn nav_item_with<'a, M: Clone + 'a>(
     .align_y(Alignment::Center);
     // 32 px for one line; a label that wraps (a long translation) makes the item taller.
     // Clipped: a long label never draws past the item's background.
-    button(content)
+    let item = button(content)
         .clip(true)
         .width(Length::Fill)
         .padding(Padding {
@@ -207,8 +230,8 @@ pub fn nav_item_with<'a, M: Clone + 'a>(
             right: SPACE_M,
         })
         .style(style::button(ButtonKind::Nav(selected)))
-        .on_press_maybe(on_press)
-        .into()
+        .on_press_maybe(on_press.clone());
+    nav_slot(item, on_press)
 }
 
 /// The dot that says "an update is ready".

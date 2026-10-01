@@ -117,11 +117,13 @@ Press `Esc` first to give the keys back to the app. `[` and `]` set in and out p
 you type in a marker's name. The F-keys always work, and so do `Ctrl+Alt+←` / `→` except in the
 comment box and a marker's name.
 
-Undo (`Ctrl+Z`) covers tagging, adding, deleting, starring and reordering tags, pasting, in/out
-points, adding, deleting, coloring and resizing markers, rotating a clip, and the rename when you
-leave a clip.
-It does not cover comment text or marker names, a rename by hand
-(double-click), untagging with 🗑, the 🔓↑ / 🔓↓ buttons, or batch actions; opening a folder or running a batch
+Undo (`Ctrl+Z`) covers tagging, untagging, adding, deleting, starring and reordering tags,
+pasting, in/out points, adding, deleting, coloring, resizing and naming markers, rotating a clip,
+the comment (what you type before leaving the box is one step), a rename by hand (double-click),
+Sync up, Sync down and the lock, and the rename when you leave a clip. The history is shared by
+the whole folder, so after moving to another clip the first undo goes back to the clip you left
+(a note says so) and the next one undoes its last change. In batch mode only markers and
+rotation are undone. It does not cover batch actions; opening a folder or running a batch
 action clears the undo history.
 
 ---
@@ -161,7 +163,11 @@ The progress bar shows what you have noted about a clip:
   the file gets a red ✕ in the list, and frename tries again when you next leave it.
   While the playhead is on a marker, its name becomes the pin's head; click it to rename the
   marker. Settings → Saving → Markers and ranges can keep them in the comment instead, one line each
-  (`0:41–0:47 — Lion`): in frename they still work as markers.
+  (`0:41–0:47 — Lion`): in frename they still work as markers. With comments in text files
+  (`.comment.txt`), the lines are written as you edit (a file that cannot be written gets the red ✕
+  and frename tries again at your next change); with comments inside the video, when you leave the
+  clip. A clip whose markers are still inside the video shows them; changing one moves them all into
+  the comment.
 - **Ranges:** hold `F2` (or the pin button) while the clip plays to mark a stretch (`0:41–0:47 — Lion`); a
   band just above the bar shows it, and overlapping bands stack. Drag the handles at the ends of the current
   range to change it (`Shift` snaps), drag them together or `Alt`+click the band to make it a
@@ -241,7 +247,8 @@ Actions:
 - turn comment lines that start with a time (`03:24 — Take 3 — nice light`, `0:41-0:47 — Lion`)
   into markers, or copy the markers into the comment as such lines. What follows the name after
   a second ` — ` or ` -- ` (not a plain ` - `) goes into the marker's comment, which Premiere
-  shows and frename keeps but does not show. The moments of an AI description become white
+  shows and frename keeps but does not show. A marker's color is a word in brackets after the time
+  (`0:41 [red] — Lion`; green, the default, has none). The moments of an AI description become white
   markers too (with their length) and stay in the description;
 - rotate the videos 90° right or left or 180°, or reset them to no rotation (this also removes
   a turn a phone recorded);

@@ -79,4 +79,34 @@ where
             .last()
             .is_some_and(|cmd| cmd.turns_a_video())
     }
+
+    /// Whether the step [`Self::undo`] would take only changes the open video (see
+    /// [`Undoable::edits_open_video`]).
+    pub fn undo_edits_open_video(&self) -> bool {
+        self.undo_stack
+            .last()
+            .is_some_and(|cmd| cmd.edits_open_video())
+    }
+
+    /// Whether the step [`Self::redo`] would take only changes the open video.
+    pub fn redo_edits_open_video(&self) -> bool {
+        self.redo_stack
+            .last()
+            .is_some_and(|cmd| cmd.edits_open_video())
+    }
+
+    /// Whether the step [`Self::undo`] would take moves to another file (see
+    /// [`Undoable::switches_file`]).
+    pub fn undo_switches_file(&self) -> bool {
+        self.undo_stack
+            .last()
+            .is_some_and(|cmd| cmd.switches_file())
+    }
+
+    /// Whether the step [`Self::redo`] would take moves to another file.
+    pub fn redo_switches_file(&self) -> bool {
+        self.redo_stack
+            .last()
+            .is_some_and(|cmd| cmd.switches_file())
+    }
 }

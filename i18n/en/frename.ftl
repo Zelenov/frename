@@ -467,6 +467,8 @@ rotate-flag-none = none
 rotate-now = Rotation: { $flag }
 rotate-turned = Turned { $turn } · rotation now { $flag }
 rotate-failed = Not rotated: { $reason }
+undo-back-on-clip = Back on this clip (undid the move). Ctrl+Z again undoes its last change.
+redo-on-clip = On this clip again (redid the move).
 rotate-reason-in-use = the file is read-only or in use
 rotate-reason-format = this format has no rotation flag
 rotate-reason-damaged = the file is damaged
@@ -539,7 +541,6 @@ sync-panel-lock = Lock
 sync-panel-differs = Order differs from the folder
 sync-panel-use-for-folder = Use for the folder
 sync-panel-sort-like-folder = Sort like the folder
-sync-panel-no-undo = This cannot be undone yet
 
 ## File name card
 

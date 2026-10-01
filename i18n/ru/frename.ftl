@@ -519,6 +519,8 @@ rotate-flag-none = нет
 rotate-now = Поворот: { $flag }
 rotate-turned = Повёрнуто на { $turn } · теперь поворот: { $flag }
 rotate-failed = Не повёрнуто: { $reason }
+undo-back-on-clip = Снова на этом ролике (переход отменён). Ещё раз Ctrl+Z — отмена его последнего изменения.
+redo-on-clip = Снова на этом ролике (переход повторён).
 rotate-reason-in-use = файл только для чтения или занят
 rotate-reason-format = в этом формате нет флага поворота
 rotate-reason-damaged = файл повреждён
@@ -591,7 +593,6 @@ sync-panel-lock = Закрепить
 sync-panel-differs = Порядок не как в папке
 sync-panel-use-for-folder = Сделать порядком папки
 sync-panel-sort-like-folder = Упорядочить как в папке
-sync-panel-no-undo = Это пока нельзя отменить
 
 ## File name card
 
