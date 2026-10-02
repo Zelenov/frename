@@ -548,8 +548,9 @@ impl VideoPlayerState {
                     .subtitles
                     .as_ref()
                     .and_then(|s| s.last_started_index(start));
-                self.followed_cue.clicked(lit);
-                self.seek_only(start, true);
+                if self.seek_only(start, true) {
+                    self.followed_cue.clicked(lit);
+                }
                 Task::none()
             }
             Message::Unload => {
@@ -714,6 +715,7 @@ impl VideoPlayerState {
         if !self.seek_only(target, accurate) {
             return Task::none();
         }
+        self.followed_cue.unpin();
         self.follow_cue(false)
     }
 
@@ -1338,28 +1340,21 @@ mod tests {
         }
     }
 
-    /// Issue #171: a click on a cue seeks; neither it nor the frames after it scroll the list.
+    /// Issue #171: after a click on a cue (which seeks), neither the frames before the seek
+    /// landed nor the one at the cue scroll the list; playback on its own does.
     #[test]
-    fn clicking_a_cue_does_not_scroll_the_list_but_playback_reaching_the_next_does() {
+    fn a_click_on_a_cue_does_not_scroll_the_list_but_playback_to_the_next_does() {
         let mut player = player_with_cues();
         let _ = player.update(Message::CueListScrolled(40.0, 300.0));
-        let click = player.update(Message::SeekToCue(2));
-        assert_eq!(click.units(), 0, "no scroll for the click");
+        player.followed_cue.clicked(Some(2));
         assert_eq!(player.cue_scroll_y(), 40.0);
-        // A frame from before the seek landed, then the one at the cue.
         player.position = Duration::from_secs(3);
-        assert_eq!(
-            player.follow_cue(false).units(),
-            0,
-            "the old frame: no scroll"
-        );
+        assert_eq!(player.follow_cue(false).units(), 0, "the old frame");
         player.position = Duration::from_secs(5);
-        assert_eq!(
-            player.follow_cue(false).units(),
-            0,
-            "the clicked cue: no scroll"
-        );
-        // Playback on its own: the list follows as before.
+        assert_eq!(player.follow_cue(false).units(), 0, "the clicked cue");
+        player.position = Duration::from_secs(3);
+        assert_eq!(player.follow_cue(false).units(), 0, "a late old frame");
+
         let mut player = player_with_cues();
         player.position = Duration::from_secs(1);
         assert_eq!(player.follow_cue(false).units(), 1);

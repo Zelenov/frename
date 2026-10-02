@@ -201,6 +201,7 @@ impl FolderWorkspace {
                 Task::none()
             }
             M::Scrolled(y, viewport) => {
+                self.markers.set_viewport(viewport);
                 // The list was just put back (fullscreen): keep the lit marker in view.
                 if !self.markers.set_scroll_y(y) || !self.media_viewer.marker_list_shown() {
                     return Task::none();
@@ -417,12 +418,27 @@ impl FolderWorkspace {
         let current = markers[index].name.clone();
         self.markers.open(guid, &current);
         let name = iced::widget::Id::new(markers::view::MARKER_NAME_INPUT_ID);
-        let offset = markers::view::row_offset(markers, index.saturating_sub(1));
-        Task::batch([
-            self.show_marker_list(),
-            scroll_marker_list_to(offset),
-            operation::focus(name),
-        ])
+        // A click on a row in view does not scroll the list (§13.2); a row out of view (opened by
+        // key) is brought in with a row of context above it.
+        let fallback = markers::view::row_offset(markers, index.saturating_sub(1));
+        let (offset, viewport) = (self.markers.scroll_y(), self.markers.viewport());
+        let wanted = if viewport > 0.0 {
+            crate::ui::scroll::keep_row_in_view(
+                offset,
+                viewport,
+                markers::view::row_offset(markers, index),
+                markers::view::row_offset(markers, index + 1) - crate::ui::tokens::SPACE_XXS,
+                fallback,
+            )
+        } else {
+            fallback
+        };
+        let scroll = if wanted == offset && viewport > 0.0 {
+            Task::none()
+        } else {
+            scroll_marker_list_to(wanted)
+        };
+        Task::batch([self.show_marker_list(), scroll, operation::focus(name)])
     }
 
     /// Keep the last marker passed by the playhead in view while the marker

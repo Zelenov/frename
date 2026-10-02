@@ -4690,6 +4690,26 @@ mod tests {
         );
     }
 
+    /// Issue #171: a click on a row that is in view opens it without scrolling the list; with the
+    /// viewport unknown, or the row out of view, the list scrolls to it as before.
+    #[test]
+    fn opening_a_marker_row_in_view_does_not_scroll_the_list() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        send_marker(&mut workspace, M::Close, 1_000);
+        let guid = workspace.file_workspace().markers().unwrap()[0]
+            .guid
+            .clone()
+            .expect("a guid");
+        let unknown = workspace.handle_marker(M::Open(guid.clone()), 1_000);
+        send_marker(&mut workspace, M::Close, 1_000);
+        let _ = workspace.handle_marker(M::Scrolled(0.0, 600.0), 1_000);
+        let in_view = workspace.handle_marker(M::Open(guid), 1_000);
+        assert_eq!(unknown.units(), in_view.units() + 1);
+    }
+
     /// Issue #145: F2 on a frame that already has a marker opens that marker; it adds no second.
     #[test]
     fn f2_on_a_frame_with_a_marker_opens_it_instead_of_adding_another() {

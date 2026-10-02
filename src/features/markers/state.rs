@@ -59,6 +59,8 @@ pub struct MarkersState {
     /// Where the list is scrolled to (from the top). The list's own offset is lost when the
     /// view builds it somewhere else in the tree (fullscreen on or off), so it is put back.
     scroll_y: f32,
+    /// The list's viewport height as last reported; 0 until it is.
+    viewport: f32,
     /// The list being put back after fullscreen; its end report carries the new viewport's
     /// height, to see whether the lit marker is still shown.
     restore: crate::ui::scroll::ScrollRestore,
@@ -175,6 +177,15 @@ impl MarkersState {
         self.scroll_y
     }
 
+    /// The list's viewport height as last reported by a scroll; 0 when none was yet.
+    pub fn viewport(&self) -> f32 {
+        self.viewport
+    }
+
+    pub fn set_viewport(&mut self, viewport: f32) {
+        self.viewport = viewport;
+    }
+
     /// Record where the list is scrolled to; true when this is the report of a restore (see
     /// [`Self::restored`]), which is then done.
     pub fn set_scroll_y(&mut self, y: f32) -> bool {
@@ -197,18 +208,14 @@ impl MarkersState {
 mod tests {
     use super::*;
 
-    /// Issue #171: a click on a marker jumps there without scrolling the list; playback passing
-    /// the next marker does.
+    /// Issue #171: a click on a marker jumps there without scrolling the list.
     #[test]
     fn a_click_on_a_marker_does_not_scroll_the_list() {
         let mut state = MarkersState::default();
         assert!(state.follow(Some(0)));
         state.clicked(Some(4));
-        assert!(
-            !state.follow(Some(3)),
-            "a frame from before the jump landed"
-        );
-        assert!(!state.follow(Some(4)));
-        assert!(state.follow(Some(5)), "playback moves on: scroll as usual");
+        assert!(!state.follow(Some(4)), "the seek's own follow");
+        assert!(!state.follow(Some(3)), "a frame before the jump landed");
+        assert!(!state.follow(Some(4)), "the landed one");
     }
 }

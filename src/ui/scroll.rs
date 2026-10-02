@@ -100,14 +100,14 @@ impl FollowedRow {
     }
 
     fn follow_at(&mut self, row: Option<usize>, now: Instant) -> bool {
-        if let Some((clicked, at)) = self.clicked.take() {
+        if let Some((clicked, at)) = self.clicked {
             if now.duration_since(at) <= CLICK_WINDOW {
-                if row != clicked {
-                    self.clicked = Some((clicked, at));
-                }
+                // The seek's own follow and the frames before it landed all come inside the
+                // window: whichever row they show, the list stays.
                 self.row = clicked;
                 return false;
             }
+            self.clicked = None;
         }
         std::mem::replace(&mut self.row, row) != row
     }
@@ -116,6 +116,11 @@ impl FollowedRow {
     pub fn set(&mut self, row: Option<usize>) {
         self.clicked = None;
         self.row = row;
+    }
+
+    /// Another seek than a click: the list follows it.
+    pub fn unpin(&mut self) {
+        self.clicked = None;
     }
 
     /// A click on a row sought to `row`: it is in view where the pointer is, leave the list be.
@@ -175,17 +180,24 @@ mod tests {
         row.clicked(Some(7));
         assert!(
             !row.follow_at(Some(6), at),
-            "a frame from before the seek landed"
+            "a frame before the seek landed"
         );
+        assert!(!row.follow_at(Some(7), at), "the seek landed on the row");
         assert!(
-            !row.follow_at(Some(7), at),
-            "the seek landed on the clicked row"
+            !row.follow_at(Some(6), at),
+            "a late frame of the old position"
         );
-        assert!(!row.follow_at(Some(7), at), "and stays there");
-        assert!(
-            row.follow_at(Some(8), at),
-            "playback moves on: scroll as usual"
-        );
+        assert!(!row.follow_at(Some(7), at), "and the landed one again");
+        let later = at + CLICK_WINDOW + Duration::from_millis(1);
+        assert!(row.follow_at(Some(8), later), "playback moves on: scroll");
+    }
+
+    #[test]
+    fn another_seek_is_followed_at_once() {
+        let mut row = FollowedRow::default();
+        row.clicked(Some(7));
+        row.unpin();
+        assert!(row.follow_at(Some(2), Instant::now()));
     }
 
     #[test]
