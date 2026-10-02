@@ -395,9 +395,6 @@ const LABEL_MIN_CHARS: usize = 12;
 /// The label's edge in its marker's color: a little heavier than a line, so the color reads.
 const LABEL_EDGE: f32 = LINE * 1.5;
 
-/// How much of its marker's color tints the label's fill.
-const LABEL_TINT: f32 = 0.25;
-
 /// `name`, cut with "…" so the label fits a player `width` px wide.
 fn fit_label(name: &str, width: f32) -> String {
     let fits = ((width - LABEL_CHROME) / LABEL_CHAR_ADVANCE).max(1.0) as usize;
@@ -448,7 +445,7 @@ fn marker_label_button(label: MarkerLabel<'_>) -> Element<'_, Message> {
             );
             // A pill tinted with the marker's color, without a shadow: it must not read as a
             // tooltip (a `bg.overlay` box with a subtle edge) when one opens next to it.
-            let fill = over(BG_RAISED, color.scale_alpha(LABEL_TINT));
+            let fill = over(BG_RAISED, faded(color, MARKER_LABEL_TINT));
             iced_button::Style {
                 background: Some(iced::Background::Color(if hovered {
                     over(fill, HOVER)
