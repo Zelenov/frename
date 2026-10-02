@@ -216,7 +216,8 @@ impl UpdatesState {
             && now >= self.saved.last_check.saturating_add(CHECK_INTERVAL_SECS)
     }
 
-    fn is_busy(&self) -> bool {
+    /// A check, a download or the restart runs: the buttons wait.
+    pub fn is_busy(&self) -> bool {
         matches!(
             self.status,
             Status::Checking { .. } | Status::Downloading(_) | Status::Restarting
@@ -252,6 +253,40 @@ impl UpdatesState {
         let current = semver::Version::parse(&self.current_version).ok()?;
         (self.installed && newest > current).then(|| short_version(&self.saved.newest_version))
     }
+
+    /// The controls of the Version row that take a click now, in page order: the ones Tab
+    /// reaches in Settings (#167). `batch_running` holds **Update and restart** back.
+    pub fn controls(&self, batch_running: bool) -> Vec<Control> {
+        let busy = self.is_busy();
+        [
+            (Control::Check, self.installed && !busy),
+            (
+                Control::UpdateAndRestart,
+                self.available_version().is_some() && !busy && !batch_running,
+            ),
+            (Control::CheckOnStart, self.installed),
+        ]
+        .into_iter()
+        .filter_map(|(control, enabled)| enabled.then_some(control))
+        .collect()
+    }
+
+    /// What Space or Enter on `control` does: what a click does.
+    pub fn press(&self, control: Control) -> Message {
+        match control {
+            Control::Check => Message::CheckNow,
+            Control::UpdateAndRestart => Message::UpdateAndRestart,
+            Control::CheckOnStart => Message::SetCheckOnStart(!self.check_on_start()),
+        }
+    }
+}
+
+/// A control of the Version row that keyboard focus can reach.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Control {
+    Check,
+    UpdateAndRestart,
+    CheckOnStart,
 }
 
 /// Download `release`, forwarding Velopack's progress as messages. Velopack reports on a

@@ -6,9 +6,11 @@ use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::{old_settings, AppDatabase, AppSettings, AppStateStore};
 use iced::Task;
 
+use super::focus::{self, Control, KeyControl, Press};
 use super::{KeyMessage, Message, Page, SETTINGS_SCROLLABLE_ID};
 use crate::features::batch::Operation;
 use crate::features::updates;
+use crate::widgets::focus_ring;
 
 /// Where the import of an old frename's settings stands.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,6 +42,8 @@ pub struct SettingsState {
     keys: Keys,
     /// The languages Soniox offers as hints; asked for each time the window opens with a key.
     subtitle_languages: LanguageList,
+    /// The control keyboard focus is on (#167); `None` until Tab is pressed, and after a click.
+    focus: Option<Control>,
 }
 
 /// Where the list of languages Soniox recognises stands.
@@ -94,6 +98,7 @@ impl Default for SettingsState {
             import,
             keys: Keys::default(),
             subtitle_languages: LanguageList::default(),
+            focus: None,
         }
     }
 }
@@ -106,7 +111,15 @@ impl SettingsState {
             Message::NextPage => self.show_page(self.page.step(1)),
             Message::PreviousPage => self.show_page(self.page.step(-1)),
             // Handled by the app.
-            Message::Close | Message::Escape => Task::none(),
+            Message::Close
+            | Message::Escape
+            | Message::FocusNext
+            | Message::FocusPrevious
+            | Message::Press(_) => Task::none(),
+            Message::ClearFocus => {
+                self.focus = None;
+                Task::none()
+            }
             Message::Updates(msg) => self.updates.update(msg).map(Message::Updates),
             Message::ImportOldSettings => Task::perform(
                 rfd::AsyncFileDialog::new()
@@ -122,6 +135,10 @@ impl SettingsState {
             }
             // The key lives in the credential store, never in the saved settings.
             Message::Key(which, message) => {
+                // Typing into a field moves the focus there: Tab goes on from it.
+                if matches!(message, KeyMessage::Input(_)) {
+                    self.focus = Some(Control::Key(which, KeyControl::Field));
+                }
                 self.apply_key(which, message);
                 Task::none()
             }
@@ -133,6 +150,9 @@ impl SettingsState {
                 Task::none()
             }
             message => {
+                if matches!(message, Message::SetCommentedTag(_)) {
+                    self.focus = Some(Control::CommentedTagName);
+                }
                 self.apply(message);
                 AppDatabase::new().set_app_settings(self.settings.clone());
                 Task::none()
@@ -148,6 +168,7 @@ impl SettingsState {
     /// Show `page`, from its top.
     pub fn show_page(&mut self, page: Page) -> Task<Message> {
         self.page = page;
+        self.focus = None;
         iced::widget::operation::snap_to(
             iced::widget::Id::new(SETTINGS_SCROLLABLE_ID),
             iced::widget::scrollable::RelativeOffset::START,
@@ -172,6 +193,51 @@ impl SettingsState {
         };
         self.apply_key(which, cancel);
         true
+    }
+
+    /// The control keyboard focus is on.
+    pub fn focus(&self) -> Option<&Control> {
+        self.focus.as_ref()
+    }
+
+    /// Tab (`steps` 1) or Shift+Tab (-1): move the focus to the next or previous control of the
+    /// page, focus or leave its text fields, and scroll the control into view.
+    pub fn move_focus(&mut self, steps: isize, batch_running: bool) -> Task<Message> {
+        let controls = focus::controls(self, batch_running);
+        self.focus = focus::step(&controls, self.focus.as_ref(), steps);
+        self.focus_effects()
+    }
+
+    /// Space or Enter: press the focused control, as a click would. The control's own message
+    /// comes back to the app, which handles it like a click's.
+    pub fn press(&mut self, press: Press, batch_running: bool) -> Task<Message> {
+        let Some(control) = self.focus.clone() else {
+            return Task::none();
+        };
+        // A control disabled since it took the focus does nothing, as a click would not.
+        if !focus::controls(self, batch_running).contains(&control) {
+            return Task::none();
+        }
+        let Some(message) = focus::press(self, &control, press) else {
+            return Task::none();
+        };
+        match focus::after_press(&control) {
+            Some(next) => {
+                self.focus = Some(next);
+                Task::batch([Task::done(message), self.focus_effects()])
+            }
+            None => Task::done(message),
+        }
+    }
+
+    /// Focus the text field the focus is on, or none of the window's fields, and bring the
+    /// focused control into view.
+    fn focus_effects(&self) -> Task<Message> {
+        let field = self.focus.as_ref().and_then(Control::field_id);
+        Task::batch([
+            focus_ring::focus_among(field, focus::FIELD_IDS),
+            focus_ring::scroll_into_view(SETTINGS_SCROLLABLE_ID, field),
+        ])
     }
 
     /// The Updates section.
@@ -371,6 +437,10 @@ impl SettingsState {
             | Message::PreviousPage
             | Message::Close
             | Message::Escape
+            | Message::FocusNext
+            | Message::FocusPrevious
+            | Message::Press(_)
+            | Message::ClearFocus
             | Message::Updates(_)
             | Message::ImportOldSettings
             | Message::OldSettingsFolderPicked(_)
@@ -391,12 +461,9 @@ fn schedule_import(folder: PathBuf) -> OldSettingsImport {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use frename_core::{CommentStorage, InOutStorage};
-
+impl SettingsState {
     /// Settings as a fresh install has them, not read from any database.
-    fn test_state() -> SettingsState {
+    pub fn for_tests() -> Self {
         SettingsState {
             settings: AppSettings::default(),
             page: Page::default(),
@@ -408,7 +475,29 @@ mod tests {
             import: OldSettingsImport::None,
             keys: Keys::default(),
             subtitle_languages: LanguageList::default(),
+            focus: None,
         }
+    }
+
+    /// Show `page`, as `show_page` does without its scroll.
+    pub fn show_page_for_tests(&mut self, page: Page) {
+        self.page = page;
+        self.focus = None;
+    }
+
+    /// A change, without saving the settings to the database.
+    pub fn apply_for_tests(&mut self, message: Message) {
+        self.apply(message);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use frename_core::{CommentStorage, InOutStorage};
+
+    fn test_state() -> SettingsState {
+        SettingsState::for_tests()
     }
 
     #[test]

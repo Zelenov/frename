@@ -41,6 +41,9 @@ pub const DOT_SIZE: f32 = 7.0;
 pub const LINE: f32 = 1.0;
 /// The focus ring, the selection bar, the cursor ring of a chip.
 pub const RING: f32 = 2.0;
+/// Between a button, checkbox or radio and the focus ring drawn around it (a field and a
+/// dropdown draw the ring as their own edge).
+pub const FOCUS_RING_GAP: f32 = RING;
 /// Width of the notice's colored edge.
 pub const NOTICE_BAR: f32 = 3.0;
 /// Width of the selected item's bar.

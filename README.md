@@ -110,6 +110,9 @@ again, even after a restart, returns to the clip you last viewed in it.
 | Key | Action |
 |---|---|
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous page |
+| `Tab` / `Shift+Tab` | Next / previous option on the page (a blue ring shows which) |
+| `Space` | Check, pick or change the option with the ring, or press its button |
+| `Enter` | Press the button with the ring |
 | `Escape` | Close Settings (while you remove or replace a key, Esc cancels that first) |
 
 While a text box (tag search, file search, comment) has the cursor, it takes the keys it needs:

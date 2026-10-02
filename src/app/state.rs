@@ -371,27 +371,35 @@ fn only_from_window(
     (window_id == window).then_some(message)
 }
 
-/// Keys of the settings window: Esc, and Ctrl+Tab / Ctrl+Shift+Tab between its pages. A focused
-/// field takes the first Esc itself (it leaves the field).
+/// Keys of the settings window: Esc, Ctrl+Tab / Ctrl+Shift+Tab between its pages, Tab /
+/// Shift+Tab between the controls of a page, and Space / Enter on the focused control (#167). A
+/// focused field takes the first Esc itself (it leaves the field), and Space and Enter (it types
+/// or submits). A click takes the focus ring away.
 fn settings_window_key(
     ev: iced::Event,
     status: event::Status,
     window_id: window::Id,
 ) -> Option<(window::Id, Message)> {
-    let iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. }) = ev else {
-        return None;
-    };
-    let message = match key {
-        keyboard::Key::Named(keyboard::key::Named::Escape) if status == event::Status::Ignored => {
-            settings::Message::Escape
-        }
-        keyboard::Key::Named(keyboard::key::Named::Tab) if modifiers.control() => {
-            if modifiers.shift() {
-                settings::Message::PreviousPage
-            } else {
-                settings::Message::NextPage
+    use keyboard::key::Named;
+    let ignored = status == event::Status::Ignored;
+    let message = match ev {
+        iced::Event::Mouse(iced::mouse::Event::ButtonPressed(_)) => settings::Message::ClearFocus,
+        iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. }) => match key {
+            keyboard::Key::Named(Named::Escape) if ignored => settings::Message::Escape,
+            keyboard::Key::Named(Named::Tab) => match (modifiers.control(), modifiers.shift()) {
+                (true, true) => settings::Message::PreviousPage,
+                (true, false) => settings::Message::NextPage,
+                (false, true) => settings::Message::FocusPrevious,
+                (false, false) => settings::Message::FocusNext,
+            },
+            keyboard::Key::Named(Named::Space) if ignored && modifiers.is_empty() => {
+                settings::Message::Press(settings::focus::Press::Space)
             }
-        }
+            keyboard::Key::Named(Named::Enter) if ignored && modifiers.is_empty() => {
+                settings::Message::Press(settings::focus::Press::Enter)
+            }
+            _ => return None,
+        },
         _ => return None,
     };
     Some((window_id, Message::Settings(message)))
@@ -557,6 +565,19 @@ impl FrenameApp {
             }
             Message::OpenSettings(page) => self.open_settings_on(page),
             Message::Settings(settings::Message::Close) => self.close_settings(),
+            // Keyboard focus in Settings (#167): a running batch job holds a button back.
+            Message::Settings(settings::Message::FocusNext) => self
+                .settings
+                .move_focus(1, self.folder_workspace.is_batch_running())
+                .map(Message::Settings),
+            Message::Settings(settings::Message::FocusPrevious) => self
+                .settings
+                .move_focus(-1, self.folder_workspace.is_batch_running())
+                .map(Message::Settings),
+            Message::Settings(settings::Message::Press(press)) => self
+                .settings
+                .press(press, self.folder_workspace.is_batch_running())
+                .map(Message::Settings),
             // Esc cancels a pending key removal or replacement first.
             Message::Settings(settings::Message::Escape) => {
                 if self.settings.escape() {
@@ -701,6 +722,10 @@ impl FrenameApp {
                     | settings::Message::PreviousPage
                     | settings::Message::Close
                     | settings::Message::Escape
+                    | settings::Message::FocusNext
+                    | settings::Message::FocusPrevious
+                    | settings::Message::Press(_)
+                    | settings::Message::ClearFocus
                     | settings::Message::Updates(_)
                     | settings::Message::ImportOldSettings
                     | settings::Message::OldSettingsFolderPicked(_)
@@ -907,7 +932,10 @@ impl FrenameApp {
         let settings_page = self.demo.as_ref().and_then(|d| d.settings_page());
         let (open, window, size) = match settings_page {
             Some(page) => {
-                let open = self.open_settings_on(Some(page));
+                let tabs = self.demo.as_ref().map_or(0, |d| d.settings_tabs());
+                let open = Task::batch(std::iter::once(self.open_settings_on(Some(page))).chain(
+                    (0..tabs).map(|_| Task::done(Message::Settings(settings::Message::FocusNext))),
+                ));
                 let id = self.settings_window.unwrap_or(self.main_window);
                 let size = SETTINGS_WINDOW_SIZE;
                 (open, id, Some((size.width as u32, size.height as u32)))

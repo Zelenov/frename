@@ -305,8 +305,10 @@ destructive (BIR: "separate dangerous buttons with extra distance").
   and space group them (DI "Titled Sections"; AF ch. 17 "visual noise").
 - **Depth:** lighter is closer. Popups (menus, tooltips, dialogs) are `bg.overlay` with one shadow
   `0 8 24 black 50 %`; dragged chips keep their lift shadow. Nothing else has a shadow.
-- **Focus:** a focused field draws a 2 px `accent.text` border (iced draws a field's border inside its
-  bounds; only fields can take focus in iced 0.14, see §11).
+- **Focus:** a focused field or dropdown draws a 2 px `accent.text` border as its edge (iced draws a
+  field's border inside its bounds). A focused button, checkbox or radio gets the same 2 px ring
+  outside it, 2 px away (`FOCUS_RING_GAP`), so focusing never moves anything. iced 0.14 focuses only
+  fields; Settings keeps the focus of its other controls itself (§11).
 
 ## 7. Icons
 
@@ -350,7 +352,7 @@ destructive (BIR: "separate dangerous buttons with extra distance").
 
 Each component lists its sizes and its states: normal, hover, pressed, focused, disabled (and
 selected where it has one). iced 0.14 gives buttons, checkboxes and radios no keyboard focus
-(§11), so "focused" applies to fields today.
+(§11), so "focused" applies to fields, and in Settings to every control (§6 Focus).
 
 ### 8.1 Buttons
 
@@ -668,7 +670,8 @@ has only *Close*, and also closes on its own key (`Ctrl`+`/`) and Esc.
 - **Enter** runs the primary button only in a dialog or a panel whose primary is safe and can be
   undone or cancelled (*Describe 12 files* can be cancelled; its cost is shown first), and only when
   focus is not in a field. Never for *Update and restart* or a destructive button. Settings has no
-  window-level Enter: Enter only submits the focused field (a key field → *Save key*). **Esc** runs
+  window-level Enter: Enter submits the focused field (a key field → *Save key*) or presses the
+  button the focus ring is on (§11), nothing else. **Esc** runs
   Close/Cancel. A destructive confirmation makes the safe button the default (§10.2).
 - *"Primary action on the right, Cancel/Close always in the same place"* (#57) is read as: the
   buttons sit on the right; Close/Cancel is the fixed last one; the primary is next to it.
@@ -796,13 +799,24 @@ registry and every surface follow:
 - **Reserved for #62's registry:** `Ctrl`+`,` opens Settings (the platform-standard key);
   `Ctrl`+`/` opens the cheat sheet. Settings uses `Ctrl`+`Tab` / `Ctrl`+`Shift`+`Tab` for its pages
   (the Windows convention for pages of a dialog) from #57 on.
-- **Focus** is visible: a 2 px `accent.text` border. iced 0.14 can focus only text fields and
-  editors; buttons, checkboxes and radios cannot take keyboard focus, and its focus operations run
-  over every open window at once, so Tab cannot be wired per window safely. In the main window every
-  daily command has a shortcut (#62). **Settings is the recorded exception:** its pages switch from
-  the keyboard and its fields take typing, but its checkboxes, radios and buttons need the mouse. It
-  is opened a few times a year; a row-focus model owned by Settings' own state (Tab moves a ring,
-  Space toggles) is filed as an idea rather than built into #57.
+- **Focus** is visible: a 2 px `accent.text` border (§6 Focus). iced 0.14 can focus only text fields
+  and editors; buttons, checkboxes and radios cannot take keyboard focus, and its focus operations
+  run over every open window at once, so iced's own Tab cannot be wired per window. In the main
+  window every daily command has a shortcut (#62).
+- **Settings keeps its own focus** (#167). Its state holds the control the focus is on; nothing
+  is focused when the window opens, after a click, or after a page change.
+  - **Tab / Shift+Tab** move the ring to the next / previous control of the page that takes a click
+    now, in visual order, then *Close*, wrapping around. Hidden and disabled controls are skipped
+    (*Save key* until a key is typed; *Update and restart* while a batch runs). The page scrolls to
+    show the focused control. Each radio option is a stop of its own.
+  - **A text field** takes real iced focus when the ring reaches it (only Settings' own fields are
+    focused or left, never the main window's), so typing goes in; typing into a field clicked with
+    the mouse moves the focus there, so Tab goes on from it.
+  - **Space** does what a click does: a checkbox toggles, a radio option is picked, a dropdown moves
+    to its next option (wrapping), a button is pressed. **Enter** presses a focused button only.
+    Both pass to a focused field instead (it types or submits).
+  - **When a press takes the control away**, the focus goes where the next step is: *Remove…* →
+    *Keep*; *Keep* → *Remove…*; *Replace…* → the new key field; *Cancel* → *Replace…*.
 
 ## 12. Text in the interface
 
@@ -1864,7 +1878,9 @@ only replaces the OS title bar with A's bar.
 - **Closes** with *Close*, Esc, or the OS ✕. Esc first leaves a focused field (iced does that
   itself) and first cancels an open remove confirmation (= *Keep*), per §9.4.
 - **Keys:** `Ctrl`+`Tab` / `Ctrl`+`Shift`+`Tab` move to the next / previous page (plain arrows would
-  switch pages while typing: iced fields do not take Up/Down). No window-level Enter (§9.2).
+  switch pages while typing: iced fields do not take Up/Down). `Tab` / `Shift`+`Tab` move between the
+  controls of a page, `Space` presses the focused one, `Enter` a focused button (§11). No
+  window-level Enter (§9.2).
   Main-window keys do not act here except the video F-keys, whose leak #62 fixes. With a dropdown
   open, Esc closes the window rather than the list (iced 0.14 limit, §9.4).
 - **Opened on a page:** ⚙ opens the last page shown in this session (*Interface* the first time), or
@@ -2103,7 +2119,7 @@ main window does not change in #57 and the README has no Settings screenshot.
   rules they follow.
 - A light theme. The tokens are named by role, so one could be added, but nothing asks for it.
 - User-adjustable font size or density.
-- Keyboard focus for buttons and checkboxes (iced 0.14 limit, §11).
+- Keyboard focus for buttons and checkboxes outside Settings (iced 0.14 limit, §11).
 - Animation beyond iced's own hover changes, except three: the turning spinner, the pulsing
   recording dot on a held `map-pin`, and the fade of a notice that times out.
 
@@ -2164,7 +2180,7 @@ main window does not change in #57 and the README has no Settings screenshot.
 7. **Chip height:** 28 in the grid and card (the checkbox, label, star and action need it), 20 in
    file list rows (§13.4.2).
 8. **Keyboard focus for Settings' checkboxes and buttons?** Not in #57 (§11); filed as #92: a
-   focus ring owned by Settings' state.
+   focus ring owned by Settings' state. Built in #167.
 
 ## 19. Sources
 

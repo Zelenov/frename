@@ -10,13 +10,20 @@ use iced::{Alignment, Element, Length};
 
 use crate::ui::layout::{self, NoticeKind};
 use crate::ui::tokens::*;
-use crate::ui::{button, form, scroll, text};
+use crate::ui::{button, form, scroll, style, text};
+use crate::widgets::focus_ring::ring;
 
+use super::focus::{self, Control, KeyControl};
 use super::state::{KeySection, LanguageList, OldSettingsImport};
 use super::{KeyMessage, Message, Page, SettingsState, SETTINGS_SCROLLABLE_ID};
 
-use crate::features::batch::{describe_ai, MarkersDirection, Operation};
+use crate::features::batch::{describe_ai, Operation};
 use crate::features::updates;
+
+/// Whether keyboard focus is on `control` (#167): it draws the focus ring.
+fn focused(state: &SettingsState, control: Control) -> bool {
+    state.focus() == Some(&control)
+}
 
 /// Render the settings window. `batch_running` holds back **Update and restart** while a batch
 /// job writes files.
@@ -43,9 +50,10 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
         scroll::vertical_with_id(SETTINGS_SCROLLABLE_ID, page),
         layout::button_bar(
             fl!("settings-apply-note"),
-            [button::secondary(fl!("settings-close"))
-                .on_press(Message::Close)
-                .into()],
+            [ring(
+                button::secondary(fl!("settings-close")).on_press(Message::Close),
+                focused(state, Control::Close),
+            )],
         ),
     )
 }
@@ -62,24 +70,30 @@ fn interface(state: &SettingsState) -> Element<'_, Message> {
                     Some(LanguageOption(settings.ui_language.clone())),
                     |option| Message::SetUiLanguage(option.0),
                 )
+                .style(style::focusable_pick_list(focused(
+                    state,
+                    Control::UiLanguage,
+                )))
                 .width(FIELD_WIDTH_M),
             ),
             layout::setting_row(
                 fl!("settings-tags"),
                 layout::aligned([form::checkbox_with_hint(
-                    form::checkbox(fl!("settings-tags-monochrome"), settings.monochrome_tags)
-                        .on_toggle(Message::SetMonochromeTags),
+                    ring(
+                        form::checkbox(fl!("settings-tags-monochrome"), settings.monochrome_tags)
+                            .on_toggle(Message::SetMonochromeTags),
+                        focused(state, Control::MonochromeTags),
+                    ),
                     text::secondary(fl!("settings-tags-monochrome-hint")),
                 )]),
             ),
             layout::setting_row(
                 fl!("settings-video"),
-                layout::aligned([form::checkbox(
-                    fl!("settings-video-autoplay"),
-                    settings.autoplay_video,
-                )
-                .on_toggle(Message::SetAutoplayVideo)
-                .into()]),
+                layout::aligned([ring(
+                    form::checkbox(fl!("settings-video-autoplay"), settings.autoplay_video)
+                        .on_toggle(Message::SetAutoplayVideo),
+                    focused(state, Control::AutoplayVideo),
+                )]),
             ),
         ],
     )
@@ -98,12 +112,16 @@ fn saving(state: &SettingsState) -> Element<'_, Message> {
             fl!("settings-tags-space-note"),
             label,
             Operation::RespaceTags,
+            focused(state, Control::RespaceTags),
         )
     });
     let file_names = layout::aligned(
         std::iter::once(form::checkbox_with_hint(
-            form::checkbox(fl!("settings-tags-space-after"), settings.space_after_tags)
-                .on_toggle(Message::SetSpaceAfterTags),
+            ring(
+                form::checkbox(fl!("settings-tags-space-after"), settings.space_after_tags)
+                    .on_toggle(Message::SetSpaceAfterTags),
+                focused(state, Control::SpaceAfterTags),
+            ),
             text::mono(fl!("settings-tags-space-example")),
         ))
         .chain(spacing_offer),
@@ -119,6 +137,7 @@ fn saving(state: &SettingsState) -> Element<'_, Message> {
             fl!("settings-comments-note"),
             label,
             Operation::MoveComments(settings.comment_storage),
+            focused(state, Control::MoveComments),
         )
     });
     // The tag for commented videos only matters while comments are inside the video, as before.
@@ -126,61 +145,69 @@ fn saving(state: &SettingsState) -> Element<'_, Message> {
         layout::indented(commented_tag(
             settings.commented_tag_enabled,
             &settings.commented_tag,
+            state.focus(),
         ))
     });
     let comments = layout::aligned(
-        [form::radio_option(
-            fl!("settings-comments-in-video"),
-            Some(form::description(fl!("settings-comments-in-video-hint"))),
-            CommentStorage::InVideo,
-            comment_storage,
-            Message::SetCommentStorage,
+        [ring(
+            form::radio_option(
+                fl!("settings-comments-in-video"),
+                Some(form::description(fl!("settings-comments-in-video-hint"))),
+                CommentStorage::InVideo,
+                comment_storage,
+                Message::SetCommentStorage,
+            ),
+            focused(state, Control::CommentStorage(CommentStorage::InVideo)),
         )]
         .into_iter()
         .chain(commented)
-        .chain([form::radio_option(
-            fl!("settings-comments-text-file"),
-            Some(form::example(fl!("settings-comments-text-file-example"))),
-            CommentStorage::TextFile,
-            comment_storage,
-            Message::SetCommentStorage,
+        .chain([ring(
+            form::radio_option(
+                fl!("settings-comments-text-file"),
+                Some(form::example(fl!("settings-comments-text-file-example"))),
+                CommentStorage::TextFile,
+                comment_storage,
+                Message::SetCommentStorage,
+            ),
+            focused(state, Control::CommentStorage(CommentStorage::TextFile)),
         )])
         .chain(comment_offer),
     );
 
     let marker_storage = Some(settings.marker_storage);
     let marker_offer = state.marker_storage_changed().then(|| {
-        let (label, direction) = match settings.marker_storage {
-            MarkerStorage::InVideo => (
-                fl!("settings-markers-move-into-videos"),
-                MarkersDirection::CommentToMarkers,
-            ),
-            MarkerStorage::Comment => (
-                fl!("settings-markers-copy-into-comment"),
-                MarkersDirection::MarkersToComment,
-            ),
+        let label = match settings.marker_storage {
+            MarkerStorage::InVideo => fl!("settings-markers-move-into-videos"),
+            MarkerStorage::Comment => fl!("settings-markers-copy-into-comment"),
         };
         move_offer(
             fl!("settings-markers-note"),
             label,
-            Operation::MarkersComment(direction),
+            focus::markers_offer(settings.marker_storage),
+            focused(state, Control::MoveMarkers),
         )
     });
     let markers = layout::aligned(
         [
-            form::radio_option(
-                fl!("settings-markers-in-video"),
-                Some(form::description(fl!("settings-markers-in-video-hint"))),
-                MarkerStorage::InVideo,
-                marker_storage,
-                Message::SetMarkerStorage,
+            ring(
+                form::radio_option(
+                    fl!("settings-markers-in-video"),
+                    Some(form::description(fl!("settings-markers-in-video-hint"))),
+                    MarkerStorage::InVideo,
+                    marker_storage,
+                    Message::SetMarkerStorage,
+                ),
+                focused(state, Control::MarkerStorage(MarkerStorage::InVideo)),
             ),
-            form::radio_option(
-                fl!("settings-markers-comment"),
-                Some(form::example(fl!("settings-markers-comment-example"))),
-                MarkerStorage::Comment,
-                marker_storage,
-                Message::SetMarkerStorage,
+            ring(
+                form::radio_option(
+                    fl!("settings-markers-comment"),
+                    Some(form::example(fl!("settings-markers-comment-example"))),
+                    MarkerStorage::Comment,
+                    marker_storage,
+                    Message::SetMarkerStorage,
+                ),
+                focused(state, Control::MarkerStorage(MarkerStorage::Comment)),
             ),
             text::secondary(fl!("settings-markers-hint")).into(),
         ]
@@ -198,23 +225,30 @@ fn saving(state: &SettingsState) -> Element<'_, Message> {
             fl!("settings-in-out-note"),
             label,
             Operation::MoveInOut(settings.in_out_storage),
+            focused(state, Control::MoveInOut),
         )
     });
     let in_out = layout::aligned(
         [
-            form::radio_option(
-                fl!("settings-in-out-in-video"),
-                Some(form::description(fl!("settings-in-out-in-video-hint"))),
-                InOutStorage::InVideo,
-                in_out_storage,
-                Message::SetInOutStorage,
+            ring(
+                form::radio_option(
+                    fl!("settings-in-out-in-video"),
+                    Some(form::description(fl!("settings-in-out-in-video-hint"))),
+                    InOutStorage::InVideo,
+                    in_out_storage,
+                    Message::SetInOutStorage,
+                ),
+                focused(state, Control::InOutStorage(InOutStorage::InVideo)),
             ),
-            form::radio_option(
-                fl!("settings-in-out-comment"),
-                Some(form::example(fl!("settings-in-out-comment-example"))),
-                InOutStorage::Comment,
-                in_out_storage,
-                Message::SetInOutStorage,
+            ring(
+                form::radio_option(
+                    fl!("settings-in-out-comment"),
+                    Some(form::example(fl!("settings-in-out-comment-example"))),
+                    InOutStorage::Comment,
+                    in_out_storage,
+                    Message::SetInOutStorage,
+                ),
+                focused(state, Control::InOutStorage(InOutStorage::Comment)),
             ),
         ]
         .into_iter()
@@ -242,6 +276,7 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
             get_one: fl!("settings-ai-key-get"),
             remove_question: fl!("settings-ai-key-remove-confirm"),
         },
+        state.focus(),
     );
     layout::page(
         Page::Ai.heading(),
@@ -259,6 +294,7 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
                         Some(Model::from_id(&settings.ai_model)),
                         Message::SetAiModel,
                     )
+                    .style(style::focusable_pick_list(focused(state, Control::AiModel)))
                     .width(FIELD_WIDTH_L)
                     .into(),
                     text::secondary(fl!("settings-ai-hint")).into(),
@@ -271,6 +307,10 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
                     Some(SummaryLanguageOption(settings.summary_language)),
                     |option| Message::SetSummaryLanguage(option.0),
                 )
+                .style(style::focusable_pick_list(focused(
+                    state,
+                    Control::SummaryLanguage,
+                )))
                 .width(FIELD_WIDTH_L),
             ),
         ],
@@ -288,21 +328,22 @@ fn subtitles(state: &SettingsState) -> Element<'_, Message> {
             get_one: fl!("settings-subtitles-key-get"),
             remove_question: fl!("settings-subtitles-key-remove-confirm"),
         },
+        state.focus(),
     );
     let list = state.subtitle_languages();
     let languages = &settings.subtitle_languages;
     let checked = |code: &str| languages.iter().any(|l| l == code);
     // Soniox's own list; until it comes (or without a key) the checked codes stay uncheckable.
-    let offered: Vec<(String, String)> = match list {
-        LanguageList::Listed(all) => all.clone(),
-        _ => languages.iter().map(|c| (c.clone(), c.clone())).collect(),
-    };
+    let offered = focus::offered_subtitle_languages(state);
     let grid = Row::with_children(offered.into_iter().map(|(code, name)| {
         let on = checked(&code);
-        form::checkbox(name, on)
-            .on_toggle(move |on| Message::SetSubtitleLanguage(code.clone(), on))
-            .width(CHOICE_WIDTH)
-            .into()
+        let ringed = focused(state, Control::SubtitleLanguage(code.clone()));
+        ring(
+            form::checkbox(name, on)
+                .on_toggle(move |on| Message::SetSubtitleLanguage(code.clone(), on))
+                .width(CHOICE_WIDTH),
+            ringed,
+        )
     }))
     .spacing(SPACE_S)
     .wrap()
@@ -332,19 +373,25 @@ fn subtitles(state: &SettingsState) -> Element<'_, Message> {
             layout::setting_row(
                 fl!("settings-subtitles-cue-length-label"),
                 layout::aligned([
-                    form::radio_option(
-                        fl!("settings-subtitles-cue-short"),
-                        Some(form::description(fl!("settings-subtitles-cue-short-hint"))),
-                        CueLength::Short,
-                        cue_length,
-                        Message::SetSubtitleCueLength,
+                    ring(
+                        form::radio_option(
+                            fl!("settings-subtitles-cue-short"),
+                            Some(form::description(fl!("settings-subtitles-cue-short-hint"))),
+                            CueLength::Short,
+                            cue_length,
+                            Message::SetSubtitleCueLength,
+                        ),
+                        focused(state, Control::CueLength(CueLength::Short)),
                     ),
-                    form::radio_option(
-                        fl!("settings-subtitles-cue-sentence"),
-                        None,
-                        CueLength::Sentence,
-                        cue_length,
-                        Message::SetSubtitleCueLength,
+                    ring(
+                        form::radio_option(
+                            fl!("settings-subtitles-cue-sentence"),
+                            None,
+                            CueLength::Sentence,
+                            cue_length,
+                            Message::SetSubtitleCueLength,
+                        ),
+                        focused(state, Control::CueLength(CueLength::Sentence)),
                     ),
                 ]),
             ),
@@ -362,15 +409,22 @@ fn subtitles(state: &SettingsState) -> Element<'_, Message> {
 }
 
 fn updates_page(state: &SettingsState, batch_running: bool) -> Element<'_, Message> {
+    let updates_focus = match state.focus() {
+        Some(Control::Updates(control)) => Some(*control),
+        _ => None,
+    };
     let mut rows = vec![layout::setting_row(
         fl!("settings-version"),
-        updates::view::view(state.updates(), batch_running).map(Message::Updates),
+        updates::view::view(state.updates(), batch_running, updates_focus).map(Message::Updates),
     )];
     // Only a package keeps its settings away from the exe; elsewhere they are next to it.
     if state.updates().installed() {
         rows.push(layout::setting_row(
             fl!("settings-old-title"),
-            old_settings_import(state.old_settings_import()),
+            old_settings_import(
+                state.old_settings_import(),
+                focused(state, Control::ImportOldSettings),
+            ),
         ));
     }
     layout::page(Page::Updates.heading(), rows)
@@ -408,9 +462,15 @@ fn key_store() -> String {
 }
 
 /// An API key: saved (with Replace… and Remove…), asking before removing, or the field to paste
-/// one into (§14.3).
-fn key_block(which: ApiKey, key: &KeySection, texts: KeyTexts) -> Element<'_, Message> {
+/// one into (§14.3). `focus` is where keyboard focus is in the window.
+fn key_block<'a>(
+    which: ApiKey,
+    key: &'a KeySection,
+    texts: KeyTexts,
+    focus: Option<&Control>,
+) -> Element<'a, Message> {
     let message = move |m: KeyMessage| Message::Key(which, m);
+    let ringed = |control: KeyControl| focus == Some(&Control::Key(which, control));
     let saved = || {
         layout::inline_status(
             NoticeKind::Success,
@@ -431,24 +491,32 @@ fn key_block(which: ApiKey, key: &KeySection, texts: KeyTexts) -> Element<'_, Me
                 texts.remove_question,
                 Some(fl!("settings-key-remove-confirm-hint")),
                 [
-                    button::danger(fl!("settings-key-remove"))
-                        .on_press(message(KeyMessage::Remove))
-                        .into(),
-                    button::secondary(fl!("settings-key-keep"))
-                        .on_press(message(KeyMessage::CancelRemove))
-                        .into(),
+                    ring(
+                        button::danger(fl!("settings-key-remove"))
+                            .on_press(message(KeyMessage::Remove)),
+                        ringed(KeyControl::Remove),
+                    ),
+                    ring(
+                        button::secondary(fl!("settings-key-keep"))
+                            .on_press(message(KeyMessage::CancelRemove)),
+                        ringed(KeyControl::Keep),
+                    ),
                 ],
             ),
         ],
         Some(KeyState::Saved) if !key.replacing => vec![
             saved(),
             layout::buttons([
-                button::secondary(fl!("settings-key-replace"))
-                    .on_press(message(KeyMessage::Replace))
-                    .into(),
-                button::danger_ghost(fl!("settings-key-remove-ask"))
-                    .on_press(message(KeyMessage::AskRemove))
-                    .into(),
+                ring(
+                    button::secondary(fl!("settings-key-replace"))
+                        .on_press(message(KeyMessage::Replace)),
+                    ringed(KeyControl::Replace),
+                ),
+                ring(
+                    button::danger_ghost(fl!("settings-key-remove-ask"))
+                        .on_press(message(KeyMessage::AskRemove)),
+                    ringed(KeyControl::AskRemove),
+                ),
             ]),
         ],
         _ => {
@@ -459,28 +527,33 @@ fn key_block(which: ApiKey, key: &KeySection, texts: KeyTexts) -> Element<'_, Me
                 fl!("settings-key-show")
             };
             let cancel = key.replacing.then(|| {
-                button::secondary(fl!("settings-key-cancel"))
-                    .on_press(message(KeyMessage::CancelReplace))
-                    .into()
+                ring(
+                    button::secondary(fl!("settings-key-cancel"))
+                        .on_press(message(KeyMessage::CancelReplace)),
+                    ringed(KeyControl::Cancel),
+                )
             });
             vec![
                 row![
                     form::text_field(&texts.placeholder, &key.input)
+                        .id(focus::key_field_id(which))
                         .secure(!key.shown)
                         .on_input(move |input| message(KeyMessage::Input(input)))
                         .on_submit_maybe(save.clone())
                         .width(Length::Fill),
-                    button::secondary(show).on_press(message(KeyMessage::ToggleShow)),
+                    ring(
+                        button::secondary(show).on_press(message(KeyMessage::ToggleShow)),
+                        ringed(KeyControl::Show),
+                    ),
                 ]
                 .spacing(SPACE_S)
                 .align_y(Alignment::Center)
                 .into(),
                 layout::buttons(
-                    std::iter::once(
-                        button::primary(fl!("settings-key-save"))
-                            .on_press_maybe(save)
-                            .into(),
-                    )
+                    std::iter::once(ring(
+                        button::primary(fl!("settings-key-save")).on_press_maybe(save),
+                        ringed(KeyControl::Save),
+                    ))
                     .chain(cancel),
                 ),
                 text::secondary(texts.get_one).into(),
@@ -494,7 +567,7 @@ fn key_block(which: ApiKey, key: &KeySection, texts: KeyTexts) -> Element<'_, Me
 }
 
 /// The way back when the first-start search missed the zip version's folder.
-fn old_settings_import(import: &OldSettingsImport) -> Element<'_, Message> {
+fn old_settings_import(import: &OldSettingsImport, focused: bool) -> Element<'_, Message> {
     let note = match import {
         OldSettingsImport::None => None,
         OldSettingsImport::Scheduled(_) => Some(fl!("settings-old-scheduled")),
@@ -508,9 +581,11 @@ fn old_settings_import(import: &OldSettingsImport) -> Element<'_, Message> {
     };
     layout::controls(
         [
-            layout::buttons([button::secondary(fl!("settings-old-import-button"))
-                .on_press(Message::ImportOldSettings)
-                .into()]),
+            layout::buttons([ring(
+                button::secondary(fl!("settings-old-import-button"))
+                    .on_press(Message::ImportOldSettings),
+                focused,
+            )]),
             text::secondary(fl!("settings-old-hint")).into(),
         ]
         .into_iter()
@@ -521,19 +596,24 @@ fn old_settings_import(import: &OldSettingsImport) -> Element<'_, Message> {
 
 /// The tag for videos with a comment, shown while comments are inside the video: a comment inside
 /// the file is not visible in Explorer or in the name, the tag is. The checkbox turns tagging off
-/// altogether; the name is kept for when it is turned back on.
-fn commented_tag(enabled: bool, tag: &str) -> Element<'_, Message> {
+/// altogether; the name is kept for when it is turned back on. `focus` is where keyboard focus
+/// is in the window.
+fn commented_tag<'a>(enabled: bool, tag: &'a str, focus: Option<&Control>) -> Element<'a, Message> {
     let help = match frename_core::clean_commented_tag(tag).filter(|_| enabled) {
         Some(tag) => fl!("settings-commented-tag-hint", tag = tag),
         None => fl!("settings-commented-tag-off"),
     };
     column![
-        form::checkbox(fl!("settings-commented-tag"), enabled)
-            .on_toggle(Message::SetCommentedTagEnabled),
+        ring(
+            form::checkbox(fl!("settings-commented-tag"), enabled)
+                .on_toggle(Message::SetCommentedTagEnabled),
+            focus == Some(&Control::CommentedTagEnabled),
+        ),
         layout::indented(
             row![
                 text::body(fl!("settings-commented-tag-name")),
                 form::text_field(frename_core::DEFAULT_COMMENTED_TAG, tag)
+                    .id(focus::COMMENTED_TAG_FIELD)
                     .on_input_maybe(enabled.then_some(Message::SetCommentedTag))
                     .width(FIELD_WIDTH_S),
                 layout::info(help),
@@ -548,14 +628,20 @@ fn commented_tag(enabled: bool, tag: &str) -> Element<'_, Message> {
 
 /// Shown after a storage change: the setting only decides where things are saved from now
 /// on, so moving what the files already have is a separate batch action, one click away.
-fn move_offer(note: String, label: String, operation: Operation) -> Element<'static, Message> {
+fn move_offer(
+    note: String,
+    label: String,
+    operation: Operation,
+    focused: bool,
+) -> Element<'static, Message> {
     layout::notice(
         NoticeKind::Info,
         note,
         None,
-        [button::secondary(label)
-            .on_press(Message::OpenBatchAction(operation))
-            .into()],
+        [ring(
+            button::secondary(label).on_press(Message::OpenBatchAction(operation)),
+            focused,
+        )],
     )
 }
 

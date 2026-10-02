@@ -72,6 +72,11 @@ impl DemoRun {
         self.settings
     }
 
+    /// How many times to press Tab in the settings window before its shot.
+    pub fn settings_tabs(&self) -> u32 {
+        self.scenario.settings_tabs
+    }
+
     /// What a demo reads instead of the renderer's own API keys: Anthropic saved, Soniox missing,
     /// so one screenshot has both states and no server is asked for languages. `request`
     /// numbers each answer the way a real read would be numbered.

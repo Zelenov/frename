@@ -1,5 +1,6 @@
 //! Settings feature - the app settings window: user-facing options persisted in the app database.
 
+pub mod focus;
 mod messages;
 mod page;
 mod state;

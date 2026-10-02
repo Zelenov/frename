@@ -39,6 +39,10 @@ pub struct DemoScenario {
     /// into it.
     #[serde(default)]
     pub more: bool,
+    /// With `--settings`: press Tab this many times in the settings window before the shot, to
+    /// show the keyboard focus ring (#167).
+    #[serde(default)]
+    pub settings_tabs: u32,
     /// Turn the open clip by this many quarter turns clockwise (negative: counter-clockwise),
     /// as `Ctrl+Alt+→` / `←` do, after the seek. The shot is then taken while the note is still
     /// shown over the picture.
@@ -273,6 +277,7 @@ name = "pick.a.mp4"
         let scenario = DemoScenario::parse(MINIMAL).unwrap();
         assert_eq!(scenario.seek, 0.0);
         assert!(!scenario.more);
+        assert_eq!(scenario.settings_tabs, 0);
         assert_eq!(scenario.files[0].comment, None);
         assert!(scenario.files[0].markers.is_empty());
     }
@@ -285,6 +290,16 @@ name = "pick.a.mp4"
 [[files]]",
         );
         assert!(DemoScenario::parse(&text).unwrap().more);
+    }
+
+    #[test]
+    fn a_scenario_can_tab_through_settings() {
+        let text = MINIMAL.replace(
+            "[[files]]",
+            "settings_tabs = 2
+[[files]]",
+        );
+        assert_eq!(DemoScenario::parse(&text).unwrap().settings_tabs, 2);
     }
 
     #[test]
