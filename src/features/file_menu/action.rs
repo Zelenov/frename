@@ -21,12 +21,12 @@ impl FileAction {
         FileAction::CopyName,
     ];
 
-    /// The keys shown next to the item, as printed on the keyboard.
-    pub fn keys(self) -> &'static str {
+    /// The keys shown next to the item, one cap each, as printed on the keyboard.
+    pub fn keys(self) -> &'static [&'static str] {
         match self {
-            FileAction::ShowInFileManager => "F11",
-            FileAction::CopyPath => "Shift+F11",
-            FileAction::CopyName => "Ctrl+F11",
+            FileAction::ShowInFileManager => &["F11"],
+            FileAction::CopyPath => &["Shift", "F11"],
+            FileAction::CopyName => &["Ctrl", "F11"],
         }
     }
 
@@ -76,10 +76,10 @@ mod tests {
     fn every_item_shows_the_key_that_does_it() {
         for action in FileAction::ALL {
             let (named, modifiers) = match action.keys() {
-                "F11" => (Named::F11, Modifiers::empty()),
-                "Shift+F11" => (Named::F11, Modifiers::SHIFT),
-                "Ctrl+F11" => (Named::F11, Modifiers::COMMAND),
-                other => panic!("unexpected keys {other}"),
+                ["F11"] => (Named::F11, Modifiers::empty()),
+                ["Shift", "F11"] => (Named::F11, Modifiers::SHIFT),
+                ["Ctrl", "F11"] => (Named::F11, Modifiers::COMMAND),
+                other => panic!("unexpected keys {other:?}"),
             };
             let key = keyboard::Key::Named(named);
             assert_eq!(FileAction::from_key(&key, modifiers), Some(action));

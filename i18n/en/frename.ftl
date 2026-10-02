@@ -381,6 +381,7 @@ batch-subtitles-usd-about = about ${ $amount }
 
 ## File list
 folder-has-subtitles = Has subtitles
+folder-closed-by-job = Closed while a batch action changes it
 folder-filter-tip = Show only…
 
 folder-search-placeholder = Find a file, or a word in a comment
@@ -551,6 +552,8 @@ sync-panel-sort-like-folder = Sort like the folder
 
 file-name-panel-no-tags = No tags on this clip
 file-name-panel-untag = Untag
+file-name-panel-clear-in = Clear the in point
+file-name-panel-clear-out = Clear the out point
 
 ## Updates (Settings)
 

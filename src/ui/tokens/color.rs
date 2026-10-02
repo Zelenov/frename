@@ -61,6 +61,9 @@ pub const DANGER_TINT: Color = Color::from_rgba(1.0, 0.478, 0.478, 0.10);
 /// The one shadow: under popups (menus, tooltips, dialogs) and dragged chips only.
 pub const SHADOW: Color = Color::from_rgba(0.0, 0.0, 0.0, 0.5);
 
+/// How much of its marker's color tints the marker label's fill (§13.3.4).
+pub const MARKER_LABEL_TINT: f32 = 0.25;
+
 /// A disabled filled button keeps its colors at this opacity.
 pub const DISABLED_ALPHA: f32 = 0.4;
 
