@@ -2,7 +2,6 @@
 ## Fixed
 - In fullscreen, buttons no longer show tooltips over the picture: not on the controls bar, not on the ⋯ button, not in the marker list. Outside fullscreen nothing changes.
 
-
 # 0.97
 ## Changed
 - Describe with AI: frames are chosen where the picture changes the most instead of a fixed interval, and a description's moments now cover only what stands out (a static or uniform clip can get none) instead of always tiling the whole clip, and a moment that only repeats the summary is left out.
