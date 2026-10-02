@@ -437,7 +437,7 @@ folder-has-subtitles = Есть субтитры
 folder-closed-by-job = Закрыт, пока его меняет пакетное действие
 folder-filter-tip = Показать только…
 
-folder-search-placeholder = Найти файл или слово в комментарии
+folder-search-placeholder = Найти файл или комментарий
 folder-search-comments-loading = Ищем в комментариях… осталось { $n }
 folder-search-clear = Очистить
 folder-all = Все
