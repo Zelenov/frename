@@ -1390,11 +1390,20 @@ impl FolderWorkspace {
             let saved = frename_core::markers_from_comment(snapshot_after_save.comment()).1;
             lines(wanted) == lines(&saved)
         });
+        let mut markers_notice = Task::none();
         if comment_holds_markers {
             // Kept in the comment now: a failed write into the video no longer holds them.
             self.unsaved_markers.remove(&id);
             if !refused {
                 self.move_markers_out_of_video(id, &new_path);
+            }
+        } else if let Some(wanted) = moved_markers {
+            // The comment did not get them (a comment inside a read-only or busy video): kept
+            // like markers a video refused, so the file is marked, they are shown when the clip
+            // opens again, and its next save writes them.
+            let first = self.unsaved_markers.insert(id, wanted).is_none();
+            if first && !refused {
+                markers_notice = Self::notice("Markers not saved: the file is read-only or in use");
             }
         }
         // Applied and read back from the file: the journal's copy of these edits is no longer
@@ -1458,11 +1467,12 @@ impl FolderWorkspace {
             return Task::batch([
                 markers_saved,
                 refused_notice,
+                markers_notice,
                 file_action,
                 Task::done(Message::ScrollFolderListToSelected),
             ]);
         }
-        Task::batch([markers_saved, refused_notice, file_action])
+        Task::batch([markers_saved, refused_notice, markers_notice, file_action])
     }
 
     fn handle_folder_message(&mut self, msg: folder::Message) -> Task<Message> {
@@ -4688,6 +4698,201 @@ mod tests {
             "{}",
             comment_file_text(&test_dir)
         );
+    }
+
+    // Issue #143, comments stored inside the video: the video cannot be written while it plays
+    // (Windows locks it), so marker edits are in the recovery journal a second after they are
+    // made and in the video's description when the clip is left.
+
+    /// Comments in the video's description, markers kept in the comment, for this test only.
+    fn video_comment_storage() -> frename_core::StorageGuard {
+        frename_core::use_storage_on_this_thread(
+            frename_core::MetadataStorage {
+                comment: frename_core::CommentStorage::InVideo,
+                in_out: frename_core::InOutStorage::InVideo,
+            },
+            frename_core::MarkerStorage::Comment,
+        )
+    }
+
+    /// The comment as the clip on disk holds it, wherever comments are stored.
+    fn comment_on_disk(path: &std::path::Path) -> String {
+        frename_core::FileTagger::parse(path, &frename_core::FolderInfo::default())
+            .comment()
+            .to_string()
+    }
+
+    /// Leave the open clip: what it holds is saved.
+    fn save_open_clip(workspace: &mut FolderWorkspace) {
+        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+    }
+
+    #[test]
+    fn marker_edits_kept_in_a_comment_inside_the_video_are_journaled_then_saved() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let _storage = video_comment_storage();
+        let mut workspace = journal_workspace(&test_dir);
+        let file = test_dir.target_file();
+
+        send_marker(&mut workspace, M::Add, 65_000);
+        tick(&mut workspace);
+        assert_eq!(journal_files(&test_dir), 1, "journaled within a second");
+        assert_eq!(comment_file_text(&test_dir), "", "no text file is made");
+
+        save_open_clip(&mut workspace);
+        assert!(comment_on_disk(&file).contains("1:05"), "added");
+        assert_eq!(journal_files(&test_dir), 0, "saved: the entry goes");
+
+        // Named and recolored, then deleted: each save carries the line along.
+        let guid = first_marker_guid(&workspace);
+        send_marker(&mut workspace, M::Open(guid.clone()), 65_000);
+        send_marker(&mut workspace, type_name("Lion"), 65_000);
+        send_marker(&mut workspace, M::Close, 65_000);
+        send_marker(
+            &mut workspace,
+            M::SetColor(guid.clone(), frename_core::MarkerColor::Red),
+            65_000,
+        );
+        save_open_clip(&mut workspace);
+        let text = comment_on_disk(&file);
+        assert!(text.contains("Lion") && text.contains("[red]"), "{text}");
+        send_marker(&mut workspace, M::Delete(guid), 0);
+        save_open_clip(&mut workspace);
+        assert!(!comment_on_disk(&file).contains("Lion"), "deleted");
+        assert!(frename_core::FileTagger::load_markers(&file)
+            .unwrap_or_default()
+            .is_empty());
+    }
+
+    #[test]
+    fn markers_held_by_the_video_move_into_its_description_on_the_first_edit() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let file = test_dir.target_file();
+        let in_video = comment_file_storage(frename_core::MarkerStorage::InVideo);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        send_marker(&mut workspace, M::AddRange(5_000, 8_000), 0);
+        save_open_clip(&mut workspace);
+        drop(in_video);
+
+        let _storage = video_comment_storage();
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(file.clone()),
+        });
+        flush_file_opened(&mut workspace);
+        assert_eq!(marker_names(&workspace).len(), 2);
+        save_open_clip(&mut workspace);
+        assert_eq!(comment_on_disk(&file), "", "opening alone rewrites nothing");
+
+        let guid = first_marker_guid(&workspace);
+        send_marker(&mut workspace, M::Open(guid), 1_000);
+        send_marker(&mut workspace, type_name("Edited"), 1_000);
+        save_open_clip(&mut workspace);
+        let text = comment_on_disk(&file);
+        assert!(text.contains("Edited") && text.contains("0:05"), "{text}");
+        assert!(frename_core::FileTagger::load_markers(&file)
+            .unwrap_or_default()
+            .is_empty());
+
+        // The batch move has nothing left to do.
+        assert!(matches!(
+            frename_core::FileTagger::markers_to_comment_reporting(&file),
+            Ok((frename_core::MoveOutcome::NothingToMove, 0))
+        ));
+    }
+
+    #[test]
+    fn markers_kept_in_a_comment_inside_the_video_survive_a_crash() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let _storage = video_comment_storage();
+        let mut workspace = journal_workspace(&test_dir);
+        send_marker(&mut workspace, M::Add, 41_000);
+        tick(&mut workspace);
+        drop(workspace); // the process dies before the clip is left
+        let lock = frename_core::recovery::InstanceLock::acquire().expect("the only instance");
+        match frename_core::recovery::restore_all(&lock).as_slice() {
+            [frename_core::recovery::Restored::Applied { path, summary }] => {
+                assert_eq!(summary.markers, 1);
+                assert!(comment_on_disk(path).contains("0:41"));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    /// A save that does not take (here a file already has the clip's new name; a read-only or
+    /// busy video fails the same way) keeps markers kept in the video's description: the file is
+    /// marked in the list, the clip shows them when opened again, and the next save writes them.
+    #[test]
+    fn a_save_that_fails_keeps_markers_kept_in_the_videos_description() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(2);
+        let _storage = video_comment_storage();
+        let mut workspace = marker_workspace(&test_dir, 2);
+        let id = file_id_at(&workspace, 0);
+        pick_tag(&mut workspace);
+        let (_, wanted) = workspace.file_workspace().get_snapshot().expect("open");
+        let blocker = test_dir.file_path(&wanted.file_name());
+        std::fs::write(&blocker, "taken").expect("a file with the new name");
+
+        send_marker(&mut workspace, M::Add, 65_000);
+        save_open_clip(&mut workspace);
+        assert!(workspace.unsaved_markers().contains_key(&id), "marked");
+        let file = test_dir.target_file();
+        assert!(!comment_on_disk(&file).contains("1:05"), "not written");
+
+        // Opened again, the clip still shows the marker; the next save writes it.
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        flush_file_opened(&mut workspace);
+        assert_eq!(marker_names(&workspace).len(), 1, "still shown");
+        std::fs::remove_file(&blocker).expect("free the name");
+        save_open_clip(&mut workspace);
+        assert!(
+            !workspace.unsaved_markers().contains_key(&id),
+            "written now"
+        );
+        let saved = workspace
+            .directory
+            .as_ref()
+            .and_then(|d| d.file_by_id(id))
+            .map(|f| f.file_path().to_path_buf())
+            .expect("the clip");
+        assert!(comment_on_disk(&saved).contains("1:05"));
+    }
+
+    /// With the comment in a text file, the batch move after an edit has nothing left to do.
+    #[test]
+    fn the_batch_move_after_a_marker_edit_is_a_no_op() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let file = test_dir.target_file();
+        let in_video = comment_file_storage(frename_core::MarkerStorage::InVideo);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        save_open_clip(&mut workspace);
+        drop(in_video);
+        let _storage = comment_file_storage(frename_core::MarkerStorage::Comment);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(file.clone()),
+        });
+        flush_file_opened(&mut workspace);
+        send_marker(&mut workspace, M::AddRange(5_000, 8_000), 0);
+        save_open_clip(&mut workspace);
+        let before = comment_file_text(&test_dir);
+        assert!(matches!(
+            frename_core::FileTagger::markers_to_comment_reporting(&file),
+            Ok((frename_core::MoveOutcome::NothingToMove, 0))
+        ));
+        assert_eq!(comment_file_text(&test_dir), before);
     }
 
     /// Issue #171: a click on a row that is in view opens it without scrolling the list; with the
