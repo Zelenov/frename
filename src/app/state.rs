@@ -713,7 +713,10 @@ impl FrenameApp {
                             (_, None) => Task::none(),
                         }
                     }
-                    settings::Message::Key(..) => Task::none(),
+                    settings::Message::Key(_, key) => {
+                        debug_assert!(key.is_local(), "Save, Remove and State are handled above");
+                        Task::none()
+                    }
                     settings::Message::SetSubtitleLanguage(..)
                     | settings::Message::SetSubtitleCueLength(_) => self.subtitle_config(),
                     settings::Message::SetMonochromeTags(_)
@@ -968,6 +971,8 @@ impl FrenameApp {
         if let Some(id) = self.settings_window {
             return Task::batch([window::gain_focus(id), show]);
         }
+        // A new window starts without keyboard focus (§11).
+        self.settings.clear_focus();
         // Whether a key is saved is read each time the window opens, not at start-up: reading
         // may unlock a keyring, and a keyring locked before may be open now.
         let read_key = if self.demo.is_some() {

@@ -413,7 +413,20 @@ selected where it has one). iced 0.14 gives buttons, checkboxes and radios no ke
   edge, `text.disabled` label.
 - **Focused** (Settings, §11): the button ring (§8.1) around the box *and* its label, the whole
   click target. A checkbox with a hint line under it rings only the checkbox line; the
-  hint stays outside. Focused + hover: the hover edge on the box, the ring around it.
+  hint stays outside. A checkbox of a fixed width (a Subtitles language, 120 wide) is ringed across
+  its whole cell, empty space included, since the whole cell takes the click. Focused + hover: the
+  hover edge on the box, the ring around it.
+
+```
+  ╭──────────────╮
+  │ ☐ Monochrome │          ← ring around box and label only
+  ╰──────────────╯
+    Tags you added show in a darker gray, …      ← the hint stays outside
+
+  ╭────────────╮
+  │ ☑ en       │ ☑ ru       ← a language cell: the ring spans the 120-wide cell
+  ╰────────────╯
+```
 - Positive wording that describes a lasting behaviour: *Check for updates when frename starts*,
   not *Don't check…*, not *Yes* (BIR «Чекбокс»; PUI "Use positive phrasing").
 - One style in the whole app. The three copies of `dark_checkbox_style` and the default iced
@@ -488,6 +501,12 @@ in Settings apply at once either way; the button bar says so.
 - States: hover edge `text.secondary`; **open**: 1 px `accent.text` edge while its list shows;
   **focused** (Settings, §11): a 2 px `accent.text` edge, as a focused field (§8.6), drawn as its
   own edge, not a ring outside it. Focused wins over hover and open: the edge stays 2 px.
+
+```
+  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+  ┃ English               ⌄  ┃   2 px accent.text edge, chevron unchanged, no outer ring
+  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+```
   Space moves a focused dropdown to its next option, wrapping (iced cannot open the list from
   the keyboard).
 

@@ -676,9 +676,9 @@ impl std::fmt::Display for LanguageOption {
 
 /// `System`, then every UI language, in the order Settings lists them.
 fn language_options() -> Vec<LanguageOption> {
-    std::iter::once(String::new())
-        .chain(crate::i18n::LANGUAGES.iter().map(|l| l.to_string()))
-        .map(LanguageOption)
+    focus::ui_languages()
+        .into_iter()
+        .map(|code| LanguageOption(code.to_string()))
         .collect()
 }
 

@@ -107,6 +107,14 @@ pub fn key_field_id(which: ApiKey) -> &'static str {
     }
 }
 
+/// The choices of the UI language dropdown, in its order: `System` (an empty code), then every
+/// UI language. The view lists them and Space steps through them.
+pub fn ui_languages() -> Vec<&'static str> {
+    std::iter::once("")
+        .chain(crate::i18n::LANGUAGES.iter().copied())
+        .collect()
+}
+
 /// The text field `id` is, as a control.
 pub fn control_of_field(id: &str) -> Option<Control> {
     match id {
@@ -221,7 +229,7 @@ pub fn controls(state: &SettingsState, batch_running: bool) -> Vec<Control> {
 }
 
 /// The controls of a key row that take a click now, in the order the row shows them.
-fn key_controls(state: &SettingsState, which: ApiKey) -> Vec<Control> {
+pub fn key_controls(state: &SettingsState, which: ApiKey) -> Vec<Control> {
     let controls = match key_row(state.key(which)) {
         KeyRow::Unavailable => vec![],
         KeyRow::ConfirmRemove => vec![KeyControl::Remove, KeyControl::Keep],
@@ -266,12 +274,9 @@ pub fn press(state: &SettingsState, control: &Control, press: Press) -> Option<M
     }
     let settings = state.settings();
     let message = match control {
-        Control::UiLanguage => {
-            let languages: Vec<&str> = std::iter::once("")
-                .chain(crate::i18n::LANGUAGES.iter().copied())
-                .collect();
-            Message::SetUiLanguage(next_of(&languages, &settings.ui_language.as_str()).to_string())
-        }
+        Control::UiLanguage => Message::SetUiLanguage(
+            next_of(&ui_languages(), &settings.ui_language.as_str()).to_string(),
+        ),
         Control::MonochromeTags => Message::SetMonochromeTags(!settings.monochrome_tags),
         Control::AutoplayVideo => Message::SetAutoplayVideo(!settings.autoplay_video),
         Control::SpaceAfterTags => Message::SetSpaceAfterTags(!settings.space_after_tags),
@@ -513,25 +518,44 @@ mod tests {
     }
 
     #[test]
-    fn a_press_that_takes_its_control_away_moves_the_focus_to_the_next_step() {
-        let key = |control| Control::Key(ApiKey::Soniox, control);
-        for (pressed, next) in [
-            (KeyControl::AskRemove, KeyControl::Keep),
-            (KeyControl::Keep, KeyControl::AskRemove),
-            (KeyControl::Replace, KeyControl::Field),
-            (KeyControl::Cancel, KeyControl::Replace),
-            (KeyControl::Save, KeyControl::Replace),
-            (KeyControl::Remove, KeyControl::Field),
-        ] {
-            assert_eq!(after_press(&key(pressed)), Some(key(next)), "{pressed:?}");
-        }
-        assert_eq!(after_press(&key(KeyControl::Show)), None);
+    fn the_saving_page_lists_what_each_choice_shows() {
+        let mut state = SettingsState::for_tests();
+        state.show_page_for_tests(Page::Saving);
+        let comments_in_text_files = [
+            Control::SpaceAfterTags,
+            Control::RespaceTags,
+            Control::CommentStorage(CommentStorage::InVideo),
+            Control::CommentStorage(CommentStorage::TextFile),
+            Control::MoveComments,
+            Control::MarkerStorage(MarkerStorage::InVideo),
+            Control::MarkerStorage(MarkerStorage::Comment),
+            Control::MoveMarkers,
+            Control::InOutStorage(InOutStorage::InVideo),
+            Control::InOutStorage(InOutStorage::Comment),
+            Control::MoveInOut,
+            Control::Close,
+        ];
+        state.apply_for_tests(Message::SetSpaceAfterTags(true));
+        state.apply_for_tests(Message::SetCommentStorage(CommentStorage::TextFile));
+        state.apply_for_tests(Message::SetMarkerStorage(MarkerStorage::Comment));
+        state.apply_for_tests(Message::SetInOutStorage(InOutStorage::Comment));
+        assert_eq!(controls(&state, false), comments_in_text_files);
+
+        // Back inside the video, with the tag turned off: its name field is not offered.
+        state.apply_for_tests(Message::SetCommentStorage(CommentStorage::InVideo));
+        state.apply_for_tests(Message::SetCommentedTagEnabled(false));
+        let in_video = controls(&state, false);
         assert_eq!(
-            after_press(&Control::Updates(updates::Control::Check)),
-            Some(Control::Updates(updates::Control::CheckOnStart))
+            in_video[2..5],
+            [
+                Control::CommentStorage(CommentStorage::InVideo),
+                Control::CommentedTagEnabled,
+                Control::CommentStorage(CommentStorage::TextFile),
+            ]
         );
-        assert_eq!(after_press(&Control::MonochromeTags), None);
-        assert!(is_offer(&Control::MoveComments) && !is_offer(&Control::Close));
+        // Taking an offer removes it.
+        state.apply_for_tests(Message::OpenBatchAction(Operation::RespaceTags));
+        assert!(!controls(&state, false).contains(&Control::RespaceTags));
     }
 
     #[test]

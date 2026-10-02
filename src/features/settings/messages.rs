@@ -105,3 +105,19 @@ pub enum KeyMessage {
         result: Result<KeyState, String>,
     },
 }
+
+impl KeyMessage {
+    /// Whether the message only changes the settings window's own state; the others (Save,
+    /// Remove, a store's answer) also go through the app, which talks to the credential store.
+    pub fn is_local(&self) -> bool {
+        match self {
+            KeyMessage::Input(_)
+            | KeyMessage::ToggleShow
+            | KeyMessage::Replace
+            | KeyMessage::CancelReplace
+            | KeyMessage::AskRemove
+            | KeyMessage::CancelRemove => true,
+            KeyMessage::Save | KeyMessage::Remove | KeyMessage::State { .. } => false,
+        }
+    }
+}

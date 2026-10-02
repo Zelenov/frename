@@ -1,6 +1,6 @@
 # 0.107
 ## Added
-- Settings work from the keyboard: `Tab` and `Shift+Tab` move a blue ring through the options and buttons of the page, `Space` checks, picks or changes the option with the ring, and `Enter` presses the button with the ring.
+- Settings work from the keyboard: `Tab` and `Shift+Tab` move a blue ring through the options and buttons of the page, `Space` checks or picks the option with the ring, moves a list to its next choice or presses the button with the ring, and `Enter` presses the button with the ring.
 
 # 0.106
 ## Added
