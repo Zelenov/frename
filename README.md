@@ -1,6 +1,6 @@
 # frename
 
-![frename turns IMG_2072.MOV into a file named with its tags](docs/frename-poster.jpg)
+![frename turns camera file names like IMG_2072.MOV into names made of tags](docs/frename-poster.jpg)
 
 frename is a desktop app for the hour before you start editing. You open a folder of raw video,
 watch each clip, and tag what you see. When you move to the next clip, frename renames the one you
@@ -23,14 +23,15 @@ frename is free and open source (MIT license).
 - **Mark the moments that matter.** Press `F2` to drop a marker and name it, hold `F2` to mark a
   range, and press `[` and `]` to set the usable part of the clip. Premiere Pro shows the markers on
   the clip, with their names, lengths and colors, and turns the in and out points into a subclip.
-- **Write a comment for each clip.** By default the comment is saved inside the video, where Premiere Pro
-  shows it in the Description column and finds it by search.
+- **Write a comment for each clip.** By default the comment is saved inside the video, where
+  Premiere Pro shows it in the Description column and finds it by search.
 - **Let AI describe your footage.** Describe with AI writes a short summary of each clip and marks
   what happens when, even in clips with no speech. It can also suggest an in and out point and
   name a single marker. You use your own Anthropic API key, and Haiku costs about $10 per 1,000
   one-minute clips.
 - **Get subtitles from speech.** Generate subtitles sends the audio to Soniox, a paid
-  speech-to-text service, and saves an `.srt` file, a Premiere Pro transcript, or both next to the video.
+  speech-to-text service, and saves an `.srt` file, a Premiere Pro transcript, or both next to
+  the video.
 - **Find any clip later.** Search the list by name, tag or comment, and filter it to untagged clips
   or clips with subtitles, comments or markers.
 - **Work on many clips at once.** Batch mode runs one action on all the clips you check, for
@@ -56,8 +57,8 @@ comment.
 3. Tag what you see.
 4. Press `[` and `]` to mark the usable part, and `F2` at a moment you want to find again. Press
    `F2` again right away to name the marker, then `Enter`.
-5. Type a comment for the clip, press `Esc` to leave the comment box, and press `PageDown` to go to the next
-   clip. frename renames the clip you left and saves its markers.
+5. Type a comment for the clip, press `Esc` to leave the comment box, and press `PageDown` to go
+   to the next clip. frename renames the clip you left and saves its markers.
 6. On Windows, drag finished clips from the list into Premiere Pro. frename saves each clip
    first, so it arrives with its new name and everything you marked. Nothing is moved.
 
@@ -125,7 +126,6 @@ single clip.
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous page |
 | `Escape` | Close Settings (while you remove or replace a key, Esc cancels that first) |
 
-
 The [guide](docs/guide.md) explains which keys a text box takes while you type, and everything
 else in detail: tags, markers, comments, search, subtitles, batch mode, Describe with AI and
 Settings.
@@ -135,8 +135,9 @@ Settings.
 - Tags live in the file names, and each folder's tag list lives in a `.frename` file inside that
   folder, so both travel with the footage.
 - Markers, in and out points and comments are saved inside mp4 and mov files. Settings can keep
-  comments in a `.comment.txt` file next to the video instead. Formats such as mkv cannot hold them, so
-  frename always uses the text file for those.
+  comments in a `.comment.txt` file next to the video instead. Formats such as mkv cannot hold
+  them, so for those frename keeps the comment and the in and out points in the text file, and
+  markers are not available.
 - frename sends your footage nowhere unless you ask. Describe with AI sends frames and
   subtitles to Anthropic, and Generate subtitles sends the audio to Soniox, both with your own API
   key. Your keys are kept in the system's password store. On Windows that is Credential Manager.
@@ -151,7 +152,8 @@ Settings.
 and run it. It installs without questions and starts frename. Video playback is built in, so you
 don't need to install anything else. Windows may warn about an unknown publisher the first time.
 If it does, click **More info**, then **Run anyway**. frename keeps its settings in
-`%LocalAppData%\frename`. Uninstalling removes them, but your tags and comments stay with your files.
+`%LocalAppData%\frename`. Uninstalling removes them, but your tags and comments stay with your
+files.
 
 If you prefer not to install, use the Windows zip from the
 [latest release](https://github.com/Zelenov/frename/releases/latest). Right-click it, open
