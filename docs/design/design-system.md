@@ -957,6 +957,14 @@ touches batch mode; steps 7–9 are **behaviour** for #58.
   controls bar shows the state.
 - **Layers** from bottom to top: picture → side list (§13.3.6) → marker label (§13.3.4) →
   tooltips. The fullscreen caption sits between the picture and the side list.
+- **Z-levels in code** (`ui::z`). Base: panels, the timeline canvas, splitters, the picture.
+  Stack layers (`stack!`): side list, caption, notices, hover actions; menus (More, filter, file
+  menu) with an `opaque` outside; the fullscreen video, always `opaque` so nothing under it gets
+  the hover. Overlays, which share one renderer layer unless they ask for their own (the renderer
+  draws every box of a layer before its text, so one overlay's text shows through another's box):
+  `Z::Anchored` (the marker label) < `Z::Tooltip` < `Z::DragPreview` (what follows a drag). An
+  overlay that has to be above another wraps its widget in `ui::z::layered(…, Z::…)`; a new overlay
+  picks its level.
 
 #### 13.3.3 Subtitle strip (windowed)
 - Present only when the clip has subtitles; fixed height 48 so the picture never jumps between

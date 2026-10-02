@@ -138,7 +138,7 @@ pub fn menu<'a>(dir: &Directory) -> Element<'a, Message> {
         .align_right(Length::Fill);
     let beside = mouse_area(container(space()).width(Length::Fill).height(Length::Fill))
         .on_press(Message::CloseFilterMenu);
-    stack![beside, popup]
+    stack![iced::widget::opaque(beside), popup]
         .width(Length::Fill)
         .height(Length::Fill)
         .into()

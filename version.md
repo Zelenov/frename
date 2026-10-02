@@ -1,3 +1,8 @@
+# 0.101
+## Fixed
+- A button's tooltip is no longer drawn under the marker's name over the timeline: the tooltip shows whole, on top.
+- In fullscreen, the file list and tag cells under the video no longer react to the pointer, so their tooltips do not appear over the picture. Open menus (More, the file filter) now also keep the controls under them from showing tooltips.
+
 # 0.100
 ## Fixed
 - Clicking a subtitle or a marker in its list no longer scrolls the list: it stays where it was, and follows the playhead again once playback moves on.

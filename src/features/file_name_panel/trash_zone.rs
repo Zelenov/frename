@@ -12,6 +12,7 @@ use frename_core::{StoredTagStore, TagList};
 use crate::ui::icons::{icon, Icon};
 use crate::ui::palette::TagPalette;
 use crate::ui::tokens::*;
+use crate::ui::z::{layered, Z};
 use crate::ui::{style, text};
 use crate::widgets::bounds_reporter::BoundsReporter;
 use crate::widgets::tag_chip;
@@ -61,10 +62,14 @@ where
     };
 
     let trash_zone = container(
-        tooltip(trash_square, tooltip_body, tooltip::Position::Top)
-            .gap(SPACE_XS)
-            .delay(Duration::ZERO)
-            .snap_within_viewport(true),
+        // What follows the drag is over every tooltip.
+        layered(
+            tooltip(trash_square, tooltip_body, tooltip::Position::Top)
+                .gap(SPACE_XS)
+                .delay(Duration::ZERO)
+                .snap_within_viewport(true),
+            Z::DragPreview,
+        ),
     )
     .width(Length::Fixed(TRASH_SIDE));
 
