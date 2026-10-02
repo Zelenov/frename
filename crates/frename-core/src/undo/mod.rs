@@ -11,8 +11,8 @@ pub use commands::{
     AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, NavigateFileCommand,
     PasteTagsCommand, RenameFileCommand, ReorderTagCommand, RotateVideoCommand, SaveTagCommand,
     SetCommentCommand, SetMarkerColorCommand, SetMarkerNameCommand, SetMarkerSpanCommand,
-    SetMarkerTextCommand, SetSegmentEndCommand, SetSegmentStartCommand, StarTagCommand,
-    SyncTagOrderCommand, ToggleTagCommand,
+    SetMarkerTextCommand, SetSegmentCommand, SetSegmentEndCommand, SetSegmentStartCommand,
+    StarTagCommand, SyncTagOrderCommand, ToggleTagCommand,
 };
 pub use context::UndoContext;
 pub use error::UndoError;

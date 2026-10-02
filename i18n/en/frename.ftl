@@ -563,6 +563,8 @@ file-name-panel-no-tags = No tags on this clip
 file-name-panel-untag = Untag
 file-name-panel-clear-in = Clear the in point
 file-name-panel-clear-out = Clear the out point
+file-name-panel-suggested-in-out = AI
+file-name-panel-apply-suggested-in-out = Set In and Out to what the AI suggests
 
 ## Updates (Settings)
 

@@ -13,8 +13,8 @@ mod tests {
         AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,
         NavigateFileCommand, PasteTagsCommand, RenameFileCommand, ReorderTagCommand,
         SaveTagCommand, SetCommentCommand, SetMarkerColorCommand, SetMarkerNameCommand,
-        SetMarkerSpanCommand, SetMarkerTextCommand, StarTagCommand, SyncTagOrderCommand,
-        ToggleTagCommand, UndoContext,
+        SetMarkerSpanCommand, SetMarkerTextCommand, SetSegmentCommand, StarTagCommand,
+        SyncTagOrderCommand, ToggleTagCommand, UndoContext,
     };
     use crate::{Directory, File, FileId, FileSnapshot, Marker, MarkerColor, StoredTag, TagList};
     use uuid::Uuid;
@@ -1334,5 +1334,32 @@ A lion walks past."
         tag_list.restore_order_state(state).unwrap();
         assert_eq!(tag_list.file_snapshot().tags(), ["Action", "Comedy", "Zed"]);
         assert_eq!(tag_list.filtered_display_tag_ids().len(), 3);
+    }
+
+    #[test]
+    fn setting_both_in_out_points_is_one_undo_step() {
+        let mut tag_list = marker_list();
+        let mut history = History::new(50);
+        tag_list.set_segment_start_secs(Some(1.0));
+        let old = tag_list.file_snapshot().segment();
+        let new = crate::Segment {
+            start: Some(3.0),
+            end: Some(12.0),
+        };
+        tag_list.set_segment_start_secs(new.start);
+        tag_list.set_segment_end_secs(new.end);
+        history.push(Box::new(SetSegmentCommand { old, new }));
+
+        run(&mut history, &mut tag_list, true);
+        assert_eq!(
+            tag_list.file_snapshot().segment(),
+            crate::Segment {
+                start: Some(1.0),
+                end: None,
+            },
+            "one undo brings back both points as they were"
+        );
+        run(&mut history, &mut tag_list, false);
+        assert_eq!(tag_list.file_snapshot().segment(), new);
     }
 }

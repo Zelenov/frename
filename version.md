@@ -1,6 +1,10 @@
-# 0.106
+# 0.107
 ## Added
 - Describe a marker with AI: ✨ on a marker's row, or `Ctrl+F2` on the marker under the playhead, names an unnamed marker and adds what happens at that moment to its comment, which the marker list now shows under the name. A name you gave stays. One undo takes it back.
+
+# 0.106
+## Added
+- Describe with AI suggests an In and Out for clips with a lead-in or lead-out around the part worth keeping. With the clip open, the suggestion shows as an **AI** pill next to the IN and OUT points; click it to use it. frename never sets them by itself.
 
 # 0.105
 ## Added

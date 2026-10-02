@@ -26,7 +26,7 @@ pub use reorder_tag::ReorderTagCommand;
 pub use rotate_video::RotateVideoCommand;
 pub use save_tag_cmd::SaveTagCommand;
 pub use set_comment::SetCommentCommand;
-pub use set_segment::{SetSegmentEndCommand, SetSegmentStartCommand};
+pub use set_segment::{SetSegmentCommand, SetSegmentEndCommand, SetSegmentStartCommand};
 pub use star_tag::StarTagCommand;
 pub use sync_order::SyncTagOrderCommand;
 pub use toggle_tag::ToggleTagCommand;

@@ -616,6 +616,8 @@ file-name-panel-no-tags = У клипа нет тегов
 file-name-panel-untag = Снять тег
 file-name-panel-clear-in = Убрать точку входа
 file-name-panel-clear-out = Убрать точку выхода
+file-name-panel-suggested-in-out = AI
+file-name-panel-apply-suggested-in-out = Поставить вход и выход, которые предлагает AI
 
 ## Updates (Settings)
 
