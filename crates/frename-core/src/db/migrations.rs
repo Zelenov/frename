@@ -87,6 +87,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 19,
         sql: schema::M19_PLAYBACK_POSITION,
     },
+    Migration {
+        version: 20,
+        sql: schema::M20_AI_MOMENTS,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
@@ -171,7 +175,7 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 19);
+        assert_eq!(current_version(&conn).expect("version"), 20);
     }
 
     #[test]

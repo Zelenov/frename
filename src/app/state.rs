@@ -531,6 +531,9 @@ impl FrenameApp {
                 let model = Task::done(describe_ai_message(batch::describe_ai::Message::SetModel(
                     clipscribe::Model::from_id(&self.settings.settings().ai_model),
                 )));
+                let moments = Task::done(describe_ai_message(
+                    batch::describe_ai::Message::SetMoments(self.settings.settings().ai_moments),
+                ));
                 let open = match self.initial_path.take().or(self.restored_clip.take()) {
                     Some(pair) => folder_workspace::Message::ScanFolder(pair),
                     None => folder_workspace::Message::LoadLastSession,
@@ -538,6 +541,7 @@ impl FrenameApp {
                 let load = Task::batch([
                     language,
                     model,
+                    moments,
                     self.subtitle_config(),
                     Task::done(Message::FolderWorkspace(open)),
                 ]);
@@ -640,6 +644,9 @@ impl FrenameApp {
                     ),
                     settings::Message::SetAiModel(model) => Task::done(describe_ai_message(
                         batch::describe_ai::Message::SetModel(model),
+                    )),
+                    settings::Message::SetAiMoments(moments) => Task::done(describe_ai_message(
+                        batch::describe_ai::Message::SetMoments(moments),
                     )),
                     settings::Message::Key(which, settings::KeyMessage::Save) => {
                         match self.settings.typed_key(which) {

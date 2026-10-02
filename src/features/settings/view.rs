@@ -3,7 +3,7 @@
 
 use clipscribe::{Model, MODELS};
 use frename_core::ai::key::{ApiKey, KeyState};
-use frename_core::ai::SummaryLanguage;
+use frename_core::ai::{MomentsMode, SummaryLanguage};
 use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage};
 use iced::widget::{column, row, Row};
 use iced::{Alignment, Element, Length};
@@ -272,6 +272,26 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
                     |option| Message::SetSummaryLanguage(option.0),
                 )
                 .width(FIELD_WIDTH_L),
+            ),
+            layout::setting_row(
+                fl!("settings-ai-moments-label"),
+                layout::aligned([
+                    form::radio_option(
+                        fl!("settings-ai-moments-important"),
+                        None,
+                        MomentsMode::Important,
+                        Some(settings.ai_moments),
+                        Message::SetAiMoments,
+                    ),
+                    form::radio_option(
+                        fl!("settings-ai-moments-full"),
+                        None,
+                        MomentsMode::Full,
+                        Some(settings.ai_moments),
+                        Message::SetAiMoments,
+                    ),
+                    text::secondary(fl!("settings-ai-moments-hint")).into(),
+                ]),
             ),
         ],
     )

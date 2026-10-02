@@ -52,6 +52,8 @@ pub enum Message {
     SetLanguage(SummaryLanguage),
     /// The model descriptions are written with, from the settings.
     SetModel(Model),
+    /// Which moments descriptions get, from the settings.
+    SetMoments(MomentsMode),
 }
 
 /// What the job does to each file: the options it started with.
@@ -61,6 +63,8 @@ pub struct Run {
     pub redo: bool,
     /// The model's id (see [`Model::from_id`]).
     pub model: &'static str,
+    /// Only what stands out (which alone suggests an In/Out), or the whole clip.
+    pub moments: MomentsMode,
 }
 
 impl Run {
@@ -74,6 +78,7 @@ pub struct Options {
     redo: bool,
     language: SummaryLanguage,
     model: Model,
+    moments: MomentsMode,
     /// What is known about each checked video, kept while the folder is open.
     probes: HashMap<FileId, Probe>,
     /// Videos whose length is being read.
@@ -97,6 +102,7 @@ impl Options {
             Message::KeyState(state) => self.key = Some(state),
             Message::SetLanguage(language) => self.language = language,
             Message::SetModel(model) => self.model = model,
+            Message::SetMoments(moments) => self.moments = moments,
         }
     }
 
@@ -105,6 +111,7 @@ impl Options {
             language: self.language,
             redo: self.redo,
             model: self.model.id,
+            moments: self.moments,
         })
     }
 
@@ -500,8 +507,9 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
     let Request {
         on_disk,
         subtitles,
-        options: describe_options,
+        options: mut describe_options,
     } = request;
+    describe_options.moments = options.moments;
     // The file's share of reading frames, as the estimate counts it; waiting for the answer
     // takes the rest.
     let mut asked_at = 0.0;
@@ -816,6 +824,7 @@ mod tests {
                 language: SummaryLanguage::English,
                 redo: false,
                 model: Model::default().id,
+                moments: MomentsMode::default(),
             },
             Path::new("C:/clips/photo.jpg"),
             &AtomicBool::new(false),

@@ -1,3 +1,7 @@
+# 0.109
+## Added
+- Settings → Describe with AI → Moments: keep only what stands out (as before) or cover the whole clip with moments. Only the first suggests an In and Out.
+
 # 0.108
 ## Added
 - Describe a marker with AI: ✨ on a marker's row, or `Ctrl+F2` on the marker under the playhead, names an unnamed marker and adds what happens at that moment to its comment, which the marker list now shows under the name. A name you gave stays. One undo takes it back.
