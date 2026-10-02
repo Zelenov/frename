@@ -568,6 +568,15 @@ markers-color-magenta = Пурпурный
 markers-color-other = Другой цвет
 markers-read-only = только чтение
 markers-name-placeholder = Имя
+markers-ai-describe = Описать с помощью AI: назвать маркер и добавить, что происходит
+markers-ai-stop = Остановить описание
+markers-ai-describing = Описываю…
+markers-ai-done = Маркер описан
+markers-ai-nothing-new = У маркера уже есть это описание
+markers-ai-no-marker = Здесь нет маркера
+markers-ai-no-key = Нет ключа Anthropic API: задайте его в настройках
+markers-ai-failed = Не описано: { $reason }
+markers-ai-failed-unknown = что-то пошло не так
 
 ## File workspace
 

@@ -31,6 +31,7 @@ pub fn view(
         markers: state.file_workspace().markers(),
         state: state.markers(),
         pane_width: state.left_width(),
+        spinner_frame: state.spinner_frame(),
     };
 
     if state.directory().is_none() && !state.media_fullscreen() {

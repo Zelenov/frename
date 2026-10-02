@@ -480,6 +480,9 @@ impl VideoPlayerState {
                     video_controls::Message::DeleteMarker => {
                         Task::done(Message::Markers(markers::Message::DeleteAtPlayhead))
                     }
+                    video_controls::Message::DescribeMarker => {
+                        Task::done(Message::Markers(markers::Message::DescribeAtPlayhead))
+                    }
                     video_controls::Message::PreviousMarker => {
                         Task::done(Message::Markers(markers::Message::Previous))
                     }

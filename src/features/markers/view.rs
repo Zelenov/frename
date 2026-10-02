@@ -11,7 +11,7 @@ use iced::{Alignment, Background, Border, Element, Length, Padding};
 use super::{MarkersState, Message};
 use crate::ui::button::{self as ui_button};
 use crate::ui::icon_button::IconButton;
-use crate::ui::icons::{icon, Icon};
+use crate::ui::icons::{icon, spinner, Icon};
 use crate::ui::palette::marker_color;
 use crate::ui::style::{self, ButtonKind};
 use crate::ui::tokens::*;
@@ -40,17 +40,25 @@ const FIELD_INSET: Padding = Padding {
     right: SPACE_S,
 };
 
-/// How many lines the name of `marker` wraps to in the list, as an estimate: good enough to
-/// scroll a row into view.
-fn name_lines(marker: &Marker) -> usize {
+/// How many lines `text` wraps to in a row of the list, as an estimate: good enough to scroll a
+/// row into view.
+fn wrapped_lines(text: &str) -> usize {
     let per_line = (NAME_ROOM / NAME_CHAR_ADVANCE) as usize;
-    marker.name.chars().count().div_ceil(per_line).max(1)
+    text.lines()
+        .map(|line| line.chars().count().div_ceil(per_line).max(1))
+        .sum::<usize>()
+        .max(1)
 }
 
 /// Estimated height of `marker`'s row, for scrolling to a row only: the row itself is as tall as
-/// its content.
+/// its content. Its comment, if any, adds its lines under the name.
 fn row_height(marker: &Marker) -> f32 {
-    MARKER_ROW_HEIGHT + (name_lines(marker) - 1) as f32 * LINE_BODY
+    let comment = if marker.comment.trim().is_empty() {
+        0.0
+    } else {
+        SPACE_XXS + wrapped_lines(marker.comment.trim()) as f32 * LINE_BODY
+    };
+    MARKER_ROW_HEIGHT + (wrapped_lines(&marker.name) - 1) as f32 * LINE_BODY + comment
 }
 
 /// Distance from the top of the list to the top of row `index`, from the rows above it.
@@ -123,8 +131,9 @@ pub fn view<'a>(
     position_ms: u64,
     in_out: Option<(u64, u64)>,
     quiet: bool,
+    spinner_frame: usize,
 ) -> Element<'a, Message> {
-    let list = marker_list(markers, state, position_ms, quiet);
+    let list = marker_list(markers, state, position_ms, quiet, spinner_frame);
     match in_out {
         Some(span) => column![in_out_line(span), list].into(),
         None => list,
@@ -165,6 +174,7 @@ fn marker_list<'a>(
     state: &'a MarkersState,
     position_ms: u64,
     quiet: bool,
+    spinner_frame: usize,
 ) -> Element<'a, Message> {
     let Some(markers) = markers else {
         return cannot_hold();
@@ -176,7 +186,7 @@ fn marker_list<'a>(
     let rows = markers
         .iter()
         .enumerate()
-        .map(|(index, marker)| marker_row(marker, state, lit == Some(index), quiet));
+        .map(|(index, marker)| marker_row(marker, state, lit == Some(index), quiet, spinner_frame));
     scroll::vertical_with_id(
         MARKER_LIST_SCROLLABLE_ID,
         Column::with_children(rows)
@@ -342,6 +352,7 @@ fn marker_row<'a>(
     state: &'a MarkersState,
     lit: bool,
     quiet: bool,
+    spinner_frame: usize,
 ) -> Element<'a, Message> {
     let guid = marker.guid.as_deref();
     let open = state.edit().filter(|edit| guid == Some(edit.guid.as_str()));
@@ -361,6 +372,7 @@ fn marker_row<'a>(
             (color_picker(marker, guid, quiet), None)
         }
         Some(guid) => {
+            let describing = state.is_describing(guid);
             let done = open.is_some().then(|| {
                 row_action(
                     Icon::Check,
@@ -369,13 +381,44 @@ fn marker_row<'a>(
                     quiet,
                 )
             });
+            let ai = if describing {
+                row_action(
+                    Icon::CircleX,
+                    Tip::new(fl!("markers-ai-stop")),
+                    Message::StopDescribing(guid.to_string()),
+                    quiet,
+                )
+            } else {
+                // `Ctrl+F2` describes the marker the playhead is on: the lit row.
+                let tip = Tip::new(fl!("markers-ai-describe"));
+                let tip = if lit { tip.keys(&["Ctrl", "F2"]) } else { tip };
+                row_action(
+                    Icon::Sparkles,
+                    tip,
+                    Message::Describe(guid.to_string()),
+                    quiet,
+                )
+            };
             let delete = row_action(
                 Icon::X,
                 Tip::new(fl!("markers-delete")),
                 Message::Delete(guid.to_string()),
                 quiet,
             );
-            let actions = row![].push(done).push(delete).align_y(Alignment::Center);
+            let actions = row![]
+                .push(done)
+                .push(ai)
+                .push(delete)
+                .align_y(Alignment::Center);
+            // Shown whether or not the actions are: the request goes on in the background.
+            let working = describing.then(|| {
+                row![
+                    spinner(spinner_frame, ICON_S, TEXT_SECONDARY),
+                    text::caption(fl!("markers-ai-describing")),
+                ]
+                .spacing(SPACE_XS)
+                .align_y(Alignment::Center)
+            });
             let line = row![
                 dot(
                     marker.color,
@@ -384,6 +427,7 @@ fn marker_row<'a>(
                 ),
                 time,
             ]
+            .push(working)
             .spacing(SPACE_S)
             .align_y(Alignment::Center)
             .height(ICON_BUTTON_SMALL);
@@ -428,7 +472,11 @@ fn marker_row<'a>(
         None if marker.name.is_empty() => text::body("—").color(TEXT_SECONDARY).into(),
         None => text::body(marker.name.as_str()).into(),
     };
+    // The comment (an AI's description, or Premiere's comment) under the name, read-only.
+    let comment =
+        (!marker.comment.trim().is_empty()).then(|| text::secondary(marker.comment.trim()));
     let body = column![first_line, name]
+        .push(comment)
         .spacing(SPACE_XXS)
         .padding(ROW_INSET);
     // The row is as tall as its content, not as the estimate of [`row_height`]: a name that wraps

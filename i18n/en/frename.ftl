@@ -515,6 +515,15 @@ markers-color-magenta = Magenta
 markers-color-other = Another color
 markers-read-only = read-only
 markers-name-placeholder = Name
+markers-ai-describe = Describe with AI: name the marker and add what happens
+markers-ai-stop = Stop describing
+markers-ai-describing = Describing…
+markers-ai-done = Marker described
+markers-ai-nothing-new = The marker already has this description
+markers-ai-no-marker = No marker here
+markers-ai-no-key = No Anthropic API key: set one in Settings
+markers-ai-failed = Not described: { $reason }
+markers-ai-failed-unknown = something went wrong
 
 ## File workspace
 

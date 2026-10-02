@@ -200,6 +200,12 @@ impl FolderWorkspace {
                 self.delete_marker(&guid);
                 Task::none()
             }
+            M::Describe(guid) => self.describe_marker(&guid),
+            M::DescribeAtPlayhead => self.describe_marker_at(position_ms),
+            M::StopDescribing(guid) => {
+                self.markers.stop_describing(&guid);
+                Task::none()
+            }
             M::Scrolled(y, viewport) => {
                 self.markers.set_viewport(viewport);
                 // The list was just put back (fullscreen): keep the lit marker in view.
@@ -371,6 +377,7 @@ impl FolderWorkspace {
         if self.markers.edit().is_some_and(|e| e.guid == guid) {
             self.close_marker_row();
         }
+        self.markers.stop_describing(guid);
         if let Some(marker) = self.file_workspace.tag_list_mut().remove_marker(guid) {
             self.history.push(Box::new(DeleteMarkerCommand { marker }));
         }

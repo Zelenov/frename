@@ -1043,7 +1043,7 @@ click on a pin seeks there.
 playhead, counting from 500 ms before its start to 2 s after it (or its end, if later); among
 several, one already started wins over one coming up, then the latest start.
 
-**Marker keys** (they work even while a field has focus; they are ignored with Ctrl or Alt held;
+**Marker keys** (they work even while a field has focus; they are ignored with Ctrl or Alt held, except `Ctrl`+`F2`;
 F2's auto-repeat is ignored; what an open marker row blocks is listed under the table):
 
 | Key | What it does |
@@ -1055,6 +1055,7 @@ F2's auto-repeat is ignored; what an open marker row blocks is listed under the 
 | `F2` on a read-only marker | notice "That marker is read-only" and the marker list opens |
 | `F2` on a file that cannot hold markers | the marker list opens to say so |
 | `Shift`+`F2` | delete the nearest editable marker within 0.5 s; notice "Marker deleted" or "No marker here" |
+| `Ctrl`+`F2` | describe the marker the playhead is on (the lit row) with AI; auto-repeat ignored; notice "No marker here" or "That marker is read-only" |
 | `Shift`+`F1` / `Shift`+`F3` | jump to the previous / next marker start; "previous" skips a marker passed less than 750 ms ago |
 | the `map-pin` button | a click is `F2`; holding it draws a range like holding `F2` |
 
@@ -1127,22 +1128,38 @@ left to right, with the widths §13.9 folds by:
 **Marker rows**
 
 ```
- ● 0:06.120                                    ✕     ← dot · time · delete
-   City lights                                       ← name (body; "—" in text.secondary when empty)
+ ● 0:06.120                                  ✨ ✕     ← dot · time · describe with AI · delete
+   City lights                                        ← name (body; "—" in text.secondary when empty)
+   Lights come on along the river at dusk.            ← comment (secondary), when it has one
  ─────────────────────────────────────────────
- ● 0:14–0:18                                   ✓ ✕   ← open row: ✓ Done (Enter)
-   [Africa stays dark_______________]                ← name field (text field style)
+ ● 0:09 ◌ Describing…                          ⊗ ✕    ← request on its way: spinner, stop
+   —
  ─────────────────────────────────────────────
- ● ● ● ● ● ● ● ●  |  ○ AI                      ✕     ← color picker replaces the first line
+ ● 0:14–0:18                                 ✓ ✨ ✕   ← open row: ✓ Done (Enter)
+   [Africa stays dark_______________]                 ← name field (text field style)
+ ─────────────────────────────────────────────
+ ● ● ● ● ● ● ● ●  |  ○ AI                       ✕     ← color picker replaces the first line
 ```
 
 - A click on the row (outside the dot and the time) opens it for renaming (the open row below); a click on
   the time jumps there.
 - First line: the **color dot** (14 px, a button; ring `text.secondary` on hover, `text.primary`
   when its picker is open), the **time** (`mono`, a ghost button that jumps there), a flexible
-  space, then row actions: `check` "Done `Enter`" (open row only) and `x` "Delete the marker" as
-  24 px icon buttons, shown on hover, on the lit row and on the open row (§8.9 "hover tools").
-- Second line: the name, `body`, wrapping.
+  space, then row actions: `check` "Done `Enter`" (open row only), `sparkles` "Describe with AI:
+  name the marker and add what happens" (with `Ctrl` `F2` on the lit row, which that key
+  describes) and `x` "Delete the marker" as 24 px icon buttons, shown on hover, on the lit row and
+  on the open row (§8.9 "hover tools").
+- Second line: the name, `body`, wrapping. Under it the marker's **comment**, when it has one
+  (an AI description, or Premiere's comment), `secondary`, wrapping, read-only.
+- **Describing** (#174): while a marker's request is on its way, its first line shows, after the
+  time and whatever the pointer does, the turning `loader-circle` 12 and "Describing…" in
+  `caption` `text.secondary`; `sparkles` becomes `circle-x` "Stop describing". Several rows can
+  be describing at once. The answer names an unnamed marker (a name the editor gave stays) and adds
+  the description to the comment on a line of its own (an empty comment becomes it; a comment
+  that already has it is left alone): one undo step. Notices: "Marker described", "Not described:
+  {reason}" (the AI's or the clip's reason), "The marker already has this description"; with no
+  key, "No Anthropic API key: set one in Settings" and Settings opens on Describe with AI.
+  Leaving the clip, or deleting the marker, stops its request.
 - **Open row** (renaming): the name becomes a multi-line text field (§8.6) with the placeholder
   "Name"; Enter or Esc closes it.
 - **Color picker** (after a click on the dot): the first line becomes the 8 Premiere colors (Green,
@@ -1754,7 +1771,7 @@ fails. The keys are today's (#62 owns the list).
 | Rename | double-click a row, Enter / Esc | inline field in the row | the row shows the new name | error line under the field (why + what to do); the field keeps the text |
 | Comment | click the comment box, type | comment editor | saved on leave; comment line in the list row; "Commented" tag checked if Settings says so | – |
 | Mark in / out | `[` `]` | video controls, file name panel | IN/OUT timecodes appear; segment on the bar | – |
-| Markers | F2 (F2 F2 to name, hold for a range), Shift+F1/F3, Shift+F2 (§13.3.4) | timeline, marker list | pin appears with its label | not saved: `circle-alert` at the row's right end and an error notice |
+| Markers | F2 (F2 F2 to name, hold for a range), Shift+F1/F3, Shift+F2, Ctrl+F2 to describe with AI (§13.3.4, §13.3.6) | timeline, marker list | pin appears with its label | not saved: `circle-alert` at the row's right end and an error notice |
 | Run a batch action | batch mode, pick an action, primary button | batch panel | progress with n of total, time left, Cancel | stopped or failed: one notice with the reason and a fix button; files not done listed once |
 | Change a setting | ⚙, Ctrl+Tab between pages | Settings window | applies at once | key save failed: error line under the key row |
 | Update | the dot on ⚙ | Settings → Updates | status line; *Update and restart* | check failed: error line with the reason |

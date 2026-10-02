@@ -108,6 +108,11 @@ impl Options {
         })
     }
 
+    /// The model and language set in the settings.
+    pub fn model_and_language(&self) -> (Model, SummaryLanguage) {
+        (self.model, self.language)
+    }
+
     /// Whether clip lengths are being read (they keep the clips open: no job may rename them).
     pub fn is_probing(&self) -> bool {
         !self.probing.is_empty()

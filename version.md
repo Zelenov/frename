@@ -1,3 +1,7 @@
+# 0.106
+## Added
+- Describe a marker with AI: ✨ on a marker's row, or `Ctrl+F2` on the marker under the playhead, names an unnamed marker and adds what happens at that moment to its comment, which the marker list now shows under the name. A name you gave stays. One undo takes it back.
+
 # 0.105
 ## Added
 - Step through a clip frame by frame: `Alt+←` / `Alt+→`, or the new buttons next to play, show the previous or next frame and pause there. Hold the key to keep stepping. While paused, the time next to the timeline shows milliseconds (`00:10.250`). It goes by the real frames, so phone clips with a variable frame rate step correctly too.

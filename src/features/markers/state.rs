@@ -1,6 +1,9 @@
 //! State of the marker list that is not the markers themselves: the row being edited, the
 //! open color picker, and what `F2` did last.
 
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// A second `F2` within this time after one that added a marker opens that marker's row, so
@@ -64,6 +67,8 @@ pub struct MarkersState {
     /// The list being put back after fullscreen; its end report carries the new viewport's
     /// height, to see whether the lit marker is still shown.
     restore: crate::ui::scroll::ScrollRestore,
+    /// Markers being described with AI, each with the flag that stops its request.
+    describing: HashMap<String, Arc<AtomicBool>>,
 }
 
 impl MarkersState {
@@ -198,8 +203,43 @@ impl MarkersState {
         self.restore.arm(y);
     }
 
-    /// Start over for another file.
+    /// Mark `guid` as being described; the flag that stops its request, or `None` when it
+    /// already is.
+    pub fn start_describing(&mut self, guid: &str) -> Option<Arc<AtomicBool>> {
+        if self.describing.contains_key(guid) {
+            return None;
+        }
+        let cancel = Arc::new(AtomicBool::new(false));
+        self.describing.insert(guid.to_string(), cancel.clone());
+        Some(cancel)
+    }
+
+    /// The request for `guid` came back; whether it was still waited for.
+    pub fn finish_describing(&mut self, guid: &str) -> bool {
+        self.describing.remove(guid).is_some()
+    }
+
+    /// Stop the request for `guid`; its answer is not used.
+    pub fn stop_describing(&mut self, guid: &str) {
+        if let Some(cancel) = self.describing.remove(guid) {
+            cancel.store(true, Ordering::Relaxed);
+        }
+    }
+
+    pub fn is_describing(&self, guid: &str) -> bool {
+        self.describing.contains_key(guid)
+    }
+
+    /// Whether any marker is being described (the spinner turns).
+    pub fn any_describing(&self) -> bool {
+        !self.describing.is_empty()
+    }
+
+    /// Start over for another file. Its requests stop: their answers would not find the markers.
     pub fn reset(&mut self) {
+        for cancel in self.describing.values() {
+            cancel.store(true, Ordering::Relaxed);
+        }
         *self = Self::default();
     }
 }
@@ -207,6 +247,24 @@ impl MarkersState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_marker_is_described_once_at_a_time_and_leaving_stops_it() {
+        let mut state = MarkersState::default();
+        let cancel = state.start_describing("a").expect("started");
+        assert!(state.start_describing("a").is_none(), "already on its way");
+        assert!(state.is_describing("a") && state.any_describing());
+        let other = state.start_describing("b").expect("another marker");
+        state.stop_describing("b");
+        assert!(other.load(Ordering::Relaxed), "stopped");
+        assert!(
+            !state.finish_describing("b"),
+            "a stopped answer is not used"
+        );
+        state.reset();
+        assert!(cancel.load(Ordering::Relaxed), "leaving the clip stops it");
+        assert!(!state.any_describing());
+    }
 
     /// Issue #171: a click on a marker jumps there without scrolling the list.
     #[test]

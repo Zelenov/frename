@@ -61,6 +61,32 @@ impl Marker {
     }
 }
 
+/// The name and comment `marker` gets from an AI's `name` and `description` of its moment
+/// ("Describe with AI" on a marker). Offered, not forced: a name the editor gave stays, and so
+/// does their comment, with the description added on a line of its own; a comment that already
+/// holds the description is left as it is, so asking again adds nothing twice.
+pub fn marker_text_with_moment(marker: &Marker, name: &str, description: &str) -> (String, String) {
+    let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
+    let description = description.trim();
+    let new_name = if marker.name.trim().is_empty() {
+        name
+    } else {
+        marker.name.clone()
+    };
+    let comment = marker.comment.trim_end();
+    let new_comment = if description.is_empty() || comment.contains(description) {
+        marker.comment.clone()
+    } else if comment.trim().is_empty() {
+        description.to_string()
+    } else {
+        format!(
+            "{comment}
+{description}"
+        )
+    };
+    (new_name, new_comment)
+}
+
 /// Sort markers by time, the order every list shows them in.
 pub fn sort_markers(markers: &mut [Marker]) {
     markers.sort_by(|a, b| {
@@ -719,6 +745,56 @@ fn merge_text(a: &str, b: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn named(name: &str, comment: &str) -> Marker {
+        let mut marker = Marker::new(1_000);
+        marker.name = name.to_string();
+        marker.comment = comment.to_string();
+        marker
+    }
+
+    #[test]
+    fn a_moment_names_an_unnamed_marker_and_describes_it() {
+        let text = marker_text_with_moment(
+            &named("", ""),
+            " Lion
+at dusk ",
+            " A lion walks. ",
+        );
+        assert_eq!(
+            text,
+            ("Lion at dusk".to_string(), "A lion walks.".to_string())
+        );
+    }
+
+    #[test]
+    fn a_moment_keeps_the_editors_name_and_comment() {
+        let text = marker_text_with_moment(&named("Mine", "My note"), "Lion", "A lion walks.");
+        assert_eq!(
+            text,
+            (
+                "Mine".to_string(),
+                "My note
+A lion walks."
+                    .to_string()
+            )
+        );
+        let blank = marker_text_with_moment(&named("  ", "  "), "Lion", "A lion walks.");
+        assert_eq!(blank, ("Lion".to_string(), "A lion walks.".to_string()));
+    }
+
+    #[test]
+    fn asking_again_adds_the_same_description_once() {
+        let once = named(
+            "Lion",
+            "My note
+A lion walks.",
+        );
+        let again = marker_text_with_moment(&once, "Lion", "A lion walks.");
+        assert_eq!(again, (once.name.clone(), once.comment.clone()));
+        let empty = marker_text_with_moment(&named("", "note"), "", "  ");
+        assert_eq!(empty, (String::new(), "note".to_string()));
+    }
 
     fn line(start_ms: u64, duration_ms: u64, name: &str, comment: &str) -> MarkerLine {
         MarkerLine {
