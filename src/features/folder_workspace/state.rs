@@ -13,8 +13,8 @@ use frename_core::{
     AppDatabase, AppStateStore, BatchRun, CreateTagCommand, DeleteTagCommand, File, FileId,
     FileSnapshot, FolderAndFile, FolderTagStore, LoggingAppStateStore, Marker, NavigateFileCommand,
     PasteTagsCommand, RenameFileCommand, ReorderTagCommand, SaveAndReparse, SaveTagCommand,
-    SetCommentCommand, SetSegmentEndCommand, SetSegmentStartCommand, StarTagCommand,
-    SyncTagOrderCommand, ToggleTagCommand, UndoContext, UndoError,
+    Segment, SetCommentCommand, SetSegmentCommand, SetSegmentEndCommand, SetSegmentStartCommand,
+    StarTagCommand, SyncTagOrderCommand, ToggleTagCommand, UndoContext, UndoError,
 };
 use rfd;
 
@@ -566,6 +566,25 @@ impl FolderWorkspace {
             old_secs,
             new_secs: Some(secs),
         }));
+        Task::none()
+    }
+
+    /// Set the open clip's in and out points to the ones its AI description suggests, as one
+    /// undo step. Like `[` and `]`, nothing happens while the clip's name is being edited.
+    fn apply_suggested_in_out(&mut self) -> Task<Message> {
+        if self.inline_rename.is_some() {
+            return Task::none();
+        }
+        let Some(new) = file_name_panel::suggested_in_out(self.file_workspace.tag_list()) else {
+            return Task::none();
+        };
+        let old = Segment {
+            start: self.file_workspace.segment_start_secs(),
+            end: self.file_workspace.segment_end_secs(),
+        };
+        self.file_workspace.set_segment_start_secs(new.start);
+        self.file_workspace.set_segment_end_secs(new.end);
+        self.history.push(Box::new(SetSegmentCommand { old, new }));
         Task::none()
     }
 
@@ -2182,6 +2201,9 @@ impl FolderWorkspace {
             }));
             return Task::none();
         }
+        if let file_name_panel::Message::ApplySuggestedInOut = msg {
+            return self.apply_suggested_in_out();
+        }
         let (dragged_id, drop_index) = if let file_name_panel::Message::DragEnded = &msg {
             (
                 self.file_name_panel.dragging_tag_id(),
@@ -3139,6 +3161,62 @@ mod tests {
             Some(3.0),
             "in/out points are not tags: a paste keeps them"
         );
+    }
+
+    /// Issue #173: the In/Out the AI suggests is set only when the editor applies it, as one
+    /// undo step, and is no longer offered once the points match it.
+    #[test]
+    fn the_ai_suggested_in_out_is_applied_as_one_undo_step() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        workspace
+            .file_workspace
+            .tag_list_mut()
+            .set_comment("AI: A walk.\nSuggested In/Out: 00:00:03.200 – 00:00:11.800".to_string());
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::SegmentStartMarked(1.0),
+        ));
+        let points = |w: &FolderWorkspace| {
+            (
+                w.file_workspace().segment_start_secs(),
+                w.file_workspace().segment_end_secs(),
+            )
+        };
+        assert_eq!(
+            points(&workspace),
+            (Some(1.0), None),
+            "nothing set by itself"
+        );
+        assert!(crate::features::file_name_panel::suggested_in_out(
+            workspace.file_workspace().tag_list()
+        )
+        .is_some());
+
+        let _ = workspace.update(Message::FileNamePanel(
+            crate::features::file_name_panel::Message::ApplySuggestedInOut,
+        ));
+        assert_eq!(points(&workspace), (Some(3.0), Some(12.0)));
+        assert!(
+            crate::features::file_name_panel::suggested_in_out(
+                workspace.file_workspace().tag_list()
+            )
+            .is_none(),
+            "applied: nothing left to offer"
+        );
+
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(
+            points(&workspace),
+            (Some(1.0), None),
+            "one undo brings back both points"
+        );
+        let _ = workspace.update(Message::Redo);
+        assert_eq!(points(&workspace), (Some(3.0), Some(12.0)));
     }
 
     /// Issue #83: pasting tags built a fresh snapshot and dropped the open file's comment,

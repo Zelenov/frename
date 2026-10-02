@@ -59,6 +59,7 @@ pub use undo::{
     AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,
     NavigateFileCommand, PasteTagsCommand, RenameFileCommand, ReorderTagCommand,
     RotateVideoCommand, SaveTagCommand, SetCommentCommand, SetMarkerColorCommand,
-    SetMarkerNameCommand, SetMarkerSpanCommand, SetSegmentEndCommand, SetSegmentStartCommand,
-    StarTagCommand, SyncTagOrderCommand, ToggleTagCommand, UndoContext, UndoError,
+    SetMarkerNameCommand, SetMarkerSpanCommand, SetSegmentCommand, SetSegmentEndCommand,
+    SetSegmentStartCommand, StarTagCommand, SyncTagOrderCommand, ToggleTagCommand, UndoContext,
+    UndoError,
 };

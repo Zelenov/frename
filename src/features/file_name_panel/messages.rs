@@ -21,6 +21,8 @@ pub enum Message {
     ClearSegmentStart,
     /// Clear the segment end marker (× on the OUT badge).
     ClearSegmentEnd,
+    /// Set the in and out points to the ones the AI description suggests.
+    ApplySuggestedInOut,
     /// Right-click on the file name: open the file menu for the open file.
     OpenFileMenu,
 }

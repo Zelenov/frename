@@ -1,6 +1,10 @@
-# 0.106
+# 0.107
 ## Added
 - A clip you open again continues where you stopped watching it, two seconds earlier, also after a restart. A note says so; `Home` or a click on the note starts it over. A clip watched to the end starts over, at its in point if it has one.
+
+# 0.106
+## Added
+- Describe with AI suggests an In and Out for clips with a lead-in or lead-out around the part worth keeping. With the clip open, the suggestion shows as an **AI** pill next to the IN and OUT points; click it to use it. frename never sets them by itself.
 
 # 0.105
 ## Added

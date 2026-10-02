@@ -27,6 +27,9 @@ use crate::tags::FileSnapshot;
 pub(crate) use conversion::{clear_moved_xmp, Inspection};
 pub use conversion::{MetadataMove, MoveOutcome};
 pub use in_out_line::format_in_out_range;
+#[cfg(test)]
+pub(crate) use in_out_line::split_in_out_line;
+pub(crate) use in_out_line::{format_in_out_line, parse_in_out_line};
 pub use rotation::{Rotation, RotationError};
 pub use xmp::Segment;
 

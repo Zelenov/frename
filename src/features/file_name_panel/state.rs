@@ -131,6 +131,7 @@ impl FileNamePanelState {
             Message::RemoveTag(_)
             | Message::ClearSegmentStart
             | Message::ClearSegmentEnd
+            | Message::ApplySuggestedInOut
             | Message::OpenFileMenu => {} // handled by workspace
         }
     }
