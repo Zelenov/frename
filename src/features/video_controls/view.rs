@@ -39,6 +39,8 @@ pub struct Command<M> {
     pub hold: Option<(M, M)>,
     /// Drawn pressed, with the recording dot: something holds it down.
     pub held: bool,
+    /// No tooltip on its button (fullscreen).
+    quiet: bool,
 }
 
 impl<M: Clone> Command<M> {
@@ -52,6 +54,7 @@ impl<M: Clone> Command<M> {
             on_press,
             hold: None,
             held: false,
+            quiet: false,
         }
     }
 
@@ -61,6 +64,12 @@ impl<M: Clone> Command<M> {
 
     pub fn latched(mut self, latched: bool) -> Self {
         self.latched = latched;
+        self
+    }
+
+    /// No tooltip on its button (fullscreen).
+    pub fn quiet(mut self, quiet: bool) -> Self {
+        self.quiet = quiet;
         self
     }
 
@@ -80,6 +89,7 @@ impl<M: Clone> Command<M> {
             on_press: self.on_press.map(&f),
             hold: self.hold.map(|(down, up)| (f(down), f(up))),
             held: self.held,
+            quiet: self.quiet,
         }
     }
 
@@ -99,6 +109,7 @@ impl<M: Clone> Command<M> {
         let base = base
             .latched(self.latched)
             .held(self.held)
+            .quiet(self.quiet)
             .tip(tip, Position::Top);
         let pressable: Element<'a, M> = match (self.hold, self.on_press.is_some()) {
             (Some((down, up)), true) => base.on_hold(down, up).into(),
@@ -522,5 +533,16 @@ mod tests {
         assert!(matches!(item.on_press, Some(Message::SetVolume(n)) if n == 2.0));
         let [_, marker] = mark(false, false);
         assert!(marker.menu_item(|_| Message::SeekBack10).on_press.is_none());
+    }
+}
+
+#[cfg(test)]
+mod quiet_tests {
+    use super::*;
+
+    #[test]
+    fn a_command_stays_quiet_when_mapped() {
+        let command = Command::icon(Icon::Play, "Play".to_string(), &[], Some(1u8)).quiet(true);
+        assert!(command.map(u32::from).quiet);
     }
 }
