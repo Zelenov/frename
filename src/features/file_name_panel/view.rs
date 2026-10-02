@@ -46,14 +46,14 @@ where
         bottom_items.push(badge::timecode(
             "IN",
             file_name_line::fmt_timecode(s),
-            Some(Message::ClearSegmentStart),
+            Some((Message::ClearSegmentStart, fl!("file-name-panel-clear-in"))),
         ));
     }
     if let Some(e) = seg_end {
         bottom_items.push(badge::timecode(
             "OUT",
             file_name_line::fmt_timecode(e),
-            Some(Message::ClearSegmentEnd),
+            Some((Message::ClearSegmentEnd, fl!("file-name-panel-clear-out"))),
         ));
     }
     bottom_items.push(file_name_line::view(name_ext));

@@ -38,13 +38,13 @@ pub fn view(props: ToolbarProps) -> Element<'static, folder::Message> {
     use folder::Message as M;
     let previous = IconButton::new(Icon::ChevronLeft)
         .tip(
-            Tip::new(fl!("folder-controls-previous")).keys(&["Page Up"]),
+            Tip::new(fl!("folder-controls-previous")).keys(&["PgUp"]),
             Position::Top,
         )
         .on_press_maybe(props.has_previous.then_some(M::PreviousFile));
     let next = IconButton::new(Icon::ChevronRight)
         .tip(
-            Tip::new(fl!("folder-controls-next")).keys(&["Page Down"]),
+            Tip::new(fl!("folder-controls-next")).keys(&["PgDn"]),
             Position::Top,
         )
         .on_press_maybe(props.has_next.then_some(M::NextFile));
@@ -73,10 +73,11 @@ pub fn view(props: ToolbarProps) -> Element<'static, folder::Message> {
         .dot(props.update_available.is_some())
         .tip(settings_tip, Position::Top)
         .on_press(M::OpenSettings);
+    // Esc leaves batch mode (`EscapePressed`).
     let batch_tip = if props.batch_mode {
-        fl!("folder-controls-batch-back")
+        Tip::new(fl!("folder-controls-batch-back")).keys(&["Esc"])
     } else {
-        fl!("folder-controls-batch")
+        Tip::new(fl!("folder-controls-batch"))
     };
     let batch = IconButton::new(Icon::ListChecks)
         .latched(props.batch_mode)

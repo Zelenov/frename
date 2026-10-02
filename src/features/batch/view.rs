@@ -74,11 +74,11 @@ fn header(state: &BatchState) -> Element<'_, Message> {
     let back = IconButton::new(Icon::X)
         .small()
         .tip(
-            Tip::new(if state.is_running() {
-                fl!("batch-back-while-running")
+            if state.is_running() {
+                Tip::new(fl!("batch-back-while-running"))
             } else {
-                fl!("folder-controls-batch-back")
-            }),
+                Tip::new(fl!("folder-controls-batch-back")).keys(&["Esc"])
+            },
             Position::Left,
         )
         .on_press_maybe((!state.is_running()).then_some(Message::SetActive(false)));

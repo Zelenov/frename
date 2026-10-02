@@ -317,7 +317,7 @@ the first look. Read it before any UI change.
   (`MARKER_LABEL_LANE`) instead of letting it cover the subtitle strip.
 - **Z-levels.** Overlays (tooltips, the marker label) share one renderer layer, in which text is
   drawn over every box: an overlay that must be above another one goes through
-  `ui::z::layered(widget, Z::…)` (tooltips already do), and a custom overlay draws in its own
+  `ui::z::layered(widget, Z::…)` (tooltips and `tooltip::drag_preview` already do), and a custom overlay draws in its own
   `renderer.with_layer(…)` with `index()` from `Z`. Stack layers over the window (menus,
   fullscreen) wrap their outside in `opaque(…)` so the widgets under them get no hover. See
   design §13.3.2.

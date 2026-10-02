@@ -436,6 +436,7 @@ batch-subtitles-usd-about = примерно ${ $amount }
 
 ## File list
 folder-has-subtitles = Есть субтитры
+folder-closed-by-job = Закрыт, пока его меняет пакетное действие
 folder-filter-tip = Показать только…
 
 folder-search-placeholder = Найти файл или слово в комментарии
@@ -605,6 +606,8 @@ sync-panel-sort-like-folder = Упорядочить как в папке
 
 file-name-panel-no-tags = У клипа нет тегов
 file-name-panel-untag = Снять тег
+file-name-panel-clear-in = Убрать точку входа
+file-name-panel-clear-out = Убрать точку выхода
 
 ## Updates (Settings)
 

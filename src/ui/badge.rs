@@ -9,6 +9,7 @@ use super::icons::{icon, Icon};
 use super::style;
 use super::text;
 use super::tokens::*;
+use super::tooltip;
 
 /// A badge's inset: 0 × 6.
 const BADGE_PADDING: Padding = Padding {
@@ -76,16 +77,20 @@ pub fn key_cap<'a, M: 'a>(key: &'a str, on_fill: bool) -> Element<'a, M> {
 }
 
 /// A timecode: `mono` on a raised pill, with the `name` ("IN", "OUT") before it and an `x` that
-/// clears it when `on_clear` is given.
+/// clears it when `on_clear` is given, with what the `x` does as its tooltip.
 pub fn timecode<'a, M: Clone + 'a>(
     name: &'a str,
     time: String,
-    on_clear: Option<M>,
+    on_clear: Option<(M, String)>,
 ) -> Element<'a, M> {
-    let clear = on_clear.map(|message| {
-        mouse_area(icon(Icon::X, ICON_S, TEXT_SECONDARY))
-            .on_press(message)
-            .interaction(mouse::Interaction::Pointer)
+    let clear = on_clear.map(|(message, tip)| {
+        tooltip::tip_text(
+            mouse_area(icon(Icon::X, ICON_S, TEXT_SECONDARY))
+                .on_press(message)
+                .interaction(mouse::Interaction::Pointer),
+            tip,
+            tooltip::Position::Top,
+        )
     });
     container(
         row![text::caption(name), text::mono(time).color(TEXT)]

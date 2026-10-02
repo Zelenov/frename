@@ -141,20 +141,25 @@ pub fn view<'a>(
     let item = container(item)
         .width(Length::Fill)
         .height(FOLDER_ROW_HEIGHT);
-    // The full name, since a long one is cut.
-    tooltip::tip_text(item, snapshot.file_name(), Position::Bottom)
+    // The full name, since a long one is cut. Beside the list, not over the next row on the way to
+    // it (§8.13); so are the row's other tooltips.
+    tooltip::tip_text(item, snapshot.file_name(), Position::Right)
 }
 
 /// The status column: `captions` when a subtitle file is next to the video; the lock when the job
 /// closed this, the open file.
 fn status_cell<'a>(has_subtitles: bool, closed_by_job: bool) -> Element<'a, Message> {
     let content: Option<Element<'a, Message>> = if closed_by_job {
-        Some(icon(Icon::Lock, ICON_S, TEXT_SECONDARY).into())
+        Some(tooltip::tip_text(
+            icon(Icon::Lock, ICON_S, TEXT_SECONDARY),
+            fl!("folder-closed-by-job"),
+            Position::Right,
+        ))
     } else if has_subtitles {
         Some(tooltip::tip_text(
             icon(Icon::Captions, ICON_MARK, TEXT_SECONDARY),
             fl!("folder-has-subtitles"),
-            Position::Bottom,
+            Position::Right,
         ))
     } else {
         None
@@ -280,7 +285,7 @@ fn not_saved_mark<'a>() -> Element<'a, Message> {
     tooltip::tip_text(
         icon(Icon::CircleAlert, ICON_MARK, ERROR),
         fl!("folder-markers-not-saved"),
-        Position::Bottom,
+        Position::Right,
     )
 }
 

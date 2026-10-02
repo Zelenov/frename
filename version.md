@@ -1,3 +1,13 @@
+# NEXT
+## Changed
+- Tooltips of a file row (its full name, the subtitles mark) open beside the list instead of over the next row, so they no longer cover the file you move to.
+- The marker's name over the timeline is now a pill tinted with the marker's color, so it no longer looks like a tooltip when one opens next to it.
+- Tooltips show `PgUp` / `PgDn` for the previous and next file, and `Esc` for leaving batch mode.
+- The chip you drag over the trash shows in a box like a tooltip's.
+
+## Fixed
+- The ✕ on the IN and OUT timecodes and the lock on a file closed by a batch action now have tooltips.
+
 # 0.102
 ## Fixed
 - The Subtitles / Markers switch above the side list no longer shifts its icons, words and counts when you change the selection.
