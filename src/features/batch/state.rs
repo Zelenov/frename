@@ -7,7 +7,6 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use clipscribe::AiUsage;
-use frename_core::ai::key::ApiKey;
 use frename_core::{File, FileId, FileSnapshot};
 
 use super::actions::{generate_subtitles, Actions};
@@ -101,11 +100,8 @@ pub struct ItemResult {
     /// Stop the job with this summary line once [`REPEATS_THAT_STOP`] files in a row end with
     /// it (e.g. the network is gone), instead of failing every file left the same way.
     pub stop_if_repeated: Option<String>,
-    /// The service's account has no credit left: the report offers to add some, and what is
-    /// left of the recorded top-up becomes zero.
+    /// The service's account has no credit left: the report offers to add some.
     pub out_of_credit: bool,
-    /// What this file cost on its paid service, for the spend ledger.
-    pub spend: Option<(ApiKey, f64)>,
 }
 
 /// How many files in a row may fail the same way before the job stops.
@@ -122,18 +118,7 @@ impl ItemResult {
             stop_job: None,
             stop_if_repeated: None,
             out_of_credit: false,
-            spend: None,
         }
-    }
-
-    /// What the file writes to the spend ledger: what it cost, and the service that has no credit
-    /// left when the file failed for that (`job_service` is the paid service the job's action
-    /// bills).
-    pub fn ledger_entry(
-        &self,
-        job_service: Option<ApiKey>,
-    ) -> (Option<(ApiKey, f64)>, Option<ApiKey>) {
-        (self.spend, job_service.filter(|_| self.out_of_credit))
     }
 
     /// A failure with the reason the failed list shows.
@@ -900,36 +885,6 @@ mod tests {
         assert_eq!(batch.stopped(), Some("Stopped: the key was rejected."));
         assert_eq!(batch.status(files[1]), Some(ItemStatus::Pending));
         assert_eq!(batch.status(files[2]), Some(ItemStatus::Pending));
-    }
-
-    #[test]
-    fn a_finished_file_writes_its_cost_and_a_used_up_service_to_the_ledger() {
-        let plain = ItemResult::new(ItemStatus::Done, None);
-        assert_eq!(plain.ledger_entry(Some(ApiKey::Anthropic)), (None, None));
-
-        let billed = ItemResult {
-            spend: Some((ApiKey::Anthropic, 0.31)),
-            ..ItemResult::new(ItemStatus::Done, None)
-        };
-        assert_eq!(
-            billed.ledger_entry(Some(ApiKey::Anthropic)),
-            (Some((ApiKey::Anthropic, 0.31)), None)
-        );
-
-        let broke = ItemResult {
-            out_of_credit: true,
-            ..ItemResult::failed("no credit")
-        };
-        assert_eq!(
-            broke.ledger_entry(Some(ApiKey::Soniox)),
-            (None, Some(ApiKey::Soniox)),
-            "the service of the job's action"
-        );
-        assert_eq!(
-            broke.ledger_entry(None),
-            (None, None),
-            "an action without one"
-        );
     }
 
     #[test]

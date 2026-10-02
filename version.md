@@ -1,6 +1,10 @@
-# 0.106
+# 0.104
 ## Added
 - Step through a clip frame by frame: `Alt+←` / `Alt+→`, or the new buttons next to play, show the previous or next frame and pause there. Hold the key to keep stepping. While paused, the time next to the timeline shows milliseconds (`00:10.250`). It goes by the real frames, so phone clips with a variable frame rate step correctly too.
+
+# 0.103
+## Removed
+- The spending tracker: Settings no longer shows what frename spent or the top-up form, and the batch page no longer shows the estimated credit left. The cost estimate before a run, the cost in the report, and **Add credit** when a service runs out stay.
 
 # 0.102
 ## Fixed
