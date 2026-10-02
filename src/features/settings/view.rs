@@ -278,7 +278,7 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
                 layout::aligned([
                     form::radio_option(
                         fl!("settings-ai-moments-important"),
-                        None,
+                        Some(form::description(fl!("settings-ai-moments-important-hint"))),
                         MomentsMode::Important,
                         Some(settings.ai_moments),
                         Message::SetAiMoments,
@@ -290,7 +290,6 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
                         Some(settings.ai_moments),
                         Message::SetAiMoments,
                     ),
-                    text::secondary(fl!("settings-ai-moments-hint")).into(),
                 ]),
             ),
         ],
