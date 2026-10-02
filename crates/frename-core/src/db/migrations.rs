@@ -170,19 +170,13 @@ mod tests {
     }
 
     #[test]
-    fn a_database_with_the_old_spend_ledger_loses_it_and_a_fresh_one_never_has_it() {
+    fn a_database_with_the_spend_ledger_loses_it_and_a_fresh_one_ends_up_without_it() {
         let conn = database_at_version_1();
-        for m in MIGRATIONS.iter().filter(|m| (2..=16).contains(&m.version)) {
+        for m in MIGRATIONS.iter().filter(|m| (2..=17).contains(&m.version)) {
             conn.execute_batch(m.sql).expect("migration");
         }
-        // The ledger as migration 17 created it before #172.
-        conn.execute_batch(
-            "CREATE TABLE ai_spend (service TEXT NOT NULL, at_ms INTEGER NOT NULL, usd REAL NOT NULL);
-             CREATE INDEX ai_spend_service_at ON ai_spend (service, at_ms);
-             CREATE TABLE ai_top_up (service TEXT PRIMARY KEY, usd REAL NOT NULL, at_ms INTEGER NOT NULL);
-             INSERT INTO ai_spend VALUES ('soniox', 0, 1.5);",
-        )
-        .expect("old ledger");
+        conn.execute("INSERT INTO ai_spend VALUES ('soniox', 0, 1.5)", [])
+            .expect("a ledger row");
         conn.execute("UPDATE schema_version SET version = 17", [])
             .expect("set version");
         run(&conn).expect("migrate");

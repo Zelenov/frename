@@ -1,6 +1,6 @@
 # 0.103
 ## Removed
-- The spending tracker is gone: Settings no longer shows what frename spent or the top-up form, and the batch page no longer shows an estimated credit left or warns about it. The cost estimate before a run, the cost in a run's report, and **Add credit** when a service says its credit is used up all stay.
+- The spending tracker: Settings no longer shows what frename spent or the top-up form, and the batch page no longer shows the estimated credit left. The cost estimate before a run, the cost in the report, and **Add credit** when a service runs out stay.
 
 # 0.102
 ## Fixed
