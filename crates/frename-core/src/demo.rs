@@ -279,8 +279,11 @@ name = "pick.a.mp4"
 
     #[test]
     fn a_scenario_can_open_more() {
-        let text = MINIMAL.replace("[[files]]", "more = true
-[[files]]");
+        let text = MINIMAL.replace(
+            "[[files]]",
+            "more = true
+[[files]]",
+        );
         assert!(DemoScenario::parse(&text).unwrap().more);
     }
 
