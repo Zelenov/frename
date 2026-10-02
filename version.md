@@ -1,10 +1,10 @@
+# 0.108
+## Added
+- Describe a marker with AI: ✨ on a marker's row, or `Ctrl+F2` on the marker under the playhead, names an unnamed marker and adds what happens at that moment to its comment, which the marker list now shows under the name. A name you gave stays. One undo takes it back.
+
 # 0.107
 ## Added
-<<<<<<< HEAD
-- Describe a marker with AI: ✨ on a marker's row, or `Ctrl+F2` on the marker under the playhead, names an unnamed marker and adds what happens at that moment to its comment, which the marker list now shows under the name. A name you gave stays. One undo takes it back.
-=======
 - A clip you open again continues where you stopped watching it, two seconds earlier, also after a restart. A note says so; `Home` or a click on the note starts it over. A clip watched to the end starts over, at its in point if it has one.
->>>>>>> origin/main
 
 # 0.106
 ## Added
