@@ -6,6 +6,8 @@ use crate::ui::tokens::*;
 /// What the controls bar shows at one pane width.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Fold {
+    /// The frame step buttons around play; otherwise in More.
+    pub frame_step: bool,
     /// ↺ ↻ in the bar; otherwise in More.
     pub rotate: bool,
     /// The `00:10 / 00:30` readout; hidden otherwise (the timeline still shows the playhead).
@@ -23,6 +25,7 @@ pub struct Fold {
 impl Fold {
     /// Everything in the bar.
     const ALL: Fold = Fold {
+        frame_step: true,
         rotate: true,
         time: true,
         volume_slider: true,
@@ -33,19 +36,25 @@ impl Fold {
 
     /// Whether something went into More, so the bar needs its button.
     pub fn has_more(self) -> bool {
-        !(self.rotate && self.mark && self.lists && self.volume_slider)
+        !(self.frame_step && self.rotate && self.mark && self.lists && self.volume_slider)
     }
 
     /// The steps from everything shown to the least, each giving up one more group.
-    fn steps() -> [Fold; 6] {
+    fn steps() -> [Fold; 7] {
         let all = Fold::ALL;
         let no_rotate = Fold {
             rotate: false,
             ..all
         };
+        // The frame steps give way before the time readout: stepping, the readout is what
+        // shows the frame's exact time.
+        let no_frame_step = Fold {
+            frame_step: false,
+            ..no_rotate
+        };
         let no_time = Fold {
             time: false,
-            ..no_rotate
+            ..no_frame_step
         };
         let no_slider = Fold {
             volume_slider: false,
@@ -59,7 +68,15 @@ impl Fold {
             lists: false,
             ..no_mark
         };
-        [all, no_rotate, no_time, no_slider, no_mark, no_lists]
+        [
+            all,
+            no_rotate,
+            no_frame_step,
+            no_time,
+            no_slider,
+            no_mark,
+            no_lists,
+        ]
     }
 
     /// The bar's width with this fold, `list_buttons` being how many list buttons the clip has
@@ -74,7 +91,7 @@ impl Fold {
         let views =
             buttons(usize::from(self.lists) * list_buttons + usize::from(self.has_more()) + 1);
         let groups = [
-            Some(buttons(3)),
+            Some(buttons(if self.frame_step { 5 } else { 3 })),
             Some(buttons(2)),
             self.mark.then(|| buttons(2)),
             self.rotate.then(|| buttons(2)),
@@ -118,14 +135,34 @@ mod tests {
         let full = Fold::ALL.width(2);
         let fold = Fold::for_width(full - 1.0, 2);
         assert!(!fold.rotate && fold.time && fold.has_more());
-        let fold = Fold::for_width(Fold::steps()[2].width(2), 2);
+        let fold = Fold::for_width(Fold::steps()[3].width(2), 2);
         assert!(!fold.time && fold.volume_slider && fold.mark);
+    }
+
+    #[test]
+    fn frame_steps_give_way_after_rotate_and_before_the_time_readout() {
+        let fold = Fold::for_width(Fold::steps()[1].width(2), 2);
+        assert!(!fold.rotate && fold.frame_step && fold.time);
+        let fold = Fold::for_width(Fold::steps()[2].width(2), 2);
+        assert!(!fold.frame_step && fold.time && fold.mark && fold.has_more());
+        assert_eq!(
+            Fold::steps()[1].width(2) - Fold::steps()[2].width(2),
+            2.0 * BAR_HEIGHT
+        );
+    }
+
+    /// The widths of each step, for the table in the design system (§13.9).
+    #[test]
+    fn the_fold_widths_match_the_design_system() {
+        let widths: Vec<f32> = Fold::steps().iter().map(|fold| fold.width(2)).collect();
+        assert_eq!(widths, [796.0, 752.0, 688.0, 524.0, 460.0, 384.0, 320.0]);
     }
 
     #[test]
     fn the_narrowest_pane_keeps_transport_in_out_and_fullscreen() {
         let fold = Fold::for_width(VIDEO_MIN_WIDTH, 2);
         assert!(!fold.lists && !fold.mark && !fold.volume_slider && !fold.time);
+        assert!(!fold.frame_step);
         assert!(fold.width(2) <= VIDEO_MIN_WIDTH, "{}", fold.width(2));
     }
 

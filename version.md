@@ -1,3 +1,7 @@
+# 0.105
+## Added
+- Step through a clip frame by frame: `Alt+←` / `Alt+→`, or the new buttons next to play, show the previous or next frame and pause there. Hold the key to keep stepping. While paused, the time next to the timeline shows milliseconds (`00:10.250`). It goes by the real frames, so phone clips with a variable frame rate step correctly too.
+
 # 0.104
 ## Changed
 - A file's full name in the file list opens beside the list instead of over the next row, so it no longer covers the file you move to.

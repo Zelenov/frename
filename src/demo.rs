@@ -167,6 +167,9 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
     if scenario.marker_list {
         steps.push(video(video::Message::ShowMarkerList));
     }
+    if scenario.more {
+        steps.push(video(video::Message::ToggleMore));
+    }
     if scenario.rotate != 0 {
         steps.push(folder_workspace::Message::RotateVideo(scenario.rotate));
     }

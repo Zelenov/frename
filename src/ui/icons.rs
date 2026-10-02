@@ -107,6 +107,8 @@ icons! {
     Sparkles => "sparkles.svg",
     Star => "star.svg",
     StarFilled => "star-filled.svg",
+    StepBack => "step-back.svg",
+    StepForward => "step-forward.svg",
     Tag => "tag.svg",
     TextCursorInput => "text-cursor-input.svg",
     Trash => "trash.svg",

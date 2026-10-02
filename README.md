@@ -91,6 +91,7 @@ again, even after a restart, returns to the clip you last viewed in it.
 | `Space` | Play / pause (or click the picture) |
 | `F1` | Back 10 seconds |
 | `F3` | Forward 10 seconds |
+| `Alt+←` / `Alt+→` | One frame back / forward (pauses; hold to keep stepping) |
 | `[` | Set the in point |
 | `]` | Set the out point |
 | `F2` | Add a marker; `F2` again within a second and a half, or on a marker, names it |
@@ -178,7 +179,9 @@ The progress bar shows what you have noted about a clip:
   band just above the bar shows it, and overlapping bands stack. Drag the handles at the ends of the current
   range to change it (`Shift` snaps), drag them together or `Alt`+click the band to make it a
   single moment again, and click a band to play just that stretch.
-- **Frames:** `F12` or 📷 saves the current frame as a JPEG next to the video
+- **Frames:** `Alt+←` / `Alt+→` (or the buttons next to play) step one frame back or forward and pause
+  there; paused, the time shows milliseconds (`00:10.250`), and `F2` marks that exact frame.
+  `F12` or 📷 saves the current frame as a JPEG next to the video
   (`clip.mp4.snap.00-01-05-250.jpg`) and shows `Frame saved`.
 - **Rotation:** ↺ / ↻ (`Ctrl+Alt+←` / `→`) turn a clip shot sideways 90° at a time. Only the
   rotation flag inside the MP4/MOV changes, right away: the picture is not re-encoded. Premiere

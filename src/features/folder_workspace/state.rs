@@ -253,6 +253,7 @@ impl FolderWorkspace {
             | Message::CopyTags
             | Message::PasteTags
             | Message::RotateVideoWhileTyping(_)
+            | Message::StepFrameWhileTyping(_)
                 if self.markers.is_editing() =>
             {
                 Task::none()
@@ -392,8 +393,14 @@ impl FolderWorkspace {
             }
             Message::RotateVideo(quarter_turns) => self.rotate_video(quarter_turns),
             Message::RotateVideoWhileTyping(quarter_turns) => {
-                self.rotate_video_unless_writing(quarter_turns)
+                self.unless_writing(Message::RotateVideo(quarter_turns))
             }
+            Message::StepFrame(step) => {
+                Task::done(Message::MediaViewer(media_viewer::Message::Video(
+                    media_viewer_video::Message::Controls(video_controls::Message::StepFrame(step)),
+                )))
+            }
+            Message::StepFrameWhileTyping(step) => self.unless_writing(Message::StepFrame(step)),
             Message::ToggleMediaFullscreen => self.set_fullscreen(!self.media_fullscreen),
             Message::RestoreListScrolls { markers_y, cues_y } => {
                 // Only a list on screen reports back; armed otherwise it would fire much later.
@@ -925,6 +932,27 @@ impl FolderWorkspace {
                 media_task,
             ])
         }
+    }
+
+    /// A video key (`Ctrl+Alt+←/→` turns, `Alt+←/→` frame steps) pressed while a text field had
+    /// the keys: send `message`, unless the field is the comment box, where the keys belong to
+    /// the text (the search fields hold nothing the keys would do, so there they still act). In
+    /// batch mode the comment box is not shown, and asking about its focus would get no answer
+    /// at all.
+    fn unless_writing(&self, message: Message) -> Task<Message> {
+        if self.batch.is_active() {
+            return Task::done(message);
+        }
+        iced::widget::operation::is_focused(iced::widget::Id::new(
+            crate::features::file_workspace::view::COMMENT_EDITOR_ID,
+        ))
+        .map(move |writing| {
+            if writing {
+                Message::Noop
+            } else {
+                message.clone()
+            }
+        })
     }
 
     /// Messages to drop now. Batch mode shows batch actions instead of the open file, so what

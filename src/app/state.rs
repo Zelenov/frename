@@ -11,7 +11,7 @@ use iced::{event, keyboard, window, Element, Subscription, Task};
 
 use crate::features::{
     batch, drag_drop, drag_out, file_menu, folder, folder_workspace, media_viewer,
-    media_viewer::video as media_viewer_video, settings, tag_panel, updates,
+    media_viewer::video as media_viewer_video, settings, tag_panel, updates, video_controls,
 };
 use crate::ui::palette::TagPalette;
 use frename_core::ai::key::{self as api_key, ApiKey};
@@ -246,6 +246,33 @@ fn main_window_event(
                 folder_workspace::Message::RotateVideoWhileTyping(quarter_turns)
             };
             Some(Message::FolderWorkspace(turn))
+        }
+        // Alt+← / → step one frame in the open video, also after typing in a search field (like
+        // the F-keys), but not while writing a comment; a held key keeps stepping.
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(arrow),
+            modifiers,
+            ..
+        }) if modifiers.alt()
+            && !modifiers.command()
+            && matches!(
+                arrow,
+                keyboard::key::Named::ArrowLeft | keyboard::key::Named::ArrowRight
+            ) =>
+        {
+            let step = if arrow == keyboard::key::Named::ArrowLeft {
+                video_controls::FrameStep::Back
+            } else {
+                video_controls::FrameStep::Forward
+            };
+            // A text field took the key: the workspace checks it is not the comment box, where
+            // the keys belong to the text.
+            let step = if matches!(status, event::Status::Ignored) {
+                folder_workspace::Message::StepFrame(step)
+            } else {
+                folder_workspace::Message::StepFrameWhileTyping(step)
+            };
+            Some(Message::FolderWorkspace(step))
         }
         // Escape: handled by FolderWorkspace (exits fullscreen or clears search filter).
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
@@ -1122,6 +1149,59 @@ mod tests {
         assert!(matches!(
             shortcut("z", Code::KeyZ, false),
             Some(folder_workspace::Message::Undo)
+        ));
+    }
+
+    fn arrow(
+        named: keyboard::key::Named,
+        modifiers: keyboard::Modifiers,
+        status: event::Status,
+    ) -> Option<folder_workspace::Message> {
+        let key = keyboard::Key::Named(named);
+        let event = iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: key.clone(),
+            modified_key: key,
+            physical_key: keyboard::key::Physical::Code(keyboard::key::Code::ArrowLeft),
+            location: keyboard::Location::Standard,
+            modifiers,
+            text: None,
+            repeat: true,
+        });
+        match main_window_event(event, status, window::Id::unique()) {
+            Some(Message::FolderWorkspace(m)) => Some(m),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn alt_arrows_step_frames_and_ctrl_alt_arrows_still_rotate() {
+        use folder_workspace::Message as W;
+        use keyboard::key::Named;
+        use video_controls::FrameStep;
+        let alt = keyboard::Modifiers::ALT;
+        let idle = event::Status::Ignored;
+        assert!(matches!(
+            arrow(Named::ArrowLeft, alt, idle),
+            Some(W::StepFrame(FrameStep::Back))
+        ));
+        // Held: auto-repeat keeps stepping.
+        assert!(matches!(
+            arrow(Named::ArrowRight, alt, idle),
+            Some(W::StepFrame(FrameStep::Forward))
+        ));
+        // A text field had the keys: the workspace decides (not in the comment box).
+        assert!(matches!(
+            arrow(Named::ArrowRight, alt, event::Status::Captured),
+            Some(W::StepFrameWhileTyping(FrameStep::Forward))
+        ));
+        let ctrl_alt = keyboard::Modifiers::CTRL | keyboard::Modifiers::ALT;
+        assert!(!matches!(
+            arrow(Named::ArrowLeft, ctrl_alt, idle),
+            Some(W::StepFrame(_))
+        ));
+        assert!(matches!(
+            arrow(Named::ArrowLeft, keyboard::Modifiers::empty(), idle),
+            Some(W::TagPanel(_))
         ));
     }
 

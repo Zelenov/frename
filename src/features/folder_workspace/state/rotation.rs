@@ -6,7 +6,6 @@ use frename_core::{FileTagger, RotateVideoCommand, UndoError};
 use iced::Task;
 
 use super::FolderWorkspace;
-use crate::features::file_workspace::view::COMMENT_EDITOR_ID;
 use crate::features::folder_workspace::Message;
 use crate::features::rotation_text::{not_rotated, rotated, turned};
 
@@ -36,25 +35,6 @@ impl FolderWorkspace {
             }
             Err(error) => Self::notice(&not_rotated(&error)),
         }
-    }
-
-    /// `Ctrl+Alt+←/→` pressed while a text field had the keys: turn the video, unless the field
-    /// is the comment box, where the keys belong to the text (the search fields hold nothing
-    /// the keys would do, so there they still turn the video). In batch mode the comment box is
-    /// not shown, and asking about its focus would get no answer at all.
-    pub(super) fn rotate_video_unless_writing(&self, quarter_turns: i32) -> Task<Message> {
-        if self.batch.is_active() {
-            return Task::done(Message::RotateVideo(quarter_turns));
-        }
-        iced::widget::operation::is_focused(iced::widget::Id::new(COMMENT_EDITOR_ID)).map(
-            move |writing| {
-                if writing {
-                    Message::Noop
-                } else {
-                    Message::RotateVideo(quarter_turns)
-                }
-            },
-        )
     }
 
     /// After an undo or redo step that turned a video: reopen the shown video and say how it is

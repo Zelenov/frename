@@ -67,7 +67,7 @@ impl VideoControlsState {
             Message::SeekReleased => {
                 self.seeking = false;
             }
-            Message::SeekBack10 | Message::SeekForward10 => {
+            Message::SeekBack10 | Message::SeekForward10 | Message::StepFrame(_) => {
                 // No local state change; video player performs the seek
             }
             Message::SetSegmentStart | Message::SetSegmentEnd => {

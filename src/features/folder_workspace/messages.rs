@@ -8,6 +8,7 @@ use iced::widget::text_editor;
 use super::Directory;
 use crate::features::{
     batch, drag_out, file_menu, file_name_panel, folder, media_viewer, sync_panel, tag_panel,
+    video_controls,
 };
 
 /// Key that triggered global focus (we emulate it into the search bar; Iced cannot replay the event).
@@ -113,6 +114,11 @@ pub enum Message {
     /// `Ctrl+Alt+←/→` while a text field had the keys: [`Message::RotateVideo`], unless the
     /// field is the comment box.
     RotateVideoWhileTyping(i32),
+    /// `Alt+←/→`: one frame back or forward in the open video.
+    StepFrame(video_controls::FrameStep),
+    /// `Alt+←/→` while a text field had the keys: [`Message::StepFrame`], unless the field is
+    /// the comment box.
+    StepFrameWhileTyping(video_controls::FrameStep),
     /// Open a native folder picker dialog so the user can choose a folder to open.
     OpenFolderPicker,
     /// Open a native file picker dialog so the user can choose a file to open.

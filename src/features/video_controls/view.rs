@@ -6,7 +6,7 @@ use iced::widget::{button as iced_button, container, mouse_area, row, stack, Row
 use iced::{mouse, Alignment, Element, Length, Padding};
 
 use super::progress_bar::{BarMarker, ProgressBar};
-use super::{Message, VideoControlsState};
+use super::{FrameStep, Message, VideoControlsState};
 use crate::ui::icon_button::IconButton;
 use crate::ui::icons::{icon, Icon};
 use crate::ui::menu::MenuItem;
@@ -185,6 +185,24 @@ pub fn transport(state: &VideoControlsState) -> [Command<Message>; 3] {
     ]
 }
 
+/// One frame back and one frame forward: around the play button, or in More.
+pub fn frame_step() -> [Command<Message>; 2] {
+    [
+        Command::icon(
+            Icon::StepBack,
+            fl!("video-controls-frame-back"),
+            &["Alt", "←"],
+            Some(Message::StepFrame(FrameStep::Back)),
+        ),
+        Command::icon(
+            Icon::StepForward,
+            fl!("video-controls-frame-forward"),
+            &["Alt", "→"],
+            Some(Message::StepFrame(FrameStep::Forward)),
+        ),
+    ]
+}
+
 /// The in and out points: words, as they are on the keys.
 pub fn in_out() -> [Command<Message>; 2] {
     [
@@ -271,13 +289,15 @@ pub fn rotate(cannot_rotate: Option<String>) -> [Command<Message>; 2] {
     ]
 }
 
-/// `00:10 / 00:30`, fixed wide so it never moves.
+/// `00:10 / 00:30`, fixed wide so it never moves. Paused, the playhead shows its milliseconds
+/// (`00:10.250 / 00:30`): the exact time of a frame stepped to.
 pub fn time_readout<'a>(state: &VideoControlsState, position_secs: f32) -> Element<'a, Message> {
-    let readout = format!(
-        "{} / {}",
-        clock(position_secs),
-        clock(state.duration_secs())
-    );
+    let position = if state.is_playing() {
+        clock(position_secs)
+    } else {
+        precise_clock(position_secs)
+    };
+    let readout = format!("{position} / {}", clock(state.duration_secs()));
     container(text::mono(readout).wrapping(iced::widget::text::Wrapping::None))
         .width(TIME_READOUT_WIDTH)
         .align_right(TIME_READOUT_WIDTH)
@@ -293,6 +313,12 @@ pub fn clock(secs: f32) -> String {
     } else {
         format!("{minutes:02}:{seconds:02}")
     }
+}
+
+/// [`clock`] with milliseconds: `00:10.250`.
+pub fn precise_clock(secs: f32) -> String {
+    let millis = (f64::from(secs.max(0.0)) * 1000.0).round() as u64;
+    format!("{}.{:03}", clock((millis / 1000) as f32), millis % 1000)
 }
 
 /// The volume slider alone: in the bar after its icon, or in More.
@@ -527,6 +553,27 @@ mod tests {
         assert_eq!(clock(10.4), "00:10");
         assert_eq!(clock(3_725.0), "1:02:05");
         assert_eq!(clock(-1.0), "00:00");
+    }
+
+    #[test]
+    fn the_precise_clock_shows_milliseconds_of_a_frame() {
+        assert_eq!(precise_clock(10.25), "00:10.250");
+        // A frame's playhead (whole milliseconds) survives the trip through f32.
+        assert_eq!(precise_clock(7.517), "00:07.517");
+        assert_eq!(precise_clock(3_725.999_5), "1:02:06.000");
+        assert_eq!(precise_clock(-1.0), "00:00.000");
+    }
+
+    /// The longest readout, a clip of hours paused, fits the readout's fixed width.
+    #[test]
+    fn the_longest_readout_fits_its_width() {
+        let longest = format!("{} / {}", precise_clock(35_999.5), clock(35_999.0));
+        assert_eq!(longest, "9:59:59.500 / 9:59:59");
+        let width = longest.chars().count() as f32 * MONO_CHAR_WIDTH;
+        assert!(
+            width <= TIME_READOUT_WIDTH,
+            "{width} > {TIME_READOUT_WIDTH}"
+        );
     }
 
     #[test]
