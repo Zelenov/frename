@@ -6,7 +6,7 @@ use iced::widget::{button as iced_button, container, mouse_area, row, stack, Row
 use iced::{mouse, Alignment, Element, Length, Padding};
 
 use super::progress_bar::{BarMarker, ProgressBar};
-use super::{Message, VideoControlsState};
+use super::{FrameStep, Message, VideoControlsState};
 use crate::ui::icon_button::IconButton;
 use crate::ui::icons::{icon, Icon};
 use crate::ui::menu::MenuItem;
@@ -181,6 +181,24 @@ pub fn transport(state: &VideoControlsState) -> [Command<Message>; 3] {
             fl!("video-controls-forward"),
             &["F3"],
             Some(Message::SeekForward10),
+        ),
+    ]
+}
+
+/// One frame back and one frame forward: around the play button, or in More.
+pub fn frame_step() -> [Command<Message>; 2] {
+    [
+        Command::icon(
+            Icon::StepBack,
+            fl!("video-controls-frame-back"),
+            &["Alt", "←"],
+            Some(Message::StepFrame(FrameStep::Back)),
+        ),
+        Command::icon(
+            Icon::StepForward,
+            fl!("video-controls-frame-forward"),
+            &["Alt", "→"],
+            Some(Message::StepFrame(FrameStep::Forward)),
         ),
     ]
 }

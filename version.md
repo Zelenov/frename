@@ -1,3 +1,7 @@
+# 0.106
+## Added
+- Step through a clip frame by frame: `Alt+←` / `Alt+→`, or the new buttons next to play, show the previous or next frame and pause there. Hold the key to keep stepping. It goes by the real frames, so phone clips with a variable frame rate step correctly too.
+
 # 0.102
 ## Fixed
 - The Subtitles / Markers switch above the side list no longer shifts its icons, words and counts when you change the selection.

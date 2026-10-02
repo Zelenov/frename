@@ -283,8 +283,15 @@ fn controls_bar<'a>(
     position_secs: f32,
 ) -> container::Container<'a, Message> {
     let controls_state = state.controls();
+    let [back, play, forward] = controls::transport(controls_state);
+    let transport = if fold.frame_step {
+        let [frame_back, frame_forward] = controls::frame_step();
+        vec![back, frame_back, play, frame_forward, forward]
+    } else {
+        vec![back, play, forward]
+    };
     let mut groups: Vec<Element<'a, Message>> = vec![
-        controls_of(controls::transport(controls_state), is_fullscreen).into(),
+        controls_of(transport, is_fullscreen).into(),
         controls_of(controls::in_out(), is_fullscreen).into(),
     ];
     if fold.mark {
@@ -399,6 +406,13 @@ fn more_popover<'a>(
 ) -> Element<'a, Message> {
     let picked = Message::MorePicked;
     let mut items: Vec<MenuItem<Message>> = Vec::new();
+    if !fold.frame_step {
+        items.extend(
+            controls::frame_step()
+                .into_iter()
+                .map(|c| c.map(Message::Controls).menu_item(picked)),
+        );
+    }
     if !fold.mark {
         items.extend(
             mark_commands(markers)

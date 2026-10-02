@@ -1064,7 +1064,7 @@ left to right, with the widths §13.9 folds by:
 
 | Group (width) | Buttons (icon, tooltip with keys) |
 |---|---|
-| Transport (96) | `rewind` "Back 10 s `F1`" · `play`/`pause` "Play `Space`" / "Pause `Space`" · `fast-forward` "Forward 10 s `F3`" |
+| Transport (160; 96 with the frame steps in More) | `rewind` "Back 10 s `F1`" · `step-back` "One frame back `Alt`+`←`" · `play`/`pause` "Play `Space`" / "Pause `Space`" · `step-forward` "One frame forward `Alt`+`→`" · `fast-forward` "Forward 10 s `F3`" |
 | In/out (64) | text `[` "Set the in point `[`" · text `]` "Set the out point `]`" (text, as #44 says) |
 | Mark (64) | `camera` "Save this frame `F12`" · `map-pin` "Add a marker `F2` (hold for a range)"; disabled with the reason "This file cannot hold markers" |
 | Free space (flexible) | empty; notices (§13.2) show here when it is at least 120 wide, cut with "…" and the full text in the tooltip |
@@ -1663,6 +1663,7 @@ below takes away what the previous width no longer fits:
 | ≥ 596 | all groups (§13.3.5) | 596 |
 | 480–595 | the time readout hides (the timeline's hover tooltip still shows times) | 596 − 104 − 12 = 480 |
 | 416–479 | also the volume slider folds into its icon button | 480 − 64 = 416 |
+| | also the frame step buttons (`step-back`, `step-forward`, #162) move into **More**, before the Mark group; each threshold above is 64 higher while they are in the bar | |
 | 372–415 | also the Mark group (`camera`, `map-pin`) moves into **More** (More appears just before fullscreen) | 416 − 64 − 12 + 32 = 372 |
 | 320–371 | also the subtitle and marker list buttons move into **More**; transport, in/out, the volume icon, More and fullscreen stay | 372 − 64 = 308 |
 

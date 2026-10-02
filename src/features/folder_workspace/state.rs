@@ -254,6 +254,7 @@ impl FolderWorkspace {
             | Message::CopyTags
             | Message::PasteTags
             | Message::RotateVideoWhileTyping(_)
+            | Message::StepFrameWhileTyping(_)
                 if self.markers.is_editing() =>
             {
                 Task::none()
@@ -393,8 +394,14 @@ impl FolderWorkspace {
             }
             Message::RotateVideo(quarter_turns) => self.rotate_video(quarter_turns),
             Message::RotateVideoWhileTyping(quarter_turns) => {
-                self.rotate_video_unless_writing(quarter_turns)
+                self.unless_writing(Message::RotateVideo(quarter_turns))
             }
+            Message::StepFrame(step) => {
+                Task::done(Message::MediaViewer(media_viewer::Message::Video(
+                    media_viewer_video::Message::Controls(video_controls::Message::StepFrame(step)),
+                )))
+            }
+            Message::StepFrameWhileTyping(step) => self.unless_writing(Message::StepFrame(step)),
             Message::ToggleMediaFullscreen => self.set_fullscreen(!self.media_fullscreen),
             Message::RestoreListScrolls { markers_y, cues_y } => {
                 // Only a list on screen reports back; armed otherwise it would fire much later.

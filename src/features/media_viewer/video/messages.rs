@@ -96,4 +96,7 @@ pub enum Message {
     MorePicked(Vec<Message>),
     /// A step of the loading spinner (internal, only while a video loads).
     LoadingTick,
+    /// Look whether the frame a step asked for is on screen yet (internal, only while one is
+    /// on its way).
+    FrameStepTick,
 }
