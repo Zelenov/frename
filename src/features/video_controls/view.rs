@@ -535,3 +535,14 @@ mod tests {
         assert!(marker.menu_item(|_| Message::SeekBack10).on_press.is_none());
     }
 }
+
+#[cfg(test)]
+mod quiet_tests {
+    use super::*;
+
+    #[test]
+    fn a_command_stays_quiet_when_mapped() {
+        let command = Command::icon(Icon::Play, "Play".to_string(), &[], Some(1u8)).quiet(true);
+        assert!(command.map(u32::from).quiet);
+    }
+}

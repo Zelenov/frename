@@ -296,8 +296,7 @@ fn controls_bar<'a>(
     // The free space holds the notice when it is wide enough (otherwise it floats over the
     // picture).
     let notice: Element<'a, Message> = match state.notice().filter(|_| fold.notice_in_bar) {
-        Some(notice) => tooltip::tip_text_unless(
-            is_fullscreen,
+        Some(notice) => tooltip::tip_text(
             text::secondary(notice).wrapping(iced::widget::text::Wrapping::None),
             notice,
             Position::Top,

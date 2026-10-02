@@ -1,6 +1,7 @@
 # 0.98
 ## Fixed
-- In fullscreen, no button tooltips pop up over the picture any more: not on the controls bar, in the ⋯ menu's button, nor in the marker and subtitle lists. Outside fullscreen they are as before.
+- In fullscreen, buttons no longer show tooltips over the picture: not on the controls bar, not on the ⋯ button, not in the marker list. Outside fullscreen nothing changes.
+
 
 # 0.97
 ## Changed
