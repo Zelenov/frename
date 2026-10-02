@@ -1096,9 +1096,9 @@ left to right, with the widths §13.9 folds by:
   120 (the pane is under about 916 with every group shown), the notice shows instead as a pill over
   the bottom-left of the picture (`bg.overlay`, radius 6, padding 4×8), with the same lifetime.
   One notice is the app's own, not a confirmation: "Resumed at 12:34 · Home: start over" when a
-  clip opens where playback stopped last time (#161). It stays 6 s, long enough to act on, and a
-  click on it (hand pointer) starts the clip over like `Home` does; the click is a shortcut, the
-  key is in the text.
+  clip opens where playback stopped last time (#161). It is always the pill over the picture,
+  whatever the free space, and stays 6 s, long enough to act on; a click on it (hand pointer)
+  starts the clip over like `Home` does. The click is a shortcut: the key is in the text.
 - **Narrow pane:** what gives way and when is in §13.9. The **More** button (`ellipsis`) sits just
   before fullscreen; its menu opens upward, lists each moved control with its icon, name and key,
   and marks a latched one with a `check`.

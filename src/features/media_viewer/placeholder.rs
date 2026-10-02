@@ -70,25 +70,18 @@ pub fn floating_notice<'a, M: Clone + 'a>(notice: &'a str, on_press: Option<M>) 
             right: SPACE_S,
         })
         .style(style::popup);
-    container(clickable(note.into(), on_press))
+    let note: Element<'a, M> = match on_press {
+        Some(message) => mouse_area(note)
+            .on_press(message)
+            .interaction(iced::mouse::Interaction::Pointer)
+            .into(),
+        None => note.into(),
+    };
+    container(note)
         .padding(SPACE_S)
         .width(Length::Fill)
         .height(Length::Fill)
         .align_left(Length::Fill)
         .align_bottom(Length::Fill)
         .into()
-}
-
-/// `content` that sends `on_press` when clicked, with the hand pointer; as it is without one.
-pub fn clickable<'a, M: Clone + 'a>(
-    content: Element<'a, M>,
-    on_press: Option<M>,
-) -> Element<'a, M> {
-    match on_press {
-        Some(message) => mouse_area(content)
-            .on_press(message)
-            .interaction(iced::mouse::Interaction::Pointer)
-            .into(),
-        None => content,
-    }
 }
