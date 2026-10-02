@@ -78,6 +78,12 @@ impl<S: AppStateStore + Clone> Directory<S> {
                 e
             })?;
         store.set_last_folder_and_file(&FolderAndFile::new(directory, None::<PathBuf>));
+        let names: Vec<String> = files
+            .iter()
+            .filter_map(|f| f.file_path().file_name())
+            .map(|name| name.to_string_lossy().to_string())
+            .collect();
+        store.tidy_playback_positions(directory, &names);
         log::info!("Directory scan complete: {} files found", files.len());
         Ok(Self::with_files(directory, files, store))
     }
@@ -414,7 +420,8 @@ impl<S: AppStateStore + Clone> Directory<S> {
     // File mutation (rename / update)
     // -----------------------------------------------------------------------
 
-    /// Update both the path and snapshot of the file identified by `id`. O(1).
+    /// Update both the path and snapshot of the file identified by `id`. O(1). Where playback
+    /// stopped in it goes along to the new path.
     /// Returns true if the file was found.
     pub fn rename_file(&mut self, id: FileId, new_path: &Path, snapshot: &FileSnapshot) -> bool {
         match self.files_by_id.get_mut(&id) {
@@ -423,6 +430,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
                 file.set_file_path(new_path);
                 file.set_file_snapshot(snapshot);
                 if old_path != new_path {
+                    self.store.move_playback_position(&old_path, new_path);
                     log::info!(
                         "Directory: renamed {} → {} ({} tag(s))",
                         old_path.display(),
@@ -568,6 +576,62 @@ mod tests {
                 "{name} must be hidden"
             );
         }
+    }
+
+    /// A migrated database of its own and a folder on disk, for one test.
+    fn database_and_folder(name: &str) -> (crate::AppDatabase, PathBuf) {
+        use crate::Initializable;
+        let base = std::env::temp_dir().join(format!("frename-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let folder = base.join("folder");
+        std::fs::create_dir_all(&folder).expect("folder");
+        let db = crate::AppDatabase::with_path(base.join("frename.db"));
+        db.initialize().expect("migrate");
+        (db, folder)
+    }
+
+    /// Issue #161: a rename done in frename carries where playback stopped along.
+    #[test]
+    fn a_rename_carries_the_playback_position_along() {
+        use crate::AppStateStore;
+        let (db, folder) = database_and_folder("dir-playback-rename");
+        let clip = folder.join("MVI_0410.mp4");
+        db.set_playback_position(&clip, std::time::Duration::from_secs(40));
+        let file = File::from_path(&clip, SystemTime::UNIX_EPOCH);
+        let id = file.id();
+        let mut dir = Directory::with_files(&folder, vec![file], db.clone());
+        let mut snapshot = dir.file_by_id(id).expect("file").snapshot().clone();
+        snapshot.set_tags(["pick"]);
+        let renamed = folder.join(snapshot.file_name());
+        dir.rename_file(id, &renamed, &snapshot);
+        assert_eq!(db.get_playback_position(&clip), None);
+        assert_eq!(
+            db.get_playback_position(&renamed),
+            Some(std::time::Duration::from_secs(40))
+        );
+    }
+
+    /// Issue #161: opening a folder forgets positions of its gone files and follows a rename done
+    /// outside frename.
+    #[test]
+    fn opening_a_folder_tidies_its_playback_positions() {
+        use crate::AppStateStore;
+        let (db, folder) = database_and_folder("dir-playback-tidy");
+        std::fs::write(folder.join("skip.MVI_0410.mp4"), b"").expect("clip");
+        let secs = std::time::Duration::from_secs;
+        db.set_playback_position(&folder.join("MVI_0410.mp4"), secs(40));
+        db.set_playback_position(&folder.join("gone.mp4"), secs(50));
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("runtime");
+        runtime
+            .block_on(Directory::open(&folder, db.clone()))
+            .expect("open");
+        assert_eq!(
+            db.get_playback_position(&folder.join("skip.MVI_0410.mp4")),
+            Some(secs(40))
+        );
+        assert_eq!(db.get_playback_position(&folder.join("gone.mp4")), None);
     }
 
     /// Directory of `file_0.mp4` … `file_n.mp4`, all without tags.

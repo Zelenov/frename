@@ -1,0 +1,248 @@
+//! Where playback stopped in each clip (#161): a clip opened again continues there.
+//!
+//! The position is personal view state written every few seconds, so it lives in the app
+//! database ([`crate::AppDatabase`]), keyed by the clip's folder and file name, never in the
+//! folder's `.frename` file or the video. Renames done in frename carry it along
+//! ([`crate::Directory::rename_file`]); a rename done outside frename that only changed the tags
+//! is followed the next time the folder is opened ([`tidy`]), the same way the folder's last
+//! viewed file is found again.
+
+use std::collections::HashSet;
+use std::time::Duration;
+
+use crate::FileSnapshot;
+
+/// How far before the remembered moment a clip opens, so the editor sees what led up to it.
+pub const RESUME_LEAD: Duration = Duration::from_secs(2);
+
+/// A clip left earlier than this has nothing worth continuing: it opens at the start, and the
+/// moment is not kept.
+pub const WORTH_RESUMING: Duration = Duration::from_secs(5);
+
+/// A clip left within this of its end was watched to the end: it opens at the start again.
+pub const NEAR_THE_END: Duration = Duration::from_secs(5);
+
+/// A clip left past this share of its length was watched to the end, too.
+const WATCHED_SHARE: f64 = 0.95;
+
+/// The most positions kept in all; the oldest go first.
+pub const MOST_KEPT: usize = 5000;
+
+/// Where a clip opens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenAt {
+    /// At the start, as a clip never seen.
+    Start,
+    /// At its in point: it was watched to the end before.
+    InPoint(Duration),
+    /// At `at`, a little before `stopped`, where playback stopped last time.
+    Resume { at: Duration, stopped: Duration },
+}
+
+/// Where a clip of `duration` opens, given where playback `stopped` in it last time and its in
+/// point. A duration of zero is unknown: then only the start of the clip is judged.
+pub fn open_at(
+    stopped: Option<Duration>,
+    duration: Duration,
+    in_point: Option<Duration>,
+) -> OpenAt {
+    let Some(stopped) = stopped.filter(|stopped| worth_remembering(*stopped)) else {
+        return OpenAt::Start;
+    };
+    let watched = !duration.is_zero()
+        && (stopped + NEAR_THE_END >= duration
+            || stopped.as_secs_f64() >= duration.as_secs_f64() * WATCHED_SHARE);
+    if watched {
+        return in_point.map_or(OpenAt::Start, OpenAt::InPoint);
+    }
+    OpenAt::Resume {
+        at: stopped.saturating_sub(RESUME_LEAD),
+        stopped,
+    }
+}
+
+/// Whether playback stopped at `position` is worth keeping (see [`WORTH_RESUMING`]).
+pub fn worth_remembering(position: Duration) -> bool {
+    position >= WORTH_RESUMING
+}
+
+/// What becomes of a position remembered for a file name once its folder is listed again.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Tidy {
+    /// The file was renamed outside frename (its tags changed): the position follows it to this
+    /// name.
+    Follow(String),
+    /// The file is gone: the position is dropped.
+    Forget,
+}
+
+/// For positions remembered under `remembered` file names of a folder that now `listed` these
+/// files: the ones that must follow a rename or be dropped. A name still listed keeps its
+/// position. A gone name follows the listed file with the same name and extension without tags,
+/// unless that file has a position of its own or another gone name took it first.
+pub fn tidy(remembered: &[String], listed: &[String]) -> Vec<(String, Tidy)> {
+    let listed_names: HashSet<&str> = listed.iter().map(String::as_str).collect();
+    let mut taken: HashSet<&str> = remembered
+        .iter()
+        .map(String::as_str)
+        .filter(|name| listed_names.contains(name))
+        .collect();
+    let mut changes = Vec::new();
+    for name in remembered {
+        if listed_names.contains(name.as_str()) {
+            continue;
+        }
+        let gone = FileSnapshot::parse(name);
+        let renamed = listed.iter().find(|candidate| {
+            let snapshot = FileSnapshot::parse(candidate);
+            !taken.contains(candidate.as_str())
+                && snapshot.name_without_extension() == gone.name_without_extension()
+                && snapshot.extension().eq_ignore_ascii_case(gone.extension())
+        });
+        match renamed {
+            Some(renamed) => {
+                taken.insert(renamed.as_str());
+                changes.push((name.clone(), Tidy::Follow(renamed.clone())));
+            }
+            None => changes.push((name.clone(), Tidy::Forget)),
+        }
+    }
+    changes
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn secs(secs: u64) -> Duration {
+        Duration::from_secs(secs)
+    }
+
+    fn names(list: &[&str]) -> Vec<String> {
+        list.iter().map(|name| name.to_string()).collect()
+    }
+
+    #[test]
+    fn a_clip_opens_a_little_before_where_it_stopped() {
+        assert_eq!(
+            open_at(Some(secs(40)), secs(120), None),
+            OpenAt::Resume {
+                at: secs(38),
+                stopped: secs(40)
+            }
+        );
+    }
+
+    #[test]
+    fn a_clip_never_left_or_left_near_its_start_opens_at_the_start() {
+        assert_eq!(open_at(None, secs(120), None), OpenAt::Start);
+        assert_eq!(open_at(Some(secs(4)), secs(120), None), OpenAt::Start);
+        assert_eq!(
+            open_at(Some(secs(5)), secs(120), None),
+            OpenAt::Resume {
+                at: secs(3),
+                stopped: secs(5)
+            }
+        );
+    }
+
+    #[test]
+    fn a_clip_watched_to_the_end_opens_at_the_start_or_its_in_point() {
+        // Within the last seconds.
+        assert_eq!(open_at(Some(secs(116)), secs(120), None), OpenAt::Start);
+        // Past 95 % of a long clip, more than a few seconds before its end.
+        assert_eq!(open_at(Some(secs(1000)), secs(1050), None), OpenAt::Start);
+        assert_eq!(
+            open_at(Some(secs(990)), secs(1050), None),
+            OpenAt::Resume {
+                at: secs(988),
+                stopped: secs(990)
+            }
+        );
+        // At the very end, where a clip played to its end stops.
+        assert_eq!(
+            open_at(Some(secs(120)), secs(120), Some(secs(12))),
+            OpenAt::InPoint(secs(12))
+        );
+    }
+
+    #[test]
+    fn a_clip_of_unknown_length_continues_where_it_stopped() {
+        assert_eq!(
+            open_at(Some(secs(40)), Duration::ZERO, None),
+            OpenAt::Resume {
+                at: secs(38),
+                stopped: secs(40)
+            }
+        );
+    }
+
+    #[test]
+    fn a_position_near_the_start_is_not_worth_keeping() {
+        assert!(!worth_remembering(Duration::ZERO));
+        assert!(!worth_remembering(Duration::from_millis(4_999)));
+        assert!(worth_remembering(secs(5)));
+    }
+
+    #[test]
+    fn listed_names_keep_their_positions() {
+        assert_eq!(
+            tidy(
+                &names(&["a.mp4", "b.mp4"]),
+                &names(&["a.mp4", "b.mp4", "c.mp4"])
+            ),
+            vec![]
+        );
+    }
+
+    #[test]
+    fn a_gone_file_is_forgotten() {
+        assert_eq!(
+            tidy(&names(&["gone.mp4"]), &names(&["a.mp4"])),
+            vec![("gone.mp4".to_string(), Tidy::Forget)]
+        );
+    }
+
+    #[test]
+    fn a_file_whose_tags_changed_outside_frename_takes_its_position_along() {
+        assert_eq!(
+            tidy(
+                &names(&["pick.MVI_0410.mp4"]),
+                &names(&["skip.night.MVI_0410.MP4"])
+            ),
+            vec![(
+                "pick.MVI_0410.mp4".to_string(),
+                Tidy::Follow("skip.night.MVI_0410.MP4".to_string())
+            )]
+        );
+    }
+
+    #[test]
+    fn a_rename_is_not_followed_across_extensions_or_onto_a_file_with_its_own_position() {
+        assert_eq!(
+            tidy(&names(&["pick.clip.mkv"]), &names(&["review.clip.mp4"])),
+            vec![("pick.clip.mkv".to_string(), Tidy::Forget)]
+        );
+        assert_eq!(
+            tidy(
+                &names(&["pick.clip.mp4", "review.clip.mp4"]),
+                &names(&["review.clip.mp4"])
+            ),
+            vec![("pick.clip.mp4".to_string(), Tidy::Forget)]
+        );
+        // Two gone names for one listed file: the first takes it.
+        assert_eq!(
+            tidy(
+                &names(&["a.clip.mp4", "b.clip.mp4"]),
+                &names(&["c.clip.mp4"])
+            ),
+            vec![
+                (
+                    "a.clip.mp4".to_string(),
+                    Tidy::Follow("c.clip.mp4".to_string())
+                ),
+                ("b.clip.mp4".to_string(), Tidy::Forget)
+            ]
+        );
+    }
+}

@@ -1,5 +1,8 @@
 //! Traits for app state storage: session read/write, stored tags, tag color mapping, and one-time initialization.
 
+use std::path::Path;
+use std::time::Duration;
+
 use uuid::Uuid;
 
 use crate::ai::SummaryLanguage;
@@ -192,6 +195,22 @@ pub trait AppStateStore: Send + Sync {
 
     /// Saves the last batch action run and its options.
     fn set_batch_run(&self, _run: BatchRun) {}
+
+    /// Where playback stopped in the clip at `clip` (#161), if that is remembered.
+    fn get_playback_position(&self, _clip: &Path) -> Option<Duration> {
+        None
+    }
+
+    /// Remembers where playback stopped in the clip at `clip`; a moment too near its start to be
+    /// worth continuing ([`crate::playback::worth_remembering`]) forgets it instead.
+    fn set_playback_position(&self, _clip: &Path, _position: Duration) {}
+
+    /// The clip at `from` was renamed to `to`: its remembered position goes along.
+    fn move_playback_position(&self, _from: &Path, _to: &Path) {}
+
+    /// `folder` now lists the files `names`: positions of files that are gone are dropped, or
+    /// follow a file renamed outside frename (see [`crate::playback::tidy`]).
+    fn tidy_playback_positions(&self, _folder: &Path, _names: &[String]) {}
 }
 
 /// Interface for stored tags and tag color mapping. Tags are keyed by tag id (UUID); tag colors are keyed by tag name.
