@@ -1,5 +1,5 @@
-# Marker list (#174): a marker being described with AI shows the turning loader and
-# "Describing…" on its first line, and ⊗ "Stop describing" in place of ✨. The demo marks it as
+# Marker list (#174): a marker being described with AI shows, on a line under its name, the
+# turning loader, "Describing…" and ⊗ "Stop describing"; its row has no ✨. The demo marks it as
 # being described without sending a request (`describing`). Not a README image.
 source = "../../tests/folder"
 open = "pick.wide.night.city.MVI_0410.mp4"

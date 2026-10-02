@@ -413,14 +413,8 @@ fn marker_row<'a>(
                     quiet,
                 )
             });
-            let ai = if describing {
-                row_action(
-                    Icon::CircleX,
-                    Tip::new(fl!("markers-ai-stop")),
-                    Message::StopDescribing(guid.to_string()),
-                    quiet,
-                )
-            } else {
+            // While it is described, its stop sits on the "Describing…" line, apart from ✕.
+            let ai = (!describing).then(|| {
                 // `Ctrl+F2` describes the marker the playhead is on: the lit row.
                 let tip = Tip::new(fl!("markers-ai-describe"));
                 let tip = if lit { tip.keys(&["Ctrl", "F2"]) } else { tip };
@@ -430,7 +424,7 @@ fn marker_row<'a>(
                     Message::Describe(guid.to_string()),
                     quiet,
                 )
-            };
+            });
             let delete = row_action(
                 Icon::X,
                 Tip::new(fl!("markers-delete")),
@@ -509,11 +503,17 @@ fn marker_row<'a>(
     let working = marker
         .guid
         .as_deref()
-        .is_some_and(|guid| state.is_describing(guid))
-        .then(|| {
+        .filter(|guid| state.is_describing(guid))
+        .map(|guid| {
             row![
                 spinner(spinner_frame, ICON_S, TEXT_SECONDARY),
                 text::caption(fl!("markers-ai-describing")),
+                row_action(
+                    Icon::CircleX,
+                    Tip::new(fl!("markers-ai-stop")),
+                    Message::StopDescribing(guid.to_string()),
+                    quiet,
+                ),
             ]
             .spacing(SPACE_XS)
             .align_y(Alignment::Center)

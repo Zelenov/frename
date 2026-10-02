@@ -9,7 +9,7 @@ use iced::{Alignment, Element, Length, Padding};
 use crate::features::folder_workspace::Directory;
 use crate::ui::badge::{badge, BadgeKind};
 use crate::ui::icon_button::IconButton;
-use crate::ui::icons::Icon;
+use crate::ui::icons::{spinner, Icon};
 use crate::ui::tokens::*;
 use crate::ui::tooltip::{Position, Tip};
 use crate::ui::{button, form, layout, scroll, style, text};
@@ -49,12 +49,16 @@ impl ListForm {
 }
 
 /// Render the batch panel. `directory` names the files of the job and lists the files the
-/// panel can check.
-pub fn view<'a>(state: &'a BatchState, directory: Option<&'a Directory>) -> Element<'a, Message> {
+/// panel can check; `spinner_frame` turns the loader of a run waiting to start.
+pub fn view<'a>(
+    state: &'a BatchState,
+    directory: Option<&'a Directory>,
+    spinner_frame: usize,
+) -> Element<'a, Message> {
     let body = responsive(move |size| {
         let page = match state.progress() {
             Some(progress) => job_view::view(state, progress, directory),
-            None => action_page(state, directory),
+            None => action_page(state, directory, spinner_frame),
         };
         match ListForm::for_width(size.width) {
             ListForm::Full => row![action_list(state), layout::vertical_line(), page].into(),
@@ -245,6 +249,7 @@ pub(super) fn with_button_bar<'a>(
 fn action_page<'a>(
     state: &'a BatchState,
     directory: Option<&'a Directory>,
+    spinner_frame: usize,
 ) -> Element<'a, Message> {
     let checked: Vec<&File> = directory.map_or_else(Vec::new, |dir| {
         dir.all_files()
@@ -276,11 +281,18 @@ fn action_page<'a>(
         let cancel = button::secondary(fl!("batch-cancel"))
             .on_press(Message::Cancel)
             .into();
-        return with_button_bar(
-            page_body(panel.page.map(Message::Action)),
-            fl!("markers-ai-stopping-for-batch"),
-            [cancel],
-        );
+        let waiting = row![
+            spinner(spinner_frame, ICON_S, TEXT_SECONDARY),
+            text::secondary(fl!("markers-ai-stopping-for-batch")),
+        ]
+        .spacing(SPACE_XS)
+        .align_y(Alignment::Center);
+        return column![
+            container(page_body(panel.page.map(Message::Action))).height(Length::Fill),
+            layout::button_bar_with(waiting.into(), [cancel]),
+        ]
+        .width(Length::Fill)
+        .into();
     }
     let run = button::primary(panel.run)
         .on_press_maybe(can_run.then_some(Message::Run))

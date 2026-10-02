@@ -1066,7 +1066,7 @@ F2's auto-repeat is ignored; what an open marker row blocks is listed under the 
 | `F2` on a read-only marker | notice "That marker is read-only" and the marker list opens |
 | `F2` on a file that cannot hold markers | the marker list opens to say so |
 | `Shift`+`F2` | delete the nearest editable marker within 0.5 s; notice "Marker deleted" or "No marker here" |
-| `Ctrl`+`F2` | describe the marker the playhead is on (the lit row) with AI and open the marker list; auto-repeat ignored; notice "No marker here" or "That marker is read-only"; nothing when that marker is being described already |
+| `Ctrl`+`F2` | describe the marker the playhead is on (the lit row) with AI and open the marker list; auto-repeat ignored; notice "No marker here" or "That marker is read-only"; on a marker already being described it opens the marker list, nothing else |
 | `Shift`+`F1` / `Shift`+`F3` | jump to the previous / next marker start; "previous" skips a marker passed less than 750 ms ago |
 | the `map-pin` button | a click is `F2`; holding it draws a range like holding `F2` |
 
@@ -1143,9 +1143,9 @@ left to right, with the widths §13.9 folds by:
    City lights                                        ← name (body; "—" in text.secondary when empty)
    Lights come on along the river at dusk.            ← comment (secondary), when it has one
  ─────────────────────────────────────────────
- ● 0:09                                        ⊗ ✕    ← request on its way: ⊗ stops it
+ ● 0:09                                          ✕    ← request on its way: no ✨
    —
-   ◌ Describing…                                      ← loader and caption, under the name
+   ◌ Describing… ⊗                                    ← loader, caption and ⊗ Stop, under the name
  ─────────────────────────────────────────────
  ● 0:14–0:18                                 ✓ ✨ ✕   ← open row: ✓ Done (Enter)
    [Africa stays dark_______________]                 ← name field (text field style)
@@ -1164,9 +1164,9 @@ left to right, with the widths §13.9 folds by:
 - Second line: the name, `body`, wrapping. Under it the marker's **comment**, when it has one
   (an AI description, or Premiere's comment), `secondary`, wrapping, read-only.
 - **Describing** (#174): while a marker's request is on its way, a line under its name and
-  comment shows, whatever the pointer does, the turning `loader-circle` 12 and "Describing…" in
-  `caption` `text.secondary` (on the first line it would run under the row's actions);
-  `sparkles` becomes `circle-x` "Stop describing". Several rows can
+  comment shows, whatever the pointer does, the turning `loader-circle` 12, "Describing…" in
+  `caption` `text.secondary` and `circle-x` "Stop describing" as a 24 px icon button (there, not
+  among the row's actions, so it never sits next to ✕ Delete); the row's `sparkles` is hidden. Several rows can
   be describing at once. The answer names an unnamed marker (a name the editor gave stays) and adds
   the description to the comment on a line of its own (an empty comment becomes it; a comment
   that already has it is left alone, compared as one line, since a comment line joins its
@@ -1180,21 +1180,24 @@ left to right, with the widths §13.9 folds by:
   that was not known yet, the request finds it out and says so the same way, once even when
   several requests find it out; the settings read the key again (they are its only reader) and
   pass it on, so later clicks send nothing.
-- **Stopped:** ⊗ (or deleting the marker, leaving the clip, opening another folder) stops the
-  request: the row is back to ✨ at once, and its answer, if it still comes, is dropped. ✨ again
+- **Stopped:** ⊗ on the "Describing…" line (or deleting the marker, leaving the clip, opening
+  another folder) stops the request: the row is back to ✨ at once, and its answer, if it still comes, is dropped. ✨ again
   starts a new request; a late answer of the stopped one never passes for it.
-- **Already describing:** ✨ (it shows ⊗ instead) and `Ctrl+F2` on that marker do nothing, with no
-  notice. `Ctrl+F2` opens the marker list (in fullscreen too) so its row shows the progress and ⊗.
+- **Already describing:** the row has no ✨; `Ctrl+F2` on that marker sends nothing and no
+  notice, it only opens the marker list. `Ctrl+F2` always opens it (in fullscreen too), so the row
+  shows the progress and ⊗.
 - **Batch job:** Run stops the open clip's marker requests and waits until the last one is back
   (it may be reading the clip's frames; clipscribe does not say when reading ends, so the wait
-  lasts until its answer, usually seconds). Meanwhile the batch panel's button bar says
-  "Stopping the marker descriptions first…" with a secondary **Cancel** in place of Run; the job
-  then starts by itself. Cancel, leaving batch mode, another action, other checked files or
-  another folder give up on that run. No request starts while a job runs or waits.
-- **Leaving the clip:** its save (a rename, a write into the video) waits the same way until the
-  clip's last request is back, since that request may still hold the file; opening the clip again
-  meanwhile shows the edits, and they are saved when it is left again. Another folder, or closing
-  frename, saves at once.
+  lasts until its answer, usually seconds). Meanwhile the batch panel's button bar shows the
+  turning `loader-circle` 12 and "Stopping the marker descriptions first… This can take up to a
+  couple of minutes." with a secondary **Cancel** in place of Run; the job then starts by itself.
+  Cancel, leaving batch mode, another action, other checked files or another folder give up on
+  that run. No request starts while a job runs or waits.
+- **Leaving the clip** does not wait for its requests (they stop). A save that meets one still
+  reading the file (on Windows a rename or a write into the video then fails) is a refused save
+  like any other of a file in use: notice "Not saved: …", the file keeps its name on disk, the
+  recovery journal keeps the edits, and markers that did not get written are kept, the file
+  marked, and written at the next save.
 - **Answer while the row is open for renaming:** the typed name is committed first, as its own
   undo step; then the answer's step (a name typed there stays, being the editor's).
 - **Comment in the list:** at most 3 lines, then "…"; all of it while the row is open.

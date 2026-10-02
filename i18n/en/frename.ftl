@@ -527,7 +527,7 @@ markers-ai-failed = Not described: { $reason }
 markers-ai-failed-unknown = something went wrong
 markers-read-only-notice = That marker is read-only
 markers-ai-gone = The marker is gone: its description was not added
-markers-ai-stopping-for-batch = Stopping the marker descriptions first…
+markers-ai-stopping-for-batch = Stopping the marker descriptions first… This can take up to a couple of minutes.
 
 ## File workspace
 

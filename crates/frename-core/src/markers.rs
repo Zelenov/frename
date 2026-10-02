@@ -73,11 +73,12 @@ pub fn marker_text_with_moment(marker: &Marker, name: &str, description: &str) -
         marker.name.clone()
     };
     let comment = marker.comment.trim_end();
-    // Already there as a line of its own, or as the whole comment once joined into one line (a
-    // marker line in a comment joins its lines); not merely inside a longer line of the editor.
+    // Already there as a line of its own, or at the end of the comment once joined into one line
+    // (a multi-line description under the editor's note; a marker line in a comment joins its
+    // lines); not merely inside a longer line of the editor's.
     let wanted = one_line(description);
-    let described =
-        comment.lines().any(|line| one_line(line) == wanted) || one_line(comment) == wanted;
+    let described = comment.lines().any(|line| one_line(line) == wanted)
+        || one_line(comment).ends_with(&wanted);
     let new_comment = if description.is_empty() || described {
         marker.comment.clone()
     } else if comment.trim().is_empty() {
@@ -788,6 +789,17 @@ mod tests {
         let joined = named("Lion", "A lion walks. It stops.");
         let again = marker_text_with_moment(&joined, "Lion", "A lion walks.\nIt stops.");
         assert_eq!(again, (joined.name.clone(), joined.comment.clone()));
+        // A multi-line description under the editor's note, as written and as reloaded from a
+        // comment line, which joins it.
+        let twice = "A lion walks.\nIt stops.";
+        for comment in [
+            "Note\nA lion walks.\nIt stops.",
+            "Note A lion walks. It stops.",
+        ] {
+            let noted = named("Lion", comment);
+            let again = marker_text_with_moment(&noted, "Lion", twice);
+            assert_eq!(again.1, comment, "added once");
+        }
         // Inside a longer line of the editor's: not the description, so it is added.
         let inside = named("Lion", "Note: A lion walks. Keep it.");
         let added = marker_text_with_moment(&inside, "Lion", "A lion walks.");

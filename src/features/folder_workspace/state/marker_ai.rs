@@ -5,11 +5,12 @@
 //! batch job stops the requests still on their way.
 //!
 //! A request reads the clip's frames through a GStreamer pipeline of its own, which holds the
-//! file open, and clipscribe does not say when it is done reading: until a clip's last request
-//! has come back, stopped or not, a save of that clip that would rename or write it waits, and so
-//! does a batch job.
+//! file open, and clipscribe does not say when it is done reading: a batch job waits until every
+//! request has come back, stopped or not. Leaving the clip does not wait: a save that meets a
+//! request still reading the file fails like any save of a file in use (see
+//! `apply_file_updated`).
 
-use frename_core::{marker_text_with_moment, FileId, FileSnapshot, SetMarkerTextCommand};
+use frename_core::{marker_text_with_moment, FileId, SetMarkerTextCommand};
 use iced::Task;
 
 use super::FolderWorkspace;
@@ -44,7 +45,7 @@ impl FolderWorkspace {
         let Some((request, cancel)) = self.markers.start_describing(guid) else {
             return Task::none();
         };
-        *self.marker_requests.entry(id).or_default() += 1;
+        self.marker_requests += 1;
         let (model, language) = self.batch.actions().ai_model_and_language();
         let at_s = describe::moment_s(&marker);
         let guid = guid.to_string();
@@ -90,69 +91,22 @@ impl FolderWorkspace {
     /// (it may be reading the clip's frames); the job then waits for it.
     pub(super) fn stop_marker_requests(&mut self) -> bool {
         self.markers.stop_all_describing();
-        !self.marker_requests.is_empty()
+        self.marker_requests > 0
     }
 
-    /// Save the clip `id`, left with the edits in `snapshot`: at once, unless a marker request
-    /// still reads it, then once the last one is back (see the module's doc). Closing frename
-    /// does not wait: a save that fails keeps its edits in the recovery journal.
-    pub(super) fn save_left_clip(&mut self, id: FileId, snapshot: FileSnapshot) -> Task<Message> {
-        let still_open = self.file_workspace.file().is_some_and(|f| f.id() == id);
-        if self.marker_requests.contains_key(&id) && !still_open && !self.closing {
-            self.held_for_markers.push((id, snapshot));
+    /// A request came back, stopped or not: when it was the last, a batch job waiting for it
+    /// starts, unless batch mode was left meanwhile.
+    fn marker_request_done(&mut self) -> Task<Message> {
+        self.marker_requests = self.marker_requests.saturating_sub(1);
+        if self.marker_requests > 0 || !self.batch.is_waiting_for_markers() {
             return Task::none();
         }
-        self.apply_file_updated(id, snapshot)
-    }
-
-    /// Apply every save held for marker requests now (another folder is opened).
-    pub(super) fn apply_held_for_markers(&mut self) -> Task<Message> {
-        let held = std::mem::take(&mut self.held_for_markers);
-        Task::batch(
-            held.into_iter()
-                .map(|(id, snapshot)| self.apply_file_updated(id, snapshot)),
-        )
-    }
-
-    /// A request about the clip `file` came back: when it was its last, the saves held for it
-    /// go ahead, and a batch job waiting for it starts. A clip opened again meanwhile keeps its
-    /// held edits for its next save, like a save waiting for the video to unload.
-    fn marker_request_done(&mut self, file: FileId) -> Task<Message> {
-        match self.marker_requests.get_mut(&file) {
-            Some(left) if *left > 1 => {
-                *left -= 1;
-                return Task::none();
-            }
-            Some(_) => {
-                self.marker_requests.remove(&file);
-            }
-            None => {}
+        self.batch.set_waiting_for_markers(false);
+        if self.batch.is_active() {
+            self.start_batch()
+        } else {
+            Task::none()
         }
-        let (mine, others) = std::mem::take(&mut self.held_for_markers)
-            .into_iter()
-            .partition::<Vec<_>, _>(|(id, _)| *id == file);
-        self.held_for_markers = others;
-        let saved = if self.file_workspace.file().is_some_and(|f| f.id() == file) {
-            self.pending_file_updates.extend(mine);
-            Task::none()
-        } else {
-            Task::batch(
-                mine.into_iter()
-                    .map(|(id, snapshot)| self.apply_file_updated(id, snapshot)),
-            )
-        };
-        // The run waited for this; it starts unless batch mode was left meanwhile.
-        let batch = if self.marker_requests.is_empty() && self.batch.is_waiting_for_markers() {
-            self.batch.set_waiting_for_markers(false);
-            if self.batch.is_active() {
-                self.start_batch()
-            } else {
-                Task::none()
-            }
-        } else {
-            Task::none()
-        };
-        Task::batch([saved, batch])
     }
 
     /// A marker's request came back: fill the marker in, or say why not. The answer of a
@@ -165,7 +119,7 @@ impl FolderWorkspace {
         request: u64,
         outcome: MomentOutcome,
     ) -> Task<Message> {
-        let done = self.marker_request_done(file);
+        let done = self.marker_request_done();
         if !self.markers.finish_describing(&guid, request)
             || self.file_workspace.file().map(|f| f.id()) != Some(file)
         {

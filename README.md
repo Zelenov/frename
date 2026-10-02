@@ -182,7 +182,7 @@ The progress bar shows what you have noted about a clip:
   single moment again, and click a band to play just that stretch.
 - **Describe a marker with AI:** ✨ on a marker's row, or `Ctrl+F2` on the marker under the playhead,
   names an unnamed marker and adds what happens at that moment to its comment, shown under its
-  name. Your own name and comment stay. ⊗ stops it; it uses the Describe with AI settings and
+  name, keeping your own name and comment. ⊗ stops it; it uses the Describe with AI settings and
   costs under a cent per marker with Haiku, a few cents with Opus.
 - **Frames:** `Alt+←` / `Alt+→` (or the buttons next to play) step one frame back or forward and pause
   there; paused, the time shows milliseconds (`00:10.250`), and `F2` marks that exact frame.

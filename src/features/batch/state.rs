@@ -240,6 +240,11 @@ impl BatchState {
     pub fn update(&mut self, message: Message) {
         // Nothing changes under a running job but its own cancel, and what background reads
         // bring in (clip lengths, the key's state).
+        // A run waiting for the open clip's marker requests is given up by anything but an
+        // option change and Run itself: leaving batch mode, Cancel, another action, other files.
+        if !matches!(message, Message::Action(_) | Message::Run) {
+            self.waiting_for_markers = false;
+        }
         let background = matches!(&message, Message::Action(m) if m.applies_while_running());
         if self.is_running() && !matches!(message, Message::Cancel) && !background {
             return;

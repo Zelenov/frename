@@ -84,12 +84,9 @@ pub struct FolderWorkspace {
     /// A batch job waits for a playing video to unload, since it may write into and rename
     /// that very file.
     batch_waits_for_unload: bool,
-    /// Marker "Describe with AI" requests whose answer has not come back yet, stopped ones too,
-    /// per clip: one may still be reading the clip's frames, which holds the file open.
-    marker_requests: HashMap<FileId, usize>,
-    /// Saves of clips that were left while a marker request still read them: a rename or a write
-    /// into the video would fail on the open file. Applied once their last request is back.
-    held_for_markers: Vec<(FileId, FileSnapshot)>,
+    /// Marker "Describe with AI" requests whose answer has not come back yet, stopped ones too:
+    /// one may still be reading the clip's frames, which holds the file open.
+    marker_requests: usize,
     /// The file being renamed in place in the folder list, if any.
     inline_rename: Option<folder::InlineRename>,
     /// The file list's filter menu is open.
@@ -210,8 +207,7 @@ impl FolderWorkspace {
             closing: false,
             batch,
             batch_waits_for_unload: false,
-            marker_requests: HashMap::new(),
-            held_for_markers: Vec::new(),
+            marker_requests: 0,
             inline_rename: None,
             filter_menu_open: false,
             comment_load_generation: 0,
@@ -276,7 +272,7 @@ impl FolderWorkspace {
             } => self.folder_loaded(directory, target_file),
             Message::FolderLoadFailed => self.folder_load_failed(),
             Message::FileOpened(file) => self.apply_file_opened(file),
-            Message::FileUpdated { id, snapshot } => self.save_left_clip(id, snapshot),
+            Message::FileUpdated { id, snapshot } => self.apply_file_updated(id, snapshot),
             Message::Batch(msg) => self.handle_batch(msg),
             Message::PrepareBatch(operation) => {
                 let files = self.listed_ids();
@@ -722,10 +718,6 @@ impl FolderWorkspace {
     }
 
     fn scan_folder(&mut self, pair: FolderAndFile) -> Task<Message> {
-        // Saves held for marker requests belong to this folder's files: now or never. File ids
-        // are renewed by the scan, so the requests' answers will not be matched to a file.
-        let held = self.apply_held_for_markers();
-        self.marker_requests.clear();
         self.batch.set_waiting_for_markers(false);
         self.inline_rename = None;
         self.markers.reset();
@@ -747,7 +739,7 @@ impl FolderWorkspace {
         self.pending_file_updates.clear();
         self.navigation_targets.clear();
 
-        let scan = Task::future(async move {
+        Task::future(async move {
             match Directory::open(&folder, store).await {
                 Ok(dir) => Message::FolderLoaded {
                     directory: dir,
@@ -755,8 +747,7 @@ impl FolderWorkspace {
                 },
                 Err(_) => Message::FolderLoadFailed,
             }
-        });
-        Task::batch([held, scan])
+        })
     }
 
     fn folder_load_failed(&mut self) -> Task<Message> {
@@ -910,9 +901,8 @@ impl FolderWorkspace {
     fn with_pending_edits(&self, file: &frename_core::File) -> frename_core::File {
         let mut file = file.clone();
         if let Some((_, edited)) = self
-            .held_for_markers
+            .pending_file_updates
             .iter()
-            .chain(&self.pending_file_updates)
             .rev()
             .find(|(id, _)| *id == file.id())
         {
@@ -1096,23 +1086,6 @@ impl FolderWorkspace {
     }
 
     fn handle_batch(&mut self, msg: batch::Message) -> Task<Message> {
-        // Run waits for marker requests; leaving batch mode, Cancel, or another action or
-        // other files give up on that run.
-        if self.batch.is_waiting_for_markers()
-            && matches!(
-                msg,
-                batch::Message::SetActive(false)
-                    | batch::Message::SelectAction(_)
-                    | batch::Message::Prepare { .. }
-                    | batch::Message::Toggle(_)
-                    | batch::Message::CheckAll(_)
-                    | batch::Message::CheckNone
-                    | batch::Message::Invert(_)
-                    | batch::Message::Cancel
-            )
-        {
-            self.batch.set_waiting_for_markers(false);
-        }
         if let batch::Message::Run = msg {
             return self.start_batch();
         }
@@ -1257,7 +1230,6 @@ impl FolderWorkspace {
             .job_files(self.batch.action(), &checked);
         // The job closes the clip: its marker requests stop, and the job starts once the last
         // one has let go of the clip (it may be reading its frames).
-        self.batch.set_waiting_for_markers(false);
         if !files.is_empty() && !self.batch.is_running() && self.stop_marker_requests() {
             // The batch panel says so and offers Cancel.
             self.batch.set_waiting_for_markers(true);
@@ -1369,7 +1341,7 @@ impl FolderWorkspace {
     fn apply_pending_file_updates(&mut self) -> Task<Message> {
         let tasks: Vec<Task<Message>> = std::mem::take(&mut self.pending_file_updates)
             .into_iter()
-            .map(|(id, snapshot)| self.save_left_clip(id, snapshot))
+            .map(|(id, snapshot)| self.apply_file_updated(id, snapshot))
             .collect();
         Task::batch(tasks)
     }
@@ -2620,6 +2592,7 @@ impl FolderWorkspace {
             || self.loading
             || self.batch.is_running()
             || self.markers.any_describing()
+            || self.batch.is_waiting_for_markers()
         {
             iced::time::every(crate::ui::tokens::SPINNER_TICK).map(|_| Message::SpinnerTick)
         } else {
@@ -4584,29 +4557,39 @@ mod tests {
         }
     }
 
-    /// Review round 2: a clip left while a marker request may still read it is saved only once
-    /// the request is back, so the save's rename does not meet the request's open file.
+    /// Review round 3: a save meeting a marker request does not wait for it; when the save fails
+    /// (here: the new name is taken, as a file still held open fails on Windows), it goes the way
+    /// of every refused save: the file keeps its name on disk, its markers are written, and the
+    /// request's answer still lands.
     #[test]
-    fn a_clip_left_during_a_marker_request_is_saved_once_it_is_back() {
+    fn a_save_refused_while_a_marker_request_runs_is_a_normal_refused_save() {
         use crate::features::markers::Message as M;
         let test_dir = TestDirectory::new(2);
         let mut workspace = marker_workspace(&test_dir, 2);
         send_marker(&mut workspace, M::Add, 1_000);
         let guid = only_guid(&workspace);
-        let left = workspace.file_workspace().file().expect("open").id();
+        let id = workspace.file_workspace().file().expect("open").id();
         send_marker(&mut workspace, M::Describe(guid.clone()), 0);
         let late = described(&workspace, &guid, "Lion", "A lion.");
-        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
-        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
-        flush_file_opened(&mut workspace);
-        // The switch saves through `FileUpdated`, as the runtime would deliver it.
-        let _ = workspace.update(Message::FileUpdated { id, snapshot });
-        let held = workspace.held_for_markers.iter().any(|(id, _)| *id == left);
-        assert!(held, "the save waits for the request");
 
+        let markers = workspace.file_workspace().markers().map(<[_]>::to_vec);
+        let mut snapshot = FileSnapshot::new(Vec::<String>::new(), "file_1", ".mp4", "file_0.mp4");
+        snapshot.set_markers(markers);
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        let path = workspace
+            .directory()
+            .and_then(|d| d.file_by_id(id))
+            .map(|f| f.file_path().to_path_buf());
+        assert_eq!(path, Some(test_dir.file_path("file_0.mp4")), "refused");
+        let saved = frename_core::FileTagger::load_markers(&test_dir.file_path("file_0.mp4"));
+        assert_eq!(saved.map(|m| m.len()), Some(1), "markers written");
+
+        assert!(workspace.markers().is_describing(&guid));
         let _ = workspace.update(late);
-        assert!(workspace.held_for_markers.is_empty(), "saved now");
-        assert!(workspace.marker_requests.is_empty());
+        assert_eq!(
+            marker_texts(&workspace),
+            [("Lion".to_string(), "A lion.".to_string())]
+        );
     }
 
     #[test]

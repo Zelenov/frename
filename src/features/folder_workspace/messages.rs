@@ -71,7 +71,8 @@ pub enum Message {
     CopyTags,
     /// Paste previously copied tags onto the current file (replace semantics).
     PasteTags,
-    /// Demo mode: show the open clip's marker named so as being described, sending nothing.
+    /// Demo mode only (a screenshot scenario's `describing`): show the open clip's marker of
+    /// this name as being described, without sending a request.
     ShowDescribing(String),
     /// A marker's "Describe with AI" request came back (see `markers::describe`).
     MarkerDescribed {
