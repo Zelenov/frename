@@ -569,6 +569,17 @@ what is inside ("Comments", "Markers and ranges"); never "General", "Advanced", 
   `bg.raised`. One cap per key, no "+" between them.
 - **Timecode:** `mono` on `bg.raised`, radius 4, padding 0×6, optional 12-px `x` to clear. IN/OUT
   badges of the file name panel use it.
+- **Suggested timecode:** a timecode range someone else proposes, to take or leave: `sparkles` 12
+  in `accent.text`, who proposes it ("AI") in `caption` `accent.text`, the range in `mono`
+  `text.primary`, and a `check` 12 in `accent.text`, on the accent tint (`accent.text` 16 %),
+  radius 4, padding 0×6. The whole pill is the target (pointer cursor) and applies it; its tooltip
+  says what that does. It stays as long as the proposal differs from what is set.
+
+  ```
+  ┌──────────────────┐ ┌───────────────────┐ ┌──────────────────────────┐
+  │ IN 00:01       x │ │ OUT 00:20       x │ │ ✦ AI 00:03 – 00:12     ✓ │
+  └──────────────────┘ └───────────────────┘ └──────────────────────────┘
+  ```
 
 ### 8.17 Modal dialog
 
@@ -1167,6 +1178,10 @@ left to right, with the widths §13.9 folds by:
 - Set with `[` / `]` (in rounds down to a whole second, out up); blocked in batch mode. Shown on the timeline (§13.3.4),
   in the file name card (§13.5.6) and in the file list row (§13.4.2).
 - Cleared with the `x` of their badge in the file name card, or undone.
+- Or taken from the AI: Describe with AI may suggest them (the clip's lead-in and lead-out cut
+  off, stored as the last line of the AI block, `Suggested In/Out: 00:00:03.200 –
+  00:00:11.800`). The file name card offers the suggestion (§13.5.6); a click sets both points as
+  `[` and `]` would (in rounded down, out up) in one undo step. Nothing is set without the click.
 
 #### 13.3.8 Fullscreen
 
@@ -1379,7 +1394,9 @@ Both buttons, and the lock, are undoable (#139); a press that changes nothing pu
   `border.control` edge; while a chip is dragged over it: `DANGER_TINT` fill, `error` edge and icon,
   and "Untag" in `caption` SemiBold `error` under it (on the card's second line). A drop there untags the clip (undoable, like the middle click).
 - **Second line:** the IN and OUT timecodes (§8.16: `mono` in a `bg.overlay` pill with "IN"/"OUT" in
-  `caption` `text.secondary` inside, and `x` to clear), then the file name part without tags in
+  `caption` `text.secondary` inside, and `x` to clear), then the In/Out the AI suggests when the
+  clip's AI description has one and it differs from the IN and OUT (§8.16 suggested timecode,
+  "AI", tooltip "Set In and Out to what the AI suggests"), then the file name part without tags in
   `mono`.
 - **No tags on the clip:** "No tags on this clip" in `secondary` where the chips go.
 
