@@ -141,8 +141,9 @@ pub fn view<'a>(
     let item = container(item)
         .width(Length::Fill)
         .height(FOLDER_ROW_HEIGHT);
-    // The full name, since a long one is cut. Beside the list, not over the next row on the way to
-    // it (§8.13); so are the row's other tooltips.
+    // The full name, since a long one is cut: beside the list on the right, not over the next row
+    // on the way to it (§8.13). The tooltips of the marks inside the row open on the left, so they
+    // never cover this one, which shows at the same time, however narrow the list.
     tooltip::tip_text(item, snapshot.file_name(), Position::Right)
 }
 
@@ -153,13 +154,13 @@ fn status_cell<'a>(has_subtitles: bool, closed_by_job: bool) -> Element<'a, Mess
         Some(tooltip::tip_text(
             icon(Icon::Lock, ICON_S, TEXT_SECONDARY),
             fl!("folder-closed-by-job"),
-            Position::Right,
+            Position::Left,
         ))
     } else if has_subtitles {
         Some(tooltip::tip_text(
             icon(Icon::Captions, ICON_MARK, TEXT_SECONDARY),
             fl!("folder-has-subtitles"),
-            Position::Right,
+            Position::Left,
         ))
     } else {
         None
@@ -232,7 +233,7 @@ fn check_cell<'a>(
         _ if outcome == Outcome::Working => tooltip::tip_text(
             spinner(spinner_frame, ICON_M, ACCENT_TEXT),
             fl!("folder-outcome-working"),
-            Position::Right,
+            Position::Left,
         ),
         Some((glyph, color, tip)) => {
             let mark = mouse_area(icon(glyph, ICON_M, color));
@@ -242,7 +243,7 @@ fn check_cell<'a>(
                 mark.on_press(Message::ToggleChecked(id))
                     .interaction(mouse::Interaction::Pointer)
             };
-            tooltip::tip_text(mark, tip, Position::Right)
+            tooltip::tip_text(mark, tip, Position::Left)
         }
         None => {
             let check = form::checkbox("", batch.is_checked(id));
@@ -285,7 +286,7 @@ fn not_saved_mark<'a>() -> Element<'a, Message> {
     tooltip::tip_text(
         icon(Icon::CircleAlert, ICON_MARK, ERROR),
         fl!("folder-markers-not-saved"),
-        Position::Right,
+        Position::Left,
     )
 }
 

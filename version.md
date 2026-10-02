@@ -1,6 +1,6 @@
 # 0.104
 ## Changed
-- Tooltips of a file row (its full name, the subtitles mark) open beside the list instead of over the next row, so they no longer cover the file you move to.
+- A file's full name in the file list opens beside the list instead of over the next row, so it no longer covers the file you move to.
 - The marker's name over the timeline is now a pill tinted with the marker's color, so it no longer looks like a tooltip when one opens next to it.
 - Tooltips show `PgUp` / `PgDn` for the previous and next file, and `Esc` for leaving batch mode.
 - The chip you drag over the trash shows in a box like a tooltip's.

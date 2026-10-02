@@ -183,6 +183,8 @@ Why these values:
   text) for tags not in the list; #53 implements it.
 - **Marker colors** (`theme::marker_color`): the nine Premiere Pro marker colors stay as they are:
   they must match Premiere, not the theme.
+  `marker.label.tint` 25 %: how much of its marker's color tints the marker label's fill over
+  `bg.raised` (§13.3.4; `MARKER_LABEL_TINT`).
 - **Video overlays** (subtitle caption, side list over the picture): black 62 % and a near-black
   72 % panel, so text reads over any picture. They are tokens (`overlay.caption`,
   `overlay.list`), used only over video.
@@ -521,8 +523,9 @@ what is inside ("Comments", "Markers and ranges"); never "General", "Advanced", 
   key in the tooltip, so half a second.
 - **Placement:** away from the edge the control sits on: *below* for the app bar and top rows,
   *above* for the bottom bars (folder controls, video controls), *left* for controls at the right
-  edge of a panel, *right* (beside the list) for file rows. 6 px gap. Never over the thing it explains, and never under the pointer's path
-  to its neighbours (BIR «Движение и клик — один жест»).
+  edge of a panel; a file row's full name *right*, beside the list, and the marks inside the row
+  *left*, so the two never cover each other. 6 px gap. Never over the thing it explains, and never
+  under the pointer's path to its neighbours (BIR «Движение и клик — один жест»).
 - **Content:** the command's name in sentence case, then its keys as key caps: `Open a folder`
   `Ctrl` `O`. Only the keys that work in that place. The key shown comes from the shortcut
   registry of #62 once it exists.

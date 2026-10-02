@@ -73,9 +73,11 @@ pub fn view(props: ToolbarProps) -> Element<'static, folder::Message> {
         .dot(props.update_available.is_some())
         .tip(settings_tip, Position::Top)
         .on_press(M::OpenSettings);
-    // Esc leaves batch mode (`EscapePressed`).
-    let batch_tip = if props.batch_mode {
+    // Esc leaves batch mode (`EscapePressed`), but not while its job runs.
+    let batch_tip = if props.batch_mode && !props.batch_running {
         Tip::new(fl!("folder-controls-batch-back")).keys(&["Esc"])
+    } else if props.batch_mode {
+        Tip::new(fl!("folder-controls-batch-back"))
     } else {
         Tip::new(fl!("folder-controls-batch"))
     };
