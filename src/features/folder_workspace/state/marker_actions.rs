@@ -149,7 +149,13 @@ impl FolderWorkspace {
             M::DeleteAtPlayhead => self.delete_marker_at(position_ms),
             M::Previous => self.jump_to_marker(position_ms, false),
             M::Next => self.jump_to_marker(position_ms, true),
-            M::JumpTo(ms) => seek_exact(ms),
+            M::JumpTo(ms) => {
+                if let Some(markers) = self.file_workspace.markers() {
+                    self.markers
+                        .clicked(markers::view::passed_index(markers, ms));
+                }
+                seek_exact(ms)
+            }
             M::Open(guid) => self.open_marker_row(guid),
             M::Close => {
                 self.close_marker_row();

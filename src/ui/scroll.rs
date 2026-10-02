@@ -80,6 +80,51 @@ impl ScrollRestore {
     }
 }
 
+/// The row a list last scrolled to while following playback; the list scrolls only when the row
+/// changes, so a list scrolled by hand is not fought on every tick. A click on a row that seeks
+/// (§13.2: a click never scrolls) calls [`Self::clicked`]: the frames that follow, which may
+/// still show the old position until the seek lands, do not move the list either.
+#[derive(Debug, Default)]
+pub struct FollowedRow {
+    row: Option<usize>,
+    clicked: Option<(Option<usize>, Instant)>,
+}
+
+/// How long after a click the frames of the old position are ignored.
+const CLICK_WINDOW: Duration = Duration::from_millis(1000);
+
+impl FollowedRow {
+    /// Playback is at `row`; true when the list has to scroll to it.
+    pub fn follow(&mut self, row: Option<usize>) -> bool {
+        self.follow_at(row, Instant::now())
+    }
+
+    fn follow_at(&mut self, row: Option<usize>, now: Instant) -> bool {
+        if let Some((clicked, at)) = self.clicked.take() {
+            if now.duration_since(at) <= CLICK_WINDOW {
+                if row != clicked {
+                    self.clicked = Some((clicked, at));
+                }
+                self.row = clicked;
+                return false;
+            }
+        }
+        std::mem::replace(&mut self.row, row) != row
+    }
+
+    /// The list is scrolled to `row` by other means (shown afresh, put back).
+    pub fn set(&mut self, row: Option<usize>) {
+        self.clicked = None;
+        self.row = row;
+    }
+
+    /// A click on a row sought to `row`: it is in view where the pointer is, leave the list be.
+    pub fn clicked(&mut self, row: Option<usize>) {
+        self.row = row;
+        self.clicked = Some((row, Instant::now()));
+    }
+}
+
 /// [`vertical`] with the id a task scrolls it by.
 pub fn vertical_with_id<'a, M: 'a>(
     id: &'static str,
@@ -119,5 +164,46 @@ mod tests {
         let mut restore = ScrollRestore::default();
         restore.arm(0.0);
         assert!(restore.report(0.0));
+    }
+
+    #[test]
+    fn a_click_keeps_the_list_where_it_is_until_playback_moves_on() {
+        let mut row = FollowedRow::default();
+        let at = Instant::now();
+        assert!(row.follow_at(Some(2), at), "playback reaches a row: scroll");
+        assert!(!row.follow_at(Some(2), at), "same row: no scroll");
+        row.clicked(Some(7));
+        assert!(
+            !row.follow_at(Some(6), at),
+            "a frame from before the seek landed"
+        );
+        assert!(
+            !row.follow_at(Some(7), at),
+            "the seek landed on the clicked row"
+        );
+        assert!(!row.follow_at(Some(7), at), "and stays there");
+        assert!(
+            row.follow_at(Some(8), at),
+            "playback moves on: scroll as usual"
+        );
+    }
+
+    #[test]
+    fn a_click_does_not_pin_the_list_for_long() {
+        let mut row = FollowedRow::default();
+        row.clicked(Some(7));
+        let later = Instant::now() + CLICK_WINDOW + Duration::from_millis(1);
+        assert!(
+            row.follow_at(Some(3), later),
+            "the seek went elsewhere: follow it"
+        );
+    }
+
+    #[test]
+    fn a_list_shown_afresh_follows_from_there() {
+        let mut row = FollowedRow::default();
+        row.clicked(Some(7));
+        row.set(Some(1));
+        assert!(row.follow_at(Some(2), Instant::now()));
     }
 }

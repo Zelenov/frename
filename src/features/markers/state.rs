@@ -53,7 +53,7 @@ pub struct MarkersState {
     /// The marker `F2` added last and when; see [`NAME_WINDOW`].
     last_added: Option<(String, Instant)>,
     /// Row the list scrolled to last when following playback.
-    followed: Option<usize>,
+    followed: crate::ui::scroll::FollowedRow,
     /// The marker `F2` is held on; it grows with the playhead.
     recording: Option<Recording>,
     /// Where the list is scrolled to (from the top). The list's own offset is lost when the
@@ -163,7 +163,12 @@ impl MarkersState {
 
     /// Record the row the list follows; returns whether it changed.
     pub fn follow(&mut self, row: Option<usize>) -> bool {
-        std::mem::replace(&mut self.followed, row) != row
+        self.followed.follow(row)
+    }
+
+    /// A click on a row jumped to `row`: the list stays where it is (§13.2).
+    pub fn clicked(&mut self, row: Option<usize>) {
+        self.followed.clicked(row);
     }
 
     pub fn scroll_y(&self) -> f32 {
@@ -185,5 +190,25 @@ impl MarkersState {
     /// Start over for another file.
     pub fn reset(&mut self) {
         *self = Self::default();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Issue #171: a click on a marker jumps there without scrolling the list; playback passing
+    /// the next marker does.
+    #[test]
+    fn a_click_on_a_marker_does_not_scroll_the_list() {
+        let mut state = MarkersState::default();
+        assert!(state.follow(Some(0)));
+        state.clicked(Some(4));
+        assert!(
+            !state.follow(Some(3)),
+            "a frame from before the jump landed"
+        );
+        assert!(!state.follow(Some(4)));
+        assert!(state.follow(Some(5)), "playback moves on: scroll as usual");
     }
 }
