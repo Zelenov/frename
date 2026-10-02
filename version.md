@@ -1,4 +1,4 @@
-# NEXT
+# 0.104
 ## Changed
 - Tooltips of a file row (its full name, the subtitles mark) open beside the list instead of over the next row, so they no longer cover the file you move to.
 - The marker's name over the timeline is now a pill tinted with the marker's color, so it no longer looks like a tooltip when one opens next to it.
