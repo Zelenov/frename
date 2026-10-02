@@ -273,6 +273,17 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
                 )
                 .width(FIELD_WIDTH_L),
             ),
+            layout::setting_row(
+                fl!("batch-option-tag-suggestions"),
+                layout::aligned([form::checkbox_with_hint(
+                    form::checkbox(
+                        fl!("settings-ai-tag-suggestions"),
+                        settings.ai_tag_suggestions,
+                    )
+                    .on_toggle(Message::SetAiTagSuggestions),
+                    text::secondary(fl!("settings-ai-tag-suggestions-hint")),
+                )]),
+            ),
         ],
     )
 }

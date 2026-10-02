@@ -56,6 +56,8 @@ pub enum Message {
     SetSummaryLanguage(SummaryLanguage),
     /// The model AI descriptions are written with.
     SetAiModel(Model),
+    /// Whether "Describe with AI" also suggests tags from the folder's tags.
+    SetAiTagSuggestions(bool),
     /// Check or uncheck a language spoken in the footage (a code such as "en"), for subtitles.
     SetSubtitleLanguage(String, bool),
     /// The languages Soniox recognises, (code, name), or why they could not be listed. Asked

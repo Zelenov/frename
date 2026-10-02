@@ -580,6 +580,22 @@ what is inside ("Comments", "Markers and ranges"); never "General", "Advanced", 
   │ IN 00:01       x │ │ OUT 00:20       x │ │ ✦ AI 00:03 – 00:12     ✓ │
   └──────────────────┘ └───────────────────┘ └──────────────────────────┘
   ```
+- **Suggested tag:** a tag someone else proposes for the clip, to take or leave: `plus` 12 in
+  `accent.text`, the tag's name in `caption` SemiBold `text.primary` (never wraps), and how sure
+  the proposal is ("90%") in `caption` `text.secondary` (left out when the proposal has no
+  number), on the accent tint, radius 4, padding 0×6. The whole pill is the target (pointer
+  cursor) and adds the tag; its tooltip says so, with the sureness ("Add the tag "night" (90%
+  sure)") and, on the first one, the key that adds it. No hover change, like the suggested
+  timecode. It goes once the clip has the tag.
+- **Apply all:** after several proposals, `check` 12 and a short verb ("Add all") in `caption`
+  SemiBold `accent.text`, no surface of its own, padding 0×6; the target (pointer cursor) takes
+  every proposal at once, its tooltip says so with its key.
+
+  ```
+  ✦ AI tags  ┌─────────────┐ ┌─────────────┐  ✓ Add all   Ideas: kayak race, crowd
+             │ + night 90% │ │ + beach 70% │
+             └─────────────┘ └─────────────┘
+  ```
 
 ### 8.17 Modal dialog
 
@@ -1397,6 +1413,7 @@ handle, comment. Columns are separated by the gaps of §5.
 |---|---|
 | arrows | move the cursor (wrapping); `Alt`+`←`/`→` step the video one frame (#162), so #62's key for moving the cursor tag in the folder order is still to be chosen |
 | `Shift`+`Space` | check or uncheck the cursor tag (or the first match of the search) |
+| `F6` / `Shift`+`F6` | add the tag the AI suggests most / every suggested tag (§13.5.6); like the other F-keys, also while a search field has the focus; a held key adds once |
 | `Enter` | add an unsaved tag to the folder's tags; on a text that is no tag, create it |
 | `Delete` | delete the cursor tag from the folder (undoable) |
 | `Backspace` | anywhere in the window: removes the last letter of the tag search and focuses it (like typing) |
@@ -1455,6 +1472,31 @@ Both buttons, and the lock, are undoable (#139); a press that changes nothing pu
   clip's AI description has one and it differs from the IN and OUT (§8.16 suggested timecode,
   "AI", tooltip "Set In and Out to what the AI suggests"), then the file name part without tags in
   `mono`.
+- **Third line, the tags the AI suggests** (#175), only while the clip's AI description suggests
+  one of the folder's own tags that the clip does not have yet, or has tag ideas:
+  - `sparkles` 12 and "AI tags" in `caption` `accent.text`; then one suggested tag pill (§8.16) per
+    tag, most likely first; then *Add all* (§8.16 apply all) when there are two or more; then the
+    ideas, "Ideas: kayak race, crowd" in `secondary`, with the tooltip "Tags the AI noticed that
+    this folder does not have. They are not added." Ideas are text only: they are never added to
+    the folder's tags.
+  - The line wraps when it does not fit the card (spacing 6 both ways).
+  - A click on a pill adds that tag to the clip, as checking it in the tag grid would (one undo
+    step); `F6` adds the first pill's tag. *Add all* (`Shift`+`F6`) adds every one as one undo
+    step. An added tag leaves the line (it is now a chip on the first line); undo brings it back.
+  - Only the folder's saved tags are offered: a suggested tag the folder no longer has is left
+    out, and an idea the folder has as a tag since is not shown as an idea.
+  - One suggestion: no *Add all*. Only ideas: "AI tags" and the ideas. Nothing left to offer: no
+    line at all.
+  - Like the other file name card edits, off in batch mode, and ignored while the clip's name is
+    being typed in its row (§13.4.2).
+
+  ```
+  ┌───────────────────────────────────────────────────────────────────────┐
+  │ [Pick] [Wide]                                                   [🗑] │
+  │ IN 00:01 x   ✦ AI 00:03 – 00:12 ✓   MVI_0410.mp4                     │
+  │ ✦ AI tags [+ night 90%] [+ beach 70%] ✓ Add all  Ideas: kayak race   │
+  └───────────────────────────────────────────────────────────────────────┘
+  ```
 - **No tags on the clip:** "No tags on this clip" in `secondary` where the chips go.
 
 #### 13.5.7 Comment
@@ -1574,7 +1616,7 @@ Every page has the same parts, in this order:
 | Fix tags by priority | renames files | none; a line "Order: as in the tag list" with the link *Show the tag list* (leaves batch mode) | Reorder tags in 12 names | nothing checked |
 | Apply tag spacing | renames files | row "Spacing" with the current choice and the link *Change* | Rename 12 files | nothing checked |
 | Reset cache and reload | changes only frename's records | none | Reload 12 files | nothing checked |
-| Describe with AI | writes into comments (and markers) | rows: Model (the model and *Change*), Language (*Change*), checkbox "Describe again the videos that have a description"; plan rows and "Without subtitles: 4" (they are described from the picture only); skipped line in `secondary` ("Skipped: 3 already described, 1 over 30 min") | Describe 12 videos · about $0.35 | estimating: a spinner line "Reading clip lengths… 40 of 120" over the plan rows drawn as empty skeletons, Run "Describe videos", reason "Waiting for the estimate"; no key (error notice "No Anthropic API key yet" + *Set the key…*); key rejected (+ *Check the key…*); nothing to send |
+| Describe with AI | writes into comments (and markers) | rows: Model (the model and *Change*), Language (*Change*), Tag suggestions (*Change*: "From the folder's 24 tags", "On, but this folder has no tags yet" or "Off"; the estimate counts the tags sent and the suggestions that come back), checkbox "Describe again the videos that have a description"; plan rows and "Without subtitles: 4" (they are described from the picture only); skipped line in `secondary` ("Skipped: 3 already described, 1 over 30 min") | Describe 12 videos · about $0.35 | estimating: a spinner line "Reading clip lengths… 40 of 120" over the plan rows drawn as empty skeletons, Run "Describe videos", reason "Waiting for the estimate"; no key (error notice "No Anthropic API key yet" + *Set the key…*); key rejected (+ *Check the key…*); nothing to send |
 | Generate subtitles | writes `.srt` files | rows: Languages (from Settings, as a line, *Change*), Cue length, checkbox "Replace existing subtitles"; plan rows: videos, length, cost with its source ("from your account" / "typical price"; "cost unknown" when neither is known), time; `secondary` lines: what is skipped and why, "The audio is sent to Soniox", "Uploads are deleted from Soniox afterwards (the log lists any that could not be)", and that the clips get the "subtitled" tag when Settings says so | Transcribe 12 videos · about $0.07 (or "Build 3 subtitles, free") | key missing or rejected (notice + *Set the key…* / *Check the key…*); nothing to transcribe |
 
 Today seven actions share one generic "Run on N files". What explains a disabled Run today: the red
@@ -1825,6 +1867,7 @@ fails. The keys are today's (#62 owns the list).
 | Open a folder | 📂, drop a folder, recent folders (#63), a path on the command line; the last session reopens at start | OS picker; the file list | the list fills; the app bar shows the folder (#64) | empty folder: empty state in the list; cannot read it: error notice, the old folder stays; missing recent folder: dimmed row with a remove offer |
 | Walk the clips | PageUp / PageDown, click | file list, video pane | row selected and scrolled into view; video loads | load failed: `circle-x` 48 and the reason in the video pane |
 | Tag a clip | type part of a name, arrows, Shift+Space | tag search, tag grid | checkbox ticks; the chip appears in the file name panel and the list row | no match: the search offers to create the tag (Enter) |
+| Take a tag the AI suggests | click a suggested tag, F6, Add all / Shift+F6 | file name card (§13.5.6) | the chip appears; the pill leaves the AI tags line | – |
 | Rename | double-click a row, Enter / Esc | inline field in the row | the row shows the new name | error line under the field (why + what to do); the field keeps the text |
 | Comment | click the comment box, type | comment editor | saved on leave; comment line in the list row; "Commented" tag checked if Settings says so | – |
 | Mark in / out | `[` `]` | video controls, file name panel | IN/OUT timecodes appear; segment on the bar | – |
@@ -1953,7 +1996,7 @@ only replaces the OS title bar with A's bar.
 |---|---|
 | **Interface** (`languages`) | Language · Tag colors (*Monochrome*) · Video (*Play videos automatically when opened*) |
 | **Saving** (`folder`) | File names (*Space after each tag*) · Comments · Markers and ranges · In/out points |
-| **Describe with AI** (`sparkles`; Russian list label «Описание от AI», heading «Описать с помощью AI») | Anthropic API key · Model · Description language |
+| **Describe with AI** (`sparkles`; Russian list label «Описание от AI», heading «Описать с помощью AI») | Anthropic API key · Model · Description language · Tag suggestions |
 | **Subtitles** (`captions`) | Soniox API key · Cue length · Languages (cue length first: the language list is long and hid it) |
 | **Updates** (`refresh-cw`) | Version (version, status, *Check for updates*, *Update and restart*, *Check for updates when frename starts*) · Settings from an older frename (installed only) |
 
@@ -2006,8 +2049,10 @@ No "General" (BIR). The version is on *Updates* ("About" would hold only it).
   - *Keyring unavailable:* warning notice with today's text and hint.
   - A failed save or removal: error line under the row.
 - **Model** (AI): dropdown 300 wide with the prices; help "Haiku is the cheapest; Sonnet and Opus
-  notice more." **Description language:** dropdown 300. The page's ⓘ (on the key row): "Used by
-  Describe with AI in batch mode."
+  notice more." **Description language:** dropdown 300. **Tag suggestions:** checkbox "Also
+  suggest tags from the folder's tags" (on by default) with the hint "In the same request, the AI
+  says which of the folder's tags fit each clip. A suggested tag is added only when you click it."
+  The page's ⓘ (on the key row): "Used by Describe with AI in batch mode."
 - **Languages** (Subtitles): checkboxes of a fixed width that wrap into as many columns as fit (three
   at the default size, two at the minimum); a status line under them while loading, locked or
   failed; help "The languages spoken in the footage, as hints." **Cue length:** radios *Short* —

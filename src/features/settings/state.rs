@@ -347,6 +347,7 @@ impl SettingsState {
             Message::OpenBatchAction(Operation::RespaceTags) => self.tag_spacing_changed = false,
             Message::SetSummaryLanguage(language) => self.settings.summary_language = language,
             Message::SetAiModel(model) => self.settings.ai_model = model.id.to_string(),
+            Message::SetAiTagSuggestions(on) => self.settings.ai_tag_suggestions = on,
             Message::SetSubtitleLanguage(code, on) => {
                 let languages = &mut self.settings.subtitle_languages;
                 languages.retain(|l| *l != code);
