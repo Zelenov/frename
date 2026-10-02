@@ -82,6 +82,12 @@ impl MediaViewerState {
         self.video.pretend_shown_at(position);
     }
 
+    /// For tests: see [`VideoPlayerState::pretend_resume_note`].
+    #[cfg(test)]
+    pub fn pretend_resume_note(&mut self) {
+        self.video.pretend_resume_note();
+    }
+
     /// For tests: see [`VideoPlayerState::resume_lookup`].
     #[cfg(test)]
     pub fn video_resume_lookup(&self) -> Option<Option<Duration>> {
@@ -100,6 +106,12 @@ impl MediaViewerState {
     /// note must still reach the editor, not disappear behind a hidden video component.
     pub fn notice(&self) -> Option<&str> {
         self.video.notice()
+    }
+
+    /// Whether the note over the picture says where the clip continued (#161): `Home` starts
+    /// it over then, even from a search field.
+    pub fn resume_note_shown(&self) -> bool {
+        self.video.notice_starts_over()
     }
 
     /// The playhead of the open video in milliseconds; `None` when no video is shown.

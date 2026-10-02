@@ -119,6 +119,10 @@ pub enum Message {
     /// `Alt+←/→` while a text field had the keys: [`Message::StepFrame`], unless the field is
     /// the comment box.
     StepFrameWhileTyping(video_controls::FrameStep),
+    /// `Home` while a text field had the keys: to the start of the clip while the note that it
+    /// continued is shown (it says Home starts it over), unless the field is the comment box or
+    /// a name being edited; otherwise the field keeps the key (#161).
+    GoToStartWhileTyping,
     /// Open a native folder picker dialog so the user can choose a folder to open.
     OpenFolderPicker,
     /// Open a native file picker dialog so the user can choose a file to open.

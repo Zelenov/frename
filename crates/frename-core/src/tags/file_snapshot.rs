@@ -109,6 +109,14 @@ impl FileSnapshot {
     pub fn tags(&self) -> &[String] {
         &self.tags
     }
+    /// Whether `self` and `other` are the same clip once their tags are left out: the same name
+    /// and the same extension, its case aside. A file renamed outside frename that only changed
+    /// its tags is found again this way; two files that merely share a name, such as
+    /// `pick.clip.mkv` and `review.clip.mp4`, are not.
+    pub fn same_clip_without_tags(&self, other: &FileSnapshot) -> bool {
+        self.name_without_extension() == other.name_without_extension()
+            && self.extension().eq_ignore_ascii_case(other.extension())
+    }
     pub fn name_without_extension(&self) -> &str {
         &self.name_without_extension
     }

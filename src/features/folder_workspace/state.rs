@@ -254,6 +254,7 @@ impl FolderWorkspace {
             | Message::PasteTags
             | Message::RotateVideoWhileTyping(_)
             | Message::StepFrameWhileTyping(_)
+            | Message::GoToStartWhileTyping
                 if self.markers.is_editing() =>
             {
                 Task::none()
@@ -401,6 +402,16 @@ impl FolderWorkspace {
                 )))
             }
             Message::StepFrameWhileTyping(step) => self.unless_writing(Message::StepFrame(step)),
+            Message::GoToStartWhileTyping => {
+                // Only the note's promise takes Home from a search field; a name being typed
+                // keeps it.
+                if self.inline_rename.is_some() || !self.media_viewer.resume_note_shown() {
+                    return Task::none();
+                }
+                self.unless_writing(Message::MediaViewer(media_viewer::Message::Video(
+                    media_viewer_video::Message::GoToStart,
+                )))
+            }
             Message::ToggleMediaFullscreen => self.set_fullscreen(!self.media_fullscreen),
             Message::RestoreListScrolls { markers_y, cues_y } => {
                 // Only a list on screen reports back; armed otherwise it would fire much later.
@@ -4204,6 +4215,31 @@ mod tests {
         assert_eq!(loads(&workspace), before + 3, "the redo reopens it once");
         assert!(workspace.pending_file_updates.is_empty());
         assert_eq!(degrees(), Ok(90));
+    }
+
+    /// Issue #161: `Home` taken by a text field goes to the start of the clip only while the
+    /// note says Home starts it over, and never while a marker's name or a file name is being
+    /// typed; otherwise the field keeps it.
+    #[test]
+    fn home_from_a_text_field_starts_the_clip_over_only_while_the_note_says_so() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        assert_eq!(
+            workspace.update(Message::GoToStartWhileTyping).units(),
+            0,
+            "no note: the field keeps Home"
+        );
+        workspace.media_viewer_mut().pretend_resume_note();
+        assert!(workspace.media_viewer().resume_note_shown());
+        // The comment box check: a widget operation, then the message.
+        assert_eq!(workspace.update(Message::GoToStartWhileTyping).units(), 1);
+        let _ = workspace.update(Message::Folder(folder::Message::StartRename(0)));
+        assert!(workspace.inline_rename.is_some(), "renaming by hand");
+        assert_eq!(
+            workspace.update(Message::GoToStartWhileTyping).units(),
+            0,
+            "a file name being typed keeps Home"
+        );
     }
 
     /// In batch mode the comment box is not shown, so `Ctrl+Alt+→` after typing in the file

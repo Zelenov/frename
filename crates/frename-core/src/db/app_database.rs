@@ -38,11 +38,26 @@ fn decode_options(text: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-/// The key a clip's playback position is kept under: its folder and its file name.
+/// The key a clip's playback position is kept under: its folder ([`folder_key`]) and its file
+/// name, exactly.
 fn clip_key(clip: &Path) -> Option<(String, String)> {
-    let folder = clip.parent()?.to_string_lossy().to_string();
+    let folder = folder_key(clip.parent()?);
     let file_name = clip.file_name()?.to_string_lossy().to_string();
     Some((folder, file_name))
+}
+
+/// A folder as playback positions are kept under it: without a trailing separator, and on
+/// Windows, where paths ignore case and take either slash, in lower case with backslashes, so
+/// one folder reached by two spellings (a dropped folder, the last session) is one folder.
+fn folder_key(folder: &Path) -> String {
+    let text = folder.to_string_lossy();
+    if cfg!(windows) {
+        text.replace('/', "\\")
+            .trim_end_matches('\\')
+            .to_lowercase()
+    } else {
+        text.trim_end_matches('/').to_string()
+    }
 }
 
 /// Now, in milliseconds since the Unix epoch.
@@ -467,7 +482,7 @@ impl AppStateStore for AppDatabase {
     }
 
     fn tidy_playback_positions(&self, folder: &Path, names: &[String]) {
-        let folder = folder.to_string_lossy().to_string();
+        let folder = folder_key(folder);
         let Ok(conn) = self.conn() else { return };
         let conn = lock_connection(&conn);
         if let Err(e) = tidy_positions(&conn, &folder, names) {
@@ -636,6 +651,28 @@ mod tests {
         // Moving a clip with no position leaves the other one alone.
         db.move_playback_position(Path::new("/footage/other.mp4"), after);
         assert_eq!(db.get_playback_position(after), Some(secs(40)));
+    }
+
+    #[test]
+    fn a_folder_spelled_another_way_is_the_same_folder() {
+        let db = database("playback-folder-key");
+        db.set_playback_position(Path::new("/footage/day1/clip.mp4"), secs(40));
+        assert_eq!(
+            db.get_playback_position(Path::new("/footage/day1//clip.mp4")),
+            Some(secs(40))
+        );
+        if cfg!(windows) {
+            db.set_playback_position(Path::new(r"C:\Footage\Day1\clip.mp4"), secs(50));
+            assert_eq!(
+                db.get_playback_position(Path::new("c:/footage/day1/clip.mp4")),
+                Some(secs(50))
+            );
+            assert_eq!(
+                db.get_playback_position(Path::new(r"C:\Footage\Day1\CLIP.mp4")),
+                None,
+                "the file name is kept exactly"
+            );
+        }
     }
 
     #[test]

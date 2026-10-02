@@ -77,37 +77,49 @@ pub enum Tidy {
 }
 
 /// For positions remembered under `remembered` file names of a folder that now `listed` these
-/// files: the ones that must follow a rename or be dropped. A name still listed keeps its
-/// position. A gone name follows the listed file with the same name and extension without tags,
-/// unless that file has a position of its own or another gone name took it first.
+/// files: the ones that must follow a rename or be dropped. A name still listed (exactly, case
+/// included) keeps its position. A gone name follows a rename done outside frename that only
+/// changed the tags ([`FileSnapshot::same_clip_without_tags`]), but only when that is certain:
+/// exactly one listed file is that clip, it has no position of its own, and no other gone name
+/// points at it. Otherwise the position is dropped: a rename keeps the file's time, so a file
+/// that sat beside the gone one all along cannot be told from a renamed one.
 pub fn tidy(remembered: &[String], listed: &[String]) -> Vec<(String, Tidy)> {
     let listed_names: HashSet<&str> = listed.iter().map(String::as_str).collect();
-    let mut taken: HashSet<&str> = remembered
+    let has_position: HashSet<&str> = remembered
         .iter()
         .map(String::as_str)
         .filter(|name| listed_names.contains(name))
         .collect();
-    let mut changes = Vec::new();
-    for name in remembered {
-        if listed_names.contains(name.as_str()) {
-            continue;
-        }
-        let gone = FileSnapshot::parse(name);
-        let renamed = listed.iter().find(|candidate| {
-            let snapshot = FileSnapshot::parse(candidate);
-            !taken.contains(candidate.as_str())
-                && snapshot.name_without_extension() == gone.name_without_extension()
-                && snapshot.extension().eq_ignore_ascii_case(gone.extension())
-        });
-        match renamed {
-            Some(renamed) => {
-                taken.insert(renamed.as_str());
-                changes.push((name.clone(), Tidy::Follow(renamed.clone())));
-            }
-            None => changes.push((name.clone(), Tidy::Forget)),
-        }
-    }
-    changes
+    let gone: Vec<(&String, Option<&String>)> = remembered
+        .iter()
+        .filter(|name| !listed_names.contains(name.as_str()))
+        .map(|name| {
+            let clip = FileSnapshot::parse(name);
+            let mut same = listed
+                .iter()
+                .filter(|candidate| FileSnapshot::parse(candidate).same_clip_without_tags(&clip));
+            let renamed = match (same.next(), same.next()) {
+                (Some(only), None) if !has_position.contains(only.as_str()) => Some(only),
+                _ => None,
+            };
+            (name, renamed)
+        })
+        .collect();
+    gone.iter()
+        .map(|(name, renamed)| {
+            let shared = |renamed: &&String| {
+                gone.iter()
+                    .filter(|(_, other)| other.is_some_and(|other| other == *renamed))
+                    .count()
+                    > 1
+            };
+            let change = match renamed {
+                Some(renamed) if !shared(renamed) => Tidy::Follow((*renamed).clone()),
+                _ => Tidy::Forget,
+            };
+            ((*name).clone(), change)
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -230,19 +242,24 @@ mod tests {
             ),
             vec![("pick.clip.mp4".to_string(), Tidy::Forget)]
         );
-        // Two gone names for one listed file: the first takes it.
+        // Two gone names for one listed file: which one it was is not known.
         assert_eq!(
             tidy(
                 &names(&["a.clip.mp4", "b.clip.mp4"]),
                 &names(&["c.clip.mp4"])
             ),
             vec![
-                (
-                    "a.clip.mp4".to_string(),
-                    Tidy::Follow("c.clip.mp4".to_string())
-                ),
+                ("a.clip.mp4".to_string(), Tidy::Forget),
                 ("b.clip.mp4".to_string(), Tidy::Forget)
             ]
+        );
+        // Two listed files that could be it: neither.
+        assert_eq!(
+            tidy(
+                &names(&["a.clip.mp4"]),
+                &names(&["b.clip.mp4", "c.clip.MP4"])
+            ),
+            vec![("a.clip.mp4".to_string(), Tidy::Forget)]
         );
     }
 }

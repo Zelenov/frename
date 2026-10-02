@@ -371,14 +371,9 @@ impl<S: AppStateStore + Clone> Directory<S> {
             file.id()
         } else {
             let remembered = FileSnapshot::parse(last_viewed);
-            let base_name = remembered.name_without_extension();
-            let extension = remembered.extension();
             self.files_by_id
                 .values()
-                .find(|f| {
-                    f.snapshot().name_without_extension() == base_name
-                        && f.snapshot().extension().eq_ignore_ascii_case(extension)
-                })?
+                .find(|f| f.snapshot().same_clip_without_tags(&remembered))?
                 .id()
         };
         self.select_by_id(id)

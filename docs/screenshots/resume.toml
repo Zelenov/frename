@@ -1,5 +1,5 @@
-# A clip opened where playback stopped last time (#161): the note in the controls bar. Not a
-# README image; for looking at the feature (`frename --demo`).
+# A clip opened where playback stopped last time (#161) on a wide video pane: the note floats over
+# the picture. Not a README image; for looking at the feature (`frename --demo`).
 source = "../../tests/folder"
 open = "pick.wide.night.city.MVI_0410.mp4"
 resume = 12.5
