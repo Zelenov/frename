@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use uuid::Uuid;
 
-use crate::ai::SummaryLanguage;
+use crate::ai::{MomentsMode, SummaryLanguage};
 use crate::{
     CommentStorage, CueLength, FolderAndFile, InOutStorage, MarkerStorage, StoredTag,
     TagColorMapping,
@@ -68,6 +68,9 @@ pub struct AppSettings {
     /// The id of the model AI descriptions are written with (see
     /// [`clipscribe::Model::from_id`]). Defaults to the cheapest.
     pub ai_model: String,
+    /// Which moments AI descriptions get: only what stands out (the default, which alone
+    /// suggests an In/Out) or the whole clip.
+    pub ai_moments: MomentsMode,
     /// Languages spoken in the footage, as hints for generating subtitles (codes such as
     /// "en"). Empty: detect automatically. Defaults to
     /// [`crate::DEFAULT_SUBTITLE_LANGUAGES`].
@@ -92,6 +95,7 @@ impl Default for AppSettings {
             space_after_tags: false,
             summary_language: SummaryLanguage::default(),
             ai_model: clipscribe::MODELS[0].id.to_string(),
+            ai_moments: MomentsMode::default(),
             subtitle_languages: crate::DEFAULT_SUBTITLE_LANGUAGES
                 .iter()
                 .map(|code| code.to_string())

@@ -41,7 +41,10 @@ pub fn describe_moment(
     language: SummaryLanguage,
     cancel: &AtomicBool,
 ) -> MomentOutcome {
-    let Some(request) = describe_ai::Request::for_clip(path, model, language) else {
+    // One moment: clipscribe's `describe_moment` does not use the moments mode.
+    let Some(request) =
+        describe_ai::Request::for_clip(path, model, language, describe::MomentsMode::default())
+    else {
         return MomentOutcome::NoKey;
     };
     match describe::describe_moment(
