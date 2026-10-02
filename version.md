@@ -1,3 +1,7 @@
+# 0.106
+## Added
+- A clip you open again continues where you stopped watching it, two seconds earlier, also after a restart. A note says so; `Home` or a click on the note starts it over. A clip watched to the end starts over, at its in point if it has one.
+
 # 0.105
 ## Added
 - Step through a clip frame by frame: `Alt+←` / `Alt+→`, or the new buttons next to play, show the previous or next frame and pause there. Hold the key to keep stepping. While paused, the time next to the timeline shows milliseconds (`00:10.250`). It goes by the real frames, so phone clips with a variable frame rate step correctly too.

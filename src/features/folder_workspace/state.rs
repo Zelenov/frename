@@ -905,7 +905,10 @@ impl FolderWorkspace {
             self.with_pending_edits(&file)
         };
         self.file_workspace.set_file(Some(opened));
-        if !same_file {
+        if same_file {
+            // Its path may have changed (an in-place rename); the video is not reopened.
+            self.media_viewer.follow_rename(&file);
+        } else {
             self.markers_loaded(file.id());
             self.journal_reset_baseline();
         }
@@ -2671,6 +2674,12 @@ impl FolderWorkspace {
         !self.pending_file_updates.is_empty()
     }
 
+    /// Test helper: the media viewer, to stand in for a real video.
+    #[cfg(test)]
+    pub fn media_viewer_mut(&mut self) -> &mut MediaViewerState {
+        &mut self.media_viewer
+    }
+
     /// State of the marker list (open row, color picker).
     pub fn markers(&self) -> &MarkersState {
         &self.markers
@@ -2984,6 +2993,51 @@ mod tests {
         assert_eq!(
             FolderTagStore::get_last_viewed(test_dir.path()),
             "file_0.mp4"
+        );
+    }
+
+    /// Issue #161: a clip left at 40 s and opened again looks up where it stopped, to continue
+    /// there once it is open; one never played has nothing to continue.
+    #[test]
+    fn a_clip_opened_again_continues_where_playback_stopped() {
+        use frename_core::AppStateStore;
+        use std::time::Duration;
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()), // file_0.mp4
+        });
+        flush_file_opened(&mut workspace);
+        assert_eq!(
+            workspace.media_viewer().video_resume_lookup(),
+            Some(None),
+            "never played"
+        );
+        workspace
+            .media_viewer_mut()
+            .pretend_video_shown_at(Duration::from_secs(40));
+
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        assert_eq!(
+            AppDatabase::new().get_playback_position(&test_dir.file_path("file_0.mp4")),
+            Some(Duration::from_secs(40))
+        );
+        // file_1 played for a moment only: nothing worth continuing in it.
+        workspace
+            .media_viewer_mut()
+            .pretend_video_shown_at(Duration::from_secs(1));
+
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        flush_file_opened(&mut workspace);
+        assert_eq!(
+            workspace.media_viewer().video_resume_lookup(),
+            Some(Some(Duration::from_secs(40)))
+        );
+        assert_eq!(
+            AppDatabase::new().get_playback_position(&test_dir.file_path("file_1.mp4")),
+            None
         );
     }
 

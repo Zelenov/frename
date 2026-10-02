@@ -126,8 +126,10 @@ pub fn view<'a>(
     ) {
         layers.push(side);
     }
+    // The note that says where the clip continued starts it over when clicked (#161).
+    let notice_press = state.notice_starts_over().then_some(Message::GoToStart);
     if let Some(notice) = state.notice().filter(|_| !fold.notice_in_bar) {
-        layers.push(placeholder::floating_notice(notice));
+        layers.push(placeholder::floating_notice(notice, notice_press.clone()));
     }
     if state.more_open() && fold.has_more() {
         layers.push(more_popover(state, markers, fold));
@@ -303,10 +305,13 @@ fn controls_bar<'a>(
     // The free space holds the notice when it is wide enough (otherwise it floats over the
     // picture).
     let notice: Element<'a, Message> = match state.notice().filter(|_| fold.notice_in_bar) {
-        Some(notice) => tooltip::tip_text(
-            text::secondary(notice).wrapping(iced::widget::text::Wrapping::None),
-            notice,
-            Position::Top,
+        Some(notice) => placeholder::clickable(
+            tooltip::tip_text(
+                text::secondary(notice).wrapping(iced::widget::text::Wrapping::None),
+                notice,
+                Position::Top,
+            ),
+            state.notice_starts_over().then_some(Message::GoToStart),
         ),
         None => space().into(),
     };

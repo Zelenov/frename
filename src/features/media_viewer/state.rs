@@ -1,5 +1,7 @@
 //! State for the media_viewer feature: video, or a placeholder for anything else.
 
+use std::time::Duration;
+
 use frename_core::{File, FileKind};
 use iced::{Subscription, Task};
 
@@ -32,14 +34,31 @@ impl MediaViewerState {
         match file.kind() {
             FileKind::Video => {
                 self.active = ActiveMedia::Video;
+                let in_point = file
+                    .snapshot()
+                    .segment_start()
+                    .filter(|secs| secs.is_finite() && *secs >= 0.0)
+                    .map(Duration::from_secs_f32);
                 self.video
-                    .load_video(frename_core::FileTagger::disk_path(file.file_path()))
+                    .load_video(
+                        frename_core::FileTagger::disk_path(file.file_path()),
+                        file.file_path().to_path_buf(),
+                        in_point,
+                    )
                     .map(Message::Video)
             }
             FileKind::Other => {
                 self.active = ActiveMedia::Unsupported;
                 Task::none()
             }
+        }
+    }
+
+    /// The shown file was renamed without being opened again (an in-place rename, an undo):
+    /// where playback stops in it is kept under its new name.
+    pub fn follow_rename(&mut self, file: &File) {
+        if matches!(self.active, ActiveMedia::Video) {
+            self.video.follow_rename(file.file_path().to_path_buf());
         }
     }
 
@@ -55,6 +74,18 @@ impl MediaViewerState {
     #[cfg(test)]
     pub fn video_loads_started(&self) -> u64 {
         self.video.loads_started()
+    }
+
+    /// For tests without a real video: see [`VideoPlayerState::pretend_shown_at`].
+    #[cfg(test)]
+    pub fn pretend_video_shown_at(&mut self, position: Duration) {
+        self.video.pretend_shown_at(position);
+    }
+
+    /// For tests: see [`VideoPlayerState::resume_lookup`].
+    #[cfg(test)]
+    pub fn video_resume_lookup(&self) -> Option<Option<Duration>> {
+        self.video.resume_lookup()
     }
 
     /// Returns `true` when a video is currently being shown.

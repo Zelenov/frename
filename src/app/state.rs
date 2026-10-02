@@ -337,6 +337,11 @@ fn main_window_event(
                     keyboard::key::Named::Delete => Some(Message::FolderWorkspace(
                         folder_workspace::Message::RemoveTag,
                     )),
+                    keyboard::key::Named::Home => Some(Message::FolderWorkspace(
+                        folder_workspace::Message::MediaViewer(media_viewer::Message::Video(
+                            media_viewer_video::Message::GoToStart,
+                        )),
+                    )),
                     _ => None,
                 };
                 if msg.is_some() {
