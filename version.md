@@ -1,3 +1,7 @@
+# 0.102
+## Fixed
+- The Subtitles / Markers switch above the side list no longer shifts its icons, words and counts when you change the selection.
+
 # 0.101
 ## Fixed
 - A button's tooltip is no longer drawn under the marker's name over the timeline: the tooltip shows whole, on top.
