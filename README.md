@@ -101,6 +101,7 @@ it has one).
 | `F2` | Add a marker; `F2` again within a second and a half, or on a marker, names it |
 | Hold `F2` | Mark a range: from where you pressed to where you let go |
 | `Shift+F2` | Delete the marker under the playhead |
+| `Ctrl+F2` | Describe the marker under the playhead with AI |
 | `Shift+F1` / `Shift+F3` | Jump to the previous / next marker |
 | `Shift` + drag the progress bar | Snap to the nearest marker |
 | `Alt` + drag the progress bar (paused) | Mark a range |
@@ -184,6 +185,10 @@ The progress bar shows what you have noted about a clip:
   band just above the bar shows it, and overlapping bands stack. Drag the handles at the ends of the current
   range to change it (`Shift` snaps), drag them together or `Alt`+click the band to make it a
   single moment again, and click a band to play just that stretch.
+- **Describe a marker with AI:** ✨ on a marker's row, or `Ctrl+F2` on the marker under the playhead,
+  names an unnamed marker and adds what happens at that moment to its comment, shown under its
+  name, keeping your own name and comment. ⊗ stops it; it uses the Describe with AI settings and
+  costs under a cent per marker with Haiku, a few cents with Opus.
 - **Frames:** `Alt+←` / `Alt+→` (or the buttons next to play) step one frame back or forward and pause
   there; paused, the time shows milliseconds (`00:10.250`), and `F2` marks that exact frame.
   `F12` or 📷 saves the current frame as a JPEG next to the video

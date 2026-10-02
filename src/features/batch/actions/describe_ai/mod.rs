@@ -108,6 +108,11 @@ impl Options {
         })
     }
 
+    /// The model and language set in the settings.
+    pub fn model_and_language(&self) -> (Model, SummaryLanguage) {
+        (self.model, self.language)
+    }
+
     /// Whether clip lengths are being read (they keep the clips open: no job may rename them).
     pub fn is_probing(&self) -> bool {
         !self.probing.is_empty()
@@ -486,25 +491,17 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
         return ItemResult::new(ItemStatus::Skipped, None);
     }
     // Removed in the settings while the job runs: every later video would fail the same way.
-    let Some(api_key) = key::read_key(key::ApiKey::Anthropic) else {
+    let Some(request) = Request::for_clip(path, options.model(), options.language) else {
         return ItemResult {
             stop_job: Some(fl!("batch-ai-stop-no-key")),
             ..ItemResult::failed(fl!("batch-ai-fail-no-key"))
         };
     };
-    // A debug build renames in memory only: the clip and its subtitles are read by the name on disk.
-    let on_disk = FileTagger::disk_path(path);
-    let subtitles = describe::srt::load_for(&on_disk).unwrap_or_else(|e| {
-        log::warn!("ai: subtitles of {} not read: {e}", path.display());
-        Vec::new()
-    });
-    let describe_options = describe::Options {
-        api_key,
-        model: options.model(),
-        language: options.language,
-        frame_sampling: FrameSampling::KeyFrames,
-        moments: MomentsMode::Important,
-    };
+    let Request {
+        on_disk,
+        subtitles,
+        options: describe_options,
+    } = request;
     // The file's share of reading frames, as the estimate counts it; waiting for the answer
     // takes the rest.
     let mut asked_at = 0.0;
@@ -541,9 +538,8 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
         Ok(described) => described,
         Err(describe::Error::Cancelled) => return ItemResult::new(ItemStatus::Pending, None),
         Err(describe::Error::TooLong(_)) => return ItemResult::new(ItemStatus::Skipped, None),
-        Err(describe::Error::Unreadable(e)) => {
-            log::warn!("ai: cannot read {}: {e}", path.display());
-            return ItemResult::failed(fl!("batch-ai-fail-unreadable"));
+        Err(e @ describe::Error::Unreadable(_)) => {
+            return ItemResult::failed(failure_reason(&e, path));
         }
         Err(describe::Error::Ai(e)) => return ai_failed(e),
         Err(describe::Error::BadAnswer { reason, usage }) => {
@@ -612,6 +608,57 @@ fn ai_failed(error: AiError) -> ItemResult {
         stop_job: error.stops_job(),
         stop_if_repeated: offline.then(|| fl!("batch-ai-stop-offline")),
         ..ItemResult::failed(error.reason())
+    }
+}
+
+/// What a request about one clip sends besides its frames: the same for a batch run and for
+/// "Describe with AI" on a marker, so the two cannot drift apart.
+pub struct Request {
+    /// Where the clip is on disk: a debug build renames in memory only, so the clip and its
+    /// subtitles are read by the name on disk.
+    pub on_disk: PathBuf,
+    /// The clip's `.srt`, if it has one (none when it cannot be read).
+    pub subtitles: Vec<describe::Cue>,
+    pub options: describe::Options,
+}
+
+impl Request {
+    /// The request for the clip at `path` with `model` and `language`; `None` when no
+    /// Anthropic key is saved. Reads the key and the subtitles: blocking.
+    pub fn for_clip(path: &Path, model: Model, language: SummaryLanguage) -> Option<Self> {
+        let api_key = key::read_key(key::ApiKey::Anthropic)?;
+        let on_disk = FileTagger::disk_path(path);
+        let subtitles = describe::srt::load_for(&on_disk).unwrap_or_else(|e| {
+            log::warn!("ai: subtitles of {} not read: {e}", path.display());
+            Vec::new()
+        });
+        Some(Self {
+            on_disk,
+            subtitles,
+            options: describe::Options {
+                api_key,
+                model,
+                language,
+                frame_sampling: FrameSampling::KeyFrames,
+                moments: MomentsMode::Important,
+            },
+        })
+    }
+}
+
+/// Why a request about the clip at `path` failed, as the batch report and the marker notice
+/// say it: the AI's own reason (a rejected key, no credit left, the network…), or the clip's.
+/// `Cancelled` has no reason to show; it gets the AI's word for it.
+pub fn failure_reason(error: &describe::Error, path: &Path) -> String {
+    match error {
+        describe::Error::Unreadable(e) => {
+            log::warn!("ai: cannot read {}: {e}", path.display());
+            fl!("batch-ai-fail-unreadable")
+        }
+        describe::Error::TooLong(_) => fl!("batch-ai-fail-too-long"),
+        describe::Error::Ai(e) => e.reason(),
+        describe::Error::BadAnswer { reason, .. } => reason.clone(),
+        describe::Error::Cancelled => AiError::Cancelled.reason(),
     }
 }
 

@@ -359,6 +359,16 @@ impl Actions {
         }
     }
 
+    /// Whether the settings said no Anthropic key is saved ("Describe with AI", on a marker too).
+    pub fn ai_key_missing(&self) -> bool {
+        self.describe_ai.key_missing()
+    }
+
+    /// The model and language of "Describe with AI", which describing a marker uses too.
+    pub fn ai_model_and_language(&self) -> (Model, clipscribe::SummaryLanguage) {
+        self.describe_ai.model_and_language()
+    }
+
     pub(super) fn describe_ai_mut(&mut self) -> &mut describe_ai::Options {
         &mut self.describe_ai
     }

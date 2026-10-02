@@ -31,6 +31,7 @@ pub fn view(
         markers: state.file_workspace().markers(),
         state: state.markers(),
         pane_width: state.left_width(),
+        spinner_frame: state.spinner_frame(),
     };
 
     if state.directory().is_none() && !state.media_fullscreen() {
@@ -96,7 +97,8 @@ pub fn view(
 
     // Batch mode shows the batch actions where the open file's tags and name are.
     let right_panel: Element<'_, Message> = if state.batch().is_active() {
-        batch::view::view(state.batch(), state.directory()).map(Message::Batch)
+        batch::view::view(state.batch(), state.directory(), state.spinner_frame())
+            .map(Message::Batch)
     } else {
         let file_ws = state.file_workspace();
         let is_synced = file_ws.tag_list().is_selected_match_display_order();

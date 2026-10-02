@@ -249,9 +249,17 @@ pub fn button_bar<'a, M: 'a>(
     hint: impl IntoFragment<'a>,
     buttons: impl IntoIterator<Item = Element<'a, M>>,
 ) -> Element<'a, M> {
+    button_bar_with(text::secondary(hint).into(), buttons)
+}
+
+/// [`button_bar`] with `lead` on the left instead of a hint: a hint with an icon before it.
+pub fn button_bar_with<'a, M: 'a>(
+    lead: Element<'a, M>,
+    buttons: impl IntoIterator<Item = Element<'a, M>>,
+) -> Element<'a, M> {
     // The hint takes what the buttons leave (a `Fill` child is laid out last), so a long hint
     // wraps instead of squeezing the buttons.
-    let bar = row![container(text::secondary(hint)).width(Length::Fill)]
+    let bar = row![container(lead).width(Length::Fill)]
         .extend(buttons)
         .spacing(SPACE_S)
         .align_y(Alignment::Center);

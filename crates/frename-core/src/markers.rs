@@ -61,6 +61,34 @@ impl Marker {
     }
 }
 
+/// The name and comment `marker` gets from an AI's `name` and `description` of its moment
+/// ("Describe with AI" on a marker). Offered, not forced: a name the editor gave stays, and so
+/// does their comment, with the description added on a line of its own; a comment that already
+/// holds the description is left as it is, so asking again adds nothing twice.
+pub fn marker_text_with_moment(marker: &Marker, name: &str, description: &str) -> (String, String) {
+    let description = description.trim();
+    let new_name = if marker.name.trim().is_empty() {
+        one_line(name)
+    } else {
+        marker.name.clone()
+    };
+    let comment = marker.comment.trim_end();
+    // Already there as a line of its own, or at the end of the comment once joined into one line
+    // (a multi-line description under the editor's note; a marker line in a comment joins its
+    // lines); not merely inside a longer line of the editor's.
+    let wanted = one_line(description);
+    let described = comment.lines().any(|line| one_line(line) == wanted)
+        || one_line(comment).ends_with(&wanted);
+    let new_comment = if description.is_empty() || described {
+        marker.comment.clone()
+    } else if comment.trim().is_empty() {
+        description.to_string()
+    } else {
+        format!("{comment}\n{description}")
+    };
+    (new_name, new_comment)
+}
+
 /// Sort markers by time, the order every list shows them in.
 pub fn sort_markers(markers: &mut [Marker]) {
     markers.sort_by(|a, b| {
@@ -654,11 +682,16 @@ fn join_text(marker: &mut Marker, line: &MarkerLine) {
     marker.comment = merge_text(&marker.comment, &line.comment);
 }
 
+/// `text` on one line, its runs of whitespace (line breaks too) one space each: how a marker's
+/// text reads back from a comment line.
+fn one_line(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 /// Whether the marker already says what the line says. A line holds a comment on one line,
 /// its words separated by single spaces (see [`format_marker_line`]), so the marker's comment
 /// (which may break lines, or carry the `\r\n` of Premiere) is compared the same way.
 fn has_text(marker: &Marker, line: &MarkerLine) -> bool {
-    let one_line = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
     one_line(&marker.name) == one_line(&line.name)
         && one_line(&marker.comment) == one_line(&line.comment)
 }
@@ -719,6 +752,61 @@ fn merge_text(a: &str, b: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn named(name: &str, comment: &str) -> Marker {
+        let mut marker = Marker::new(1_000);
+        marker.name = name.to_string();
+        marker.comment = comment.to_string();
+        marker
+    }
+
+    #[test]
+    fn a_moment_names_an_unnamed_marker_and_describes_it() {
+        let text = marker_text_with_moment(&named("", ""), " Lion\nat dusk ", " A lion walks. ");
+        assert_eq!(
+            text,
+            ("Lion at dusk".to_string(), "A lion walks.".to_string())
+        );
+    }
+
+    #[test]
+    fn a_moment_keeps_the_editors_name_and_comment() {
+        let text = marker_text_with_moment(&named("Mine", "My note"), "Lion", "A lion walks.");
+        assert_eq!(
+            text,
+            ("Mine".to_string(), "My note\nA lion walks.".to_string())
+        );
+        let blank = marker_text_with_moment(&named("  ", "  "), "Lion", "A lion walks.");
+        assert_eq!(blank, ("Lion".to_string(), "A lion walks.".to_string()));
+    }
+
+    #[test]
+    fn asking_again_adds_the_same_description_once() {
+        let once = named("Lion", "My note\nA lion walks.");
+        let again = marker_text_with_moment(&once, "Lion", "A lion walks.");
+        assert_eq!(again, (once.name.clone(), once.comment.clone()));
+        // A comment line joins the description's lines: still the same description.
+        let joined = named("Lion", "A lion walks. It stops.");
+        let again = marker_text_with_moment(&joined, "Lion", "A lion walks.\nIt stops.");
+        assert_eq!(again, (joined.name.clone(), joined.comment.clone()));
+        // A multi-line description under the editor's note, as written and as reloaded from a
+        // comment line, which joins it.
+        let twice = "A lion walks.\nIt stops.";
+        for comment in [
+            "Note\nA lion walks.\nIt stops.",
+            "Note A lion walks. It stops.",
+        ] {
+            let noted = named("Lion", comment);
+            let again = marker_text_with_moment(&noted, "Lion", twice);
+            assert_eq!(again.1, comment, "added once");
+        }
+        // Inside a longer line of the editor's: not the description, so it is added.
+        let inside = named("Lion", "Note: A lion walks. Keep it.");
+        let added = marker_text_with_moment(&inside, "Lion", "A lion walks.");
+        assert_eq!(added.1, "Note: A lion walks. Keep it.\nA lion walks.");
+        let empty = marker_text_with_moment(&named("", "note"), "", "  ");
+        assert_eq!(empty, (String::new(), "note".to_string()));
+    }
 
     fn line(start_ms: u64, duration_ms: u64, name: &str, comment: &str) -> MarkerLine {
         MarkerLine {

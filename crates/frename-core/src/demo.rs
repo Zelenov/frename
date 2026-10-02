@@ -43,6 +43,10 @@ pub struct DemoScenario {
     /// into it.
     #[serde(default)]
     pub more: bool,
+    /// Show the open clip's marker with this name as being described with AI (its row's turning
+    /// loader and stop button), without sending a request.
+    #[serde(default)]
+    pub describing: Option<String>,
     /// Turn the open clip by this many quarter turns clockwise (negative: counter-clockwise),
     /// as `Ctrl+Alt+→` / `←` do, after the seek. The shot is then taken while the note is still
     /// shown over the picture.
@@ -293,6 +297,14 @@ name = "pick.a.mp4"
 [[files]]",
         );
         assert!(DemoScenario::parse(&text).unwrap().more);
+    }
+
+    #[test]
+    fn a_scenario_can_show_a_marker_being_described() {
+        let text = MINIMAL.replace("[[files]]", "describing = \"Lion\"\n[[files]]");
+        let scenario = DemoScenario::parse(&text).unwrap();
+        assert_eq!(scenario.describing.as_deref(), Some("Lion"));
+        assert_eq!(DemoScenario::parse(MINIMAL).unwrap().describing, None);
     }
 
     #[test]

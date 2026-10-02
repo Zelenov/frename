@@ -31,10 +31,10 @@ pub use file::{File, FileId};
 pub use file_kind::FileKind;
 pub use folder_file::{choose_dropped_path, FolderAndFile};
 pub use markers::{
-    comment_to_markers, format_marker_line, format_marker_time, markers_from_comment,
-    markers_into_comment, markers_to_comment, merge_duplicate_markers, parse_ai_line,
-    parse_marker_line, replace_ai_markers, sort_markers, CommentToMarkers, Marker, MarkerColor,
-    MarkerLine, AI_MARKER_COLOR, MARKER_SNAP_MS,
+    comment_to_markers, format_marker_line, format_marker_time, marker_text_with_moment,
+    markers_from_comment, markers_into_comment, markers_to_comment, merge_duplicate_markers,
+    parse_ai_line, parse_marker_line, replace_ai_markers, sort_markers, CommentToMarkers, Marker,
+    MarkerColor, MarkerLine, AI_MARKER_COLOR, MARKER_SNAP_MS,
 };
 pub use metadata::{
     active_commented_tag, cache::modified_ms, clean_commented_tag, commented_tag,
@@ -59,7 +59,7 @@ pub use undo::{
     AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,
     NavigateFileCommand, PasteTagsCommand, RenameFileCommand, ReorderTagCommand,
     RotateVideoCommand, SaveTagCommand, SetCommentCommand, SetMarkerColorCommand,
-    SetMarkerNameCommand, SetMarkerSpanCommand, SetSegmentCommand, SetSegmentEndCommand,
-    SetSegmentStartCommand, StarTagCommand, SyncTagOrderCommand, ToggleTagCommand, UndoContext,
-    UndoError,
+    SetMarkerNameCommand, SetMarkerSpanCommand, SetMarkerTextCommand, SetSegmentCommand,
+    SetSegmentEndCommand, SetSegmentStartCommand, StarTagCommand, SyncTagOrderCommand,
+    ToggleTagCommand, UndoContext, UndoError,
 };

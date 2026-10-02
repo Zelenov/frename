@@ -66,6 +66,8 @@ pub struct MarkersView<'a> {
     /// Width of the video pane, which starts at the window's left edge. Windowed only:
     /// fullscreen, the player is the whole window.
     pub pane_width: f32,
+    /// Frame of the app's spinner, for the markers being described.
+    pub spinner_frame: usize,
 }
 
 /// Render the video player with its strip, timeline and controls below.
@@ -543,6 +545,7 @@ fn side_overlay<'a>(
             state.position_ms(),
             in_out,
             is_fullscreen,
+            markers.spinner_frame,
         )
         .map(Message::Markers),
     };

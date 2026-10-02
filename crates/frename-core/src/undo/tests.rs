@@ -13,8 +13,8 @@ mod tests {
         AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,
         NavigateFileCommand, PasteTagsCommand, RenameFileCommand, ReorderTagCommand,
         SaveTagCommand, SetCommentCommand, SetMarkerColorCommand, SetMarkerNameCommand,
-        SetMarkerSpanCommand, SetSegmentCommand, StarTagCommand, SyncTagOrderCommand,
-        ToggleTagCommand, UndoContext,
+        SetMarkerSpanCommand, SetMarkerTextCommand, SetSegmentCommand, StarTagCommand,
+        SyncTagOrderCommand, ToggleTagCommand, UndoContext,
     };
     use crate::{Directory, File, FileId, FileSnapshot, Marker, MarkerColor, StoredTag, TagList};
     use uuid::Uuid;
@@ -1240,6 +1240,33 @@ mod tests {
         assert_eq!(tag_list.marker(&guid).unwrap().name, "");
         run(&mut history, &mut tag_list, false);
         assert_eq!(tag_list.marker(&guid).unwrap().name, "hello");
+    }
+
+    #[test]
+    fn marker_text_command_undoes_and_redoes_the_name_and_comment_together() {
+        let mut tag_list = marker_list();
+        let mut marker = Marker::new(0);
+        marker.comment = "mine".to_string();
+        let guid = marker.guid.clone().unwrap();
+        tag_list.add_marker(marker);
+        let new = ("Lion".to_string(), "mine\nA lion walks past.".to_string());
+        tag_list.update_marker(&guid, |m| (m.name, m.comment) = new.clone());
+        let mut history = History::new(50);
+        history.push(Box::new(SetMarkerTextCommand {
+            guid: guid.clone(),
+            old: (String::new(), "mine".to_string()),
+            new: new.clone(),
+        }));
+
+        run(&mut history, &mut tag_list, true);
+        let undone = tag_list.marker(&guid).unwrap();
+        assert_eq!(
+            (undone.name.as_str(), undone.comment.as_str()),
+            ("", "mine")
+        );
+        run(&mut history, &mut tag_list, false);
+        let redone = tag_list.marker(&guid).unwrap();
+        assert_eq!((redone.name.clone(), redone.comment.clone()), new);
     }
 
     #[test]

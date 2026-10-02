@@ -1054,7 +1054,7 @@ click on a pin seeks there.
 playhead, counting from 500 ms before its start to 2 s after it (or its end, if later); among
 several, one already started wins over one coming up, then the latest start.
 
-**Marker keys** (they work even while a field has focus; they are ignored with Ctrl or Alt held;
+**Marker keys** (they work even while a field has focus; they are ignored with Ctrl or Alt held, except `Ctrl`+`F2`;
 F2's auto-repeat is ignored; what an open marker row blocks is listed under the table):
 
 | Key | What it does |
@@ -1066,6 +1066,7 @@ F2's auto-repeat is ignored; what an open marker row blocks is listed under the 
 | `F2` on a read-only marker | notice "That marker is read-only" and the marker list opens |
 | `F2` on a file that cannot hold markers | the marker list opens to say so |
 | `Shift`+`F2` | delete the nearest editable marker within 0.5 s; notice "Marker deleted" or "No marker here" |
+| `Ctrl`+`F2` | describe the marker the playhead is on (the lit row) with AI and open the marker list; auto-repeat ignored; notice "No marker here" or "That marker is read-only"; on a marker already being described it opens the marker list, nothing else |
 | `Shift`+`F1` / `Shift`+`F3` | jump to the previous / next marker start; "previous" skips a marker passed less than 750 ms ago |
 | the `map-pin` button | a click is `F2`; holding it draws a range like holding `F2` |
 
@@ -1148,22 +1149,68 @@ left to right, with the widths §13.9 folds by:
 **Marker rows**
 
 ```
- ● 0:06.120                                    ✕     ← dot · time · delete
-   City lights                                       ← name (body; "—" in text.secondary when empty)
+ ● 0:06.120                                  ✨ ✕     ← dot · time · describe with AI · delete
+   City lights                                        ← name (body; "—" in text.secondary when empty)
+   Lights come on along the river at dusk.            ← comment (secondary), when it has one
  ─────────────────────────────────────────────
- ● 0:14–0:18                                   ✓ ✕   ← open row: ✓ Done (Enter)
-   [Africa stays dark_______________]                ← name field (text field style)
+ ● 0:09                                          ✕    ← request on its way: no ✨
+   —
+   ◌ Describing… ⊗                                    ← loader, caption and ⊗ Stop, under the name
  ─────────────────────────────────────────────
- ● ● ● ● ● ● ● ●  |  ○ AI                      ✕     ← color picker replaces the first line
+ ● 0:14–0:18                                 ✓ ✨ ✕   ← open row: ✓ Done (Enter)
+   [Africa stays dark_______________]                 ← name field (text field style)
+ ─────────────────────────────────────────────
+ ● ● ● ● ● ● ● ●  |  ○ AI                       ✕     ← color picker replaces the first line
 ```
 
 - A click on the row (outside the dot and the time) opens it for renaming (the open row below); a click on
   the time jumps there.
 - First line: the **color dot** (14 px, a button; ring `text.secondary` on hover, `text.primary`
   when its picker is open), the **time** (`mono`, a ghost button that jumps there), a flexible
-  space, then row actions: `check` "Done `Enter`" (open row only) and `x` "Delete the marker" as
-  24 px icon buttons, shown on hover, on the lit row and on the open row (§8.9 "hover tools").
-- Second line: the name, `body`, wrapping.
+  space, then row actions: `check` "Done `Enter`" (open row only), `sparkles` "Describe with AI:
+  name the marker and add what happens" (with `Ctrl` `F2` on the lit row, which that key
+  describes) and `x` "Delete the marker" as 24 px icon buttons, shown on hover, on the lit row and
+  on the open row (§8.9 "hover tools").
+- Second line: the name, `body`, wrapping. Under it the marker's **comment**, when it has one
+  (an AI description, or Premiere's comment), `secondary`, wrapping, read-only.
+- **Describing** (#174): while a marker's request is on its way, a line under its name and
+  comment shows, whatever the pointer does, the turning `loader-circle` 12, "Describing…" in
+  `caption` `text.secondary` and `circle-x` "Stop describing" as a 24 px icon button (there, not
+  among the row's actions, so it never sits next to ✕ Delete); the row's `sparkles` is hidden. Several rows can
+  be describing at once. The answer names an unnamed marker (a name the editor gave stays) and adds
+  the description to the comment on a line of its own (an empty comment becomes it; a comment
+  that already has it is left alone, compared as one line, since a comment line joins its
+  lines): one undo step. Notices: "Marker described", "Not described: {reason}", "The marker
+  already has this description", "The marker is gone: its description was not added" (an undo
+  removed it meanwhile). The reasons are the batch action's own strings, shared
+  (`describe_ai::failure_reason`): "Video could not be read", "The clip is too long for AI (over
+  30 min)", the AI's reason (key rejected, no credit left, network error, no answer in time…).
+- **No key:** when the settings already said no key is saved, ✨ / `Ctrl+F2` send nothing:
+  notice "No Anthropic API key: set one in Settings" and Settings opens on Describe with AI. When
+  that was not known yet, the request finds it out and says so the same way, once even when
+  several requests find it out; the settings read the key again (they are its only reader) and
+  pass it on, so later clicks send nothing.
+- **Stopped:** ⊗ on the "Describing…" line (or deleting the marker, leaving the clip, opening
+  another folder) stops the request: the row is back to ✨ at once, and its answer, if it still comes, is dropped. ✨ again
+  starts a new request; a late answer of the stopped one never passes for it.
+- **Already describing:** the row has no ✨; `Ctrl+F2` on that marker sends nothing and no
+  notice, it only opens the marker list. `Ctrl+F2` always opens it (in fullscreen too), so the row
+  shows the progress and ⊗.
+- **Batch job:** Run stops the open clip's marker requests and waits until the last one is back
+  (it may be reading the clip's frames; clipscribe does not say when reading ends, so the wait
+  lasts until its answer, usually seconds). Meanwhile the batch panel's button bar shows the
+  turning `loader-circle` 12 and "Stopping the marker descriptions first… This can take up to a
+  couple of minutes." with a secondary **Cancel** in place of Run; the job then starts by itself.
+  Cancel, leaving batch mode, another action, other checked files or another folder give up on
+  that run. No request starts while a job runs or waits.
+- **Leaving the clip** does not wait for its requests (they stop). A save that meets one still
+  reading the file (on Windows a rename or a write into the video then fails) is a refused save
+  like any other of a file in use: notice "Not saved: …", the file keeps its name on disk, the
+  recovery journal keeps the edits, and markers that did not get written are kept, the file
+  marked, and written at the next save.
+- **Answer while the row is open for renaming:** the typed name is committed first, as its own
+  undo step; then the answer's step (a name typed there stays, being the editor's).
+- **Comment in the list:** at most 3 lines, then "…"; all of it while the row is open.
 - **Open row** (renaming): the name becomes a multi-line text field (§8.6) with the placeholder
   "Name"; Enter or Esc closes it.
 - **Color picker** (after a click on the dot): the first line becomes the 8 Premiere colors (Green,
@@ -1781,7 +1828,7 @@ fails. The keys are today's (#62 owns the list).
 | Rename | double-click a row, Enter / Esc | inline field in the row | the row shows the new name | error line under the field (why + what to do); the field keeps the text |
 | Comment | click the comment box, type | comment editor | saved on leave; comment line in the list row; "Commented" tag checked if Settings says so | – |
 | Mark in / out | `[` `]` | video controls, file name panel | IN/OUT timecodes appear; segment on the bar | – |
-| Markers | F2 (F2 F2 to name, hold for a range), Shift+F1/F3, Shift+F2 (§13.3.4) | timeline, marker list | pin appears with its label | not saved: `circle-alert` at the row's right end and an error notice |
+| Markers | F2 (F2 F2 to name, hold for a range), Shift+F1/F3, Shift+F2, Ctrl+F2 to describe with AI (§13.3.4, §13.3.6) | timeline, marker list | pin appears with its label | not saved: `circle-alert` at the row's right end and an error notice |
 | Run a batch action | batch mode, pick an action, primary button | batch panel | progress with n of total, time left, Cancel | stopped or failed: one notice with the reason and a fix button; files not done listed once |
 | Change a setting | ⚙, Ctrl+Tab between pages | Settings window | applies at once | key save failed: error line under the key row |
 | Update | the dot on ⚙ | Settings → Updates | status line; *Update and restart* | check failed: error line with the reason |

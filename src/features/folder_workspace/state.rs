@@ -47,6 +47,7 @@ mod drag_out_actions;
 mod file_actions;
 mod journal;
 mod marker_actions;
+mod marker_ai;
 mod rotation;
 
 /// How many actions undo/redo keeps. Reset per folder, since tags are per folder.
@@ -83,6 +84,9 @@ pub struct FolderWorkspace {
     /// A batch job waits for a playing video to unload, since it may write into and rename
     /// that very file.
     batch_waits_for_unload: bool,
+    /// Marker "Describe with AI" requests whose answer has not come back yet, stopped ones too:
+    /// one may still be reading the clip's frames, which holds the file open.
+    marker_requests: usize,
     /// The file being renamed in place in the folder list, if any.
     inline_rename: Option<folder::InlineRename>,
     /// The file list's filter menu is open.
@@ -203,6 +207,7 @@ impl FolderWorkspace {
             closing: false,
             batch,
             batch_waits_for_unload: false,
+            marker_requests: 0,
             inline_rename: None,
             filter_menu_open: false,
             comment_load_generation: 0,
@@ -283,6 +288,23 @@ impl FolderWorkspace {
             // The tick doubles as the pump for the start-up notes: it runs while a clip is open,
             // which is when they can be shown.
             Message::JournalTick => Task::batch([self.journal_tick(), self.show_startup_notes()]),
+            Message::ShowDescribing(name) => {
+                let guid = self
+                    .file_workspace
+                    .markers()
+                    .and_then(|markers| markers.iter().find(|m| m.name == name))
+                    .and_then(|m| m.guid.clone());
+                if let Some(guid) = guid {
+                    let _ = self.markers.start_describing(&guid);
+                }
+                Task::none()
+            }
+            Message::MarkerDescribed {
+                file,
+                guid,
+                request,
+                outcome,
+            } => self.marker_described(file, guid, request, outcome),
             Message::JournalWritten(id, outcome) => {
                 self.journal_written(id, outcome);
                 Task::none()
@@ -715,6 +737,7 @@ impl FolderWorkspace {
     }
 
     fn scan_folder(&mut self, pair: FolderAndFile) -> Task<Message> {
+        self.batch.set_waiting_for_markers(false);
         self.inline_rename = None;
         self.markers.reset();
         // File ids are renewed by the scan, so markers kept for them cannot be matched again.
@@ -1227,6 +1250,13 @@ impl FolderWorkspace {
             .batch
             .actions()
             .job_files(self.batch.action(), &checked);
+        // The job closes the clip: its marker requests stop, and the job starts once the last
+        // one has let go of the clip (it may be reading its frames).
+        if !files.is_empty() && !self.batch.is_running() && self.stop_marker_requests() {
+            // The batch panel says so and offers Cancel.
+            self.batch.set_waiting_for_markers(true);
+            return Task::none();
+        }
         if !self.batch.start(files) {
             return Task::none();
         }
@@ -2574,12 +2604,18 @@ impl FolderWorkspace {
 
     pub fn subscription(&self) -> Subscription<Message> {
         // The spinner only turns while something waits (rows loading their comments, a folder
-        // opening, a job's file in work), so an idle list does not redraw.
+        // opening, a job's file in work, a marker being described), so an idle list does not
+        // redraw.
         let loading_comments = self
             .directory
             .as_ref()
             .is_some_and(|d| d.loading_comment_count() > 0);
-        let spinner = if loading_comments || self.loading || self.batch.is_running() {
+        let spinner = if loading_comments
+            || self.loading
+            || self.batch.is_running()
+            || self.markers.any_describing()
+            || self.batch.is_waiting_for_markers()
+        {
             iced::time::every(crate::ui::tokens::SPINNER_TICK).map(|_| Message::SpinnerTick)
         } else {
             Subscription::none()
@@ -4408,6 +4444,408 @@ mod tests {
             .iter()
             .map(|m| (m.start_ms, m.name.clone()))
             .collect()
+    }
+
+    // Issue #174: "Describe with AI" on a marker. The request's task is not run in tests: its
+    // answer is handed in as the message the task would end with.
+
+    /// The answer the request on its way for `guid` would end with.
+    fn answer(
+        workspace: &FolderWorkspace,
+        guid: &str,
+        outcome: crate::features::markers::MomentOutcome,
+    ) -> Message {
+        Message::MarkerDescribed {
+            file: workspace.file_workspace().file().expect("open").id(),
+            guid: guid.to_string(),
+            request: workspace.markers().request_of(guid).expect("on its way"),
+            outcome,
+        }
+    }
+
+    fn described(
+        workspace: &FolderWorkspace,
+        guid: &str,
+        name: &str,
+        description: &str,
+    ) -> Message {
+        answer(
+            workspace,
+            guid,
+            crate::features::markers::MomentOutcome::Described {
+                name: name.to_string(),
+                description: description.to_string(),
+            },
+        )
+    }
+
+    fn marker_texts(workspace: &FolderWorkspace) -> Vec<(String, String)> {
+        workspace
+            .file_workspace()
+            .markers()
+            .unwrap_or_default()
+            .iter()
+            .map(|m| (m.name.clone(), m.comment.clone()))
+            .collect()
+    }
+
+    fn only_guid(workspace: &FolderWorkspace) -> String {
+        let markers = workspace.file_workspace().markers().unwrap_or_default();
+        assert_eq!(markers.len(), 1);
+        markers[0].guid.clone().expect("editable")
+    }
+
+    #[test]
+    fn a_described_marker_is_named_and_described_in_one_undo_step() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = only_guid(&workspace);
+
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        assert!(workspace.markers().is_describing(&guid));
+        let _ = workspace.update(described(&workspace, &guid, "Lion", "A lion walks past."));
+        assert!(!workspace.markers().is_describing(&guid));
+        assert_eq!(
+            marker_texts(&workspace),
+            [("Lion".to_string(), "A lion walks past.".to_string())]
+        );
+
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_texts(&workspace), [(String::new(), String::new())]);
+        assert_eq!(
+            marker_names(&workspace),
+            [(1_000, String::new())],
+            "only the AI's text was undone"
+        );
+        let _ = workspace.update(Message::Redo);
+        assert_eq!(
+            marker_texts(&workspace),
+            [("Lion".to_string(), "A lion walks past.".to_string())]
+        );
+    }
+
+    #[test]
+    fn a_marker_name_typed_by_the_editor_is_kept() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        send_marker(&mut workspace, M::Add, 1_000);
+        send_marker(&mut workspace, type_name("Mine"), 1_000);
+        let guid = only_guid(&workspace);
+
+        // Its row is still open while the answer comes: the typed name is a step of its own.
+        send_marker(&mut workspace, M::Describe(guid.clone()), 1_000);
+        let _ = workspace.update(described(&workspace, &guid, "Lion", "A lion walks past."));
+        assert!(!workspace.markers().is_editing());
+        assert_eq!(
+            marker_texts(&workspace),
+            [("Mine".to_string(), "A lion walks past.".to_string())]
+        );
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(
+            marker_texts(&workspace),
+            [("Mine".to_string(), String::new())]
+        );
+    }
+
+    #[test]
+    fn a_stopped_request_and_one_for_a_clip_left_are_dropped() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = marker_workspace(&test_dir, 2);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = only_guid(&workspace);
+
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        let stopped = described(&workspace, &guid, "Lion", "A lion.");
+        send_marker(&mut workspace, M::StopDescribing(guid.clone()), 0);
+        assert!(!workspace.markers().any_describing());
+        let _ = workspace.update(stopped);
+        assert_eq!(marker_texts(&workspace), [(String::new(), String::new())]);
+
+        // Asked again, then the clip is left before the answer comes.
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        let answer = described(&workspace, &guid, "Lion", "A lion.");
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        assert!(!workspace.markers().any_describing(), "leaving stopped it");
+        let history = workspace.history.can_undo();
+        let _ = workspace.update(answer);
+        assert!(
+            marker_texts(&workspace).is_empty(),
+            "the other clip got nothing"
+        );
+        assert_eq!(workspace.history.can_undo(), history, "no step was pushed");
+    }
+
+    /// Review round 1: the late answer of a stopped request must not end the request sent after
+    /// it for the same marker.
+    #[test]
+    fn a_stopped_requests_late_answer_does_not_take_the_next_ones_place() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = only_guid(&workspace);
+
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        let first = described(&workspace, &guid, "First", "The first answer.");
+        send_marker(&mut workspace, M::StopDescribing(guid.clone()), 0);
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        let second = described(&workspace, &guid, "Second", "The second answer.");
+
+        let _ = workspace.update(first);
+        assert!(workspace.markers().is_describing(&guid), "still waiting");
+        assert_eq!(marker_texts(&workspace), [(String::new(), String::new())]);
+        let _ = workspace.update(second);
+        assert!(!workspace.markers().any_describing());
+        assert_eq!(
+            marker_texts(&workspace),
+            [("Second".to_string(), "The second answer.".to_string())]
+        );
+    }
+
+    /// A batch job closes the clip: its marker requests stop, and the job waits until the last
+    /// one has let go of the clip, then starts by itself.
+    #[test]
+    fn a_batch_job_stops_marker_requests_and_waits_for_them() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = only_guid(&workspace);
+        let ids: Vec<FileId> = workspace
+            .directory()
+            .expect("dir")
+            .files_in_order()
+            .map(|f| f.id())
+            .collect();
+        let _ = workspace.update(Message::Batch(batch::Message::SetActive(true)));
+        let _ = workspace.update(Message::Batch(batch::Message::CheckAll(ids)));
+
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        let late = described(&workspace, &guid, "Lion", "A lion.");
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        assert!(!workspace.markers().any_describing(), "stopped");
+        assert!(!workspace.is_batch_running(), "waits for the request");
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        assert!(
+            !workspace.markers().any_describing(),
+            "none starts meanwhile"
+        );
+
+        let _ = workspace.update(late);
+        assert!(workspace.is_batch_running(), "started once it let go");
+        assert_eq!(marker_texts(&workspace), [(String::new(), String::new())]);
+    }
+
+    #[test]
+    fn ctrl_f2_opens_the_marker_list_to_show_the_request() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        assert!(!workspace.media_viewer.marker_list_shown());
+        send_marker(&mut workspace, M::DescribeAtPlayhead, 1_200);
+        assert!(workspace.markers().is_describing(&only_guid(&workspace)));
+        assert!(workspace.media_viewer.marker_list_shown());
+    }
+
+    #[test]
+    fn no_key_sends_nothing_more_and_changes_nothing() {
+        use crate::features::markers::{Message as M, MomentOutcome};
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = only_guid(&workspace);
+        let steps = workspace.history.can_undo();
+
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        let _ = workspace.update(answer(&workspace, &guid, MomentOutcome::NoKey));
+        assert!(
+            !workspace.batch.actions().ai_key_missing(),
+            "the settings read the key, not the request"
+        );
+        assert!(workspace.markers.no_key_said(), "said once");
+        assert_eq!(marker_texts(&workspace), [(String::new(), String::new())]);
+        assert_eq!(workspace.history.can_undo(), steps);
+        // The settings' answer to the read the request asked for.
+        let _ = workspace.update(Message::Batch(batch::Message::Action(
+            batch::ActionMessage::DescribeAi(batch::describe_ai::Message::KeyState(
+                frename_core::ai::key::KeyState::Missing,
+            )),
+        )));
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        assert!(!workspace.markers().any_describing(), "nothing is sent");
+    }
+
+    #[test]
+    fn a_failed_request_or_nothing_new_leaves_the_marker_and_the_history() {
+        use crate::features::markers::{Message as M, MomentOutcome};
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = only_guid(&workspace);
+
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        let failed = MomentOutcome::Failed("Network error".to_string());
+        let _ = workspace.update(answer(&workspace, &guid, failed));
+        assert!(!workspace.markers().any_describing());
+        assert_eq!(marker_texts(&workspace), [(String::new(), String::new())]);
+
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        let _ = workspace.update(described(&workspace, &guid, "Lion", "A lion."));
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        let _ = workspace.update(described(&workspace, &guid, "Other", "A lion."));
+        assert_eq!(
+            marker_texts(&workspace),
+            [("Lion".to_string(), "A lion.".to_string())]
+        );
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(
+            marker_texts(&workspace),
+            [(String::new(), String::new())],
+            "nothing new pushed no step: one undo takes the first answer back"
+        );
+    }
+
+    #[test]
+    fn an_answer_for_a_marker_undone_meanwhile_is_dropped() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = only_guid(&workspace);
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        let late = described(&workspace, &guid, "Lion", "A lion.");
+        let _ = workspace.update(Message::Undo);
+        assert!(marker_texts(&workspace).is_empty(), "the add was undone");
+        let _ = workspace.update(late);
+        assert!(marker_texts(&workspace).is_empty());
+        assert!(!workspace.markers().any_describing());
+    }
+
+    /// Review round 2: a run that waited for marker requests and was then given up on (batch
+    /// mode left, Cancel, other files) does not start when the requests are back.
+    #[test]
+    fn a_run_given_up_while_waiting_for_marker_requests_does_not_start() {
+        use crate::features::markers::Message as M;
+        let give_ups = [
+            Message::Batch(batch::Message::SetActive(false)),
+            Message::Batch(batch::Message::Cancel),
+            Message::Batch(batch::Message::CheckNone),
+        ];
+        for give_up in give_ups {
+            let test_dir = TestDirectory::new(1);
+            let mut workspace = marker_workspace(&test_dir, 1);
+            send_marker(&mut workspace, M::Add, 1_000);
+            let guid = only_guid(&workspace);
+            let ids: Vec<FileId> = workspace
+                .directory()
+                .expect("dir")
+                .files_in_order()
+                .map(|f| f.id())
+                .collect();
+            let _ = workspace.update(Message::Batch(batch::Message::SetActive(true)));
+            let _ = workspace.update(Message::Batch(batch::Message::CheckAll(ids)));
+            send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+            let late = described(&workspace, &guid, "Lion", "A lion.");
+            let _ = workspace.update(Message::Batch(batch::Message::Run));
+            assert!(
+                workspace.batch.is_waiting_for_markers(),
+                "the panel says so"
+            );
+
+            let _ = workspace.update(give_up.clone());
+            assert!(!workspace.batch.is_waiting_for_markers(), "{give_up:?}");
+            let _ = workspace.update(late);
+            assert!(!workspace.is_batch_running(), "{give_up:?}: not started");
+        }
+    }
+
+    /// Review round 3: a save meeting a marker request does not wait for it; when the save fails
+    /// (here: the new name is taken, as a file still held open fails on Windows), it goes the way
+    /// of every refused save: the file keeps its name on disk, its markers are written, and the
+    /// request's answer still lands.
+    #[test]
+    fn a_save_refused_while_a_marker_request_runs_is_a_normal_refused_save() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = marker_workspace(&test_dir, 2);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = only_guid(&workspace);
+        let id = workspace.file_workspace().file().expect("open").id();
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        let late = described(&workspace, &guid, "Lion", "A lion.");
+
+        let markers = workspace.file_workspace().markers().map(<[_]>::to_vec);
+        let mut snapshot = FileSnapshot::new(Vec::<String>::new(), "file_1", ".mp4", "file_0.mp4");
+        snapshot.set_markers(markers);
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        let path = workspace
+            .directory()
+            .and_then(|d| d.file_by_id(id))
+            .map(|f| f.file_path().to_path_buf());
+        assert_eq!(path, Some(test_dir.file_path("file_0.mp4")), "refused");
+        let saved = frename_core::FileTagger::load_markers(&test_dir.file_path("file_0.mp4"));
+        assert_eq!(saved.map(|m| m.len()), Some(1), "markers written");
+
+        assert!(workspace.markers().is_describing(&guid));
+        let _ = workspace.update(late);
+        assert_eq!(
+            marker_texts(&workspace),
+            [("Lion".to_string(), "A lion.".to_string())]
+        );
+    }
+
+    #[test]
+    fn ctrl_f2_describes_the_marker_the_playhead_is_on() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::DescribeAtPlayhead, 1_000);
+        assert!(!workspace.markers().any_describing(), "no marker yet");
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = only_guid(&workspace);
+        send_marker(&mut workspace, M::DescribeAtPlayhead, 9_000);
+        assert!(
+            !workspace.markers().any_describing(),
+            "the playhead is past it"
+        );
+        send_marker(&mut workspace, M::DescribeAtPlayhead, 1_500);
+        assert!(workspace.markers().is_describing(&guid));
+    }
+
+    #[test]
+    fn a_deleted_marker_stops_its_request() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = only_guid(&workspace);
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        send_marker(&mut workspace, M::Delete(guid), 0);
+        assert!(!workspace.markers().any_describing());
+    }
+
+    #[test]
+    fn a_described_marker_kept_in_a_comment_file_is_written_at_once() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let _storage = comment_file_storage(frename_core::MarkerStorage::Comment);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = only_guid(&workspace);
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        let _ = workspace.update(described(&workspace, &guid, "Lion", "A lion walks past."));
+        let written = comment_file_text(&test_dir);
+        assert!(
+            written.contains("Lion") && written.contains("A lion walks past."),
+            "{written:?}"
+        );
     }
 
     #[test]

@@ -2,6 +2,8 @@
 //! except the one row open for renaming. A row is as tall as its name's lines; the list is
 //! scrolled to a row by an estimate of the rows above it ([`row_offset`]), as the subtitle list is.
 
+use std::borrow::Cow;
+
 use frename_core::{format_marker_time, Marker, MarkerColor, AI_MARKER_COLOR, MARKER_SNAP_MS};
 use iced::widget::{
     button, column, container, hover, mouse_area, row, space, stack, text_editor, Column,
@@ -11,7 +13,7 @@ use iced::{Alignment, Background, Border, Element, Length, Padding};
 use super::{MarkersState, Message};
 use crate::ui::button::{self as ui_button};
 use crate::ui::icon_button::IconButton;
-use crate::ui::icons::{icon, Icon};
+use crate::ui::icons::{icon, spinner, Icon};
 use crate::ui::palette::marker_color;
 use crate::ui::style::{self, ButtonKind};
 use crate::ui::tokens::*;
@@ -40,17 +42,55 @@ const FIELD_INSET: Padding = Padding {
     right: SPACE_S,
 };
 
-/// How many lines the name of `marker` wraps to in the list, as an estimate: good enough to
-/// scroll a row into view.
-fn name_lines(marker: &Marker) -> usize {
+/// How many lines `text` wraps to in a row of the list, as an estimate: good enough to scroll a
+/// row into view.
+fn wrapped_lines(text: &str) -> usize {
     let per_line = (NAME_ROOM / NAME_CHAR_ADVANCE) as usize;
-    marker.name.chars().count().div_ceil(per_line).max(1)
+    text.lines()
+        .map(|line| line.chars().count().div_ceil(per_line).max(1))
+        .sum::<usize>()
+        .max(1)
+}
+
+/// A comment shows at most this many lines in a row that is not open.
+const COMMENT_LINES: usize = 3;
+
+/// `comment` cut to [`COMMENT_LINES`] lines of a row (estimated like [`wrapped_lines`]), ending
+/// in "…" when cut.
+fn clamped_comment(comment: &str) -> Cow<'_, str> {
+    let per_line = (NAME_ROOM / NAME_CHAR_ADVANCE) as usize;
+    let all = comment.lines().count();
+    let mut left = COMMENT_LINES;
+    let mut kept: Vec<String> = Vec::new();
+    for line in comment.lines() {
+        let lines = line.chars().count().div_ceil(per_line).max(1);
+        if lines > left {
+            let cut: String = line.chars().take(left * per_line - 1).collect();
+            kept.push(format!("{}…", cut.trim_end()));
+            return Cow::Owned(kept.join("\n"));
+        }
+        kept.push(line.to_string());
+        left -= lines;
+        if left == 0 && kept.len() < all {
+            let last = kept.pop().unwrap_or_default();
+            kept.push(format!("{}…", last.trim_end()));
+            return Cow::Owned(kept.join("\n"));
+        }
+    }
+    Cow::Borrowed(comment)
 }
 
 /// Estimated height of `marker`'s row, for scrolling to a row only: the row itself is as tall as
-/// its content.
+/// its content. Its comment, if any, adds its lines under the name (at most
+/// [`COMMENT_LINES`]).
 fn row_height(marker: &Marker) -> f32 {
-    MARKER_ROW_HEIGHT + (name_lines(marker) - 1) as f32 * LINE_BODY
+    let comment = if marker.comment.trim().is_empty() {
+        0.0
+    } else {
+        let lines = wrapped_lines(&clamped_comment(marker.comment.trim()));
+        SPACE_XXS + lines as f32 * LINE_BODY
+    };
+    MARKER_ROW_HEIGHT + (wrapped_lines(&marker.name) - 1) as f32 * LINE_BODY + comment
 }
 
 /// Distance from the top of the list to the top of row `index`, from the rows above it.
@@ -123,8 +163,9 @@ pub fn view<'a>(
     position_ms: u64,
     in_out: Option<(u64, u64)>,
     quiet: bool,
+    spinner_frame: usize,
 ) -> Element<'a, Message> {
-    let list = marker_list(markers, state, position_ms, quiet);
+    let list = marker_list(markers, state, position_ms, quiet, spinner_frame);
     match in_out {
         Some(span) => column![in_out_line(span), list].into(),
         None => list,
@@ -165,6 +206,7 @@ fn marker_list<'a>(
     state: &'a MarkersState,
     position_ms: u64,
     quiet: bool,
+    spinner_frame: usize,
 ) -> Element<'a, Message> {
     let Some(markers) = markers else {
         return cannot_hold();
@@ -176,7 +218,7 @@ fn marker_list<'a>(
     let rows = markers
         .iter()
         .enumerate()
-        .map(|(index, marker)| marker_row(marker, state, lit == Some(index), quiet));
+        .map(|(index, marker)| marker_row(marker, state, lit == Some(index), quiet, spinner_frame));
     scroll::vertical_with_id(
         MARKER_LIST_SCROLLABLE_ID,
         Column::with_children(rows)
@@ -342,6 +384,7 @@ fn marker_row<'a>(
     state: &'a MarkersState,
     lit: bool,
     quiet: bool,
+    spinner_frame: usize,
 ) -> Element<'a, Message> {
     let guid = marker.guid.as_deref();
     let open = state.edit().filter(|edit| guid == Some(edit.guid.as_str()));
@@ -361,11 +404,24 @@ fn marker_row<'a>(
             (color_picker(marker, guid, quiet), None)
         }
         Some(guid) => {
+            let describing = state.is_describing(guid);
             let done = open.is_some().then(|| {
                 row_action(
                     Icon::Check,
                     Tip::new(fl!("markers-done")).keys(&["Enter"]),
                     Message::Close,
+                    quiet,
+                )
+            });
+            // While it is described, its stop sits on the "Describing…" line, apart from ✕.
+            let ai = (!describing).then(|| {
+                // `Ctrl+F2` describes the marker the playhead is on: the lit row.
+                let tip = Tip::new(fl!("markers-ai-describe"));
+                let tip = if lit { tip.keys(&["Ctrl", "F2"]) } else { tip };
+                row_action(
+                    Icon::Sparkles,
+                    tip,
+                    Message::Describe(guid.to_string()),
                     quiet,
                 )
             });
@@ -375,7 +431,11 @@ fn marker_row<'a>(
                 Message::Delete(guid.to_string()),
                 quiet,
             );
-            let actions = row![].push(done).push(delete).align_y(Alignment::Center);
+            let actions = row![]
+                .push(done)
+                .push(ai)
+                .push(delete)
+                .align_y(Alignment::Center);
             let line = row![
                 dot(
                     marker.color,
@@ -428,7 +488,39 @@ fn marker_row<'a>(
         None if marker.name.is_empty() => text::body("—").color(TEXT_SECONDARY).into(),
         None => text::body(marker.name.as_str()).into(),
     };
+    // The comment (an AI's description, or Premiere's comment) under the name, read-only: a few
+    // lines, the whole of it while the row is open.
+    let comment = (!marker.comment.trim().is_empty()).then(|| {
+        let comment = marker.comment.trim();
+        if open.is_some() {
+            text::secondary(comment)
+        } else {
+            text::secondary(clamped_comment(comment).into_owned())
+        }
+    });
+    // A request on its way, under the name and its comment: shown whether or not the actions
+    // are (it goes on in the background), and clear of them.
+    let working = marker
+        .guid
+        .as_deref()
+        .filter(|guid| state.is_describing(guid))
+        .map(|guid| {
+            row![
+                spinner(spinner_frame, ICON_S, TEXT_SECONDARY),
+                text::caption(fl!("markers-ai-describing")),
+                row_action(
+                    Icon::CircleX,
+                    Tip::new(fl!("markers-ai-stop")),
+                    Message::StopDescribing(guid.to_string()),
+                    quiet,
+                ),
+            ]
+            .spacing(SPACE_XS)
+            .align_y(Alignment::Center)
+        });
     let body = column![first_line, name]
+        .push(comment)
+        .push(working)
         .spacing(SPACE_XXS)
         .padding(ROW_INSET);
     // The row is as tall as its content, not as the estimate of [`row_height`]: a name that wraps
@@ -527,6 +619,25 @@ mod tests {
             name(20_000),
             Some(""),
             "unnamed: labelled so it can be named"
+        );
+    }
+
+    #[test]
+    fn a_long_comment_shows_three_lines_and_an_ellipsis() {
+        let per_line = (NAME_ROOM / NAME_CHAR_ADVANCE) as usize;
+        let short = "A lion walks past.";
+        assert_eq!(clamped_comment(short), short);
+        let long = "x".repeat(per_line * 5);
+        let cut = clamped_comment(&long);
+        assert!(cut.ends_with('…'), "{cut}");
+        assert_eq!(wrapped_lines(&cut), COMMENT_LINES);
+        let many = "one\ntwo\nthree\nfour";
+        assert_eq!(clamped_comment(many), "one\ntwo\nthree…");
+        let mut marker = Marker::new(0);
+        marker.comment = long;
+        assert_eq!(
+            row_height(&marker),
+            MARKER_ROW_HEIGHT + SPACE_XXS + COMMENT_LINES as f32 * LINE_BODY
         );
     }
 

@@ -17,7 +17,7 @@ pub use create_tag::CreateTagCommand;
 pub use delete_tag::DeleteTagCommand;
 pub use marker::{
     AddMarkerCommand, DeleteMarkerCommand, SetMarkerColorCommand, SetMarkerNameCommand,
-    SetMarkerSpanCommand,
+    SetMarkerSpanCommand, SetMarkerTextCommand,
 };
 pub use navigate_file::NavigateFileCommand;
 pub use paste_tags::PasteTagsCommand;

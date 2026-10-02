@@ -71,6 +71,17 @@ pub enum Message {
     CopyTags,
     /// Paste previously copied tags onto the current file (replace semantics).
     PasteTags,
+    /// Demo mode only (a screenshot scenario's `describing`): show the open clip's marker of
+    /// this name as being described, without sending a request.
+    ShowDescribing(String),
+    /// A marker's "Describe with AI" request came back (see `markers::describe`).
+    MarkerDescribed {
+        file: FileId,
+        guid: String,
+        /// The request's number (see `MarkersState::start_describing`).
+        request: u64,
+        outcome: crate::features::markers::MomentOutcome,
+    },
     /// A second passed: write the open clip's unsaved edits into the recovery journal, if they
     /// changed (see `frename_core::recovery`).
     JournalTick,

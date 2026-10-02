@@ -200,6 +200,12 @@ impl FolderWorkspace {
                 self.delete_marker(&guid);
                 Task::none()
             }
+            M::Describe(guid) => self.describe_marker(&guid),
+            M::DescribeAtPlayhead => self.describe_marker_at(position_ms),
+            M::StopDescribing(guid) => {
+                self.markers.stop_describing(&guid);
+                Task::none()
+            }
             M::Scrolled(y, viewport) => {
                 self.markers.set_viewport(viewport);
                 // The list was just put back (fullscreen): keep the lit marker in view.
@@ -247,7 +253,7 @@ impl FolderWorkspace {
             Some(Some(guid)) => self.open_marker_row(guid),
             Some(None) => Task::batch([
                 self.show_marker_list(),
-                Self::notice("That marker is read-only"),
+                Self::notice(&fl!("markers-read-only-notice")),
             ]),
             None => self.add_marker(position_ms, true, held),
         }
@@ -362,8 +368,8 @@ impl FolderWorkspace {
                 Self::notice("Marker deleted")
             }
             // Read-only: another tool wrote it without a GUID, so it could not be found again.
-            Some(None) => Self::notice("That marker is read-only"),
-            None => Self::notice("No marker here"),
+            Some(None) => Self::notice(&fl!("markers-read-only-notice")),
+            None => Self::notice(&fl!("markers-no-marker-notice")),
         }
     }
 
@@ -371,6 +377,7 @@ impl FolderWorkspace {
         if self.markers.edit().is_some_and(|e| e.guid == guid) {
             self.close_marker_row();
         }
+        self.markers.stop_describing(guid);
         if let Some(marker) = self.file_workspace.tag_list_mut().remove_marker(guid) {
             self.history.push(Box::new(DeleteMarkerCommand { marker }));
         }
@@ -396,7 +403,7 @@ impl FolderWorkspace {
 
     /// Show the marker list, in this update: a focus or scroll task started with it must find
     /// the list already there, which a `Task::done` would only show after them.
-    fn show_marker_list(&mut self) -> Task<Message> {
+    pub(super) fn show_marker_list(&mut self) -> Task<Message> {
         self.media_viewer
             .update(media_viewer::Message::Video(video::Message::ShowMarkerList))
             .map(Message::MediaViewer)
