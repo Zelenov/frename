@@ -68,6 +68,9 @@ pub struct AppSettings {
     /// The id of the model AI descriptions are written with (see
     /// [`clipscribe::Model::from_id`]). Defaults to the cheapest.
     pub ai_model: String,
+    /// Whether "Describe with AI" also suggests tags from the folder's own tags, in the same
+    /// request. Defaults to true.
+    pub ai_tag_suggestions: bool,
     /// Languages spoken in the footage, as hints for generating subtitles (codes such as
     /// "en"). Empty: detect automatically. Defaults to
     /// [`crate::DEFAULT_SUBTITLE_LANGUAGES`].
@@ -92,6 +95,7 @@ impl Default for AppSettings {
             space_after_tags: false,
             summary_language: SummaryLanguage::default(),
             ai_model: clipscribe::MODELS[0].id.to_string(),
+            ai_tag_suggestions: true,
             subtitle_languages: crate::DEFAULT_SUBTITLE_LANGUAGES
                 .iter()
                 .map(|code| code.to_string())

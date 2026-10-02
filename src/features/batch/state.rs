@@ -525,6 +525,11 @@ impl BatchState {
         self.waiting_for_markers = waiting;
     }
 
+    /// The open folder's own tags, which "Describe with AI" may suggest from.
+    pub fn set_folder_tags(&mut self, tags: Vec<String>) {
+        self.actions.set_folder_tags(tags);
+    }
+
     /// Whether the right half shows the batch panel instead of the open file.
     pub fn is_active(&self) -> bool {
         self.active

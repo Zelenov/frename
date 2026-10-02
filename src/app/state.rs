@@ -10,7 +10,7 @@
 use iced::{event, keyboard, window, Element, Subscription, Task};
 
 use crate::features::{
-    batch, drag_drop, drag_out, file_menu, folder, folder_workspace, media_viewer,
+    batch, drag_drop, drag_out, file_menu, file_name_panel, folder, folder_workspace, media_viewer,
     media_viewer::video as media_viewer_video, settings, tag_panel, updates, video_controls,
 };
 use crate::ui::palette::TagPalette;
@@ -180,6 +180,26 @@ fn main_window_event(
                 media_viewer_video::Message::TogglePause,
             )),
         )),
+        // F6 adds the most likely tag the AI suggests, Shift+F6 every one: always, like the other
+        // F-keys. A held key adds once, not one suggestion after another.
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(keyboard::key::Named::F6),
+            modifiers,
+            repeat,
+            ..
+        }) => {
+            if repeat {
+                return Some(Message::Noop);
+            }
+            let add = if modifiers.shift() {
+                file_name_panel::Message::AddAllSuggestedTags
+            } else {
+                file_name_panel::Message::AddFirstSuggestedTag
+            };
+            Some(Message::FolderWorkspace(
+                folder_workspace::Message::FileNamePanel(add),
+            ))
+        }
         // F5 toggles fullscreen for the media viewer.
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
             key: keyboard::Key::Named(keyboard::key::Named::F5),
@@ -531,6 +551,11 @@ impl FrenameApp {
                 let model = Task::done(describe_ai_message(batch::describe_ai::Message::SetModel(
                     clipscribe::Model::from_id(&self.settings.settings().ai_model),
                 )));
+                let tag_suggestions = Task::done(describe_ai_message(
+                    batch::describe_ai::Message::SetTagSuggestions(
+                        self.settings.settings().ai_tag_suggestions,
+                    ),
+                ));
                 let open = match self.initial_path.take().or(self.restored_clip.take()) {
                     Some(pair) => folder_workspace::Message::ScanFolder(pair),
                     None => folder_workspace::Message::LoadLastSession,
@@ -538,6 +563,7 @@ impl FrenameApp {
                 let load = Task::batch([
                     language,
                     model,
+                    tag_suggestions,
                     self.subtitle_config(),
                     Task::done(Message::FolderWorkspace(open)),
                 ]);
@@ -640,6 +666,9 @@ impl FrenameApp {
                     ),
                     settings::Message::SetAiModel(model) => Task::done(describe_ai_message(
                         batch::describe_ai::Message::SetModel(model),
+                    )),
+                    settings::Message::SetAiTagSuggestions(on) => Task::done(describe_ai_message(
+                        batch::describe_ai::Message::SetTagSuggestions(on),
                     )),
                     settings::Message::Key(which, settings::KeyMessage::Save) => {
                         match self.settings.typed_key(which) {
@@ -1217,6 +1246,43 @@ mod tests {
             arrow(Named::ArrowLeft, keyboard::Modifiers::empty(), idle),
             Some(W::TagPanel(_))
         ));
+    }
+
+    #[test]
+    fn f6_adds_the_first_suggested_tag_and_shift_f6_all_of_them_once_per_press() {
+        use file_name_panel::Message as P;
+        use folder_workspace::Message as W;
+        let f6 = |modifiers: keyboard::Modifiers, repeat: bool, status: event::Status| {
+            let key = keyboard::Key::Named(keyboard::key::Named::F6);
+            let event = iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                key: key.clone(),
+                modified_key: key,
+                physical_key: keyboard::key::Physical::Code(keyboard::key::Code::F6),
+                location: keyboard::Location::Standard,
+                modifiers,
+                text: None,
+                repeat,
+            });
+            main_window_event(event, status, window::Id::unique())
+        };
+        let none = keyboard::Modifiers::empty();
+        assert!(matches!(
+            f6(none, false, event::Status::Ignored),
+            Some(Message::FolderWorkspace(W::FileNamePanel(
+                P::AddFirstSuggestedTag
+            )))
+        ));
+        // Like the other F-keys, also while a search field has the focus.
+        assert!(matches!(
+            f6(keyboard::Modifiers::SHIFT, false, event::Status::Captured),
+            Some(Message::FolderWorkspace(W::FileNamePanel(
+                P::AddAllSuggestedTags
+            )))
+        ));
+        assert!(
+            matches!(f6(none, true, event::Status::Ignored), Some(Message::Noop)),
+            "a held key adds once"
+        );
     }
 
     #[test]

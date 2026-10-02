@@ -186,3 +186,9 @@ CREATE TABLE IF NOT EXISTS playback_position (
     PRIMARY KEY (folder, file_name)
 );
 ";
+
+/// Migration 20: whether "Describe with AI" also suggests tags from the folder's tags (#175).
+/// On by default.
+pub const M20_AI_TAG_SUGGESTIONS: &str = "
+ALTER TABLE app_settings ADD COLUMN ai_tag_suggestions INTEGER NOT NULL DEFAULT 1;
+";

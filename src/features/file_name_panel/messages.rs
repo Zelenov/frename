@@ -23,6 +23,12 @@ pub enum Message {
     ClearSegmentEnd,
     /// Set the in and out points to the ones the AI description suggests.
     ApplySuggestedInOut,
+    /// Add the tag the AI description suggests (by name) to the open clip.
+    AddSuggestedTag(String),
+    /// Add the most likely of the tags the AI description suggests (F6).
+    AddFirstSuggestedTag,
+    /// Add every tag the AI description suggests, as one undo step (Shift+F6).
+    AddAllSuggestedTags,
     /// Right-click on the file name: open the file menu for the open file.
     OpenFileMenu,
 }
