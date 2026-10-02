@@ -3113,25 +3113,17 @@ mod tests {
     /// undo step, and is no longer offered once the points match it.
     #[test]
     fn the_ai_suggested_in_out_is_applied_as_one_undo_step() {
-        let test_dir = TestDirectory::new(2);
+        let test_dir = TestDirectory::new(1);
         let mut workspace = FolderWorkspace::new();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
         });
         flush_file_opened(&mut workspace);
-        let file_0_id = file_id_at(&workspace, 0);
-        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
-        flush_file_opened(&mut workspace);
-        let mut snapshot = FileSnapshot::new(vec![], "file_0", ".mp4", "file_0.mp4");
-        snapshot
+        workspace
+            .file_workspace
+            .tag_list_mut()
             .set_comment("AI: A walk.\nSuggested In/Out: 00:00:03.200 – 00:00:11.800".to_string());
-        let _ = workspace.update(Message::FileUpdated {
-            id: file_0_id,
-            snapshot,
-        });
-        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
-        flush_file_opened(&mut workspace);
         let _ = workspace.update(Message::MediaViewer(
             crate::features::media_viewer::Message::SegmentStartMarked(1.0),
         ));
