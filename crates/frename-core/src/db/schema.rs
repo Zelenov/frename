@@ -186,3 +186,9 @@ CREATE TABLE IF NOT EXISTS playback_position (
     PRIMARY KEY (folder, file_name)
 );
 ";
+
+/// Migration 20: which moments AI descriptions get (`ai::moments_as_str`): only what stands out,
+/// or the whole clip (#176).
+pub const M20_AI_MOMENTS: &str = "
+ALTER TABLE app_settings ADD COLUMN ai_moments TEXT NOT NULL DEFAULT 'important';
+";

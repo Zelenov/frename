@@ -1,3 +1,11 @@
+# 0.110
+## Added
+- Settings → Describe with AI → Moments: segments only for what stands out (as before) or covering the whole clip. Only "Only what stands out" suggests an In and Out (the **AI** pill).
+
+# 0.109
+## Fixed
+- The file search hint is shorter, "Find a file or a comment", so it is no longer cut off in the file list.
+
 # 0.108
 ## Added
 - Describe a marker with AI: ✨ on a marker's row, or `Ctrl+F2` on the marker under the playhead, names an unnamed marker and adds what happens at that moment to its comment, which the marker list now shows under the name. A name you gave stays. One undo takes it back.
