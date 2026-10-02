@@ -122,8 +122,9 @@ pub fn view<'a>(
     state: &'a MarkersState,
     position_ms: u64,
     in_out: Option<(u64, u64)>,
+    quiet: bool,
 ) -> Element<'a, Message> {
-    let list = marker_list(markers, state, position_ms);
+    let list = marker_list(markers, state, position_ms, quiet);
     match in_out {
         Some(span) => column![in_out_line(span), list].into(),
         None => list,
@@ -163,18 +164,19 @@ fn marker_list<'a>(
     markers: Option<&'a [Marker]>,
     state: &'a MarkersState,
     position_ms: u64,
+    quiet: bool,
 ) -> Element<'a, Message> {
     let Some(markers) = markers else {
         return cannot_hold();
     };
     if markers.is_empty() {
-        return empty_list();
+        return empty_list(quiet);
     }
     let lit = lit_index(markers, position_ms);
     let rows = markers
         .iter()
         .enumerate()
-        .map(|(index, marker)| marker_row(marker, state, lit == Some(index)));
+        .map(|(index, marker)| marker_row(marker, state, lit == Some(index), quiet));
     scroll::vertical_with_id(
         MARKER_LIST_SCROLLABLE_ID,
         Column::with_children(rows)
@@ -204,7 +206,7 @@ fn cannot_hold<'a>() -> Element<'a, Message> {
 }
 
 /// An empty list: a line and the button that adds the first marker.
-fn empty_list<'a>() -> Element<'a, Message> {
+fn empty_list<'a>(quiet: bool) -> Element<'a, Message> {
     let add = ui_button::with_icon(
         ButtonKind::Secondary,
         Icon::MapPin,
@@ -212,7 +214,8 @@ fn empty_list<'a>() -> Element<'a, Message> {
         true,
     )
     .on_press(Message::Add);
-    let add = tooltip::tip(
+    let add = tooltip::tip_unless(
+        quiet,
         add,
         Tip::new(fl!("markers-add")).keys(&["F2"]),
         Position::Bottom,
@@ -280,8 +283,9 @@ fn dot<'a>(color: MarkerColor, ringed: bool, message: Option<Message>) -> Elemen
 }
 
 /// A 24-px action over the list: shown on hover, on the lit row and on the open row.
-fn row_action<'a>(glyph: Icon, tip: Tip, message: Message) -> Element<'a, Message> {
+fn row_action<'a>(glyph: Icon, tip: Tip, message: Message, quiet: bool) -> Element<'a, Message> {
     IconButton::new(glyph)
+        .quiet(quiet)
         .small()
         .overlay()
         .tip(tip, Position::Left)
@@ -291,7 +295,7 @@ fn row_action<'a>(glyph: Icon, tip: Tip, message: Message) -> Element<'a, Messag
 
 /// The color picker that replaces a row's first line: the editor's colors, then, set apart, the
 /// AI's. White is what marks a marker as the AI's, so it is picked as "AI", not as a color.
-fn color_picker<'a>(marker: &Marker, guid: &str) -> Element<'a, Message> {
+fn color_picker<'a>(marker: &Marker, guid: &str, quiet: bool) -> Element<'a, Message> {
     let pick = |color: MarkerColor| {
         dot(
             color,
@@ -302,8 +306,11 @@ fn color_picker<'a>(marker: &Marker, guid: &str) -> Element<'a, Message> {
     let colors = MarkerColor::ALL
         .into_iter()
         .filter(|&color| color != AI_MARKER_COLOR)
-        .map(|color| tooltip::tip_text(pick(color), color_name(color), Position::Top));
-    let ai = tooltip::tip_text(
+        .map(|color| {
+            tooltip::tip_text_unless(quiet, pick(color), color_name(color), Position::Top)
+        });
+    let ai = tooltip::tip_text_unless(
+        quiet,
         row![pick(AI_MARKER_COLOR), text::caption("AI")]
             .spacing(SPACE_XS)
             .align_y(Alignment::Center),
@@ -322,6 +329,7 @@ fn color_picker<'a>(marker: &Marker, guid: &str) -> Element<'a, Message> {
             Icon::X,
             Tip::new(fl!("markers-keep-color")),
             Message::ToggleColorPicker(guid.to_string()),
+            quiet,
         ))
         .spacing(SPACE_XS)
         .align_y(Alignment::Center)
@@ -329,7 +337,12 @@ fn color_picker<'a>(marker: &Marker, guid: &str) -> Element<'a, Message> {
         .into()
 }
 
-fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Element<'a, Message> {
+fn marker_row<'a>(
+    marker: &'a Marker,
+    state: &'a MarkersState,
+    lit: bool,
+    quiet: bool,
+) -> Element<'a, Message> {
     let guid = marker.guid.as_deref();
     let open = state.edit().filter(|edit| guid == Some(edit.guid.as_str()));
     let time = button(text::mono(time_label(marker)))
@@ -344,19 +357,23 @@ fn marker_row<'a>(marker: &'a Marker, state: &'a MarkersState, lit: bool) -> Ele
     // The first line without its actions, and the actions, which show only on hover unless the
     // row is lit or open.
     let (first_line, actions): (Element<'a, Message>, Option<Element<'a, Message>>) = match guid {
-        Some(guid) if state.color_picker() == Some(guid) => (color_picker(marker, guid), None),
+        Some(guid) if state.color_picker() == Some(guid) => {
+            (color_picker(marker, guid, quiet), None)
+        }
         Some(guid) => {
             let done = open.is_some().then(|| {
                 row_action(
                     Icon::Check,
                     Tip::new(fl!("markers-done")).keys(&["Enter"]),
                     Message::Close,
+                    quiet,
                 )
             });
             let delete = row_action(
                 Icon::X,
                 Tip::new(fl!("markers-delete")),
                 Message::Delete(guid.to_string()),
+                quiet,
             );
             let actions = row![].push(done).push(delete).align_y(Alignment::Center);
             let line = row![

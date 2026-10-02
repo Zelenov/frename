@@ -112,3 +112,31 @@ pub fn tip_text<'a, M: 'a>(
     .delay(TOOLTIP_DELAY)
     .into()
 }
+
+/// `tip`, or `content` as it is when `quiet` (fullscreen: nothing pops up over the picture).
+pub fn tip_unless<'a, M: 'a>(
+    quiet: bool,
+    content: impl Into<Element<'a, M>>,
+    tip_: impl Into<Tip>,
+    position: Position,
+) -> Element<'a, M> {
+    if quiet {
+        content.into()
+    } else {
+        tip(content, tip_, position)
+    }
+}
+
+/// `tip_text`, or `content` as it is when `quiet`.
+pub fn tip_text_unless<'a, M: 'a>(
+    quiet: bool,
+    content: impl Into<Element<'a, M>>,
+    label: impl IntoFragment<'a>,
+    position: Position,
+) -> Element<'a, M> {
+    if quiet {
+        content.into()
+    } else {
+        tip_text(content, label, position)
+    }
+}
