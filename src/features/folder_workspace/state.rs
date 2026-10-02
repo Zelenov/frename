@@ -1118,7 +1118,7 @@ impl FolderWorkspace {
             return self.start_batch();
         }
         if let batch::Message::OpenLog = msg {
-            open_in_default_app(frename_core::log_path());
+            open_in_default_app(crate::package::log_path_for_other_apps());
             return Task::none();
         }
         // From the job's report, when the service said its credit is used up.

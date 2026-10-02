@@ -7,6 +7,11 @@ on:
     branches: [main]
     paths: ["version.md"]
 
+# The GStreamer bundled with frename, in the installer and the Store package alike: as ci.yml.
+env:
+  GST_VERSION: 1.28.7
+  GST_SHA256: 032fc6062b8539838fc8da22589cb9b24c5d820baa7f8cc160af9ea08395badf
+
 jobs:
   prepare:
     runs-on: ubuntu-22.04
@@ -81,9 +86,7 @@ jobs:
       # Only used when the AZURE_* secrets below are set, for OIDC login to Azure Artifact Signing.
       id-token: write
     env:
-      # The GStreamer bundled with frename, and Velopack's packer (matches the crate): as ci.yml.
-      GST_VERSION: 1.28.7
-      GST_SHA256: 032fc6062b8539838fc8da22589cb9b24c5d820baa7f8cc160af9ea08395badf
+      # Velopack's packer (matches the crate): as ci.yml.
       VPK_VERSION: 1.2.158
       PACKAGE_VERSION: ${{ needs.prepare.outputs.package_version }}
       # Code signing (docs/signing-setup.md). Empty when not configured: `if: env.AZURE_CLIENT_ID
@@ -257,6 +260,88 @@ jobs:
         shell: pwsh
         run: packaging/windows/test-package.ps1 -Setup packages\frename-win-Setup.exe -Portable packages\frename-windows-x64-v${{ needs.prepare.outputs.package_version }}.zip
 
+  # The Microsoft Store package (docs/design/microsoft-store.md): the same app built without
+  # Velopack's updater, as MSIX. Unsigned: the Store signs it. The GitHub release does not wait
+  # for it and does not carry it; submit-store hands it to the Store.
+  build-store:
+    needs: prepare
+    if: needs.prepare.outputs.should_build == 'true'
+    runs-on: windows-2022
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - uses: actions/cache@v5
+        with:
+          path: C:\gst-download
+          key: gstreamer-msvc-x86_64-${{ env.GST_VERSION }}
+
+      - name: Install GStreamer
+        shell: pwsh
+        run: packaging/windows/install-gstreamer.ps1 -Version $env:GST_VERSION -Sha256 $env:GST_SHA256 -Dir C:\gstreamer -Download C:\gst-download
+
+      - name: Build the Store variant
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ needs.prepare.outputs.package_version }}
+        run: cargo build --release --locked --features store
+
+      - name: Bundle GStreamer
+        shell: pwsh
+        run: packaging/windows/bundle.ps1 -GstRoot C:\gstreamer -Exe target\release\frename.exe -Out dist\frename-store
+
+      # MSIX versions have four parts and the Store needs the last one to be 0: 0.74.0 -> 0.74.0.0.
+      - name: Pack the Store package (MSIX)
+        shell: pwsh
+        env:
+          STORE_IDENTITY_NAME: ${{ vars.STORE_IDENTITY_NAME }}
+          STORE_PUBLISHER: ${{ vars.STORE_PUBLISHER }}
+          STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.STORE_PUBLISHER_DISPLAY_NAME }}
+        run: packaging/windows/build-msix.ps1 -Bundle dist\frename-store -Version "${{ needs.prepare.outputs.package_version }}.0" -Out "store\frename-${{ needs.prepare.outputs.package_version }}.0-x64.msix" -IdentityName $env:STORE_IDENTITY_NAME -Publisher $env:STORE_PUBLISHER -PublisherDisplayName $env:STORE_PUBLISHER_DISPLAY_NAME
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: frename-store-msix-v${{ needs.prepare.outputs.package_version }}
+          path: store/frename-${{ needs.prepare.outputs.package_version }}.0-x64.msix
+
+  # A Store package that does not install, play video and pass the certification kit on a clean
+  # machine is never submitted. Its failure is a Store problem, not a failed GitHub release: the
+  # release does not wait for it.
+  test-store:
+    needs: [prepare, build-store]
+    if: needs.prepare.outputs.should_build == 'true'
+    runs-on: windows-2022
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: frename-store-msix-v${{ needs.prepare.outputs.package_version }}
+          path: store
+
+      # Windows PowerShell: the Appx cmdlets do not load in PowerShell 7 on Windows Server 2022.
+      - name: Install, self-test and certify the Store package
+        shell: powershell
+        run: packaging/windows/test-msix.ps1 -Msix "store\frename-${{ needs.prepare.outputs.package_version }}.0-x64.msix" -Report store\wack-report.xml
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: wack-report-v${{ needs.prepare.outputs.package_version }}
+          path: store/wack-report.xml
+          if-no-files-found: ignore
+
   build-linux:
     needs: prepare
     if: needs.prepare.outputs.should_build == 'true'
@@ -320,9 +405,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Only what the release publishes: not the Store package, which may be there already.
       - uses: actions/download-artifact@v7
         with:
           path: artifacts
+          pattern: "{release-notes,frename-windows-x64-v*,frename-linux-x86_64-v*}"
           merge-multiple: true
 
       - name: Remove existing draft and tag
@@ -353,3 +440,46 @@ jobs:
             artifacts/frename-linux-x86_64-v${{ needs.prepare.outputs.package_version }}.AppImage
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+  # Hands the tested Store package to the Microsoft Store as a new submission (docs/store-setup.md,
+  # "Automated submissions"). Off until the owner sets the MS_STORE_PRODUCT_ID variable, which is
+  # done only after the first submission was made by hand and is live. The listing texts stay as
+  # they are in Partner Center; certification takes up to three business days after this.
+  submit-store:
+    needs: [prepare, test-store, release]
+    if: needs.prepare.outputs.draft == 'false' && vars.MS_STORE_PRODUCT_ID != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      MS_STORE_TENANT_ID: ${{ secrets.MS_STORE_TENANT_ID }}
+      MS_STORE_SELLER_ID: ${{ secrets.MS_STORE_SELLER_ID }}
+      MS_STORE_CLIENT_ID: ${{ secrets.MS_STORE_CLIENT_ID }}
+      MS_STORE_CLIENT_SECRET: ${{ secrets.MS_STORE_CLIENT_SECRET }}
+      MS_STORE_PRODUCT_ID: ${{ vars.MS_STORE_PRODUCT_ID }}
+      # Without these the package has the placeholder identity, which the Store rejects.
+      STORE_IDENTITY_NAME: ${{ vars.STORE_IDENTITY_NAME }}
+      STORE_PUBLISHER: ${{ vars.STORE_PUBLISHER }}
+      STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.STORE_PUBLISHER_DISPLAY_NAME }}
+    steps:
+      - name: Check the Store credentials and identity
+        run: |
+          for name in MS_STORE_TENANT_ID MS_STORE_SELLER_ID MS_STORE_CLIENT_ID MS_STORE_CLIENT_SECRET \
+                      STORE_IDENTITY_NAME STORE_PUBLISHER STORE_PUBLISHER_DISPLAY_NAME; do
+            [ -n "${!name}" ] || { echo "::error::MS_STORE_PRODUCT_ID is set but $name is not (docs/store-setup.md)"; exit 1; }
+          done
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: frename-store-msix-v${{ needs.prepare.outputs.package_version }}
+          path: store
+
+      # Installs Microsoft's msstore command line tool.
+      - uses: microsoft/microsoft-store-apppublisher@v1.4
+
+      - name: Submit to the Microsoft Store
+        run: |
+          msstore reconfigure --tenantId "$MS_STORE_TENANT_ID" --sellerId "$MS_STORE_SELLER_ID" \
+            --clientId "$MS_STORE_CLIENT_ID" --clientSecret "$MS_STORE_CLIENT_SECRET"
+          msstore publish "store/frename-${{ needs.prepare.outputs.package_version }}.0-x64.msix" -id "$MS_STORE_PRODUCT_ID"
+          echo "Submitted frename ${{ needs.prepare.outputs.version }} to the Microsoft Store (product $MS_STORE_PRODUCT_ID)." >> "$GITHUB_STEP_SUMMARY"

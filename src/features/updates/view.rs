@@ -12,6 +12,19 @@ use crate::ui::{button, form, text};
 /// **Update and restart**, then the start-up checkbox. `batch_running` holds the update back: the
 /// batch job would be cut off by the restart.
 pub fn view(state: &UpdatesState, batch_running: bool) -> Element<'_, Message> {
+    let version = || {
+        text::strong(fl!(
+            "updates-current-version",
+            version = state.current_version()
+        ))
+        .into()
+    };
+    // The Store build has no updater of its own: nothing to check or to switch on.
+    if state.is_store_build() {
+        return layout::aligned([version(), text::secondary(fl!("updates-from-store")).into()])
+            .into();
+    }
+
     let status = state.status();
     let busy = matches!(
         status,
@@ -62,19 +75,15 @@ pub fn view(state: &UpdatesState, batch_running: bool) -> Element<'_, Message> {
     let actions = layout::buttons(std::iter::once(check.into()).chain(update));
 
     layout::aligned(
-        [text::strong(fl!(
-            "updates-current-version",
-            version = state.current_version()
-        ))
-        .into()]
-        .into_iter()
-        .chain(note.map(Element::from))
-        .chain([
-            actions,
-            form::checkbox(fl!("updates-check-on-start"), state.check_on_start())
-                .on_toggle_maybe(state.installed().then_some(Message::SetCheckOnStart))
-                .into(),
-        ]),
+        [version()]
+            .into_iter()
+            .chain(note.map(Element::from))
+            .chain([
+                actions,
+                form::checkbox(fl!("updates-check-on-start"), state.check_on_start())
+                    .on_toggle_maybe(state.installed().then_some(Message::SetCheckOnStart))
+                    .into(),
+            ]),
     )
     .into()
 }

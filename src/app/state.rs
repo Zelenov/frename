@@ -529,7 +529,7 @@ impl FrenameApp {
                     ),
                 ));
                 let model = Task::done(describe_ai_message(batch::describe_ai::Message::SetModel(
-                    clipscribe::Model::from_id(&self.settings.settings().ai_model),
+                    frename_core::ai::model_from_id(&self.settings.settings().ai_model),
                 )));
                 let moments = Task::done(describe_ai_message(
                     batch::describe_ai::Message::SetMoments(self.settings.settings().ai_moments),
