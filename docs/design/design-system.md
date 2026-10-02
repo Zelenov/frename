@@ -382,7 +382,16 @@ selected where it has one). iced 0.14 gives buttons, checkboxes and radios no ke
 - **Focused** (Settings, §11): a 2 px `accent.text` ring with radius 6 (radius 4 + the gap) drawn
   2 px outside the button, around its whole box, for every kind (danger and danger-ghost too: the
   ring is the one focus color, the button keeps its own). Focused + hover shows both: the hover fill
-  inside, the ring outside. A disabled button never has the ring: Tab skips it.
+  inside, the ring outside. Tab never lands on a disabled button; one disabled while focused keeps
+  the ring (§11), around its 40 % look:
+
+```
+  ╭──────────────────────╮
+  │┌────────────────────┐│   ring at full strength, button at 40 %
+  ││ Update and restart ││   (disabled while a batch runs; Space and Enter do nothing)
+  │└────────────────────┘│
+  ╰──────────────────────╯
+```
 
 ```
   ╭────────────╮
@@ -878,8 +887,9 @@ registry and every surface follow:
   - **Space** does what a click does: a checkbox toggles, a radio option is picked, a dropdown moves
     to its next option (wrapping), a button is pressed. **Enter** presses a focused button only.
     Both pass to a focused field instead (it types or submits).
-  - **When a press takes the control away**, the focus goes where the next step is, at once
-    (the row changes before the focus moves, so the new field is there to focus):
+  - **When a press takes the control away**, the focus goes where the next step is. A key row's
+    own buttons (*Remove…*, *Keep*, *Replace…*, *Cancel*) change the row at once, before the focus
+    moves, so the new field is there to focus:
 
     | Pressed | The focus goes to |
     |---|---|
@@ -887,12 +897,14 @@ registry and every surface follow:
     | *Keep*, or Esc in the question | *Remove…* |
     | *Replace…* | the new key field |
     | *Cancel*, or Esc while replacing | *Replace…* |
-    | *Save key* | *Replace…*, once the key is saved (on a failed save, the next Tab starts over) |
-    | *Remove key* | the field for a new key |
+    | *Save key*, or Enter in the key field | stays there while the key is saved; *Replace…* once saved; on a failure it stays on *Save key* (or the field) |
+    | *Remove key* | *Remove…* (the question closes); the field for a new key once removed; on a failure it stays on *Remove…* |
     | *Check for updates* (disabled while it checks) | *Check for updates when frename starts* |
     | an offer (the button under a changed choice that opens its batch action) | the control after it on the page |
 
-    Esc moves the focus only while it is in that key row; without keyboard focus it stays off.
+    *Save key* and *Remove key* are settled when the credential store answers, and only while the
+    focus is still in that row. Esc moves the focus only while it is in that key row; without
+    keyboard focus it stays off.
   - **A control disabled while focused** (*Update and restart* when a batch starts) keeps the ring
     until Tab moves it; Space and Enter on it do nothing, as a click would not. Tab skips it.
   - **A control that goes away otherwise** (a page change, an option hidden by another choice):

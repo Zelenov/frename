@@ -5,7 +5,9 @@ use clipscribe::{Model, MODELS};
 use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::ai::SummaryLanguage;
 use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage};
-use iced::widget::{column, row, Row};
+use std::borrow::Borrow;
+
+use iced::widget::{column, row, PickList, Row};
 use iced::{Alignment, Element, Length};
 
 use crate::ui::layout::{self, NoticeKind};
@@ -23,6 +25,20 @@ use crate::features::updates;
 /// Whether keyboard focus is on `control` (#167): it draws the focus ring.
 fn focused(state: &SettingsState, control: Control) -> bool {
     state.focus() == Some(&control)
+}
+
+/// A dropdown that keyboard focus can be on: the focused edge, and its place reported for
+/// scrolling (§8.7).
+fn focusable_dropdown<'a, T, L, V>(
+    dropdown: PickList<'a, T, L, V, Message>,
+    focused: bool,
+) -> Element<'a, Message>
+where
+    T: ToString + PartialEq + Clone + 'a,
+    L: Borrow<[T]> + 'a,
+    V: Borrow<T> + 'a,
+{
+    edge(dropdown.style(style::focusable_pick_list(focused)), focused)
 }
 
 /// Render the settings window. `batch_running` holds back **Update and restart** while a batch
@@ -65,16 +81,12 @@ fn interface(state: &SettingsState) -> Element<'_, Message> {
         [
             layout::setting_row(
                 fl!("settings-language"),
-                edge(
+                focusable_dropdown(
                     form::dropdown(
                         language_options(),
                         Some(LanguageOption(settings.ui_language.clone())),
                         |option| Message::SetUiLanguage(option.0),
                     )
-                    .style(style::focusable_pick_list(focused(
-                        state,
-                        Control::UiLanguage,
-                    )))
                     .width(FIELD_WIDTH_M),
                     focused(state, Control::UiLanguage),
                 ),
@@ -292,13 +304,12 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
             layout::setting_row(
                 fl!("settings-ai-model-label"),
                 layout::controls([
-                    edge(
+                    focusable_dropdown(
                         form::dropdown(
                             MODELS,
                             Some(Model::from_id(&settings.ai_model)),
                             Message::SetAiModel,
                         )
-                        .style(style::focusable_pick_list(focused(state, Control::AiModel)))
                         .width(FIELD_WIDTH_L),
                         focused(state, Control::AiModel),
                     ),
@@ -307,16 +318,12 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
             ),
             layout::setting_row(
                 fl!("settings-ai-language-label"),
-                edge(
+                focusable_dropdown(
                     form::dropdown(
                         SummaryLanguage::ALL.map(SummaryLanguageOption),
                         Some(SummaryLanguageOption(settings.summary_language)),
                         |option| Message::SetSummaryLanguage(option.0),
                     )
-                    .style(style::focusable_pick_list(focused(
-                        state,
-                        Control::SummaryLanguage,
-                    )))
                     .width(FIELD_WIDTH_L),
                     focused(state, Control::SummaryLanguage),
                 ),

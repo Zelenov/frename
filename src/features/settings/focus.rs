@@ -330,9 +330,11 @@ pub fn press(state: &SettingsState, control: &Control, press: Press) -> Option<M
 /// Where the focus goes after `pressed` was pressed, when the press takes that control away
 /// (§11): the question about removing a key keeps the key by default; giving up a replacement or
 /// a removal goes back to the button that started it; **Replace…** goes into the new field;
-/// **Save key** goes to the **Replace…** the saved key shows, **Remove key** to the field for a
-/// new one; **Check for updates** (disabled while it checks) to the checkbox under it. An offer
-/// goes away with its press: the focus goes to the control after it (see `SettingsState::press`).
+/// **Remove key** closes the question, so the focus goes to the **Remove…** it shows again;
+/// **Check for updates** (disabled while it checks) to the checkbox under it. **Save key** stays
+/// focused while the store saves: where it goes then is settled by the store's answer
+/// (`SettingsState::after_key_answer`). An offer goes away with its press: the focus goes to the
+/// control after it (see `SettingsState::press`).
 pub fn after_press(pressed: &Control) -> Option<Control> {
     match pressed {
         Control::Key(which, key) => {
@@ -341,9 +343,8 @@ pub fn after_press(pressed: &Control) -> Option<Control> {
                 KeyControl::Keep => KeyControl::AskRemove,
                 KeyControl::Replace => KeyControl::Field,
                 KeyControl::Cancel => KeyControl::Replace,
-                KeyControl::Save => KeyControl::Replace,
-                KeyControl::Remove => KeyControl::Field,
-                KeyControl::Field | KeyControl::Show => return None,
+                KeyControl::Remove => KeyControl::AskRemove,
+                KeyControl::Field | KeyControl::Show | KeyControl::Save => return None,
             };
             Some(Control::Key(*which, next))
         }
