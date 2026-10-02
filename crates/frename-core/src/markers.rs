@@ -437,6 +437,30 @@ pub fn markers_into_comment(comment: &str, markers: &[Marker]) -> String {
     result
 }
 
+/// The marker lines of `markers`, sorted, for comparing one set of markers with another.
+fn sorted_marker_lines(markers: &[Marker]) -> Vec<String> {
+    let mut lines: Vec<String> = markers.iter().map(format_marker_line).collect();
+    lines.sort();
+    lines
+}
+
+/// `comment` holds exactly `markers`, each as it is: none was merged into another or lost a part
+/// the line format cannot hold. Only then may the markers leave the video, since after that the
+/// comment is all there is.
+pub fn comment_holds_markers(comment: &str, markers: &[Marker]) -> bool {
+    sorted_marker_lines(markers) == sorted_marker_lines(&markers_from_comment(comment).1)
+}
+
+/// The `saved` comment has every marker of the `written` one, both as read back from a comment
+/// (so what the line format cannot hold counts on neither side); it may hold more, such as a
+/// line typed into it. Whether a write of the markers took.
+pub fn comment_kept_markers(written: &str, saved: &str) -> bool {
+    let saved = sorted_marker_lines(&markers_from_comment(saved).1);
+    sorted_marker_lines(&markers_from_comment(written).1)
+        .iter()
+        .all(|line| saved.contains(line))
+}
+
 /// What "comment → markers" does to one file: the markers to add and the comment left over.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommentToMarkers {
@@ -736,6 +760,80 @@ mod tests {
         m.name = name.to_string();
         m.comment = comment.to_string();
         m
+    }
+
+    /// Markers written into a comment, checked the way a save is checked.
+    fn written(comment: &str, markers: &[Marker]) -> String {
+        markers_into_comment(comment, markers)
+    }
+
+    #[test]
+    fn plain_markers_are_held_exactly_and_kept() {
+        let markers = [
+            marker(1_000, 0, "Lion", ""),
+            marker(5_000, 3_000, "Run", ""),
+        ];
+        let comment = written("A note", &markers);
+        assert!(comment_holds_markers(&comment, &markers));
+        assert!(comment_kept_markers(&comment, &comment));
+        assert!(
+            !comment_kept_markers(&comment, "A note"),
+            "the save lost them"
+        );
+        // A line typed into the comment is more, not less.
+        let more = format!(
+            "{comment}
+0:41 — Typed"
+        );
+        assert!(comment_kept_markers(&comment, &more));
+        // A marker comment with a line break goes through as well.
+        let markers = [marker(
+            65_000,
+            0,
+            "Lion",
+            "two
+lines",
+        )];
+        let comment = written("", &markers);
+        assert!(comment_holds_markers(&comment, &markers));
+        assert!(comment_kept_markers(&comment, &comment));
+    }
+
+    /// What the line format cannot hold as it is: kept (the write took), not held exactly (the
+    /// markers must stay in the video).
+    #[test]
+    fn markers_the_line_format_changes_are_kept_but_not_held_exactly() {
+        let cases = [
+            vec![marker(65_000, 0, "intro -- take 2", "")],
+            vec![marker(65_000, 0, "— dash first", "")],
+        ];
+        for markers in cases {
+            let comment = written("", &markers);
+            assert!(comment_kept_markers(&comment, &comment), "{markers:?}");
+            assert!(!comment_holds_markers(&comment, &markers), "{markers:?}");
+        }
+    }
+
+    #[test]
+    fn markers_merged_or_cut_by_the_comment_are_not_held_exactly() {
+        // Two unnamed points close by read back as one.
+        let close = [marker(1_000, 0, "", ""), marker(1_300, 0, "", "")];
+        // Two markers at one time read back as one.
+        let mut red = marker(1_000, 0, "B", "");
+        red.color = MarkerColor::Red;
+        let same_time = [marker(1_000, 0, "A", ""), red];
+        // An AI-color marker's line in the AI block has no room for its comment.
+        let mut ai = marker(2_000, 0, "Street", "keep this note");
+        ai.color = AI_MARKER_COLOR;
+        let ai_block = "AI: Two lions.";
+        for (comment, markers) in [
+            ("", close.to_vec()),
+            ("", same_time.to_vec()),
+            (ai_block, vec![ai]),
+        ] {
+            let comment = written(comment, &markers);
+            assert!(!comment_holds_markers(&comment, &markers), "{markers:?}");
+        }
     }
 
     #[test]

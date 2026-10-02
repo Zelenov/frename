@@ -1375,26 +1375,17 @@ impl FolderWorkspace {
         } else {
             Task::none()
         };
-        // Both sides are compared as read back from a comment, so what the line format cannot
-        // hold (a ` -- ` in a name, a line break) does not count as a failed write.
-        let lines = |comment: &str| {
-            let mut lines: Vec<String> = frename_core::markers_from_comment(comment)
-                .1
-                .iter()
-                .map(frename_core::format_marker_line)
-                .collect();
-            lines.sort();
-            lines
-        };
-        let saved_lines = lines(snapshot_after_save.comment());
-        let wanted_lines = moved_markers.is_some().then(|| lines(snapshot.comment()));
-        // Markers shown from the video leave it only when the comment holds exactly what was
-        // written, since after that the comment is all there is; that the markers got written
-        // (the comment may hold more, such as a line typed into it) is enough to unmark the file.
-        let comment_holds_markers = wanted_lines.as_ref() == Some(&saved_lines);
-        let markers_written = wanted_lines
-            .as_ref()
-            .is_some_and(|wanted| wanted.iter().all(|line| saved_lines.contains(line)));
+        // Markers shown from the video leave it only when the comment holds exactly them (one
+        // the line format would merge or cut stays in the video); that the write took (compared
+        // as read back, the comment may hold more) is enough to unmark the file.
+        let comment_holds_markers = moved_markers.as_deref().is_some_and(|wanted| {
+            frename_core::comment_holds_markers(snapshot_after_save.comment(), wanted)
+        });
+        let markers_written = moved_markers.is_some()
+            && frename_core::comment_kept_markers(
+                snapshot.comment(),
+                snapshot_after_save.comment(),
+            );
         let comment_in_video =
             frename_core::metadata_storage().comment == frename_core::CommentStorage::InVideo;
         let mut markers_notice = Task::none();
@@ -1409,7 +1400,8 @@ impl FolderWorkspace {
                 // A comment inside a video that could not be written: the markers are kept like
                 // markers a video refused, so the file is marked, they are shown when the clip
                 // opens again, and its next save writes them. (A `.comment.txt` got them as they
-                // were edited.) A refused save already said so.
+                // were edited.) A refused save already said so: its notice is dropped, the call
+                // only records that this one was said.
                 let notice =
                     self.keep_unsaved_markers(id, wanted, marker_actions::MARKERS_NOT_SAVED);
                 if !refused {
@@ -3744,10 +3736,7 @@ mod tests {
         let _ = workspace.update(Message::CommentAction(Action::SelectAll));
         let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Delete)));
         // Away and straight back: no Unloaded in between.
-        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
-        flush_file_opened(&mut workspace);
-        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
-        flush_file_opened(&mut workspace);
+        reopen_first_clip(&mut workspace);
         let _ = workspace.update(Message::MediaViewer(
             crate::features::media_viewer::Message::Unloaded,
         ));
@@ -4739,6 +4728,14 @@ mod tests {
         let _ = workspace.update(Message::FileUpdated { id, snapshot });
     }
 
+    /// Open the second clip, then the first one again.
+    fn reopen_first_clip(workspace: &mut FolderWorkspace) {
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(workspace);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        flush_file_opened(workspace);
+    }
+
     #[test]
     fn marker_edits_kept_in_a_comment_inside_the_video_are_journaled_then_saved() {
         use crate::features::markers::Message as M;
@@ -4858,10 +4855,7 @@ mod tests {
         assert!(!comment_on_disk(&file).contains("1:05"), "not written");
 
         // Opened again, the clip still shows the marker; the next save writes it.
-        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
-        flush_file_opened(&mut workspace);
-        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
-        flush_file_opened(&mut workspace);
+        reopen_first_clip(&mut workspace);
         assert_eq!(marker_names(&workspace).len(), 1, "still shown");
         std::fs::remove_file(&blocker).expect("free the name");
         save_open_clip(&mut workspace);
@@ -4907,10 +4901,7 @@ mod tests {
             !workspace.unsaved_markers().contains_key(&id),
             "{comment:?}"
         );
-        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
-        flush_file_opened(&mut workspace);
-        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
-        flush_file_opened(&mut workspace);
+        reopen_first_clip(&mut workspace);
         save_open_clip(&mut workspace);
         assert!(
             !workspace.unsaved_markers().contains_key(&id),
@@ -4945,6 +4936,94 @@ mod tests {
         save_open_clip(&mut workspace);
         assert!(comment_on_disk(&test_dir.target_file()).contains("intro"));
         assert!(!workspace.unsaved_markers().contains_key(&id), "not marked");
+    }
+
+    /// Markers held by the video that the comment's lines would merge or cut stay in the video
+    /// when another marker is edited: the comment does not hold them as they are. `comment` is
+    /// typed into the clip's comment first.
+    fn markers_the_comment_cannot_hold_stay_in_the_video(
+        held: Vec<frename_core::Marker>,
+        comment: &str,
+    ) {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let file = test_dir.target_file();
+        let in_video = frename_core::use_storage_on_this_thread(
+            frename_core::MetadataStorage {
+                comment: frename_core::CommentStorage::InVideo,
+                in_out: frename_core::InOutStorage::InVideo,
+            },
+            frename_core::MarkerStorage::InVideo,
+        );
+        drop(marker_workspace(&test_dir, 1));
+        let other = frename_core::Marker {
+            name: "Other".to_string(),
+            ..frename_core::Marker::new(30_000)
+        };
+        let guid = other.guid.clone().expect("a guid");
+        let held: Vec<frename_core::Marker> = held.into_iter().chain([other]).collect();
+        frename_core::FileTagger::save_markers(&file, &held, &Default::default())
+            .expect("markers in the video");
+        drop(in_video);
+
+        let _storage = video_comment_storage();
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(file.clone()),
+        });
+        flush_file_opened(&mut workspace);
+        // The clip's own comment text, typed in.
+        let _ = workspace.update(Message::CommentAction(
+            iced::widget::text_editor::Action::Edit(iced::widget::text_editor::Edit::Paste(
+                std::sync::Arc::new(comment.to_string()),
+            )),
+        ));
+        send_marker(&mut workspace, M::Open(guid), 30_000);
+        send_marker(&mut workspace, type_name(" edited"), 30_000);
+        send_marker(&mut workspace, M::Close, 30_000);
+        save_open_clip(&mut workspace);
+        assert_eq!(
+            frename_core::FileTagger::load_markers(&file),
+            Some(held),
+            "still in the video"
+        );
+    }
+
+    #[test]
+    fn unnamed_markers_close_by_stay_in_the_video() {
+        markers_the_comment_cannot_hold_stay_in_the_video(
+            vec![
+                frename_core::Marker::new(1_000),
+                frename_core::Marker::new(1_300),
+            ],
+            "",
+        );
+    }
+
+    #[test]
+    fn markers_at_one_time_stay_in_the_video() {
+        let a = frename_core::Marker {
+            name: "A".to_string(),
+            ..frename_core::Marker::new(1_000)
+        };
+        let b = frename_core::Marker {
+            name: "B".to_string(),
+            color: frename_core::MarkerColor::Red,
+            ..frename_core::Marker::new(1_000)
+        };
+        markers_the_comment_cannot_hold_stay_in_the_video(vec![a, b], "");
+    }
+
+    #[test]
+    fn an_ai_marker_with_a_comment_stays_in_the_video() {
+        let street = frename_core::Marker {
+            name: "Street".to_string(),
+            comment: "keep this note".to_string(),
+            color: frename_core::AI_MARKER_COLOR,
+            ..frename_core::Marker::new(2_000)
+        };
+        markers_the_comment_cannot_hold_stay_in_the_video(vec![street], "AI: Two lions.");
     }
 
     /// Markers that keep failing to be written are said once, not at every save.
