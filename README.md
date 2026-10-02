@@ -181,12 +181,9 @@ The progress bar shows what you have noted about a clip:
   range to change it (`Shift` snaps), drag them together or `Alt`+click the band to make it a
   single moment again, and click a band to play just that stretch.
 - **Describe a marker with AI:** ✨ on a marker's row, or `Ctrl+F2` on the marker under the playhead,
-  sends the frames and subtitles around that moment to Claude. An unnamed marker gets a short name,
-  and the description goes into the marker's comment (shown under its name in the list; Premiere
-  Pro shows it as the marker's comment). A name you gave stays, and your comment keeps its text
-  with the description added below. One undo undoes it. Several markers can be described at once;
-  ⊗ (where ✨ was) stops one, and leaving the clip stops them all. It uses the key, model and
-  language of Describe with AI; a marker costs under a cent with Haiku, a few cents with Opus.
+  names an unnamed marker and adds what happens at that moment to its comment, shown under its
+  name. Your own name and comment stay. ⊗ stops it; it uses the Describe with AI settings and
+  costs under a cent per marker with Haiku, a few cents with Opus.
 - **Frames:** `Alt+←` / `Alt+→` (or the buttons next to play) step one frame back or forward and pause
   there; paused, the time shows milliseconds (`00:10.250`), and `F2` marks that exact frame.
   `F12` or 📷 saves the current frame as a JPEG next to the video

@@ -1143,8 +1143,9 @@ left to right, with the widths §13.9 folds by:
    City lights                                        ← name (body; "—" in text.secondary when empty)
    Lights come on along the river at dusk.            ← comment (secondary), when it has one
  ─────────────────────────────────────────────
- ● 0:09 ◌ Describing…                          ⊗ ✕    ← request on its way: spinner, stop
+ ● 0:09                                        ⊗ ✕    ← request on its way: ⊗ stops it
    —
+   ◌ Describing…                                      ← loader and caption, under the name
  ─────────────────────────────────────────────
  ● 0:14–0:18                                 ✓ ✨ ✕   ← open row: ✓ Done (Enter)
    [Africa stays dark_______________]                 ← name field (text field style)
@@ -1162,9 +1163,10 @@ left to right, with the widths §13.9 folds by:
   on the open row (§8.9 "hover tools").
 - Second line: the name, `body`, wrapping. Under it the marker's **comment**, when it has one
   (an AI description, or Premiere's comment), `secondary`, wrapping, read-only.
-- **Describing** (#174): while a marker's request is on its way, its first line shows, after the
-  time and whatever the pointer does, the turning `loader-circle` 12 and "Describing…" in
-  `caption` `text.secondary`; `sparkles` becomes `circle-x` "Stop describing". Several rows can
+- **Describing** (#174): while a marker's request is on its way, a line under its name and
+  comment shows, whatever the pointer does, the turning `loader-circle` 12 and "Describing…" in
+  `caption` `text.secondary` (on the first line it would run under the row's actions);
+  `sparkles` becomes `circle-x` "Stop describing". Several rows can
   be describing at once. The answer names an unnamed marker (a name the editor gave stays) and adds
   the description to the comment on a line of its own (an empty comment becomes it; a comment
   that already has it is left alone, compared as one line, since a comment line joins its
@@ -1175,16 +1177,26 @@ left to right, with the widths §13.9 folds by:
   30 min)", the AI's reason (key rejected, no credit left, network error, no answer in time…).
 - **No key:** when the settings already said no key is saved, ✨ / `Ctrl+F2` send nothing:
   notice "No Anthropic API key: set one in Settings" and Settings opens on Describe with AI. When
-  that was not known yet, the request finds it out, says so the same way once, and records it, so
-  later clicks and the other requests' answers stay quiet.
+  that was not known yet, the request finds it out and says so the same way, once even when
+  several requests find it out; the settings read the key again (they are its only reader) and
+  pass it on, so later clicks send nothing.
 - **Stopped:** ⊗ (or deleting the marker, leaving the clip, opening another folder) stops the
   request: the row is back to ✨ at once, and its answer, if it still comes, is dropped. ✨ again
   starts a new request; a late answer of the stopped one never passes for it.
 - **Already describing:** ✨ (it shows ⊗ instead) and `Ctrl+F2` on that marker do nothing, with no
   notice. `Ctrl+F2` opens the marker list (in fullscreen too) so its row shows the progress and ⊗.
-- **Batch job:** Run stops the open clip's marker requests and waits until the last one lets go
-  of the clip (it may be reading its frames): notice "Stopping the marker descriptions first…",
-  then the job starts by itself. No request starts while a job runs or waits.
+- **Batch job:** Run stops the open clip's marker requests and waits until the last one is back
+  (it may be reading the clip's frames; clipscribe does not say when reading ends, so the wait
+  lasts until its answer, usually seconds). Meanwhile the batch panel's button bar says
+  "Stopping the marker descriptions first…" with a secondary **Cancel** in place of Run; the job
+  then starts by itself. Cancel, leaving batch mode, another action, other checked files or
+  another folder give up on that run. No request starts while a job runs or waits.
+- **Leaving the clip:** its save (a rename, a write into the video) waits the same way until the
+  clip's last request is back, since that request may still hold the file; opening the clip again
+  meanwhile shows the edits, and they are saved when it is left again. Another folder, or closing
+  frename, saves at once.
+- **Answer while the row is open for renaming:** the typed name is committed first, as its own
+  undo step; then the answer's step (a name typed there stays, being the editor's).
 - **Comment in the list:** at most 3 lines, then "…"; all of it while the row is open.
 - **Open row** (renaming): the name becomes a multi-line text field (§8.6) with the placeholder
   "Name"; Enter or Esc closes it.

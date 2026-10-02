@@ -84,11 +84,12 @@ pub struct FolderWorkspace {
     /// A batch job waits for a playing video to unload, since it may write into and rename
     /// that very file.
     batch_waits_for_unload: bool,
-    /// Marker "Describe with AI" requests whose answer has not come back yet, stopped ones too:
-    /// one may still be reading the clip's frames.
-    marker_requests: usize,
-    /// A batch job waits for the stopped marker requests to let go of the clip.
-    batch_waits_for_markers: bool,
+    /// Marker "Describe with AI" requests whose answer has not come back yet, stopped ones too,
+    /// per clip: one may still be reading the clip's frames, which holds the file open.
+    marker_requests: HashMap<FileId, usize>,
+    /// Saves of clips that were left while a marker request still read them: a rename or a write
+    /// into the video would fail on the open file. Applied once their last request is back.
+    held_for_markers: Vec<(FileId, FileSnapshot)>,
     /// The file being renamed in place in the folder list, if any.
     inline_rename: Option<folder::InlineRename>,
     /// The file list's filter menu is open.
@@ -209,8 +210,8 @@ impl FolderWorkspace {
             closing: false,
             batch,
             batch_waits_for_unload: false,
-            marker_requests: 0,
-            batch_waits_for_markers: false,
+            marker_requests: HashMap::new(),
+            held_for_markers: Vec::new(),
             inline_rename: None,
             filter_menu_open: false,
             comment_load_generation: 0,
@@ -275,7 +276,7 @@ impl FolderWorkspace {
             } => self.folder_loaded(directory, target_file),
             Message::FolderLoadFailed => self.folder_load_failed(),
             Message::FileOpened(file) => self.apply_file_opened(file),
-            Message::FileUpdated { id, snapshot } => self.apply_file_updated(id, snapshot),
+            Message::FileUpdated { id, snapshot } => self.save_left_clip(id, snapshot),
             Message::Batch(msg) => self.handle_batch(msg),
             Message::PrepareBatch(operation) => {
                 let files = self.listed_ids();
@@ -290,6 +291,17 @@ impl FolderWorkspace {
             // The tick doubles as the pump for the start-up notes: it runs while a clip is open,
             // which is when they can be shown.
             Message::JournalTick => Task::batch([self.journal_tick(), self.show_startup_notes()]),
+            Message::ShowDescribing(name) => {
+                let guid = self
+                    .file_workspace
+                    .markers()
+                    .and_then(|markers| markers.iter().find(|m| m.name == name))
+                    .and_then(|m| m.guid.clone());
+                if let Some(guid) = guid {
+                    let _ = self.markers.start_describing(&guid);
+                }
+                Task::none()
+            }
             Message::MarkerDescribed {
                 file,
                 guid,
@@ -710,6 +722,11 @@ impl FolderWorkspace {
     }
 
     fn scan_folder(&mut self, pair: FolderAndFile) -> Task<Message> {
+        // Saves held for marker requests belong to this folder's files: now or never. File ids
+        // are renewed by the scan, so the requests' answers will not be matched to a file.
+        let held = self.apply_held_for_markers();
+        self.marker_requests.clear();
+        self.batch.set_waiting_for_markers(false);
         self.inline_rename = None;
         self.markers.reset();
         // File ids are renewed by the scan, so markers kept for them cannot be matched again.
@@ -730,7 +747,7 @@ impl FolderWorkspace {
         self.pending_file_updates.clear();
         self.navigation_targets.clear();
 
-        Task::future(async move {
+        let scan = Task::future(async move {
             match Directory::open(&folder, store).await {
                 Ok(dir) => Message::FolderLoaded {
                     directory: dir,
@@ -738,7 +755,8 @@ impl FolderWorkspace {
                 },
                 Err(_) => Message::FolderLoadFailed,
             }
-        })
+        });
+        Task::batch([held, scan])
     }
 
     fn folder_load_failed(&mut self) -> Task<Message> {
@@ -892,8 +910,9 @@ impl FolderWorkspace {
     fn with_pending_edits(&self, file: &frename_core::File) -> frename_core::File {
         let mut file = file.clone();
         if let Some((_, edited)) = self
-            .pending_file_updates
+            .held_for_markers
             .iter()
+            .chain(&self.pending_file_updates)
             .rev()
             .find(|(id, _)| *id == file.id())
         {
@@ -1077,6 +1096,23 @@ impl FolderWorkspace {
     }
 
     fn handle_batch(&mut self, msg: batch::Message) -> Task<Message> {
+        // Run waits for marker requests; leaving batch mode, Cancel, or another action or
+        // other files give up on that run.
+        if self.batch.is_waiting_for_markers()
+            && matches!(
+                msg,
+                batch::Message::SetActive(false)
+                    | batch::Message::SelectAction(_)
+                    | batch::Message::Prepare { .. }
+                    | batch::Message::Toggle(_)
+                    | batch::Message::CheckAll(_)
+                    | batch::Message::CheckNone
+                    | batch::Message::Invert(_)
+                    | batch::Message::Cancel
+            )
+        {
+            self.batch.set_waiting_for_markers(false);
+        }
         if let batch::Message::Run = msg {
             return self.start_batch();
         }
@@ -1221,9 +1257,11 @@ impl FolderWorkspace {
             .job_files(self.batch.action(), &checked);
         // The job closes the clip: its marker requests stop, and the job starts once the last
         // one has let go of the clip (it may be reading its frames).
+        self.batch.set_waiting_for_markers(false);
         if !files.is_empty() && !self.batch.is_running() && self.stop_marker_requests() {
-            self.batch_waits_for_markers = true;
-            return Self::notice(&fl!("markers-ai-stopping-for-batch"));
+            // The batch panel says so and offers Cancel.
+            self.batch.set_waiting_for_markers(true);
+            return Task::none();
         }
         if !self.batch.start(files) {
             return Task::none();
@@ -1331,7 +1369,7 @@ impl FolderWorkspace {
     fn apply_pending_file_updates(&mut self) -> Task<Message> {
         let tasks: Vec<Task<Message>> = std::mem::take(&mut self.pending_file_updates)
             .into_iter()
-            .map(|(id, snapshot)| self.apply_file_updated(id, snapshot))
+            .map(|(id, snapshot)| self.save_left_clip(id, snapshot))
             .collect();
         Task::batch(tasks)
     }
@@ -4445,9 +4483,19 @@ mod tests {
 
         send_marker(&mut workspace, M::Describe(guid.clone()), 0);
         let _ = workspace.update(answer(&workspace, &guid, MomentOutcome::NoKey));
-        assert!(workspace.batch.actions().ai_key_missing(), "now known");
+        assert!(
+            !workspace.batch.actions().ai_key_missing(),
+            "the settings read the key, not the request"
+        );
+        assert!(workspace.markers.no_key_said(), "said once");
         assert_eq!(marker_texts(&workspace), [(String::new(), String::new())]);
         assert_eq!(workspace.history.can_undo(), steps);
+        // The settings' answer to the read the request asked for.
+        let _ = workspace.update(Message::Batch(batch::Message::Action(
+            batch::ActionMessage::DescribeAi(batch::describe_ai::Message::KeyState(
+                frename_core::ai::key::KeyState::Missing,
+            )),
+        )));
         send_marker(&mut workspace, M::Describe(guid.clone()), 0);
         assert!(!workspace.markers().any_describing(), "nothing is sent");
     }
@@ -4496,6 +4544,69 @@ mod tests {
         let _ = workspace.update(late);
         assert!(marker_texts(&workspace).is_empty());
         assert!(!workspace.markers().any_describing());
+    }
+
+    /// Review round 2: a run that waited for marker requests and was then given up on (batch
+    /// mode left, Cancel, other files) does not start when the requests are back.
+    #[test]
+    fn a_run_given_up_while_waiting_for_marker_requests_does_not_start() {
+        use crate::features::markers::Message as M;
+        let give_ups = [
+            Message::Batch(batch::Message::SetActive(false)),
+            Message::Batch(batch::Message::Cancel),
+            Message::Batch(batch::Message::CheckNone),
+        ];
+        for give_up in give_ups {
+            let test_dir = TestDirectory::new(1);
+            let mut workspace = marker_workspace(&test_dir, 1);
+            send_marker(&mut workspace, M::Add, 1_000);
+            let guid = only_guid(&workspace);
+            let ids: Vec<FileId> = workspace
+                .directory()
+                .expect("dir")
+                .files_in_order()
+                .map(|f| f.id())
+                .collect();
+            let _ = workspace.update(Message::Batch(batch::Message::SetActive(true)));
+            let _ = workspace.update(Message::Batch(batch::Message::CheckAll(ids)));
+            send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+            let late = described(&workspace, &guid, "Lion", "A lion.");
+            let _ = workspace.update(Message::Batch(batch::Message::Run));
+            assert!(
+                workspace.batch.is_waiting_for_markers(),
+                "the panel says so"
+            );
+
+            let _ = workspace.update(give_up.clone());
+            assert!(!workspace.batch.is_waiting_for_markers(), "{give_up:?}");
+            let _ = workspace.update(late);
+            assert!(!workspace.is_batch_running(), "{give_up:?}: not started");
+        }
+    }
+
+    /// Review round 2: a clip left while a marker request may still read it is saved only once
+    /// the request is back, so the save's rename does not meet the request's open file.
+    #[test]
+    fn a_clip_left_during_a_marker_request_is_saved_once_it_is_back() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = marker_workspace(&test_dir, 2);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = only_guid(&workspace);
+        let left = workspace.file_workspace().file().expect("open").id();
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        let late = described(&workspace, &guid, "Lion", "A lion.");
+        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        // The switch saves through `FileUpdated`, as the runtime would deliver it.
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        let held = workspace.held_for_markers.iter().any(|(id, _)| *id == left);
+        assert!(held, "the save waits for the request");
+
+        let _ = workspace.update(late);
+        assert!(workspace.held_for_markers.is_empty(), "saved now");
+        assert!(workspace.marker_requests.is_empty());
     }
 
     #[test]

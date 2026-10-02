@@ -369,7 +369,7 @@ impl FolderWorkspace {
             }
             // Read-only: another tool wrote it without a GUID, so it could not be found again.
             Some(None) => Self::notice(&fl!("markers-read-only-notice")),
-            None => Self::notice("No marker here"),
+            None => Self::notice(&fl!("markers-no-marker-notice")),
         }
     }
 

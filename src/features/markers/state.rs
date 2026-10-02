@@ -73,6 +73,8 @@ pub struct MarkersState {
     /// The number the next request gets. Never reset, so the answer of a request stopped
     /// earlier never passes for a later one's.
     next_request: u64,
+    /// A request found no key and said so: the others that find it out too stay quiet.
+    no_key_said: bool,
 }
 
 impl MarkersState {
@@ -214,6 +216,7 @@ impl MarkersState {
             return None;
         }
         self.next_request += 1;
+        self.no_key_said = false;
         let request = (self.next_request, Arc::new(AtomicBool::new(false)));
         self.describing.insert(guid.to_string(), request.clone());
         Some(request)
@@ -233,6 +236,11 @@ impl MarkersState {
         } else {
             false
         }
+    }
+
+    /// A request found no key: whether that was said already (since the last request was sent).
+    pub fn no_key_said(&mut self) -> bool {
+        std::mem::replace(&mut self.no_key_said, true)
     }
 
     /// Stop the request for `guid`; its answer is not used.

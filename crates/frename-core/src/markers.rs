@@ -73,17 +73,17 @@ pub fn marker_text_with_moment(marker: &Marker, name: &str, description: &str) -
         marker.name.clone()
     };
     let comment = marker.comment.trim_end();
-    // Compared on one line: a comment kept as a marker line in a comment comes back so.
-    let described = one_line(comment).contains(&one_line(description));
+    // Already there as a line of its own, or as the whole comment once joined into one line (a
+    // marker line in a comment joins its lines); not merely inside a longer line of the editor.
+    let wanted = one_line(description);
+    let described =
+        comment.lines().any(|line| one_line(line) == wanted) || one_line(comment) == wanted;
     let new_comment = if description.is_empty() || described {
         marker.comment.clone()
     } else if comment.trim().is_empty() {
         description.to_string()
     } else {
-        format!(
-            "{comment}
-{description}"
-        )
+        format!("{comment}\n{description}")
     };
     (new_name, new_comment)
 }
@@ -681,15 +681,15 @@ fn join_text(marker: &mut Marker, line: &MarkerLine) {
     marker.comment = merge_text(&marker.comment, &line.comment);
 }
 
-/// Whether the marker already says what the line says. A line holds a comment on one line,
-/// its words separated by single spaces (see [`format_marker_line`]), so the marker's comment
-/// (which may break lines, or carry the `\r\n` of Premiere) is compared the same way.
 /// `text` on one line, its runs of whitespace (line breaks too) one space each: how a marker's
 /// text reads back from a comment line.
 fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// Whether the marker already says what the line says. A line holds a comment on one line,
+/// its words separated by single spaces (see [`format_marker_line`]), so the marker's comment
+/// (which may break lines, or carry the `\r\n` of Premiere) is compared the same way.
 fn has_text(marker: &Marker, line: &MarkerLine) -> bool {
     one_line(&marker.name) == one_line(&line.name)
         && one_line(&marker.comment) == one_line(&line.comment)
@@ -761,12 +761,7 @@ mod tests {
 
     #[test]
     fn a_moment_names_an_unnamed_marker_and_describes_it() {
-        let text = marker_text_with_moment(
-            &named("", ""),
-            " Lion
-at dusk ",
-            " A lion walks. ",
-        );
+        let text = marker_text_with_moment(&named("", ""), " Lion\nat dusk ", " A lion walks. ");
         assert_eq!(
             text,
             ("Lion at dusk".to_string(), "A lion walks.".to_string())
@@ -778,12 +773,7 @@ at dusk ",
         let text = marker_text_with_moment(&named("Mine", "My note"), "Lion", "A lion walks.");
         assert_eq!(
             text,
-            (
-                "Mine".to_string(),
-                "My note
-A lion walks."
-                    .to_string()
-            )
+            ("Mine".to_string(), "My note\nA lion walks.".to_string())
         );
         let blank = marker_text_with_moment(&named("  ", "  "), "Lion", "A lion walks.");
         assert_eq!(blank, ("Lion".to_string(), "A lion walks.".to_string()));
@@ -791,22 +781,17 @@ A lion walks."
 
     #[test]
     fn asking_again_adds_the_same_description_once() {
-        let once = named(
-            "Lion",
-            "My note
-A lion walks.",
-        );
+        let once = named("Lion", "My note\nA lion walks.");
         let again = marker_text_with_moment(&once, "Lion", "A lion walks.");
         assert_eq!(again, (once.name.clone(), once.comment.clone()));
         // A comment line joins the description's lines: still the same description.
         let joined = named("Lion", "A lion walks. It stops.");
-        let again = marker_text_with_moment(
-            &joined,
-            "Lion",
-            "A lion walks.
-It stops.",
-        );
+        let again = marker_text_with_moment(&joined, "Lion", "A lion walks.\nIt stops.");
         assert_eq!(again, (joined.name.clone(), joined.comment.clone()));
+        // Inside a longer line of the editor's: not the description, so it is added.
+        let inside = named("Lion", "Note: A lion walks. Keep it.");
+        let added = marker_text_with_moment(&inside, "Lion", "A lion walks.");
+        assert_eq!(added.1, "Note: A lion walks. Keep it.\nA lion walks.");
         let empty = marker_text_with_moment(&named("", "note"), "", "  ");
         assert_eq!(empty, (String::new(), "note".to_string()));
     }

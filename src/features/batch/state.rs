@@ -217,6 +217,9 @@ pub struct BatchState {
     actions: Actions,
     checked: HashSet<FileId>,
     job: Option<Job>,
+    /// Run was pressed while the open clip's marker requests still hold it: the job starts once
+    /// they let go (the workspace knows), unless it is cancelled first.
+    waiting_for_markers: bool,
 }
 
 impl Default for BatchState {
@@ -227,6 +230,7 @@ impl Default for BatchState {
             actions: Actions::default(),
             checked: HashSet::new(),
             job: None,
+            waiting_for_markers: false,
         }
     }
 }
@@ -505,6 +509,15 @@ impl BatchState {
         }
         let options = self.actions.describe_ai_mut();
         (options.missing_probes(checked), options.request_key_state())
+    }
+
+    /// Whether Run waits for the open clip's marker requests to let go of it.
+    pub fn is_waiting_for_markers(&self) -> bool {
+        self.waiting_for_markers
+    }
+
+    pub fn set_waiting_for_markers(&mut self, waiting: bool) {
+        self.waiting_for_markers = waiting;
     }
 
     /// Whether the right half shows the batch panel instead of the open file.

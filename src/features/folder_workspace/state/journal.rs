@@ -43,10 +43,12 @@ impl FolderWorkspace {
     pub(super) fn journal_reset_baseline(&mut self) {
         self.journal_baseline = self.journal_entry();
         self.journal_written = None;
-        self.journal_force = self
-            .journal_baseline
-            .as_ref()
-            .is_some_and(|(id, _)| self.pending_file_updates.iter().any(|(p, _)| p == id));
+        self.journal_force = self.journal_baseline.as_ref().is_some_and(|(id, _)| {
+            self.pending_file_updates
+                .iter()
+                .chain(&self.held_for_markers)
+                .any(|(p, _)| p == id)
+        });
     }
 
     /// Once a second: write the open clip's edits into the journal when they changed, and take

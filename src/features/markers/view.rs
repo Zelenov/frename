@@ -67,20 +67,14 @@ fn clamped_comment(comment: &str) -> Cow<'_, str> {
         if lines > left {
             let cut: String = line.chars().take(left * per_line - 1).collect();
             kept.push(format!("{}…", cut.trim_end()));
-            return Cow::Owned(kept.join(
-                "
-",
-            ));
+            return Cow::Owned(kept.join("\n"));
         }
         kept.push(line.to_string());
         left -= lines;
         if left == 0 && kept.len() < all {
             let last = kept.pop().unwrap_or_default();
             kept.push(format!("{}…", last.trim_end()));
-            return Cow::Owned(kept.join(
-                "
-",
-            ));
+            return Cow::Owned(kept.join("\n"));
         }
     }
     Cow::Borrowed(comment)
@@ -448,15 +442,6 @@ fn marker_row<'a>(
                 .push(ai)
                 .push(delete)
                 .align_y(Alignment::Center);
-            // Shown whether or not the actions are: the request goes on in the background.
-            let working = describing.then(|| {
-                row![
-                    spinner(spinner_frame, ICON_S, TEXT_SECONDARY),
-                    text::caption(fl!("markers-ai-describing")),
-                ]
-                .spacing(SPACE_XS)
-                .align_y(Alignment::Center)
-            });
             let line = row![
                 dot(
                     marker.color,
@@ -465,7 +450,6 @@ fn marker_row<'a>(
                 ),
                 time,
             ]
-            .push(working)
             .spacing(SPACE_S)
             .align_y(Alignment::Center)
             .height(ICON_BUTTON_SMALL);
@@ -520,8 +504,23 @@ fn marker_row<'a>(
             text::secondary(clamped_comment(comment).into_owned())
         }
     });
+    // A request on its way, under the name and its comment: shown whether or not the actions
+    // are (it goes on in the background), and clear of them.
+    let working = marker
+        .guid
+        .as_deref()
+        .is_some_and(|guid| state.is_describing(guid))
+        .then(|| {
+            row![
+                spinner(spinner_frame, ICON_S, TEXT_SECONDARY),
+                text::caption(fl!("markers-ai-describing")),
+            ]
+            .spacing(SPACE_XS)
+            .align_y(Alignment::Center)
+        });
     let body = column![first_line, name]
         .push(comment)
+        .push(working)
         .spacing(SPACE_XXS)
         .padding(ROW_INSET);
     // The row is as tall as its content, not as the estimate of [`row_height`]: a name that wraps
@@ -632,16 +631,8 @@ mod tests {
         let cut = clamped_comment(&long);
         assert!(cut.ends_with('…'), "{cut}");
         assert_eq!(wrapped_lines(&cut), COMMENT_LINES);
-        let many = "one
-two
-three
-four";
-        assert_eq!(
-            clamped_comment(many),
-            "one
-two
-three…"
-        );
+        let many = "one\ntwo\nthree\nfour";
+        assert_eq!(clamped_comment(many), "one\ntwo\nthree…");
         let mut marker = Marker::new(0);
         marker.comment = long;
         assert_eq!(

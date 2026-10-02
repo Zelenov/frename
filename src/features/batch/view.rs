@@ -270,6 +270,18 @@ fn action_page<'a>(
             .on_press(Message::CheckAll(listed))
             .into()
     });
+    // Run was pressed while the open clip's marker descriptions still hold it: the job starts
+    // once they let go, or Cancel gives up on it.
+    if state.is_waiting_for_markers() {
+        let cancel = button::secondary(fl!("batch-cancel"))
+            .on_press(Message::Cancel)
+            .into();
+        return with_button_bar(
+            page_body(panel.page.map(Message::Action)),
+            fl!("markers-ai-stopping-for-batch"),
+            [cancel],
+        );
+    }
     let run = button::primary(panel.run)
         .on_press_maybe(can_run.then_some(Message::Run))
         .into();

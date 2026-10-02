@@ -1249,12 +1249,7 @@ mod tests {
         marker.comment = "mine".to_string();
         let guid = marker.guid.clone().unwrap();
         tag_list.add_marker(marker);
-        let new = (
-            "Lion".to_string(),
-            "mine
-A lion walks past."
-                .to_string(),
-        );
+        let new = ("Lion".to_string(), "mine\nA lion walks past.".to_string());
         tag_list.update_marker(&guid, |m| (m.name, m.comment) = new.clone());
         let mut history = History::new(50);
         history.push(Box::new(SetMarkerTextCommand {

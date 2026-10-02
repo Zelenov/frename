@@ -68,7 +68,10 @@ pub fn describe_moment(
             MomentOutcome::Cancelled
         }
         Err(e) => {
-            log::warn!("ai: describing the moment at {at_s:.2}s failed: {e:?}");
+            // `failure_reason` logs an unreadable clip itself.
+            if !matches!(e, describe::Error::Unreadable(_)) {
+                log::warn!("ai: describing the moment at {at_s:.2}s failed: {e:?}");
+            }
             MomentOutcome::Failed(describe_ai::failure_reason(&e, path))
         }
     }
