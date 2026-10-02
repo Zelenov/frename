@@ -8,6 +8,10 @@
 ## Fixed
 - The ✕ on the IN and OUT timecodes and the lock on a file closed by a batch action now have tooltips.
 
+# 0.103
+## Removed
+- The spending tracker: Settings no longer shows what frename spent or the top-up form, and the batch page no longer shows the estimated credit left. The cost estimate before a run, the cost in the report, and **Add credit** when a service runs out stay.
+
 # 0.102
 ## Fixed
 - The Subtitles / Markers switch above the side list no longer shifts its icons, words and counts when you change the selection.
