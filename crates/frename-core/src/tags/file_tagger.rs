@@ -101,9 +101,16 @@ impl FileTagger {
 
     /// "Comment → markers": turn the lines of the file's comment that start with a time
     /// (`03:24 — shaky`) into clip markers and take them out of the comment (see
-    /// [`crate::comment_to_markers`]). The comment changes only after the markers were written,
-    /// so a failed write leaves the file as it was. Lines past the end of the clip stay.
+    /// [`crate::comment_to_markers`]): a line for a moment that has a marker renames it in
+    /// place, and markers the clip already has on one moment are merged. The comment changes
+    /// only after the markers were written, so a failed write leaves the comment as it was (the
+    /// markers may already be merged). Lines past the end of the clip stay.
     pub fn comment_to_markers(path: &Path) -> Result<MoveOutcome, MarkersError> {
+        Self::comment_to_markers_reporting(path).map(|(outcome, _)| outcome)
+    }
+
+    /// [`Self::comment_to_markers`], and how many duplicate markers it merged away.
+    pub fn comment_to_markers_reporting(path: &Path) -> Result<(MoveOutcome, usize), MarkersError> {
         let mut snapshot = Self::parse(path, &FolderInfo::default());
         let markers =
             Self::load_markers(path).ok_or_else(|| crate::metadata::cannot_hold_markers(path))?;
@@ -115,38 +122,69 @@ impl FileTagger {
                 result.past_end
             );
         }
-        if result.lines_moved == 0 && result.added.is_empty() {
-            return Ok(MoveOutcome::NothingToMove);
+        // Markers a line renamed or recolored keep their place and GUID.
+        let renamed: Vec<Marker> = markers
+            .iter()
+            .map(|m| {
+                result
+                    .updated
+                    .iter()
+                    .find(|u| u.guid.is_some() && u.guid == m.guid)
+                    .unwrap_or(m)
+                    .clone()
+            })
+            .chain(result.added.iter().cloned())
+            .collect();
+        // Markers on one moment are one marker (see [`crate::merge_duplicate_markers`]).
+        let (all, merged_away) = crate::merge_duplicate_markers(&renamed);
+        let markers_changed =
+            !result.added.is_empty() || !result.updated.is_empty() || merged_away > 0;
+        if result.lines_moved == 0 && !markers_changed {
+            return Ok((MoveOutcome::NothingToMove, 0));
         }
-        if !result.added.is_empty() {
-            let all: Vec<Marker> = markers.into_iter().chain(result.added).collect();
-            Self::save_markers(path, &all, &HashSet::new())?;
+        if markers_changed {
+            Self::save_markers(path, &all, &known_guids(&markers))?;
         }
         if result.lines_moved == 0 {
             // Only AI segments became markers: the comment keeps its block as it is.
-            return Ok(MoveOutcome::Moved(path.to_path_buf()));
+            return Ok((MoveOutcome::Moved(path.to_path_buf()), merged_away));
         }
         let was_commented = !snapshot.comment().trim().is_empty();
         snapshot.set_comment(result.comment);
         Self::follow_commented_tag(&mut snapshot, was_commented);
-        Ok(MoveOutcome::Moved(Self::save(&snapshot, path)))
+        Ok((MoveOutcome::Moved(Self::save(&snapshot, path)), merged_away))
     }
 
     /// "Markers → comment": append a line per clip marker to the file's comment, leaving out
-    /// lines it already has (see [`crate::markers_to_comment`]). The markers stay in the file.
+    /// lines it already has (see [`crate::markers_to_comment`]). Markers the clip has twice on
+    /// one moment are merged first, in the video as well. The markers stay in the file.
     pub fn markers_to_comment(path: &Path) -> Result<MoveOutcome, MarkersError> {
+        Self::markers_to_comment_reporting(path).map(|(outcome, _)| outcome)
+    }
+
+    /// [`Self::markers_to_comment`], and how many duplicate markers it merged away.
+    pub fn markers_to_comment_reporting(path: &Path) -> Result<(MoveOutcome, usize), MarkersError> {
         let mut snapshot = Self::parse(path, &FolderInfo::default());
-        let Some(markers) = Self::load_markers(path) else {
-            return Ok(MoveOutcome::NothingToMove);
+        let Some(loaded) = Self::load_markers(path) else {
+            return Ok((MoveOutcome::NothingToMove, 0));
         };
+        let (markers, merged_away) = crate::merge_duplicate_markers(&loaded);
+        if merged_away > 0 {
+            Self::save_markers(path, &markers, &known_guids(&loaded))?;
+        }
         let (comment, added) = crate::markers::markers_to_comment(snapshot.comment(), &markers);
         if added == 0 {
-            return Ok(MoveOutcome::NothingToMove);
+            let outcome = if merged_away > 0 {
+                MoveOutcome::Moved(path.to_path_buf())
+            } else {
+                MoveOutcome::NothingToMove
+            };
+            return Ok((outcome, merged_away));
         }
         let was_commented = !snapshot.comment().trim().is_empty();
         snapshot.set_comment(comment);
         Self::follow_commented_tag(&mut snapshot, was_commented);
-        Ok(MoveOutcome::Moved(Self::save(&snapshot, path)))
+        Ok((MoveOutcome::Moved(Self::save(&snapshot, path)), merged_away))
     }
 
     /// The commented tag follows a comment that appeared or went, as it does when the comment
@@ -323,6 +361,12 @@ impl SaveAndReparse for FileSnapshot {
         let snapshot = FileTagger::parse(&new_path, &folder_info);
         (new_path, snapshot)
     }
+}
+
+/// The GUIDs of `markers`, which a save may replace or drop: a marker left out of the list
+/// leaves the file only when its GUID is among them.
+fn known_guids(markers: &[Marker]) -> HashSet<String> {
+    markers.iter().filter_map(|m| m.guid.clone()).collect()
 }
 
 #[cfg(test)]
@@ -591,5 +635,42 @@ AI: A walk.
             ),
             "removing the editor's text with the block kept removes the tag"
         );
+    }
+
+    fn clip_with_markers(name: &str, markers: &[Marker]) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("frename-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let file = dir.join("clip.mov");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
+        std::fs::copy(fixture, &file).expect("copy fixture");
+        FileTagger::save_markers(&file, markers, &HashSet::new()).expect("markers");
+        file
+    }
+
+    fn named(start_ms: u64, name: &str) -> Marker {
+        let mut m = Marker::new(start_ms);
+        m.name = name.to_string();
+        m
+    }
+
+    /// Issue #145: the owner's two lines on one frame become one marker in either direction, and
+    /// no number of rounds adds another.
+    #[test]
+    fn two_markers_on_one_frame_are_merged_by_both_move_actions() {
+        let both = [
+            named(63_558, "Субтитр: нет субтитра «Цельное дерево»"),
+            named(63_558, "нет субтитра «Цельное дерево»"),
+        ];
+        let file = clip_with_markers("dup-to-comment", &both);
+        FileTagger::markers_to_comment(&file).expect("move");
+        let markers = FileTagger::load_markers(&file).expect("markers");
+        assert_eq!(markers.len(), 1);
+        assert_eq!(markers[0].name, "Субтитр: нет субтитра «Цельное дерево»");
+        let _ = std::fs::remove_dir_all(file.parent().unwrap());
+
+        let file = clip_with_markers("dup-from-comment", &both);
+        FileTagger::comment_to_markers(&file).expect("move");
+        assert_eq!(FileTagger::load_markers(&file).expect("markers").len(), 1);
+        let _ = std::fs::remove_dir_all(file.parent().unwrap());
     }
 }

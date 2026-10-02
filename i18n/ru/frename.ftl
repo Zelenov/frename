@@ -281,6 +281,13 @@ batch-close = Закрыть
 batch-failed-subtitles = Без субтитров:
 batch-written-subtitles = Записанные файлы:
 batch-table-written = Записано
+batch-merged-markers = Объединённые дубли маркеров:
+batch-table-merged = Объединено
+batch-markers-merged = { $count ->
+    [one] объединён { $count } дубль маркера
+    [few] объединено { $count } дубля маркера
+   *[many] объединено { $count } дублей маркера
+}
 batch-add-credit = Пополнить счёт
 batch-open-log = Открыть журнал
 
