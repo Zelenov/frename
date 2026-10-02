@@ -35,6 +35,10 @@ pub struct DemoScenario {
     /// Open the marker list over the picture (the ◆ button).
     #[serde(default)]
     pub marker_list: bool,
+    /// Open **More** (the `⋯` button of the video controls), to show what a narrow pane folds
+    /// into it.
+    #[serde(default)]
+    pub more: bool,
     /// Turn the open clip by this many quarter turns clockwise (negative: counter-clockwise),
     /// as `Ctrl+Alt+→` / `←` do, after the seek. The shot is then taken while the note is still
     /// shown over the picture.
@@ -268,8 +272,16 @@ name = "pick.a.mp4"
     fn a_minimal_scenario_gets_defaults() {
         let scenario = DemoScenario::parse(MINIMAL).unwrap();
         assert_eq!(scenario.seek, 0.0);
+        assert!(!scenario.more);
         assert_eq!(scenario.files[0].comment, None);
         assert!(scenario.files[0].markers.is_empty());
+    }
+
+    #[test]
+    fn a_scenario_can_open_more() {
+        let text = MINIMAL.replace("[[files]]", "more = true
+[[files]]");
+        assert!(DemoScenario::parse(&text).unwrap().more);
     }
 
     #[test]
