@@ -283,9 +283,7 @@ fn main_window_event(
             ..
         }) if modifiers.is_empty() => Some(Message::FolderWorkspace(
             if matches!(status, event::Status::Ignored) {
-                folder_workspace::Message::MediaViewer(media_viewer::Message::Video(
-                    media_viewer_video::Message::GoToStart,
-                ))
+                folder_workspace::Message::GoToStart
             } else {
                 folder_workspace::Message::GoToStartWhileTyping
             },
@@ -1228,9 +1226,7 @@ mod tests {
         let none = keyboard::Modifiers::empty();
         assert!(matches!(
             arrow(Named::Home, none, event::Status::Ignored),
-            Some(W::MediaViewer(media_viewer::Message::Video(
-                media_viewer_video::Message::GoToStart
-            )))
+            Some(W::GoToStart)
         ));
         assert!(matches!(
             arrow(Named::Home, none, event::Status::Captured),

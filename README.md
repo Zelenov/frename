@@ -117,7 +117,8 @@ it has one).
 | `Escape` | Close Settings (while you remove or replace a key, Esc cancels that first) |
 
 While a text box (tag search, file search, comment) has the cursor, it takes the keys it needs:
-arrows, `Delete`, `Space`, `Enter`, `Ctrl+C`, and in the comment box also `PageUp` / `PageDown`.
+arrows, `Delete`, `Space`, `Home` (except in a search field while the "Resumed at" note shows),
+`Enter`, `Ctrl+C`, and in the comment box also `PageUp` / `PageDown`.
 Press `Esc` first to give the keys back to the app. `[` and `]` set in and out points, except while
 you type in a marker's name. The F-keys always work, and so do `Ctrl+Alt+←` / `→` except in the
 comment box and a marker's name.

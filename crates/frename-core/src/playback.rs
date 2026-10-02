@@ -7,7 +7,7 @@
 //! is followed the next time the folder is opened ([`tidy`]), the same way the folder's last
 //! viewed file is found again.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use crate::FileSnapshot;
@@ -79,42 +79,48 @@ pub enum Tidy {
 /// For positions remembered under `remembered` file names of a folder that now `listed` these
 /// files: the ones that must follow a rename or be dropped. A name still listed (exactly, case
 /// included) keeps its position. A gone name follows a rename done outside frename that only
-/// changed the tags ([`FileSnapshot::same_clip_without_tags`]), but only when that is certain:
-/// exactly one listed file is that clip, it has no position of its own, and no other gone name
-/// points at it. Otherwise the position is dropped: a rename keeps the file's time, so a file
-/// that sat beside the gone one all along cannot be told from a renamed one.
-pub fn tidy(remembered: &[String], listed: &[String]) -> Vec<(String, Tidy)> {
+/// changed the tags ([`FileSnapshot::untagged_key`]; with `ignore_case`, as on Windows, also one
+/// that changed only letter case), but only when that is certain: exactly one listed file is
+/// that clip, it has no position of its own, and no other gone name points at it. Otherwise the
+/// position is dropped: a rename keeps the file's time, so a file that sat beside the gone one
+/// all along cannot be told from a renamed one.
+pub fn tidy(remembered: &[String], listed: &[String], ignore_case: bool) -> Vec<(String, Tidy)> {
     let listed_names: HashSet<&str> = listed.iter().map(String::as_str).collect();
     let has_position: HashSet<&str> = remembered
         .iter()
         .map(String::as_str)
         .filter(|name| listed_names.contains(name))
         .collect();
+    // Each listed file parsed once: the clips by their key without tags.
+    let mut clips: HashMap<(String, String), Vec<&String>> = HashMap::new();
+    for name in listed {
+        clips
+            .entry(FileSnapshot::parse(name).untagged_key(ignore_case))
+            .or_default()
+            .push(name);
+    }
     let gone: Vec<(&String, Option<&String>)> = remembered
         .iter()
         .filter(|name| !listed_names.contains(name.as_str()))
         .map(|name| {
-            let clip = FileSnapshot::parse(name);
-            let mut same = listed
-                .iter()
-                .filter(|candidate| FileSnapshot::parse(candidate).same_clip_without_tags(&clip));
-            let renamed = match (same.next(), same.next()) {
-                (Some(only), None) if !has_position.contains(only.as_str()) => Some(only),
+            let key = FileSnapshot::parse(name).untagged_key(ignore_case);
+            let renamed = match clips.get(&key).map(Vec::as_slice) {
+                Some([only]) if !has_position.contains(only.as_str()) => Some(*only),
                 _ => None,
             };
             (name, renamed)
         })
         .collect();
+    let mut claims: HashMap<&String, usize> = HashMap::new();
+    for renamed in gone.iter().filter_map(|(_, renamed)| *renamed) {
+        *claims.entry(renamed).or_default() += 1;
+    }
     gone.iter()
         .map(|(name, renamed)| {
-            let shared = |renamed: &&String| {
-                gone.iter()
-                    .filter(|(_, other)| other.is_some_and(|other| other == *renamed))
-                    .count()
-                    > 1
-            };
             let change = match renamed {
-                Some(renamed) if !shared(renamed) => Tidy::Follow((*renamed).clone()),
+                Some(renamed) if claims.get(renamed) == Some(&1) => {
+                    Tidy::Follow((*renamed).clone())
+                }
                 _ => Tidy::Forget,
             };
             ((*name).clone(), change)
@@ -132,6 +138,28 @@ mod tests {
 
     fn names(list: &[&str]) -> Vec<String> {
         list.iter().map(|name| name.to_string()).collect()
+    }
+
+    /// [`tidy`] where letter case matters.
+    fn tidy_exact(remembered: &[String], listed: &[String]) -> Vec<(String, Tidy)> {
+        tidy(remembered, listed, false)
+    }
+
+    #[test]
+    fn a_rename_that_changed_only_letter_case_is_followed_where_case_does_not_matter() {
+        let remembered = names(&["pick.MVI_0410.mp4"]);
+        let listed = names(&["pick.mvi_0410.MP4"]);
+        assert_eq!(
+            tidy(&remembered, &listed, true),
+            vec![(
+                "pick.MVI_0410.mp4".to_string(),
+                Tidy::Follow("pick.mvi_0410.MP4".to_string())
+            )]
+        );
+        assert_eq!(
+            tidy(&remembered, &listed, false),
+            vec![("pick.MVI_0410.mp4".to_string(), Tidy::Forget)]
+        );
     }
 
     #[test]
@@ -199,7 +227,7 @@ mod tests {
     #[test]
     fn listed_names_keep_their_positions() {
         assert_eq!(
-            tidy(
+            tidy_exact(
                 &names(&["a.mp4", "b.mp4"]),
                 &names(&["a.mp4", "b.mp4", "c.mp4"])
             ),
@@ -210,7 +238,7 @@ mod tests {
     #[test]
     fn a_gone_file_is_forgotten() {
         assert_eq!(
-            tidy(&names(&["gone.mp4"]), &names(&["a.mp4"])),
+            tidy_exact(&names(&["gone.mp4"]), &names(&["a.mp4"])),
             vec![("gone.mp4".to_string(), Tidy::Forget)]
         );
     }
@@ -218,7 +246,7 @@ mod tests {
     #[test]
     fn a_file_whose_tags_changed_outside_frename_takes_its_position_along() {
         assert_eq!(
-            tidy(
+            tidy_exact(
                 &names(&["pick.MVI_0410.mp4"]),
                 &names(&["skip.night.MVI_0410.MP4"])
             ),
@@ -232,11 +260,11 @@ mod tests {
     #[test]
     fn a_rename_is_not_followed_across_extensions_or_onto_a_file_with_its_own_position() {
         assert_eq!(
-            tidy(&names(&["pick.clip.mkv"]), &names(&["review.clip.mp4"])),
+            tidy_exact(&names(&["pick.clip.mkv"]), &names(&["review.clip.mp4"])),
             vec![("pick.clip.mkv".to_string(), Tidy::Forget)]
         );
         assert_eq!(
-            tidy(
+            tidy_exact(
                 &names(&["pick.clip.mp4", "review.clip.mp4"]),
                 &names(&["review.clip.mp4"])
             ),
@@ -244,7 +272,7 @@ mod tests {
         );
         // Two gone names for one listed file: which one it was is not known.
         assert_eq!(
-            tidy(
+            tidy_exact(
                 &names(&["a.clip.mp4", "b.clip.mp4"]),
                 &names(&["c.clip.mp4"])
             ),
@@ -255,7 +283,7 @@ mod tests {
         );
         // Two listed files that could be it: neither.
         assert_eq!(
-            tidy(
+            tidy_exact(
                 &names(&["a.clip.mp4"]),
                 &names(&["b.clip.mp4", "c.clip.MP4"])
             ),

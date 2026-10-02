@@ -119,6 +119,8 @@ pub enum Message {
     /// `Alt+←/→` while a text field had the keys: [`Message::StepFrame`], unless the field is
     /// the comment box.
     StepFrameWhileTyping(video_controls::FrameStep),
+    /// `Home`: to the start of the open video, when a video is shown (#161).
+    GoToStart,
     /// `Home` while a text field had the keys: to the start of the clip while the note that it
     /// continued is shown (it says Home starts it over), unless the field is the comment box or
     /// a name being edited; otherwise the field keeps the key (#161).

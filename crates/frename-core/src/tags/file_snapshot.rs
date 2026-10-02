@@ -114,8 +114,19 @@ impl FileSnapshot {
     /// its tags is found again this way; two files that merely share a name, such as
     /// `pick.clip.mkv` and `review.clip.mp4`, are not.
     pub fn same_clip_without_tags(&self, other: &FileSnapshot) -> bool {
-        self.name_without_extension() == other.name_without_extension()
-            && self.extension().eq_ignore_ascii_case(other.extension())
+        self.untagged_key(false) == other.untagged_key(false)
+    }
+
+    /// The clip without its tags as a key that is equal for [`Self::same_clip_without_tags`]:
+    /// the name, and the extension in lower case. With `ignore_case`, the name is in lower case
+    /// too, for file systems that ignore it (Windows).
+    pub fn untagged_key(&self, ignore_case: bool) -> (String, String) {
+        let name = if ignore_case {
+            self.name_without_extension().to_lowercase()
+        } else {
+            self.name_without_extension().to_string()
+        };
+        (name, self.extension().to_lowercase())
     }
     pub fn name_without_extension(&self) -> &str {
         &self.name_without_extension

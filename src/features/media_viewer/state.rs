@@ -43,11 +43,15 @@ impl MediaViewerState {
                     .load_video(
                         frename_core::FileTagger::disk_path(file.file_path()),
                         file.file_path().to_path_buf(),
+                        file.id(),
                         in_point,
                     )
                     .map(Message::Video)
             }
             FileKind::Other => {
+                // The clip shown until now keeps where it was, and is let go: nothing done while
+                // this file shows may move it (#161).
+                self.video.close_clip();
                 self.active = ActiveMedia::Unsupported;
                 Task::none()
             }
@@ -80,6 +84,12 @@ impl MediaViewerState {
     #[cfg(test)]
     pub fn pretend_video_shown_at(&mut self, position: Duration) {
         self.video.pretend_shown_at(position);
+    }
+
+    /// For tests: see [`VideoPlayerState::reopens_at`].
+    #[cfg(test)]
+    pub fn video_reopens_at(&self) -> Option<Duration> {
+        self.video.reopens_at()
     }
 
     /// For tests: see [`VideoPlayerState::pretend_resume_note`].

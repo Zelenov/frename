@@ -108,7 +108,7 @@ fn tidy_positions(
         .prepare("SELECT file_name FROM playback_position WHERE folder = ?1")?
         .query_map([folder], |row| row.get(0))?
         .collect::<Result<_, _>>()?;
-    for (name, change) in crate::playback::tidy(&remembered, names) {
+    for (name, change) in crate::playback::tidy(&remembered, names, cfg!(windows)) {
         match change {
             crate::playback::Tidy::Follow(renamed) => move_position(
                 conn,

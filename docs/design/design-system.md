@@ -1114,7 +1114,8 @@ left to right, with the widths §13.9 folds by:
   notices outlive that, #84). A newer notice within the 6 s replaces it like any other, and the
   pill no longer starts anything; `Home` still goes to the start. While the note shows, `Home`
   works from the tag and file searches too (the editor has usually just typed a tag), but not in
-  the comment box or a name being typed.
+  the comment box or a name being typed. `Home` does nothing while no video is shown, and a
+  file that is not a video opening lets the clip go after keeping where it was.
 - **Narrow pane:** what gives way and when is in §13.9. The **More** button (`ellipsis`) sits just
   before fullscreen; its menu opens upward, lists each moved control with its icon, name and key,
   and marks a latched one with a `check`.
