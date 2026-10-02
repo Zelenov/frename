@@ -13,11 +13,12 @@ use crate::ui::tokens::*;
 use super::chips_panel;
 use super::file_name_line;
 use super::trash_zone;
-use super::{FileNamePanelState, Message};
+use super::{suggested_in_out, FileNamePanelState, Message};
 
 /// Renders the file name card (design system §13.5.6):
 /// - first line: the checked tags as chips in the file's order | the trash
-/// - second line: the IN and OUT timecodes (when set) | the name without the tags
+/// - second line: the IN and OUT timecodes (when set), the In/Out the AI suggests (while it
+///   differs from them) | the name without the tags
 pub fn view<'a, S>(
     state: &'a FileNamePanelState,
     tag_list: &'a TagList<S>,
@@ -54,6 +55,24 @@ where
             "OUT",
             file_name_line::fmt_timecode(e),
             Some((Message::ClearSegmentEnd, fl!("file-name-panel-clear-out"))),
+        ));
+    }
+    if let Some(suggested) = suggested_in_out(tag_list) {
+        bottom_items.push(badge::suggested_timecode(
+            fl!("file-name-panel-suggested-in-out"),
+            format!(
+                "{} – {}",
+                suggested
+                    .start
+                    .map(file_name_line::fmt_timecode)
+                    .unwrap_or_default(),
+                suggested
+                    .end
+                    .map(file_name_line::fmt_timecode)
+                    .unwrap_or_default(),
+            ),
+            Message::ApplySuggestedInOut,
+            fl!("file-name-panel-apply-suggested-in-out"),
         ));
     }
     bottom_items.push(file_name_line::view(name_ext));

@@ -293,6 +293,11 @@ summary. A new run replaces the AI markers and leaves the others alone, so give 
 keep it. With markers kept in the comment, or a format that cannot hold markers, the segments
 are lines of the description.
 
+When a clip has a lead-in or lead-out around the part worth keeping, the description ends with
+the In and Out the AI suggests (`Suggested In/Out: 00:00:03.200 – 00:00:11.800`). With the clip
+open, it shows as an **AI** pill next to the IN and OUT points; click it to set In and Out to it
+(one undo step). frename never sets them by itself.
+
 ### Generate subtitles
 
 **Generate subtitles** sends the audio of each checked video to [Soniox](https://soniox.com), a

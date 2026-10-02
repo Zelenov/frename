@@ -1,3 +1,7 @@
+# 0.106
+## Added
+- Describe with AI suggests an In and Out for clips with a lead-in or lead-out around the part worth keeping. With the clip open, the suggestion shows as an **AI** pill next to the IN and OUT points; click it to use it. frename never sets them by itself.
+
 # 0.105
 ## Added
 - Step through a clip frame by frame: `Alt+←` / `Alt+→`, or the new buttons next to play, show the previous or next frame and pause there. Hold the key to keep stepping. While paused, the time next to the timeline shows milliseconds (`00:10.250`). It goes by the real frames, so phone clips with a variable frame rate step correctly too.
