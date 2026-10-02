@@ -1,0 +1,10 @@
+# Settings from the keyboard (#167): one clip, for `--settings <page> --keys tab,tab,space`
+# shots of the focus ring (`frename --demo`). Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.MVI_1601.mp4"
+window = [1100, 680]
+panels = [420, 260]
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_1601.mp4"

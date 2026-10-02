@@ -3,12 +3,14 @@
 use std::path::PathBuf;
 
 use frename_core::ai::key::{ApiKey, KeyState};
-use frename_core::{old_settings, AppDatabase, AppSettings, AppStateStore};
+use frename_core::{old_settings, AppDatabase, AppSettings, AppStateStore, MarkerStorage};
 use iced::Task;
 
+use super::focus::{self, Control, KeyControl, KeyRow, Press};
 use super::{KeyMessage, Message, Page, SETTINGS_SCROLLABLE_ID};
-use crate::features::batch::Operation;
+use crate::features::batch::{MarkersDirection, Operation};
 use crate::features::updates;
+use crate::widgets::focus_ring;
 
 /// Where the import of an old frename's settings stands.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,6 +42,8 @@ pub struct SettingsState {
     keys: Keys,
     /// The languages Soniox offers as hints; asked for each time the window opens with a key.
     subtitle_languages: LanguageList,
+    /// The control keyboard focus is on (#167); `None` until Tab is pressed, and after a click.
+    focus: Option<Control>,
 }
 
 /// Where the list of languages Soniox recognises stands.
@@ -94,6 +98,7 @@ impl Default for SettingsState {
             import,
             keys: Keys::default(),
             subtitle_languages: LanguageList::default(),
+            focus: None,
         }
     }
 }
@@ -106,7 +111,22 @@ impl SettingsState {
             Message::NextPage => self.show_page(self.page.step(1)),
             Message::PreviousPage => self.show_page(self.page.step(-1)),
             // Handled by the app.
-            Message::Close | Message::Escape => Task::none(),
+            Message::Close
+            | Message::Escape
+            | Message::FocusNext
+            | Message::FocusPrevious
+            | Message::Press(_) => Task::none(),
+            // A click takes the ring away; a click into a field puts the focus there.
+            Message::ClearFocus => {
+                self.focus = None;
+                focus_ring::focused_among(focus::FIELD_IDS).map(Message::FieldFocused)
+            }
+            Message::FieldFocused(field) => {
+                if let Some(control) = field.and_then(focus::control_of_field) {
+                    self.focus = Some(control);
+                }
+                Task::none()
+            }
             Message::Updates(msg) => self.updates.update(msg).map(Message::Updates),
             Message::ImportOldSettings => Task::perform(
                 rfd::AsyncFileDialog::new()
@@ -122,8 +142,17 @@ impl SettingsState {
             }
             // The key lives in the credential store, never in the saved settings.
             Message::Key(which, message) => {
+                // Typing into a field moves the focus there: Tab goes on from it.
+                if matches!(message, KeyMessage::Input(_)) {
+                    self.focus = Some(Control::Key(which, KeyControl::Field));
+                }
+                let answer = matches!(message, KeyMessage::State { .. });
                 self.apply_key(which, message);
-                Task::none()
+                if answer {
+                    self.after_key_answer(which)
+                } else {
+                    Task::none()
+                }
             }
             Message::SubtitleLanguagesListed(result) => {
                 self.subtitle_languages = match result {
@@ -133,6 +162,9 @@ impl SettingsState {
                 Task::none()
             }
             message => {
+                if matches!(message, Message::SetCommentedTag(_)) {
+                    self.focus = Some(Control::CommentedTagName);
+                }
                 self.apply(message);
                 AppDatabase::new().set_app_settings(self.settings.clone());
                 Task::none()
@@ -148,6 +180,7 @@ impl SettingsState {
     /// Show `page`, from its top.
     pub fn show_page(&mut self, page: Page) -> Task<Message> {
         self.page = page;
+        self.focus = None;
         iced::widget::operation::snap_to(
             iced::widget::Id::new(SETTINGS_SCROLLABLE_ID),
             iced::widget::scrollable::RelativeOffset::START,
@@ -163,15 +196,133 @@ impl SettingsState {
             _ => return false,
         };
         let key = self.key(which);
-        let cancel = if key.confirm_remove {
-            KeyMessage::CancelRemove
+        let (cancel, focus_to) = if key.confirm_remove {
+            (KeyMessage::CancelRemove, KeyControl::AskRemove)
         } else if key.replacing {
-            KeyMessage::CancelReplace
+            (KeyMessage::CancelReplace, KeyControl::Replace)
         } else {
             return false;
         };
         self.apply_key(which, cancel);
+        // As Keep and Cancel move it (§11): only while the keyboard focus is in this row.
+        if matches!(self.focus, Some(Control::Key(row, _)) if row == which) {
+            self.focus = Some(Control::Key(which, focus_to));
+        }
         true
+    }
+
+    /// The control keyboard focus is on.
+    pub fn focus(&self) -> Option<&Control> {
+        self.focus.as_ref()
+    }
+
+    /// Tab (`steps` 1) or Shift+Tab (-1): move the focus to the next or previous control of the
+    /// page, focus or leave its text fields, and scroll the control into view.
+    pub fn move_focus(&mut self, steps: isize, batch_running: bool) -> Task<Message> {
+        let controls = focus::controls(self, batch_running);
+        self.focus = focus::step(&controls, self.focus.as_ref(), steps);
+        self.focus_effects()
+    }
+
+    /// Space or Enter: press the focused control, as a click would. The control's own message
+    /// comes back to the app, which handles it like a click's.
+    pub fn press(&mut self, press: Press, batch_running: bool) -> Task<Message> {
+        let Some(control) = self.focus.clone() else {
+            return Task::none();
+        };
+        // A control disabled since it took the focus does nothing, as a click would not.
+        if !focus::controls(self, batch_running).contains(&control) {
+            return Task::none();
+        }
+        let Some(message) = focus::press(self, &control, press) else {
+            return Task::none();
+        };
+        let controls = focus::controls(self, batch_running);
+        let next = focus::after_press(&control).or_else(|| {
+            // An offer goes away with its press: the control after it takes the focus.
+            focus::is_offer(&control)
+                .then(|| controls.iter().position(|c| *c == control))
+                .flatten()
+                .and_then(|at| controls.get(at + 1).cloned())
+        });
+        // A key row's own buttons only change this state: apply them now, so the control the
+        // focus moves to (the new key field after Replace…) is drawn before the focus effects run
+        // on it. Save and Remove go to the app, which talks to the credential store.
+        let message = match message {
+            Message::Key(which, key) if key.is_local() => {
+                self.apply_key(which, key);
+                None
+            }
+            message => Some(message),
+        };
+        let effects = match next {
+            Some(next) => {
+                self.focus = Some(next);
+                self.focus_effects()
+            }
+            None => Task::none(),
+        };
+        Task::batch([message.map_or_else(Task::none, Task::done), effects])
+    }
+
+    /// Take the keyboard focus away: the window opens without it.
+    pub fn clear_focus(&mut self) {
+        self.focus = None;
+    }
+
+    /// The credential store answered for the `which` key row (after Save, Remove or a read), and
+    /// the row may show other controls now. While the keyboard focus is in that row and on a
+    /// control the row no longer shows, it moves to the row's own first step (§11): **Replace…**
+    /// once a key is saved, the field for a new key once it is removed (focused now that it is
+    /// there). A failed save or removal changes nothing on the row, so the focus stays on **Save
+    /// key** (or the field) or **Remove…**.
+    fn after_key_answer(&mut self, which: ApiKey) -> Task<Message> {
+        let Some(focused @ Control::Key(row, _)) = self.focus.clone() else {
+            return Task::none();
+        };
+        if row != which || focus::key_controls(self, which).contains(&focused) {
+            return Task::none();
+        }
+        let next = match focus::key_row(self.key(which)) {
+            KeyRow::Unavailable => None,
+            KeyRow::ConfirmRemove => Some(KeyControl::Keep),
+            KeyRow::Saved => Some(KeyControl::Replace),
+            KeyRow::Typing { .. } => Some(KeyControl::Field),
+        };
+        self.focus = next.map(|control| Control::Key(which, control));
+        self.focus_effects()
+    }
+
+    /// Focus the text field the focus is on, or none of the window's fields, and bring the
+    /// focused control into view.
+    fn focus_effects(&self) -> Task<Message> {
+        let field = self.focus.as_ref().and_then(Control::field_id);
+        Task::batch([
+            focus_ring::focus_among(field, focus::FIELD_IDS),
+            focus_ring::scroll_into_view(SETTINGS_SCROLLABLE_ID, field),
+        ])
+    }
+
+    /// The batch action offered after the marker storage changed.
+    pub fn markers_offer(&self) -> Operation {
+        Operation::MarkersComment(match self.settings.marker_storage {
+            MarkerStorage::InVideo => MarkersDirection::CommentToMarkers,
+            MarkerStorage::Comment => MarkersDirection::MarkersToComment,
+        })
+    }
+
+    /// The languages the Subtitles page offers, (code, name): Soniox's own list, or until it
+    /// comes the codes checked already.
+    pub fn offered_subtitle_languages(&self) -> Vec<(String, String)> {
+        match &self.subtitle_languages {
+            LanguageList::Listed(all) => all.clone(),
+            _ => self
+                .settings
+                .subtitle_languages
+                .iter()
+                .map(|c| (c.clone(), c.clone()))
+                .collect(),
+        }
     }
 
     /// The Updates section.
@@ -371,6 +522,11 @@ impl SettingsState {
             | Message::PreviousPage
             | Message::Close
             | Message::Escape
+            | Message::FocusNext
+            | Message::FocusPrevious
+            | Message::Press(_)
+            | Message::ClearFocus
+            | Message::FieldFocused(_)
             | Message::Updates(_)
             | Message::ImportOldSettings
             | Message::OldSettingsFolderPicked(_)
@@ -391,12 +547,9 @@ fn schedule_import(folder: PathBuf) -> OldSettingsImport {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use frename_core::{CommentStorage, InOutStorage};
-
+impl SettingsState {
     /// Settings as a fresh install has them, not read from any database.
-    fn test_state() -> SettingsState {
+    pub fn for_tests() -> Self {
         SettingsState {
             settings: AppSettings::default(),
             page: Page::default(),
@@ -408,7 +561,29 @@ mod tests {
             import: OldSettingsImport::None,
             keys: Keys::default(),
             subtitle_languages: LanguageList::default(),
+            focus: None,
         }
+    }
+
+    /// Show `page`, as `show_page` does without its scroll.
+    pub fn show_page_for_tests(&mut self, page: Page) {
+        self.page = page;
+        self.focus = None;
+    }
+
+    /// A change, without saving the settings to the database.
+    pub fn apply_for_tests(&mut self, message: Message) {
+        self.apply(message);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use frename_core::{CommentStorage, InOutStorage};
+
+    fn test_state() -> SettingsState {
+        SettingsState::for_tests()
     }
 
     #[test]
@@ -626,6 +801,237 @@ mod tests {
         ));
         assert_eq!(state.key(ApiKey::Soniox).state, Some(KeyState::Saved));
         assert_eq!(state.key(ApiKey::Anthropic).state, None);
+    }
+
+    fn saved_key(state: &mut SettingsState, which: ApiKey) {
+        let request = state.begin_key_request(which);
+        state.apply(Message::Key(
+            which,
+            KeyMessage::State {
+                request,
+                result: Ok(KeyState::Saved),
+            },
+        ));
+    }
+
+    #[test]
+    fn replace_shows_the_field_before_the_focus_moves_into_it() {
+        let mut state = test_state();
+        state.page = Page::Ai;
+        saved_key(&mut state, ApiKey::Anthropic);
+        state.focus = Some(Control::Key(ApiKey::Anthropic, KeyControl::Replace));
+        let _ = state.press(Press::Space, false);
+        let field = Control::Key(ApiKey::Anthropic, KeyControl::Field);
+        assert!(state.key(ApiKey::Anthropic).replacing, "applied at once");
+        assert_eq!(state.focus(), Some(&field));
+        assert!(
+            focus::controls(&state, false).contains(&field),
+            "the field is on the page when the focus effects run"
+        );
+    }
+
+    fn answer(state: &mut SettingsState, which: ApiKey, result: Result<KeyState, String>) -> usize {
+        let request = state.begin_key_request(which);
+        state
+            .update(Message::Key(which, KeyMessage::State { request, result }))
+            .units()
+    }
+
+    #[test]
+    fn removing_a_key_focuses_the_new_field_once_the_store_answers() {
+        let mut state = test_state();
+        state.page = Page::Subtitles;
+        saved_key(&mut state, ApiKey::Soniox);
+        state.apply(Message::Key(ApiKey::Soniox, KeyMessage::AskRemove));
+        state.focus = Some(Control::Key(ApiKey::Soniox, KeyControl::Remove));
+        let _ = state.press(Press::Enter, false);
+        let ask = Control::Key(ApiKey::Soniox, KeyControl::AskRemove);
+        assert_eq!(state.focus(), Some(&ask), "the question closes");
+        // The app routes Remove back here, then asks the store.
+        let _ = state.update(Message::Key(ApiKey::Soniox, KeyMessage::Remove));
+        assert!(
+            focus::controls(&state, false).contains(&ask),
+            "drawn while waiting"
+        );
+        let effects = answer(&mut state, ApiKey::Soniox, Ok(KeyState::Missing));
+        assert_eq!(
+            state.focus(),
+            Some(&Control::Key(ApiKey::Soniox, KeyControl::Field))
+        );
+        assert!(effects > 0, "the field is focused now that it is shown");
+    }
+
+    #[test]
+    fn a_failed_removal_puts_the_focus_back_on_remove() {
+        let mut state = test_state();
+        state.page = Page::Subtitles;
+        saved_key(&mut state, ApiKey::Soniox);
+        state.apply(Message::Key(ApiKey::Soniox, KeyMessage::AskRemove));
+        state.focus = Some(Control::Key(ApiKey::Soniox, KeyControl::Remove));
+        let _ = state.press(Press::Space, false);
+        let _ = state.update(Message::Key(ApiKey::Soniox, KeyMessage::Remove));
+        let effects = answer(&mut state, ApiKey::Soniox, Err("locked".to_string()));
+        assert_eq!(
+            state.focus(),
+            Some(&Control::Key(ApiKey::Soniox, KeyControl::AskRemove))
+        );
+        assert_eq!(effects, 0, "nothing moved");
+    }
+
+    #[test]
+    fn saving_a_key_moves_the_focus_to_replace_and_a_failed_save_back_to_save() {
+        let mut state = test_state();
+        state.page = Page::Ai;
+        let _ = state.update(Message::Key(
+            ApiKey::Anthropic,
+            KeyMessage::Input("sk".to_string()),
+        ));
+        let save = Control::Key(ApiKey::Anthropic, KeyControl::Save);
+        state.focus = Some(save.clone());
+        let _ = state.press(Press::Enter, false);
+        assert_eq!(state.focus(), Some(&save), "focused while the store saves");
+        let _ = state.update(Message::Key(ApiKey::Anthropic, KeyMessage::Save));
+        let effects = answer(&mut state, ApiKey::Anthropic, Err("locked".to_string()));
+        assert_eq!(
+            state.focus(),
+            Some(&save),
+            "the typed key is kept to try again"
+        );
+        assert_eq!(effects, 0, "nothing moved");
+
+        // An answer that changes nothing leaves a field being typed in alone.
+        state.focus = Some(Control::Key(ApiKey::Anthropic, KeyControl::Field));
+        assert_eq!(
+            answer(&mut state, ApiKey::Anthropic, Ok(KeyState::Missing)),
+            0
+        );
+
+        // Enter in the field saves too.
+        state.focus = Some(Control::Key(ApiKey::Anthropic, KeyControl::Field));
+        let _ = state.update(Message::Key(ApiKey::Anthropic, KeyMessage::Save));
+        let effects = answer(&mut state, ApiKey::Anthropic, Ok(KeyState::Saved));
+        assert_eq!(
+            state.focus(),
+            Some(&Control::Key(ApiKey::Anthropic, KeyControl::Replace))
+        );
+        assert!(effects > 0, "the field is left");
+    }
+
+    #[test]
+    fn a_store_answer_leaves_a_focus_outside_its_row_alone() {
+        let mut state = test_state();
+        state.page = Page::Ai;
+        state.focus = Some(Control::AiModel);
+        assert_eq!(
+            answer(&mut state, ApiKey::Anthropic, Ok(KeyState::Saved)),
+            0
+        );
+        assert_eq!(state.focus(), Some(&Control::AiModel));
+    }
+
+    #[test]
+    fn giving_up_a_replacement_puts_the_focus_back_on_replace() {
+        let mut state = test_state();
+        state.page = Page::Ai;
+        saved_key(&mut state, ApiKey::Anthropic);
+        let replace = Control::Key(ApiKey::Anthropic, KeyControl::Replace);
+
+        state.focus = Some(replace.clone());
+        let _ = state.press(Press::Space, false);
+        assert!(state.escape(), "Esc gives up replacing");
+        assert_eq!(state.focus(), Some(&replace));
+
+        let _ = state.press(Press::Space, false);
+        state.focus = Some(Control::Key(ApiKey::Anthropic, KeyControl::Cancel));
+        let _ = state.press(Press::Enter, false);
+        assert!(!state.key(ApiKey::Anthropic).replacing);
+        assert_eq!(state.focus(), Some(&replace));
+    }
+
+    #[test]
+    fn asking_to_remove_then_esc_puts_the_focus_back_on_remove() {
+        let mut state = test_state();
+        state.page = Page::Subtitles;
+        saved_key(&mut state, ApiKey::Soniox);
+        state.focus = Some(Control::Key(ApiKey::Soniox, KeyControl::AskRemove));
+        let _ = state.press(Press::Enter, false);
+        assert!(state.key(ApiKey::Soniox).confirm_remove);
+        assert_eq!(
+            state.focus(),
+            Some(&Control::Key(ApiKey::Soniox, KeyControl::Keep))
+        );
+        assert!(state.escape());
+        assert_eq!(
+            state.focus(),
+            Some(&Control::Key(ApiKey::Soniox, KeyControl::AskRemove))
+        );
+
+        // Without keyboard focus, Esc leaves it that way.
+        state.apply(Message::Key(ApiKey::Soniox, KeyMessage::AskRemove));
+        state.focus = None;
+        assert!(state.escape());
+        assert_eq!(state.focus(), None);
+    }
+
+    #[test]
+    fn a_pressed_offer_hands_the_focus_to_the_control_after_it() {
+        let mut state = test_state();
+        state.page = Page::Saving;
+        state.apply(Message::SetSpaceAfterTags(true));
+        state.focus = Some(Control::RespaceTags);
+        let _ = state.press(Press::Space, false);
+        assert_eq!(
+            state.focus(),
+            Some(&Control::CommentStorage(CommentStorage::InVideo))
+        );
+    }
+
+    #[test]
+    fn a_control_disabled_since_it_took_the_focus_does_nothing() {
+        let mut state = test_state();
+        state.page = Page::Ai;
+        state.focus = Some(Control::Key(ApiKey::Anthropic, KeyControl::Save));
+        let _ = state.press(Press::Enter, false);
+        assert_eq!(
+            state.focus(),
+            Some(&Control::Key(ApiKey::Anthropic, KeyControl::Save)),
+            "nothing typed: Save is disabled, the press is dropped"
+        );
+        assert!(state.key(ApiKey::Anthropic).error.is_none());
+
+        state.page = Page::Updates;
+        let update = Control::Updates(crate::features::updates::Control::UpdateAndRestart);
+        assert!(!focus::controls(&state, true).contains(&update));
+        state.focus = Some(update.clone());
+        let _ = state.press(Press::Enter, true);
+        assert_eq!(state.focus(), Some(&update));
+    }
+
+    #[test]
+    fn a_page_change_or_a_click_takes_the_focus_away_and_typing_brings_it_to_the_field() {
+        let mut state = test_state();
+        state.focus = Some(Control::MonochromeTags);
+        let _ = state.update(Message::ClearFocus);
+        assert_eq!(state.focus(), None);
+        let _ = state.update(Message::FieldFocused(Some(focus::COMMENTED_TAG_FIELD)));
+        assert_eq!(state.focus(), Some(&Control::CommentedTagName));
+        let _ = state.update(Message::FieldFocused(None));
+        assert_eq!(
+            state.focus(),
+            Some(&Control::CommentedTagName),
+            "no field focused: the focus stays"
+        );
+
+        let _ = state.show_page(Page::Subtitles);
+        assert_eq!(state.focus(), None);
+        let _ = state.update(Message::Key(
+            ApiKey::Soniox,
+            KeyMessage::Input("k".to_string()),
+        ));
+        assert_eq!(
+            state.focus(),
+            Some(&Control::Key(ApiKey::Soniox, KeyControl::Field))
+        );
     }
 
     #[test]

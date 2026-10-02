@@ -7,6 +7,7 @@ use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::ai::SummaryLanguage;
 use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage};
 
+use super::focus::Press;
 use super::Page;
 use crate::features::batch::Operation;
 use crate::features::updates;
@@ -25,6 +26,16 @@ pub enum Message {
     /// Esc in the window: cancels an inline confirmation or key replacement first, else closes
     /// the window. Handled by the app.
     Escape,
+    /// Tab / Shift+Tab: keyboard focus to the next / previous control of the page (#167).
+    /// Handled by the app, which knows whether a batch job holds a button back.
+    FocusNext,
+    FocusPrevious,
+    /// Space or Enter outside a text field: press the focused control. Handled by the app.
+    Press(Press),
+    /// A click in the window: the focus ring goes until Tab is pressed again.
+    ClearFocus,
+    /// Which of the window's text fields has focus after a click: the focus goes there.
+    FieldFocused(Option<&'static str>),
     /// The UI language code (`en`, `ru`); empty follows the OS language.
     SetUiLanguage(String),
     /// Start playing videos as soon as they are opened.
@@ -93,4 +104,20 @@ pub enum KeyMessage {
         request: u64,
         result: Result<KeyState, String>,
     },
+}
+
+impl KeyMessage {
+    /// Whether the message only changes the settings window's own state; the others (Save,
+    /// Remove, a store's answer) also go through the app, which talks to the credential store.
+    pub fn is_local(&self) -> bool {
+        match self {
+            KeyMessage::Input(_)
+            | KeyMessage::ToggleShow
+            | KeyMessage::Replace
+            | KeyMessage::CancelReplace
+            | KeyMessage::AskRemove
+            | KeyMessage::CancelRemove => true,
+            KeyMessage::Save | KeyMessage::Remove | KeyMessage::State { .. } => false,
+        }
+    }
 }

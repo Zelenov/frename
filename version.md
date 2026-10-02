@@ -1,3 +1,7 @@
+# 0.107
+## Added
+- Settings work from the keyboard: `Tab` and `Shift+Tab` move a blue ring through the options and buttons of the page, `Space` checks or picks the option with the ring, moves a list to its next choice or presses the button with the ring, and `Enter` presses the button with the ring.
+
 # 0.106
 ## Added
 - Describe with AI suggests an In and Out for clips with a lead-in or lead-out around the part worth keeping. With the clip open, the suggestion shows as an **AI** pill next to the IN and OUT points; click it to use it. frename never sets them by itself.

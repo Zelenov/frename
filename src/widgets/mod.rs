@@ -2,6 +2,7 @@
 
 pub mod bounds_reporter;
 pub mod file_name_display;
+pub mod focus_ring;
 pub mod height_handle;
 pub mod right_press_reporter;
 pub mod search_bar;
