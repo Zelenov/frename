@@ -1,3 +1,13 @@
+# 0.104
+## Changed
+- A file's full name in the file list opens beside the list instead of over the next row, so it no longer covers the file you move to.
+- The marker's name over the timeline is now a pill tinted with the marker's color, so it no longer looks like a tooltip when one opens next to it.
+- Tooltips show `PgUp` / `PgDn` for the previous and next file, and `Esc` for leaving batch mode.
+- The chip you drag over the trash shows in a box like a tooltip's.
+
+## Fixed
+- The ✕ on the IN and OUT timecodes and the lock on a file closed by a batch action now have tooltips.
+
 # 0.103
 ## Removed
 - The spending tracker: Settings no longer shows what frename spent or the top-up form, and the batch page no longer shows the estimated credit left. The cost estimate before a run, the cost in the report, and **Add credit** when a service runs out stay.

@@ -20,8 +20,7 @@ pub fn view(state: &FileMenuState) -> Element<'_, Message> {
             ui::menu::item(MenuItem {
                 icon: None,
                 label: label(action),
-                // One key cap per key: "Shift+F11" is `Shift` `F11`.
-                keys: action.keys().split('+').collect(),
+                keys: action.keys().to_vec(),
                 checked: false,
                 on_press: Some(Message::Choose(menu.file, action)),
             })

@@ -183,6 +183,8 @@ Why these values:
   text) for tags not in the list; #53 implements it.
 - **Marker colors** (`theme::marker_color`): the nine Premiere Pro marker colors stay as they are:
   they must match Premiere, not the theme.
+  `marker.label.tint` 25 %: how much of its marker's color tints the marker label's fill over
+  `bg.raised` (§13.3.4; `MARKER_LABEL_TINT`).
 - **Video overlays** (subtitle caption, side list over the picture): black 62 % and a near-black
   72 % panel, so text reads over any picture. They are tokens (`overlay.caption`,
   `overlay.list`), used only over video.
@@ -521,14 +523,17 @@ what is inside ("Comments", "Markers and ranges"); never "General", "Advanced", 
   key in the tooltip, so half a second.
 - **Placement:** away from the edge the control sits on: *below* for the app bar and top rows,
   *above* for the bottom bars (folder controls, video controls), *left* for controls at the right
-  edge of a panel. 6 px gap. Never over the thing it explains, and never under the pointer's path
-  to its neighbours (BIR «Движение и клик — один жест»).
+  edge of a panel; a file row's full name *right*, beside the list, and the marks inside the row
+  *left*, so the two never cover each other. 6 px gap. Never over the thing it explains, and never
+  under the pointer's path to its neighbours (BIR «Движение и клик — один жест»).
 - **Content:** the command's name in sentence case, then its keys as key caps: `Open a folder`
   `Ctrl` `O`. Only the keys that work in that place. The key shown comes from the shortcut
   registry of #62 once it exists.
 - Required on every icon-only control; optional on text buttons (only to say why one is
   disabled).
 - Never used for errors (BIR: errors go next to the field).
+- A drag preview (the chip over the trash) is drawn in the tooltip's box, at once, over every
+  tooltip (`ui::tooltip::drag_preview`, `Z::DragPreview`).
 
 ### 8.14 Menu and context menu
 
@@ -1007,9 +1012,11 @@ part over the segment, because the yellow over the blue would hide where the pla
 | Shift (snap) | a 1 px `text.primary` guide at the snap target while Shift is held during a drag | nothing |
 
 **Marker label** (the head of the active marker):
-- A chip-like button: `bg.overlay`, 1.5 px edge in the marker's color, radius 6, padding 2×8, text
-  `tooltip` 12/16 in `text.primary`, then a 12 px `pencil` in `text.secondary`; an unnamed marker
-  shows "Add a name" in `text.secondary`.
+- A chip-like button: a pill (full radius) filled with `bg.raised` tinted by 25 % of the marker's
+  color, 1.5 px edge in the marker's color, no shadow, padding 2×8, text `tooltip` 12/16 in
+  `text.primary`, then a 12 px `pencil` in `text.secondary`; an unnamed marker shows "Add a name"
+  in `text.secondary`. Not the tooltip's box (`bg.overlay`, `border.subtle`, radius 6, shadow), so
+  when a tooltip opens next to it the two never read as two tooltips.
 - Centered over a pin or the middle of a range; kept 4 px inside the pane; the name is cut with "…"
   to fit the pane (windowed; §13.9) and never in fullscreen.
 - Hover: `state.hover`; click: opens the marker's row for renaming. A read-only marker's label has

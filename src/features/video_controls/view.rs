@@ -443,17 +443,20 @@ fn marker_label_button(label: MarkerLabel<'_>) -> Element<'_, Message> {
                 status,
                 iced_button::Status::Hovered | iced_button::Status::Pressed
             );
+            // A pill tinted with the marker's color, without a shadow: it must not read as a
+            // tooltip (a `bg.overlay` box with a subtle edge) when one opens next to it.
+            let fill = over(BG_RAISED, faded(color, MARKER_LABEL_TINT));
             iced_button::Style {
                 background: Some(iced::Background::Color(if hovered {
-                    over(BG_OVERLAY, HOVER)
+                    over(fill, HOVER)
                 } else {
-                    BG_OVERLAY
+                    fill
                 })),
                 text_color: TEXT,
                 border: iced::Border {
                     color,
                     width: LABEL_EDGE,
-                    radius: RADIUS_M.into(),
+                    radius: RADIUS_FULL.into(),
                 },
                 ..style::button(ButtonKind::Ghost)(theme, status)
             }

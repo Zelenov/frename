@@ -2,7 +2,9 @@
 //! as key caps. Every icon-only control has one; none holds an error.
 
 use iced::widget::text::IntoFragment;
-use iced::widget::{column, container, row, tooltip};
+use iced::widget::{column, container, row, space, tooltip};
+use std::time::Duration;
+
 use iced::{Alignment, Element, Padding};
 
 pub use iced::widget::tooltip::Position;
@@ -144,4 +146,28 @@ pub fn tip_text_unless<'a, M: 'a>(
     } else {
         tip_text(content, label, position)
     }
+}
+
+/// `content` with `preview` beside it at once, over every tooltip: what follows a drag (a chip
+/// dropped on the trash, §13.5.6). In the tooltip's box; nothing shows while `preview` is `None`,
+/// and the widget tree stays the same either way so `content` keeps its state.
+pub fn drag_preview<'a, M: 'a>(
+    content: impl Into<Element<'a, M>>,
+    preview: Option<Element<'a, M>>,
+    position: Position,
+) -> Element<'a, M> {
+    let body: Element<'a, M> = match preview {
+        Some(preview) => container(preview)
+            .padding(PADDING)
+            .style(style::popup)
+            .into(),
+        None => space().into(),
+    };
+    layered(
+        tooltip(content, body, position)
+            .gap(SPACE_TIGHT)
+            .delay(Duration::ZERO)
+            .snap_within_viewport(true),
+        Z::DragPreview,
+    )
 }
