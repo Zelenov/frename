@@ -64,10 +64,10 @@ where
     frename_core::ai::block::tag_ideas(tag_list.comment())
         .into_iter()
         .filter(|idea| {
-            tag_list
+            !tag_list
                 .tag_id_by_name(idea)
                 .and_then(|id| tag_list.get_tag(id))
-                .is_none_or(|tag| !tag.is_stored())
+                .is_some_and(|tag| tag.is_stored())
         })
         .collect()
 }

@@ -411,7 +411,7 @@ mod tests {
     }
 
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
-    const NOT_UI_TEXT: [(&str, &str); 74] = [
+    const NOT_UI_TEXT: [(&str, &str); 75] = [
         ("comment-editor", "widget id"),
         (
             "Rotate videos",
@@ -424,6 +424,7 @@ mod tests {
         ("Esc", "key name, as printed on the key"),
         ("Ctrl", "key name, as printed on the key"),
         ("Alt", "key name, as printed on the key"),
+        ("Shift", "key name, as printed on the key"),
         ("Delete", "key name, as printed on the key"),
         ("IN", "badge that mirrors in_ in file names"),
         ("OUT", "badge that mirrors out_ in file names"),

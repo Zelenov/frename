@@ -87,6 +87,7 @@ it has one).
 | `Ctrl+Z` | Undo |
 | `Ctrl+Y` or `Ctrl+Shift+Z` | Redo |
 | Middle-click a chip in the file name | Untag the file |
+| `F6` / `Shift+F6` | Add the tag Describe with AI suggests most, or every one it suggests |
 
 ### Video
 | Key | Action |
@@ -308,6 +309,12 @@ the In and Out the AI suggests (`Suggested In/Out: 00:00:03.200 – 00:00:11.800
 open, it shows as an **AI** pill next to the IN and OUT points; click it to set In and Out to it
 (one undo step). frename never sets them by itself.
 
+The same request also says which of the folder's tags fit the clip, and how sure it is. With the
+clip open they show under its name: click one (or press `F6` for the first) to add it, or **Add
+all** (`Shift+F6`); each is one undo step, and nothing is added until you do. Tags the AI noticed
+that the folder does not have are listed as ideas, never added. Turn this off in Settings →
+Describe with AI.
+
 ### Generate subtitles
 
 **Generate subtitles** sends the audio of each checked video to [Soniox](https://soniox.com), a
@@ -340,7 +347,8 @@ pages:
   you already have.
 - **Describe with AI:** your Anthropic API key, kept in the system's password store (Windows
   Credential Manager, macOS Keychain, or a keyring such as GNOME Keyring on Linux), the model
-  (Claude Haiku 4.5, Sonnet 5 or Opus 5, with their prices) and the language of the descriptions.
+  (Claude Haiku 4.5, Sonnet 5 or Opus 5, with their prices), the language of the descriptions,
+  and whether it also suggests tags from the folder's tags (on by default).
 - **Subtitles:** your Soniox API key (kept the same way), the languages spoken in your footage, and
   whether a subtitle is a short line or a whole sentence.
 - **Updates:** **Check for updates**, then **Update and restart** when a newer version is out.

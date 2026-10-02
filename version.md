@@ -1,3 +1,7 @@
+# 0.110
+## Added
+- Describe with AI also suggests which of the folder's tags fit each clip. They show under the clip's name with how sure the AI is; click one, or press `F6` for the first, or Add all (`Shift+F6`). Nothing is added until you do. Turn it off in Settings → Describe with AI.
+
 # 0.109
 ## Fixed
 - The file search hint is shorter, "Find a file or a comment", so it is no longer cut off in the file list.

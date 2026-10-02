@@ -333,7 +333,8 @@ batch-ai-tag-suggestions-off = Выключены
 batch-ai-tag-suggestions-no-tags = Включены, но у этой папки пока нет тегов
 batch-ai-tag-suggestions-on = { $tags ->
     [one] Из { $tags } тега папки
-   *[other] Из { $tags } тегов папки
+    [few] Из { $tags } тегов папки
+   *[many] Из { $tags } тегов папки
 }
 batch-ai-key-missing = Укажите ключ API Anthropic в настройках
 batch-ai-key-unavailable = Не удалось открыть системное хранилище паролей: оно может быть заблокировано или отсутствовать (например, GNOME Keyring или KWallet).
