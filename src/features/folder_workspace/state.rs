@@ -1376,34 +1376,41 @@ impl FolderWorkspace {
             Task::none()
         };
         // Markers shown from the video are taken out of it only once the save shows the comment
-        // holds all of them: a refused save, or a comment that did not get written, must not
+        // holds exactly them: a refused save, or a comment that did not get written, must not
         // leave them nowhere.
-        let comment_holds_markers = moved_markers.as_ref().is_some_and(|wanted| {
-            let lines = |markers: &[Marker]| {
-                let mut lines: Vec<String> = markers
-                    .iter()
-                    .map(frename_core::format_marker_line)
-                    .collect();
-                lines.sort();
-                lines
-            };
-            let saved = frename_core::markers_from_comment(snapshot_after_save.comment()).1;
-            lines(wanted) == lines(&saved)
-        });
+        let lines = |markers: &[Marker]| {
+            let mut lines: Vec<String> = markers
+                .iter()
+                .map(frename_core::format_marker_line)
+                .collect();
+            lines.sort();
+            lines
+        };
+        let saved_lines =
+            lines(&frename_core::markers_from_comment(snapshot_after_save.comment()).1);
+        let wanted_lines = moved_markers.as_deref().map(lines);
+        let comment_holds_markers = wanted_lines.as_ref() == Some(&saved_lines);
+        // Every marker is in the saved comment (it may hold more, such as a line typed into it).
+        let markers_written = wanted_lines
+            .as_ref()
+            .is_some_and(|wanted| wanted.iter().all(|line| saved_lines.contains(line)));
         let mut markers_notice = Task::none();
-        if comment_holds_markers {
+        if comment_holds_markers && !refused {
+            self.move_markers_out_of_video(id, &new_path);
+        }
+        if markers_written {
             // Kept in the comment now: a failed write into the video no longer holds them.
             self.unsaved_markers.remove(&id);
+        } else if let Some(wanted) = moved_markers.filter(|_| {
+            frename_core::metadata_storage().comment == frename_core::CommentStorage::InVideo
+        }) {
+            // A comment inside a video that could not be written: the markers are kept like
+            // markers a video refused, so the file is marked, they are shown when the clip opens
+            // again, and its next save writes them. (A `.comment.txt` got them as they were
+            // edited.) A refused save already said so.
+            let notice = self.keep_unsaved_markers(id, wanted, marker_actions::MARKERS_NOT_SAVED);
             if !refused {
-                self.move_markers_out_of_video(id, &new_path);
-            }
-        } else if let Some(wanted) = moved_markers {
-            // The comment did not get them (a comment inside a read-only or busy video): kept
-            // like markers a video refused, so the file is marked, they are shown when the clip
-            // opens again, and its next save writes them.
-            let first = self.unsaved_markers.insert(id, wanted).is_none();
-            if first && !refused {
-                markers_notice = Self::notice("Markers not saved: the file is read-only or in use");
+                markers_notice = notice;
             }
         }
         // Applied and read back from the file: the journal's copy of these edits is no longer
@@ -4865,6 +4872,68 @@ mod tests {
             .map(|f| f.file_path().to_path_buf())
             .expect("the clip");
         assert!(comment_on_disk(&saved).contains("1:05"));
+    }
+
+    /// A marker line typed into the comment box is not a failed write: neither the save nor the
+    /// save after opening the clip again marks the file, in both storages.
+    fn a_typed_marker_line_is_not_a_failed_write(comment: frename_core::CommentStorage) {
+        let test_dir = TestDirectory::new(2);
+        let _storage = frename_core::use_storage_on_this_thread(
+            frename_core::MetadataStorage {
+                comment,
+                in_out: frename_core::InOutStorage::InVideo,
+            },
+            frename_core::MarkerStorage::Comment,
+        );
+        let mut workspace = marker_workspace(&test_dir, 2);
+        let id = file_id_at(&workspace, 0);
+        let _ = workspace.update(Message::CommentAction(
+            iced::widget::text_editor::Action::Edit(iced::widget::text_editor::Edit::Paste(
+                std::sync::Arc::new("0:41 — Lion".to_string()),
+            )),
+        ));
+        save_open_clip(&mut workspace);
+        assert!(
+            !workspace.unsaved_markers().contains_key(&id),
+            "{comment:?}"
+        );
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        flush_file_opened(&mut workspace);
+        save_open_clip(&mut workspace);
+        assert!(
+            !workspace.unsaved_markers().contains_key(&id),
+            "{comment:?}"
+        );
+    }
+
+    #[test]
+    fn a_typed_marker_line_is_not_a_failed_write_with_comments_in_text_files() {
+        a_typed_marker_line_is_not_a_failed_write(frename_core::CommentStorage::TextFile);
+    }
+
+    #[test]
+    fn a_typed_marker_line_is_not_a_failed_write_with_comments_inside_the_video() {
+        a_typed_marker_line_is_not_a_failed_write(frename_core::CommentStorage::InVideo);
+    }
+
+    /// Markers that keep failing to be written are said once, not at every save.
+    #[test]
+    fn unsaved_markers_are_said_once() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let id = file_id_at(&workspace, 0);
+        let text = super::marker_actions::MARKERS_NOT_SAVED;
+        assert_eq!(
+            workspace.keep_unsaved_markers(id, Vec::new(), text).units(),
+            1
+        );
+        assert_eq!(
+            workspace.keep_unsaved_markers(id, Vec::new(), text).units(),
+            0
+        );
+        assert!(workspace.unsaved_markers().contains_key(&id));
     }
 
     /// With the comment in a text file, the batch move after an edit has nothing left to do.

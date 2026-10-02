@@ -1,6 +1,6 @@
 # NEXT
 ## Fixed
-- Markers kept in the comment, with comments inside the video: a clip whose save does not take (read-only, open in another program, or another file already has its new name) no longer drops them. The file gets the red ✕ in the list, the clip still shows its markers when you open it again, and frename writes them when you next leave it.
+- Markers kept in the comment, with comments inside the video: a clip that cannot be saved (read-only, open elsewhere, or its new name is taken) keeps its markers. It gets the red ✕, shows them when reopened, and frename saves them when you next leave it.
 
 # 0.102
 ## Fixed

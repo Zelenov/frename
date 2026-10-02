@@ -21,6 +21,9 @@ use crate::features::media_viewer::{self, video};
 /// while playing goes on to the one before instead of back to the same one.
 const PREVIOUS_SLACK_MS: u64 = 750;
 
+/// Said when markers could not be written into the video, or into a comment inside it.
+pub(super) const MARKERS_NOT_SAVED: &str = "Markers not saved: the file is read-only or in use";
+
 impl FolderWorkspace {
     /// Apply a marker key or marker list message; `position_ms` is the playhead. Markers kept in
     /// a comment file are in it when this returns.
@@ -69,14 +72,28 @@ impl FolderWorkspace {
             Ok(false) => Task::none(),
             Err(e) => {
                 log::warn!("markers of {path:?} not written into the comment file: {e}");
-                // Said once, not at every edit that fails the same way.
-                let first = self.unsaved_markers.insert(id, markers.to_vec()).is_none();
-                if first {
-                    Self::notice("Markers not saved: the comment file is read-only or in use")
-                } else {
-                    Task::none()
-                }
+                self.keep_unsaved_markers(
+                    id,
+                    markers.to_vec(),
+                    "Markers not saved: the comment file is read-only or in use",
+                )
             }
+        }
+    }
+
+    /// Keep the markers of the file `id` that could not be written: the file is marked in the
+    /// list, the clip shows them when it opens again, and its next save writes them. `text` is
+    /// said once, not at every save or edit that fails the same way.
+    pub(super) fn keep_unsaved_markers(
+        &mut self,
+        id: FileId,
+        markers: Vec<Marker>,
+        text: &str,
+    ) -> Task<Message> {
+        if self.unsaved_markers.insert(id, markers).is_none() {
+            Self::notice(text)
+        } else {
+            Task::none()
         }
     }
 
@@ -514,7 +531,7 @@ impl FolderWorkspace {
             Err(MarkersError::WriteFailed(reason)) => {
                 log::warn!("markers of {path:?} not saved, kept for the next save: {reason}");
                 self.unsaved_markers.insert(id, markers.to_vec());
-                Self::notice("Markers not saved: the file is read-only or in use")
+                Self::notice(MARKERS_NOT_SAVED)
             }
         }
     }
