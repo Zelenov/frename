@@ -1,7 +1,8 @@
 //! Keyboard focus for controls iced 0.14 cannot focus itself (`docs/design/design-system.md` §11):
 //! a ring drawn around a button, checkbox or radio that a window's own state says is focused,
-//! and the two widget operations such a window needs: focus one of its own text fields (or
-//! none) without touching another window's, and scroll the focused control into view.
+//! and the widget operations such a window needs: focus one of its own text fields (or none)
+//! without touching another window's, tell which of its fields has focus, and scroll the
+//! focused control into view.
 
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer;
@@ -28,12 +29,45 @@ pub fn ring<'a, Message: 'a>(
     Element::new(FocusRing {
         content: content.into(),
         focused,
+        draw: true,
+        report: true,
+    })
+}
+
+/// A control that draws the focus ring as its own edge (a dropdown): nothing is drawn here, but
+/// the focused control can still be scrolled into view.
+pub fn edge<'a, Message: 'a>(
+    content: impl Into<Element<'a, Message>>,
+    focused: bool,
+) -> Element<'a, Message> {
+    Element::new(FocusRing {
+        content: content.into(),
+        focused,
+        draw: false,
+        report: true,
+    })
+}
+
+/// [`ring`] for a control that never scrolls (a window's button bar): showing it scrolls nothing.
+pub fn fixed_ring<'a, Message: 'a>(
+    content: impl Into<Element<'a, Message>>,
+    focused: bool,
+) -> Element<'a, Message> {
+    Element::new(FocusRing {
+        content: content.into(),
+        focused,
+        draw: true,
+        report: false,
     })
 }
 
 struct FocusRing<'a, Message, Theme, Renderer> {
     content: Element<'a, Message, Theme, Renderer>,
     focused: bool,
+    /// Draw the ring (the content may draw its own focused edge instead).
+    draw: bool,
+    /// Report where the focused control is, for [`scroll_into_view`].
+    report: bool,
 }
 
 impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer>
@@ -71,7 +105,7 @@ where
         renderer: &Renderer,
         operation: &mut dyn Operation,
     ) {
-        if self.focused {
+        if self.focused && self.report {
             operation.container(Some(&Id::new(RING_ID)), ring_bounds(layout.bounds()));
         }
         operation.traverse(&mut |operation| {
@@ -143,7 +177,7 @@ where
             cursor,
             viewport,
         );
-        if self.focused {
+        if self.focused && self.draw {
             renderer.fill_quad(
                 renderer::Quad {
                     bounds: ring_bounds(layout.bounds()),
@@ -214,6 +248,39 @@ where
         fields: fields.iter().copied().map(Id::new).collect(),
     })
     .discard()
+}
+
+/// Which of `fields` (the ids of one window's text fields) has focus, if any: a click into a
+/// field moves the window's own focus there.
+pub fn focused_among(fields: &'static [&'static str]) -> Task<Option<&'static str>> {
+    struct FocusedAmong {
+        fields: &'static [&'static str],
+        found: Option<&'static str>,
+    }
+
+    impl Operation<Option<&'static str>> for FocusedAmong {
+        fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn Operation<Option<&'static str>>)) {
+            operate(self);
+        }
+
+        fn focusable(&mut self, id: Option<&Id>, _bounds: Rectangle, state: &mut dyn Focusable) {
+            let Some(id) = id else { return };
+            if state.is_focused() {
+                if let Some(field) = self.fields.iter().find(|field| *id == Id::new(field)) {
+                    self.found = Some(*field);
+                }
+            }
+        }
+
+        fn finish(&self) -> Outcome<Option<&'static str>> {
+            Outcome::Some(self.found)
+        }
+    }
+
+    iced::advanced::widget::operate(FocusedAmong {
+        fields,
+        found: None,
+    })
 }
 
 /// Scroll the scrollable `scrollable` so the focused control is in view: the ring of

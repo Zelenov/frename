@@ -11,9 +11,9 @@ use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::ai::SummaryLanguage;
 use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage};
 
-use super::state::{LanguageList, SettingsState};
+use super::state::{KeySection, SettingsState};
 use super::{KeyMessage, Message, Page};
-use crate::features::batch::{MarkersDirection, Operation};
+use crate::features::batch::Operation;
 use crate::features::updates;
 
 /// The text fields of the settings window; only these are focused or unfocused by Tab.
@@ -107,13 +107,41 @@ pub fn key_field_id(which: ApiKey) -> &'static str {
     }
 }
 
-/// The batch action offered after the tag spacing, a storage or its direction changed; the view
-/// shows the same offer.
-pub fn markers_offer(storage: MarkerStorage) -> Operation {
-    Operation::MarkersComment(match storage {
-        MarkerStorage::InVideo => MarkersDirection::CommentToMarkers,
-        MarkerStorage::Comment => MarkersDirection::MarkersToComment,
-    })
+/// The text field `id` is, as a control.
+pub fn control_of_field(id: &str) -> Option<Control> {
+    match id {
+        ANTHROPIC_KEY_FIELD => Some(Control::Key(ApiKey::Anthropic, KeyControl::Field)),
+        SONIOX_KEY_FIELD => Some(Control::Key(ApiKey::Soniox, KeyControl::Field)),
+        COMMENTED_TAG_FIELD => Some(Control::CommentedTagName),
+        _ => None,
+    }
+}
+
+/// What a key row shows (§14.3): the one place both the view and [`controls`] read it from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyRow {
+    /// The credential store cannot be used: a warning, no controls.
+    Unavailable,
+    /// "Remove the saved key?": **Remove key** and **Keep**.
+    ConfirmRemove,
+    /// A key is saved: **Replace…** and **Remove…**.
+    Saved,
+    /// The field to type a key into, **Show**, **Save key** (enabled once something is typed)
+    /// and, while replacing a saved key, **Cancel**.
+    Typing { can_save: bool, cancel: bool },
+}
+
+/// What the key row of `key` shows now.
+pub fn key_row(key: &KeySection) -> KeyRow {
+    match key.state {
+        Some(KeyState::Unavailable) => KeyRow::Unavailable,
+        Some(KeyState::Saved) if key.confirm_remove => KeyRow::ConfirmRemove,
+        Some(KeyState::Saved) if !key.replacing => KeyRow::Saved,
+        _ => KeyRow::Typing {
+            can_save: !key.input.trim().is_empty(),
+            cancel: key.replacing,
+        },
+    }
 }
 
 /// The controls of the page shown that take a click now, in the order the page shows them, and
@@ -169,7 +197,8 @@ pub fn controls(state: &SettingsState, batch_running: bool) -> Vec<Control> {
                 Control::CueLength(CueLength::Sentence),
             ]);
             controls.extend(
-                offered_subtitle_languages(state)
+                state
+                    .offered_subtitle_languages()
                     .into_iter()
                     .map(|(code, _)| Control::SubtitleLanguage(code)),
             );
@@ -191,32 +220,17 @@ pub fn controls(state: &SettingsState, batch_running: bool) -> Vec<Control> {
     controls
 }
 
-/// The languages the Subtitles page offers, (code, name): Soniox's own list, or until it comes
-/// the codes checked already.
-pub fn offered_subtitle_languages(state: &SettingsState) -> Vec<(String, String)> {
-    match state.subtitle_languages() {
-        LanguageList::Listed(all) => all.clone(),
-        _ => state
-            .settings()
-            .subtitle_languages
-            .iter()
-            .map(|c| (c.clone(), c.clone()))
-            .collect(),
-    }
-}
-
-/// The controls of a key row, as `key_block` in the view shows them.
+/// The controls of a key row that take a click now, in the order the row shows them.
 fn key_controls(state: &SettingsState, which: ApiKey) -> Vec<Control> {
-    let key = state.key(which);
-    let controls = match key.state {
-        Some(KeyState::Unavailable) => vec![],
-        Some(KeyState::Saved) if key.confirm_remove => vec![KeyControl::Remove, KeyControl::Keep],
-        Some(KeyState::Saved) if !key.replacing => vec![KeyControl::Replace, KeyControl::AskRemove],
-        _ => [
+    let controls = match key_row(state.key(which)) {
+        KeyRow::Unavailable => vec![],
+        KeyRow::ConfirmRemove => vec![KeyControl::Remove, KeyControl::Keep],
+        KeyRow::Saved => vec![KeyControl::Replace, KeyControl::AskRemove],
+        KeyRow::Typing { can_save, cancel } => [
             Some(KeyControl::Field),
             Some(KeyControl::Show),
-            (!key.input.trim().is_empty()).then_some(KeyControl::Save),
-            key.replacing.then_some(KeyControl::Cancel),
+            can_save.then_some(KeyControl::Save),
+            cancel.then_some(KeyControl::Cancel),
         ]
         .into_iter()
         .flatten()
@@ -271,7 +285,7 @@ pub fn press(state: &SettingsState, control: &Control, press: Press) -> Option<M
             Message::OpenBatchAction(Operation::MoveComments(settings.comment_storage))
         }
         Control::MarkerStorage(storage) => Message::SetMarkerStorage(*storage),
-        Control::MoveMarkers => Message::OpenBatchAction(markers_offer(settings.marker_storage)),
+        Control::MoveMarkers => Message::OpenBatchAction(state.markers_offer()),
         Control::InOutStorage(storage) => Message::SetInOutStorage(*storage),
         Control::MoveInOut => {
             Message::OpenBatchAction(Operation::MoveInOut(settings.in_out_storage))
@@ -308,21 +322,39 @@ pub fn press(state: &SettingsState, control: &Control, press: Press) -> Option<M
     Some(message)
 }
 
-/// Where the focus goes after `pressed` was pressed, when the press takes that control away:
-/// the question about removing a key keeps the key by default, giving up a replacement or a
-/// removal goes back to the button that started it, and **Replace…** goes into the new field.
+/// Where the focus goes after `pressed` was pressed, when the press takes that control away
+/// (§11): the question about removing a key keeps the key by default; giving up a replacement or
+/// a removal goes back to the button that started it; **Replace…** goes into the new field;
+/// **Save key** goes to the **Replace…** the saved key shows, **Remove key** to the field for a
+/// new one; **Check for updates** (disabled while it checks) to the checkbox under it. An offer
+/// goes away with its press: the focus goes to the control after it (see `SettingsState::press`).
 pub fn after_press(pressed: &Control) -> Option<Control> {
-    let Control::Key(which, key) = pressed else {
-        return None;
-    };
-    let next = match key {
-        KeyControl::AskRemove => KeyControl::Keep,
-        KeyControl::Keep => KeyControl::AskRemove,
-        KeyControl::Replace => KeyControl::Field,
-        KeyControl::Cancel => KeyControl::Replace,
-        _ => return None,
-    };
-    Some(Control::Key(*which, next))
+    match pressed {
+        Control::Key(which, key) => {
+            let next = match key {
+                KeyControl::AskRemove => KeyControl::Keep,
+                KeyControl::Keep => KeyControl::AskRemove,
+                KeyControl::Replace => KeyControl::Field,
+                KeyControl::Cancel => KeyControl::Replace,
+                KeyControl::Save => KeyControl::Replace,
+                KeyControl::Remove => KeyControl::Field,
+                KeyControl::Field | KeyControl::Show => return None,
+            };
+            Some(Control::Key(*which, next))
+        }
+        Control::Updates(updates::Control::Check) => {
+            Some(Control::Updates(updates::Control::CheckOnStart))
+        }
+        _ => None,
+    }
+}
+
+/// Whether pressing `control` makes it go away: an offer to run a batch action.
+pub fn is_offer(control: &Control) -> bool {
+    matches!(
+        control,
+        Control::RespaceTags | Control::MoveComments | Control::MoveMarkers | Control::MoveInOut
+    )
 }
 
 /// The item after `current` in `items`, wrapping around; the first when `current` is not there.
@@ -481,15 +513,66 @@ mod tests {
     }
 
     #[test]
-    fn asking_to_remove_a_key_moves_the_focus_to_keep() {
+    fn a_press_that_takes_its_control_away_moves_the_focus_to_the_next_step() {
+        let key = |control| Control::Key(ApiKey::Soniox, control);
+        for (pressed, next) in [
+            (KeyControl::AskRemove, KeyControl::Keep),
+            (KeyControl::Keep, KeyControl::AskRemove),
+            (KeyControl::Replace, KeyControl::Field),
+            (KeyControl::Cancel, KeyControl::Replace),
+            (KeyControl::Save, KeyControl::Replace),
+            (KeyControl::Remove, KeyControl::Field),
+        ] {
+            assert_eq!(after_press(&key(pressed)), Some(key(next)), "{pressed:?}");
+        }
+        assert_eq!(after_press(&key(KeyControl::Show)), None);
         assert_eq!(
-            after_press(&Control::Key(ApiKey::Soniox, KeyControl::AskRemove)),
-            Some(Control::Key(ApiKey::Soniox, KeyControl::Keep))
-        );
-        assert_eq!(
-            after_press(&Control::Key(ApiKey::Soniox, KeyControl::Replace)),
-            Some(Control::Key(ApiKey::Soniox, KeyControl::Field))
+            after_press(&Control::Updates(updates::Control::Check)),
+            Some(Control::Updates(updates::Control::CheckOnStart))
         );
         assert_eq!(after_press(&Control::MonochromeTags), None);
+        assert!(is_offer(&Control::MoveComments) && !is_offer(&Control::Close));
+    }
+
+    #[test]
+    fn every_field_id_names_its_control() {
+        for id in FIELD_IDS {
+            assert_eq!(control_of_field(id).and_then(|c| c.field_id()), Some(*id));
+        }
+        assert_eq!(control_of_field("search-bar-input"), None);
+    }
+
+    #[test]
+    fn the_key_row_shows_what_its_state_asks_for() {
+        let mut key = KeySection::default();
+        assert_eq!(
+            key_row(&key),
+            KeyRow::Typing {
+                can_save: false,
+                cancel: false
+            }
+        );
+        key.input = "  ".to_string();
+        assert!(matches!(
+            key_row(&key),
+            KeyRow::Typing {
+                can_save: false,
+                ..
+            }
+        ));
+        key.state = Some(KeyState::Saved);
+        assert_eq!(key_row(&key), KeyRow::Saved);
+        key.replacing = true;
+        assert_eq!(
+            key_row(&key),
+            KeyRow::Typing {
+                can_save: false,
+                cancel: true
+            }
+        );
+        key.confirm_remove = true;
+        assert_eq!(key_row(&key), KeyRow::ConfirmRemove);
+        key.state = Some(KeyState::Unavailable);
+        assert_eq!(key_row(&key), KeyRow::Unavailable);
     }
 }

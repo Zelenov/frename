@@ -257,18 +257,28 @@ impl UpdatesState {
     /// The controls of the Version row that take a click now, in page order: the ones Tab
     /// reaches in Settings (#167). `batch_running` holds **Update and restart** back.
     pub fn controls(&self, batch_running: bool) -> Vec<Control> {
-        let busy = self.is_busy();
         [
-            (Control::Check, self.installed && !busy),
+            (Control::Check, self.check_enabled()),
             (
                 Control::UpdateAndRestart,
-                self.available_version().is_some() && !busy && !batch_running,
+                self.available_version().is_some() && self.update_enabled(batch_running),
             ),
             (Control::CheckOnStart, self.installed),
         ]
         .into_iter()
         .filter_map(|(control, enabled)| enabled.then_some(control))
         .collect()
+    }
+
+    /// Whether **Check for updates** takes a click: in a package, while nothing runs.
+    pub fn check_enabled(&self) -> bool {
+        self.installed && !self.is_busy()
+    }
+
+    /// Whether **Update and restart**, when shown, takes a click: not while a check, a download
+    /// or a batch job runs.
+    pub fn update_enabled(&self, batch_running: bool) -> bool {
+        !self.is_busy() && !batch_running
     }
 
     /// What Space or Enter on `control` does: what a click does.

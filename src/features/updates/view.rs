@@ -19,7 +19,6 @@ pub fn view(
     focus: Option<Control>,
 ) -> Element<'_, Message> {
     let status = state.status();
-    let busy = state.is_busy();
     let focused = |control| focus == Some(control);
     let available = state.available_version();
 
@@ -54,13 +53,16 @@ pub fn view(
 
     let check = ring(
         button::secondary(fl!("updates-check"))
-            .on_press_maybe((state.installed() && !busy).then_some(Message::CheckNow)),
+            .on_press_maybe(state.check_enabled().then_some(Message::CheckNow)),
         focused(Control::Check),
     );
     let update = available.is_some().then(|| {
         let update = ring(
-            button::primary(fl!("updates-update-and-restart"))
-                .on_press_maybe((!busy && !batch_running).then_some(Message::UpdateAndRestart)),
+            button::primary(fl!("updates-update-and-restart")).on_press_maybe(
+                state
+                    .update_enabled(batch_running)
+                    .then_some(Message::UpdateAndRestart),
+            ),
             focused(Control::UpdateAndRestart),
         );
         if batch_running {

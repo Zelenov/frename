@@ -11,9 +11,9 @@ use iced::{Alignment, Element, Length};
 use crate::ui::layout::{self, NoticeKind};
 use crate::ui::tokens::*;
 use crate::ui::{button, form, scroll, style, text};
-use crate::widgets::focus_ring::ring;
+use crate::widgets::focus_ring::{edge, fixed_ring, ring};
 
-use super::focus::{self, Control, KeyControl};
+use super::focus::{self, Control, KeyControl, KeyRow};
 use super::state::{KeySection, LanguageList, OldSettingsImport};
 use super::{KeyMessage, Message, Page, SettingsState, SETTINGS_SCROLLABLE_ID};
 
@@ -50,7 +50,7 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
         scroll::vertical_with_id(SETTINGS_SCROLLABLE_ID, page),
         layout::button_bar(
             fl!("settings-apply-note"),
-            [ring(
+            [fixed_ring(
                 button::secondary(fl!("settings-close")).on_press(Message::Close),
                 focused(state, Control::Close),
             )],
@@ -65,16 +65,19 @@ fn interface(state: &SettingsState) -> Element<'_, Message> {
         [
             layout::setting_row(
                 fl!("settings-language"),
-                form::dropdown(
-                    language_options(),
-                    Some(LanguageOption(settings.ui_language.clone())),
-                    |option| Message::SetUiLanguage(option.0),
-                )
-                .style(style::focusable_pick_list(focused(
-                    state,
-                    Control::UiLanguage,
-                )))
-                .width(FIELD_WIDTH_M),
+                edge(
+                    form::dropdown(
+                        language_options(),
+                        Some(LanguageOption(settings.ui_language.clone())),
+                        |option| Message::SetUiLanguage(option.0),
+                    )
+                    .style(style::focusable_pick_list(focused(
+                        state,
+                        Control::UiLanguage,
+                    )))
+                    .width(FIELD_WIDTH_M),
+                    focused(state, Control::UiLanguage),
+                ),
             ),
             layout::setting_row(
                 fl!("settings-tags"),
@@ -183,7 +186,7 @@ fn saving(state: &SettingsState) -> Element<'_, Message> {
         move_offer(
             fl!("settings-markers-note"),
             label,
-            focus::markers_offer(settings.marker_storage),
+            state.markers_offer(),
             focused(state, Control::MoveMarkers),
         )
     });
@@ -289,29 +292,34 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
             layout::setting_row(
                 fl!("settings-ai-model-label"),
                 layout::controls([
-                    form::dropdown(
-                        MODELS,
-                        Some(Model::from_id(&settings.ai_model)),
-                        Message::SetAiModel,
-                    )
-                    .style(style::focusable_pick_list(focused(state, Control::AiModel)))
-                    .width(FIELD_WIDTH_L)
-                    .into(),
+                    edge(
+                        form::dropdown(
+                            MODELS,
+                            Some(Model::from_id(&settings.ai_model)),
+                            Message::SetAiModel,
+                        )
+                        .style(style::focusable_pick_list(focused(state, Control::AiModel)))
+                        .width(FIELD_WIDTH_L),
+                        focused(state, Control::AiModel),
+                    ),
                     text::secondary(fl!("settings-ai-hint")).into(),
                 ]),
             ),
             layout::setting_row(
                 fl!("settings-ai-language-label"),
-                form::dropdown(
-                    SummaryLanguage::ALL.map(SummaryLanguageOption),
-                    Some(SummaryLanguageOption(settings.summary_language)),
-                    |option| Message::SetSummaryLanguage(option.0),
-                )
-                .style(style::focusable_pick_list(focused(
-                    state,
-                    Control::SummaryLanguage,
-                )))
-                .width(FIELD_WIDTH_L),
+                edge(
+                    form::dropdown(
+                        SummaryLanguage::ALL.map(SummaryLanguageOption),
+                        Some(SummaryLanguageOption(settings.summary_language)),
+                        |option| Message::SetSummaryLanguage(option.0),
+                    )
+                    .style(style::focusable_pick_list(focused(
+                        state,
+                        Control::SummaryLanguage,
+                    )))
+                    .width(FIELD_WIDTH_L),
+                    focused(state, Control::SummaryLanguage),
+                ),
             ),
         ],
     )
@@ -334,7 +342,7 @@ fn subtitles(state: &SettingsState) -> Element<'_, Message> {
     let languages = &settings.subtitle_languages;
     let checked = |code: &str| languages.iter().any(|l| l == code);
     // Soniox's own list; until it comes (or without a key) the checked codes stay uncheckable.
-    let offered = focus::offered_subtitle_languages(state);
+    let offered = state.offered_subtitle_languages();
     let grid = Row::with_children(offered.into_iter().map(|(code, name)| {
         let on = checked(&code);
         let ringed = focused(state, Control::SubtitleLanguage(code.clone()));
@@ -477,14 +485,14 @@ fn key_block<'a>(
             fl!("settings-key-saved-in", store = key_store()),
         )
     };
-    let mut items: Vec<Element<'_, Message>> = match key.state {
-        Some(KeyState::Unavailable) => vec![layout::notice(
+    let mut items: Vec<Element<'_, Message>> = match focus::key_row(key) {
+        KeyRow::Unavailable => vec![layout::notice(
             NoticeKind::Warning,
             fl!("settings-key-unavailable"),
             Some(fl!("settings-key-unavailable-hint")),
             [],
         )],
-        Some(KeyState::Saved) if key.confirm_remove => vec![
+        KeyRow::ConfirmRemove => vec![
             saved(),
             layout::notice(
                 NoticeKind::Error,
@@ -504,7 +512,7 @@ fn key_block<'a>(
                 ],
             ),
         ],
-        Some(KeyState::Saved) if !key.replacing => vec![
+        KeyRow::Saved => vec![
             saved(),
             layout::buttons([
                 ring(
@@ -519,14 +527,14 @@ fn key_block<'a>(
                 ),
             ]),
         ],
-        _ => {
-            let save = (!key.input.trim().is_empty()).then_some(message(KeyMessage::Save));
+        KeyRow::Typing { can_save, cancel } => {
+            let save = can_save.then_some(message(KeyMessage::Save));
             let show = if key.shown {
                 fl!("settings-key-hide")
             } else {
                 fl!("settings-key-show")
             };
-            let cancel = key.replacing.then(|| {
+            let cancel = cancel.then(|| {
                 ring(
                     button::secondary(fl!("settings-key-cancel"))
                         .on_press(message(KeyMessage::CancelReplace)),

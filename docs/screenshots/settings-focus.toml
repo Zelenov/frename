@@ -1,11 +1,9 @@
-# Settings from the keyboard (#167): with `--settings interface` the ring is on the
-# monochrome-tags checkbox, with `--settings saving` on the first comment option. Not a README
-# image; for looking at the feature (`frename --demo`).
+# Settings from the keyboard (#167): one clip, for `--settings <page> --keys tab,tab,space`
+# shots of the focus ring (`frename --demo`). Not a README image.
 source = "../../tests/folder"
 open = "pick.wide.MVI_1601.mp4"
 window = [1100, 680]
 panels = [420, 260]
-settings_tabs = 2
 
 [[files]]
 from = "file_example_MP4_480_1_5MG.mp4"

@@ -49,6 +49,8 @@ pub struct DemoRun {
     ai: bool,
     /// Capture the settings window, on this page, instead of the main one.
     settings: Option<settings::Page>,
+    /// Keys pressed in the settings window before its shot.
+    keys: Vec<SettingsKey>,
     video_ready: bool,
 }
 
@@ -62,6 +64,7 @@ impl DemoRun {
             batch: args.batch,
             ai: args.ai,
             settings: args.settings,
+            keys: args.keys.clone(),
             video_ready: false,
         }
     }
@@ -72,9 +75,9 @@ impl DemoRun {
         self.settings
     }
 
-    /// How many times to press Tab in the settings window before its shot.
-    pub fn settings_tabs(&self) -> u32 {
-        self.scenario.settings_tabs
+    /// The keys to press in the settings window before its shot.
+    pub fn settings_keys(&self) -> Vec<settings::Message> {
+        self.keys.iter().map(|key| key.message()).collect()
     }
 
     /// What a demo reads instead of the renderer's own API keys: Anthropic saved, Soniox missing,
@@ -257,8 +260,39 @@ fn save_png(shot: &window::Screenshot, expected: (u32, u32), path: &Path) -> Res
         .map_err(|e| format!("cannot save {}: {e}", path.display()))
 }
 
+/// A key `--keys` presses in the settings window (#167).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettingsKey {
+    Tab,
+    ShiftTab,
+    Space,
+    Enter,
+}
+
+impl SettingsKey {
+    fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "tab" => Some(Self::Tab),
+            "shift+tab" => Some(Self::ShiftTab),
+            "space" => Some(Self::Space),
+            "enter" => Some(Self::Enter),
+            _ => None,
+        }
+    }
+
+    /// What the key sends in the settings window.
+    fn message(self) -> settings::Message {
+        match self {
+            Self::Tab => settings::Message::FocusNext,
+            Self::ShiftTab => settings::Message::FocusPrevious,
+            Self::Space => settings::Message::Press(settings::focus::Press::Space),
+            Self::Enter => settings::Message::Press(settings::focus::Press::Enter),
+        }
+    }
+}
+
 /// What `--demo <scenario> --out <png> [--batch] [--mono] [--ai] [--settings [page]]
-/// [--lang <code>]` asks for.
+/// [--keys tab,tab,space] [--lang <code>]` asks for.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DemoArgs {
     pub scenario: PathBuf,
@@ -275,6 +309,9 @@ pub struct DemoArgs {
     /// The UI language setting: `en` unless given, so screenshots never follow the renderer's
     /// OS language; `--lang ""` follows it (System).
     pub lang: String,
+    /// With `--settings`: keys to press in the settings window before the shot, to show the
+    /// keyboard focus (`--keys tab,tab,space`; also `shift+tab`, `enter`).
+    pub keys: Vec<SettingsKey>,
 }
 
 /// The demo the command line asks for; `None` for a normal start.
@@ -290,6 +327,7 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
     let out_at = args.iter().position(|a| a == "--out");
     let lang_at = args.iter().position(|a| a == "--lang");
     let settings_at = args.iter().position(|a| a == "--settings");
+    let keys_at = args.iter().position(|a| a == "--keys");
     Some(value("--demo", Some(at)).and_then(|scenario| {
         let out =
             value("--out", out_at).map_err(|_| "--demo needs --out <file.png>".to_string())?;
@@ -311,6 +349,20 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
                 ),
             },
         };
+        let keys = match keys_at {
+            None => Vec::new(),
+            Some(_) if settings.is_none() => {
+                return Err("--keys presses keys in Settings: it needs --settings".to_string())
+            }
+            Some(_) => value("--keys", keys_at)?
+                .to_string_lossy()
+                .split(',')
+                .map(|name| {
+                    SettingsKey::from_name(name.trim())
+                        .ok_or(format!("--keys: no key called {name}"))
+                })
+                .collect::<Result<_, _>>()?,
+        };
         Ok(DemoArgs {
             scenario,
             out,
@@ -319,6 +371,7 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
             ai: args.iter().any(|a| a == "--ai"),
             settings,
             lang,
+            keys,
         })
     }))
 }
@@ -391,6 +444,7 @@ mod tests {
                 ai: false,
                 settings: None,
                 lang: "en".to_string(),
+                keys: vec![],
             }))
         );
         assert_eq!(
@@ -406,8 +460,32 @@ mod tests {
                 ai: false,
                 settings: None,
                 lang: "ru".to_string(),
+                keys: vec![],
             }))
         );
+    }
+
+    #[test]
+    fn keys_are_pressed_in_settings_only_and_must_be_known() {
+        let with = |keys: &[&str]| {
+            let mut all = vec!["frename", "--demo", "a.toml", "--out", "a.png"];
+            all.extend_from_slice(keys);
+            demo_args(&args(&all))
+        };
+        assert!(matches!(
+            with(&["--settings", "ai", "--keys", "tab,shift+tab,space,enter"]),
+            Some(Ok(DemoArgs { keys, .. })) if keys == [
+                SettingsKey::Tab,
+                SettingsKey::ShiftTab,
+                SettingsKey::Space,
+                SettingsKey::Enter,
+            ]
+        ));
+        assert!(matches!(with(&["--keys", "tab"]), Some(Err(_))));
+        assert!(matches!(
+            with(&["--settings", "--keys", "tab,escape"]),
+            Some(Err(_))
+        ));
     }
 
     #[test]
@@ -575,6 +653,7 @@ mod tests {
             ai: false,
             settings: None,
             lang: "en".to_string(),
+            keys: vec![],
         };
         let mut run = DemoRun::new(scenario(), "o.png".into(), "w".into(), &args);
         assert!(run.video_ready().is_some());

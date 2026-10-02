@@ -726,6 +726,7 @@ impl FrenameApp {
                     | settings::Message::FocusPrevious
                     | settings::Message::Press(_)
                     | settings::Message::ClearFocus
+                    | settings::Message::FieldFocused(_)
                     | settings::Message::Updates(_)
                     | settings::Message::ImportOldSettings
                     | settings::Message::OldSettingsFolderPicked(_)
@@ -932,10 +933,17 @@ impl FrenameApp {
         let settings_page = self.demo.as_ref().and_then(|d| d.settings_page());
         let (open, window, size) = match settings_page {
             Some(page) => {
-                let tabs = self.demo.as_ref().map_or(0, |d| d.settings_tabs());
-                let open = Task::batch(std::iter::once(self.open_settings_on(Some(page))).chain(
-                    (0..tabs).map(|_| Task::done(Message::Settings(settings::Message::FocusNext))),
-                ));
+                let keys = self
+                    .demo
+                    .as_ref()
+                    .map(|d| d.settings_keys())
+                    .unwrap_or_default();
+                // One after another: each key acts on what the one before it changed.
+                let presses = keys
+                    .into_iter()
+                    .map(|key| Task::done(Message::Settings(key)))
+                    .fold(Task::none(), |all: Task<Message>, key| all.chain(key));
+                let open = self.open_settings_on(Some(page)).chain(presses);
                 let id = self.settings_window.unwrap_or(self.main_window);
                 let size = SETTINGS_WINDOW_SIZE;
                 (open, id, Some((size.width as u32, size.height as u32)))

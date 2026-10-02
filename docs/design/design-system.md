@@ -274,6 +274,7 @@ Rules:
 | `row.tall` | 44 | two-line row (recent folders, file list keeps its 52) |
 | `icon.button.small` | 24 | icon buttons inside rows and chips |
 | `check.size` | 16 | checkbox and radio |
+| `focus.ring.gap` | 2 | between a button, checkbox or radio and the 2 px focus ring around it (`FOCUS_RING_GAP`, §6 Focus) |
 | `nav.width` | 188 | Settings navigation column |
 | `label.width` | 160 | Settings label column |
 
@@ -378,6 +379,18 @@ selected where it has one). iced 0.14 gives buttons, checkboxes and radios no ke
 - States: hover = `accent.hover` / `state.hover` overlay; pressed = `accent.pressed` /
   `state.pressed`; disabled = 40 % opacity, same size and place. A disabled button always has a
   visible reason nearby or in its tooltip (PUI "Avoid disabled buttons"; BIR: caption it).
+- **Focused** (Settings, §11): a 2 px `accent.text` ring with radius 6 (radius 4 + the gap) drawn
+  2 px outside the button, around its whole box, for every kind (danger and danger-ghost too: the
+  ring is the one focus color, the button keeps its own). Focused + hover shows both: the hover fill
+  inside, the ring outside. A disabled button never has the ring: Tab skips it.
+
+```
+  ╭────────────╮
+  │┌──────────┐│   2 px accent.text ring, 2 px gap
+  ││ Replace… ││   (the button's own edge and fill unchanged)
+  │└──────────┘│
+  ╰────────────╯
+```
 - **Close and Cancel** are secondary buttons, except on a *result* screen where nothing is left to
   commit (a finished batch job, #58): there Close is the primary button, and it is still the last
   one on the right (§9.2).
@@ -398,6 +411,9 @@ selected where it has one). iced 0.14 gives buttons, checkboxes and radios no ke
   tick. Label `body` on the right, 8 px gap; the label is clickable.
 - States: hover edge `text.secondary`; checked hover `accent.hover`; disabled: `border.subtle`
   edge, `text.disabled` label.
+- **Focused** (Settings, §11): the button ring (§8.1) around the box *and* its label, the whole
+  click target. A checkbox with a hint line under it rings only the checkbox line; the
+  hint stays outside. Focused + hover: the hover edge on the box, the ring around it.
 - Positive wording that describes a lasting behaviour: *Check for updates when frename starts*,
   not *Don't check…*, not *Yes* (BIR «Чекбокс»; PUI "Use positive phrasing").
 - One style in the whole app. The three copies of `dark_checkbox_style` and the default iced
@@ -421,6 +437,18 @@ selected where it has one). iced 0.14 gives buttons, checkboxes and radios no ke
   lines.
 - The group's question is the row label on the left; the options do not repeat its words
   (BIR: "take it out of the brackets").
+- **Focused** (Settings, §11): each option is a Tab stop of its own, and Space picks it. The ring
+  (§8.1) goes around the whole option, its description included, since a click on the description
+  picks it too:
+
+```
+  ╭──────────────────────────────────────────╮
+  │ ○ Inside the video file                  │   ← focused, not selected
+  │   XMP, the Description column in Premiere│
+  ╰──────────────────────────────────────────╯
+   ◉ In a text file next to the video
+     clip.comment.txt
+```
 
 ### 8.4 Segmented control
 
@@ -457,6 +485,11 @@ in Settings apply at once either way; the button bar says so.
   grows over time (UI languages). A fixed set of fewer than 5 short options is a radio group (PUI:
   radios up to about 10; BIR).
 - Drop-downs choose values, never run commands (DI p. 378).
+- States: hover edge `text.secondary`; **open**: 1 px `accent.text` edge while its list shows;
+  **focused** (Settings, §11): a 2 px `accent.text` edge, as a focused field (§8.6), drawn as its
+  own edge, not a ring outside it. Focused wins over hover and open: the edge stays 2 px.
+  Space moves a focused dropdown to its next option, wrapping (iced cannot open the list from
+  the keyboard).
 
 ### 8.8 Slider
 
@@ -815,8 +848,28 @@ registry and every surface follow:
   - **Space** does what a click does: a checkbox toggles, a radio option is picked, a dropdown moves
     to its next option (wrapping), a button is pressed. **Enter** presses a focused button only.
     Both pass to a focused field instead (it types or submits).
-  - **When a press takes the control away**, the focus goes where the next step is: *Remove…* →
-    *Keep*; *Keep* → *Remove…*; *Replace…* → the new key field; *Cancel* → *Replace…*.
+  - **When a press takes the control away**, the focus goes where the next step is, at once
+    (the row changes before the focus moves, so the new field is there to focus):
+
+    | Pressed | The focus goes to |
+    |---|---|
+    | *Remove…* | *Keep* (the safe answer, §10.2) |
+    | *Keep*, or Esc in the question | *Remove…* |
+    | *Replace…* | the new key field |
+    | *Cancel*, or Esc while replacing | *Replace…* |
+    | *Save key* | *Replace…*, once the key is saved (on a failed save, the next Tab starts over) |
+    | *Remove key* | the field for a new key |
+    | *Check for updates* (disabled while it checks) | *Check for updates when frename starts* |
+    | an offer (the button under a changed choice that opens its batch action) | the control after it on the page |
+
+    Esc moves the focus only while it is in that key row; without keyboard focus it stays off.
+  - **A control disabled while focused** (*Update and restart* when a batch starts) keeps the ring
+    until Tab moves it; Space and Enter on it do nothing, as a click would not. Tab skips it.
+  - **A control that goes away otherwise** (a page change, an option hidden by another choice):
+    the ring is not drawn, and the next Tab starts from the first control, Shift+Tab from the last.
+  - **A click** takes the ring away; a click into a text field puts the focus on that field, so
+    Tab goes on from it.
+  - The button bar's *Close* never scrolls the page: it is outside it.
 
 ## 12. Text in the interface
 
@@ -1964,8 +2017,9 @@ No "General" (BIR). The version is on *Updates* ("About" would hold only it).
 - **Settings from an older frename** (installed only): *Import from an old frename folder…*
   (secondary), help "Bring the settings of a frename you ran from a zip folder.", and the import's
   status line.
-- **Button bar:** "Changes apply right away. Ctrl+Tab moves between pages." on the left, so the
-  page key is visible (§11: every shortcut is shown); *Close* (secondary) on the right.
+- **Button bar:** "Changes apply right away. Tab moves between options, Ctrl+Tab between pages."
+  on the left, so the keys are visible (§11: every shortcut is shown); *Close* (secondary) on the
+  right.
 
 ### As built
 
