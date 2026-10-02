@@ -285,7 +285,7 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
                     ),
                     form::radio_option(
                         fl!("settings-ai-moments-full"),
-                        None,
+                        Some(form::description(fl!("settings-ai-moments-full-hint"))),
                         MomentsMode::Full,
                         Some(settings.ai_moments),
                         Message::SetAiMoments,

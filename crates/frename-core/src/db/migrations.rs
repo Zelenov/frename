@@ -219,6 +219,27 @@ mod tests {
         assert_eq!(language, "");
     }
 
+    #[test]
+    fn a_version_19_database_gets_only_what_stands_out() {
+        let conn = database_at_version_1();
+        for m in MIGRATIONS.iter().filter(|m| (2..=19).contains(&m.version)) {
+            conn.execute_batch(m.sql).expect("migration");
+        }
+        conn.execute("UPDATE schema_version SET version = 19", [])
+            .expect("set version");
+        conn.execute("INSERT INTO app_settings (id) VALUES (1)", [])
+            .expect("settings row");
+        run(&conn).expect("migrate");
+        let moments: String = conn
+            .query_row(
+                "SELECT ai_moments FROM app_settings WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("ai_moments column");
+        assert_eq!(moments, "important");
+    }
+
     /// A database at `version` with a settings row whose in/out storage is `in_out`.
     fn database_with_in_out_storage(version: u32, in_out: &str) -> Connection {
         let conn = database_at_version_1();

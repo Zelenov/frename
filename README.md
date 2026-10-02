@@ -341,8 +341,8 @@ pages:
 - **Describe with AI:** your Anthropic API key, kept in the system's password store (Windows
   Credential Manager, macOS Keychain, or a keyring such as GNOME Keyring on Linux), the model
   (Claude Haiku 4.5, Sonnet 5 or Opus 5, with their prices), the language of the descriptions, and
-  whether the moments mark only what stands out (the default, the only one that suggests an In
-  and Out) or cover the whole clip.
+  **Moments**: segments only for what stands out (the default, and the only choice that suggests
+  an In and Out) or segments covering the whole clip.
 - **Subtitles:** your Soniox API key (kept the same way), the languages spoken in your footage, and
   whether a subtitle is a short line or a whole sentence.
 - **Updates:** **Check for updates**, then **Update and restart** when a newer version is out.

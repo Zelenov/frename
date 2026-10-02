@@ -1,6 +1,6 @@
 # 0.110
 ## Added
-- Settings → Describe with AI → Moments: keep only what stands out (as before) or cover the whole clip with moments. Only the first suggests an In and Out.
+- Settings → Describe with AI → Moments: segments only for what stands out (as before) or covering the whole clip. Only "Only what stands out" suggests an In and Out (the **AI** pill).
 
 # 0.109
 ## Fixed

@@ -357,7 +357,7 @@ impl AppStateStore for AppDatabase {
                     settings.subtitle_cue_length.as_str(),
                     settings.marker_storage.as_str(),
                     settings.ui_language,
-                    ai::moments_name(settings.ai_moments),
+                    ai::moments_as_str(settings.ai_moments),
                 ],
             );
         }

@@ -498,7 +498,8 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
         return ItemResult::new(ItemStatus::Skipped, None);
     }
     // Removed in the settings while the job runs: every later video would fail the same way.
-    let Some(request) = Request::for_clip(path, options.model(), options.language) else {
+    let Some(request) = Request::for_clip(path, options.model(), options.language, options.moments)
+    else {
         return ItemResult {
             stop_job: Some(fl!("batch-ai-stop-no-key")),
             ..ItemResult::failed(fl!("batch-ai-fail-no-key"))
@@ -507,9 +508,8 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
     let Request {
         on_disk,
         subtitles,
-        options: mut describe_options,
+        options: describe_options,
     } = request;
-    describe_options.moments = options.moments;
     // The file's share of reading frames, as the estimate counts it; waiting for the answer
     // takes the rest.
     let mut asked_at = 0.0;
@@ -631,9 +631,14 @@ pub struct Request {
 }
 
 impl Request {
-    /// The request for the clip at `path` with `model` and `language`; `None` when no
-    /// Anthropic key is saved. Reads the key and the subtitles: blocking.
-    pub fn for_clip(path: &Path, model: Model, language: SummaryLanguage) -> Option<Self> {
+    /// The request for the clip at `path` with `model`, `language` and `moments`; `None` when
+    /// no Anthropic key is saved. Reads the key and the subtitles: blocking.
+    pub fn for_clip(
+        path: &Path,
+        model: Model,
+        language: SummaryLanguage,
+        moments: MomentsMode,
+    ) -> Option<Self> {
         let api_key = key::read_key(key::ApiKey::Anthropic)?;
         let on_disk = FileTagger::disk_path(path);
         let subtitles = describe::srt::load_for(&on_disk).unwrap_or_else(|e| {
@@ -648,7 +653,7 @@ impl Request {
                 model,
                 language,
                 frame_sampling: FrameSampling::KeyFrames,
-                moments: MomentsMode::Important,
+                moments,
             },
         })
     }
@@ -831,5 +836,17 @@ mod tests {
             &ItemProgress::default(),
         );
         assert_eq!(result.status, ItemStatus::Skipped);
+    }
+
+    #[test]
+    fn the_moments_set_in_the_settings_go_into_the_run() {
+        let mut options = Options::default();
+        let moments = |options: &Options| match options.operation() {
+            super::super::Operation::DescribeAi(run) => run.moments,
+            other => panic!("not a Describe with AI run: {other:?}"),
+        };
+        assert_eq!(moments(&options), MomentsMode::Important, "the default");
+        options.update(Message::SetMoments(MomentsMode::Full));
+        assert_eq!(moments(&options), MomentsMode::Full);
     }
 }
