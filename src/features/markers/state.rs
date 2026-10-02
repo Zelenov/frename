@@ -53,12 +53,14 @@ pub struct MarkersState {
     /// The marker `F2` added last and when; see [`NAME_WINDOW`].
     last_added: Option<(String, Instant)>,
     /// Row the list scrolled to last when following playback.
-    followed: Option<usize>,
+    followed: crate::ui::scroll::FollowedRow,
     /// The marker `F2` is held on; it grows with the playhead.
     recording: Option<Recording>,
     /// Where the list is scrolled to (from the top). The list's own offset is lost when the
     /// view builds it somewhere else in the tree (fullscreen on or off), so it is put back.
     scroll_y: f32,
+    /// The list's viewport height as last reported; 0 until it is.
+    viewport: f32,
     /// The list being put back after fullscreen; its end report carries the new viewport's
     /// height, to see whether the lit marker is still shown.
     restore: crate::ui::scroll::ScrollRestore,
@@ -163,11 +165,25 @@ impl MarkersState {
 
     /// Record the row the list follows; returns whether it changed.
     pub fn follow(&mut self, row: Option<usize>) -> bool {
-        std::mem::replace(&mut self.followed, row) != row
+        self.followed.follow(row)
+    }
+
+    /// A click on a row jumped to `row`: the list stays where it is (§13.2).
+    pub fn clicked(&mut self, row: Option<usize>) {
+        self.followed.clicked(row);
     }
 
     pub fn scroll_y(&self) -> f32 {
         self.scroll_y
+    }
+
+    /// The list's viewport height as last reported by a scroll; 0 when none was yet.
+    pub fn viewport(&self) -> f32 {
+        self.viewport
+    }
+
+    pub fn set_viewport(&mut self, viewport: f32) {
+        self.viewport = viewport;
     }
 
     /// Record where the list is scrolled to; true when this is the report of a restore (see
@@ -185,5 +201,21 @@ impl MarkersState {
     /// Start over for another file.
     pub fn reset(&mut self) {
         *self = Self::default();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Issue #171: a click on a marker jumps there without scrolling the list.
+    #[test]
+    fn a_click_on_a_marker_does_not_scroll_the_list() {
+        let mut state = MarkersState::default();
+        assert!(state.follow(Some(0)));
+        state.clicked(Some(4));
+        assert!(!state.follow(Some(4)), "the seek's own follow");
+        assert!(!state.follow(Some(3)), "a frame before the jump landed");
+        assert!(!state.follow(Some(4)), "the landed one");
     }
 }

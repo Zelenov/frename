@@ -14,6 +14,7 @@ use super::view::{cue_offset, CUE_LIST_SCROLLABLE_ID};
 use super::Message;
 use crate::features::markers;
 use crate::features::video_controls::{self, VideoControlsState};
+use crate::ui::scroll::FollowedRow;
 use crate::ui::tokens::{SPACE_XXS, SPINNER_TICK};
 use frename_core::{
     load_subtitles, AppDatabase, AppStateStore, FileTagger, Rotation, RotationError, Subtitles,
@@ -89,7 +90,7 @@ pub struct VideoPlayerState {
     position: Duration,
     /// Cue the list last scrolled to; the list follows only when this changes, so a
     /// user scrolling it by hand is not fought on every tick.
-    followed_cue: Option<usize>,
+    followed_cue: FollowedRow,
     /// Where the subtitle list is scrolled to; put back when fullscreen rebuilds the list.
     cue_scroll_y: f32,
     /// Set when the list was just put back at this offset; see `CueListScrolled`.
@@ -137,7 +138,7 @@ impl Default for VideoPlayerState {
             notice: None,
             notice_count: 0,
             position: Duration::ZERO,
-            followed_cue: None,
+            followed_cue: FollowedRow::default(),
             cue_scroll_y: 0.0,
             cue_restore: Default::default(),
             play_until: None,
@@ -209,7 +210,7 @@ impl VideoPlayerState {
         self.current_path = Some(path.clone());
         self.subtitles = None;
         self.position = Duration::ZERO;
-        self.followed_cue = None;
+        self.followed_cue = FollowedRow::default();
         self.cue_scroll_y = 0.0;
         self.cue_restore = Default::default();
         self.play_until = None;
@@ -542,7 +543,15 @@ impl VideoPlayerState {
                 // Exact, not keyframe: a keyframe before the cue would land playback on
                 // the previous cue, and the highlight would jump back to it.
                 let start = cue.start;
-                self.seek_to(start, true)
+                // A click never scrolls the list (§13.2): the row is under the pointer.
+                let lit = self
+                    .subtitles
+                    .as_ref()
+                    .and_then(|s| s.last_started_index(start));
+                if self.seek_only(start, true) {
+                    self.followed_cue.clicked(lit);
+                }
+                Task::none()
             }
             Message::Unload => {
                 // A load still under way belongs to the video being closed: drop it when it
@@ -703,15 +712,24 @@ impl VideoPlayerState {
     /// Seek and adopt the target as the position right away, so the view shows where
     /// playback is going rather than wherever the pipeline is mid-seek.
     fn seek_to(&mut self, target: Duration, accurate: bool) -> Task<Message> {
-        let Some(video) = self.current_video.as_mut() else {
+        if !self.seek_only(target, accurate) {
             return Task::none();
+        }
+        self.followed_cue.unpin();
+        self.follow_cue(false)
+    }
+
+    /// [`Self::seek_to`] without following the cue; false when it did not seek.
+    fn seek_only(&mut self, target: Duration, accurate: bool) -> bool {
+        let Some(video) = self.current_video.as_mut() else {
+            return false;
         };
         if let Err(e) = video.seek(target, accurate) {
             log::error!("Failed to seek: {e}");
-            return Task::none();
+            return false;
         }
         self.position = target.min(video.duration());
-        self.follow_cue(false)
+        true
     }
 
     /// Scroll the subtitle list so the current cue sits near its top. Only when that cue
@@ -721,10 +739,11 @@ impl VideoPlayerState {
             return Task::none();
         };
         let cue = subtitles.last_started_index(self.display_position());
-        if cue == self.followed_cue && !force {
+        if force {
+            self.followed_cue.set(cue);
+        } else if !self.followed_cue.follow(cue) {
             return Task::none();
         }
-        self.followed_cue = cue;
         // One cue of context above the current one.
         let rows_above = cue.unwrap_or(0).saturating_sub(1);
         Self::scroll_cue_list_to(cue_offset(subtitles, rows_above))
@@ -1311,5 +1330,35 @@ mod tests {
         let _ = state.update(Message::RestoreCueScroll(80.0));
         // Nothing is armed for a list that is not shown.
         assert!(!state.cue_restore.report(80.0));
+    }
+
+    fn player_with_cues() -> VideoPlayerState {
+        let srt = "1\n00:00:01,000 --> 00:00:02,000\none\n\n2\n00:00:03,000 --> 00:00:04,000\ntwo\n\n3\n00:00:05,000 --> 00:00:06,000\nthree\n";
+        VideoPlayerState {
+            subtitles: Some(Arc::new(Subtitles::parse(srt))),
+            ..VideoPlayerState::default()
+        }
+    }
+
+    /// Issue #171: after a click on a cue (which seeks), neither the frames before the seek
+    /// landed nor the one at the cue scroll the list; playback on its own does.
+    #[test]
+    fn a_click_on_a_cue_does_not_scroll_the_list_but_playback_to_the_next_does() {
+        let mut player = player_with_cues();
+        let _ = player.update(Message::CueListScrolled(40.0, 300.0));
+        player.followed_cue.clicked(Some(2));
+        assert_eq!(player.cue_scroll_y(), 40.0);
+        player.position = Duration::from_secs(3);
+        assert_eq!(player.follow_cue(false).units(), 0, "the old frame");
+        player.position = Duration::from_secs(5);
+        assert_eq!(player.follow_cue(false).units(), 0, "the clicked cue");
+        player.position = Duration::from_secs(3);
+        assert_eq!(player.follow_cue(false).units(), 0, "a late old frame");
+
+        let mut player = player_with_cues();
+        player.position = Duration::from_secs(1);
+        assert_eq!(player.follow_cue(false).units(), 1);
+        player.position = Duration::from_secs(3);
+        assert_eq!(player.follow_cue(false).units(), 1, "the next cue: scroll");
     }
 }

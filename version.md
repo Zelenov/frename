@@ -1,3 +1,7 @@
+# 0.100
+## Fixed
+- Clicking a subtitle or a marker in its list no longer scrolls the list: it stays where it was, and follows the playhead again once playback moves on.
+
 # 0.99
 ## Fixed
 - Moving markers between the video and the comment no longer leaves two markers on one moment: a comment line for a moment that already has a marker renames it, and more lines for that moment join its text.
