@@ -2905,13 +2905,33 @@ mod tests {
     impl TestDirectory {
         pub fn new(file_count: usize) -> Self {
             let path = unique_test_folder();
+            Self::with_store(
+                file_count,
+                AppDatabase::with_path(path.with_extension("db")),
+                path,
+            )
+        }
+
+        /// Like [`TestDirectory::new`], but the folder's store is the app database the player
+        /// writes playback positions to, for a test that needs a rename to move one.
+        pub fn sharing_app_database(file_count: usize) -> Self {
+            Self::with_store(file_count, AppDatabase::new(), unique_test_folder())
+        }
+
+        fn with_store(file_count: usize, db: AppDatabase, path: PathBuf) -> Self {
+            // Code under test also writes to the app database (playback positions, panel
+            // widths); migrate it as `main` does at startup.
+            LoggingAppStateStore::new(AppDatabase::new())
+                .initialize()
+                .unwrap();
             std::fs::create_dir_all(&path).expect("create test folder");
             let files: Vec<File> = (0..file_count)
                 .map(|i| {
                     File::from_path(path.join(format!("file_{}.mp4", i)), SystemTime::UNIX_EPOCH)
                 })
                 .collect();
-            let db = AppDatabase::new();
+            // `new` gives each folder its own database file, so tests running at the same time
+            // never share session rows (#107).
             let store = LoggingAppStateStore::new(db);
             store.initialize().unwrap();
             let directory = Directory::with_files(&path, files, store);
@@ -2942,6 +2962,8 @@ mod tests {
     impl Drop for TestDirectory {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.path);
+            // The open connection stays cached, so on Windows this file may stay behind.
+            let _ = std::fs::remove_file(self.path.with_extension("db"));
         }
     }
 
@@ -3125,7 +3147,7 @@ mod tests {
     fn the_open_clip_saved_under_a_new_name_reopens_at_the_same_moment() {
         use frename_core::AppStateStore;
         use std::time::Duration;
-        let test_dir = TestDirectory::new(1);
+        let test_dir = TestDirectory::sharing_app_database(1);
         let mut workspace = FolderWorkspace::new();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
