@@ -153,7 +153,7 @@ CREATE TABLE IF NOT EXISTS batch_run (
 
 /// Migration 17: what frename spent on each paid service (`ai_spend`, one row per file a batch
 /// billed) and the top-up the user recorded for it (`ai_top_up`, one row per service), for the
-/// credit estimate (issue #121). `service` is `anthropic` or `soniox`.
+/// credit estimate (issue #121). `service` is `anthropic` or `soniox`. Dropped by migration 18.
 pub const M17_AI_LEDGER: &str = "
 CREATE TABLE IF NOT EXISTS ai_spend (
     service TEXT NOT NULL,
@@ -166,4 +166,11 @@ CREATE TABLE IF NOT EXISTS ai_top_up (
     usd REAL NOT NULL,
     at_ms INTEGER NOT NULL
 );
+";
+
+/// Migration 18: drop the spend ledger tables; the spending tracker is gone (#172).
+pub const M18_DROP_AI_LEDGER: &str = "
+DROP INDEX IF EXISTS ai_spend_service_at;
+DROP TABLE IF EXISTS ai_spend;
+DROP TABLE IF EXISTS ai_top_up;
 ";

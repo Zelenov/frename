@@ -4,7 +4,6 @@
 
 pub mod block;
 pub mod key;
-pub mod ledger;
 
 pub use block::has_editor_comment;
 pub use clipscribe::SummaryLanguage;

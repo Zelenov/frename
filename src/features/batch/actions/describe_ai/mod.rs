@@ -16,8 +16,7 @@ use clipscribe::{
     MAX_DURATION_S,
 };
 use frename_core::ai::block;
-use frename_core::ai::key::{self, ApiKey, KeyState};
-use frename_core::ai::ledger::SpendSummary;
+use frename_core::ai::key::{self, KeyState};
 use frename_core::{File, FileId, FileKind, FileTagger, FolderInfo, MarkerStorage};
 use iced::widget::column;
 use iced::Element;
@@ -206,7 +205,7 @@ impl Options {
 
     /// The page for `checked` and its run button (`Describe 12 videos · about $0.35` once the
     /// estimate and the key are known). The plan is made once.
-    pub fn panel(&self, checked: &[&File], credit: SpendSummary) -> Panel<'_> {
+    pub fn panel(&self, checked: &[&File]) -> Panel<'_> {
         let plan = self.plan(checked);
         let ready = !plan.estimating && !plan.send.is_empty() && self.key == Some(KeyState::Saved);
         let reason = if plan.estimating {
@@ -217,7 +216,7 @@ impl Options {
             None
         };
         Panel {
-            page: self.view(&plan, credit),
+            page: self.view(&plan),
             run: self.run_label(&plan),
             ready,
             reason,
@@ -239,7 +238,7 @@ impl Options {
         }
     }
 
-    fn view(&self, plan: &Plan, credit: SpendSummary) -> Element<'_, ActionMessage> {
+    fn view(&self, plan: &Plan) -> Element<'_, ActionMessage> {
         let settings = [
             page::linked_row(
                 fl!("settings-ai-model-label"),
@@ -268,14 +267,13 @@ impl Options {
             &[Change::IntoComments],
             settings
                 .into_iter()
-                .chain(std::iter::once(self.estimate(plan, credit)))
-                .chain(self.credit_notice(plan, credit))
+                .chain(std::iter::once(self.estimate(plan)))
                 .chain(self.key_notice()),
         )
     }
 
     /// The plan's figures and what is skipped, or how far the estimate is.
-    fn estimate(&self, plan: &Plan, credit: SpendSummary) -> Element<'_, ActionMessage> {
+    fn estimate(&self, plan: &Plan) -> Element<'_, ActionMessage> {
         if plan.estimating {
             return text::body(fl!(
                 "batch-action-describe-ai-estimating",
@@ -297,37 +295,21 @@ impl Options {
             ));
         }
         let rows = (!plan.send.is_empty()).then(|| {
-            page::plan(
-                [
-                    (fl!("batch-plan-videos"), videos(plan.send.len())),
-                    (fl!("batch-plan-length"), minutes(plan.seconds)),
-                    (
-                        fl!("batch-plan-cost"),
-                        dollars(self.model.cost_usd(plan.usage)),
-                    ),
-                ]
-                .into_iter()
-                .chain(super::credit_left_row(credit))
-                .chain([(fl!("batch-plan-time"), duration_text(plan.run_seconds))]),
-            )
+            page::plan([
+                (fl!("batch-plan-videos"), videos(plan.send.len())),
+                (fl!("batch-plan-length"), minutes(plan.seconds)),
+                (
+                    fl!("batch-plan-cost"),
+                    dollars(self.model.cost_usd(plan.usage)),
+                ),
+                (fl!("batch-plan-time"), duration_text(plan.run_seconds)),
+            ])
         });
         column![]
             .push(rows)
             .push(page::notes(notes))
             .spacing(SPACE_S)
             .into()
-    }
-
-    /// The warning before a run that costs more than what is probably left.
-    fn credit_notice(
-        &self,
-        plan: &Plan,
-        credit: SpendSummary,
-    ) -> Option<Element<'_, ActionMessage>> {
-        if plan.estimating || plan.send.is_empty() {
-            return None;
-        }
-        super::credit_low_notice(ApiKey::Anthropic, credit, self.model.cost_usd(plan.usage))
     }
 
     /// Why the key keeps the run button off, with the button that fixes it.
@@ -716,7 +698,7 @@ mod tests {
     }
 
     fn run_button(options: &Options, checked: &[&File]) -> (String, bool) {
-        let panel = options.panel(checked, SpendSummary::default());
+        let panel = options.panel(checked);
         (panel.run, panel.ready)
     }
 
