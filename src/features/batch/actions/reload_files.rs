@@ -4,9 +4,9 @@
 use std::path::Path;
 
 use frename_core::FileTagger;
-use iced::widget::column;
 use iced::Element;
 
+use super::super::page::{self, Change};
 use super::super::{ItemResult, ItemStatus};
 
 pub fn label() -> String {
@@ -14,10 +14,11 @@ pub fn label() -> String {
 }
 
 pub fn view<'a, M: 'a>() -> Element<'a, M> {
-    super::panel(
+    page::page(
         label(),
         fl!("batch-action-reload-files-hint"),
-        column![].into(),
+        &[Change::OwnRecords],
+        [],
     )
 }
 

@@ -1,4 +1,6 @@
-//! In-memory FileTagger: no disk access. Used in debug/test mode.
+//! In-memory FileTagger: no disk access, except the read-only existence checks `save` makes for
+//! its overwrite guard (issue #84), which mirror `ProductionFileTagger`'s own. Used in debug/test
+//! mode.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -37,6 +39,13 @@ impl FileTaggerBackend for InMemoryFileTagger {
             .parent()
             .map(|p| p.join(&new_file_name))
             .unwrap_or_else(|| PathBuf::from(&new_file_name));
+        // Mirrors ProductionFileTagger's overwrite guard (issue #84): a real file (or sidecar)
+        // already at the target name must refuse the same way here, or this backend (meant to be
+        // "always correct for tests and debug builds", see the module doc) would let a test's
+        // directory of real files be silently clobbered where production would not.
+        if super::file_tagger::target_name_taken(path, &new_path) {
+            return path.to_path_buf();
+        }
         self.storage
             .lock()
             .expect("lock")

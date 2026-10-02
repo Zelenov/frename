@@ -8,18 +8,37 @@ use iced::{time, Subscription, Task};
 use iced_video_player::{Error as VideoError, Video};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use super::view::{CUE_LIST_SCROLLABLE_ID, CUE_ROW_PITCH};
+use super::frame_step::{self, ShownFrame, StepTarget};
+use super::view::{cue_offset, CUE_LIST_SCROLLABLE_ID};
 use super::Message;
 use crate::features::markers;
 use crate::features::video_controls::{self, VideoControlsState};
+use crate::ui::scroll::FollowedRow;
+use crate::ui::tokens::{SPACE_XXS, SPINNER_TICK};
+use frename_core::playback::{self, OpenAt};
+use frename_core::FileId;
 use frename_core::{
     load_subtitles, AppDatabase, AppStateStore, FileTagger, Rotation, RotationError, Subtitles,
 };
 
 /// How long a note over the picture stays.
 const NOTICE_DURATION: Duration = Duration::from_secs(2);
+/// How long a note that must be read stays: the report of a crash and what was restored.
+const LONG_NOTICE_DURATION: Duration = Duration::from_secs(20);
+/// How long the note that a clip continued where it stopped stays: long enough to click it.
+const RESUME_NOTICE_DURATION: Duration = Duration::from_secs(6);
+/// How often where playback is gets kept while a clip plays, so a crash loses little of it.
+const REMEMBER_EVERY: Duration = Duration::from_secs(5);
+/// How often a frame step looks whether its frame is on screen.
+const FRAME_STEP_TICK: Duration = Duration::from_millis(15);
+/// How long a frame step waits for a new frame once the pipeline has settled: past the first or
+/// last frame none comes. While the pipeline is still decoding toward the frame (a backward seek
+/// in a 4K clip with long groups of pictures takes seconds), it waits on.
+const FRAME_STEP_SETTLED_WAIT: Duration = Duration::from_millis(250);
+/// The longest a frame step waits at all, should the pipeline never settle.
+const FRAME_STEP_GIVE_UP: Duration = Duration::from_secs(20);
 
 /// What the list over the right of the picture shows. One list at a time, so a windowed
 /// video is not covered twice. Kept across files, like volume.
@@ -53,6 +72,62 @@ impl RangePlay {
     }
 }
 
+/// A frame step on its way: the frame it started from, which way, and when.
+#[derive(Debug, Clone, Copy)]
+struct PendingStep {
+    from: ShownFrame,
+    step: video_controls::FrameStep,
+    /// Sent as a step event: the frame it shows starts where it says.
+    by_step_event: bool,
+    since: Instant,
+}
+
+/// A note over the picture.
+#[derive(Debug, Clone)]
+struct Notice {
+    text: String,
+    /// Its number, so an older timer does not hide a newer note.
+    number: u64,
+    /// It says where the clip continued (#161): a click on it starts the clip over, and it goes
+    /// with that clip, unlike other notes, which outlive an unload (#84).
+    starts_over: bool,
+}
+
+/// What a clip being loaded continues from once it is open (#161).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PendingResume {
+    /// Where playback stopped in it last time, if that is remembered.
+    stopped: Option<Duration>,
+    /// Its in point: where a clip watched to the end starts over.
+    in_point: Option<Duration>,
+}
+
+/// A clip that continued a little before where playback had stopped in it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Continued {
+    /// The moment it continued at.
+    at: Duration,
+    /// Where playback had stopped.
+    stopped: Duration,
+}
+
+/// The clip shown: the file it is, which stays the same through a rename, and the path the
+/// folder lists it under, which where playback stops is kept for (#161).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Clip {
+    id: FileId,
+    path: PathBuf,
+}
+
+/// The clip a video unload closed, and where it was. Opened again right after (its file was
+/// saved in place, maybe under a new name), it comes back at that very moment, as a reopen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Closed {
+    id: FileId,
+    position: Duration,
+    continued: Option<Continued>,
+}
+
 /// Video player component state.
 pub struct VideoPlayerState {
     current_video: Option<Video>,
@@ -73,9 +148,8 @@ pub struct VideoPlayerState {
     subtitles: Option<Arc<Subtitles>>,
     /// The list shown over the picture; see [`Overlay`].
     overlay: Overlay,
-    /// Note shown over the picture and its number, so an older timer does not hide a newer
-    /// note.
-    notice: Option<(String, u64)>,
+    /// Note shown over the picture.
+    notice: Option<Notice>,
     notice_count: u64,
     /// Playback position the whole view agrees on: progress bar, caption and list.
     ///
@@ -86,7 +160,11 @@ pub struct VideoPlayerState {
     position: Duration,
     /// Cue the list last scrolled to; the list follows only when this changes, so a
     /// user scrolling it by hand is not fought on every tick.
-    followed_cue: Option<usize>,
+    followed_cue: FollowedRow,
+    /// Where the subtitle list is scrolled to; put back when fullscreen rebuilds the list.
+    cue_scroll_y: f32,
+    /// Set when the list was just put back at this offset; see `CueListScrolled`.
+    cue_restore: crate::ui::scroll::ScrollRestore,
     /// A clicked range is playing: pause when playback reaches its end. Any seek or pause by
     /// the user forgets it.
     play_until: Option<RangePlay>,
@@ -96,6 +174,40 @@ pub struct VideoPlayerState {
     rotation: Option<Result<Rotation, RotationError>>,
     /// Number of the latest load; a `VideoLoaded` of an older one is dropped.
     load_generation: u64,
+    /// Loads started (on a blocking thread, opening the file) whose `VideoLoaded` has not
+    /// landed yet. While GStreamer is inside that open, it holds the file open on the OS
+    /// level; `Unload` must not answer `VideoUnloaded` until this reaches zero, or a save
+    /// right after can hit a sharing violation on Windows (issue #91).
+    loads_in_flight: u64,
+    /// `Unload` arrived while a load was still in flight: `VideoUnloaded` is held back until
+    /// every such load has landed (and, being stale, been dropped) — see `loads_in_flight`.
+    unloading: bool,
+    /// **More** is open over the picture.
+    more_open: bool,
+    /// Steps of the spinner clock since the load started: turns the spinner, and after a while
+    /// says the file is slow to come.
+    loading_ticks: usize,
+    /// A frame step whose frame is not on screen yet. Further steps wait for it: a held key
+    /// would otherwise step again from the frame still shown and stand still.
+    frame_step: Option<PendingStep>,
+    /// A step back left the pipeline running backward (see `seek_backward`); any forward seek
+    /// clears it. Kept here rather than read from the frame on screen: while the backward seek
+    /// is still on its way there is none, and playing then would play the clip backward.
+    reversed: bool,
+    /// The frame the last step event showed, as the sink reports it; see
+    /// [`frame_step::stepped_onto`].
+    stepped_onto: Option<ShownFrame>,
+    /// The clip shown; see [`Clip`].
+    clip: Option<Clip>,
+    /// What the clip being loaded continues from once it is open (see [`playback::open_at`]).
+    pending_resume: Option<PendingResume>,
+    /// The shown clip continued a little before where it had stopped: until playback moves past
+    /// that, the latter is the moment kept, so opening and leaving it does not creep back.
+    continued: Option<Continued>,
+    /// The clip the last unload closed; see [`Closed`].
+    closed: Option<Closed>,
+    /// When the position was last kept while playing.
+    remembered_at: Option<Instant>,
 }
 
 impl Default for VideoPlayerState {
@@ -117,20 +229,166 @@ impl Default for VideoPlayerState {
             notice: None,
             notice_count: 0,
             position: Duration::ZERO,
-            followed_cue: None,
+            followed_cue: FollowedRow::default(),
+            cue_scroll_y: 0.0,
+            cue_restore: Default::default(),
             play_until: None,
             resume_at: None,
             rotation: None,
             load_generation: 0,
+            loads_in_flight: 0,
+            unloading: false,
+            more_open: false,
+            loading_ticks: 0,
+            frame_step: None,
+            reversed: false,
+            stepped_onto: None,
+            clip: None,
+            pending_resume: None,
+            continued: None,
+            closed: None,
+            remembered_at: None,
         }
     }
 }
 
 impl VideoPlayerState {
-    /// Load a video file asynchronously.
-    pub fn load_video(&mut self, path: PathBuf) -> Task<Message> {
+    /// Load the video file at `path` asynchronously. `clip` is the file it is (`id`) and the
+    /// path the folder lists it under, which where playback stops is kept for; `in_point` its in
+    /// point. The clip shown until now keeps where playback stopped in it. The same file opened
+    /// again right after it was closed (saved in place, even under a new name) comes back at
+    /// the very moment it showed; any other continues where playback stopped in it last time,
+    /// once it is open.
+    pub fn load_video(
+        &mut self,
+        path: PathBuf,
+        clip: PathBuf,
+        id: FileId,
+        in_point: Option<Duration>,
+    ) -> Task<Message> {
+        self.remember_position();
+        self.drop_resume_note();
+        let shown = !self.loading && !self.load_failed;
+        let reopened = match self.closed.take().filter(|closed| closed.id == id) {
+            Some(closed) => Some((closed.position, closed.continued)),
+            None if shown && self.clip.as_ref().is_some_and(|shown| shown.id == id) => {
+                Some((self.position, self.continued))
+            }
+            None => None,
+        };
+        let clip = Clip { id, path: clip };
+        match reopened {
+            Some((position, continued)) => {
+                self.pending_resume = None;
+                self.continued = continued;
+                self.clip = Some(clip);
+                let task = self.open(path, !self.autoplay);
+                self.resume_at = Some(position);
+                task
+            }
+            None => {
+                self.resume_at = None;
+                self.continued = None;
+                self.pending_resume = Some(PendingResume {
+                    stopped: AppDatabase::new().get_playback_position(&clip.path),
+                    in_point,
+                });
+                self.clip = Some(clip);
+                self.open(path, !self.autoplay)
+            }
+        }
+    }
+
+    /// The shown clip was renamed (an in-place rename or an undo, which does not reopen it):
+    /// where playback stops is kept for its new path from now on.
+    pub fn follow_rename(&mut self, path: PathBuf) {
+        if let Some(clip) = self.clip.as_mut() {
+            clip.path = path;
+        }
+    }
+
+    /// The video stops being shown without an unload (a file that is not a video opened): keep
+    /// where playback was, and let the clip go, so nothing done meanwhile (`Home`) touches it.
+    pub fn close_clip(&mut self) {
+        self.remember_position();
+        self.drop_resume_note();
+        self.clip = None;
+        self.closed = None;
+        self.pending_resume = None;
+        self.continued = None;
+    }
+
+    /// Keep where playback is in the shown clip, for when it is opened again (#161). Nothing
+    /// while it loads or when it could not be played: the moment kept from before stays.
+    fn remember_position(&mut self) {
+        let Some(clip) = self.clip.as_ref() else {
+            return;
+        };
+        if self.loading || self.load_failed {
+            return;
+        }
+        // Continued a little before where it had stopped, and not past that yet (a glance, or
+        // the first seconds of playing on): where it had stopped stays the moment to keep.
+        let position = match self.continued {
+            Some(continued) if (continued.at..=continued.stopped).contains(&self.position) => {
+                continued.stopped
+            }
+            _ => self.position,
+        };
+        AppDatabase::new().set_playback_position(&clip.path, position);
+        self.remembered_at = Some(Instant::now());
+    }
+
+    /// Once the clip is open: continue where playback stopped in it last time, a little before,
+    /// with a note that says so; or start it over at its in point when it was watched to the
+    /// end.
+    fn resume_playback(&mut self, duration: Duration) -> Task<Message> {
+        let Some(pending) = self.pending_resume.take() else {
+            return Task::none();
+        };
+        match playback::open_at(pending.stopped, duration, pending.in_point) {
+            OpenAt::Start => Task::none(),
+            OpenAt::InPoint(at) => self.seek_to(at, true),
+            OpenAt::Resume { at, stopped } => {
+                // No note about a moment the clip did not go to.
+                if !self.seek_only(at, true) {
+                    return Task::none();
+                }
+                self.followed_cue.unpin();
+                let follow = self.follow_cue(false);
+                self.continued = Some(Continued {
+                    at: self.position,
+                    stopped,
+                });
+                let time = video_controls::view::clock(stopped.as_secs_f32());
+                let notice = self.show_resume_note(fl!("media-viewer-video-resumed", time = time));
+                Task::batch([follow, notice])
+            }
+        }
+    }
+
+    /// Take away the note that says where the clip continued: it belongs to the clip shown.
+    fn drop_resume_note(&mut self) {
+        if self
+            .notice
+            .as_ref()
+            .is_some_and(|notice| notice.starts_over)
+        {
+            self.notice = None;
+        }
+    }
+
+    /// Back to the very start of the clip (`Home`, or a click on the note that says where it
+    /// continued).
+    fn go_to_start(&mut self) -> Task<Message> {
+        self.drop_resume_note();
+        // The start, chosen: no moment kept from before overrides it, and a clip still loading
+        // does not continue anywhere else once open.
+        self.continued = None;
+        self.pending_resume = None;
         self.resume_at = None;
-        self.open(path, !self.autoplay)
+        self.play_until = None;
+        self.seek_to(Duration::ZERO, true)
     }
 
     /// Open the shown video again at the same moment and in the same play state, e.g. after
@@ -153,10 +411,48 @@ impl VideoPlayerState {
         self.rotation.as_ref()
     }
 
+    /// Scroll the subtitle list to `y`.
+    fn scroll_cue_list_to(y: f32) -> Task<Message> {
+        iced::widget::operation::scroll_to::<()>(
+            iced::widget::Id::new(CUE_LIST_SCROLLABLE_ID),
+            iced::widget::scrollable::AbsoluteOffset {
+                x: None,
+                y: Some(y),
+            },
+        )
+        .discard()
+    }
+
     /// How many loads have started (see `load_generation`), for tests of reopens.
     #[cfg(test)]
     pub fn loads_started(&self) -> u64 {
         self.load_generation
+    }
+
+    /// For tests without a real video: the clip has loaded and is shown at `position`.
+    #[cfg(test)]
+    pub fn pretend_shown_at(&mut self, position: Duration) {
+        self.loading = false;
+        self.position = position;
+    }
+
+    /// For tests: the note that says where the clip continued is shown.
+    #[cfg(test)]
+    pub fn pretend_resume_note(&mut self) {
+        let _ = self.show_resume_note("Resumed at 00:40".to_string());
+    }
+
+    /// For tests: the moment the clip being loaded reopens at, when it is the clip just shown.
+    #[cfg(test)]
+    pub fn reopens_at(&self) -> Option<Duration> {
+        self.resume_at
+    }
+
+    /// For tests: where playback stopped last time in the clip being loaded, as looked up to
+    /// continue there; `None` when no lookup is waiting.
+    #[cfg(test)]
+    pub fn resume_lookup(&self) -> Option<Option<Duration>> {
+        self.pending_resume.map(|pending| pending.stopped)
     }
 
     fn open(&mut self, path: PathBuf, paused: bool) -> Task<Message> {
@@ -164,17 +460,24 @@ impl VideoPlayerState {
         // Unknown until the load reads it: a reopen after a turn or an undo may see another.
         self.rotation = None;
         self.loading = true;
+        self.loading_ticks = 0;
         self.load_failed = false;
         self.current_video = None;
         self.controls = VideoControlsState::with_volume(self.controls.volume());
         self.current_path = Some(path.clone());
         self.subtitles = None;
         self.position = Duration::ZERO;
-        self.followed_cue = None;
+        self.followed_cue = FollowedRow::default();
+        self.cue_scroll_y = 0.0;
+        self.cue_restore = Default::default();
         self.play_until = None;
+        self.frame_step = None;
+        self.reversed = false;
+        self.remembered_at = None;
         self.paused = paused;
         self.load_generation = self.load_generation.wrapping_add(1);
         let generation = self.load_generation;
+        self.loads_in_flight += 1;
 
         let subtitles_task = Self::load_subtitles(path.clone());
         let video_task = Task::future(async move {
@@ -235,17 +538,31 @@ impl VideoPlayerState {
     /// Handle all video player messages.
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            // A load started before the latest one (the video was reopened meanwhile): its
-            // video, dropped here, may show an older rotation.
-            Message::VideoLoaded { generation, .. } if generation != self.load_generation => {
-                log::debug!("Dropping a video load that a newer one replaced");
-                Task::none()
-            }
             Message::VideoLoaded {
                 video: slot,
                 rotation,
-                ..
+                generation,
             } => {
+                // This load has landed: whatever file handle GStreamer held open for it is
+                // dropped by the end of this arm (with the video, if any). If `Unload` came in
+                // while this was still in flight, only now is it safe to say so (issue #91).
+                self.loads_in_flight = self.loads_in_flight.saturating_sub(1);
+                let unloaded = if self.unloading && self.loads_in_flight == 0 {
+                    self.unloading = false;
+                    // The wait `Unload` set up is over: `loading` (kept true so the view showed
+                    // its spinner rather than "nothing loaded" for the wait) is now false, same
+                    // as `Unload` itself would have set it had no load been in flight.
+                    self.loading = false;
+                    Task::done(Message::VideoUnloaded)
+                } else {
+                    Task::none()
+                };
+                // A load started before the latest one (the video was reopened meanwhile): its
+                // video, dropped here, may show an older rotation.
+                if generation != self.load_generation {
+                    log::debug!("Dropping a video load that a newer one replaced");
+                    return unloaded;
+                }
                 self.loading = false;
                 self.rotation = rotation;
                 let resume_at = self.resume_at.take();
@@ -254,18 +571,22 @@ impl VideoPlayerState {
                 let video = slot.lock().ok().and_then(|mut slot| slot.take());
                 let Some(video) = video else {
                     self.load_failed = true;
+                    self.pending_resume = None;
                     log::info!("Video load failed; showing error state");
-                    return Task::none();
+                    return unloaded;
                 };
                 self.load_failed = false;
-                let duration_secs = video.duration().as_secs_f32();
+                let duration = video.duration();
+                let duration_secs = duration.as_secs_f32();
                 self.current_video = Some(video);
                 let ready = Task::done(Message::VideoReady { duration_secs });
-                match resume_at {
+                let loaded = match resume_at {
                     // Reopened: back to the moment it showed.
                     Some(position) => Task::batch([ready, self.seek_to(position, true)]),
-                    None => ready,
-                }
+                    // Opened: on from where playback stopped in it last time (#161).
+                    None => Task::batch([ready, self.resume_playback(duration)]),
+                };
+                Task::batch([unloaded, loaded])
             }
             Message::VideoReady { duration_secs } => {
                 let ready = Task::done(Message::Controls(video_controls::Message::VideoReady {
@@ -282,6 +603,13 @@ impl VideoPlayerState {
             Message::NewFrame => {
                 if let Some(position) = self.current_video.as_ref().and_then(query_position) {
                     self.position = position;
+                }
+                if !self.paused
+                    && !self
+                        .remembered_at
+                        .is_some_and(|at| at.elapsed() < REMEMBER_EVERY)
+                {
+                    self.remember_position();
                 }
                 let follow = self.follow_cue(false);
                 let position = self.position;
@@ -309,24 +637,42 @@ impl VideoPlayerState {
                 // The pipeline stays in Playing at the end; the next play restarts the stream.
                 self.play_until = None;
                 self.paused = true;
+                // The ticks stop with playback: the playhead is the end, not the last tick, so
+                // `]` and the readout take where the clip really ended.
+                if let Some(video) = self.current_video.as_ref() {
+                    self.position = query_position(video).unwrap_or_else(|| video.duration());
+                }
+                // Played to the end: opened again, it starts over.
+                self.remember_position();
                 Task::done(Message::Controls(video_controls::Message::SetPlaying(
                     false,
                 )))
             }
             Message::TogglePause => {
                 self.play_until = None;
-                // Pausing stops the ticks, so take the exact position playback stopped at.
-                if let Some(position) = self.current_video.as_ref().and_then(query_position) {
+                self.frame_step = None;
+                // A step back left the pipeline running backward: turn it forward at the frame
+                // shown before playing.
+                if self.paused && self.reversed {
+                    self.seek_only(self.position, true);
+                } else if let Some(position) = self.current_video.as_ref().and_then(query_position)
+                {
+                    // Pausing stops the ticks, so take the exact position playback stopped at.
                     self.position = position;
                 }
                 if let Some(video) = &mut self.current_video {
                     self.paused = !self.paused;
                     video.set_paused(self.paused);
                 }
+                if self.paused {
+                    self.remember_position();
+                }
                 Task::none()
             }
+            Message::GoToStart => self.go_to_start(),
             Message::Seek(position_secs) => {
                 self.play_until = None;
+                self.continued = None;
                 self.seek_to(
                     Duration::from_secs_f64(position_secs.max(0.0) as f64),
                     false,
@@ -350,6 +696,7 @@ impl VideoPlayerState {
                         let dur = video.duration().as_secs_f32();
                         Task::done(Message::Seek((self.position.as_secs_f32() + 10.0).min(dur)))
                     }
+                    video_controls::Message::StepFrame(step) => self.step_frame(step),
                     video_controls::Message::SetSegmentStart => self.capture_segment_start(),
                     video_controls::Message::SetSegmentEnd => self.capture_segment_end(),
                     video_controls::Message::TakeScreenshot => self.capture_screenshot(),
@@ -375,6 +722,9 @@ impl VideoPlayerState {
                     ),
                     video_controls::Message::DeleteMarker => {
                         Task::done(Message::Markers(markers::Message::DeleteAtPlayhead))
+                    }
+                    video_controls::Message::DescribeMarker => {
+                        Task::done(Message::Markers(markers::Message::DescribeAtPlayhead))
                     }
                     video_controls::Message::PreviousMarker => {
                         Task::done(Message::Markers(markers::Message::Previous))
@@ -436,22 +786,52 @@ impl VideoPlayerState {
             Message::Markers(_) => Task::none(),
             Message::SeekExact(ms) => {
                 self.play_until = None;
+                self.continued = None;
                 self.seek_to(Duration::from_millis(ms), true)
             }
-            Message::ShowNotice(text) => {
-                self.notice_count += 1;
-                let number = self.notice_count;
-                self.notice = Some((text, number));
-                Task::future(async move {
-                    tokio::time::sleep(NOTICE_DURATION).await;
-                    Message::ClearNotice(number)
-                })
-            }
+            Message::ShowNotice(text) => self.show_notice(text, NOTICE_DURATION),
+            Message::ShowLongNotice(text) => self.show_notice(text, LONG_NOTICE_DURATION),
             Message::ClearNotice(number) => {
-                if self.notice.as_ref().is_some_and(|(_, n)| *n == number) {
+                if self
+                    .notice
+                    .as_ref()
+                    .is_some_and(|notice| notice.number == number)
+                {
                     self.notice = None;
                 }
                 Task::none()
+            }
+            Message::CueListScrolled(y, viewport) => {
+                self.cue_scroll_y = y;
+                if !self.cue_restore.report(y) {
+                    return Task::none();
+                }
+                // The list was just put back here: if the lit cue is out of the new viewport,
+                // bring it in, as the follow does.
+                let Some(subtitles) = self.subtitles.as_ref() else {
+                    return Task::none();
+                };
+                let Some(cue) = subtitles.last_started_index(self.display_position()) else {
+                    return Task::none();
+                };
+                let wanted = crate::ui::scroll::keep_row_in_view(
+                    y,
+                    viewport,
+                    cue_offset(subtitles, cue),
+                    cue_offset(subtitles, cue + 1) - SPACE_XXS,
+                    cue_offset(subtitles, cue.saturating_sub(1)),
+                );
+                if wanted == y {
+                    return Task::none();
+                }
+                Self::scroll_cue_list_to(wanted)
+            }
+            Message::RestoreCueScroll(y) => {
+                // Only a list on screen reports back; armed otherwise it would fire much later.
+                if self.show_cue_list() && self.subtitles.is_some() {
+                    self.cue_restore.arm(y);
+                }
+                Self::scroll_cue_list_to(y)
             }
             Message::SeekToCue(index) => {
                 let Some(cue) = self.subtitles.as_ref().and_then(|s| s.cues().get(index)) else {
@@ -460,17 +840,49 @@ impl VideoPlayerState {
                 // Exact, not keyframe: a keyframe before the cue would land playback on
                 // the previous cue, and the highlight would jump back to it.
                 let start = cue.start;
-                self.seek_to(start, true)
+                self.continued = None;
+                // A click never scrolls the list (§13.2): the row is under the pointer.
+                let lit = self
+                    .subtitles
+                    .as_ref()
+                    .and_then(|s| s.last_started_index(start));
+                if self.seek_only(start, true) {
+                    self.followed_cue.clicked(lit);
+                }
+                Task::none()
             }
             Message::Unload => {
-                // A load still under way belongs to the video being closed: drop it when it lands.
+                // A load still under way belongs to the video being closed: drop it when it
+                // lands (`VideoLoaded` above). Until then GStreamer's open on the blocking
+                // thread may still hold the file open, so `VideoUnloaded` — the caller's signal
+                // that it is safe to rename or resave the file — has to wait for it (#91).
+                let load_in_flight = self.loads_in_flight > 0;
+                self.remember_position();
+                self.drop_resume_note();
+                let shown = !self.loading && !self.load_failed;
+                self.closed = self.clip.take().filter(|_| shown).map(|clip| Closed {
+                    id: clip.id,
+                    position: self.position,
+                    continued: self.continued,
+                });
+                self.pending_resume = None;
                 self.load_generation = self.load_generation.wrapping_add(1);
                 self.resume_at = None;
+                self.frame_step = None;
                 self.current_video = None;
-                self.loading = false;
                 self.current_path = None;
                 self.subtitles = None;
-                Task::done(Message::VideoUnloaded)
+                if load_in_flight {
+                    // `loading` stays true for this same wait: the view keeps showing its
+                    // spinner instead of falling back to "nothing loaded", and `is_active()`
+                    // correctly still reports the player as busy in the meantime.
+                    log::debug!("Deferring VideoUnloaded: a load is still in flight");
+                    self.unloading = true;
+                    Task::none()
+                } else {
+                    self.loading = false;
+                    Task::done(Message::VideoUnloaded)
+                }
             }
             Message::VideoUnloaded => Task::none(),
             // Intercepted by media_viewer/folder_workspace; no-op here.
@@ -479,6 +891,27 @@ impl VideoPlayerState {
                 self.autoplay = autoplay;
                 Task::none()
             }
+            Message::ToggleMore => {
+                self.more_open = !self.more_open;
+                Task::none()
+            }
+            Message::CloseMore => {
+                self.more_open = false;
+                Task::none()
+            }
+            Message::MorePicked(messages) => {
+                self.more_open = false;
+                messages
+                    .into_iter()
+                    .map(Task::done)
+                    .reduce(Task::chain)
+                    .unwrap_or_else(Task::none)
+            }
+            Message::LoadingTick => {
+                self.loading_ticks = self.loading_ticks.wrapping_add(1);
+                Task::none()
+            }
+            Message::FrameStepTick => self.frame_step_tick(),
         }
     }
 
@@ -497,6 +930,11 @@ impl VideoPlayerState {
     pub fn subtitles(&self) -> Option<&Subtitles> {
         self.subtitles.as_deref()
     }
+    /// Where the subtitle list is scrolled to.
+    pub fn cue_scroll_y(&self) -> f32 {
+        self.cue_scroll_y
+    }
+
     /// Whether the subtitle list is open.
     pub fn show_cue_list(&self) -> bool {
         self.overlay == Overlay::Subtitles
@@ -507,9 +945,59 @@ impl VideoPlayerState {
         self.overlay == Overlay::Markers
     }
 
+    /// Whether **More** is open.
+    pub fn more_open(&self) -> bool {
+        self.more_open
+    }
+
+    /// The file being loaded, by name, while it loads.
+    pub fn loading_name(&self) -> Option<String> {
+        self.loading
+            .then(|| self.current_path.as_ref()?.file_name())
+            .flatten()
+            .map(|name| name.to_string_lossy().into_owned())
+    }
+
+    /// Steps of the spinner clock since the load started.
+    pub fn loading_ticks(&self) -> usize {
+        self.loading_ticks
+    }
+
+    /// Show `text` over the picture for `duration`; a newer note replaces it.
+    fn show_notice(&mut self, text: String, duration: Duration) -> Task<Message> {
+        self.show(text, duration, false)
+    }
+
+    /// Show the note that says where the clip continued: it starts the clip over when clicked
+    /// and goes with the clip.
+    fn show_resume_note(&mut self, text: String) -> Task<Message> {
+        self.show(text, RESUME_NOTICE_DURATION, true)
+    }
+
+    fn show(&mut self, text: String, duration: Duration, starts_over: bool) -> Task<Message> {
+        self.notice_count += 1;
+        let number = self.notice_count;
+        self.notice = Some(Notice {
+            text,
+            number,
+            starts_over,
+        });
+        Task::future(async move {
+            tokio::time::sleep(duration).await;
+            Message::ClearNotice(number)
+        })
+    }
+
     /// The note to show over the picture, if any.
     pub fn notice(&self) -> Option<&str> {
-        self.notice.as_ref().map(|(text, _)| text.as_str())
+        self.notice.as_ref().map(|notice| notice.text.as_str())
+    }
+
+    /// Whether the note says where the clip continued: a click on it starts the clip over.
+    pub fn notice_starts_over(&self) -> bool {
+        self.notice
+            .as_ref()
+            .is_some_and(|notice| notice.starts_over)
     }
 
     /// The playhead in milliseconds, as the view shows it.
@@ -532,6 +1020,7 @@ impl VideoPlayerState {
         if self.current_video.is_none() {
             return Task::none();
         }
+        self.continued = None;
         let seek = self.seek_to(start, true);
         self.play_until = Some(RangePlay {
             start,
@@ -551,18 +1040,111 @@ impl VideoPlayerState {
         ])
     }
 
-    /// Seek and adopt the target as the position right away, so the view shows where
-    /// playback is going rather than wherever the pipeline is mid-seek.
-    fn seek_to(&mut self, target: Duration, accurate: bool) -> Task<Message> {
+    /// One frame back or forward. Pauses playback first; the playhead becomes the shown frame's
+    /// time once it is on screen (see [`Self::frame_step_tick`]).
+    fn step_frame(&mut self, step: video_controls::FrameStep) -> Task<Message> {
         let Some(video) = self.current_video.as_mut() else {
             return Task::none();
         };
-        if let Err(e) = video.seek(target, accurate) {
-            log::error!("Failed to seek: {e}");
+        self.play_until = None;
+        let paused = if self.paused {
+            Task::none()
+        } else {
+            self.paused = true;
+            video.set_paused(true);
+            Task::done(Message::Controls(video_controls::Message::SetPlaying(
+                false,
+            )))
+        };
+        if self.frame_step.is_some() {
+            return paused;
+        }
+        let Some(mut frame) = shown_frame(video) else {
+            return paused;
+        };
+        if self.stepped_onto == Some(frame) {
+            frame = frame_step::stepped_onto(frame);
+        }
+        let target = frame_step::step_target(frame, step, video.duration());
+        let moved = match target {
+            StepTarget::Stay => return paused,
+            StepTarget::NextBuffer => {
+                video.step_one_frame();
+                Task::none()
+            }
+            StepTarget::Backward(stop) => {
+                if seek_backward(video, stop) {
+                    self.reversed = true;
+                }
+                Task::none()
+            }
+            StepTarget::Forward(target) => self.seek_to(target, true),
+        };
+        self.frame_step = Some(PendingStep {
+            from: frame,
+            step,
+            by_step_event: target == StepTarget::NextBuffer,
+            since: Instant::now(),
+        });
+        Task::batch([paused, moved])
+    }
+
+    /// While a frame step is on its way: once a new frame is on screen (or the wait is over),
+    /// the playhead becomes its time.
+    fn frame_step_tick(&mut self) -> Task<Message> {
+        let (Some(pending), Some(video)) = (self.frame_step, self.current_video.as_ref()) else {
+            self.frame_step = None;
+            return Task::none();
+        };
+        let shown = shown_frame(video).filter(|frame| *frame != pending.from);
+        if shown.is_none() {
+            let waited = pending.since.elapsed();
+            let decoding = video.pipeline().state(gst::ClockTime::ZERO).0
+                == Ok(gst::StateChangeSuccess::Async);
+            if waited < FRAME_STEP_SETTLED_WAIT || (decoding && waited < FRAME_STEP_GIVE_UP) {
+                return Task::none();
+            }
+        }
+        self.frame_step = None;
+        let Some(frame) = shown else {
+            // Nothing new came: the step ran past the first or last frame. Show the frame it
+            // started from again, played forward.
+            self.seek_only(pending.from.start, true);
+            self.position = frame_step::frame_position(pending.from);
+            return self.follow_cue(false);
+        };
+        self.stepped_onto = pending.by_step_event.then_some(frame);
+        self.position = frame_step::frame_position(frame);
+        let follow = self.follow_cue(false);
+        if frame_step::only_found_the_start(pending.from, frame) {
+            // The first half of a step back: now the frame before can be found.
+            return Task::batch([follow, self.step_frame(pending.step)]);
+        }
+        follow
+    }
+
+    /// Seek and adopt the target as the position right away, so the view shows where
+    /// playback is going rather than wherever the pipeline is mid-seek.
+    fn seek_to(&mut self, target: Duration, accurate: bool) -> Task<Message> {
+        if !self.seek_only(target, accurate) {
             return Task::none();
         }
-        self.position = target.min(video.duration());
+        self.followed_cue.unpin();
         self.follow_cue(false)
+    }
+
+    /// [`Self::seek_to`] without following the cue; false when it did not seek.
+    fn seek_only(&mut self, target: Duration, accurate: bool) -> bool {
+        let Some(video) = self.current_video.as_mut() else {
+            return false;
+        };
+        if let Err(e) = video.seek(target, accurate) {
+            log::error!("Failed to seek: {e}");
+            return false;
+        }
+        self.reversed = false;
+        self.position = target.min(video.duration());
+        true
     }
 
     /// Scroll the subtitle list so the current cue sits near its top. Only when that cue
@@ -572,37 +1154,39 @@ impl VideoPlayerState {
             return Task::none();
         };
         let cue = subtitles.last_started_index(self.display_position());
-        if cue == self.followed_cue && !force {
+        if force {
+            self.followed_cue.set(cue);
+        } else if !self.followed_cue.follow(cue) {
             return Task::none();
         }
-        self.followed_cue = cue;
         // One cue of context above the current one.
         let rows_above = cue.unwrap_or(0).saturating_sub(1);
-        let offset = iced::widget::scrollable::AbsoluteOffset {
-            x: None,
-            y: Some(rows_above as f32 * CUE_ROW_PITCH),
-        };
-        iced::widget::operation::scroll_to::<()>(
-            iced::widget::Id::new(CUE_LIST_SCROLLABLE_ID),
-            offset,
-        )
-        .discard()
+        Self::scroll_cue_list_to(cue_offset(subtitles, rows_above))
     }
 
     fn capture_segment_start(&self) -> Task<Message> {
-        let Some(video) = self.current_video.as_ref() else {
+        let Some(position) = self.segment_point() else {
             return Task::none();
         };
-        let secs = video.position().as_secs_f32().floor();
-        Task::done(Message::SegmentStartMarked(secs))
+        Task::done(Message::SegmentStartMarked(position.as_secs_f32().floor()))
     }
 
     fn capture_segment_end(&self) -> Task<Message> {
-        let Some(video) = self.current_video.as_ref() else {
+        let Some(position) = self.segment_point() else {
             return Task::none();
         };
-        let secs = video.position().as_secs_f32().ceil();
-        Task::done(Message::SegmentEndMarked(secs))
+        Task::done(Message::SegmentEndMarked(position.as_secs_f32().ceil()))
+    }
+
+    /// Where `[` / `]` mark: paused, the playhead the view shows (a stepped frame's time, as `F2`
+    /// takes it); playing, the pipeline's own position, which the 4-a-second tick lags behind.
+    fn segment_point(&self) -> Option<Duration> {
+        let video = self.current_video.as_ref()?;
+        Some(if self.paused {
+            self.display_position()
+        } else {
+            video.position()
+        })
     }
 
     fn capture_screenshot(&self) -> Task<Message> {
@@ -629,7 +1213,11 @@ impl VideoPlayerState {
     /// Subscriptions active while a video is loaded.
     pub fn subscription(&self) -> Subscription<Message> {
         if self.current_video.is_none() {
-            return Subscription::none();
+            return if self.loading {
+                time::every(SPINNER_TICK).map(|_| Message::LoadingTick)
+            } else {
+                Subscription::none()
+            };
         }
         // The tick exists only to advance the progress bar, so it is pointless while paused:
         // it used to force a full view rebuild 4x/second for as long as a video stayed open.
@@ -639,8 +1227,14 @@ impl VideoPlayerState {
         } else {
             time::every(Duration::from_millis(250)).map(|_| Message::NewFrame)
         };
+        let step_tick = if self.frame_step.is_some() {
+            time::every(FRAME_STEP_TICK).map(|_| Message::FrameStepTick)
+        } else {
+            Subscription::none()
+        };
         Subscription::batch([
             frame_tick,
+            step_tick,
             self.controls.subscription().map(Message::Controls),
         ])
     }
@@ -658,6 +1252,48 @@ fn query_position(video: &Video) -> Option<Duration> {
         .pipeline()
         .query_position::<gst::ClockTime>()
         .map(|t| Duration::from_nanos(t.nseconds()))
+}
+
+/// The frame on screen: the player sink's last frame, its timestamp in stream time (what the
+/// playhead and markers count in). `None` before the first frame and while a seek flushes.
+fn shown_frame(video: &Video) -> Option<ShownFrame> {
+    let sink = player_video_sink(&video.pipeline())?;
+    let sample = sink.property::<Option<gst::Sample>>("last-sample")?;
+    let buffer = sample.buffer()?;
+    let pts = buffer.pts()?;
+    let segment = sample.segment()?.downcast_ref::<gst::ClockTime>()?.clone();
+    let reversed = segment.rate() < 0.0;
+    let start = segment
+        .to_stream_time_full(pts)
+        .and_then(|time| time.positive())
+        .unwrap_or(pts);
+    Some(ShownFrame {
+        start: Duration::from_nanos(start.nseconds()),
+        duration: buffer
+            .duration()
+            .map(|duration| Duration::from_nanos(duration.nseconds())),
+        // A forward seek clips the frame it lands in to start at the seek target.
+        start_exact: reversed || segment.start() != Some(pts),
+        reversed,
+    })
+}
+
+/// An accurate seek running backward and stopping at `stop`: paused, it shows the frame just
+/// before `stop`, whole from its true start. The pipeline keeps running backward until a seek
+/// turns it forward (see `TogglePause`). False when the seek was refused.
+fn seek_backward(video: &Video, stop: Duration) -> bool {
+    let result = video.pipeline().seek(
+        -1.0,
+        gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE,
+        gst::SeekType::Set,
+        gst::ClockTime::ZERO,
+        gst::SeekType::Set,
+        gst::ClockTime::from_nseconds(u64::try_from(stop.as_nanos()).unwrap_or(u64::MAX)),
+    );
+    if let Err(e) = &result {
+        log::error!("Failed to seek backward: {e}");
+    }
+    result.is_ok()
 }
 
 // ---------------------------------------------------------------------------
@@ -753,6 +1389,16 @@ fn open_video_with(
 /// The direction is set from frename's own reading of the file rather than left to `auto`
 /// (GStreamer's orientation tag), so a debug build shows a turn it keeps in memory. A mirrored
 /// picture is left to `auto`, which knows GStreamer's own naming of mirror and turn.
+/// For tests: the video at `path` opened for real, its picture going nowhere.
+#[cfg(all(test, any(target_os = "linux", windows)))]
+pub(crate) fn open_for_test(path: &std::path::Path) -> Video {
+    let url = url::Url::from_file_path(path).expect("url");
+    gst::init().expect("gstreamer");
+    open_video_with(&url, Some("fakesink"), flip_direction(None))
+        .map_err(|failure| failure.to_string())
+        .expect("open")
+}
+
 fn flip_direction(rotation: Option<Rotation>) -> Option<&'static str> {
     let rotation = rotation?;
     let direction = match (rotation.mirrored(), rotation.degrees()) {
@@ -1046,6 +1692,71 @@ mod tests {
         assert_eq!(player.resume_at, Some(Duration::from_secs(42)));
     }
 
+    /// Issue #91: `Unload` while a load is still opening the file on a blocking thread must
+    /// hold `VideoUnloaded` back until that load lands — GStreamer may still hold the file
+    /// open, and a save made right after `VideoUnloaded` (the caller's "safe to rename now"
+    /// signal) could hit a sharing violation on Windows.
+    #[test]
+    fn unload_waits_for_a_load_still_in_flight() {
+        let mut player = VideoPlayerState {
+            loading: true,
+            loads_in_flight: 1,
+            load_generation: 3,
+            ..VideoPlayerState::default()
+        };
+        let _ = player.update(Message::Unload);
+        assert!(player.unloading, "must wait for the in-flight load");
+        assert!(
+            player.loading,
+            "the view must keep showing its spinner, not \"nothing loaded\", during the wait"
+        );
+
+        // The load lands, stale (Unload bumped the generation): only now is it safe to say so.
+        let stale = Message::VideoLoaded {
+            video: Arc::new(Mutex::new(None)),
+            rotation: None,
+            generation: 3,
+        };
+        let _ = player.update(stale);
+        assert!(!player.unloading, "the wait ends once the stale load lands");
+        assert!(!player.loading, "the wait is over");
+        assert_eq!(player.loads_in_flight, 0);
+    }
+
+    /// Two loads in flight (reopened twice) when `Unload` arrives: it must wait for both to
+    /// land, not just the first stale one to arrive — a plain "is a load closing" flag would
+    /// answer `VideoUnloaded` while the other load could still hold the file open.
+    #[test]
+    fn unload_waits_for_every_load_still_in_flight() {
+        let mut player = VideoPlayerState {
+            loading: true,
+            loads_in_flight: 2,
+            load_generation: 5,
+            ..VideoPlayerState::default()
+        };
+        let _ = player.update(Message::Unload);
+        assert!(player.unloading);
+        assert!(player.loading, "still waiting: the spinner must stay up");
+
+        let stale = |generation| Message::VideoLoaded {
+            video: Arc::new(Mutex::new(None)),
+            rotation: None,
+            generation,
+        };
+        let _ = player.update(stale(4));
+        assert!(
+            player.unloading,
+            "one of two loads landed: still waiting on the other"
+        );
+        assert!(player.loading, "still one load left in flight");
+        assert_eq!(player.loads_in_flight, 1);
+
+        let _ = player.update(stale(3));
+        assert!(!player.unloading, "both loads landed: safe to say so now");
+        assert!(!player.loading, "the wait is over");
+        assert_eq!(player.loads_in_flight, 0);
+    }
+
     #[test]
     fn only_a_turned_picture_gets_a_flip() {
         assert_eq!(flip_direction(None), None);
@@ -1091,5 +1802,476 @@ mod tests {
         assert_eq!(size(flagged), (height, width));
         assert_eq!(size(Rotation::UPRIGHT.turned(1)), (height, width));
         assert_eq!(size(Rotation::UPRIGHT.turned(2)), (width, height));
+    }
+
+    /// Issue #162 on a real (turned) clip: a step pauses playback, five steps forward visit five
+    /// new frames, and five back return to the frame they started from; the playhead is the
+    /// shown frame's time each time.
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn frame_steps_forward_and_back_return_to_the_same_frame() {
+        use crate::features::video_controls::FrameStep;
+        let clip =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/folder/rotated-90.mp4");
+        let url = url::Url::from_file_path(&clip).expect("url");
+        gst::init().expect("gstreamer");
+        let flip = flip_direction(FileTagger::video_rotation(&clip).ok());
+        let video = open_video_with(&url, Some("fakesink"), flip)
+            .map_err(|failure| failure.to_string())
+            .expect("open");
+        let mut player = VideoPlayerState {
+            current_video: Some(video),
+            paused: false,
+            ..VideoPlayerState::default()
+        };
+        let shown = |player: &VideoPlayerState| {
+            let video = player.current_video.as_ref().expect("video");
+            let deadline = Instant::now() + Duration::from_secs(10);
+            loop {
+                if let Some(frame) = shown_frame(video) {
+                    return frame;
+                }
+                assert!(Instant::now() < deadline, "no frame on screen");
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        };
+        let step = |player: &mut VideoPlayerState, step: FrameStep| {
+            let _ = player.update(Message::Controls(video_controls::Message::StepFrame(step)));
+            assert!(player.paused, "a step pauses playback");
+            assert!(player.frame_step.is_some(), "the step is on its way");
+            while player.frame_step.is_some() {
+                std::thread::sleep(FRAME_STEP_TICK);
+                let _ = player.update(Message::FrameStepTick);
+            }
+            let frame = shown(player);
+            assert_eq!(player.position, frame_step::frame_position(frame));
+            frame.end().expect("a frame of known length")
+        };
+        let first = step(&mut player, FrameStep::Forward);
+        let mut forward = vec![first];
+        for _ in 0..5 {
+            forward.push(step(&mut player, FrameStep::Forward));
+        }
+        assert!(
+            forward.windows(2).all(|pair| pair[0] < pair[1]),
+            "each step forward shows a later frame: {forward:?}"
+        );
+        let mut back = Vec::new();
+        for _ in 0..5 {
+            back.push(step(&mut player, FrameStep::Back));
+        }
+        back.reverse();
+        assert_eq!(back, forward[..5], "back visits the same frames");
+
+        // From a moment a seek landed in mid-frame (a marker): back shows the frame before
+        // in one step, and forward returns to the frame the seek showed.
+        let _ = player.update(Message::SeekExact(1_234));
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let marked = loop {
+            let frame = shown(&player);
+            if frame
+                .end()
+                .is_some_and(|end| end > Duration::from_millis(1_234))
+            {
+                break frame.end().expect("an end");
+            }
+            assert!(Instant::now() < deadline, "the seek did not land");
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        let before = step(&mut player, FrameStep::Back);
+        assert!(before < marked);
+        assert_eq!(step(&mut player, FrameStep::Forward), marked);
+
+        // A step back leaves the pipeline running backward; playing turns it forward.
+        let before = step(&mut player, FrameStep::Back);
+        let _ = player.update(Message::TogglePause);
+        assert!(!player.paused);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let frame = shown(&player);
+            if !frame.reversed && frame.end().is_some_and(|end| end > before) {
+                break;
+            }
+            assert!(Instant::now() < deadline, "playback did not go on forward");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        // Play pressed while a step back is still on its way (no frame on screen yet): it
+        // plays forward, not backward to the start.
+        let _ = player.update(Message::TogglePause);
+        assert!(player.paused);
+        let paused_at = shown(&player).end().expect("an end");
+        let _ = player.update(Message::Controls(video_controls::Message::StepFrame(
+            FrameStep::Back,
+        )));
+        let _ = player.update(Message::TogglePause);
+        assert!(!player.paused);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let frame = shown(&player);
+            if !frame.reversed
+                && frame
+                    .end()
+                    .is_some_and(|end| end > paused_at + Duration::from_millis(300))
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "playback did not go on forward: {frame:?}"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    #[test]
+    fn the_subtitle_list_offset_is_kept_and_a_load_starts_it_over() {
+        let mut state = VideoPlayerState::default();
+        let _ = state.update(Message::CueListScrolled(80.0, 300.0));
+        assert_eq!(state.cue_scroll_y(), 80.0);
+        let _ = state.update(Message::RestoreCueScroll(80.0));
+        // Nothing is armed for a list that is not shown.
+        assert!(!state.cue_restore.report(80.0));
+    }
+
+    fn player_with_cues() -> VideoPlayerState {
+        let srt = "1\n00:00:01,000 --> 00:00:02,000\none\n\n2\n00:00:03,000 --> 00:00:04,000\ntwo\n\n3\n00:00:05,000 --> 00:00:06,000\nthree\n";
+        VideoPlayerState {
+            subtitles: Some(Arc::new(Subtitles::parse(srt))),
+            ..VideoPlayerState::default()
+        }
+    }
+
+    /// Issue #171: after a click on a cue (which seeks), neither the frames before the seek
+    /// landed nor the one at the cue scroll the list; playback on its own does.
+    #[test]
+    fn a_click_on_a_cue_does_not_scroll_the_list_but_playback_to_the_next_does() {
+        let mut player = player_with_cues();
+        let _ = player.update(Message::CueListScrolled(40.0, 300.0));
+        player.followed_cue.clicked(Some(2));
+        assert_eq!(player.cue_scroll_y(), 40.0);
+        player.position = Duration::from_secs(3);
+        assert_eq!(player.follow_cue(false).units(), 0, "the old frame");
+        player.position = Duration::from_secs(5);
+        assert_eq!(player.follow_cue(false).units(), 0, "the clicked cue");
+        player.position = Duration::from_secs(3);
+        assert_eq!(player.follow_cue(false).units(), 0, "a late old frame");
+
+        let mut player = player_with_cues();
+        player.position = Duration::from_secs(1);
+        assert_eq!(player.follow_cue(false).units(), 1);
+        player.position = Duration::from_secs(3);
+        assert_eq!(player.follow_cue(false).units(), 1, "the next cue: scroll");
+    }
+
+    /// A clip path no other test keeps a playback position for, in the test database.
+    fn unique_clip(name: &str) -> PathBuf {
+        use frename_core::Initializable;
+        let _ = AppDatabase::new().initialize();
+        std::env::temp_dir()
+            .join(format!("frename-resume-{}-{name}", std::process::id()))
+            .join("clip.mp4")
+    }
+
+    /// The shown clip at `path`, a file of its own.
+    fn clip_at(path: &std::path::Path) -> Option<Clip> {
+        Some(Clip {
+            id: FileId::new(),
+            path: path.to_path_buf(),
+        })
+    }
+
+    fn note(text: &str, starts_over: bool) -> Option<Notice> {
+        Some(Notice {
+            text: text.to_string(),
+            number: 1,
+            starts_over,
+        })
+    }
+
+    /// The fixture clip, opened for real, and how long it is.
+    #[cfg(any(target_os = "linux", windows))]
+    fn real_clip() -> (Video, Duration) {
+        let video = open_for_test(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/folder/file_example_MP4_480_1_5MG.mp4"),
+        );
+        let duration = video.duration();
+        (video, duration)
+    }
+
+    /// The load `player` started lands with `video`, as the open on its blocking thread would.
+    #[cfg(any(target_os = "linux", windows))]
+    fn video_loaded(video: Video, generation: u64) -> Message {
+        Message::VideoLoaded {
+            video: Arc::new(Mutex::new(Some(video))),
+            rotation: None,
+            generation,
+        }
+    }
+
+    /// Issue #161: opening another clip keeps where playback was in the one shown; the one
+    /// opened looks up where it stopped last time, to continue there once it is open.
+    #[test]
+    fn opening_another_clip_keeps_where_playback_was() {
+        let secs = Duration::from_secs;
+        let clip = unique_clip("leave");
+        let other = unique_clip("other");
+        let mut player = VideoPlayerState {
+            clip: clip_at(&clip),
+            position: secs(40),
+            ..VideoPlayerState::default()
+        };
+        let _ = player.load_video(other.clone(), other.clone(), FileId::new(), None);
+        assert_eq!(
+            AppDatabase::new().get_playback_position(&clip),
+            Some(secs(40))
+        );
+        assert_eq!(
+            player.pending_resume,
+            Some(PendingResume {
+                stopped: None,
+                in_point: None
+            }),
+            "never played before"
+        );
+        // Still loading, so nothing was played in it: leaving it keeps nothing for it.
+        player.position = secs(12);
+        let _ = player.load_video(clip.clone(), clip.clone(), FileId::new(), Some(secs(3)));
+        assert_eq!(AppDatabase::new().get_playback_position(&other), None);
+        assert_eq!(
+            player.pending_resume,
+            Some(PendingResume {
+                stopped: Some(secs(40)),
+                in_point: Some(secs(3))
+            })
+        );
+    }
+
+    /// Issue #161: the clip shown, opened again right after its file was saved in place (an
+    /// unload, then the same file, here under the new name a rename gave it), comes back at
+    /// the very moment it showed: no 2 s lead, no lookup, no note.
+    #[test]
+    fn a_clip_saved_in_place_comes_back_at_the_same_moment_even_renamed() {
+        let secs = Duration::from_secs;
+        let before = unique_clip("in-place");
+        let after = before.with_file_name("pick.clip.mp4");
+        let continued = Continued {
+            at: secs(38),
+            stopped: secs(40),
+        };
+        let shown = clip_at(&before);
+        let id = shown.as_ref().expect("clip").id;
+        let mut player = VideoPlayerState {
+            clip: shown,
+            position: secs(38),
+            continued: Some(continued),
+            ..VideoPlayerState::default()
+        };
+        let _ = player.update(Message::Unload);
+        let _ = player.load_video(after.clone(), after.clone(), id, None);
+        assert_eq!(player.pending_resume, None, "no lookup, no note");
+        assert_eq!(player.resume_at, Some(secs(38)));
+        assert_eq!(player.continued, Some(continued));
+        assert_eq!(
+            player.clip.as_ref().map(|clip| clip.path.clone()),
+            Some(after)
+        );
+    }
+
+    /// Issue #161: the note that says where a clip continued goes with that clip, whether the
+    /// next one opens straight away or after an unload; other notes outlive an unload (#84).
+    #[test]
+    fn the_note_that_a_clip_continued_goes_with_the_clip() {
+        let other = unique_clip("note-next");
+        let mut player = VideoPlayerState {
+            notice: note("Resumed at 00:40 · Home: start over", true),
+            ..VideoPlayerState::default()
+        };
+        let _ = player.load_video(other.clone(), other, FileId::new(), None);
+        assert_eq!(player.notice(), None);
+
+        player.notice = note("Resumed at 00:40 · Home: start over", true);
+        let _ = player.update(Message::Unload);
+        assert_eq!(player.notice(), None);
+
+        player.notice = note("Not saved: a file with that name already exists", false);
+        let _ = player.update(Message::Unload);
+        assert_eq!(
+            player.notice(),
+            Some("Not saved: a file with that name already exists")
+        );
+        let next = unique_clip("note-other");
+        let _ = player.load_video(next.clone(), next, FileId::new(), None);
+        assert!(player.notice().is_some(), "another note stays");
+    }
+
+    /// Issue #161: a clip continued 2 s early and glanced at (or played on a little) keeps the
+    /// moment it had stopped at; past it, where playback is.
+    #[test]
+    fn a_glance_does_not_creep_the_kept_moment_back() {
+        let secs = Duration::from_secs;
+        let clip = unique_clip("glance");
+        let mut player = VideoPlayerState {
+            clip: clip_at(&clip),
+            position: secs(39),
+            continued: Some(Continued {
+                at: secs(38),
+                stopped: secs(40),
+            }),
+            ..VideoPlayerState::default()
+        };
+        player.remember_position();
+        assert_eq!(
+            AppDatabase::new().get_playback_position(&clip),
+            Some(secs(40))
+        );
+        player.position = secs(45);
+        player.remember_position();
+        assert_eq!(
+            AppDatabase::new().get_playback_position(&clip),
+            Some(secs(45))
+        );
+    }
+
+    /// Issue #161: `Home` is a choice of the start: the moment kept from before no longer
+    /// overrides it, and a clip still loading does not continue anywhere once open.
+    #[test]
+    fn home_forgets_where_the_clip_would_continue() {
+        let secs = Duration::from_secs;
+        let mut player = VideoPlayerState {
+            clip: clip_at(&unique_clip("home-forgets")),
+            loading: true,
+            pending_resume: Some(PendingResume {
+                stopped: Some(secs(40)),
+                in_point: None,
+            }),
+            resume_at: Some(secs(12)),
+            continued: Some(Continued {
+                at: secs(38),
+                stopped: secs(40),
+            }),
+            ..VideoPlayerState::default()
+        };
+        let _ = player.update(Message::GoToStart);
+        assert_eq!(player.pending_resume, None);
+        assert_eq!(player.resume_at, None);
+        assert_eq!(player.continued, None);
+    }
+
+    /// Issue #161: a file that is not a video opening lets the clip go, after keeping where it
+    /// was: `Home` meanwhile, and the next clip opening, do not touch the kept moment.
+    #[test]
+    fn a_clip_let_go_for_another_file_keeps_its_moment() {
+        let secs = Duration::from_secs;
+        let clip = unique_clip("let-go");
+        let mut player = VideoPlayerState {
+            clip: clip_at(&clip),
+            position: secs(40),
+            ..VideoPlayerState::default()
+        };
+        player.close_clip();
+        assert_eq!(player.clip, None);
+        let _ = player.update(Message::GoToStart);
+        let next = unique_clip("let-go-next");
+        let _ = player.load_video(next.clone(), next, FileId::new(), None);
+        assert_eq!(
+            AppDatabase::new().get_playback_position(&clip),
+            Some(secs(40))
+        );
+    }
+
+    /// Issue #161: a clip watched to the end opens without a note; so does one whose seek
+    /// cannot happen (no video): the note never names a moment the clip did not go to.
+    #[test]
+    fn no_note_without_a_moment_to_continue_at() {
+        let duration = Duration::from_secs(60);
+        let mut player = VideoPlayerState {
+            clip: clip_at(&unique_clip("watched")),
+            pending_resume: Some(PendingResume {
+                stopped: Some(duration),
+                in_point: None,
+            }),
+            ..VideoPlayerState::default()
+        };
+        let _ = player.resume_playback(duration);
+        assert_eq!(player.position, Duration::ZERO);
+        assert_eq!(player.notice(), None);
+        assert_eq!(player.pending_resume, None, "used once");
+
+        player.pending_resume = Some(PendingResume {
+            stopped: Some(Duration::from_secs(30)),
+            in_point: None,
+        });
+        let _ = player.resume_playback(duration);
+        assert_eq!(player.notice(), None, "the seek did not happen");
+        assert_eq!(player.continued, None);
+    }
+
+    /// Issue #161 end to end on a real clip: opened through `load_video` and its `VideoLoaded`,
+    /// it lands two seconds before where playback stopped, with a note that says so; left again
+    /// without moving, where it stopped is kept; a turn (which reopens it) keeps that; `Home`
+    /// goes to the start, takes the note away, and a clip left there has nothing to continue.
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn a_clip_continues_where_playback_stopped_and_home_starts_it_over() {
+        let (video, duration) = real_clip();
+        // Whole seconds: positions are kept to the millisecond.
+        let stopped = Duration::from_secs(duration.as_secs() / 2);
+        assert!(playback::worth_remembering(stopped), "a clip long enough");
+        let clip = unique_clip("continue");
+        AppDatabase::new().set_playback_position(&clip, stopped);
+
+        let mut player = VideoPlayerState::default();
+        let _ = player.load_video(clip.clone(), clip.clone(), FileId::new(), None);
+        let generation = player.loads_started();
+        let _ = player.update(video_loaded(video, generation));
+        assert_eq!(player.position, stopped - playback::RESUME_LEAD);
+        assert!(player.notice_starts_over());
+        let time = video_controls::view::clock(stopped.as_secs_f32());
+        assert!(
+            player.notice().is_some_and(|notice| notice.contains(&time)),
+            "{:?} says {time}",
+            player.notice()
+        );
+
+        player.remember_position();
+        assert_eq!(
+            AppDatabase::new().get_playback_position(&clip),
+            Some(stopped)
+        );
+
+        let _ = player.update(Message::GoToStart);
+        assert_eq!(player.position, Duration::ZERO);
+        assert_eq!(player.notice(), None);
+        player.remember_position();
+        assert_eq!(
+            AppDatabase::new().get_playback_position(&clip),
+            None,
+            "back at the start: nothing to continue"
+        );
+    }
+
+    /// Issue #161: a turn reopens the clip; where it continued from stays known.
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn a_turn_keeps_where_the_clip_continued() {
+        let (video, _) = real_clip();
+        let secs = Duration::from_secs;
+        let continued = Continued {
+            at: secs(8),
+            stopped: secs(10),
+        };
+        let mut player = VideoPlayerState {
+            current_video: Some(video),
+            current_path: Some(unique_clip("turn")),
+            clip: clip_at(&unique_clip("turn")),
+            position: secs(8),
+            continued: Some(continued),
+            ..VideoPlayerState::default()
+        };
+        let _ = player.reload_video();
+        assert_eq!(player.continued, Some(continued));
+        assert_eq!(player.resume_at, Some(secs(8)));
     }
 }

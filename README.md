@@ -34,9 +34,9 @@ Nothing is locked inside frename.
 
 ## The workflow
 
-1. Open a folder with the 📂 button, drag a folder onto the window, or right-click a folder in
+1. Open a folder with the **Open a folder** button (under the file list), drag a folder onto the window, or right-click a folder in
    Explorer and choose "Open in frename" (installed version; on Windows 11 under "Show more
-   options"). To start at one clip, right-click 📂 to pick the file, or drag the file in: its
+   options"). To start at one clip, right-click that button to pick the file, or drag the file in: its
    whole folder opens with that clip selected.
 2. The video starts playing.
 3. Tag what you see: click a tag, or move with the arrow keys and press `Shift+Space`.
@@ -49,7 +49,11 @@ Nothing is locked inside frename.
 8. Drag a clip from the list into Premiere Pro, Explorer or any other program (Windows): it is saved
    first, so it arrives under its new name with everything you marked. Nothing is moved.
 
-Next time you start frename, it reopens the last folder and clip.
+Next time you start frename, it reopens the last folder and clip — and opening any other folder
+again, even after a restart, returns to the clip you last viewed in it. A clip you open again
+continues two seconds before where you stopped watching, with a note that says so: press `Home`
+or click the note to start it over. A clip watched to the end starts over (at its in point, if
+it has one).
 
 ---
 
@@ -61,6 +65,13 @@ Next time you start frename, it reopens the last folder and clip.
 | `PageDown` | Next file (renames the file you leave) |
 | `PageUp` | Previous file (renames the file you leave) |
 | Double-click a file | Rename it by hand: `Enter` renames, `Esc` cancels |
+| `Ctrl+click` a file | Add it (and the open one) to a selection, or drop it if already selected |
+| `Shift+click` a file | Select every file between it and the last `Ctrl`-clicked one |
+| Right-click a file or the open file's name | Menu: show it in Explorer, copy its full path or its name (`Esc` or a click outside closes it) |
+| `F11` | Show the open file in Explorer, with the file selected (Linux: in the file manager) |
+| `Shift+F11` | Copy the open file's full path (`D:\footage\clip.mp4`) |
+| `Ctrl+F11` | Copy the open file's name (`clip.mp4`) |
+| `Escape` | Leaves a selection made with `Ctrl`/`Shift`+click (batch mode); otherwise clears the file and tag searches |
 
 ### Tags
 | Key | Action |
@@ -70,7 +81,7 @@ Next time you start frename, it reopens the last folder and clip.
 | Any letter, `Backspace` | Type into the tag search |
 | `Enter` | Add the typed tag, or the selected unsaved (○) tag, to the folder's tags |
 | `Delete` | Delete the selected tag from the folder's tags |
-| `Escape` | Clear the tag and file searches |
+| `Escape` | Clear the tag and file searches, or leave a `Ctrl`/`Shift`+click selection first if one is running (see Files above) |
 | `Ctrl+C` | Copy the file's tags (and its new name to the clipboard) |
 | `Ctrl+V` | Replace the file's tags with the copied ones |
 | `Ctrl+Z` | Undo |
@@ -83,11 +94,14 @@ Next time you start frename, it reopens the last folder and clip.
 | `Space` | Play / pause (or click the picture) |
 | `F1` | Back 10 seconds |
 | `F3` | Forward 10 seconds |
+| `Alt+←` / `Alt+→` | One frame back / forward (pauses; hold to keep stepping) |
+| `Home` | Go to the start of the clip |
 | `[` | Set the in point |
 | `]` | Set the out point |
 | `F2` | Add a marker; `F2` again within a second and a half, or on a marker, names it |
 | Hold `F2` | Mark a range: from where you pressed to where you let go |
 | `Shift+F2` | Delete the marker under the playhead |
+| `Ctrl+F2` | Describe the marker under the playhead with AI |
 | `Shift+F1` / `Shift+F3` | Jump to the previous / next marker |
 | `Shift` + drag the progress bar | Snap to the nearest marker |
 | `Alt` + drag the progress bar (paused) | Mark a range |
@@ -104,16 +118,25 @@ Next time you start frename, it reopens the last folder and clip.
 | `Escape` | Close Settings (while you remove or replace a key, Esc cancels that first) |
 
 While a text box (tag search, file search, comment) has the cursor, it takes the keys it needs:
-arrows, `Delete`, `Space`, `Enter`, `Ctrl+C`, and in the comment box also `PageUp` / `PageDown`.
+arrows, `Delete`, `Space`, `Home` (except in a search field while the "Resumed at" note shows),
+`Enter`, `Ctrl+C`, and in the comment box also `PageUp` / `PageDown`.
 Press `Esc` first to give the keys back to the app. `[` and `]` set in and out points, except while
 you type in a marker's name. The F-keys always work, and so do `Ctrl+Alt+←` / `→` except in the
 comment box and a marker's name.
 
-Undo (`Ctrl+Z`) covers tagging, adding, deleting, starring and reordering tags, pasting, in/out
-points, adding, deleting, coloring and resizing markers, rotating a clip, and the rename when you
-leave a clip.
-It does not cover comment text or marker names, a rename by hand
-(double-click), untagging with 🗑, the 🔓↑ / 🔓↓ buttons, or batch actions; opening a folder or running a batch
+Your unsaved work on the open clip (tags, comment, in/out points, markers) is also kept in a small
+recovery file, a second after each change. If frename or the computer stops without closing it,
+the next start applies that work, opens that clip and says so. If the clip changed meanwhile, it
+is left alone: the message names the folder (`recovery/kept`, next to the settings) with a
+readable copy of your work to retype from. Undo history is not restored.
+
+Undo (`Ctrl+Z`) covers tagging, untagging, adding, deleting, starring and reordering tags,
+pasting, in/out points, adding, deleting, coloring, resizing and naming markers, rotating a clip,
+the comment (what you type before leaving the box is one step), a rename by hand (double-click),
+Sync up, Sync down and the lock, and the rename when you leave a clip. The history is shared by
+the whole folder, so after moving to another clip the first undo goes back to the clip you left
+(a note says so) and the next one undoes its last change. In batch mode only markers and
+rotation are undone. It does not cover batch actions; opening a folder or running a batch
 action clears the undo history.
 
 ---
@@ -142,7 +165,8 @@ A folder without one starts with a set for travel and documentary work: `pick`, 
 
 The progress bar shows what you have noted about a clip:
 
-- **Markers:** `F2` or 📍 marks the moment under the playhead with a pin in the marker's color. ◆ opens the
+- **Markers:** `F2` or the pin button marks the moment under the playhead with a pin in the marker's color. The
+  marker list button opens the
   marker list over the picture (in fullscreen too; it shares the place with the subtitle list, with a
   tab for each; an empty list has an Add button). Click a marker's row to name it, its dot to
   pick one of Premiere's colors, ✕ to delete it, and its time to jump there. Markers are saved inside the video when you leave the
@@ -152,12 +176,22 @@ The progress bar shows what you have noted about a clip:
   the file gets a red ✕ in the list, and frename tries again when you next leave it.
   While the playhead is on a marker, its name becomes the pin's head; click it to rename the
   marker. Settings → Saving → Markers and ranges can keep them in the comment instead, one line each
-  (`0:41–0:47 — Lion`): in frename they still work as markers.
-- **Ranges:** hold `F2` (or 📍) while the clip plays to mark a stretch (`0:41–0:47 — Lion`); a
+  (`0:41–0:47 — Lion`): in frename they still work as markers. With comments in text files
+  (`.comment.txt`), the lines are written as you edit (a file that cannot be written gets the red ✕
+  and frename tries again at your next change); with comments inside the video, when you leave the
+  clip. A clip whose markers are still inside the video shows them; changing one moves them all into
+  the comment.
+- **Ranges:** hold `F2` (or the pin button) while the clip plays to mark a stretch (`0:41–0:47 — Lion`); a
   band just above the bar shows it, and overlapping bands stack. Drag the handles at the ends of the current
   range to change it (`Shift` snaps), drag them together or `Alt`+click the band to make it a
   single moment again, and click a band to play just that stretch.
-- **Frames:** `F12` or 📷 saves the current frame as a JPEG next to the video
+- **Describe a marker with AI:** ✨ on a marker's row, or `Ctrl+F2` on the marker under the playhead,
+  names an unnamed marker and adds what happens at that moment to its comment, shown under its
+  name, keeping your own name and comment. ⊗ stops it; it uses the Describe with AI settings and
+  costs under a cent per marker with Haiku, a few cents with Opus.
+- **Frames:** `Alt+←` / `Alt+→` (or the buttons next to play) step one frame back or forward and pause
+  there; paused, the time shows milliseconds (`00:10.250`), and `F2` marks that exact frame.
+  `F12` or 📷 saves the current frame as a JPEG next to the video
   (`clip.mp4.snap.00-01-05-250.jpg`) and shows `Frame saved`.
 - **Rotation:** ↺ / ↻ (`Ctrl+Alt+←` / `→`) turn a clip shot sideways 90° at a time. Only the
   rotation flag inside the MP4/MOV changes, right away: the picture is not re-encoded. Premiere
@@ -170,8 +204,7 @@ The progress bar shows what you have noted about a clip:
   By default they are saved inside the video as a marker that Premiere Pro turns into a subclip.
   Settings can keep them in the comment instead, as a line after your own text
   (`In/Out: 00:01:05.250 – 00:02:10.000`), which the comment box does not show: change it with
-  `[` and `]`. Older versions could put them in the file name (`in_00_01_05`); frename no longer
-  reads them there, and the batch action **Move in/out points out of file names** moves them.
+  `[` and `]`.
 - **Comments:** free text per clip. By default it is saved inside the video, where Premiere Pro
   shows it in the Description column and finds it by search. Settings can keep it in a
   `.comment.txt` next to the video instead. The file list shows the first line of each comment.
@@ -181,8 +214,8 @@ The progress bar shows what you have noted about a clip:
   and ⊡ brings the tags back.
 
 Some formats, such as mkv, cannot hold comments, in/out points or markers inside them; for those,
-frename keeps the comment, with the in/out line, in `.comment.txt` whatever Settings say, and 📍 is
-off. mp4 and mov hold everything.
+frename keeps the comment, with the in/out line, in `.comment.txt` whatever Settings say, and the pin
+button is off. mp4 and mov hold everything.
 
 `.comment.txt` files and subtitles are renamed together with their video.
 
@@ -190,10 +223,15 @@ off. mp4 and mov hold everything.
 
 ## Finding files
 
-- **Search** the file list by name. Tags already in a name are searchable too.
+- **Search** the file list by name or by comment: type words, and a file is listed when each word
+  is in its name (tags included) or in its comment (your text, the AI description, marker lines),
+  in any case. A file found by its comment shows the matching line under its name with the words
+  marked. While comments are still loading, those files match by name only, and a line says how
+  many are left.
 - **Filter** the list to files that are untagged, have subtitles, a comment or markers: the
-  Filter dropdown sits at the right end of the search bar. A file with markers shows 📍 and
-  their number in the list.
+  filter button at the right end of the search bar opens a menu (tick as many as you like;
+  **Show all** clears them) and shows how many are on. A file with subtitles shows the subtitles
+  icon, and a file with markers a pin and their number.
 - The list shows only videos (mp4, mov, mkv, avi, webm, and other common formats), oldest first.
 
 ## Subtitles
@@ -208,20 +246,33 @@ No subtitles yet? Check the videos in batch mode and run **Generate subtitles** 
 
 ![Batch mode](docs/frename-screenshot-batch.jpg)
 
-Click ☑ to check files in the list (All / Invert) and run one action on all of them, with progress
-and Cancel. Each file then shows a green or red check box. Drag a checked file to drag all checked
-files (an unchecked one drags only itself). Actions:
+Click **Batch actions** (the right end of the bar under the file list) to check files in the list (All / Invert) and run one action on all of them, with progress
+and Cancel. Each file then shows an icon for what happened to it (changed, nothing to change, not done). Drag a checked file to drag all checked
+files (an unchecked one drags only itself). Esc leaves batch mode, the same as clicking **Batch actions** again.
+Batch mode opens with the action you last ran selected, and its own options (e.g. which way
+in/out points move, or "Replace existing subtitles") as they were then, even across restarts.
+
+**Select several clips without the button**: **Ctrl+click** a clip to add it (and the one open before it) to
+the selection; Ctrl+click a selected clip to drop it. **Shift+click** a clip to select every clip
+between it and the last one you clicked with Ctrl (or the open clip, if you have not Ctrl+clicked
+yet), replacing the selection. Either turns on batch mode with exactly that selection checked, and
+the clip you clicked stays the one shown in the player. A plain click still opens just that one
+clip, as always.
+
+Actions:
 
 - move comments between the video and `.comment.txt` files;
 - move in/out points between the comment and the video;
-- move in/out points out of file names written by older versions into the comment or the video,
-  as set in Settings (a file that already has in/out points stored keeps them, and the report
-  lists it);
 - turn comment lines that start with a time (`03:24 — Take 3 — nice light`, `0:41-0:47 — Lion`)
   into markers, or copy the markers into the comment as such lines. What follows the name after
   a second ` — ` or ` -- ` (not a plain ` - `) goes into the marker's comment, which Premiere
-  shows and frename keeps but does not show. The moments of an AI description become white
-  markers too (with their length) and stay in the description;
+  shows and frename keeps but does not show. A marker's color is a word in brackets after the time
+  (`0:41 [red] — Lion`; green, the default, has none). The moments of an AI description become white
+  markers too (with their length) and stay in the description. One marker per moment: a comment
+  line for a moment that already has a marker renames it. Running either of these actions on a
+  clip with doubled markers repairs it and lists the clips it merged in (different names stay as
+  `name — other name`, which reads back as a name and a comment). Markers made by other tools
+  that Premiere would not recognise are left alone;
 - rotate the videos 90° right or left or 180°, or reset them to no rotation (this also removes
   a turn a phone recorded);
 - tag commented videos with "Commented" and untag the rest;
@@ -252,23 +303,35 @@ summary. A new run replaces the AI markers and leaves the others alone, so give 
 keep it. With markers kept in the comment, or a format that cannot hold markers, the segments
 are lines of the description.
 
+When a clip has a lead-in or lead-out around the part worth keeping, the description ends with
+the In and Out the AI suggests (`Suggested In/Out: 00:00:03.200 – 00:00:11.800`). With the clip
+open, it shows as an **AI** pill next to the IN and OUT points; click it to set In and Out to it
+(one undo step). frename never sets them by itself.
+
 ### Generate subtitles
 
 **Generate subtitles** sends the audio of each checked video to [Soniox](https://soniox.com), a
 paid speech-to-text service (a few cents per hour of audio), and saves the subtitles next to it as
 `clip.srt`. Before you run it, the panel shows how much audio will be sent and about what it
-costs. Videos that already have subtitles are skipped unless you tick **Replace existing
-subtitles**, and a video found to have no speech is not sent again. Afterwards the panel lists
+costs. Under **Files to write** tick what you want: **SRT subtitles** (`clip.srt`, on by
+default) and/or a **Premiere Pro transcript** (`clip.premiere.json`, for Text panel → Transcript →
+Import Static Transcript in Premiere Pro); with neither ticked Run stays off. A video is skipped
+only when every ticked file already exists (unless you tick **Replace existing subtitles**, which
+applies to every ticked file), and a video found to have no speech is not sent again. If only one
+of the files exists, adding the other is free when the video's transcript was saved earlier;
+otherwise the video is transcribed again. When a Premiere transcript was written, the result
+lists the files written for each video. Afterwards the panel lists
 every video that got no subtitles and why. You need your own Soniox API key: set it in Settings →
 Subtitles. Formats such as mkv, m2ts and avi need [ffmpeg](https://ffmpeg.org) on your PATH.
 
 ## Settings
 
-The ⚙ button opens Settings. Changes apply right away; **Close** or `Esc` closes it. It has five
+The **Settings** button (under the file list) opens Settings. Changes apply right away; **Close** or `Esc` closes it. It has five
 pages:
 
 - **Interface:** the UI language (follows your system by default, or pick English or Russian;
-  more languages are on the way), monochrome tags, and playing videos as soon as they open.
+  more languages are on the way), monochrome tags (a tag you added shows darker, one that is not
+  in your list stays the lighter gray it always was), and playing videos as soon as they open.
 - **Saving:** a space after each tag in file names (`Food. Goat. clip.mp4`), and where comments,
   markers and in/out points are kept: inside the video, or in a text file (comments) or the
   comment (markers; in/out points as one line, `In/Out: 00:01:05.250 – 00:02:10.000`). While
@@ -277,12 +340,14 @@ pages:
   you already have.
 - **Describe with AI:** your Anthropic API key, kept in the system's password store (Windows
   Credential Manager, macOS Keychain, or a keyring such as GNOME Keyring on Linux), the model
-  (Claude Haiku 4.5, Sonnet 5 or Opus 5, with their prices) and the language of the descriptions.
+  (Claude Haiku 4.5, Sonnet 5 or Opus 5, with their prices), the language of the descriptions, and
+  **Moments**: segments only for what stands out (the default, and the only choice that suggests
+  an In and Out) or segments covering the whole clip.
 - **Subtitles:** your Soniox API key (kept the same way), the languages spoken in your footage, and
   whether a subtitle is a short line or a whole sentence.
 - **Updates:** **Check for updates**, then **Update and restart** when a newer version is out.
-  frename also checks once a day by itself (you can turn that off) and puts a dot on ⚙ when an
-  update is ready; ⚙ then opens this page. Nothing is downloaded until you click.
+  frename also checks once a day by itself (you can turn that off) and puts a dot on the Settings button
+  when an update is ready; it then opens this page. Nothing is downloaded until you click.
 
 ![Monochrome tags](docs/frename-screenshot-mono.jpg)
 

@@ -10,10 +10,10 @@
 use iced::{event, keyboard, window, Element, Subscription, Task};
 
 use crate::features::{
-    batch, drag_drop, drag_out, folder, folder_workspace, media_viewer,
-    media_viewer::video as media_viewer_video, settings, tag_panel, updates,
+    batch, drag_drop, drag_out, file_menu, folder, folder_workspace, media_viewer,
+    media_viewer::video as media_viewer_video, settings, tag_panel, updates, video_controls,
 };
-use crate::tag_colors::TagPalette;
+use crate::ui::palette::TagPalette;
 use frename_core::ai::key::{self as api_key, ApiKey};
 use frename_core::{AppDatabase, AppStateStore, WindowGeometry};
 
@@ -28,18 +28,114 @@ fn ctrl_v_paste_tags_handler(
     _window_id: window::Id,
 ) -> Option<Message> {
     if let iced::Event::Keyboard(keyboard::Event::KeyPressed {
-        key: keyboard::Key::Character(c),
+        key,
+        physical_key,
         modifiers,
         ..
     }) = ev
     {
-        if c.as_ref() == "v" && modifiers.command() {
+        if latin_key(&key, physical_key) == Some('v') && modifiers.command() {
             return Some(Message::FolderWorkspace(
                 folder_workspace::Message::PasteTags,
             ));
         }
     }
     None
+}
+
+/// The Latin letter a key stands for, so Ctrl+Z, Y, C and V work on any keyboard layout: with a
+/// Russian layout the key is `я` but the physical key is still Z.
+fn latin_key(key: &keyboard::Key, physical_key: keyboard::key::Physical) -> Option<char> {
+    key.to_latin(physical_key).map(|c| c.to_ascii_lowercase())
+}
+
+/// What a restore holds, in words: `5 tags, 3 markers, comment`.
+fn recovery_what(summary: frename_core::recovery::Summary) -> String {
+    let mut parts = Vec::new();
+    if summary.tags > 0 {
+        parts.push(fl!("recovery-tags", count = summary.tags));
+    }
+    if summary.markers > 0 {
+        parts.push(fl!("recovery-markers", count = summary.markers));
+    }
+    if summary.comment {
+        parts.push(fl!("recovery-comment"));
+    }
+    if summary.in_out {
+        parts.push(fl!("recovery-in-out"));
+    }
+    if parts.is_empty() {
+        parts.push(fl!("recovery-edits"));
+    }
+    parts.join(", ")
+}
+
+/// Apply the edits an earlier crash left in the recovery journal, when this is the only frename
+/// running; the messages to show and the first restored clip (to open it, so the message
+/// appears over it). The restore is synchronous on purpose: it must run before any video is
+/// open (Windows locks a playing clip), and it is a few small file operations.
+fn restore_after_crash(
+    lock: Option<&frename_core::recovery::InstanceLock>,
+) -> (Vec<String>, Option<frename_core::FolderAndFile>) {
+    use frename_core::recovery::{KeptWhy, Restored};
+    let mut notes = Vec::new();
+    let mut open = None;
+    let Some(lock) = lock else {
+        log::info!("recovery: another frename is running; leaving the journal to it");
+        return (notes, open);
+    };
+    for report in frename_core::recovery::restore_all(lock) {
+        let file_name = |path: &std::path::Path| {
+            path.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        };
+        let folder_of = |path: &std::path::Path| {
+            path.parent()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default()
+        };
+        match report {
+            Restored::Applied { path, summary } => {
+                log::info!("recovery: restored {summary:?} on {path:?}");
+                notes.push(fl!(
+                    "recovery-restored",
+                    clip = file_name(&path),
+                    what = recovery_what(summary)
+                ));
+                if open.is_none() {
+                    open = path
+                        .parent()
+                        .map(|folder| frename_core::FolderAndFile::new(folder, Some(&path)));
+                }
+            }
+            Restored::Kept {
+                clip,
+                kept,
+                why,
+                summary,
+            } => {
+                log::warn!("recovery: edits on {clip:?} kept at {kept:?}: {why:?}");
+                let why = match why {
+                    KeptWhy::ClipGone => fl!("recovery-why-gone"),
+                    KeptWhy::ClipChanged => fl!("recovery-why-changed"),
+                    KeptWhy::NotWritten => fl!("recovery-why-not-written"),
+                };
+                notes.push(fl!(
+                    "recovery-kept",
+                    clip = file_name(&clip),
+                    what = recovery_what(summary),
+                    why = why,
+                    folder = folder_of(&kept)
+                ));
+            }
+            Restored::Ignored { kept } => {
+                log::warn!("recovery: an unreadable journal file was set aside at {kept:?}");
+                notes.push(fl!("recovery-unreadable", folder = folder_of(&kept)));
+            }
+        }
+    }
+    (notes, open)
 }
 
 /// Global keyboard and window events of the main window: shortcuts, typing into the search bar,
@@ -58,6 +154,15 @@ fn main_window_event(
         iced::Event::Window(window::Event::Resized(size)) => {
             Some(Message::WindowResized(size.width, size.height))
         }
+        // The keyboard modifiers Ctrl/Shift+click on a file row reads (a mouse click carries
+        // none of its own in iced). Cleared on losing focus, so a Ctrl released while the
+        // window was unfocused cannot leave a stuck modifier behind.
+        iced::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => Some(
+            Message::FolderWorkspace(folder_workspace::Message::ModifiersChanged(modifiers)),
+        ),
+        iced::Event::Window(window::Event::Unfocused) => Some(Message::FolderWorkspace(
+            folder_workspace::Message::ModifiersChanged(keyboard::Modifiers::empty()),
+        )),
         // Shift+Space toggles the selected tag.
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
             key: keyboard::Key::Named(keyboard::key::Named::Space),
@@ -82,6 +187,21 @@ fn main_window_event(
         }) => Some(Message::FolderWorkspace(
             folder_workspace::Message::ToggleMediaFullscreen,
         )),
+        // F11 shows the open file in Explorer, Shift+F11 copies its path, Ctrl+F11 its name:
+        // always, like the other F-keys. A held key acts once.
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key,
+            modifiers,
+            repeat,
+            ..
+        }) if file_menu::FileAction::from_key(&key, modifiers).is_some() => {
+            if repeat {
+                return Some(Message::Noop);
+            }
+            file_menu::FileAction::from_key(&key, modifiers).map(|action| {
+                Message::FolderWorkspace(folder_workspace::Message::FileAction(action))
+            })
+        }
         // [ / ] always set segment IN/OUT (even when search bar has focus).
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
             key: keyboard::Key::Character(c),
@@ -127,6 +247,47 @@ fn main_window_event(
             };
             Some(Message::FolderWorkspace(turn))
         }
+        // Alt+← / → step one frame in the open video, also after typing in a search field (like
+        // the F-keys), but not while writing a comment; a held key keeps stepping.
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(arrow),
+            modifiers,
+            ..
+        }) if modifiers.alt()
+            && !modifiers.command()
+            && matches!(
+                arrow,
+                keyboard::key::Named::ArrowLeft | keyboard::key::Named::ArrowRight
+            ) =>
+        {
+            let step = if arrow == keyboard::key::Named::ArrowLeft {
+                video_controls::FrameStep::Back
+            } else {
+                video_controls::FrameStep::Forward
+            };
+            // A text field took the key: the workspace checks it is not the comment box, where
+            // the keys belong to the text.
+            let step = if matches!(status, event::Status::Ignored) {
+                folder_workspace::Message::StepFrame(step)
+            } else {
+                folder_workspace::Message::StepFrameWhileTyping(step)
+            };
+            Some(Message::FolderWorkspace(step))
+        }
+        // Home goes to the start of the clip. A text field that took it keeps it, except a
+        // search field while the note says Home starts the clip over: typing a tag is how the
+        // editor works, and the note's promise must hold then (#161).
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(keyboard::key::Named::Home),
+            modifiers,
+            ..
+        }) if modifiers.is_empty() => Some(Message::FolderWorkspace(
+            if matches!(status, event::Status::Ignored) {
+                folder_workspace::Message::GoToStart
+            } else {
+                folder_workspace::Message::GoToStartWhileTyping
+            },
+        )),
         // Escape: handled by FolderWorkspace (exits fullscreen or clears search filter).
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
             key: keyboard::Key::Named(keyboard::key::Named::Escape),
@@ -148,23 +309,22 @@ fn main_window_event(
                 Some(Message::Noop)
             }
         }
-        iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. })
-            if matches!(status, event::Status::Ignored) =>
-        {
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key,
+            physical_key,
+            modifiers,
+            ..
+        }) if matches!(status, event::Status::Ignored) => {
             if modifiers.command() {
-                return match key.as_ref() {
-                    keyboard::Key::Character("c") => Some(Message::FolderWorkspace(
+                return match latin_key(&key, physical_key) {
+                    Some('c') => Some(Message::FolderWorkspace(
                         folder_workspace::Message::CopyTags,
                     )),
-                    keyboard::Key::Character("z") if modifiers.shift() => {
+                    Some('z') if modifiers.shift() => {
                         Some(Message::FolderWorkspace(folder_workspace::Message::Redo))
                     }
-                    keyboard::Key::Character("z") => {
-                        Some(Message::FolderWorkspace(folder_workspace::Message::Undo))
-                    }
-                    keyboard::Key::Character("y") => {
-                        Some(Message::FolderWorkspace(folder_workspace::Message::Redo))
-                    }
+                    Some('z') => Some(Message::FolderWorkspace(folder_workspace::Message::Undo)),
+                    Some('y') => Some(Message::FolderWorkspace(folder_workspace::Message::Redo)),
                     _ => None,
                 };
             }
@@ -291,6 +451,10 @@ pub struct FrenameApp {
     demo: Option<crate::demo::DemoRun>,
     /// A folder or file given on the command line, opened instead of the last session.
     initial_path: Option<frename_core::FolderAndFile>,
+    /// The clip whose edits were restored after a crash: opened first when no clip was asked for.
+    restored_clip: Option<frename_core::FolderAndFile>,
+    /// Held while frename runs: tells the next start (and a second frename) whose the journal is.
+    _recovery_lock: Option<frename_core::recovery::InstanceLock>,
     /// A downloaded update to apply once the main window has closed.
     pending_update: Option<updates::Release>,
 }
@@ -308,18 +472,29 @@ impl FrenameApp {
         frename_core::set_commented_tag(settings.settings().effective_commented_tag());
         frename_core::set_space_after_tags(settings.settings().space_after_tags);
         crate::i18n::apply(&settings.settings().ui_language);
+        // Edits left in the recovery journal mean the last run ended abnormally: apply them now,
+        // before any clip is open (nothing locks the clips yet).
+        let recovery_lock = frename_core::recovery::InstanceLock::acquire();
+        let (recovery_notes, restored_clip) = restore_after_crash(recovery_lock.as_ref());
+        let mut folder_workspace = folder_workspace::FolderWorkspace::new();
+        for note in recovery_notes {
+            folder_workspace.add_startup_note(note);
+        }
         Self {
             drag_drop_state: drag_drop::DragDropState::default(),
-            folder_workspace: folder_workspace::FolderWorkspace::new(),
+            folder_workspace,
+            restored_clip,
+            _recovery_lock: recovery_lock,
             settings,
             pending_close: None,
             main_window,
             settings_window: None,
             window_icon,
             window_pos: saved.map(|g| (g.x, g.y)).unwrap_or((0.0, 0.0)),
-            window_size: saved
-                .map(|g| (g.width, g.height))
-                .unwrap_or((1200.0, 600.0)),
+            window_size: saved.map(|g| (g.width, g.height)).unwrap_or((
+                crate::ui::tokens::WINDOW_WIDTH,
+                crate::ui::tokens::WINDOW_HEIGHT,
+            )),
             is_maximized: saved.map(|g| g.is_maximized).unwrap_or(false),
             monitor_size: saved
                 .map(|g| (g.monitor_width, g.monitor_height))
@@ -356,13 +531,17 @@ impl FrenameApp {
                 let model = Task::done(describe_ai_message(batch::describe_ai::Message::SetModel(
                     clipscribe::Model::from_id(&self.settings.settings().ai_model),
                 )));
-                let open = match self.initial_path.take() {
+                let moments = Task::done(describe_ai_message(
+                    batch::describe_ai::Message::SetMoments(self.settings.settings().ai_moments),
+                ));
+                let open = match self.initial_path.take().or(self.restored_clip.take()) {
                     Some(pair) => folder_workspace::Message::ScanFolder(pair),
                     None => folder_workspace::Message::LoadLastSession,
                 };
                 let load = Task::batch([
                     language,
                     model,
+                    moments,
                     self.subtitle_config(),
                     Task::done(Message::FolderWorkspace(open)),
                 ]);
@@ -465,6 +644,9 @@ impl FrenameApp {
                     ),
                     settings::Message::SetAiModel(model) => Task::done(describe_ai_message(
                         batch::describe_ai::Message::SetModel(model),
+                    )),
+                    settings::Message::SetAiMoments(moments) => Task::done(describe_ai_message(
+                        batch::describe_ai::Message::SetMoments(moments),
                     )),
                     settings::Message::Key(which, settings::KeyMessage::Save) => {
                         match self.settings.typed_key(which) {
@@ -584,13 +766,29 @@ impl FrenameApp {
                         crate::features::batch::Message::Cancel,
                     )));
                 }
+                // Save the open file's tags, comment and in/out before closing: otherwise they
+                // are lost silently (issue #21). Only for the main window: `CloseRequested`
+                // also fires for the Settings window's own OS close button (the subscription
+                // isn't scoped to one window), and that must not tell folder_workspace the app
+                // itself is closing — it would wrongly drop a queued folder scan or skip
+                // reopening the video once the (unrelated) unload this triggers finishes.
+                let save = if id == self.main_window {
+                    self.folder_workspace
+                        .flush_open_file()
+                        .map(Message::FolderWorkspace)
+                } else {
+                    Task::none()
+                };
                 if !self.folder_workspace.needs_media_unload() {
-                    return window::close(id);
+                    return Task::batch([save, window::close(id)]);
                 }
                 self.pending_close = Some(id);
-                Task::done(Message::FolderWorkspace(
-                    folder_workspace::Message::MediaViewer(media_viewer::Message::Unload),
-                ))
+                Task::batch([
+                    save,
+                    Task::done(Message::FolderWorkspace(
+                        folder_workspace::Message::MediaViewer(media_viewer::Message::Unload),
+                    )),
+                ])
             }
             Message::WindowMoved(x, y) => {
                 if !self.is_maximized {
@@ -788,12 +986,9 @@ impl FrenameApp {
 
     /// The theme of a window: the design system's in Settings; the main window keeps iced's dark
     /// theme until it moves onto the system (#59).
-    pub fn theme(&self, window_id: window::Id) -> iced::Theme {
-        if self.settings_window == Some(window_id) {
-            crate::ui::theme()
-        } else {
-            iced::Theme::Dark
-        }
+    /// Every window is on the design system.
+    pub fn theme(&self, _window_id: window::Id) -> iced::Theme {
+        crate::ui::theme()
     }
 
     /// Feature subscriptions (file drop, window opened, global keyboard to search bar).
@@ -919,5 +1114,150 @@ mod tests {
     #[test]
     fn test_app_creation() {
         let _app = FrenameApp::new(window::Id::unique(), None);
+    }
+
+    fn ctrl_key(
+        key: &str,
+        code: keyboard::key::Code,
+        shift: bool,
+    ) -> (iced::Event, event::Status, window::Id) {
+        let mut modifiers = keyboard::Modifiers::CTRL;
+        modifiers.set(keyboard::Modifiers::SHIFT, shift);
+        let key = keyboard::Key::Character(key.into());
+        let event = iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: key.clone(),
+            modified_key: key,
+            physical_key: keyboard::key::Physical::Code(code),
+            location: keyboard::Location::Standard,
+            modifiers,
+            text: None,
+            repeat: false,
+        });
+        (event, event::Status::Ignored, window::Id::unique())
+    }
+
+    fn shortcut(
+        key: &str,
+        code: keyboard::key::Code,
+        shift: bool,
+    ) -> Option<folder_workspace::Message> {
+        let (ev, status, id) = ctrl_key(key, code, shift);
+        match main_window_event(ev, status, id) {
+            Some(Message::FolderWorkspace(m)) => Some(m),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn undo_redo_and_copy_work_on_a_russian_layout() {
+        use keyboard::key::Code;
+        assert!(matches!(
+            shortcut("я", Code::KeyZ, false),
+            Some(folder_workspace::Message::Undo)
+        ));
+        assert!(matches!(
+            shortcut("я", Code::KeyZ, true),
+            Some(folder_workspace::Message::Redo)
+        ));
+        assert!(matches!(
+            shortcut("н", Code::KeyY, false),
+            Some(folder_workspace::Message::Redo)
+        ));
+        assert!(matches!(
+            shortcut("с", Code::KeyC, false),
+            Some(folder_workspace::Message::CopyTags)
+        ));
+        assert!(matches!(
+            shortcut("z", Code::KeyZ, false),
+            Some(folder_workspace::Message::Undo)
+        ));
+    }
+
+    fn arrow(
+        named: keyboard::key::Named,
+        modifiers: keyboard::Modifiers,
+        status: event::Status,
+    ) -> Option<folder_workspace::Message> {
+        let key = keyboard::Key::Named(named);
+        let event = iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: key.clone(),
+            modified_key: key,
+            physical_key: keyboard::key::Physical::Code(keyboard::key::Code::ArrowLeft),
+            location: keyboard::Location::Standard,
+            modifiers,
+            text: None,
+            repeat: true,
+        });
+        match main_window_event(event, status, window::Id::unique()) {
+            Some(Message::FolderWorkspace(m)) => Some(m),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn alt_arrows_step_frames_and_ctrl_alt_arrows_still_rotate() {
+        use folder_workspace::Message as W;
+        use keyboard::key::Named;
+        use video_controls::FrameStep;
+        let alt = keyboard::Modifiers::ALT;
+        let idle = event::Status::Ignored;
+        assert!(matches!(
+            arrow(Named::ArrowLeft, alt, idle),
+            Some(W::StepFrame(FrameStep::Back))
+        ));
+        // Held: auto-repeat keeps stepping.
+        assert!(matches!(
+            arrow(Named::ArrowRight, alt, idle),
+            Some(W::StepFrame(FrameStep::Forward))
+        ));
+        // A text field had the keys: the workspace decides (not in the comment box).
+        assert!(matches!(
+            arrow(Named::ArrowRight, alt, event::Status::Captured),
+            Some(W::StepFrameWhileTyping(FrameStep::Forward))
+        ));
+        let ctrl_alt = keyboard::Modifiers::CTRL | keyboard::Modifiers::ALT;
+        assert!(!matches!(
+            arrow(Named::ArrowLeft, ctrl_alt, idle),
+            Some(W::StepFrame(_))
+        ));
+        assert!(matches!(
+            arrow(Named::ArrowLeft, keyboard::Modifiers::empty(), idle),
+            Some(W::TagPanel(_))
+        ));
+    }
+
+    #[test]
+    fn home_goes_to_the_start_and_a_text_field_s_home_asks_the_workspace() {
+        use folder_workspace::Message as W;
+        use keyboard::key::Named;
+        let none = keyboard::Modifiers::empty();
+        assert!(matches!(
+            arrow(Named::Home, none, event::Status::Ignored),
+            Some(W::GoToStart)
+        ));
+        assert!(matches!(
+            arrow(Named::Home, none, event::Status::Captured),
+            Some(W::GoToStartWhileTyping)
+        ));
+        // Shift+Home selects text in a field; it is not this key.
+        assert!(!matches!(
+            arrow(
+                Named::Home,
+                keyboard::Modifiers::SHIFT,
+                event::Status::Captured
+            ),
+            Some(W::GoToStartWhileTyping)
+        ));
+    }
+
+    #[test]
+    fn paste_works_on_a_russian_layout() {
+        let (ev, status, id) = ctrl_key("м", keyboard::key::Code::KeyV, false);
+        assert!(matches!(
+            ctrl_v_paste_tags_handler(ev, status, id),
+            Some(Message::FolderWorkspace(
+                folder_workspace::Message::PasteTags
+            ))
+        ));
     }
 }

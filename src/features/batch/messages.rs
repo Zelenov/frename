@@ -1,5 +1,6 @@
 //! Messages for batch mode.
 
+use frename_core::ai::key::ApiKey;
 use frename_core::FileId;
 
 use super::{ActionMessage, Operation};
@@ -38,6 +39,6 @@ pub enum Message {
     Retry,
     /// Open the log, which says why each failed file failed. Handled by the workspace.
     OpenLog,
-    /// Open the Anthropic billing page to add credit. Handled by the workspace.
-    OpenBilling,
+    /// Open the billing page of a paid service to add credit. Handled by the workspace.
+    OpenBilling(ApiKey),
 }

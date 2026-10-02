@@ -1,3 +1,176 @@
+# 0.110
+## Added
+- Settings → Describe with AI → Moments: segments only for what stands out (as before) or covering the whole clip. Only "Only what stands out" suggests an In and Out (the **AI** pill).
+
+# 0.109
+## Fixed
+- The file search hint is shorter, "Find a file or a comment", so it is no longer cut off in the file list.
+
+# 0.108
+## Added
+- Describe a marker with AI: ✨ on a marker's row, or `Ctrl+F2` on the marker under the playhead, names an unnamed marker and adds what happens at that moment to its comment, which the marker list now shows under the name. A name you gave stays. One undo takes it back.
+
+# 0.107
+## Added
+- A clip you open again continues where you stopped watching it, two seconds earlier, also after a restart. A note says so; `Home` or a click on the note starts it over. A clip watched to the end starts over, at its in point if it has one.
+
+# 0.106
+## Added
+- Describe with AI suggests an In and Out for clips with a lead-in or lead-out around the part worth keeping. With the clip open, the suggestion shows as an **AI** pill next to the IN and OUT points; click it to use it. frename never sets them by itself.
+
+# 0.105
+## Added
+- Step through a clip frame by frame: `Alt+←` / `Alt+→`, or the new buttons next to play, show the previous or next frame and pause there. Hold the key to keep stepping. While paused, the time next to the timeline shows milliseconds (`00:10.250`). It goes by the real frames, so phone clips with a variable frame rate step correctly too.
+
+# 0.104
+## Changed
+- A file's full name in the file list opens beside the list instead of over the next row, so it no longer covers the file you move to.
+- The marker's name over the timeline is now a pill tinted with the marker's color, so it no longer looks like a tooltip when one opens next to it.
+- Tooltips show `PgUp` / `PgDn` for the previous and next file, and `Esc` for leaving batch mode.
+- The chip you drag over the trash shows in a box like a tooltip's.
+
+## Fixed
+- The ✕ on the IN and OUT timecodes and the lock on a file closed by a batch action now have tooltips.
+
+# 0.103
+## Removed
+- The spending tracker: Settings no longer shows what frename spent or the top-up form, and the batch page no longer shows the estimated credit left. The cost estimate before a run, the cost in the report, and **Add credit** when a service runs out stay.
+
+# 0.102
+## Fixed
+- The Subtitles / Markers switch above the side list no longer shifts its icons, words and counts when you change the selection.
+
+# 0.101
+## Fixed
+- A button's tooltip is no longer drawn under the marker's name over the timeline: the tooltip shows whole, on top.
+- In fullscreen, the file list and tag cells under the video no longer react to the pointer, so their tooltips do not appear over the picture. Open menus (More, the file filter) now also keep the controls under them from showing tooltips.
+
+# 0.100
+## Fixed
+- Clicking a subtitle or a marker in its list no longer scrolls the list: it stays where it was, and follows the playhead again once playback moves on.
+
+# 0.99
+## Fixed
+- Moving markers between the video and the comment no longer leaves two markers on one moment: a comment line for a moment that already has a marker renames it, and more lines for that moment join its text.
+- A clip that already has doubled markers is repaired by running either "Markers ⇄ comment" action on it; the result lists the clips where markers were merged. Names that differ are kept as `name — other name`, which reads back as a name and a comment after the next move.
+
+# 0.98
+## Fixed
+- In fullscreen, buttons no longer show tooltips over the picture: not on the controls bar, not on the ⋯ button, not in the marker list. Outside fullscreen nothing changes.
+
+# 0.97
+## Changed
+- Describe with AI: frames are chosen where the picture changes the most instead of a fixed interval, and a description's moments now cover only what stands out (a static or uniform clip can get none) instead of always tiling the whole clip, and a moment that only repeats the summary is left out.
+
+# 0.96
+## Added
+- Your unsaved work on the open clip (tags, comment, in/out points, markers) is saved to a recovery file a second after each change. After a crash, a killed program or a power cut, the next start applies it, opens that clip and says so ("frename closed unexpectedly. Restored your unsaved work on …").
+- A clip that changed in the meantime is never overwritten: the message says so and names the folder where a readable copy of your work is kept. Undo history is not restored.
+
+# 0.95
+## Fixed
+- The marker list and the subtitle list keep their scroll position when you switch fullscreen on or off (the lit marker or cue is brought into view if it would be hidden).
+
+# 0.94
+## Added
+- Undo (`Ctrl+Z`) and Redo (`Ctrl+Y`) also cover a rename by hand (double-click), the comment (what you type until the box loses the keys is one step), a marker's name (one step per row), and Sync up, Sync down and the lock.
+
+## Fixed
+- Two quick moves to other clips, before the video has let go of the first, are two undo steps, not one.
+- Dropping a tag chip on 🗑 can be undone.
+- `Shift+F2` on a marker another tool wrote without an id says that marker is read-only, not "No marker here".
+
+# 0.93
+## Fixed
+- In the batch window's action list and in Settings' navigation, the mouse cursor no longer drops to an arrow between two items.
+
+# 0.92
+## Fixed
+- With markers kept in the comment (Settings → Saving) and comments in text files, markers are written into the comment as you add, rename, recolor, move or delete them, not only when you leave the clip. A comment file that cannot be written marks the file with the red ✕ and is tried again at your next change.
+- With markers kept in the comment, a clip whose markers are still inside the video shows them; changing one moves them all into the comment.
+
+# 0.91
+## Fixed
+- The last marker in the marker list is no longer cut off at the bottom, however long its name is.
+
+# 0.90
+## Fixed
+- Undo (`Ctrl+Z`) brings back a deleted marker in batch mode, and works while a marker's name is open for editing (the name field closes first).
+- A turn of the video is undone in batch mode too.
+- `Ctrl+Z`, `Ctrl+Y`, `Ctrl+C` and `Ctrl+V` work on a Russian or any other non-Latin keyboard layout.
+- While the comment box has the keys, `Ctrl+Z` no longer undoes marker or tag changes behind your back.
+- When Undo steps back to the previous clip (the history is shared by the whole folder), a note says so; Undo again undoes the change in that clip.
+
+# 0.89
+## Fixed
+- Marker colors are no longer lost when markers are copied into the comment: a line reads `0:41 [red] — Lion` (green has no tag), and reading the comment back gives the same colors. Older lines still read as green.
+
+# 0.88
+## Fixed
+- The marker list lights a marker only while the playhead is on it; the last marker no longer stays lit until the end of the clip.
+
+# 0.87
+## Added
+- Spending on the paid services: Settings → Describe with AI and → Subtitles show what frename spent today, this month and since your last top-up. Record a top-up (the amount and the day) and they show about how much is left, marked as an estimate; the batch page shows it before Run and warns when a run costs more, with a button to the billing page. After a "no credit left" stop the estimate reads zero until you record a new top-up.
+
+# 0.86
+## Added
+- The file search also looks in comments: type a word from a comment and the clips that have it are listed, with the matching line and the word marked under each name. All words you type must be found, in the name or the comment.
+
+## Changed
+- The file search matches each word on its own, so `trip goat` no longer needs the two words next to each other in a name.
+
+# 0.85
+## Fixed
+- Switching from one clip to the next no longer flashes the movie icon between them: the video pane stays empty, then shows the loading spinner.
+
+# 0.84
+## Fixed
+- A comment you clear no longer comes back when you return to the clip right away.
+
+# 0.83
+## Added
+- Generate subtitles: choose what is written for each video, **SRT subtitles** (`clip.srt`, as before) and/or a **Premiere Pro transcript** (`clip.premiere.json`, for Import Static Transcript in Premiere's Text panel). The choice is remembered like the other batch options.
+
+# 0.82
+## Changed
+- The whole main window follows the design system that Settings got in 0.77: one font (Inter, bundled), the same dark surfaces, and icons with tooltips that show their keys instead of emoji buttons.
+  - Video: the controls in groups with a time readout, and a timeline with a visible playhead. The subtitle and marker lists get tabs with counts. The rotate buttons are in the new ⋯ menu, which also takes the buttons that don't fit a narrow player, the volume slider included; the wheel over the volume still changes it.
+  - The in/out span is a band above the timeline, where the played part no longer hides it, and a line at the top of the marker list.
+  - Subtitles in the side list take only the height their text needs.
+  - File list: file names in a fixed-width font with small tag chips; the open file is marked by a bar; a clip with subtitles shows the subtitles icon. Tags that do not fit a row become "+2" instead of being cut at the edge, and long names end in "…". While a batch action runs, a line says the list is locked; after a job, each file shows an icon for what happened to it.
+  - The file list's filter is a button with a menu: tick several filters, **Show all** clears them.
+  - Tags: a checked tag's name is bold; stars are black so they show on every chip color. Tags not yet in the folder's tags are listed first, under a caption of their own, then the folder's tags. The columns no longer jump while you search. The order strip says in words what reordering does.
+  - Batch actions: every action has an icon, and the paid ones show who bills them. Each page says what it changes. Run names what it will do ("Move 14 comments"), and when it is off, the reason is shown next to it. A finished job shows its outcome once, the counts as figures, and the files not done as a table.
+  - Empty screens say what is missing and offer the button that fixes it, instead of showing a lone symbol.
+  - Settings → Subtitles: the cue length comes before the list of languages.
+- The main window can no longer be made smaller than 900 × 560.
+- Picking another batch action after a job finished now opens it (it used to keep showing the result).
+- A double-click to rename a clip no longer loads its video twice.
+
+## Removed
+- The batch action "Move in/out points out of file names", which only existed for names written by old versions.
+
+# 0.81
+## Added
+- Right-click a file in the list, or the open file's name, for a menu: Show in Explorer (the folder opens with the file selected; on Linux the file manager), Copy full path, Copy file name. The keys work without the menu on the open file: `F11`, `Shift+F11`, `Ctrl+F11`. The file's tags are saved first, so what you copy is its final name.
+- Select several clips without turning on batch mode by hand: `Ctrl+click` a clip to add it (and the one open before it) to the selection, or drop it if it is already selected; `Shift+click` a clip to select every clip between it and the last one you `Ctrl`-clicked. Either turns on batch mode with exactly that selection checked; `Esc` leaves it, same as clicking ☑ again.
+- Batch mode remembers the action you last ran, and its own options (e.g. the subtitle "Replace existing" checkbox, which way in/out points or markers move), and opens with them selected, even after a restart.
+- Each folder remembers the clip you were last viewing in it, in its own `.frename` file, so switching between shoots no longer loses your place in the one you switch back to. A renamed clip is still found; if it is gone, the first clip in the list opens instead.
+
+## Changed
+- Monochrome tags now use two grays instead of one: a tag you added shows darker, a tag that is not in your list (a stray word from a file name) stays the lighter gray it always was. The two were indistinguishable before.
+- Pasting tags onto a clip no longer wipes its comment.
+- A rename that would give a clip the same name as another one (or its comment, subtitle or transcript) is refused instead of replacing it, with a note that it was not saved.
+- Leaving a clip and moving to the next one before its video has finished loading no longer risks the tag you just set failing to reach the file.
+
+## Fixed
+- The volume control no longer disappears when the video panel is narrow: below a width it collapses to its icon, which you scroll to change the volume. The panel can no longer be narrowed past the point where a button would be cut off.
+
+# 0.80
+## Changed
+- Closing frename, opening another folder, or opening a file outside the current folder now saves the open file's tags, comment and in/out instead of losing them.
+
 # 0.79
 ## Added
 - Settings → In/out points: keep them in the comment, as one line (`In/Out: 00:01:05.250 – 00:02:10.000`) you change with `[` and `]`, or inside the video (the default).

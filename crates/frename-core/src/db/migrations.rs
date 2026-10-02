@@ -71,6 +71,26 @@ const MIGRATIONS: &[Migration] = &[
         version: 15,
         sql: schema::M15_IN_OUT_OUT_OF_NAMES,
     },
+    Migration {
+        version: 16,
+        sql: schema::M16_BATCH_RUN,
+    },
+    Migration {
+        version: 17,
+        sql: schema::M17_AI_LEDGER,
+    },
+    Migration {
+        version: 18,
+        sql: schema::M18_DROP_AI_LEDGER,
+    },
+    Migration {
+        version: 19,
+        sql: schema::M19_PLAYBACK_POSITION,
+    },
+    Migration {
+        version: 20,
+        sql: schema::M20_AI_MOMENTS,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
@@ -144,6 +164,7 @@ mod tests {
             "window_state",
             "video_settings",
             "app_settings",
+            "playback_position",
         ] {
             assert!(table_exists(&conn, table), "{table} must survive");
         }
@@ -154,7 +175,27 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 15);
+        assert_eq!(current_version(&conn).expect("version"), 20);
+    }
+
+    #[test]
+    fn a_database_with_the_spend_ledger_loses_it_and_a_fresh_one_ends_up_without_it() {
+        let conn = database_at_version_1();
+        for m in MIGRATIONS.iter().filter(|m| (2..=17).contains(&m.version)) {
+            conn.execute_batch(m.sql).expect("migration");
+        }
+        conn.execute("INSERT INTO ai_spend VALUES ('soniox', 0, 1.5)", [])
+            .expect("a ledger row");
+        conn.execute("UPDATE schema_version SET version = 17", [])
+            .expect("set version");
+        run(&conn).expect("migrate");
+        assert!(!table_exists(&conn, "ai_spend"));
+        assert!(!table_exists(&conn, "ai_top_up"));
+
+        let fresh = Connection::open_in_memory().expect("open");
+        run(&fresh).expect("migrate");
+        assert!(!table_exists(&fresh, "ai_spend"));
+        assert!(!table_exists(&fresh, "ai_top_up"));
     }
 
     #[test]
@@ -176,6 +217,27 @@ mod tests {
             )
             .expect("ui_language column");
         assert_eq!(language, "");
+    }
+
+    #[test]
+    fn a_version_19_database_gets_only_what_stands_out() {
+        let conn = database_at_version_1();
+        for m in MIGRATIONS.iter().filter(|m| (2..=19).contains(&m.version)) {
+            conn.execute_batch(m.sql).expect("migration");
+        }
+        conn.execute("UPDATE schema_version SET version = 19", [])
+            .expect("set version");
+        conn.execute("INSERT INTO app_settings (id) VALUES (1)", [])
+            .expect("settings row");
+        run(&conn).expect("migrate");
+        let moments: String = conn
+            .query_row(
+                "SELECT ai_moments FROM app_settings WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("ai_moments column");
+        assert_eq!(moments, "important");
     }
 
     /// A database at `version` with a settings row whose in/out storage is `in_out`.

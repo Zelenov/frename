@@ -14,42 +14,36 @@ use iced::advanced::{self, overlay, renderer, Clipboard, Shell};
 use iced::{keyboard, mouse};
 use iced::{Border, Color, Element, Event, Length, Point, Rectangle, Shadow, Size, Vector};
 
-use crate::theme;
+use crate::ui::tokens::*;
 
-const BAR_HEIGHT: f32 = 8.0;
-const HIT_HEIGHT: f32 = 24.0;
-/// Top of the bar within the widget with at most one lane of bands; the widget grows upwards
+/// Top of the track within the widget with at most one lane of bands; the widget grows upwards
 /// when bands need more lanes.
-const BAR_TOP: f32 = (HIT_HEIGHT - BAR_HEIGHT) / 2.0;
-/// Room above the highest lane of bands.
-const LANES_TOP: f32 = 0.0;
-const BORDER_RADIUS: f32 = 4.0;
-/// How far (px) a pin's needle reaches below the bar.
-const TICK_OVERHANG: f32 = 3.0;
-/// Diameter of a pin's round head, at the top of the widget.
-const PIN_HEAD: f32 = 7.0;
-const NEEDLE_WIDTH: f32 = 2.0;
-/// Height of the band a ranged marker draws above the bar: something to click.
-const BAND_HEIGHT: f32 = 4.0;
+const TRACK_TOP: f32 = (TIMELINE_HEIGHT - TRACK_HEIGHT) / 2.0;
 /// From one lane of bands to the next.
-const LANE_PITCH: f32 = BAND_HEIGHT + 1.0;
+const LANE_PITCH: f32 = BAND_HEIGHT + LINE;
 /// Overlapping ranges stack into at most this many lanes; the rest share the last one.
 pub const MAX_LANES: usize = 3;
-/// Width of the handles at the ends of the active range.
-const HANDLE_WIDTH: f32 = 6.0;
-/// How far a handle reaches above and below its band, so it reads as something to grab.
-const HANDLE_OVERHANG: f32 = 2.0;
-/// How far (px) around a band or a handle a press still hits it.
-const HIT_SLACK: f32 = 3.0;
-/// A Shift seek snaps to a marker this close to the cursor (px).
-const SNAP_DISTANCE: f32 = 8.0;
 /// How far into the widget the label (the active pin's head) reaches: its bottom sits where
 /// a round head would be, and the needle runs from it.
-const LABEL_DIP: f32 = 2.0;
+const LABEL_DIP: f32 = SPACE_XXS;
 /// Least room between the label and the edge of the window or the player.
-const LABEL_MARGIN: f32 = 4.0;
-/// Bands that are not the active one are drawn this opaque, so the active one stands out.
-const IDLE_BAND_ALPHA: f32 = 0.6;
+const LABEL_MARGIN: f32 = SPACE_XS;
+
+/// The in/out span as a band above the bar, in its own lane like a range: `None` unless both
+/// points are set and in comes first. It has no GUID, so no handles; a click on it plays it.
+pub fn in_out_band(start: Option<f32>, end: Option<f32>) -> Option<BarMarker> {
+    match (start, end) {
+        (Some(start), Some(end)) if start < end => Some(BarMarker {
+            start,
+            end,
+            color: VIDEO_SEGMENT_EDGE,
+            // Drawn in full: the span is set by hand, not an idle marker among others.
+            active: true,
+            guid: None,
+        }),
+        _ => None,
+    }
+}
 
 /// A clip marker as the bar draws it, in the bar's unit.
 #[derive(Debug, Clone, PartialEq)]
@@ -120,8 +114,10 @@ pub struct ProgressBar<'a, Message, Theme = iced::Theme, Renderer = iced::Render
     segment_start: Option<f32>,
     /// Optional segment end in seconds (for the highlighted range).
     segment_end: Option<f32>,
-    /// Fill color for the progress portion (defaults to theme::ACCENT).
+    /// Fill color for the progress portion (defaults to `ACCENT`).
     fill_color: Option<Color>,
+    /// Whether the playhead line is drawn at the value (the timeline; not the volume).
+    playhead: bool,
     /// Clip markers to draw as colored ticks (ranged ones with a band) and snap to.
     markers: Vec<BarMarker>,
     /// The lane of each marker's band (0 for points), and how many lanes are in use.
@@ -131,6 +127,8 @@ pub struct ProgressBar<'a, Message, Theme = iced::Theme, Renderer = iced::Render
     label: Option<(f32, Element<'a, Message, Theme, Renderer>)>,
     /// Right edge (window x) the label stays left of; `None` for the window's.
     label_right_edge: Option<f32>,
+    /// A lane at the top holds the marker label (the clip has markers).
+    label_lane: bool,
     /// A range's ends were dragged (or `Alt`+click made it a point): its GUID, start and end.
     on_marker_span: Option<SpanFn<'a, Message>>,
     /// `Alt`+drag drew a new range from start to end; `None` turns `Alt`+drag off.
@@ -158,11 +156,13 @@ impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
             segment_start: None,
             segment_end: None,
             fill_color: None,
+            playhead: true,
             markers: Vec::new(),
             lanes: Vec::new(),
             lane_count: 0,
             label: None,
             label_right_edge: None,
+            label_lane: false,
             on_marker_span: None,
             on_new_range: None,
             on_play_range: None,
@@ -172,6 +172,12 @@ impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
     /// Override the fill color for the progress portion.
     pub fn fill_color(mut self, color: Color) -> Self {
         self.fill_color = Some(color);
+        self
+    }
+
+    /// No playhead line: a slider (the volume) shows its value by the fill alone.
+    pub fn without_playhead(mut self) -> Self {
+        self.playhead = false;
         self
     }
 
@@ -192,6 +198,13 @@ impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
     pub fn markers(mut self, markers: impl IntoIterator<Item = BarMarker>) -> Self {
         self.markers = markers.into_iter().collect();
         (self.lanes, self.lane_count) = assign_lanes(&self.markers);
+        self
+    }
+
+    /// Keep a lane at the top for the marker label, so the label stays inside the timeline row
+    /// instead of reaching over what is above it. On for a clip with markers.
+    pub fn label_lane(mut self, on: bool) -> Self {
+        self.label_lane = on;
         self
     }
 
@@ -239,12 +252,17 @@ impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
     }
 
     fn height(&self) -> f32 {
-        height_for_lanes(self.lane_count)
+        self.label_room() + height_for_lanes(self.lane_count)
+    }
+
+    /// The label lane's height: none without markers.
+    fn label_room(&self) -> f32 {
+        label_room(self.label_lane)
     }
 
     /// Top of the bar within the widget: lower when there are lanes of bands above it.
     fn bar_top(&self) -> f32 {
-        bar_top_for_lanes(self.lane_count)
+        self.label_room() + bar_top_for_lanes(self.lane_count)
     }
 
     /// Convert cursor position to a value in min..=max, not snapped.
@@ -255,7 +273,7 @@ impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
     }
 
     /// Convert cursor position to a value in min..=max; with `snap`, the start of the nearest
-    /// marker within [`SNAP_DISTANCE`] instead, when there is one.
+    /// marker within [`SNAP_REACH`] instead, when there is one.
     fn value_from_cursor(
         &self,
         bounds: Rectangle,
@@ -319,7 +337,7 @@ impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
 
     /// Top of the band in `lane`: lane 0 just above the bar, the next ones above it.
     fn band_y(&self, bounds: Rectangle, lane: usize) -> f32 {
-        bounds.y + self.bar_top() - 1.0 - BAND_HEIGHT - lane as f32 * LANE_PITCH
+        bounds.y + self.bar_top() - LINE - BAND_HEIGHT - lane as f32 * LANE_PITCH
     }
 
     /// The active editable range whose handle is under the cursor: its GUID, the end that
@@ -333,10 +351,10 @@ impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
             .find_map(|(m, &lane)| {
                 let guid = m.guid.clone()?;
                 let y = self.band_y(bounds, lane);
-                if at.y < y - HIT_SLACK || at.y > y + BAND_HEIGHT + HIT_SLACK {
+                if at.y < y - TIMELINE_HIT_SLACK || at.y > y + BAND_HEIGHT + TIMELINE_HIT_SLACK {
                     return None;
                 }
-                let reach = HANDLE_WIDTH / 2.0 + HIT_SLACK;
+                let reach = RANGE_HANDLE_WIDTH / 2.0 + TIMELINE_HIT_SLACK;
                 let (x0, x1) = (self.x_of(bounds, m.start), self.x_of(bounds, m.end));
                 if (at.x - x1).abs() <= reach {
                     Some((guid, m.start, m.end))
@@ -358,23 +376,23 @@ impl<'a, Message, Theme, Renderer> ProgressBar<'a, Message, Theme, Renderer> {
             .find(|(m, &lane)| {
                 let y = self.band_y(bounds, lane);
                 let (x0, x1) = (self.x_of(bounds, m.start), self.x_of(bounds, m.end));
-                (y - HIT_SLACK..=y + BAND_HEIGHT + HIT_SLACK).contains(&at.y)
-                    && (x0 - HIT_SLACK..=x1 + HIT_SLACK).contains(&at.x)
+                (y - TIMELINE_HIT_SLACK..=y + BAND_HEIGHT + TIMELINE_HIT_SLACK).contains(&at.y)
+                    && (x0 - TIMELINE_HIT_SLACK..=x1 + TIMELINE_HIT_SLACK).contains(&at.x)
             })
             .map(|(m, _)| m)
     }
 }
 
-/// `value`, or the nearest of `targets` at most [`SNAP_DISTANCE`] px away.
+/// `value`, or the nearest of `targets` at most [`SNAP_REACH`] px away.
 fn snap_to(value: f32, targets: impl Iterator<Item = f32>, px_per_unit: f32) -> f32 {
     targets
         .map(|t| (t, ((t - value) * px_per_unit).abs()))
-        .filter(|(_, distance)| *distance <= SNAP_DISTANCE)
+        .filter(|(_, distance)| *distance <= SNAP_REACH)
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .map_or(value, |(t, _)| t)
 }
 
-/// `value`, or the start of the nearest marker at most [`SNAP_DISTANCE`] px away.
+/// `value`, or the start of the nearest marker at most [`SNAP_REACH`] px away.
 #[cfg(test)]
 fn snap_to_marker(value: f32, markers: &[BarMarker], px_per_unit: f32) -> f32 {
     snap_to(value, markers.iter().map(|m| m.start), px_per_unit)
@@ -382,17 +400,27 @@ fn snap_to_marker(value: f32, markers: &[BarMarker], px_per_unit: f32) -> f32 {
 
 /// Top of the bar within the widget, below `lanes` lanes of bands.
 fn bar_top_for_lanes(lanes: usize) -> f32 {
-    (LANES_TOP + lanes as f32 * LANE_PITCH + 1.0).max(BAR_TOP)
+    (lanes as f32 * LANE_PITCH + LINE).max(TRACK_TOP)
 }
 
 /// The widget's height: the bands above the bar, the bar, and the room below it.
 fn height_for_lanes(lanes: usize) -> f32 {
-    HIT_HEIGHT - BAR_TOP + bar_top_for_lanes(lanes)
+    TIMELINE_HEIGHT - TRACK_TOP + bar_top_for_lanes(lanes)
 }
 
-/// How tall the bar is with these markers: it grows when overlapping ranges need lanes.
-pub fn bar_height(markers: &[BarMarker]) -> f32 {
-    height_for_lanes(assign_lanes(markers).1)
+/// The label lane's height when there is one.
+fn label_room(label_lane: bool) -> f32 {
+    if label_lane {
+        MARKER_LABEL_LANE
+    } else {
+        0.0
+    }
+}
+
+/// How tall the bar is with these markers: it grows when overlapping ranges need lanes, and by
+/// the label lane when `label_lane`.
+pub fn bar_height(markers: &[BarMarker], label_lane: bool) -> f32 {
+    label_room(label_lane) + height_for_lanes(assign_lanes(markers).1)
 }
 
 /// The lane of each marker's band: each range goes into the first lane where it overlaps no
@@ -419,6 +447,31 @@ pub fn assign_lanes(markers: &[BarMarker]) -> (Vec<usize>, usize) {
         lanes[i] = lane;
     }
     (lanes, ends.len())
+}
+
+/// A plain quad over `bounds` with corners of `radius`.
+fn quad(bounds: Rectangle, radius: f32) -> renderer::Quad {
+    renderer::Quad {
+        bounds,
+        border: Border {
+            radius: radius.into(),
+            ..Border::default()
+        },
+        shadow: Shadow::default(),
+        snap: true,
+    }
+}
+
+/// A quad with a 1-px edge of `edge`.
+fn edged(bounds: Rectangle, radius: f32, edge: Color) -> renderer::Quad {
+    renderer::Quad {
+        border: Border {
+            radius: radius.into(),
+            width: LINE,
+            color: edge,
+        },
+        ..quad(bounds, radius)
+    }
 }
 
 impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
@@ -469,131 +522,58 @@ where
         _theme: &Theme,
         _style: &renderer::Style,
         layout: Layout<'_>,
-        _cursor: mouse::Cursor,
+        cursor: mouse::Cursor,
         _viewport: &Rectangle,
     ) {
+        // Layers from the bottom (design system §13.3.4): track, in/out segment, played part,
+        // in/out end lines, range bands, pins, the range being drawn, playhead.
         let state = tree.state.downcast_ref::<State>();
         let bounds = layout.bounds();
         let bar_y = bounds.y + self.bar_top();
+        let in_hand = cursor.is_over(bounds) || state.drag == Drag::Seek;
+        let track = |x: f32, width: f32| Rectangle {
+            x,
+            y: bar_y,
+            width,
+            height: TRACK_HEIGHT,
+        };
 
-        // Track background
         renderer.fill_quad(
-            renderer::Quad {
-                bounds: Rectangle {
-                    x: bounds.x,
-                    y: bar_y,
-                    width: bounds.width,
-                    height: BAR_HEIGHT,
-                },
-                border: Border {
-                    radius: BORDER_RADIUS.into(),
-                    ..Border::default()
-                },
-                shadow: Shadow::default(),
-                snap: true,
-            },
-            theme::TRACK,
+            quad(track(bounds.x, bounds.width), RADIUS_CHECK),
+            if in_hand { BORDER_CONTROL } else { VIDEO_TRACK },
         );
 
-        // Progress fill
-        let fill_width = bounds.width * self.fraction();
-        if fill_width > 0.5 {
+        let span = self.max - self.min;
+        let to_x = |v: f32| self.x_of(bounds, v);
+        // The in and out points are lines across the track, over the played part; the span
+        // between them is a band above the bar (see `in_out_band`), since a fill on the track
+        // would hide under the played part.
+        let edges: Vec<f32> = if span > 0.0 {
+            self.segment_start
+                .into_iter()
+                .chain(self.segment_end)
+                .map(to_x)
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        let played = bounds.width * self.fraction();
+        if played > 0.5 {
             renderer.fill_quad(
-                renderer::Quad {
-                    bounds: Rectangle {
-                        x: bounds.x,
-                        y: bar_y,
-                        width: fill_width,
-                        height: BAR_HEIGHT,
-                    },
-                    border: Border {
-                        radius: BORDER_RADIUS.into(),
-                        ..Border::default()
-                    },
-                    shadow: Shadow::default(),
-                    snap: true,
-                },
-                self.fill_color.unwrap_or(theme::ACCENT),
+                quad(track(bounds.x, played), RADIUS_CHECK),
+                self.fill_color.unwrap_or(ACCENT),
             );
         }
-
-        // Segment highlight, then the clip markers over it.
-        // Positions are clamped to [min, max] so we never draw outside the bar.
-        // Rules:
-        //   only start OR only end  → single vertical marker line
-        //   start < end             → filled rectangle (no rounded corners) between them
-        //   start >= end            → two separate marker lines, no fill
-        let span = self.max - self.min;
-
-        if span > 0.0 {
-            // Convert seconds to an x-coordinate, clamped to the bar's pixel range.
-            let to_x = |secs: f32| self.x_of(bounds, secs);
-            let draw_marker = |renderer: &mut Renderer, x: f32| {
-                renderer.fill_quad(
-                    renderer::Quad {
-                        bounds: Rectangle {
-                            x: x - 1.0,
-                            y: bar_y,
-                            width: 2.0,
-                            height: BAR_HEIGHT,
-                        },
-                        border: Border::default(),
-                        shadow: Shadow::default(),
-                        snap: true,
-                    },
-                    theme::SEGMENT,
-                );
-            };
-
-            match (self.segment_start, self.segment_end) {
-                (Some(s), Some(e)) if s < e => {
-                    // Both markers in valid order → filled range (no rounded corners) + two marker lines.
-                    let x0 = to_x(s);
-                    let x1 = to_x(e);
-                    let w = (x1 - x0).max(2.0);
-                    renderer.fill_quad(
-                        renderer::Quad {
-                            bounds: Rectangle {
-                                x: x0,
-                                y: bar_y,
-                                width: w,
-                                height: BAR_HEIGHT,
-                            },
-                            border: Border::default(),
-                            shadow: Shadow::default(),
-                            snap: true,
-                        },
-                        theme::SEGMENT,
-                    );
-                    draw_marker(renderer, x0);
-                    draw_marker(renderer, x1);
-                }
-                (Some(s), Some(e)) => {
-                    // Both exist but start >= end → two separate marker lines, no fill.
-                    draw_marker(renderer, to_x(s));
-                    draw_marker(renderer, to_x(e));
-                }
-                (Some(s), None) => draw_marker(renderer, to_x(s)),
-                (None, Some(e)) => draw_marker(renderer, to_x(e)),
-                (None, None) => {}
-            }
+        for x in edges {
+            renderer.fill_quad(quad(track(x - RING / 2.0, RING), 0.0), VIDEO_SEGMENT_EDGE);
         }
 
-        // Clip markers as pins in their colors, and a band under the bar for a range, in its
+        // Clip markers as pins in their colors, and a band above the bar for a range, in its
         // lane. The active pin is drawn last, over its neighbours, with its needle up to the
         // label; a range being dragged is drawn where the drag has it.
         if span > 0.0 {
-            let to_x = |v: f32| self.x_of(bounds, v);
-            let needle_bottom = bar_y + BAR_HEIGHT + TICK_OVERHANG;
-            let quad = |bounds: Rectangle, radius: f32| renderer::Quad {
-                bounds,
-                border: Border {
-                    radius: radius.into(),
-                    ..Border::default()
-                },
-                shadow: Shadow::default(),
-                snap: true,
-            };
+            let needle_bottom = bar_y + TRACK_HEIGHT + PIN_OVERHANG;
             let span_of = |marker: &BarMarker| match &state.drag {
                 Drag::Handle {
                     guid,
@@ -624,89 +604,83 @@ where
                     let color = if marker.active {
                         marker.color
                     } else {
-                        Color {
-                            a: marker.color.a * IDLE_BAND_ALPHA,
-                            ..marker.color
-                        }
+                        faded(marker.color, IDLE_BAND_ALPHA)
                     };
-                    renderer.fill_quad(
-                        quad(
-                            Rectangle {
-                                x: x0,
-                                y: band_y,
-                                width: (x1 - x0).max(2.0),
-                                height: BAND_HEIGHT,
-                            },
-                            0.0,
-                        ),
-                        color,
-                    );
+                    let band = Rectangle {
+                        x: x0,
+                        y: band_y,
+                        width: (x1 - x0).max(RING),
+                        height: BAND_HEIGHT,
+                    };
+                    renderer.fill_quad(quad(band, 0.0), color);
                     if marker.active && marker.guid.is_some() && self.on_marker_span.is_some() {
                         for x in [x0, x1] {
-                            renderer.fill_quad(
-                                quad(
-                                    Rectangle {
-                                        x: x - HANDLE_WIDTH / 2.0,
-                                        y: band_y - HANDLE_OVERHANG,
-                                        width: HANDLE_WIDTH,
-                                        height: BAND_HEIGHT + 2.0 * HANDLE_OVERHANG,
-                                    },
-                                    2.0,
-                                ),
-                                marker.color,
-                            );
+                            let handle = Rectangle {
+                                x: x - RANGE_HANDLE_WIDTH / 2.0,
+                                y: band_y - (RANGE_HANDLE_HEIGHT - BAND_HEIGHT) / 2.0,
+                                width: RANGE_HANDLE_WIDTH,
+                                height: RANGE_HANDLE_HEIGHT,
+                            };
+                            renderer.fill_quad(edged(handle, RADIUS_CHECK, TEXT), marker.color);
                         }
                     }
                     // A range is its band: no pin through the bar.
                     continue;
                 }
                 let needle_top = if marker.active {
-                    bounds.y + LABEL_DIP
+                    bounds.y + self.label_room() + LABEL_DIP
                 } else {
-                    bounds.y + PIN_HEAD / 2.0
+                    bounds.y + self.label_room() + PIN_HEAD / 2.0
                 };
-                renderer.fill_quad(
-                    quad(
-                        Rectangle {
-                            x: x0 - NEEDLE_WIDTH / 2.0,
-                            y: needle_top,
-                            width: NEEDLE_WIDTH,
-                            height: needle_bottom - needle_top,
-                        },
-                        0.0,
-                    ),
-                    marker.color,
-                );
+                let needle = Rectangle {
+                    x: x0 - RING / 2.0,
+                    y: needle_top,
+                    width: RING,
+                    height: needle_bottom - needle_top,
+                };
+                renderer.fill_quad(quad(needle, 0.0), marker.color);
                 if !marker.active {
-                    renderer.fill_quad(
-                        quad(
-                            Rectangle {
-                                x: x0 - PIN_HEAD / 2.0,
-                                y: bounds.y,
-                                width: PIN_HEAD,
-                                height: PIN_HEAD,
-                            },
-                            PIN_HEAD / 2.0,
-                        ),
-                        marker.color,
-                    );
+                    // Outlined in the panel's color, so heads that overlap stay readable.
+                    let head = Rectangle {
+                        x: x0 - PIN_HEAD / 2.0,
+                        y: bounds.y + self.label_room(),
+                        width: PIN_HEAD,
+                        height: PIN_HEAD,
+                    };
+                    renderer.fill_quad(edged(head, PIN_HEAD / 2.0, BG_PANEL), marker.color);
                 }
             }
             // The range an `Alt`+drag is drawing, in the first lane.
             if let Drag::NewRange { from, to } = state.drag {
                 let (x0, x1) = (to_x(from.min(to)), to_x(from.max(to)));
-                renderer.fill_quad(
-                    quad(
-                        Rectangle {
-                            x: x0,
-                            y: self.band_y(bounds, 0),
-                            width: (x1 - x0).max(2.0),
-                            height: BAND_HEIGHT,
-                        },
-                        0.0,
-                    ),
-                    Color::WHITE,
-                );
+                let band = Rectangle {
+                    x: x0,
+                    y: self.band_y(bounds, 0),
+                    width: (x1 - x0).max(RING),
+                    height: BAND_HEIGHT,
+                };
+                renderer.fill_quad(edged(band, 0.0, TEXT), NEW_RANGE);
+            }
+        }
+
+        // The playhead: a line a little taller than the track, with a knob while it is in hand.
+        if self.playhead && span > 0.0 {
+            let x = bounds.x + played;
+            let line = Rectangle {
+                x: x - RING / 2.0,
+                y: bar_y - PLAYHEAD_OVERHANG,
+                width: RING,
+                height: TRACK_HEIGHT + 2.0 * PLAYHEAD_OVERHANG,
+            };
+            renderer.fill_quad(quad(line, 0.0), TEXT);
+            if in_hand {
+                let knob = Rectangle {
+                    x: x - PLAYHEAD_KNOB / 2.0,
+                    y: bar_y + (TRACK_HEIGHT - PLAYHEAD_KNOB) / 2.0,
+                    width: PLAYHEAD_KNOB,
+                    height: PLAYHEAD_KNOB,
+                };
+                renderer.fill_quad(quad(knob, PLAYHEAD_KNOB / 2.0), TEXT);
             }
         }
     }
@@ -832,13 +806,14 @@ where
         let span = self.max - self.min;
         let min = self.min;
         let right_edge = self.label_right_edge;
+        let label_top = self.label_room();
         let (value, content) = self.label.as_mut().filter(|_| span > 0.0)?;
         let bounds = layout.bounds() + translation;
         let x = bounds.x + ((*value - min) / span).clamp(0.0, 1.0) * bounds.width;
         Some(overlay::Element::new(Box::new(LabelOverlay {
             content,
             tree: tree.children.first_mut()?,
-            anchor: Point::new(x, bounds.y + LABEL_DIP),
+            anchor: Point::new(x, bounds.y + label_top + LABEL_DIP),
             right_edge,
         })))
     }
@@ -898,7 +873,8 @@ where
     fn layout(&mut self, renderer: &Renderer, bounds: Size) -> layout::Node {
         let right = self.right_edge.unwrap_or(bounds.width).min(bounds.width);
         // Never wider than the player: a long name is cut to fit (see the label's view).
-        let max = Size::new((right - 2.0 * LABEL_MARGIN).max(0.0), bounds.height);
+        let room = (right - LABEL_MARGIN - LABEL_MARGIN).max(0.0);
+        let max = Size::new(room, bounds.height);
         let node = self.content.as_widget_mut().layout(
             self.tree,
             renderer,
@@ -919,15 +895,19 @@ where
         layout: Layout<'_>,
         cursor: mouse::Cursor,
     ) {
-        self.content.as_widget().draw(
-            self.tree,
-            renderer,
-            theme,
-            style,
-            layout,
-            cursor,
-            &layout.bounds(),
-        );
+        // A layer of its own, under the tooltips' (`ui::z`): in one layer the renderer draws
+        // text over every box, so a tooltip over this label would be covered by its text.
+        renderer.with_layer(layout.bounds().expand(LABEL_MARGIN), |renderer| {
+            self.content.as_widget().draw(
+                self.tree,
+                renderer,
+                theme,
+                style,
+                layout,
+                cursor,
+                &layout.bounds(),
+            );
+        });
     }
 
     fn update(
@@ -964,6 +944,10 @@ where
             &layout.bounds(),
             renderer,
         )
+    }
+
+    fn index(&self) -> f32 {
+        crate::ui::z::Z::Anchored.index()
     }
 }
 

@@ -1,177 +1,112 @@
-//! UI for folder controls (prev/next). Only this module knows they are buttons; receives only booleans.
+//! The toolbar under the file list (`docs/design/design-system.md` §13.4.3): moving between files,
+//! opening a folder, and, until the app bar of #64, Settings and the batch mode toggle. Receives
+//! only what it shows.
 
-use iced::widget::{button, container, mouse_area, row, text, tooltip};
-use iced::Element;
+use iced::widget::{column, container, mouse_area, row, space};
+use iced::{Alignment, Element, Length, Padding};
 
 use crate::features::folder;
-use crate::theme;
+use crate::ui::icon_button::IconButton;
+use crate::ui::icons::Icon;
+use crate::ui::style;
+use crate::ui::tokens::*;
+use crate::ui::tooltip::{Position, Tip};
 
-const CONTROLS_HEIGHT: f32 = 32.0;
-
-/// Render the folder controls: Previous File, Next File, Scroll-to-Selected, Open (a folder, or a
-/// file on right-click), Settings and Batch mode buttons. Buttons are enabled only when applicable. `batch_mode`
-/// highlights the batch button; `batch_running` locks it while a job runs. `update_available`, a
-/// newer frename version, puts a dot on the Settings button, where the update is.
-pub fn view(
-    has_previous: bool,
-    has_next: bool,
-    has_selected: bool,
-    batch_mode: bool,
-    batch_running: bool,
-    update_available: Option<String>,
-) -> Element<'static, folder::Message> {
-    let prev_btn: Element<'_, folder::Message> = tooltip(
-        button(
-            container(text("◀").size(16))
-                .center_x(iced::Length::Fill)
-                .center_y(iced::Length::Fill),
-        )
-        .on_press(folder::Message::PreviousFile)
-        .width(CONTROLS_HEIGHT)
-        .height(iced::Length::Fill)
-        .padding(0)
-        .style(theme::icon_button_style(has_previous)),
-        text("Page Up"), // key name, as printed on the key
-        iced::widget::tooltip::Position::Top,
-    )
-    .into();
-
-    let next_btn: Element<'_, folder::Message> = tooltip(
-        button(
-            container(text("▶").size(16))
-                .center_x(iced::Length::Fill)
-                .center_y(iced::Length::Fill),
-        )
-        .on_press(folder::Message::NextFile)
-        .width(CONTROLS_HEIGHT)
-        .height(iced::Length::Fill)
-        .padding(0)
-        .style(theme::icon_button_style(has_next)),
-        text("Page Down"),
-        iced::widget::tooltip::Position::Top,
-    )
-    .into();
-
-    let scroll_btn: Element<'_, folder::Message> = tooltip(
-        button(
-            container(text("⊙").size(16))
-                .center_x(iced::Length::Fill)
-                .center_y(iced::Length::Fill),
-        )
-        .on_press(folder::Message::ScrollToSelected)
-        .width(CONTROLS_HEIGHT)
-        .height(iced::Length::Fill)
-        .padding(0)
-        .style(theme::icon_button_style(has_selected)),
-        text(fl!("folder-controls-scroll")),
-        iced::widget::tooltip::Position::Top,
-    )
-    .into();
-
-    // Click picks a folder; right-click picks one file, which takes no room in a narrow bar.
-    let open_btn: Element<'_, folder::Message> = tooltip(
-        mouse_area(
-            button(
-                container(text("📂").size(16))
-                    .center_x(iced::Length::Fill)
-                    .center_y(iced::Length::Fill),
-            )
-            .on_press(folder::Message::OpenFolder)
-            .width(CONTROLS_HEIGHT)
-            .height(iced::Length::Fill)
-            .padding(0)
-            .style(theme::icon_button_style(true)),
-        )
-        .on_right_press(folder::Message::OpenFile),
-        text(fl!("folder-controls-open")),
-        iced::widget::tooltip::Position::Top,
-    )
-    .into();
-
-    let settings_button = button(
-        container(text("⚙").size(16))
-            .center_x(iced::Length::Fill)
-            .center_y(iced::Length::Fill),
-    )
-    .on_press(folder::Message::OpenSettings)
-    .width(CONTROLS_HEIGHT)
-    .height(iced::Length::Fill)
-    .padding(0)
-    .style(theme::icon_button_style(true));
-    let (settings_face, settings_hint): (Element<'_, folder::Message>, String) =
-        match update_available {
-            Some(version) => (
-                iced::widget::stack![settings_button, update_dot()].into(),
-                fl!("folder-controls-update-available", version = version),
-            ),
-            None => (settings_button.into(), fl!("settings-window-title")),
-        };
-    let settings_btn: Element<'_, folder::Message> = tooltip(
-        settings_face,
-        text(settings_hint),
-        iced::widget::tooltip::Position::Top,
-    )
-    .into();
-
-    let batch_hint = if batch_mode {
-        fl!("folder-controls-batch-back")
-    } else {
-        fl!("folder-controls-batch")
-    };
-    let batch_btn: Element<'_, folder::Message> = tooltip(
-        button(
-            container(text("☑").size(16))
-                .center_x(iced::Length::Fill)
-                .center_y(iced::Length::Fill),
-        )
-        .on_press_maybe((!batch_running).then_some(folder::Message::SetBatchMode(!batch_mode)))
-        .width(CONTROLS_HEIGHT)
-        .height(iced::Length::Fill)
-        .padding(0)
-        .style(theme::list_item_button_style(batch_mode, !batch_running)),
-        text(batch_hint),
-        iced::widget::tooltip::Position::Top,
-    )
-    .into();
-
-    let controls = row![
-        prev_btn,
-        next_btn,
-        scroll_btn,
-        open_btn,
-        settings_btn,
-        batch_btn,
-    ]
-    .spacing(8)
-    .height(iced::Length::Fill)
-    .align_y(iced::Alignment::Center);
-
-    container(controls)
-        .padding([0, 8])
-        .width(iced::Length::Fill)
-        .height(CONTROLS_HEIGHT)
-        .style(theme::panel_container_style)
-        .into()
+/// What the toolbar shows.
+pub struct ToolbarProps {
+    pub has_previous: bool,
+    pub has_next: bool,
+    /// A file is open, so it can be shown in the list.
+    pub has_selected: bool,
+    /// Batch mode is on: its toggle is latched.
+    pub batch_mode: bool,
+    /// A job runs: the batch toggle waits for it.
+    pub batch_running: bool,
+    /// A newer frename version, when the update check found one: the dot on Settings.
+    pub update_available: Option<String>,
 }
 
-/// The accent dot in the Settings button's top right corner: a newer frename is available.
-fn update_dot() -> Element<'static, folder::Message> {
-    const DOT: f32 = 7.0;
-    container(
-        container(iced::widget::Space::new())
-            .width(DOT)
-            .height(DOT)
-            .style(|_| container::Style {
-                background: Some(theme::ACCENT.into()),
-                border: iced::Border {
-                    radius: (DOT / 2.0).into(),
-                    ..iced::Border::default()
-                },
-                ..container::Style::default()
-            }),
+const PADDING: Padding = Padding {
+    top: 0.0,
+    bottom: 0.0,
+    left: SPACE_S,
+    right: SPACE_S,
+};
+
+/// Render the toolbar. Buttons that cannot act now are disabled where they are.
+pub fn view(props: ToolbarProps) -> Element<'static, folder::Message> {
+    use folder::Message as M;
+    let previous = IconButton::new(Icon::ChevronLeft)
+        .tip(
+            Tip::new(fl!("folder-controls-previous")).keys(&["PgUp"]),
+            Position::Top,
+        )
+        .on_press_maybe(props.has_previous.then_some(M::PreviousFile));
+    let next = IconButton::new(Icon::ChevronRight)
+        .tip(
+            Tip::new(fl!("folder-controls-next")).keys(&["PgDn"]),
+            Position::Top,
+        )
+        .on_press_maybe(props.has_next.then_some(M::NextFile));
+    let locate = IconButton::new(Icon::LocateFixed)
+        .tip(fl!("folder-controls-scroll"), Position::Top)
+        .on_press_maybe(props.has_selected.then_some(M::ScrollToSelected));
+    // A click picks a folder; a right-click picks one file, which takes no room in the bar.
+    let open = mouse_area(
+        IconButton::new(Icon::FolderOpen)
+            .tip(
+                Tip::new(fl!("folder-controls-open")).detail(fl!("folder-controls-open-file")),
+                Position::Top,
+            )
+            .on_press(M::OpenFolder),
     )
-    .width(CONTROLS_HEIGHT)
-    .align_right(CONTROLS_HEIGHT)
-    .padding(3)
+    .on_right_press(M::OpenFile);
+
+    let settings_tip = match &props.update_available {
+        Some(version) => fl!(
+            "folder-controls-update-available",
+            version = version.clone()
+        ),
+        None => fl!("settings-window-title"),
+    };
+    let settings = IconButton::new(Icon::Settings)
+        .dot(props.update_available.is_some())
+        .tip(settings_tip, Position::Top)
+        .on_press(M::OpenSettings);
+    // Esc leaves batch mode (`EscapePressed`), but not while its job runs.
+    let batch_tip = if props.batch_mode && !props.batch_running {
+        Tip::new(fl!("folder-controls-batch-back")).keys(&["Esc"])
+    } else if props.batch_mode {
+        Tip::new(fl!("folder-controls-batch-back"))
+    } else {
+        Tip::new(fl!("folder-controls-batch"))
+    };
+    let batch = IconButton::new(Icon::ListChecks)
+        .latched(props.batch_mode)
+        .tip(batch_tip, Position::Top)
+        .on_press_maybe((!props.batch_running).then_some(M::SetBatchMode(!props.batch_mode)));
+
+    // Groups 12 px apart; the buttons of a group touch.
+    let files = row![
+        Element::from(previous),
+        Element::from(next),
+        Element::from(locate)
+    ];
+    let app = row![Element::from(settings), Element::from(batch)];
+    let bar = row![files, open, space::horizontal(), app]
+        .spacing(SPACE_M)
+        .align_y(Alignment::Center);
+    // A line on top: the rows above it scroll.
+    column![
+        container(space())
+            .width(Length::Fill)
+            .height(LINE)
+            .style(style::divider),
+        container(bar)
+            .padding(PADDING)
+            .width(Length::Fill)
+            .center_y(BAR_HEIGHT)
+            .style(style::panel),
+    ]
     .into()
 }

@@ -29,14 +29,15 @@ pub struct FileWorkspace<S> {
     comment_height: f32,
     /// The comment box takes the whole panel instead of the tags.
     comment_expanded: bool,
+    /// The comment box has the keys: its edge draws the focus ring.
+    comment_focused: bool,
+    /// Markers kept in the comment, read from the video's XMP instead because the comment has
+    /// none yet (the clip got them in the other storage, from Premiere or from the AI).
+    markers_from_video: Option<Vec<frename_core::Marker>>,
 }
 
-/// Height of the comment box until it is resized.
-pub const COMMENT_HEIGHT: f32 = 80.0;
-/// The comment box keeps at least about two lines.
-pub const COMMENT_MIN_HEIGHT: f32 = 48.0;
-/// And leaves the tags room: taller than this, "Expand" is the way.
-pub const COMMENT_MAX_HEIGHT: f32 = 600.0;
+/// The comment box's heights: at first, lowest, tallest.
+pub use crate::ui::tokens::{COMMENT_HEIGHT, COMMENT_MAX_HEIGHT, COMMENT_MIN_HEIGHT};
 
 impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     /// Create a file workspace with the given store. Tag list is built from the store; no file selected.
@@ -49,6 +50,8 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
             comment_content: text_editor::Content::new(),
             comment_height: COMMENT_HEIGHT,
             comment_expanded: false,
+            comment_focused: false,
+            markers_from_video: None,
         }
     }
 
@@ -77,11 +80,23 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
                 let mut snapshot = f.snapshot().clone();
                 // Markers kept in the comment come out of it while the file is open: they are
                 // edited as markers, and saving writes them back as lines.
+                self.markers_from_video = None;
                 let markers = match frename_core::marker_storage() {
                     frename_core::MarkerStorage::Comment => {
-                        let (text, markers) =
+                        let (text, mut markers) =
                             frename_core::markers_from_comment(snapshot.comment());
                         snapshot.set_comment(text);
+                        // A comment without marker lines, on a clip whose video holds some:
+                        // they are shown, and move into the comment on the first edit.
+                        if markers.is_empty() {
+                            if let Some(held) =
+                                frename_core::FileTagger::load_markers(f.file_path())
+                                    .filter(|held| !held.is_empty())
+                            {
+                                self.markers_from_video = Some(held.clone());
+                                markers = held;
+                            }
+                        }
                         Some(markers)
                     }
                     frename_core::MarkerStorage::InVideo => {
@@ -94,6 +109,12 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
                 self.tag_list.set_markers(markers);
             }
         }
+    }
+
+    /// The markers the open clip's video holds that are shown because the comment has none, as
+    /// they were read; see [`Self::set_file`].
+    pub fn markers_from_video(&self) -> Option<&[frename_core::Marker]> {
+        self.markers_from_video.as_deref()
     }
 
     /// The current file when ready. Returns None if nothing set or still loading.
@@ -125,6 +146,15 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     }
 
     /// Whether the comment box takes the whole panel instead of the tags.
+    /// Whether the comment box has the keys.
+    pub fn comment_focused(&self) -> bool {
+        self.comment_focused
+    }
+
+    pub fn set_comment_focused(&mut self, focused: bool) {
+        self.comment_focused = focused;
+    }
+
     pub fn comment_expanded(&self) -> bool {
         self.comment_expanded
     }
@@ -153,6 +183,14 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         // text() appends a trailing newline; strip it for storage.
         let trimmed = text.trim_end_matches('\n').to_string();
         self.store_comment(trimmed);
+    }
+
+    /// Show the tag list's comment in the comment box again, after an undo or redo changed it.
+    pub fn sync_comment_editor(&mut self) {
+        let comment = self.tag_list.comment();
+        if self.comment_content.text().trim_end_matches('\n') != comment {
+            self.comment_content = text_editor::Content::with_text(comment);
+        }
     }
 
     /// Put the comment in the tag list. When the editor's own text (all but the AI

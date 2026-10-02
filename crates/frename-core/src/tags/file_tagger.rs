@@ -15,7 +15,7 @@ use super::folder_tag_store::FolderTagStore;
 use super::in_memory_file_tagger::InMemoryFileTagger;
 use super::tag_list::TagList;
 use crate::markers::Marker;
-use crate::metadata::{MarkersError, MetadataMove, MoveOutcome, Rotation, RotationError, Segment};
+use crate::metadata::{MarkersError, MetadataMove, MoveOutcome, Rotation, RotationError};
 
 static BACKEND: OnceLock<Box<dyn FileTaggerBackend>> = OnceLock::new();
 
@@ -101,9 +101,16 @@ impl FileTagger {
 
     /// "Comment → markers": turn the lines of the file's comment that start with a time
     /// (`03:24 — shaky`) into clip markers and take them out of the comment (see
-    /// [`crate::comment_to_markers`]). The comment changes only after the markers were written,
-    /// so a failed write leaves the file as it was. Lines past the end of the clip stay.
+    /// [`crate::comment_to_markers`]): a line for a moment that has a marker renames it in
+    /// place, and markers the clip already has on one moment are merged. The comment changes
+    /// only after the markers were written, so a failed write leaves the comment as it was (the
+    /// markers may already be merged). Lines past the end of the clip stay.
     pub fn comment_to_markers(path: &Path) -> Result<MoveOutcome, MarkersError> {
+        Self::comment_to_markers_reporting(path).map(|(outcome, _)| outcome)
+    }
+
+    /// [`Self::comment_to_markers`], and how many duplicate markers it merged away.
+    pub fn comment_to_markers_reporting(path: &Path) -> Result<(MoveOutcome, usize), MarkersError> {
         let mut snapshot = Self::parse(path, &FolderInfo::default());
         let markers =
             Self::load_markers(path).ok_or_else(|| crate::metadata::cannot_hold_markers(path))?;
@@ -115,54 +122,69 @@ impl FileTagger {
                 result.past_end
             );
         }
-        if result.lines_moved == 0 && result.added.is_empty() {
-            return Ok(MoveOutcome::NothingToMove);
+        // Markers a line renamed or recolored keep their place and GUID.
+        let renamed: Vec<Marker> = markers
+            .iter()
+            .map(|m| {
+                result
+                    .updated
+                    .iter()
+                    .find(|u| u.guid.is_some() && u.guid == m.guid)
+                    .unwrap_or(m)
+                    .clone()
+            })
+            .chain(result.added.iter().cloned())
+            .collect();
+        // Markers on one moment are one marker (see [`crate::merge_duplicate_markers`]).
+        let (all, merged_away) = crate::merge_duplicate_markers(&renamed);
+        let markers_changed =
+            !result.added.is_empty() || !result.updated.is_empty() || merged_away > 0;
+        if result.lines_moved == 0 && !markers_changed {
+            return Ok((MoveOutcome::NothingToMove, 0));
         }
-        if !result.added.is_empty() {
-            let all: Vec<Marker> = markers.into_iter().chain(result.added).collect();
-            Self::save_markers(path, &all, &HashSet::new())?;
+        if markers_changed {
+            Self::save_markers(path, &all, &known_guids(&markers))?;
         }
         if result.lines_moved == 0 {
             // Only AI segments became markers: the comment keeps its block as it is.
-            return Ok(MoveOutcome::Moved(path.to_path_buf()));
+            return Ok((MoveOutcome::Moved(path.to_path_buf()), merged_away));
         }
         let was_commented = !snapshot.comment().trim().is_empty();
         snapshot.set_comment(result.comment);
         Self::follow_commented_tag(&mut snapshot, was_commented);
-        Ok(MoveOutcome::Moved(Self::save(&snapshot, path)))
+        Ok((MoveOutcome::Moved(Self::save(&snapshot, path)), merged_away))
     }
 
     /// "Markers → comment": append a line per clip marker to the file's comment, leaving out
-    /// lines it already has (see [`crate::markers_to_comment`]). The markers stay in the file.
+    /// lines it already has (see [`crate::markers_to_comment`]). Markers the clip has twice on
+    /// one moment are merged first, in the video as well. The markers stay in the file.
     pub fn markers_to_comment(path: &Path) -> Result<MoveOutcome, MarkersError> {
+        Self::markers_to_comment_reporting(path).map(|(outcome, _)| outcome)
+    }
+
+    /// [`Self::markers_to_comment`], and how many duplicate markers it merged away.
+    pub fn markers_to_comment_reporting(path: &Path) -> Result<(MoveOutcome, usize), MarkersError> {
         let mut snapshot = Self::parse(path, &FolderInfo::default());
-        let Some(markers) = Self::load_markers(path) else {
-            return Ok(MoveOutcome::NothingToMove);
+        let Some(loaded) = Self::load_markers(path) else {
+            return Ok((MoveOutcome::NothingToMove, 0));
         };
+        let (markers, merged_away) = crate::merge_duplicate_markers(&loaded);
+        if merged_away > 0 {
+            Self::save_markers(path, &markers, &known_guids(&loaded))?;
+        }
         let (comment, added) = crate::markers::markers_to_comment(snapshot.comment(), &markers);
         if added == 0 {
-            return Ok(MoveOutcome::NothingToMove);
+            let outcome = if merged_away > 0 {
+                MoveOutcome::Moved(path.to_path_buf())
+            } else {
+                MoveOutcome::NothingToMove
+            };
+            return Ok((outcome, merged_away));
         }
         let was_commented = !snapshot.comment().trim().is_empty();
         snapshot.set_comment(comment);
         Self::follow_commented_tag(&mut snapshot, was_commented);
-        Ok(MoveOutcome::Moved(Self::save(&snapshot, path)))
-    }
-
-    /// "Move in/out points out of file names": take the `in_HH_MM_SS` / `out_HH_MM_SS` parts
-    /// an older version wrote into the name of the file at `path`, save the points where in/out
-    /// points are kept now (the video or the comment, see [`crate::set_in_out_storage`]), and
-    /// rename the file without those parts. When the file already has in/out points stored,
-    /// in either home, those stay and the name's are dropped; the result says so. A file whose
-    /// name would be empty or is taken is left as it is.
-    pub fn move_in_out_out_of_name(path: &Path) -> NameInOutMove {
-        move_name_in_out(
-            path,
-            |path| Self::parse(path, &FolderInfo::default()),
-            |path| backend().stored_in_out(path),
-            Self::save,
-            |path| backend().drop_marker_behind_line(path),
-        )
+        Ok((MoveOutcome::Moved(Self::save(&snapshot, path)), merged_away))
     }
 
     /// The commented tag follows a comment that appeared or went, as it does when the comment
@@ -301,97 +323,29 @@ impl FileTagger {
     }
 }
 
-/// What [`FileTagger::move_in_out_out_of_name`] did to one file.
-#[derive(Debug, Clone, PartialEq)]
-pub enum NameInOutMove {
-    /// The name held no in/out points.
-    NothingToMove,
-    /// Renamed to `path`. `kept_stored` is set when the file already had in/out points
-    /// stored, in the comment or in the video: they were kept (and saved where Settings keep
-    /// in/out points now), and the name's were dropped.
-    Moved {
-        path: PathBuf,
-        kept_stored: Option<KeptStored>,
-    },
-    /// The file is still at `path`, for this reason.
-    Failed {
-        path: PathBuf,
-        problem: NameInOutProblem,
-    },
-}
-
-/// In/out points a file had both in its name and stored; see [`NameInOutMove::kept_stored`].
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct KeptStored {
-    /// The name's, dropped.
-    pub from_name: Segment,
-    /// The stored ones, kept.
-    pub stored: Segment,
-}
-
-/// Why [`FileTagger::move_in_out_out_of_name`] left a file as it was.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum NameInOutProblem {
-    /// The name is nothing but in/out parts: without them it would be empty.
-    NameWouldBeEmpty,
-    /// The name without the in/out parts is taken: a file (or a comment or subtitle file of
-    /// one) with this name is already in the folder, and renaming would replace it.
-    NameTaken(String),
-    /// The rename failed (the file is in use or read-only); the log says why.
-    NotRenamed,
-}
-
-/// [`FileTagger::move_in_out_out_of_name`] with the parse and save to use, and `stored`, which
-/// reads the in/out points a file has in either home (the comment or the video).
-pub(crate) fn move_name_in_out(
-    path: &Path,
-    parse: impl Fn(&Path) -> FileSnapshot,
-    stored: impl Fn(&Path) -> Segment,
-    save: impl Fn(&FileSnapshot, &Path) -> PathBuf,
-    drop_marker_behind_line: impl Fn(&Path),
-) -> NameInOutMove {
-    let left_alone = |problem: NameInOutProblem| NameInOutMove::Failed {
-        path: path.to_path_buf(),
-        problem,
-    };
-    let mut snapshot = parse(path);
-    let Some(from_name) = snapshot.take_name_in_out() else {
-        return NameInOutMove::NothingToMove;
-    };
-    if snapshot.name_without_extension().is_empty() {
-        return left_alone(NameInOutProblem::NameWouldBeEmpty);
+/// Whether `new_path`, or one of the sidecars that travel with it (comment, subtitle,
+/// transcript), already exists — checked before any write a rename would otherwise make, since
+/// renaming onto an existing file (issue #84) or its sidecar would silently replace it.
+///
+/// A `new_path` that differs from `old_path` only by case is never "taken": on Windows' case-
+/// insensitive, case-preserving filesystem it is the same file being renamed, not another one,
+/// and a rename that only fixes case (`clip.MOV` → `clip.mov`) must still go through.
+pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
+    let same_file_other_case = old_path
+        .file_name()
+        .zip(new_path.file_name())
+        .is_some_and(|(a, b)| a.eq_ignore_ascii_case(b));
+    if same_file_other_case {
+        return false;
     }
-    // Checked before anything is written: a rename onto an existing file would replace it.
-    let new_name = snapshot.file_name();
-    let new_path = path.with_file_name(&new_name);
-    let taken = [
-        new_path.clone(),
-        crate::comment::comment_path(&new_path),
-        crate::subtitles::subtitle_path(&new_path),
+    [
+        new_path.to_path_buf(),
+        crate::comment::comment_path(new_path),
+        crate::subtitles::subtitle_path(new_path),
+        crate::subtitles::transcript_path(new_path),
     ]
     .iter()
-    .any(|p| p.exists());
-    if taken {
-        return left_alone(NameInOutProblem::NameTaken(new_name));
-    }
-    // Points stored in either home win over the name's, and are saved where Settings keep
-    // in/out points now: a marker in the video is read only with video storage.
-    let stored = stored(path);
-    let kept = if stored.is_empty() { from_name } else { stored };
-    snapshot.set_segment(kept);
-    let saved_path = save(&snapshot, path);
-    if saved_path == path {
-        return left_alone(NameInOutProblem::NotRenamed);
-    }
-    // Kept from the video's marker while in/out points are kept in the comment: the line has
-    // them now, and the marker would go on showing them in Premiere.
-    drop_marker_behind_line(&saved_path);
-    // The same points in both places are no conflict (a retry after a failed rename, say).
-    let conflict = !stored.is_empty() && stored != from_name;
-    NameInOutMove::Moved {
-        path: saved_path,
-        kept_stored: conflict.then_some(KeptStored { from_name, stored }),
-    }
+    .any(|p| p.exists())
 }
 
 /// Extension trait: save this snapshot then re-parse from the new path.
@@ -409,10 +363,29 @@ impl SaveAndReparse for FileSnapshot {
     }
 }
 
+/// The GUIDs of `markers`, which a save may replace or drop: a marker left out of the list
+/// leaves the file only when its GUID is among them.
+fn known_guids(markers: &[Marker]) -> HashSet<String> {
+    markers.iter().filter_map(|m| m.guid.clone()).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{StoredTag, StoredTagStore};
+
+    /// Issue #84: a target that differs from the old path only by case must never count as
+    /// "taken" (it is the same file on Windows' case-insensitive filesystem, and a rename that
+    /// only fixes case must still go through). The check short-circuits on the name comparison
+    /// before ever consulting the filesystem, so this holds the same way on every platform,
+    /// including a case-sensitive one where the two names would otherwise be unrelated files.
+    #[test]
+    fn a_same_file_case_change_is_never_taken() {
+        let dir = std::env::temp_dir().join(format!("frename-case-only-{}", std::process::id()));
+        let old_path = dir.join("goat.mov");
+        let new_path = dir.join("goat.MOV");
+        assert!(!target_name_taken(&old_path, &new_path));
+    }
 
     /// Tags follow the folder's order; a file already in order is left alone.
     #[test]
@@ -595,6 +568,7 @@ AI: A walk.
             duration_ms: 150,
             name: name.to_string(),
             comment: String::new(),
+            color: crate::MarkerColor::Green,
         };
         let mut mine = Marker::new(100);
         mine.name = "Mine".to_string();
@@ -661,5 +635,42 @@ AI: A walk.
             ),
             "removing the editor's text with the block kept removes the tag"
         );
+    }
+
+    fn clip_with_markers(name: &str, markers: &[Marker]) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("frename-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let file = dir.join("clip.mov");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
+        std::fs::copy(fixture, &file).expect("copy fixture");
+        FileTagger::save_markers(&file, markers, &HashSet::new()).expect("markers");
+        file
+    }
+
+    fn named(start_ms: u64, name: &str) -> Marker {
+        let mut m = Marker::new(start_ms);
+        m.name = name.to_string();
+        m
+    }
+
+    /// Issue #145: the owner's two lines on one frame become one marker in either direction, and
+    /// no number of rounds adds another.
+    #[test]
+    fn two_markers_on_one_frame_are_merged_by_both_move_actions() {
+        let both = [
+            named(63_558, "Субтитр: нет субтитра «Цельное дерево»"),
+            named(63_558, "нет субтитра «Цельное дерево»"),
+        ];
+        let file = clip_with_markers("dup-to-comment", &both);
+        FileTagger::markers_to_comment(&file).expect("move");
+        let markers = FileTagger::load_markers(&file).expect("markers");
+        assert_eq!(markers.len(), 1);
+        assert_eq!(markers[0].name, "Субтитр: нет субтитра «Цельное дерево»");
+        let _ = std::fs::remove_dir_all(file.parent().unwrap());
+
+        let file = clip_with_markers("dup-from-comment", &both);
+        FileTagger::comment_to_markers(&file).expect("move");
+        assert_eq!(FileTagger::load_markers(&file).expect("markers").len(), 1);
+        let _ = std::fs::remove_dir_all(file.parent().unwrap());
     }
 }

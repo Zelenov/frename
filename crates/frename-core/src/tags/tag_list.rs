@@ -25,11 +25,30 @@ use super::{
     FileSnapshot, StoredTag,
 };
 use crate::markers::{sort_markers, Marker};
-use crate::ordered::OrderedCollection;
+use crate::ordered::{OrderKey, OrderedCollection};
 use crate::{db::StoredTagStore, OrderedThing};
 
 /// Number of tag colors in the UI palette (must match the UI crate).
 const TAG_PALETTE_LEN: u8 = 16;
+
+/// The order of the tags (the grid's and the file name's) and the lock, as Sync up, Sync down
+/// and the lock change them; kept to undo and redo those. Tags are kept by name: the ids of
+/// tags not in the database change whenever the list is rebuilt (an undo, a refresh).
+#[derive(Clone)]
+pub struct TagOrderState {
+    display: Vec<String>,
+    selected: Vec<String>,
+    sync_locked: bool,
+}
+
+impl TagOrderState {
+    /// Whether `other` has the same orders and lock.
+    pub fn same_as(&self, other: &TagOrderState) -> bool {
+        self.sync_locked == other.sync_locked
+            && self.display == other.display
+            && self.selected == other.selected
+    }
+}
 
 /// A collection of available tags. Generic over the store type S (load and add stored tags).
 #[derive(Clone, Debug)]
@@ -799,6 +818,51 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         Ok(())
     }
 
+    /// The tag orders and the lock now (for [`Self::restore_order_state`]).
+    pub fn order_state(&self) -> TagOrderState {
+        let names = |c: &OrderedCollection<TagId, ()>| -> Vec<String> {
+            c.iter()
+                .filter_map(|(id, _, _)| self.tags_by_id.get(id))
+                .map(|t| t.tag().to_string())
+                .collect()
+        };
+        TagOrderState {
+            display: names(&self.display_tag_ids),
+            selected: names(&self.selected_tag_ids),
+            sync_locked: self.sync_locked,
+        }
+    }
+
+    /// Put the tag orders and the lock back as [`Self::order_state`] saw them, saving the
+    /// grid's order. Tags that are not in the list any more are skipped, and tags the state
+    /// does not know stay where they are.
+    pub fn restore_order_state(
+        &mut self,
+        state: TagOrderState,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let wanted = |names: &[String]| -> OrderedCollection<TagId, ()> {
+            let mut wanted = OrderedCollection::new();
+            let ids = names.iter().filter_map(|name| {
+                self.tags_by_id
+                    .iter()
+                    .find(|(_, t)| t.tag() == name)
+                    .map(|(id, _)| *id)
+            });
+            for (i, id) in ids.enumerate() {
+                wanted.insert(id, (), i as OrderKey);
+            }
+            wanted
+        };
+        let (display, selected) = (wanted(&state.display), wanted(&state.selected));
+        self.display_tag_ids.sync_order_from(&display);
+        self.selected_tag_ids.sync_order_from(&selected);
+        let saved = self.persist_display_order();
+        self.rebuild_filtered_display_tag_ids();
+        self.update_is_selected_match_display_order();
+        self.set_sync_locked(state.sync_locked);
+        saved
+    }
+
     /// Sync Down: apply the order from `display_tag_ids` (grid/DB) onto
     /// `selected_tag_ids` (file name panel). No DB write needed.
     pub fn sync_display_to_selected(&mut self) {
@@ -827,6 +891,22 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         if !self.is_selected_match_display_order {
             self.sync_locked = false;
         }
+    }
+
+    /// Characters of the longest tag name in the whole list, whatever the filter: the tag grid
+    /// is sized by it, so it does not reflow while a search narrows the list.
+    pub fn longest_tag_name_chars(&self) -> usize {
+        self.display_tag_ids
+            .iter()
+            .filter_map(|(id, _, _)| self.tags_by_id.get(id))
+            .map(|t| t.tag().chars().count())
+            .max()
+            .unwrap_or_default()
+    }
+
+    /// Whether the list has any tag at all, whatever the filter.
+    pub fn has_tags(&self) -> bool {
+        !self.display_tag_ids.is_empty()
     }
 
     /// Cached result of whether the checked-tag order matches in both collections.
@@ -1398,5 +1478,22 @@ mod tests {
         // Orders differ (D before C in display, C before D in selected) → is_selected_match = false.
         assert!(!list.is_selected_match_display_order());
         assert!(!list.sync_locked());
+    }
+
+    #[test]
+    fn the_longest_name_and_having_tags_ignore_the_filter() {
+        let store = FakeAppStorage::new()
+            .add_stored_tag(
+                StoredTag::with_all(Uuid::new_v4(), "golden-hour", 1, false),
+                0,
+            )
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "wide", 2, false), 0);
+        let snapshot = FileSnapshot::new(vec![], "name", "mp4", "name.mp4");
+        let mut list = TagList::new(store, snapshot);
+        list.set_filter("wide");
+        assert_eq!(list.longest_tag_name_chars(), "golden-hour".len());
+        assert!(list.has_tags());
+        list.set_filter("nothing like it");
+        assert!(list.has_tags());
     }
 }

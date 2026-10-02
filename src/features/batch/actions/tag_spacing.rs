@@ -5,12 +5,11 @@
 use std::path::Path;
 
 use frename_core::FileTagger;
-use iced::widget::{button, row, text};
-use iced::{Element, Length};
+use iced::Element;
 
+use super::super::page::{self, Change};
 use super::super::ItemResult;
 use super::ActionMessage;
-use crate::theme;
 
 pub fn label() -> String {
     fl!("batch-action-respace-tags")
@@ -28,21 +27,17 @@ pub fn view<'a>() -> Element<'a, ActionMessage> {
             fl!("batch-action-respace-tags-status-no-space"),
         )
     };
-    // The status wraps when the panel is narrow; the button keeps its label on one line.
-    let settings = row![
-        text(status).size(13).width(Length::Fill),
-        button(
-            text(fl!("batch-action-respace-tags-settings"))
-                .size(12)
-                .wrapping(iced::widget::text::Wrapping::None),
-        )
-        .on_press(ActionMessage::OpenSettings)
-        .padding([3, 10])
-        .style(theme::icon_button_style(true)),
-    ]
-    .spacing(12)
-    .align_y(iced::Alignment::Center);
-    super::panel(label(), hint, settings.into())
+    page::page(
+        label(),
+        hint,
+        &[Change::Renames],
+        [page::linked_row(
+            fl!("batch-option-spacing"),
+            status,
+            fl!("batch-ai-change"),
+            ActionMessage::OpenSettings,
+        )],
+    )
 }
 
 /// Rename the file at `path` to the chosen tag spacing.

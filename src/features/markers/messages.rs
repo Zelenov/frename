@@ -35,4 +35,12 @@ pub enum Message {
     ToggleColorPicker(String),
     SetColor(String, MarkerColor),
     Delete(String),
+    /// A row's ✨: name and describe this marker with AI, in the background.
+    Describe(String),
+    /// `Ctrl+F2`: [`Message::Describe`] the marker the playhead is on.
+    DescribeAtPlayhead,
+    /// Stop describing this marker.
+    StopDescribing(String),
+    /// The list scrolled: its offset from the top and its viewport's height.
+    Scrolled(f32, f32),
 }

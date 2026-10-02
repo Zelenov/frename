@@ -15,7 +15,7 @@ members = [".", "crates/frename-core"]
 frename-core = { path = "crates/frename-core" }
 # Describing clips with Claude: frames and subtitles in, a summary and key moments out.
 # Pinned to a commit of Zelenov/clipscribe; the library with frames, without its command line.
-clipscribe = { git = "https://github.com/Zelenov/clipscribe", rev = "57623d2022dc44639367722296db98f2b0382a02", default-features = false, features = ["frames"] }
+clipscribe = { git = "https://github.com/Zelenov/clipscribe", rev = "0b9e8189db62b52069210a305e2a580a94ae3354", default-features = false, features = ["frames"] }
 
 # GUI framework - Iced for cross-platform GUI
 iced = { version = "0.14", features = ["tokio", "image", "svg"] }
@@ -89,6 +89,11 @@ opt-level = 3
 # Faster release builds in CI while keeping good optimization quality.
 lto = "thin"
 codegen-units = 8
+
+# "Show in file manager" on Linux: the file manager's org.freedesktop.FileManager1 D-Bus call.
+# Already built for iced (winit's theme detection), with the same features: no new crate.
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = { version = "5", default-features = false, features = ["async-io"] }
 
 # Whether another frename from the same install is running before an update
 [target.'cfg(windows)'.dependencies]

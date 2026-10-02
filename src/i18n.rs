@@ -45,7 +45,7 @@ pub fn loader() -> &'static FluentLanguageLoader {
 static SYSTEM_LANGUAGE: Mutex<&str> = Mutex::new(FALLBACK);
 
 /// A message in the current UI language, checked against `i18n/en/frename.ftl` at compile time:
-/// `fl!("batch-run", count = 5)`.
+/// `fl!("batch-run-rename", count = 5)`.
 #[macro_export]
 macro_rules! fl {
     ($message_id:literal) => {{
@@ -411,17 +411,19 @@ mod tests {
     }
 
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
-    const NOT_UI_TEXT: [(&str, &str); 47] = [
+    const NOT_UI_TEXT: [(&str, &str); 74] = [
         ("comment-editor", "widget id"),
         (
             "Rotate videos",
             "English-only log id and log label, see Action::log_id",
         ),
-        ("Page Up", "key name, as printed on the key"),
-        ("Page Down", "key name, as printed on the key"),
+        ("PgUp", "key name, as printed on the key"),
+        ("PgDn", "key name, as printed on the key"),
         ("Space", "key name, as printed on the key"),
         ("Enter", "key name, as printed on the key"),
         ("Esc", "key name, as printed on the key"),
+        ("Ctrl", "key name, as printed on the key"),
+        ("Alt", "key name, as printed on the key"),
         ("Delete", "key name, as printed on the key"),
         ("IN", "badge that mirrors in_ in file names"),
         ("OUT", "badge that mirrors out_ in file names"),
@@ -521,6 +523,106 @@ mod tests {
         (
             "{failed_deletes} upload(s) not deleted from Soniox",
             "English-only log text, see SubtitleJob::log_report",
+        ),
+        (
+            "move_comments",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "move_in_out",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "in_out_from_names",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "markers_comment",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "rotate",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "tag_commented",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "fix_tags",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "respace_tags",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "reload_files",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "describe_ai",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "generate_subtitles",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "comment_to_markers",
+            "stable option value for the batch run remembered across restarts (#65), see Direction::as_str",
+        ),
+        (
+            "markers_to_comment",
+            "stable option value for the batch run remembered across restarts (#65), see Direction::as_str",
+        ),
+        (
+            "right",
+            "stable option value for the batch run remembered across restarts (#65), see Turn::as_str",
+        ),
+        (
+            "left",
+            "stable option value for the batch run remembered across restarts (#65), see Turn::as_str",
+        ),
+        (
+            "half",
+            "stable option value for the batch run remembered across restarts (#65), see Turn::as_str",
+        ),
+        (
+            "reset",
+            "stable option value for the batch run remembered across restarts (#65), see Turn::as_str",
+        ),
+        (
+            "to",
+            "stable option key for the batch run remembered across restarts (#65), see Actions::persist",
+        ),
+        (
+            "direction",
+            "stable option key for the batch run remembered across restarts (#65), see Actions::persist",
+        ),
+        (
+            "turn",
+            "stable option key for the batch run remembered across restarts (#65), see Actions::persist",
+        ),
+        (
+            "redo",
+            "stable option key for the batch run remembered across restarts (#65), see Actions::persist",
+        ),
+        (
+            "replace",
+            "stable option key for the batch run remembered across restarts (#65), see Actions::persist",
+        ),
+        (
+            "srt",
+            "stable option key for the batch run remembered across restarts (#126), see Actions::persist",
+        ),
+        (
+            "premiere",
+            "stable option key for the batch run remembered across restarts (#126), see Actions::persist",
+        ),
+        (
+            "true",
+            "stable option value (a bool) for the batch run remembered across restarts (#65), see Actions::persist",
         ),
     ];
 
@@ -702,7 +804,7 @@ mod tests {
     fn arguments_are_not_wrapped_in_isolation_marks() {
         let mut args = fluent_bundle::FluentArgs::new();
         args.set("count", 5);
-        let text = loader("ru").get_args_fluent("batch-run", Some(&args));
+        let text = loader("ru").get_args_fluent("batch-run-rename", Some(&args));
         assert!(!text.contains(['\u{2068}', '\u{2069}']), "{text:?}");
         assert!(text.contains('5'), "{text:?}");
     }

@@ -1,489 +1,279 @@
-//! UI for the folder list. Only this module knows the list is scrollable and how rows look.
-//!
-//! Receives only data (directory, loading, tag color mapping) from workspace; selection from directory; no parent knows our layout or widgets.
+//! UI for the file list (`docs/design/design-system.md` §13.4, §13.6.2, §13.7). Only this module
+//! knows the list is scrollable and how rows look; the workspace passes the data in
+//! [`ListProps`].
 
-use iced::widget::{
-    button, checkbox, column, container, mouse_area, pick_list, row, scrollable, text, text_input,
-    tooltip,
+use std::collections::HashMap;
+
+use frename_core::{FileId, Marker, TagColorMapping};
+use iced::widget::{column, container, row, space, stack, Column};
+use iced::{Alignment, Element, Length, Padding};
+
+use crate::features::batch::BatchState;
+use crate::features::folder_workspace::Directory;
+use crate::ui::button;
+use crate::ui::empty;
+use crate::ui::icons::{icon, spinner, Icon};
+use crate::ui::palette::TagPalette;
+use crate::ui::tokens::*;
+use crate::ui::tooltip::{self, Position};
+use crate::ui::{form, scroll, style, text};
+use crate::widgets::search_bar::{self, SearchBar, FILE_SEARCH_BAR_INPUT_ID};
+
+use super::row::{self as file_row, RowState};
+use super::{filter, InlineRename, Message, FOLDER_LIST_SCROLLABLE_ID};
+
+/// What the file list shows.
+/// `'m` is the colour mapping's borrow, which only lasts while the rows are built.
+pub struct ListProps<'a, 'm> {
+    pub directory: Option<&'a Directory>,
+    /// A folder is being opened.
+    pub loading: bool,
+    pub tag_color_mapping: &'m TagColorMapping,
+    pub tag_palette: TagPalette,
+    pub rename: Option<&'a InlineRename>,
+    /// The app's spinner clock.
+    pub spinner_frame: usize,
+    /// The batch state while batch mode is on: rows get the check column.
+    pub batch: Option<&'a BatchState>,
+    /// Files whose markers could not be written.
+    pub markers_not_saved: &'a HashMap<FileId, Vec<Marker>>,
+    /// The filter menu is open over the list.
+    pub filter_menu_open: bool,
+    /// The list's width, which the names are fitted to.
+    pub width: f32,
+}
+
+/// The inset of the lock line and the batch header, level with the rows' content.
+const STRIP_PADDING: Padding = Padding {
+    top: 0.0,
+    bottom: 0.0,
+    left: SPACE_S,
+    right: SPACE_S,
 };
-use iced::{mouse, Element, Length};
 
-use crate::features::batch::{BatchState, ItemStatus};
-use crate::tag_colors::TagPalette;
-use crate::theme;
-use crate::widgets;
-use crate::widgets::search_bar::FILE_SEARCH_BAR_INPUT_ID;
-
-use super::Message;
-use super::{InlineRename, FOLDER_LIST_SCROLLABLE_ID, FOLDER_RENAME_INPUT_ID, FOLDER_ROW_HEIGHT};
-
-const SUBTITLES_MARKER_WIDTH: f32 = 28.0;
-/// Width of the check box column in batch mode.
-const CHECK_WIDTH: f32 = 28.0;
-/// Size of the check boxes, so the header box lines up with the rows' boxes.
-const CHECK_SIZE: f32 = 16.0;
-
-/// Render the folder panel: a scrollable list of file names (tag chips + name.extension, no wrap).
-/// Selection comes from the directory; view emits SelectFile/Previous/Next.
-/// `batch` is the batch state while batch mode is on: rows get a check box, or the file's
-/// outcome while a job has it. Files in `markers_not_saved` get a red ✕.
-#[allow(clippy::too_many_arguments)]
-pub fn view<'a>(
-    directory: Option<&'a crate::features::folder_workspace::Directory>,
-    loading: bool,
-    tag_color_mapping: &frename_core::TagColorMapping,
-    tag_palette: TagPalette,
-    rename: Option<&'a InlineRename>,
-    spinner_frame: usize,
-    batch: Option<&'a BatchState>,
-    markers_not_saved: &'a std::collections::HashMap<
-        frename_core::FileId,
-        Vec<frename_core::Marker>,
-    >,
-) -> Element<'a, Message> {
-    let placeholder_icon = |icon: &'static str| {
-        container(text(icon).size(48).color(theme::TEXT_MUTED))
-            .padding([8, 8])
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .style(theme::panel_container_style)
+/// Render the file list: the lock line while a job runs, the search bar, the batch header in
+/// batch mode, and the rows (or what is missing).
+pub fn view<'a>(props: ListProps<'a, '_>) -> Element<'a, Message> {
+    let body = match props.directory {
+        _ if props.loading => opening(props.spinner_frame),
+        None => space().into(),
+        Some(dir) => list(&props, dir),
     };
-
-    if loading {
-        return placeholder_icon("⏳").into();
+    let mut top = Column::new();
+    let locked_by = props.batch.filter(|b| b.is_running());
+    if let Some(batch) = locked_by {
+        top = top.push(lock_line(batch));
     }
-
-    let Some(dir) = directory else {
-        return placeholder_icon("📂").into();
+    if let Some(dir) = props.directory.filter(|_| !props.loading) {
+        top = top.push(search(dir, props.filter_menu_open));
+        top = top.push(searching_comments(dir));
+        // The batch header joins the top column rather than the outer one, so the list keeps
+        // its place in the widget tree and with it its scroll position when batch mode turns
+        // on or off.
+        if let Some(batch) = props.batch {
+            top = top.push(batch_header(dir, batch, locked_by.is_some()));
+        }
+    }
+    // The filter menu floats over the rows. The layers are always there (a space when the menu
+    // is closed), so the list keeps its place in the widget tree and its scroll position.
+    let menu: Element<'a, Message> = match props.directory {
+        Some(dir) if props.filter_menu_open && !props.loading => filter::menu(dir),
+        _ => space().into(),
     };
-
-    if dir.is_empty() {
-        return placeholder_icon("📭").into();
-    }
-
-    let selected_index = dir.selected_index();
-    // A running job locks the list: no other file may open while files are written.
-    let locked = batch.is_some_and(|b| b.is_running());
-
-    let items: Vec<Element<'_, Message>> = dir
-        .files_in_order()
-        .enumerate()
-        .map(|(index, file_info)| {
-            let is_selected = selected_index == Some(index);
-            let name_display = widgets::file_name_display::view(
-                file_info.snapshot(),
-                tag_color_mapping,
-                tag_palette,
-                false,
-            );
-
-            // On the name line, next to the tags: centred on the whole row it would float
-            // between the name and the comment line.
-            let subtitles_icon: Element<'_, Message> =
-                if markers_not_saved.contains_key(&file_info.id()) {
-                    tooltip(
-                        container(text("✕").size(12).color(theme::ERROR))
-                            .center_x(Length::Fixed(SUBTITLES_MARKER_WIDTH)),
-                        container(text(fl!("folder-markers-not-saved")).size(12))
-                            .padding([4, 8])
-                            .style(theme::elevated_container_bordered_style),
-                        tooltip::Position::Bottom,
-                    )
-                    .into()
-                } else if file_info.has_subtitles() {
-                    container(text("SRT").size(9).color(theme::ACCENT))
-                        .center_x(Length::Fixed(SUBTITLES_MARKER_WIDTH))
-                        .into()
-                } else {
-                    container(iced::widget::Space::new())
-                        .width(Length::Fixed(SUBTITLES_MARKER_WIDTH))
-                        .into()
-                };
-
-            // In batch mode the check box leads the name line, level with the tags whether or
-            // not a comment line follows.
-            let check_width = if batch.is_some() { CHECK_WIDTH } else { 0.0 };
-            let mut name_line = row![].align_y(iced::Alignment::Center);
-            if let Some(batch) = batch {
-                name_line = name_line.push(check_cell(batch, file_info.id(), locked));
-            }
-            let marker_count = file_info.snapshot().marker_count();
-            let marker_badge = (marker_count > 0).then(|| {
-                container(
-                    // One line: squeezed by a long name, the count used to drop below the pin.
-                    text(format!("📍{marker_count}"))
-                        .size(11)
-                        .color(theme::TEXT_MUTED)
-                        .wrapping(iced::widget::text::Wrapping::None),
-                )
-                .padding([0, 4])
-            });
-            // The name gives way to the marker count: a long name is clipped, the count stays.
-            let name_display = match &marker_badge {
-                Some(_) => container(name_display)
-                    .width(Length::Fill)
-                    .clip(true)
-                    .into(),
-                None => name_display,
-            };
-            let name_line = name_line
-                .push(subtitles_icon)
-                .push(name_display)
-                .push(marker_badge);
-            // Indented like the name, so the comment starts under it and not under the marker.
-            let comment_line = row![
-                iced::widget::Space::new()
-                    .width(Length::Fixed(check_width + SUBTITLES_MARKER_WIDTH)),
-                comment_line(file_info.snapshot(), spinner_frame),
-            ];
-
-            let editing = rename.filter(|r| r.id == file_info.id() && batch.is_none());
-            let name_area: Element<'_, Message> = if let Some(rename) = editing {
-                row![
-                    iced::widget::Space::new().width(Length::Fixed(SUBTITLES_MARKER_WIDTH)),
-                    rename_editor(rename),
-                ]
-                .into()
-            } else {
-                let area = mouse_area(
-                    container(column![name_line, comment_line].spacing(2))
-                        .padding(iced::Padding {
-                            top: 4.0,
-                            right: 8.0,
-                            bottom: 4.0,
-                            left: 0.0,
-                        })
-                        .width(Length::Fill)
-                        .height(Length::Fill)
-                        .center_y(Length::Fill)
-                        .clip(true),
-                );
-                match (locked, batch.is_some()) {
-                    (true, _) => area.into(),
-                    // Batch mode previews files but does not edit them, renaming included.
-                    (false, true) => area
-                        .on_press(Message::SelectFile(index))
-                        .interaction(mouse::Interaction::Pointer)
-                        .into(),
-                    (false, false) => area
-                        .on_press(Message::SelectFile(index))
-                        .on_double_click(Message::StartRename(index))
-                        .interaction(mouse::Interaction::Pointer)
-                        .into(),
-                }
-            };
-
-            container(
-                row![name_area]
-                    .align_y(iced::Alignment::Center)
-                    .width(Length::Fill)
-                    .height(Length::Fill),
-            )
-            .width(Length::Fill)
-            .height(Length::Fixed(FOLDER_ROW_HEIGHT))
-            .style(move |theme: &iced::Theme| theme::selectable_row_style(theme, is_selected))
-            .into()
-        })
-        .collect();
-
-    // A filter hides everything: say so instead of showing an empty scrollable.
-    let body: Element<'_, Message> = if items.is_empty() {
-        let icon = if dir.name_filter().trim().is_empty() {
-            "✓"
-        } else {
-            "🔍"
-        };
-        container(text(icon).size(48).color(theme::TEXT_MUTED))
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
-    } else {
-        scrollable(column(items).width(Length::Fill))
-            .id(iced::widget::Id::new(FOLDER_LIST_SCROLLABLE_ID))
-            .height(Length::Fill)
-            // Scrollbar beside the rows, not over them: long names and the rename field
-            // would otherwise run underneath it.
-            .spacing(2)
-            .on_scroll(|viewport| {
-                let offset = viewport.absolute_offset();
-                Message::Scrolled {
-                    scroll_y: offset.y,
-                    viewport_height: viewport.bounds().height,
-                }
-            })
-            .style(theme::dark_scrollable_style)
-            .into()
-    };
-
-    let search = widgets::search_bar::view_with_trailing(
-        FILE_SEARCH_BAR_INPUT_ID,
-        dir.name_filter(),
-        Message::SetNameFilter,
-        || Message::SetNameFilter(String::new()),
-        None::<fn(String) -> Message>,
-        Some(filter_dropdown(dir)),
-    );
-    // The batch header joins the search bar's column rather than the outer one, so the list
-    // keeps its place in the widget tree and with it its scroll position when batch mode
-    // turns on or off.
-    let mut top = column![search].spacing(4);
-    if let Some(batch) = batch {
-        top = top.push(batch_header(dir, batch, locked));
-    }
-
-    container(column![top, body].spacing(4))
+    container(column![top, stack![body, menu]])
         .width(Length::Fill)
         .height(Length::Fill)
-        .style(theme::panel_container_style)
+        .style(style::panel)
         .into()
 }
 
-/// Batch mode header: check or uncheck every listed file, invert, and how many are checked.
+/// The rows, or why there are none.
+fn list<'a>(props: &ListProps<'a, '_>, dir: &'a Directory) -> Element<'a, Message> {
+    if dir.is_empty() {
+        return empty::pane(
+            Icon::FolderX,
+            fl!("folder-empty-title"),
+            Some(fl!("folder-empty-line")),
+            Some(
+                button::secondary(fl!("folder-open-another"))
+                    .on_press(Message::OpenFolder)
+                    .into(),
+            ),
+        );
+    }
+    if dir.listed_count() == 0 {
+        return empty::pane(
+            Icon::SearchX,
+            fl!("folder-no-match"),
+            None,
+            Some(
+                button::secondary(fl!("folder-show-all"))
+                    .on_press(Message::ShowAll)
+                    .into(),
+            ),
+        );
+    }
+    let selected = dir.selected_index();
+    // A running job locks the list: no other file may open while files are written.
+    let locked = props.batch.is_some_and(|b| b.is_running());
+    let failures: HashMap<FileId, &str> = props
+        .batch
+        .map(|b| {
+            b.failed()
+                .into_iter()
+                .filter_map(|(id, reason)| reason.map(|r| (id, r)))
+                .collect()
+        })
+        .unwrap_or_default();
+    let rows = dir.files_in_order().enumerate().map(|(index, file)| {
+        file_row::view(
+            props,
+            file,
+            RowState {
+                index,
+                selected: selected == Some(index),
+                locked,
+                failure: failures.get(&file.id()).copied(),
+            },
+        )
+    });
+    scroll::vertical_with_id(FOLDER_LIST_SCROLLABLE_ID, Column::with_children(rows))
+        .on_scroll(|viewport| Message::Scrolled {
+            scroll_y: viewport.absolute_offset().y,
+            viewport_height: viewport.bounds().height,
+        })
+        .into()
+}
+
+/// A folder is being opened.
+fn opening<'a>(spinner_frame: usize) -> Element<'a, Message> {
+    container(
+        column![
+            spinner(spinner_frame, ICON_L, TEXT_SECONDARY),
+            text::secondary(fl!("folder-opening"))
+        ]
+        .spacing(SPACE_S)
+        .align_x(Alignment::Center),
+    )
+    .center(Length::Fill)
+    .into()
+}
+
+fn search(dir: &Directory, menu_open: bool) -> Element<'_, Message> {
+    search_bar::view(
+        SearchBar {
+            input_id: FILE_SEARCH_BAR_INPUT_ID,
+            placeholder: fl!("folder-search-placeholder"),
+            value: dir.name_filter(),
+            clear_tip: fl!("folder-search-clear"),
+            on_clear: Message::SetNameFilter(String::new()),
+            on_submit: Message::SetNameFilter(dir.name_filter().to_string()),
+            trailing: Some(filter::button(dir, menu_open)),
+        },
+        Message::SetNameFilter,
+    )
+}
+
+/// While a search has words and some comments are still loading, those files match by name only:
+/// say so, and how many are left. The list updates by itself as they load.
+fn searching_comments(dir: &Directory) -> Option<Element<'_, Message>> {
+    let left = dir.loading_comment_count();
+    (dir.is_searching() && left > 0).then(|| {
+        container(text::secondary(fl!(
+            "folder-search-comments-loading",
+            n = (left as i64)
+        )))
+        .padding(STRIP_PADDING)
+        .width(Length::Fill)
+        .into()
+    })
+}
+
+/// The line over the list while a job runs: why the rows take no clicks (§13.2 "Locks").
+fn lock_line<'a>(batch: &BatchState) -> Element<'a, Message> {
+    let action = batch.job_action().unwrap_or(batch.action()).label();
+    container(
+        row![
+            icon(Icon::Lock, ICON_MARK, TEXT_SECONDARY),
+            text::secondary(fl!("folder-locked", action = action))
+        ]
+        .spacing(SPACE_S)
+        .align_y(Alignment::Center),
+    )
+    .padding(STRIP_PADDING)
+    .width(Length::Fill)
+    .center_y(LOCK_LINE_HEIGHT)
+    .style(style::raised)
+    .into()
+}
+
+/// How many checked files the search or a filter hides: they are in the job too.
+fn hidden_checked(checked: usize, listed_checked: usize) -> usize {
+    checked.saturating_sub(listed_checked)
+}
+
+/// Batch mode header (§13.6.2): check or uncheck every listed file, invert, and how many are
+/// checked, hidden ones too.
 fn batch_header<'a>(
-    dir: &'a crate::features::folder_workspace::Directory,
+    dir: &'a Directory,
     batch: &'a BatchState,
     locked: bool,
 ) -> Element<'a, Message> {
-    let mut listed = dir.files_in_order().peekable();
-    let any_listed = listed.peek().is_some();
-    let all_checked = any_listed && listed.all(|f| batch.is_checked(f.id()));
-    let mut all = checkbox(all_checked)
-        .label(fl!("folder-all"))
-        .text_size(12)
-        .size(CHECK_SIZE);
-    if !locked {
-        all = all.on_toggle(|_| Message::ToggleAllChecked);
-    }
-    let invert = button(text(fl!("folder-invert")).size(12))
-        .on_press_maybe((!locked).then_some(Message::InvertChecks))
-        .padding([2, 8])
-        .style(theme::icon_button_style(!locked));
+    let listed = dir.listed_count();
+    let listed_checked = dir
+        .files_in_order()
+        .filter(|f| batch.is_checked(f.id()))
+        .count();
+    let all_checked = listed > 0 && listed_checked == listed;
+    let all = form::checkbox(fl!("folder-all"), all_checked);
+    let all = if locked {
+        all
+    } else {
+        all.on_toggle(|_| Message::ToggleAllChecked)
+    };
+    let invert = button::ghost(fl!("folder-invert"))
+        .on_press_maybe((!locked).then_some(Message::InvertChecks));
+    let count = batch.checked_count() as i64;
+    let hidden = hidden_checked(batch.checked_count(), listed_checked);
+    let checked: Element<'a, Message> = if hidden == 0 {
+        text::secondary(fl!("folder-checked", count = count)).into()
+    } else {
+        let hidden = hidden as i64;
+        tooltip::tip_text(
+            text::secondary(fl!("folder-checked-hidden", count = count, hidden = hidden)),
+            fl!("folder-checked-hidden-tip", hidden = hidden),
+            Position::Bottom,
+        )
+    };
     // The box sits where the rows' boxes sit: centred in the same first column.
-    let inset = (CHECK_WIDTH - CHECK_SIZE) / 2.0;
-    row![
-        container(all).padding(iced::Padding {
-            top: 0.0,
-            right: 0.0,
-            bottom: 0.0,
-            left: inset
-        }),
-        invert,
-        iced::widget::Space::new().width(Length::Fill),
-        text(fl!(
-            "folder-checked",
-            count = (batch.checked_count() as i64)
-        ))
-        .size(12)
-        .color(theme::TEXT_MUTED),
-    ]
-    .spacing(8)
-    .padding(iced::Padding {
-        top: 0.0,
-        right: 8.0,
-        bottom: 0.0,
-        left: 0.0,
-    })
-    .align_y(iced::Alignment::Center)
+    let inset = (CHECK_COLUMN - CHECK_SIZE) / 2.0;
+    container(
+        row![
+            container(all).padding(Padding {
+                left: inset,
+                ..Padding::ZERO
+            }),
+            invert,
+            space::horizontal(),
+            checked,
+        ]
+        .spacing(SPACE_S)
+        .align_y(Alignment::Center),
+    )
+    .padding(STRIP_PADDING)
+    .width(Length::Fill)
+    .center_y(ROW_HEIGHT)
     .into()
 }
 
-/// The check box leading a row in batch mode. A file the last job finished keeps its box, tinted
-/// with the outcome until it is clicked (which unchecks it) or the report is closed: green when
-/// the file now is as the action wants it, red with a cross when it failed.
-fn check_cell(
-    batch: &BatchState,
-    id: frename_core::FileId,
-    locked: bool,
-) -> Element<'static, Message> {
-    // The file in work keeps its plain box: most files take milliseconds, so anything shown
-    // for them would only flicker. The job panel names the file in work.
-    let outcome = match batch.status(id) {
-        Some(ItemStatus::Done) => Some((theme::VOLUME, None, fl!("folder-outcome-changed"))),
-        Some(ItemStatus::Skipped) => Some((theme::VOLUME, None, fl!("folder-outcome-unchanged"))),
-        Some(ItemStatus::Failed) => Some((theme::ERROR, Some('✕'), fl!("folder-outcome-failed"))),
-        Some(ItemStatus::Pending | ItemStatus::Running) | None => None,
-    };
-    let mut check = checkbox(batch.is_checked(id)).size(CHECK_SIZE);
-    if !locked {
-        check = check.on_toggle(move |_| Message::ToggleChecked(id));
+#[cfg(test)]
+mod tests {
+    use super::hidden_checked;
+
+    #[test]
+    fn checked_files_outside_the_list_count_as_hidden() {
+        assert_eq!(hidden_checked(12, 9), 3);
+        assert_eq!(hidden_checked(4, 4), 0);
+        assert_eq!(hidden_checked(0, 0), 0);
     }
-    let content: Element<'static, Message> = match outcome {
-        None => check.into(),
-        Some((color, mark, hint)) => {
-            let mut check = check.style(theme::outcome_checkbox_style(color));
-            if let Some(mark) = mark {
-                check = check.icon(checkbox::Icon {
-                    font: iced::Font::DEFAULT,
-                    code_point: mark,
-                    size: None,
-                    line_height: text::LineHeight::default(),
-                    shaping: text::Shaping::Advanced,
-                });
-            }
-            tooltip(
-                check,
-                container(text(hint))
-                    .padding([2, 6])
-                    .style(theme::elevated_container_style),
-                tooltip::Position::Right,
-            )
-            .into()
-        }
-    };
-    container(content)
-        .center_x(Length::Fixed(CHECK_WIDTH))
-        .into()
-}
-
-/// Which list filter a dropdown row controls.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FilterKind {
-    Untagged,
-    Subtitles,
-    Comments,
-    Markers,
-}
-
-impl FilterKind {
-    fn label(self) -> String {
-        match self {
-            Self::Untagged => fl!("folder-controls-filter-untagged"),
-            Self::Subtitles => fl!("folder-controls-filter-subtitles"),
-            Self::Comments => fl!("folder-controls-filter-comments"),
-            Self::Markers => fl!("folder-controls-filter-markers"),
-        }
-    }
-
-    fn set(self, on: bool) -> Message {
-        match self {
-            Self::Untagged => Message::SetUntaggedOnly(on),
-            Self::Subtitles => Message::SetSubtitledOnly(on),
-            Self::Comments => Message::SetCommentedOnly(on),
-            Self::Markers => Message::SetMarkedOnly(on),
-        }
-    }
-}
-
-/// One row of the filter dropdown: whether the filter is on and how many files match it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct FilterItem {
-    kind: FilterKind,
-    active: bool,
-    count: usize,
-}
-
-impl std::fmt::Display for FilterItem {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mark = if self.active { "✓" } else { "   " };
-        write!(f, "{mark} {}  {}", self.kind.label(), self.count)
-    }
-}
-
-/// Filter dropdown at the right end of the search bar, since it narrows the same list: one
-/// row per filter with its match count; picking a row toggles it. The button shows how many
-/// filters are on.
-fn filter_dropdown<'a>(dir: &crate::features::folder_workspace::Directory) -> Element<'a, Message> {
-    let items = [
-        FilterItem {
-            kind: FilterKind::Untagged,
-            active: dir.untagged_only(),
-            count: dir.untagged_count(),
-        },
-        FilterItem {
-            kind: FilterKind::Subtitles,
-            active: dir.subtitled_only(),
-            count: dir.subtitled_count(),
-        },
-        FilterItem {
-            kind: FilterKind::Comments,
-            active: dir.commented_only(),
-            count: dir.commented_count(),
-        },
-        FilterItem {
-            kind: FilterKind::Markers,
-            active: dir.marked_only(),
-            count: dir.marked_count(),
-        },
-    ];
-    let active = items.iter().filter(|item| item.active).count();
-    let placeholder = if active == 0 {
-        fl!("folder-controls-filter")
-    } else {
-        fl!("folder-controls-filter-active", count = (active as i64))
-    };
-    // No tooltip: it would draw over the open list.
-    pick_list(items.to_vec(), None::<FilterItem>, |item| {
-        item.kind.set(!item.active)
-    })
-    .placeholder(placeholder)
-    .text_size(12)
-    .padding([2, 8])
-    .into()
-}
-
-/// Spinner frames for rows whose comment is still loading.
-const SPINNER: [&str; 4] = ["◐", "◓", "◑", "◒"];
-
-/// The line under a file's name: the first line of its comment, a spinner while the comment
-/// is still loading, or nothing. Always one line high, so every row
-/// keeps [`FOLDER_ROW_HEIGHT`] and the comment never wraps into the next row.
-fn comment_line(
-    snapshot: &frename_core::FileSnapshot,
-    spinner_frame: usize,
-) -> Element<'_, Message> {
-    let line = if snapshot.comment_loading() {
-        SPINNER[spinner_frame % SPINNER.len()]
-    } else {
-        snapshot.comment().lines().next().unwrap_or_default()
-    };
-    text(line)
-        .size(11)
-        .color(theme::TEXT_MUTED)
-        .wrapping(iced::widget::text::Wrapping::None)
-        .into()
-}
-
-/// The in-place rename editor that replaces a row's name: the whole file name in a text
-/// field, with a red border and the reason next to it when Enter was refused.
-fn rename_editor(rename: &InlineRename) -> Element<'_, Message> {
-    let border = if rename.error.is_some() {
-        theme::ERROR
-    } else {
-        theme::ACCENT
-    };
-    let input = text_input("", &rename.text)
-        .id(iced::widget::Id::from(FOLDER_RENAME_INPUT_ID))
-        .on_input(Message::RenameInput)
-        .on_submit(Message::SubmitRename)
-        .size(14)
-        .padding([4, 6])
-        .style(
-            move |_theme: &iced::Theme, _status: text_input::Status| text_input::Style {
-                background: iced::Background::Color(theme::BG_ELEVATED),
-                border: iced::Border {
-                    radius: 2.0.into(),
-                    width: 1.0,
-                    color: border,
-                },
-                icon: theme::TEXT_MUTED,
-                placeholder: theme::TEXT_MUTED,
-                value: theme::TEXT,
-                selection: theme::ACCENT_SELECTED,
-            },
-        );
-    let mut content = row![input].spacing(6).align_y(iced::Alignment::Center);
-    if let Some(error) = rename.error {
-        content = content.push(text(error.text()).size(11).color(theme::ERROR));
-    }
-    container(content)
-        .padding(iced::Padding {
-            top: 0.0,
-            right: 8.0,
-            bottom: 0.0,
-            left: 0.0,
-        })
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .center_y(Length::Fill)
-        .into()
 }

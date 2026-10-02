@@ -21,4 +21,31 @@ impl TagColorMapping {
     pub fn color_index_for(&self, tag_name: &str) -> u8 {
         self.name_to_index.get(tag_name).copied().unwrap_or(0)
     }
+
+    /// Whether `tag_name` is a stored tag (has an entry here), as opposed to a stray word from a
+    /// file name that was never added. Unlike [`Self::color_index_for`], never confused by a
+    /// stored tag that happens to land on color index 0.
+    pub fn contains(&self, tag_name: &str) -> bool {
+        self.name_to_index.contains_key(tag_name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn contains_tells_a_stored_tag_apart_from_an_unmapped_one_even_at_index_zero() {
+        let mapping = TagColorMapping::from_entries([("pick".to_string(), 0)]);
+        assert!(
+            mapping.contains("pick"),
+            "stored, even though its index is 0"
+        );
+        assert!(!mapping.contains("aurora"), "never stored");
+        assert_eq!(
+            mapping.color_index_for("aurora"),
+            0,
+            "defaults to 0 either way"
+        );
+    }
 }

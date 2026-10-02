@@ -347,6 +347,7 @@ impl SettingsState {
             Message::OpenBatchAction(Operation::RespaceTags) => self.tag_spacing_changed = false,
             Message::SetSummaryLanguage(language) => self.settings.summary_language = language,
             Message::SetAiModel(model) => self.settings.ai_model = model.id.to_string(),
+            Message::SetAiMoments(moments) => self.settings.ai_moments = moments,
             Message::SetSubtitleLanguage(code, on) => {
                 let languages = &mut self.settings.subtitle_languages;
                 languages.retain(|l| *l != code);
@@ -359,7 +360,6 @@ impl SettingsState {
             Message::Key(which, message) => self.apply_key(which, message),
             Message::OpenBatchAction(
                 Operation::TagCommented
-                | Operation::InOutFromNames
                 | Operation::FixTags
                 | Operation::ReloadFiles
                 | Operation::Rotate(_)

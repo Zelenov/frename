@@ -3,14 +3,14 @@
 
 use clipscribe::{Model, MODELS};
 use frename_core::ai::key::{ApiKey, KeyState};
-use frename_core::ai::SummaryLanguage;
+use frename_core::ai::{MomentsMode, SummaryLanguage};
 use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage};
 use iced::widget::{column, row, Row};
 use iced::{Alignment, Element, Length};
 
 use crate::ui::layout::{self, NoticeKind};
 use crate::ui::tokens::*;
-use crate::ui::{button, form, text};
+use crate::ui::{button, form, scroll, text};
 
 use super::state::{KeySection, LanguageList, OldSettingsImport};
 use super::{KeyMessage, Message, Page, SettingsState, SETTINGS_SCROLLABLE_ID};
@@ -40,7 +40,7 @@ pub fn view(state: &SettingsState, batch_running: bool) -> Element<'_, Message> 
     };
     layout::window_with_navigation(
         layout::sidebar(navigation),
-        layout::scroll(SETTINGS_SCROLLABLE_ID, page),
+        scroll::vertical_with_id(SETTINGS_SCROLLABLE_ID, page),
         layout::button_bar(
             fl!("settings-apply-note"),
             [button::secondary(fl!("settings-close"))
@@ -273,6 +273,25 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
                 )
                 .width(FIELD_WIDTH_L),
             ),
+            layout::setting_row(
+                fl!("settings-ai-moments-label"),
+                layout::aligned([
+                    form::radio_option(
+                        fl!("settings-ai-moments-important"),
+                        Some(form::description(fl!("settings-ai-moments-important-hint"))),
+                        MomentsMode::Important,
+                        Some(settings.ai_moments),
+                        Message::SetAiMoments,
+                    ),
+                    form::radio_option(
+                        fl!("settings-ai-moments-full"),
+                        Some(form::description(fl!("settings-ai-moments-full-hint"))),
+                        MomentsMode::Full,
+                        Some(settings.ai_moments),
+                        Message::SetAiMoments,
+                    ),
+                ]),
+            ),
         ],
     )
 }
@@ -330,15 +349,6 @@ fn subtitles(state: &SettingsState) -> Element<'_, Message> {
                 key,
             ),
             layout::setting_row(
-                fl!("settings-subtitles-languages-label"),
-                layout::aligned(
-                    [grid.into()]
-                        .into_iter()
-                        .chain(status.map(|s| text::secondary(s).into()))
-                        .chain([text::secondary(hint).into()]),
-                ),
-            ),
-            layout::setting_row(
                 fl!("settings-subtitles-cue-length-label"),
                 layout::aligned([
                     form::radio_option(
@@ -356,6 +366,15 @@ fn subtitles(state: &SettingsState) -> Element<'_, Message> {
                         Message::SetSubtitleCueLength,
                     ),
                 ]),
+            ),
+            layout::setting_row(
+                fl!("settings-subtitles-languages-label"),
+                layout::aligned(
+                    [grid.into()]
+                        .into_iter()
+                        .chain(status.map(|s| text::secondary(s).into()))
+                        .chain([text::secondary(hint).into()]),
+                ),
             ),
         ],
     )

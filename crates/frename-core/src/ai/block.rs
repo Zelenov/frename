@@ -14,13 +14,24 @@
 //! it, so everything above it stays the editor's. Blocks written before the end line was
 //! dropped end with a line `— <model>, <YYYY-MM-DD> —` (or with `--`); text after such a line
 //! is the editor's too.
+//!
+//! When the clip has a lead-in or lead-out around the part worth keeping, the block ends with
+//! the In and Out the AI suggests (`Suggested In/Out: 00:00:03.200 – 00:00:11.800`, the times of
+//! the in/out line of the comment). It is a suggestion only: the in/out points change when the
+//! editor applies it. The line starts with a word, so it is never a marker line or an in/out
+//! line, and as the block's last line it stays last when markers kept in the comment are
+//! written back under the summary.
 
 use std::ops::Range;
 
-use clipscribe::{format_time, Description};
+use clipscribe::{format_time, Description, MainRange};
+
+use crate::Segment;
 
 /// What starts the block's first line, before the summary.
 const START: &str = "AI: ";
+/// What the suggested in/out line has before the in/out line it would be (`In/Out: …`).
+const SUGGESTED: &str = "Suggested ";
 
 /// Byte range of the comment's AI block, from the start of its last `AI: ` line to the end
 /// of the comment (trailing white space left out), or to the end of an old block's end line.
@@ -128,12 +139,45 @@ pub fn format_block(description: &Description) -> String {
             one_line(&segment.description)
         ));
     }
+    push_suggestion(&mut block, description.main);
     block
 }
 
-/// The block with the summary only, for when the moments go into the video as markers.
+/// The block with the summary only, for when the moments go into the video as markers. The
+/// suggested in/out line stays.
 pub fn format_summary_block(description: &Description) -> String {
-    format!("{START}{}", one_line(&description.summary))
+    let mut block = format!("{START}{}", one_line(&description.summary));
+    push_suggestion(&mut block, description.main);
+    block
+}
+
+/// Add the suggested in/out line for `main`, if there is one, as the block's last line.
+fn push_suggestion(block: &mut String, main: Option<MainRange>) {
+    let Some(main) = main else {
+        return;
+    };
+    let segment = Segment {
+        start: Some(main.start_s as f32),
+        end: Some(main.end_s as f32),
+    };
+    block.push('\n');
+    block.push_str(SUGGESTED);
+    block.push_str(&crate::metadata::format_in_out_line(segment).unwrap_or_default());
+}
+
+/// The In and Out the comment's AI block suggests, as `[` and `]` would set them: the in
+/// rounded down to a whole second, the out up, so the part worth keeping stays whole. `None`
+/// when the block has no suggestion, or the comment no block.
+pub fn suggested_in_out(comment: &str) -> Option<Segment> {
+    let segment = ai_block(comment)?.lines().find_map(|line| {
+        line.trim()
+            .strip_prefix(SUGGESTED)
+            .and_then(crate::metadata::parse_in_out_line)
+    })?;
+    Some(Segment {
+        start: Some(segment.start?.floor()),
+        end: Some(segment.end?.ceil()),
+    })
 }
 
 /// The description's segments as markers hold them: whole milliseconds, one-line names.
@@ -149,6 +193,7 @@ pub fn segment_lines(description: &Description) -> Vec<crate::MarkerLine> {
                 duration_ms: ms(segment.end_s).saturating_sub(start_ms),
                 name: one_line(&segment.description),
                 comment: String::new(),
+                color: crate::MarkerColor::Green,
             }
         })
         .collect()
@@ -174,6 +219,7 @@ mod tests {
                 end_s: 14.2,
                 description: "Entrance.".to_string(),
             }],
+            main: None,
         }
     }
 
@@ -195,8 +241,24 @@ mod tests {
                 duration_ms: 14_200,
                 name: "Entrance.".to_string(),
                 comment: String::new(),
+                color: crate::MarkerColor::Green,
             }]
         );
+    }
+
+    #[test]
+    fn no_segments_leaves_just_the_summary_and_no_markers() {
+        let no_segments = Description {
+            summary: description().summary,
+            segments: vec![],
+            main: None,
+        };
+        assert_eq!(format_block(&no_segments), "AI: A guide leads tourists.");
+        assert_eq!(
+            format_summary_block(&no_segments),
+            "AI: A guide leads tourists."
+        );
+        assert_eq!(segment_lines(&no_segments), []);
     }
 
     #[test]
@@ -274,6 +336,82 @@ mod tests {
         assert!(has_editor_comment(&format!("x\n\n{BLOCK}")));
         assert!(!has_editor_comment(""));
         assert!(has_editor_comment("x"));
+    }
+
+    fn with_main(start_s: f64, end_s: f64) -> Description {
+        Description {
+            main: Some(MainRange { start_s, end_s }),
+            ..description()
+        }
+    }
+
+    const SUGGESTION: &str = "Suggested In/Out: 00:00:03.200 – 00:00:11.800";
+
+    #[test]
+    fn a_main_range_is_written_as_the_blocks_last_line() {
+        let described = with_main(3.2, 11.8);
+        assert_eq!(format_block(&described), format!("{BLOCK}\n{SUGGESTION}"));
+        assert_eq!(
+            format_summary_block(&described),
+            format!("AI: A guide leads tourists.\n{SUGGESTION}")
+        );
+        assert_eq!(
+            segment_lines(&described).len(),
+            1,
+            "the suggestion is no segment"
+        );
+    }
+
+    #[test]
+    fn the_suggestion_is_read_as_brackets_would_set_it() {
+        let comment = format!("Mine\n\n{}", format_block(&with_main(3.2, 11.8)));
+        assert_eq!(
+            suggested_in_out(&comment),
+            Some(crate::Segment {
+                start: Some(3.0),
+                end: Some(12.0),
+            }),
+            "in rounded down, out up: the part worth keeping stays whole"
+        );
+        assert_eq!(suggested_in_out(&format_block(&description())), None);
+        assert_eq!(suggested_in_out(""), None);
+        assert_eq!(
+            suggested_in_out(&format!("{SUGGESTION}\n\nAI: Summary")),
+            None,
+            "only the AI block suggests"
+        );
+        assert_eq!(
+            suggested_in_out(&format!("{BLOCK}\r\n{SUGGESTION}\r\n")),
+            Some(crate::Segment {
+                start: Some(3.0),
+                end: Some(12.0),
+            })
+        );
+    }
+
+    #[test]
+    fn the_suggestion_is_no_marker_and_no_in_out_point() {
+        let comment = format!("Mine\n\n{}", format_block(&with_main(3.2, 11.8)));
+        assert_eq!(crate::parse_marker_line(SUGGESTION), None);
+        assert_eq!(crate::markers::parse_ai_line(SUGGESTION), None);
+        let (kept, segment) = crate::metadata::split_in_out_line(&comment);
+        assert_eq!(
+            (kept.as_str(), segment),
+            (comment.as_str(), crate::Segment::default())
+        );
+    }
+
+    #[test]
+    fn markers_kept_in_the_comment_leave_the_suggestion_last_and_in_place() {
+        let comment = format!("Mine\n\n{}", format_block(&with_main(3.2, 11.8)));
+        let (text, markers) = crate::markers_from_comment(&comment);
+        assert_eq!(
+            markers.len(),
+            1,
+            "the segment is a marker, the suggestion is not"
+        );
+        assert!(text.ends_with(SUGGESTION));
+        assert_eq!(crate::markers_into_comment(&text, &markers), comment);
     }
 
     #[test]

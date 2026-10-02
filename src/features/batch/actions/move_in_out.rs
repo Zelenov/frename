@@ -4,10 +4,11 @@
 use std::path::Path;
 
 use frename_core::{FileTagger, InOutStorage, MetadataMove};
-use iced::widget::{column, radio};
 use iced::Element;
 
+use super::super::page::{self, Change};
 use super::super::ItemResult;
+use crate::ui::{form, layout};
 
 pub fn label() -> String {
     fl!("batch-action-move-in-out")
@@ -49,27 +50,32 @@ impl Options {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        let choices = column![
-            radio(
-                fl!("batch-action-move-in-out-into-videos"),
-                InOutStorage::InVideo,
-                Some(self.to),
-                Message::SetTo,
-            )
-            .text_size(13),
-            radio(
-                fl!("batch-action-move-in-out-into-comments"),
-                InOutStorage::Comment,
-                Some(self.to),
-                Message::SetTo
-            )
-            .text_size(13),
-        ]
-        .spacing(8);
-        super::panel(
+        let choice = |label: String, description: Element<'static, Message>, to| {
+            form::radio_option(label, Some(description), to, Some(self.to), Message::SetTo)
+        };
+        let change = match self.to {
+            InOutStorage::InVideo => Change::IntoVideos,
+            InOutStorage::Comment => Change::IntoComments,
+        };
+        page::page(
             label(),
             fl!("batch-action-move-in-out-hint"),
-            choices.into(),
+            &[change],
+            [page::option_row(
+                fl!("batch-option-direction"),
+                layout::choices([
+                    choice(
+                        fl!("batch-action-move-in-out-into-videos"),
+                        form::description(fl!("settings-in-out-in-video-hint")),
+                        InOutStorage::InVideo,
+                    ),
+                    choice(
+                        fl!("batch-action-move-in-out-into-comments"),
+                        form::example(fl!("settings-in-out-comment-example")),
+                        InOutStorage::Comment,
+                    ),
+                ]),
+            )],
         )
     }
 }

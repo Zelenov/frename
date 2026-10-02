@@ -1,8 +1,11 @@
 //! Traits for app state storage: session read/write, stored tags, tag color mapping, and one-time initialization.
 
+use std::path::Path;
+use std::time::Duration;
+
 use uuid::Uuid;
 
-use crate::ai::SummaryLanguage;
+use crate::ai::{MomentsMode, SummaryLanguage};
 use crate::{
     CommentStorage, CueLength, FolderAndFile, InOutStorage, MarkerStorage, StoredTag,
     TagColorMapping,
@@ -65,6 +68,9 @@ pub struct AppSettings {
     /// The id of the model AI descriptions are written with (see
     /// [`clipscribe::Model::from_id`]). Defaults to the cheapest.
     pub ai_model: String,
+    /// Which moments AI descriptions get: only what stands out (the default, which alone
+    /// suggests an In/Out) or the whole clip.
+    pub ai_moments: MomentsMode,
     /// Languages spoken in the footage, as hints for generating subtitles (codes such as
     /// "en"). Empty: detect automatically. Defaults to
     /// [`crate::DEFAULT_SUBTITLE_LANGUAGES`].
@@ -89,6 +95,7 @@ impl Default for AppSettings {
             space_after_tags: false,
             summary_language: SummaryLanguage::default(),
             ai_model: clipscribe::MODELS[0].id.to_string(),
+            ai_moments: MomentsMode::default(),
             subtitle_languages: crate::DEFAULT_SUBTITLE_LANGUAGES
                 .iter()
                 .map(|code| code.to_string())
@@ -132,6 +139,17 @@ impl Default for UpdateCheckState {
     }
 }
 
+/// The last batch action run, and its options, so batch mode reopens with them selected (#65).
+/// Options are simple `key=value` pairs the UI's own action list understands; a key it no longer
+/// has, or a value it cannot parse, is for the reader to fall back on quietly.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BatchRun {
+    /// The stable id of the action that ran (see the UI's action list); empty when none has run
+    /// yet.
+    pub action: String,
+    pub options: Vec<(String, String)>,
+}
+
 /// Interface for storing and restoring app state (last folder and file, window geometry).
 /// Implemented by the application database and by the test fake (e.g. `FakeAppStorage`).
 /// Pass by value (e.g. `Box<dyn AppStateStore>`); no singleton, connection is opened per use.
@@ -173,6 +191,30 @@ pub trait AppStateStore: Send + Sync {
 
     /// Saves the update check state.
     fn set_update_check(&self, _state: UpdateCheckState) {}
+
+    /// Returns the last batch action run and its options, if any.
+    fn get_batch_run(&self) -> Option<BatchRun> {
+        None
+    }
+
+    /// Saves the last batch action run and its options.
+    fn set_batch_run(&self, _run: BatchRun) {}
+
+    /// Where playback stopped in the clip at `clip` (#161), if that is remembered.
+    fn get_playback_position(&self, _clip: &Path) -> Option<Duration> {
+        None
+    }
+
+    /// Remembers where playback stopped in the clip at `clip`; a moment too near its start to be
+    /// worth continuing ([`crate::playback::worth_remembering`]) forgets it instead.
+    fn set_playback_position(&self, _clip: &Path, _position: Duration) {}
+
+    /// The clip at `from` was renamed to `to`: its remembered position goes along.
+    fn move_playback_position(&self, _from: &Path, _to: &Path) {}
+
+    /// `folder` now lists the files `names`: positions of files that are gone are dropped, or
+    /// follow a file renamed outside frename (see [`crate::playback::tidy`]).
+    fn tidy_playback_positions(&self, _folder: &Path, _names: &[String]) {}
 }
 
 /// Interface for stored tags and tag color mapping. Tags are keyed by tag id (UUID); tag colors are keyed by tag name.

@@ -21,7 +21,7 @@ settings-video = Video
 settings-video-autoplay = Play videos automatically when opened
 settings-tags = Tag colors
 settings-tags-monochrome = Monochrome
-settings-tags-monochrome-hint = Every tag chip in one gray.
+settings-tags-monochrome-hint = Tags you added show in a darker gray, others in a lighter one — no other colors.
 settings-file-names = File names
 settings-tags-space-after = Space after each tag
 settings-tags-space-example = Food. Goat. clip.mp4
@@ -70,10 +70,15 @@ settings-ai-key-label = Anthropic API key
 settings-ai-key-placeholder = sk-ant-…
 settings-ai-key-get = Get a key at console.anthropic.com → API keys.
 settings-ai-key-remove-confirm = Remove the saved Anthropic key?
-settings-ai-used-by = Used by Describe with AI in batch mode.
+settings-ai-used-by = Used by Describe with AI in batch mode and on markers (✨, Ctrl+F2).
 settings-ai-model-label = Model
 settings-ai-language-label = Description language
 settings-ai-hint = Haiku is the cheapest; Sonnet and Opus notice more.
+settings-ai-moments-label = Moments
+settings-ai-moments-important = Only what stands out
+settings-ai-moments-full = Cover the whole clip
+settings-ai-moments-important-hint = Also suggests where to set In and Out (the AI pill next to IN and OUT)
+settings-ai-moments-full-hint = A moment for every part, quiet ones too; no In and Out suggestion
 settings-subtitles = Subtitles
 settings-subtitles-key-label = Soniox API key
 settings-subtitles-key-placeholder = Paste the key
@@ -108,37 +113,139 @@ settings-key-save-into = Save key keeps it in { $store } on this computer.
 
 ## Batch mode
 
-batch-title = Batch actions
-batch-on-checked = on { $count ->
-    [one] { $count } file
-   *[other] { $count } files
-} checked
-batch-run = Run on { $count ->
+batch-back-while-running = Cancel the action first
+batch-checked-count = { $count ->
+    [one] { $count } file checked
+   *[other] { $count } files checked
+}
+batch-no-key = No key
+batch-group-move = Move between places
+batch-group-fix = Fix names and videos
+batch-group-paid = Paid services
+batch-reason-none-checked = No files checked
+batch-reason-reading = Reading clip lengths…
+batch-check-all = Check all { $count ->
     [one] { $count } file
    *[other] { $count } files
 }
+batch-job-running = running
+batch-job-finished = finished
+batch-job-stopped = stopped
+batch-progress-files = { $finished } of { $total ->
+    [one] { $total } file
+   *[other] { $total } files
+}
+batch-time-left = about { $time } left
+batch-time-estimating = estimating time…
+batch-time-spent = { $time } so far
+batch-locked-until-end = The folder is locked until it ends
+batch-run-again = Run again on { $count ->
+    [one] { $count } file
+   *[other] { $count } files
+}
+batch-result-done = Done: { $total ->
+    [one] { $total } file
+   *[other] { $total } files
+}
+batch-result-done-detail = { $changed } changed, { $unchanged } had nothing to change
+batch-result-problems = Done with problems: { $failed } of { $total ->
+    [one] { $total } file
+   *[other] { $total } files
+} not done
+batch-figure-unchanged = unchanged
+batch-figure-not-done = not done
+batch-figure-not-reached = not reached
+batch-files-not-done = Files not done
+batch-table-file = File
+batch-table-why = Why
+
+batch-run-move-comments = Move { $count ->
+    [one] { $count } comment
+   *[other] { $count } comments
+}
+batch-run-move-in-out = Move in/out of { $count ->
+    [one] { $count } file
+   *[other] { $count } files
+}
+batch-run-convert = Convert { $count ->
+    [one] { $count } file
+   *[other] { $count } files
+}
+batch-run-rotate = Rotate { $count ->
+    [one] { $count } video
+   *[other] { $count } videos
+}
+batch-run-tag = Tag { $count ->
+    [one] { $count } file
+   *[other] { $count } files
+}
+batch-run-fix-tags = Reorder tags in { $count ->
+    [one] { $count } name
+   *[other] { $count } names
+}
+batch-run-rename = Rename { $count ->
+    [one] { $count } file
+   *[other] { $count } files
+}
+batch-run-reload = Reload { $count ->
+    [one] { $count } file
+   *[other] { $count } files
+}
+batch-service-anthropic = Anthropic
+batch-service-soniox = Soniox
+batch-change-renames = Renames files
+batch-change-videos = Writes into the videos
+batch-change-text-files = Writes text files next to the videos
+batch-change-comments = Writes into the comments
+batch-change-subtitles = Writes subtitle files next to the videos
+batch-change-records = Changes only frename's own records
+batch-option-direction = Direction
+batch-option-language = Language
+batch-option-described = Described videos
+batch-option-subtitled = Subtitled videos
+batch-option-subtitles-write = Files to write
+batch-option-spacing = Spacing
+batch-option-tag = Tag
+batch-option-turn = Turn
+batch-plan-videos = Videos
+batch-plan-length = Length
+batch-plan-cost = Cost
+batch-plan-time = Time
+batch-reason-estimate = Waiting for the estimate
+batch-reason-subtitles-no-format = Check at least one file to write
+batch-set-key = Set the key…
+batch-check-key = Check the key…
+batch-subtitles-languages-auto = Detected in each video
+batch-action-describe-ai-run-waiting = Describe videos
+batch-action-fix-tags-order = Order: as in the tag list, unknown tags first.
+batch-action-markers-comment-hint-short = Turns comment lines with a time into markers, or copies the markers into the comment.
+batch-action-markers-to-comment-hint = The markers stay; running it again adds nothing twice.
+batch-action-rotate-hint-short = Turns MP4 and MOV clips by their rotation flag, without re-encoding.
+batch-action-tag-commented-off = Tagging commented videos is off
+batch-action-tag-commented-choose = Choose the tag…
+
+batch-title = Batch actions
 batch-done-label-changed = changed
 batch-done-label-subtitled = subtitled
-batch-counts = ✓ { $done } { $done_label }   – { $skipped } unchanged   ✗ { $failed } failed
 batch-ai-at-least = at least
-batch-ai-spend-line = AI: { $spend }
 batch-cancel = Cancel
 batch-stopping = Stopping…
 batch-stopped = Stopped after { $finished } of { $total ->
     [one] { $total } file
    *[other] { $total } files
 }.
-batch-finished = Finished { $total ->
-    [one] { $total } file
-   *[other] { $total } files
-}.
 batch-close = Close
 batch-failed-subtitles = Not subtitled:
-batch-failed-plain = Failed:
-batch-failed-with-log = Failed (the log says why):
-batch-retry = Retry
+batch-written-subtitles = Files written:
+batch-table-written = Written
+batch-merged-markers = Duplicate markers merged:
+batch-table-merged = Merged
+batch-markers-merged = { $count ->
+    [one] { $count } duplicate marker merged
+   *[other] { $count } duplicate markers merged
+}
 batch-add-credit = Add credit
-batch-open-log = Open log
+batch-open-log = Open the log
 
 batch-action-move-comments = Move comments
 batch-action-move-comments-hint = Moves the comment of each checked file to the chosen place, with the in/out points it holds. Tags and in/out points kept in the video stay where they are.
@@ -150,17 +257,6 @@ batch-action-move-in-out-hint = Moves the in/out points of each checked file to 
 batch-action-move-in-out-into-videos = From the comments into the videos (Adobe XMP marker)
 batch-action-move-in-out-into-comments = From the videos (XMP marker) into the comments
 
-batch-action-in-out-from-names = Move in/out points out of file names
-batch-action-in-out-from-names-hint = Older versions could keep in/out points in the file name (clip.in_00_01_05.mp4). This takes them out of the name of each checked file and saves them where in/out points are kept now. A file that already has in/out points stored keeps those; the report lists it.
-batch-action-in-out-from-names-status-comment = Goes to: the comment
-batch-action-in-out-from-names-status-video = Goes to: inside the video (XMP); for mkv, webm and other formats that cannot hold it, the comment
-batch-action-in-out-from-names-settings = In/out settings…
-batch-action-in-out-from-names-kept = kept the stored { $stored }, dropped the name's { $name }
-batch-action-in-out-from-names-not-renamed = could not be renamed (the log says why)
-batch-action-in-out-from-names-empty = left as it is: the name would be empty
-batch-action-in-out-from-names-taken = left as it is: { $name } already exists
-batch-in-out-from-names-listed = Files that failed or kept their stored in/out points:
-
 batch-action-markers-comment = Markers ⇄ comment
 batch-action-markers-comment-to-markers = Comment lines with a time into markers
 batch-action-markers-to-comment = Markers into the comment (a copy: the markers stay)
@@ -169,10 +265,6 @@ batch-action-markers-comment-hint = A line like "03:24 — Take 3 — nice light
 batch-action-tag-commented = Tag commented videos
 batch-action-tag-commented-hint = Adds the "{ $tag }" tag to each checked video with a comment of yours (AI descriptions do not count) and removes it from those without one. Files whose tag changes are renamed.
 batch-action-tag-commented-hint-off = Adds the tag for videos with a comment to each checked video with a comment of yours and removes it from those without one. The tag is turned off in the settings.
-batch-action-tag-commented-status = Tag: { $tag }
-batch-action-tag-commented-status-off = Tag: off
-batch-action-tag-commented-settings = Tag settings…
-
 batch-action-fix-tags = Fix tags by priority
 batch-action-fix-tags-hint = Puts the tags in the name of each checked file in the order of the tag panel, so the higher a tag is there, the earlier it comes in the name. Tags the folder does not know yet come first, as in the tag panel. Files whose order changes are renamed.
 
@@ -181,27 +273,20 @@ batch-action-respace-tags-hint-space = Renames each checked file to put a space 
 batch-action-respace-tags-hint-no-space = Renames each checked file to have no space after its tags, as set in the settings: Food.Goat.clip.mp4.
 batch-action-respace-tags-status-space = Spacing: a space after each tag
 batch-action-respace-tags-status-no-space = Spacing: no space after tags
-batch-action-respace-tags-settings = Spacing settings…
-
 batch-action-reload-files = Reset cache and reload
 batch-action-reload-files-hint = Reads the comment and in/out points of each checked file from the file itself again and replaces what the folder remembered for it. Use it after the files were changed in another program. Files whose remembered values were missing or out of date count as changed.
 
 batch-action-describe-ai = Describe with AI
-batch-action-describe-ai-run = Describe { $videos }
+batch-action-describe-ai-run = Describe { $videos } · about { $dollars }
 batch-action-describe-ai-estimating = Estimating… { $known } / { $total }
 batch-action-describe-ai-none = No videos to describe.
-batch-action-describe-ai-plan = { $videos }, { $minutes } · about { $dollars } with { $model }
-batch-action-describe-ai-hint = Takes about { $duration }. The folder is locked until it ends. Cancel keeps the videos already described; running it again skips them.
+batch-action-describe-ai-hint = The folder is locked until it ends. Cancel keeps the videos already described; running it again skips them.
 batch-action-describe-ai-no-subtitles = Without subtitles (only the picture is described): { $videos }.
 batch-action-describe-ai-redo = Redo videos that already have an AI description
 batch-action-describe-ai-hint-panel = Describes what happens in each checked video, and when: a summary and time-ranged segments go into the AI description of its comment; your own text is kept. Frames and subtitles are sent to Anthropic.
 batch-ai-change = Change
-batch-ai-open-settings = Open Settings
 batch-ai-key-missing = Set an Anthropic API key in Settings
 batch-ai-key-unavailable = The system keyring could not be opened: it may be locked, or there is none (such as GNOME Keyring or KWallet).
-batch-ai-language-same-as-subtitles = Descriptions in the subtitles' language (English if none)
-batch-ai-language = Descriptions in { $language }
-
 ## AI description language names: the Settings picker and { $language } above.
 
 ai-language-same-as-subtitles = Same as subtitles
@@ -224,10 +309,6 @@ batch-ai-dollars-under = under $0.01
 batch-ai-skip-described = already described
 batch-ai-skip-too-long = over 30 min
 batch-ai-skip-unreadable = unreadable
-batch-ai-skip-photos = { $n ->
-    [one] { $n } photo
-   *[other] { $n } photos
-}
 batch-ai-skipped = Skipped: { $parts }.
 batch-ai-progress-frame = frame { $done } of { $total }
 batch-ai-progress-waiting = waiting for Claude
@@ -235,6 +316,7 @@ batch-ai-progress-saving = saving
 batch-ai-stop-no-key = Stopped: no Anthropic API key. Set one in Settings.
 batch-ai-fail-no-key = No API key
 batch-ai-fail-unreadable = Video could not be read
+batch-ai-fail-too-long = The clip is too long for AI (over 30 min)
 batch-ai-fail-not-saved = The description could not be saved
 batch-ai-stop-offline = Stopped: no connection to Anthropic. Run it again to describe the rest.
 
@@ -242,9 +324,12 @@ batch-action-generate-subtitles = Generate subtitles
 batch-action-generate-subtitles-install-ffmpeg = to read .mkv, .m2ts, .avi …, install ffmpeg from ffmpeg.org, add it to PATH, restart frename
 batch-action-generate-subtitles-replace = Replace existing subtitles
 batch-action-generate-subtitles-replace-hint = Transcribes again; costs as shown.
+batch-action-generate-subtitles-srt = SRT subtitles (clip.srt)
+batch-action-generate-subtitles-premiere = Premiere Pro transcript (clip.premiere.json)
+batch-action-generate-subtitles-premiere-hint = In Premiere Pro: Text panel → Transcript → Import Static Transcript.
 batch-action-generate-subtitles-privacy = The audio of these videos is sent to Soniox and deleted there afterwards.
 batch-action-generate-subtitles-duration-hint = Takes a few minutes per hour of audio; the folder is locked until it ends. Closing frename stops the run; finished subtitles are kept.
-batch-action-generate-subtitles-hint = Transcribes the speech of each checked video with Soniox and saves the subtitles next to it (clip.srt), where frename shows them.
+batch-action-generate-subtitles-hint = Transcribes the speech of each checked video with Soniox and saves the result next to it: subtitles (clip.srt), where frename shows them, and/or a Premiere Pro transcript.
 batch-subtitles-transcribe = Transcribe
 batch-subtitles-transcribe-count = Transcribe { $videos }
 batch-subtitles-build-free = Build { $count } (free)
@@ -301,7 +386,13 @@ batch-subtitles-usd-under = less than $0.01
 batch-subtitles-usd-about = about ${ $amount }
 
 ## File list
+folder-has-subtitles = Has subtitles
+folder-closed-by-job = Closed while a batch action changes it
+folder-filter-tip = Show only…
 
+folder-search-placeholder = Find a file or a comment
+folder-search-comments-loading = Searching comments… { $n } left
+folder-search-clear = Clear
 folder-all = All
 folder-invert = Invert
 folder-checked = { $count } checked
@@ -314,31 +405,71 @@ folder-rename-error-trailing = Cannot end with a dot or space
 folder-rename-error-exists = A file with this name exists
 folder-markers-not-saved = Markers not saved: the file is read-only or in use (close it in Premiere, then open the file and leave it again)
 drag-out-not-saved = Not dragged: can't save the file (read-only, or open in Premiere)
+folder-opening = Opening the folder…
+folder-empty-title = No videos in this folder
+folder-empty-line = frename shows MP4, MOV, MKV and other video files.
+folder-open-another = Open another folder…
+folder-no-match = No files match
+folder-show-all = Show all
+folder-locked = Locked while { $action } runs
+folder-checked-hidden = { $count } checked · { $hidden } hidden
+folder-checked-hidden-tip = { $hidden ->
+    [one] 1 checked file is hidden by the search or a filter; the action runs on it too
+   *[other] { $hidden } checked files are hidden by the search or a filter; the action runs on them too
+}
+folder-outcome-working = Working on it
+folder-outcome-not-reached = Not reached
+folder-window-empty-title = Open a folder of clips
+folder-window-empty-line = Or drop a folder on the window. A right-click on the button opens one file.
+folder-window-open = Open a folder…
+
+## File menu (right-click on a file, or F11 / Shift+F11 / Ctrl+F11)
+
+file-menu-show-in-explorer = Show in Explorer
+file-menu-show-in-file-manager = Show in file manager
+file-menu-copy-path = Copy full path
+file-menu-copy-name = Copy file name
+file-menu-copied = Copied
+file-menu-not-copied = Not copied: the clipboard is not available
+file-menu-not-shown = Could not open the file manager
 
 ## Controls bar under the file list
 
-folder-controls-filter = Filter
-folder-controls-filter-active = Filter ({ $count })
 folder-controls-filter-untagged = Untagged
 folder-controls-filter-subtitles = Subtitles
 folder-controls-filter-comments = Comments
 folder-controls-filter-markers = Markers
-folder-controls-scroll = Scroll to file
-folder-controls-open = Open folder (right-click: open a file)
+folder-controls-scroll = Show the open file in the list
+folder-controls-open = Open a folder
 folder-controls-batch = Batch actions on checked files
 folder-controls-batch-back = Back to the open file
 folder-controls-update-available = Update available: { $version }
+folder-controls-previous = Previous file
+folder-controls-next = Next file
+folder-controls-open-file = Right-click: open one file
 
 ## Video
 
-video-controls-set-in = [  Set In
-video-controls-set-out = ]  Set Out
-video-controls-screenshot = Save this frame as a JPEG (F12)
-video-controls-add-marker = Add marker (F2, hold for a range; again to name it)
+video-controls-back = Back 10 s
+video-controls-play = Play
+video-controls-pause = Pause
+video-controls-forward = Forward 10 s
+video-controls-frame-back = One frame back
+video-controls-frame-forward = One frame forward
+video-controls-set-in = Set the in point
+video-controls-set-out = Set the out point
+video-controls-screenshot = Save this frame
+video-controls-add-marker = Add a marker
+video-controls-add-marker-hold = Hold for a range; press again to name it
 video-controls-cannot-hold-markers = This file cannot hold markers
 video-controls-add-a-name = Add a name
-video-controls-rotate-left = Rotate left (Ctrl+Alt+←)
-video-controls-rotate-right = Rotate right (Ctrl+Alt+→)
+video-controls-rotate-left = Rotate left
+video-controls-rotate-right = Rotate right
+video-controls-more = More
+media-viewer-loading-slow = Waiting for the file… (a cloud file may take a while)
+media-viewer-cannot-play = This clip cannot be played
+media-viewer-no-picture = This file has no video picture
+video-controls-volume-scroll = Volume — scroll to change
 rotate-cannot = Cannot rotate: { $reason }
 rotate-reason-missing = the file is no longer there
 rotate-flag-right = 90° right
@@ -348,6 +479,8 @@ rotate-flag-none = none
 rotate-now = Rotation: { $flag }
 rotate-turned = Turned { $turn } · rotation now { $flag }
 rotate-failed = Not rotated: { $reason }
+undo-back-on-clip = Back on this clip (undid the move). Ctrl+Z again undoes its last change.
+redo-on-clip = On this clip again (redid the move).
 rotate-reason-in-use = the file is read-only or in use
 rotate-reason-format = this format has no rotation flag
 rotate-reason-damaged = the file is damaged
@@ -359,27 +492,90 @@ batch-action-rotate-right = 90° right (clockwise)
 batch-action-rotate-left = 90° left (counter-clockwise)
 batch-action-rotate-half = 180°
 batch-action-rotate-reset = Reset: no rotation (0°)
-media-viewer-video-show-subtitles = Show subtitle list
-media-viewer-video-hide-subtitles = Hide subtitle list
-media-viewer-video-markers-hint = Markers (Shift+F1 / Shift+F3 to jump, Shift+drag to snap)
+media-viewer-video-subtitle-list = Subtitle list
+media-viewer-video-marker-list = Marker list
+media-viewer-video-markers-hint = Shift+F1 / Shift+F3 jump between markers; Shift+drag snaps
 media-viewer-video-tab-markers = Markers
+media-viewer-video-fullscreen = Full screen
+media-viewer-video-close-list = Close the list
+# Shown over the picture when a clip opens where playback stopped last time; Home or a click goes to the start.
+media-viewer-video-resumed = Resumed at { $time } · Home: start over
 
 ## Markers list
+markers-in-out = In/out points
 
 markers-empty = No markers yet
-markers-add = 📍 Add a marker (F2)
+markers-add = Add a marker
 markers-ai-hint = AI marker: replaced when the AI describes this clip again
 markers-keep-color = Keep the color
-markers-done-enter = Done (Enter)
+markers-done = Done
 markers-delete = Delete the marker
+markers-cannot-hold-hint = Premiere reads markers from MP4 and MOV files.
+markers-color-green = Green
+markers-color-red = Red
+markers-color-orange = Orange
+markers-color-yellow = Yellow
+markers-color-white = White
+markers-color-blue = Blue
+markers-color-cyan = Cyan
+markers-color-lavender = Lavender
+markers-color-magenta = Magenta
+markers-color-other = Another color
 markers-read-only = read-only
 markers-name-placeholder = Name
+markers-ai-describe = Describe with AI: name the marker and add what happens
+markers-ai-stop = Stop describing
+markers-ai-describing = Describing…
+markers-ai-done = Marker described
+markers-ai-nothing-new = The marker already has this description
+markers-no-marker-notice = No marker here
+markers-ai-no-key = No Anthropic API key: set one in Settings
+markers-ai-failed = Not described: { $reason }
+markers-ai-failed-unknown = something went wrong
+markers-read-only-notice = That marker is read-only
+markers-ai-gone = The marker is gone: its description was not added
+markers-ai-stopping-for-batch = Stopping the marker descriptions first… This can take up to a couple of minutes.
 
 ## File workspace
 
+file-workspace-search-placeholder = Find a tag — or just type
+file-workspace-search-clear = Clear
 file-workspace-comment-placeholder = Comment...
 file-workspace-comment-collapse = Back to the tags
 file-workspace-comment-expand = Expand the comment
+
+## Tag grid
+
+tag-grid-star = Star: keep it at the top
+tag-grid-unstar = Unstar
+tag-grid-save = Add to the folder's tags
+tag-grid-delete = Delete “{ $tag }” from the folder's tags
+tag-grid-create = Create “{ $tag }”
+tag-grid-no-file = Open a clip to tag it
+tag-grid-no-tags = No tags yet
+tag-grid-no-tags-hint = Type a name and press Enter to create the first one.
+tag-grid-group-unsaved = Not in the folder's tags
+tag-grid-group-folder = Folder tags
+tag-grid-more = +{ $count } more
+
+## Order strip
+
+sync-panel-locked = Reordering below reorders the folder
+sync-panel-unlocked = Reordering below changes this clip only
+sync-panel-unlock = Unlock
+sync-panel-lock = Lock
+sync-panel-differs = Order differs from the folder
+sync-panel-use-for-folder = Use for the folder
+sync-panel-sort-like-folder = Sort like the folder
+
+## File name card
+
+file-name-panel-no-tags = No tags on this clip
+file-name-panel-untag = Untag
+file-name-panel-clear-in = Clear the in point
+file-name-panel-clear-out = Clear the out point
+file-name-panel-suggested-in-out = AI
+file-name-panel-apply-suggested-in-out = Set In and Out to what the AI suggests
 
 ## Updates (Settings)
 
@@ -398,3 +594,21 @@ updates-update-and-restart = Update and restart
 updates-wait-for-batch = Wait for the batch to finish
 updates-current-version = frename { $version }
 updates-check-on-start = Check for updates when frename starts
+
+recovery-restored = frename closed unexpectedly. Restored your unsaved work on { $clip } ({ $what }).
+recovery-kept = frename closed unexpectedly. Your unsaved work on { $clip } ({ $what }) was not applied: { $why }. A readable copy to retype from is in { $folder }.
+recovery-unreadable = frename closed unexpectedly, and a recovery file could not be read. It is kept in { $folder }.
+recovery-why-gone = the clip is gone or was renamed
+recovery-why-changed = the clip changed after your edits
+recovery-why-not-written = a file with that name exists, or the clip is read-only or in use
+recovery-tags = { $count ->
+    [one] { $count } tag
+   *[other] { $count } tags
+}
+recovery-markers = { $count ->
+    [one] { $count } marker
+   *[other] { $count } markers
+}
+recovery-comment = comment
+recovery-in-out = in/out points
+recovery-edits = edits

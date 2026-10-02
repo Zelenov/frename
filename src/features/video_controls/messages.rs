@@ -1,5 +1,12 @@
 //! Messages for video controls feature
 
+/// Which way a frame step goes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FrameStep {
+    Back,
+    Forward,
+}
+
 /// Messages handled by video controls
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -17,6 +24,8 @@ pub enum Message {
     SeekBack10,
     /// Seek 10 seconds forward (button or F3)
     SeekForward10,
+    /// One frame back or forward, paused (button or `Alt`+`←` / `→`).
+    StepFrame(FrameStep),
     /// Set segment start marker at the current video position ([ key or button)
     SetSegmentStart,
     /// Set segment end marker at the current video position (] key or button)
@@ -38,6 +47,8 @@ pub enum Message {
     PlayRange(f32, f32),
     /// Delete the marker under the playhead (Shift+F2).
     DeleteMarker,
+    /// `Ctrl+F2`: describe the marker the playhead is on with AI.
+    DescribeMarker,
     /// Jump to the previous marker (Shift+F1).
     PreviousMarker,
     /// Jump to the next marker (Shift+F3).

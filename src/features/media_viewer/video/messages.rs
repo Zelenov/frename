@@ -36,6 +36,9 @@ pub enum Message {
     TogglePause,
     /// Seek to position in seconds
     Seek(f32),
+    /// Back to the very start of the clip (`Home`, or a click on the note that says where it
+    /// continued).
+    GoToStart,
     /// Controls message
     Controls(video_controls::Message),
     /// Unload current video (e.g. before switching file). Emits VideoUnloaded when done.
@@ -68,6 +71,8 @@ pub enum Message {
     SeekExact(u64),
     /// Show a short note over the picture (e.g. `Frame saved`) for a moment.
     ShowNotice(String),
+    /// A note that must be read, not glanced at (what a crash left): it stays long.
+    ShowLongNotice(String),
     /// Hide the note with this number, unless a newer one replaced it (internal).
     ClearNotice(u64),
     /// Subtitle file next to `video_path` was read; `None` when there is none.
@@ -77,8 +82,24 @@ pub enum Message {
     },
     /// User picked a cue in the subtitle list: seek to its start.
     SeekToCue(usize),
+    /// The subtitle list scrolled: its offset from the top and its viewport's height.
+    CueListScrolled(f32, f32),
+    /// Put the subtitle list back at this offset (fullscreen went on or off).
+    RestoreCueScroll(f32),
     /// Show or hide the subtitle list over the picture.
     ToggleCueList,
     /// Autoplay setting changed: whether videos opened from now on start playing.
     SetAutoplay(bool),
+    /// Open or close **More**, the menu of the controls a narrow pane has no room for.
+    ToggleMore,
+    /// Close More: a click outside it.
+    CloseMore,
+    /// An item of More was chosen: close it, then send its messages in order (as if their
+    /// buttons had been pressed, so the parents see them as they would from the bar).
+    MorePicked(Vec<Message>),
+    /// A step of the loading spinner (internal, only while a video loads).
+    LoadingTick,
+    /// Look whether the frame a step asked for is on screen yet (internal, only while one is
+    /// on its way).
+    FrameStepTick,
 }

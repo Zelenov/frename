@@ -7,7 +7,8 @@ use iced::widget::text_editor;
 
 use super::Directory;
 use crate::features::{
-    batch, drag_out, file_name_panel, folder, media_viewer, sync_panel, tag_panel,
+    batch, drag_out, file_menu, file_name_panel, folder, media_viewer, sync_panel, tag_panel,
+    video_controls,
 };
 
 /// Key that triggered global focus (we emulate it into the search bar; Iced cannot replay the event).
@@ -70,6 +71,25 @@ pub enum Message {
     CopyTags,
     /// Paste previously copied tags onto the current file (replace semantics).
     PasteTags,
+    /// Demo mode only (a screenshot scenario's `describing`): show the open clip's marker of
+    /// this name as being described, without sending a request.
+    ShowDescribing(String),
+    /// A marker's "Describe with AI" request came back (see `markers::describe`).
+    MarkerDescribed {
+        file: FileId,
+        guid: String,
+        /// The request's number (see `MarkersState::start_describing`).
+        request: u64,
+        outcome: crate::features::markers::MomentOutcome,
+    },
+    /// A second passed: write the open clip's unsaved edits into the recovery journal, if they
+    /// changed (see `frename_core::recovery`).
+    JournalTick,
+    /// A journal write finished (what was written, or why not).
+    JournalWritten(
+        frename_core::FileId,
+        Option<(frename_core::recovery::Entry, Result<(), String>)>,
+    ),
     /// Undo the last undoable action (Ctrl+Z).
     Undo,
     /// Redo the last undone action (Ctrl+Y / Ctrl+Shift+Z).
@@ -78,6 +98,9 @@ pub enum Message {
     ScrollFolderListToSelected,
     /// Internal: update cached folder list scroll Y after programmatic scroll.
     FolderListScrollAdjusted(f32),
+    /// Fullscreen went on or off: put the marker list and the subtitle list back at the offsets
+    /// they had (the view built them anew).
+    RestoreListScrolls { markers_y: f32, cues_y: f32 },
     /// Toggle fullscreen mode for the media viewer (F5).
     ToggleMediaFullscreen,
     /// Escape pressed globally: exits fullscreen if active, otherwise clears the search bar filter.
@@ -88,6 +111,10 @@ pub enum Message {
     SetSegmentEnd,
     /// User interacted with the multiline comment editor.
     CommentAction(text_editor::Action),
+    /// A click or a focus key somewhere: ask whether the comment box has the keys now.
+    CheckCommentFocus,
+    /// Whether the comment box has the keys, so its edge can show it.
+    CommentFocused(bool),
     /// Resize the comment box, or let it take the whole panel.
     CommentLayout(crate::features::file_workspace::CommentLayout),
     /// Screenshot captured at position (ms) with JPEG bytes.
@@ -98,6 +125,17 @@ pub enum Message {
     /// `Ctrl+Alt+←/→` while a text field had the keys: [`Message::RotateVideo`], unless the
     /// field is the comment box.
     RotateVideoWhileTyping(i32),
+    /// `Alt+←/→`: one frame back or forward in the open video.
+    StepFrame(video_controls::FrameStep),
+    /// `Alt+←/→` while a text field had the keys: [`Message::StepFrame`], unless the field is
+    /// the comment box.
+    StepFrameWhileTyping(video_controls::FrameStep),
+    /// `Home`: to the start of the open video, when a video is shown (#161).
+    GoToStart,
+    /// `Home` while a text field had the keys: to the start of the clip while the note that it
+    /// continued is shown (it says Home starts it over), unless the field is the comment box or
+    /// a name being edited; otherwise the field keeps the key (#161).
+    GoToStartWhileTyping,
     /// Open a native folder picker dialog so the user can choose a folder to open.
     OpenFolderPicker,
     /// Open a native file picker dialog so the user can choose a file to open.
@@ -129,4 +167,13 @@ pub enum Message {
     StartDragOut(Vec<PathBuf>),
     /// The drag out of the window ended (the app sends it when the drag loop returns).
     DragOutFinished,
+    /// The file context menu: opening, closing, and the item chosen (run by the workspace).
+    FileMenu(file_menu::Message),
+    /// A file menu key (`F11`, `Shift+F11`, `Ctrl+F11`): the action on the open file.
+    FileAction(file_menu::FileAction),
+    /// Run the action on the file now: its pending edits are on disk (internal).
+    RunFileAction(FileId, file_menu::FileAction),
+    /// The keyboard modifiers held right now (Ctrl/Shift), or none once the window loses focus.
+    /// A mouse click carries no modifiers in iced, so a file-row click reads this instead.
+    ModifiersChanged(iced::keyboard::Modifiers),
 }

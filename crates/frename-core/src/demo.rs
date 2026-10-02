@@ -25,6 +25,10 @@ pub struct DemoScenario {
     /// Where to pause the video, in seconds.
     #[serde(default)]
     pub seek: f32,
+    /// Where playback stopped in the open clip last time, in seconds (#161): it opens a little
+    /// before, with the note that says so, instead of seeking to `seek`.
+    #[serde(default)]
+    pub resume: Option<f32>,
     /// Window size in logical pixels: width, height.
     pub window: [u32; 2],
     /// Widths of the video panel and the file list panel.
@@ -35,6 +39,14 @@ pub struct DemoScenario {
     /// Open the marker list over the picture (the ◆ button).
     #[serde(default)]
     pub marker_list: bool,
+    /// Open **More** (the `⋯` button of the video controls), to show what a narrow pane folds
+    /// into it.
+    #[serde(default)]
+    pub more: bool,
+    /// Show the open clip's marker with this name as being described with AI (its row's turning
+    /// loader and stop button), without sending a request.
+    #[serde(default)]
+    pub describing: Option<String>,
     /// Turn the open clip by this many quarter turns clockwise (negative: counter-clockwise),
     /// as `Ctrl+Alt+→` / `←` do, after the seek. The shot is then taken while the note is still
     /// shown over the picture.
@@ -43,6 +55,17 @@ pub struct DemoScenario {
     /// In batch mode (`--batch`), the action to select, by its English name ("Rotate videos").
     #[serde(default)]
     pub batch_action: Option<String>,
+    /// Files to Ctrl+click in order, by name, after the seek: builds a multi-selection the way
+    /// a click does (issue #60), turning batch mode on. Independent of `--batch`.
+    #[serde(default)]
+    pub ctrl_click: Vec<String>,
+    /// One more file to Shift+click after `ctrl_click`, extending the selection to the range
+    /// between it and the last Ctrl-clicked file (or `open`, if `ctrl_click` is empty).
+    #[serde(default)]
+    pub shift_click: Option<String>,
+    /// A word to type in the file search bar (issue #99).
+    #[serde(default)]
+    pub search: Option<String>,
     /// The staged files, oldest first: the file list shows them in this order.
     pub files: Vec<DemoFile>,
 }
@@ -135,6 +158,21 @@ impl DemoScenario {
         if self.window.contains(&0) {
             return Err(DemoError("window size must not be zero".into()));
         }
+        let staged = |name: &str| self.files.iter().any(|f| f.name == name);
+        for name in &self.ctrl_click {
+            if !staged(name) {
+                return Err(DemoError(format!(
+                    "ctrl_click = {name:?} is not one of the staged files"
+                )));
+            }
+        }
+        if let Some(name) = &self.shift_click {
+            if !staged(name) {
+                return Err(DemoError(format!(
+                    "shift_click = {name:?} is not one of the staged files"
+                )));
+            }
+        }
         Ok(())
     }
 }
@@ -221,6 +259,9 @@ pub fn seed(
         ..AppSettings::default()
     });
     store.set_last_folder_and_file(&FolderAndFile::new(folder, Some(file)));
+    if let Some(resume) = scenario.resume {
+        store.set_playback_position(file, std::time::Duration::from_secs_f32(resume.max(0.0)));
+    }
 }
 
 #[cfg(test)]
@@ -242,8 +283,28 @@ name = "pick.a.mp4"
     fn a_minimal_scenario_gets_defaults() {
         let scenario = DemoScenario::parse(MINIMAL).unwrap();
         assert_eq!(scenario.seek, 0.0);
+        assert_eq!(scenario.resume, None);
+        assert!(!scenario.more);
         assert_eq!(scenario.files[0].comment, None);
         assert!(scenario.files[0].markers.is_empty());
+    }
+
+    #[test]
+    fn a_scenario_can_open_more() {
+        let text = MINIMAL.replace(
+            "[[files]]",
+            "more = true
+[[files]]",
+        );
+        assert!(DemoScenario::parse(&text).unwrap().more);
+    }
+
+    #[test]
+    fn a_scenario_can_show_a_marker_being_described() {
+        let text = MINIMAL.replace("[[files]]", "describing = \"Lion\"\n[[files]]");
+        let scenario = DemoScenario::parse(&text).unwrap();
+        assert_eq!(scenario.describing.as_deref(), Some("Lion"));
+        assert_eq!(DemoScenario::parse(MINIMAL).unwrap().describing, None);
     }
 
     #[test]
@@ -357,6 +418,7 @@ markers = ["0:00.100 — Start — first frames"]
         window: Mutex<Option<WindowGeometry>>,
         settings: Mutex<Option<AppSettings>>,
         session: Mutex<Option<FolderAndFile>>,
+        playback: Mutex<Option<(std::path::PathBuf, std::time::Duration)>>,
     }
 
     impl AppStateStore for Recorder {
@@ -371,6 +433,9 @@ markers = ["0:00.100 — Start — first frames"]
         }
         fn set_app_settings(&self, settings: AppSettings) {
             *self.settings.lock().unwrap() = Some(settings);
+        }
+        fn set_playback_position(&self, clip: &Path, position: std::time::Duration) {
+            *self.playback.lock().unwrap() = Some((clip.to_path_buf(), position));
         }
     }
 
@@ -406,6 +471,33 @@ markers = ["0:00.100 — Start — first frames"]
         assert_eq!(
             store.get_last_session(),
             Some(FolderAndFile::new("/f", Some("/f/pick.a.mp4")))
+        );
+        assert_eq!(*store.playback.lock().unwrap(), None, "nothing to resume");
+    }
+
+    #[test]
+    fn a_scenario_can_open_its_clip_where_playback_stopped() {
+        let text = MINIMAL.replace(
+            "[[files]]",
+            "resume = 41.5
+[[files]]",
+        );
+        let scenario = DemoScenario::parse(&text).unwrap();
+        let store = Recorder::default();
+        seed(
+            &store,
+            &scenario,
+            Path::new("/f"),
+            Path::new("/f/pick.a.mp4"),
+            false,
+            "en",
+        );
+        assert_eq!(
+            *store.playback.lock().unwrap(),
+            Some((
+                Path::new("/f/pick.a.mp4").to_path_buf(),
+                std::time::Duration::from_millis(41_500)
+            ))
         );
     }
 }

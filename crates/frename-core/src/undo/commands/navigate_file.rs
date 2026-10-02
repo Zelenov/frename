@@ -56,4 +56,8 @@ where
             .ok_or(UndoError::FileNotFound(self.path_after.clone()))?;
         Ok(())
     }
+
+    fn switches_file(&self) -> bool {
+        true
+    }
 }

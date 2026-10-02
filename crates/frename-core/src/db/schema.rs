@@ -136,8 +136,59 @@ ALTER TABLE app_settings ADD COLUMN ui_language TEXT NOT NULL DEFAULT '';
 ";
 
 /// Migration 15: file names no longer hold in/out points (#69). Who kept them there
-/// (`file_name`, the default of migration 5) now keeps them inside the video; the batch action
-/// "Move in/out points out of file names" moves the existing ones.
+/// (`file_name`, the default of migration 5) now keeps them inside the video.
 pub const M15_IN_OUT_OUT_OF_NAMES: &str = "
 UPDATE app_settings SET in_out_storage = 'xmp' WHERE in_out_storage = 'file_name';
+";
+
+/// Migration 16: the last batch action run and its options (#65), so batch mode reopens with
+/// them selected.
+pub const M16_BATCH_RUN: &str = "
+CREATE TABLE IF NOT EXISTS batch_run (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    action TEXT NOT NULL DEFAULT '',
+    options TEXT NOT NULL DEFAULT ''
+);
+";
+
+/// Migration 17: what frename spent on each paid service (`ai_spend`, one row per file a batch
+/// billed) and the top-up the user recorded for it (`ai_top_up`, one row per service), for the
+/// credit estimate (issue #121). `service` is `anthropic` or `soniox`. Dropped by migration 18.
+pub const M17_AI_LEDGER: &str = "
+CREATE TABLE IF NOT EXISTS ai_spend (
+    service TEXT NOT NULL,
+    at_ms INTEGER NOT NULL,
+    usd REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ai_spend_service_at ON ai_spend (service, at_ms);
+CREATE TABLE IF NOT EXISTS ai_top_up (
+    service TEXT PRIMARY KEY,
+    usd REAL NOT NULL,
+    at_ms INTEGER NOT NULL
+);
+";
+
+/// Migration 18: drop the spend ledger tables; the spending tracker is gone (#172).
+pub const M18_DROP_AI_LEDGER: &str = "
+DROP INDEX IF EXISTS ai_spend_service_at;
+DROP TABLE IF EXISTS ai_spend;
+DROP TABLE IF EXISTS ai_top_up;
+";
+
+/// Migration 19: where playback stopped in each clip (#161), by its folder and file name, and
+/// when that was saved (Unix milliseconds), so the oldest go first once there are too many.
+pub const M19_PLAYBACK_POSITION: &str = "
+CREATE TABLE IF NOT EXISTS playback_position (
+    folder TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    position_ms INTEGER NOT NULL,
+    saved_at_ms INTEGER NOT NULL,
+    PRIMARY KEY (folder, file_name)
+);
+";
+
+/// Migration 20: which moments AI descriptions get (`ai::moments_as_str`): only what stands out,
+/// or the whole clip (#176).
+pub const M20_AI_MOMENTS: &str = "
+ALTER TABLE app_settings ADD COLUMN ai_moments TEXT NOT NULL DEFAULT 'important';
 ";

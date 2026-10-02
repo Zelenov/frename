@@ -160,15 +160,58 @@ impl DemoRun {
 fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace::Message> {
     let video =
         |message| folder_workspace::Message::MediaViewer(media_viewer::Message::Video(message));
-    let mut steps = vec![video(video::Message::Seek(scenario.seek))];
+    // A clip opened where playback stopped is already there (#161): a seek would move it on.
+    let mut steps = if scenario.resume.is_some() {
+        Vec::new()
+    } else {
+        vec![video(video::Message::Seek(scenario.seek))]
+    };
     if scenario.subtitle_list {
         steps.push(video(video::Message::ToggleCueList));
     }
     if scenario.marker_list {
         steps.push(video(video::Message::ShowMarkerList));
     }
+    if scenario.more {
+        steps.push(video(video::Message::ToggleMore));
+    }
+    if let Some(name) = &scenario.describing {
+        steps.push(folder_workspace::Message::ShowDescribing(name.clone()));
+    }
     if scenario.rotate != 0 {
         steps.push(folder_workspace::Message::RotateVideo(scenario.rotate));
+    }
+    // Multi-select (issue #60): reproduce Ctrl/Shift+click the way a real click does — hold
+    // the modifier, then select — independently of `--batch`, since either click turns batch
+    // mode on by itself.
+    let index_of = |name: &str| scenario.files.iter().position(|f| f.name == name);
+    for name in &scenario.ctrl_click {
+        if let Some(index) = index_of(name) {
+            steps.push(folder_workspace::Message::ModifiersChanged(
+                iced::keyboard::Modifiers::COMMAND,
+            ));
+            steps.push(folder_workspace::Message::Folder(
+                folder::Message::SelectFile(index),
+            ));
+        }
+    }
+    if let Some(index) = scenario.shift_click.as_deref().and_then(index_of) {
+        steps.push(folder_workspace::Message::ModifiersChanged(
+            iced::keyboard::Modifiers::SHIFT,
+        ));
+        steps.push(folder_workspace::Message::Folder(
+            folder::Message::SelectFile(index),
+        ));
+    }
+    if !scenario.ctrl_click.is_empty() || scenario.shift_click.is_some() {
+        steps.push(folder_workspace::Message::ModifiersChanged(
+            iced::keyboard::Modifiers::empty(),
+        ));
+    }
+    if let Some(query) = scenario.search.clone() {
+        steps.push(folder_workspace::Message::Folder(
+            folder::Message::SetNameFilter(query),
+        ));
     }
     if batch {
         steps.push(folder_workspace::Message::Folder(
@@ -316,14 +359,8 @@ pub fn prepare(args: &DemoArgs, work: &Path) -> Result<DemoRun, String> {
     let folder = work.join("folder");
     let file = frename_core::demo::stage(&scenario, scenario_dir, &folder)
         .map_err(|e| format!("cannot stage the demo folder: {e}"))?;
-    frename_core::demo::seed(
-        &frename_core::AppDatabase::new(),
-        &scenario,
-        &folder,
-        &file,
-        args.mono,
-        &args.lang,
-    );
+    let db = frename_core::AppDatabase::new();
+    frename_core::demo::seed(&db, &scenario, &folder, &file, args.mono, &args.lang);
     Ok(DemoRun::new(
         scenario,
         args.out.clone(),
@@ -560,7 +597,9 @@ mod tests {
     }
 
     /// The committed README scenarios stage clips CI can decode, and only tags a new folder
-    /// already has (any other tag would show up as unsaved).
+    /// already has (any other tag would show up as unsaved) — except `mono.toml`, whose point
+    /// is exactly one tag that is not in the list, so the monochrome screenshot can show it next
+    /// to a listed one (issue #53).
     #[test]
     fn the_readme_scenarios_are_valid() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -585,6 +624,9 @@ mod tests {
                     "{name}: {} is not in tests/self-test-clips.txt",
                     file.from
                 );
+                if name == "mono.toml" {
+                    continue;
+                }
                 for tag in frename_core::FileSnapshot::parse(&file.name).tags() {
                     assert!(known.contains(&tag.as_str()), "{name}: tag {tag}");
                 }
