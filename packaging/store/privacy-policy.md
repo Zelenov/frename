@@ -1,6 +1,6 @@
 # frename privacy policy
 
-Last updated: 2026-09-27
+Last updated: 2026-10-02
 
 frename is a desktop app for reviewing, tagging and renaming video clips. It is made by one
 developer, Eugene Zelenov ([github.com/Zelenov](https://github.com/Zelenov)). This policy covers
@@ -10,8 +10,9 @@ and the Linux AppImage.
 ## The short version
 
 frename has no account, no analytics, no ads and no telemetry. The developer receives no data from
-you. Your videos, tags, comments and settings stay on your computer. Only two optional features
-send data off your computer, only to the service they use, and only with an API key of your own.
+you. Your videos, tags, comments and settings stay on your computer. Only the optional AI features
+send data off your computer, to two services (Anthropic and Soniox), and only with an API key of your own.
+The Store app contacts no other server.
 
 ## What stays on your computer
 
@@ -31,12 +32,12 @@ send data off your computer, only to the service they use, and only with an API 
 
 ## What leaves your computer, and when
 
-No video data is sent until you run one of these actions on the videos you select, and each shows
-what it will send and about what it costs before you start:
+No video data is sent until you run one of these actions on the videos you select (or on a marker),
+and the batch panels show what they will send and about what it costs before you start:
 
 | Action | What is sent | To whom | Needs |
 |---|---|---|---|
-| **Describe with AI** | frames taken from each selected video (one every 2 seconds, at most 60 per clip) and its subtitles (`.srt`), if it has them | [Anthropic](https://www.anthropic.com) (the Claude API) | your own Anthropic API key |
+| **Describe with AI** (in batch mode, and ✨ / `Ctrl+F2` on a marker) | frames taken from each selected video (at most 60 per clip, chosen where the picture changes) or from around the marker, and the video's subtitles (`.srt`), if it has them | [Anthropic](https://www.anthropic.com) (the Claude API) | your own Anthropic API key |
 | **Generate subtitles** | the audio track of each selected video, under the video's file name (which holds its tags) | [Soniox](https://soniox.com) (speech-to-text API) | your own Soniox API key |
 
 Two more requests to Soniox, without any video data, while a Soniox key is saved: opening Settings
@@ -66,7 +67,7 @@ The results (descriptions, markers, subtitles) are written back to your files on
 ## Children
 
 frename is a general-purpose tool, not directed at children. The developer collects no personal
-information from anyone; the two optional actions above send data only to the service they use,
+information from anyone; the optional actions above send data only to the service they use,
 with your key.
 
 ## Removing your data

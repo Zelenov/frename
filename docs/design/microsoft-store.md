@@ -283,7 +283,7 @@ the runners does the same with one less tool.
 9. **Listing in English only** at first; category Photo & video.
 10. **Privacy policy as a Markdown page in the repository** (a GitHub URL), not GitHub Pages: no
     Pages setup needed, and its history is public.
-11. **Screenshots**: the three README screenshots as PNG (the Store takes PNG, 1366×768 or larger,
+11. **Screenshots**: four 1600×900 demo-mode captures of today's window as PNG (the Store takes PNG, 1366×768 or larger,
     `WDD hub/apps/publish/publish-your-app/msix/screenshots-and-images.md`).
 
 ## Test plan

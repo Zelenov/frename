@@ -137,7 +137,7 @@ Partner Center → frename → **Start your submission**. The texts are ready in
    match. Device families: **Windows 10/11 Desktop**
    only.
 5. **Store listings** → **Add/remove languages**: keep **English (United States)** →
-   open it and paste every field from `packaging/store/listing.md`. Screenshots: upload the three
+   open it and paste every field from `packaging/store/listing.md`. Screenshots: upload the four
    PNG files in `packaging/store/screenshots/` with the captions in
    `packaging/store/screenshots.md`.
 6. **Submission options**:
