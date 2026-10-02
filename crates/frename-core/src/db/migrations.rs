@@ -79,6 +79,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 17,
         sql: schema::M17_AI_LEDGER,
     },
+    Migration {
+        version: 18,
+        sql: schema::M18_DROP_AI_LEDGER,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
@@ -162,7 +166,33 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 17);
+        assert_eq!(current_version(&conn).expect("version"), 18);
+    }
+
+    #[test]
+    fn a_database_with_the_old_spend_ledger_loses_it_and_a_fresh_one_never_has_it() {
+        let conn = database_at_version_1();
+        for m in MIGRATIONS.iter().filter(|m| (2..=16).contains(&m.version)) {
+            conn.execute_batch(m.sql).expect("migration");
+        }
+        // The ledger as migration 17 created it before #172.
+        conn.execute_batch(
+            "CREATE TABLE ai_spend (service TEXT NOT NULL, at_ms INTEGER NOT NULL, usd REAL NOT NULL);
+             CREATE INDEX ai_spend_service_at ON ai_spend (service, at_ms);
+             CREATE TABLE ai_top_up (service TEXT PRIMARY KEY, usd REAL NOT NULL, at_ms INTEGER NOT NULL);
+             INSERT INTO ai_spend VALUES ('soniox', 0, 1.5);",
+        )
+        .expect("old ledger");
+        conn.execute("UPDATE schema_version SET version = 17", [])
+            .expect("set version");
+        run(&conn).expect("migrate");
+        assert!(!table_exists(&conn, "ai_spend"));
+        assert!(!table_exists(&conn, "ai_top_up"));
+
+        let fresh = Connection::open_in_memory().expect("open");
+        run(&fresh).expect("migrate");
+        assert!(!table_exists(&fresh, "ai_spend"));
+        assert!(!table_exists(&fresh, "ai_top_up"));
     }
 
     #[test]

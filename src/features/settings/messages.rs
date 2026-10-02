@@ -66,19 +66,6 @@ pub enum Message {
     /// An API key section; never saved with the settings (the keys live in the credential
     /// store).
     Key(ApiKey, KeyMessage),
-    /// The spending section of a service: typing a top-up, recording it (issue #121).
-    TopUp(ApiKey, TopUpMessage),
-}
-
-/// The top-up form of a service's spending section.
-#[derive(Debug, Clone)]
-pub enum TopUpMessage {
-    /// Typing the amount added, in dollars.
-    Amount(String),
-    /// Typing the day it was added (`YYYY-MM-DD`); empty means today.
-    Date(String),
-    /// Record it: what is left is estimated from here. Then the app tells the batch panels.
-    Record,
 }
 
 /// The API key section's messages.

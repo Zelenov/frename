@@ -1,3 +1,7 @@
+# 0.103
+## Removed
+- The spending tracker is gone: Settings no longer shows what frename spent or the top-up form, and the batch page no longer shows an estimated credit left or warns about it. The cost estimate before a run, the cost in a run's report, and **Add credit** when a service says its credit is used up all stay.
+
 # 0.102
 ## Fixed
 - The Subtitles / Markers switch above the side list no longer shifts its icons, words and counts when you change the selection.

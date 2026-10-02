@@ -21,6 +21,15 @@ impl ApiKey {
             Self::Soniox => "soniox-api-key",
         }
     }
+
+    /// The page where credit is added for this service: the button of the error that says
+    /// the account has no credit left.
+    pub fn billing_url(self) -> &'static str {
+        match self {
+            Self::Anthropic => "https://console.anthropic.com/settings/billing",
+            Self::Soniox => "https://console.soniox.com/org/billing/overview",
+        }
+    }
 }
 
 /// Whether a key is saved, or that the store cannot be used on this system.

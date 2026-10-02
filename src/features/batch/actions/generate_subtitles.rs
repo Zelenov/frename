@@ -13,7 +13,6 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use frename_core::ai::key::{self, ApiKey, KeyState};
-use frename_core::ai::ledger::SpendSummary;
 use frename_core::{subtitle_path, CueLength, File, FileId, FileTagger};
 use iced::widget::column;
 use iced::Element;
@@ -353,7 +352,7 @@ impl Options {
     }
 
     /// The page for `checked` and its run button.
-    pub fn panel(&self, checked: &[&File], credit: SpendSummary) -> Panel<'_> {
+    pub fn panel(&self, checked: &[&File]) -> Panel<'_> {
         let plan = self.plan_for(checked);
         let (run, ready) = match plan {
             None => (fl!("batch-subtitles-transcribe"), false),
@@ -380,14 +379,14 @@ impl Options {
             (plan.is_none() && !checked.is_empty()).then(|| fl!("batch-reason-estimate"))
         };
         Panel {
-            page: self.view(plan, credit),
+            page: self.view(plan),
             run,
             ready,
             reason,
         }
     }
 
-    fn view(&self, plan: Option<&Plan>, credit: SpendSummary) -> Element<'_, ActionMessage> {
+    fn view(&self, plan: Option<&Plan>) -> Element<'_, ActionMessage> {
         let languages = if self.config.languages.is_empty() {
             fl!("batch-subtitles-languages-auto")
         } else {
@@ -446,7 +445,6 @@ impl Options {
                 let mut lines = plan_lines(plan, price).into_iter();
                 column![]
                     .push(lines.next().map(text::strong))
-                    .push(super::credit_left_row(credit).map(|row| page::plan([row])))
                     .push(page::notes(lines))
                     .spacing(SPACE_XXS)
                     .into()
@@ -463,26 +461,7 @@ impl Options {
             settings
                 .into_iter()
                 .chain([estimate, notes])
-                .chain(self.credit_notice(plan, credit))
                 .chain(self.key_notice()),
-        )
-    }
-
-    /// The warning before a run that costs more than what is probably left.
-    fn credit_notice(
-        &self,
-        plan: Option<&Plan>,
-        credit: SpendSummary,
-    ) -> Option<Element<'_, ActionMessage>> {
-        let plan = plan.filter(|p| p.transcribe > 0 && p.audio_s > 0.0)?;
-        let price = match self.key {
-            Some(KeyState::Saved) => self.price()?,
-            _ => Price::Typical,
-        };
-        super::credit_low_notice(
-            ApiKey::Soniox,
-            credit,
-            price.usd_per_hour() * plan.audio_s / 3600.0,
         )
     }
 
@@ -877,10 +856,7 @@ pub fn run(job: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress)
         job.uploaded_ms
             .fetch_add((seconds * 1000.0) as u64, Ordering::Relaxed);
     }
-    let mut item = item_result(&path, result, token.is_cancelled());
-    // What was sent, at the price the estimate used, for the spend ledger.
-    item.spend = uploaded_s.map(|seconds| (ApiKey::Soniox, job.usd_per_hour * seconds / 3600.0));
-    item
+    item_result(&path, result, token.is_cancelled())
 }
 
 /// One file through sonisub. A saved transcript next to it needs no key.
@@ -1277,7 +1253,7 @@ mod tests {
             }),
         });
         assert!(options.operation().is_none());
-        let super::Panel { ready, reason, .. } = options.panel(&[&a], SpendSummary::default());
+        let super::Panel { ready, reason, .. } = options.panel(&[&a]);
         assert!(!ready);
         assert_eq!(reason, Some(fl!("batch-reason-subtitles-no-format")));
 
@@ -1449,9 +1425,10 @@ mod tests {
         let folder = Folder::new("free");
         let video = folder.video("clip.mp4");
         folder.file("clip.soniox.json", TRANSCRIPT);
-        let result = run_now(&job(HashMap::new(), false), &video);
+        let job = job(HashMap::new(), false);
+        let result = run_now(&job, &video);
         assert_eq!(result.status, ItemStatus::Done, "{:?}", result.reason);
-        assert_eq!(result.spend, None, "nothing was sent to Soniox");
+        assert_eq!(job.report(), None, "nothing was sent to Soniox");
     }
 
     #[test]
@@ -1623,7 +1600,7 @@ mod tests {
         options.update(Message::PriceReady(Price::Learned(0.1)));
         assert!(options.operation().is_some());
         // Only the label and readiness: the page borrows the options.
-        let super::Panel { run, ready, .. } = options.panel(&[&a], SpendSummary::default());
+        let super::Panel { run, ready, .. } = options.panel(&[&a]);
         assert_eq!(
             (run, ready),
             (
