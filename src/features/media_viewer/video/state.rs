@@ -71,6 +71,8 @@ impl RangePlay {
 struct PendingStep {
     from: ShownFrame,
     step: video_controls::FrameStep,
+    /// Sent as a step event: the frame it shows starts where it says.
+    by_step_event: bool,
     since: Instant,
 }
 
@@ -141,6 +143,9 @@ pub struct VideoPlayerState {
     /// clears it. Kept here rather than read from the frame on screen: while the backward seek
     /// is still on its way there is none, and playing then would play the clip backward.
     reversed: bool,
+    /// The frame the last step event showed, as the sink reports it; see
+    /// [`frame_step::stepped_onto`].
+    stepped_onto: Option<ShownFrame>,
 }
 
 impl Default for VideoPlayerState {
@@ -175,6 +180,7 @@ impl Default for VideoPlayerState {
             loading_ticks: 0,
             frame_step: None,
             reversed: false,
+            stepped_onto: None,
         }
     }
 }
@@ -395,6 +401,11 @@ impl VideoPlayerState {
                 // The pipeline stays in Playing at the end; the next play restarts the stream.
                 self.play_until = None;
                 self.paused = true;
+                // The ticks stop with playback: the playhead is the end, not the last tick, so
+                // `]` and the readout take where the clip really ended.
+                if let Some(video) = self.current_video.as_ref() {
+                    self.position = query_position(video).unwrap_or_else(|| video.duration());
+                }
                 Task::done(Message::Controls(video_controls::Message::SetPlaying(
                     false,
                 )))
@@ -765,10 +776,14 @@ impl VideoPlayerState {
         if self.frame_step.is_some() {
             return paused;
         }
-        let Some(frame) = shown_frame(video) else {
+        let Some(mut frame) = shown_frame(video) else {
             return paused;
         };
-        let moved = match frame_step::step_target(frame, step, video.duration()) {
+        if self.stepped_onto == Some(frame) {
+            frame = frame_step::stepped_onto(frame);
+        }
+        let target = frame_step::step_target(frame, step, video.duration());
+        let moved = match target {
             StepTarget::Stay => return paused,
             StepTarget::NextBuffer => {
                 video.step_one_frame();
@@ -785,6 +800,7 @@ impl VideoPlayerState {
         self.frame_step = Some(PendingStep {
             from: frame,
             step,
+            by_step_event: target == StepTarget::NextBuffer,
             since: Instant::now(),
         });
         Task::batch([paused, moved])
@@ -814,6 +830,7 @@ impl VideoPlayerState {
             self.position = frame_step::frame_position(pending.from);
             return self.follow_cue(false);
         };
+        self.stepped_onto = pending.by_step_event.then_some(frame);
         self.position = frame_step::frame_position(frame);
         let follow = self.follow_cue(false);
         if frame_step::only_found_the_start(pending.from, frame) {

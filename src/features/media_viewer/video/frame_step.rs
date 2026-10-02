@@ -72,6 +72,16 @@ pub fn step_target(frame: ShownFrame, step: FrameStep, clip: Duration) -> StepTa
     }
 }
 
+/// A frame a step event showed: its timestamp is its true start. The sink reports a segment
+/// starting there, as after a forward seek that may have clipped it, so it would read as
+/// inexact and a step back from it would first seek to find its start.
+pub fn stepped_onto(frame: ShownFrame) -> ShownFrame {
+    ShownFrame {
+        start_exact: true,
+        ..frame
+    }
+}
+
 /// Whether a step from `from` that showed `to` only found `from`'s true start (the first half
 /// of a step back): the same frame, so the step goes on.
 pub fn only_found_the_start(from: ShownFrame, to: ShownFrame) -> bool {
@@ -139,15 +149,16 @@ mod tests {
             })
         }
 
-        /// A step event from `frame`: the next frame, whole.
+        /// A step event from `frame`: the next frame, whole, reported with a segment starting
+        /// at it (so inexact), and marked exact the way the player does.
         fn next(&self, frame: ShownFrame) -> ShownFrame {
             let (start, end) = self.bounds(self.index_of(frame) + 1);
-            ShownFrame {
+            stepped_onto(ShownFrame {
                 start,
                 duration: Some(end - start),
-                start_exact: true,
+                start_exact: false,
                 reversed: false,
-            }
+            })
         }
 
         /// One step as the player takes it, including the second half of a step back.
@@ -270,6 +281,26 @@ mod tests {
         assert_eq!(
             step_target(reversed, FrameStep::Forward, clip),
             StepTarget::Forward(Duration::from_millis(1_040))
+        );
+    }
+
+    /// After a step forward, a step back is one backward seek, not two.
+    #[test]
+    fn back_after_a_step_forward_seeks_once() {
+        let clip = constant();
+        let shown = clip.next(clip.forward(clip.starts[3]));
+        assert_eq!(
+            step_target(shown, FrameStep::Back, clip.end),
+            StepTarget::Backward(clip.starts[4])
+        );
+        let reported = ShownFrame {
+            start_exact: false,
+            ..shown
+        };
+        assert_eq!(
+            step_target(reported, FrameStep::Back, clip.end),
+            StepTarget::Backward(clip.bounds(4).1),
+            "as the sink reports it, the frame would first be found again"
         );
     }
 

@@ -561,6 +561,18 @@ mod tests {
         assert_eq!(precise_clock(-1.0), "00:00.000");
     }
 
+    /// The longest readout, a clip of hours paused, fits the readout's fixed width.
+    #[test]
+    fn the_longest_readout_fits_its_width() {
+        let longest = format!("{} / {}", precise_clock(35_999.5), clock(35_999.0));
+        assert_eq!(longest, "9:59:59.500 / 9:59:59");
+        let width = longest.chars().count() as f32 * MONO_CHAR_WIDTH;
+        assert!(
+            width <= TIME_READOUT_WIDTH,
+            "{width} > {TIME_READOUT_WIDTH}"
+        );
+    }
+
     #[test]
     fn a_held_button_sends_its_press_and_release_from_more() {
         let [_, marker] = mark(true, false);

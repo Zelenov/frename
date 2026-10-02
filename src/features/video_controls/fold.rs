@@ -155,7 +155,7 @@ mod tests {
     #[test]
     fn the_fold_widths_match_the_design_system() {
         let widths: Vec<f32> = Fold::steps().iter().map(|fold| fold.width(2)).collect();
-        assert_eq!(widths, [772.0, 728.0, 664.0, 524.0, 460.0, 384.0, 320.0]);
+        assert_eq!(widths, [796.0, 752.0, 688.0, 524.0, 460.0, 384.0, 320.0]);
     }
 
     #[test]
