@@ -389,7 +389,7 @@ folder-has-subtitles = Has subtitles
 folder-closed-by-job = Closed while a batch action changes it
 folder-filter-tip = Show only…
 
-folder-search-placeholder = Find a file, or a word in a comment
+folder-search-placeholder = Find a file or a comment
 folder-search-comments-loading = Searching comments… { $n } left
 folder-search-clear = Clear
 folder-all = All

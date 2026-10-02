@@ -1,6 +1,10 @@
-# 0.109
+# 0.110
 ## Added
 - Settings → Describe with AI → Moments: keep only what stands out (as before) or cover the whole clip with moments. Only the first suggests an In and Out.
+
+# 0.109
+## Fixed
+- The file search hint is shorter, "Find a file or a comment", so it is no longer cut off in the file list.
 
 # 0.108
 ## Added
