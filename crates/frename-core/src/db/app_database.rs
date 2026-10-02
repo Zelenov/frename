@@ -181,6 +181,18 @@ impl AppDatabase {
         Self { path: path.into() }
     }
 
+    /// Closes this database's cached connection, so SQLite folds its write-ahead log back in
+    /// and the files can be deleted. A later call opens it again.
+    pub fn close(&self) {
+        let Some(cache) = CONNECTIONS.get() else {
+            return;
+        };
+        cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(&self.path);
+    }
+
     /// Returns the shared connection for this database's path, opening it on first use.
     pub(super) fn conn(&self) -> Result<Arc<Mutex<Connection>>, rusqlite::Error> {
         let cache = CONNECTIONS.get_or_init(|| Mutex::new(HashMap::new()));
@@ -537,6 +549,21 @@ impl AppDatabase {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_closed_database_leaves_no_files_behind() {
+        let folder = std::env::temp_dir().join(format!("frename-db-close-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("create folder");
+        let db = AppDatabase::with_path(folder.join("app.db"));
+        db.initialize().expect("migrate");
+        db.set_playback_position(Path::new("C:/clips/a.mp4"), Duration::from_secs(40));
+
+        db.close();
+
+        std::fs::remove_dir_all(&folder).expect("nothing holds the files open");
+        assert!(!folder.exists());
+    }
 
     #[test]
     fn the_update_check_state_round_trips() {
