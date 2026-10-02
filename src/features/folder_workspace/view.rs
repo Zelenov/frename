@@ -137,13 +137,16 @@ pub fn view(
     // scrollable positions only when the widget-tree structure stays identical.
     // The overlay is the fullscreen media view when active, or an invisible space.
     let overlay: Element<'_, Message> = if state.media_fullscreen() {
-        container(
-            media_viewer::view::view(state.media_viewer(), true, seg_start, seg_end, markers)
-                .map(Message::MediaViewer),
+        // `opaque`: the rows and cells under the fullscreen video must not get the hover (and
+        // show their tooltips over it).
+        iced::widget::opaque(
+            container(
+                media_viewer::view::view(state.media_viewer(), true, seg_start, seg_end, markers)
+                    .map(Message::MediaViewer),
+            )
+            .width(Length::Fill)
+            .height(Length::Fill),
         )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
     } else {
         iced::widget::Space::new().into()
     };

@@ -895,15 +895,19 @@ where
         layout: Layout<'_>,
         cursor: mouse::Cursor,
     ) {
-        self.content.as_widget().draw(
-            self.tree,
-            renderer,
-            theme,
-            style,
-            layout,
-            cursor,
-            &layout.bounds(),
-        );
+        // A layer of its own, under the tooltips' (`ui::z`): in one layer the renderer draws
+        // text over every box, so a tooltip over this label would be covered by its text.
+        renderer.with_layer(layout.bounds().expand(LABEL_MARGIN), |renderer| {
+            self.content.as_widget().draw(
+                self.tree,
+                renderer,
+                theme,
+                style,
+                layout,
+                cursor,
+                &layout.bounds(),
+            );
+        });
     }
 
     fn update(
@@ -940,6 +944,10 @@ where
             &layout.bounds(),
             renderer,
         )
+    }
+
+    fn index(&self) -> f32 {
+        crate::ui::z::Z::Anchored.index()
     }
 }
 

@@ -315,6 +315,12 @@ the first look. Read it before any UI change.
 - **Overlays escape their parent.** A custom widget's overlay (the marker label) draws outside
   the widget's bounds, over its neighbours: reserve room for it inside the widget
   (`MARKER_LABEL_LANE`) instead of letting it cover the subtitle strip.
+- **Z-levels.** Overlays (tooltips, the marker label) share one renderer layer, in which text is
+  drawn over every box: an overlay that must be above another one goes through
+  `ui::z::layered(widget, Z::…)` (tooltips already do), and a custom overlay draws in its own
+  `renderer.with_layer(…)` with `index()` from `Z`. Stack layers over the window (menus,
+  fullscreen) wrap their outside in `opaque(…)` so the widgets under them get no hover. See
+  design §13.3.2.
 - **Popups:** there is no menu widget. A popup is an open flag in the feature's state, a
   `stack!` layer with `ui::menu::menu` at its anchor, and a full-size transparent `mouse_area`
   under it that closes it on a click beside it (see `folder::filter`, the video pane's More).

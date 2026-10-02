@@ -437,7 +437,7 @@ fn more_popover<'a>(
         .align_bottom(Length::Fill);
     let outside = mouse_area(container(space()).width(Length::Fill).height(Length::Fill))
         .on_press(Message::CloseMore);
-    stack![outside, popup]
+    stack![iced::widget::opaque(outside), popup]
         .width(Length::Fill)
         .height(Length::Fill)
         .into()

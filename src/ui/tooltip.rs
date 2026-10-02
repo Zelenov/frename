@@ -11,6 +11,7 @@ use super::badge::key_cap;
 use super::style;
 use super::text;
 use super::tokens::*;
+use super::z::{layered, Z};
 
 const PADDING: Padding = Padding {
     top: SPACE_TIGHT,
@@ -81,17 +82,19 @@ pub fn tip<'a, M: 'a>(
     tip: impl Into<Tip>,
     position: Position,
 ) -> Element<'a, M> {
-    tooltip(
-        content,
-        container(tip.into().view())
-            .max_width(TOOLTIP_MAX_WIDTH)
-            .padding(PADDING)
-            .style(style::popup),
-        position,
+    layered(
+        tooltip(
+            content,
+            container(tip.into().view())
+                .max_width(TOOLTIP_MAX_WIDTH)
+                .padding(PADDING)
+                .style(style::popup),
+            position,
+        )
+        .gap(SPACE_TIGHT)
+        .delay(TOOLTIP_DELAY),
+        Z::Tooltip,
     )
-    .gap(SPACE_TIGHT)
-    .delay(TOOLTIP_DELAY)
-    .into()
 }
 
 /// `content` with a one-line text tooltip.
@@ -100,17 +103,19 @@ pub fn tip_text<'a, M: 'a>(
     label: impl IntoFragment<'a>,
     position: Position,
 ) -> Element<'a, M> {
-    tooltip(
-        content,
-        container(text::tooltip(label))
-            .max_width(TOOLTIP_MAX_WIDTH)
-            .padding(PADDING)
-            .style(style::popup),
-        position,
+    layered(
+        tooltip(
+            content,
+            container(text::tooltip(label))
+                .max_width(TOOLTIP_MAX_WIDTH)
+                .padding(PADDING)
+                .style(style::popup),
+            position,
+        )
+        .gap(SPACE_TIGHT)
+        .delay(TOOLTIP_DELAY),
+        Z::Tooltip,
     )
-    .gap(SPACE_TIGHT)
-    .delay(TOOLTIP_DELAY)
-    .into()
 }
 
 /// `tip`, or `content` as it is when `quiet` (fullscreen: nothing pops up over the picture).
