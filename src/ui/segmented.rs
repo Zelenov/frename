@@ -3,7 +3,7 @@
 //! SemiBold and underlined, so it does not rest on color.
 
 use iced::border::Radius;
-use iced::widget::{button, column, container, row, space, Row};
+use iced::widget::{button, column, container, row, space, stack, Row};
 use iced::{Alignment, Color, Element, Length, Padding};
 
 use super::icons::{icon, Icon};
@@ -41,11 +41,16 @@ fn corners(first: bool, last: bool) -> Radius {
 
 fn segment<'a, M: Clone + 'a>(s: Segment<M>, first: bool, last: bool) -> Element<'a, M> {
     let color = if s.selected { TEXT } else { TEXT_SECONDARY };
-    let label = if s.selected {
+    // Every segment reserves the width of its label in SemiBold (a transparent copy under the
+    // visible one), so selecting it moves nothing: the weight changes, not the width. The words
+    // start where they did and the count after them stays where it was.
+    let sizer = text::strong(s.label.clone()).color(Color::TRANSPARENT);
+    let shown = if s.selected {
         text::strong(s.label)
     } else {
         text::body(s.label).color(color)
     };
+    let label = stack![sizer, shown];
     let words = row![]
         .push(s.icon.map(|glyph| icon(glyph, ICON_M, color)))
         .push(label)
