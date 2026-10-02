@@ -2900,25 +2900,32 @@ mod tests {
     pub struct TestDirectory {
         directory: Directory,
         path: PathBuf,
+        /// The folder's own database, closed when the test ends; `None` when it shares the app
+        /// database.
+        own_db: Option<AppDatabase>,
     }
 
     impl TestDirectory {
+        /// The folder's store is its own database file inside the test folder, so tests running
+        /// at the same time never share session or tag-store rows (#107).
         pub fn new(file_count: usize) -> Self {
             let path = unique_test_folder();
-            Self::with_store(
-                file_count,
-                AppDatabase::with_path(path.with_extension("db")),
-                path,
-            )
+            let db = AppDatabase::with_path(path.join("app.db"));
+            Self::with_store(file_count, db.clone(), path, Some(db))
         }
 
         /// Like [`TestDirectory::new`], but the folder's store is the app database the player
         /// writes playback positions to, for a test that needs a rename to move one.
         pub fn sharing_app_database(file_count: usize) -> Self {
-            Self::with_store(file_count, AppDatabase::new(), unique_test_folder())
+            Self::with_store(file_count, AppDatabase::new(), unique_test_folder(), None)
         }
 
-        fn with_store(file_count: usize, db: AppDatabase, path: PathBuf) -> Self {
+        fn with_store(
+            file_count: usize,
+            db: AppDatabase,
+            path: PathBuf,
+            own_db: Option<AppDatabase>,
+        ) -> Self {
             // Code under test also writes to the app database (playback positions, panel
             // widths); migrate it as `main` does at startup.
             LoggingAppStateStore::new(AppDatabase::new())
@@ -2930,12 +2937,14 @@ mod tests {
                     File::from_path(path.join(format!("file_{}.mp4", i)), SystemTime::UNIX_EPOCH)
                 })
                 .collect();
-            // `new` gives each folder its own database file, so tests running at the same time
-            // never share session rows (#107).
             let store = LoggingAppStateStore::new(db);
             store.initialize().unwrap();
             let directory = Directory::with_files(&path, files, store);
-            Self { directory, path }
+            Self {
+                directory,
+                path,
+                own_db,
+            }
         }
 
         /// The scanned directory, ready to hand to `Message::FolderLoaded`.
@@ -2961,17 +2970,63 @@ mod tests {
 
     impl Drop for TestDirectory {
         fn drop(&mut self) {
+            // Closed first, so SQLite lets go of the files and the folder can be removed whole.
+            if let Some(db) = &self.own_db {
+                db.close();
+            }
             let _ = std::fs::remove_dir_all(&self.path);
-            // The open connection stays cached, so on Windows this file may stay behind.
-            let _ = std::fs::remove_file(self.path.with_extension("db"));
         }
     }
 
     /// A folder name no other test, and no concurrent test run, will pick.
     fn unique_test_folder() -> PathBuf {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        static SWEPT: std::sync::Once = std::sync::Once::new();
+        SWEPT.call_once(sweep_old_test_folders);
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
         std::env::temp_dir().join(format!("frename-test-{}-{n}", std::process::id()))
+    }
+
+    /// Removes `frename-test-*` leftovers of earlier test runs. Only ones untouched for an hour:
+    /// another test run may be using newer ones right now.
+    fn sweep_old_test_folders() {
+        let Ok(entries) = std::fs::read_dir(std::env::temp_dir()) else {
+            return;
+        };
+        let hour_ago = SystemTime::now() - std::time::Duration::from_secs(60 * 60);
+        for entry in entries.flatten() {
+            let is_ours = entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| name.starts_with("frename-test-"));
+            let old = entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .is_ok_and(|modified| modified < hour_ago);
+            if is_ours && old {
+                let path = entry.path();
+                let _ = std::fs::remove_dir_all(&path).or_else(|_| std::fs::remove_file(&path));
+            }
+        }
+    }
+
+    /// Issue #107: a test's folder, its own database included, is gone when the test ends.
+    #[test]
+    fn a_test_folder_leaves_nothing_behind() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let path = test_dir.path().to_path_buf();
+        assert!(path.join("app.db").exists(), "the folder's own database");
+
+        drop(workspace);
+        drop(test_dir);
+
+        assert!(!path.exists(), "nothing left in temp");
     }
 
     #[test]
