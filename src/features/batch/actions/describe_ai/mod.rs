@@ -545,12 +545,14 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
                         ),
                     );
                 }
-                Stage::Asking => progress.creep(
+                Stage::Asking { .. } => progress.creep(
                     asked_at,
                     0.97,
                     std::time::Duration::from_secs_f64(SECONDS_PER_REQUEST),
                     fl!("batch-ai-progress-waiting"),
                 ),
+                // A wait before the request is sent again keeps the "waiting" text it has.
+                _ => {}
             },
         );
     let described = match described {
