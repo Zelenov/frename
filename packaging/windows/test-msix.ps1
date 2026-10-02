@@ -158,6 +158,9 @@ db.close()
 
     Write-Host "== 4. Windows App Certification Kit"
     $appcert = Get-AppCert
+    if (!$appcert -and $env:GITHUB_ACTIONS) {
+        throw "The Windows App Certification Kit is not installed on this runner: CI must not pass without it"
+    }
     if (!$appcert) {
         Write-Host "::warning::The Windows App Certification Kit is not installed on this runner; skipped."
         if ($env:GITHUB_STEP_SUMMARY) {

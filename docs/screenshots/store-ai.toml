@@ -1,9 +1,9 @@
-# Microsoft Store listing screenshots (#51): 1600x900, the window as it is today. Rendered by hand, see packaging/store/screenshots.md.
+# Microsoft Store listing screenshots (#51): 1920x1080, the window as it is today. Rendered by hand, see packaging/store/screenshots.md.
 source = "../../tests/folder"
 open = "pick.wide.night.city.MVI_0410.mp4"
 seek = 10.0
-window = [1600, 900]
-panels = [800, 450]
+window = [1920, 1080]
+panels = [1000, 420]
 
 [[files]]
 from = "file_example_MP4_480_1_5MG.mp4"
@@ -45,10 +45,9 @@ name = "MVI_0409.webm"
 [[files]]
 from = "file_example_MP4_480_1_5MG.mp4"
 name = "pick.wide.night.city.MVI_0410.mp4"
-comment = """City lights over Europe, keep this one
-In/Out: 00:00:01.000 – end
+comment = """In/Out: 00:00:01.000 – end
 
-AI: A night timelapse of a city seen from space, lights spreading along the coast.
+AI: Night timelapse of a city seen from space.
 Suggested In/Out: 00:00:02.400 – 00:00:13.600"""
 subtitles = """1
 00:00:01,000 --> 00:00:04,000

@@ -1,3 +1,10 @@
+# 0.111
+## Added
+- frename is available as a Microsoft Store package (Windows). It updates through the Store, and on its first start it copies the settings of an installed frename.
+
+## Changed
+- Settings → Describe with AI lists only Claude models. The GPT models it offered would have been sent your Anthropic key; a saved GPT choice becomes Claude Haiku 4.5.
+
 # 0.110
 ## Added
 - Settings → Describe with AI → Moments: segments only for what stands out (as before) or covering the whole clip. Only "Only what stands out" suggests an In and Out (the **AI** pill).

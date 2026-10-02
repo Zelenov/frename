@@ -1,9 +1,9 @@
-# Microsoft Store listing screenshots (#51): 1600x900, the window as it is today. Rendered by hand, see packaging/store/screenshots.md.
+# Microsoft Store listing screenshots (#51): 1920x1080, the window as it is today. Rendered by hand, see packaging/store/screenshots.md.
 source = "../../tests/folder"
 open = "pick.wide.night.city.MVI_0410.mp4"
 seek = 10.0
-window = [1600, 900]
-panels = [800, 450]
+window = [1920, 1080]
+panels = [1000, 420]
 subtitle_list = true
 
 [[files]]

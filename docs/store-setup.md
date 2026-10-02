@@ -220,13 +220,13 @@ On a Windows 10/11 machine, ideally one where frename was never installed:
    videos: a clip plays (MP4 and MOV at least).
 3. Tag a clip and press PageDown: the file is renamed in that folder.
 4. Settings → Updates says **Updates come from the Microsoft Store**, with no Check button.
-   Check a few clips, click the batch button, and if a batch action shows **Open log**, click it:
+5. If a batch action shows **Open log** when it ends (check a few clips, run an action), click it:
    the log opens.
-5. Settings → enter an Anthropic API key, run **Describe with AI** on one short clip; restart
+6. Settings → enter an Anthropic API key, run **Describe with AI** on one short clip; restart
    frename: the key is still saved. Open Windows **Credential Manager** → **Windows
    Credentials**: an entry with `frename` in its name exists. (This is the one thing the agent
    could not verify: that the password store works from a Store app.)
-6. Uninstall from Start → right-click frename → **Uninstall**. The key entry remains in
+7. Uninstall from Start → right-click frename → **Uninstall**. The key entry remains in
    Credential Manager (remove it there, or in Settings before uninstalling).
 
 If anything fails, **hand it back** with what you saw (if it is the key in Credential Manager,

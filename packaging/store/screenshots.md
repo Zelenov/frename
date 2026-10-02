@@ -2,7 +2,7 @@
 
 Upload in this order in Partner Center → Store listings → English (United States) →
 Screenshots → Desktop. The Store takes PNG, 1366×768 or larger, up to 10 per listing.
-The files here are 1600×900 captures of the app's demo mode, from the scenarios
+The files here are 1920×1080 captures of the app's demo mode, from the scenarios
 `docs/screenshots/store-*.toml`.
 
 | File | Caption (up to 200 characters) |
@@ -10,10 +10,11 @@ The files here are 1600×900 captures of the app's demo mode, from the scenarios
 | `screenshots/1-main-window.png` | Watch each clip, tag what you see, and move on: the clip you leave is renamed with its tags. |
 | `screenshots/2-markers-and-subtitles.png` | Name and color markers on the timeline; Premiere Pro shows them on the clip. Subtitles sit in a list beside the picture. |
 | `screenshots/3-ai-in-out.png` | Describe with AI writes a summary and suggests an In and Out; one click on the AI pill sets them. |
-| `screenshots/4-batch-actions.png` | Batch actions over a whole folder: move comments, markers and in/out points, tag commented clips, rotate, reorder tags. |
+| `screenshots/4-batch-actions.png` | Batch actions over a whole folder, for example moving comments between the videos and text files. |
 
-When the app's look changes, render them again (Linux, Xvfb as in `CLAUDE.md` "Looking at the UI";
-keep the mouse pointer outside the window) and look at every image before committing:
+When the app's look changes, render them again (Linux, Xvfb 1920×1080 as in `CLAUDE.md` "Looking at the UI";
+the scenarios keep the screen's centre, where Xvfb starts the pointer, over the video, so no
+tooltip is open) and look at every image before committing:
 
 ```sh
 cd docs/screenshots

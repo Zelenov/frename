@@ -25,9 +25,9 @@ WHAT YOU CAN DO
 • Tag clips with one click or one key; copy the tags of one clip and paste them onto the next.
 • Find a clip fast: search the file list by name or by what you wrote in its comment, or show only untagged clips, clips with subtitles, a comment or markers.
 • Mark the usable part of a clip with in and out points ([ and ]).
-• Press F2 to drop a marker at an interesting moment, name it, give it a color, or hold F2 to mark a range. Markers are saved inside the video and Premiere Pro shows them on the clip.
-• Step through a clip frame by frame, save the current frame as a JPEG with F12, and turn a clip shot sideways without re-encoding it.
-• Write a comment per clip; it is saved inside the video, where Premiere Pro shows it, or as a text file next to it.
+• Press F2 to drop a marker at an interesting moment, name it, give it a color, or hold F2 to mark a range. In MP4 and MOV files markers are saved inside the video and Premiere Pro shows them on the clip.
+• Step through a clip frame by frame, save the current frame as a JPEG with F12, and turn a sideways MP4 or MOV clip upright without re-encoding it.
+• Write a comment per clip; it is saved inside MP4 and MOV videos, where Premiere Pro shows it, or as a text file next to the video (always for other formats).
 • Drag a clip from the list into Premiere Pro or Explorer: it is saved first, so it arrives under its new name with everything you marked.
 • Undo and redo tagging, markers, in/out points, comments and renames.
 • Your unsaved work is kept in a small recovery file: after a crash or a power cut, the next start puts you back where you were.
@@ -128,7 +128,7 @@ footage organizer
 clip logger
 ```
 ```text
-Premiere Pro markers
+clip markers
 ```
 ```text
 video notes
