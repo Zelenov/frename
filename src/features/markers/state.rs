@@ -67,8 +67,12 @@ pub struct MarkersState {
     /// The list being put back after fullscreen; its end report carries the new viewport's
     /// height, to see whether the lit marker is still shown.
     restore: crate::ui::scroll::ScrollRestore,
-    /// Markers being described with AI, each with the flag that stops its request.
-    describing: HashMap<String, Arc<AtomicBool>>,
+    /// Markers being described with AI: each one's request (its number, which its answer
+    /// carries) and the flag that stops it.
+    describing: HashMap<String, (u64, Arc<AtomicBool>)>,
+    /// The number the next request gets. Never reset, so the answer of a request stopped
+    /// earlier never passes for a later one's.
+    next_request: u64,
 }
 
 impl MarkersState {
@@ -203,27 +207,53 @@ impl MarkersState {
         self.restore.arm(y);
     }
 
-    /// Mark `guid` as being described; the flag that stops its request, or `None` when it
-    /// already is.
-    pub fn start_describing(&mut self, guid: &str) -> Option<Arc<AtomicBool>> {
+    /// Mark `guid` as being described: the new request's number and the flag that stops it, or
+    /// `None` when one is on its way already.
+    pub fn start_describing(&mut self, guid: &str) -> Option<(u64, Arc<AtomicBool>)> {
         if self.describing.contains_key(guid) {
             return None;
         }
-        let cancel = Arc::new(AtomicBool::new(false));
-        self.describing.insert(guid.to_string(), cancel.clone());
-        Some(cancel)
+        self.next_request += 1;
+        let request = (self.next_request, Arc::new(AtomicBool::new(false)));
+        self.describing.insert(guid.to_string(), request.clone());
+        Some(request)
     }
 
-    /// The request for `guid` came back; whether it was still waited for.
-    pub fn finish_describing(&mut self, guid: &str) -> bool {
-        self.describing.remove(guid).is_some()
+    /// The answer of request `request` for `guid` came: whether it is the one still waited
+    /// for (then it is not any more). An answer of a stopped request, or of an earlier one, is
+    /// not.
+    pub fn finish_describing(&mut self, guid: &str, request: u64) -> bool {
+        if self
+            .describing
+            .get(guid)
+            .is_some_and(|(id, _)| *id == request)
+        {
+            self.describing.remove(guid);
+            true
+        } else {
+            false
+        }
     }
 
     /// Stop the request for `guid`; its answer is not used.
     pub fn stop_describing(&mut self, guid: &str) {
-        if let Some(cancel) = self.describing.remove(guid) {
+        if let Some((_, cancel)) = self.describing.remove(guid) {
             cancel.store(true, Ordering::Relaxed);
         }
+    }
+
+    /// Stop every request (a batch job closes the clip).
+    pub fn stop_all_describing(&mut self) {
+        for (_, cancel) in self.describing.values() {
+            cancel.store(true, Ordering::Relaxed);
+        }
+        self.describing.clear();
+    }
+
+    /// The number of the request for `guid` on its way (tests hand its answer in).
+    #[cfg(test)]
+    pub fn request_of(&self, guid: &str) -> Option<u64> {
+        self.describing.get(guid).map(|(id, _)| *id)
     }
 
     pub fn is_describing(&self, guid: &str) -> bool {
@@ -237,10 +267,12 @@ impl MarkersState {
 
     /// Start over for another file. Its requests stop: their answers would not find the markers.
     pub fn reset(&mut self) {
-        for cancel in self.describing.values() {
-            cancel.store(true, Ordering::Relaxed);
-        }
-        *self = Self::default();
+        self.stop_all_describing();
+        let next_request = self.next_request;
+        *self = Self {
+            next_request,
+            ..Self::default()
+        };
     }
 }
 
@@ -251,19 +283,41 @@ mod tests {
     #[test]
     fn a_marker_is_described_once_at_a_time_and_leaving_stops_it() {
         let mut state = MarkersState::default();
-        let cancel = state.start_describing("a").expect("started");
+        let (first, cancel) = state.start_describing("a").expect("started");
         assert!(state.start_describing("a").is_none(), "already on its way");
         assert!(state.is_describing("a") && state.any_describing());
-        let other = state.start_describing("b").expect("another marker");
+        let (other, other_cancel) = state.start_describing("b").expect("another marker");
         state.stop_describing("b");
-        assert!(other.load(Ordering::Relaxed), "stopped");
+        assert!(other_cancel.load(Ordering::Relaxed), "stopped");
         assert!(
-            !state.finish_describing("b"),
+            !state.finish_describing("b", other),
             "a stopped answer is not used"
         );
         state.reset();
         assert!(cancel.load(Ordering::Relaxed), "leaving the clip stops it");
         assert!(!state.any_describing());
+        let (again, _) = state.start_describing("a").expect("started again");
+        assert!(again > first, "numbers go on after a reset");
+        assert!(
+            !state.finish_describing("a", first),
+            "the old answer is not this one's"
+        );
+        assert!(state.is_describing("a"));
+        assert!(state.finish_describing("a", again));
+    }
+
+    #[test]
+    fn a_stopped_request_answering_late_does_not_end_the_next_one() {
+        let mut state = MarkersState::default();
+        let (first, _) = state.start_describing("a").unwrap();
+        state.stop_describing("a");
+        let (second, _) = state.start_describing("a").unwrap();
+        assert!(!state.finish_describing("a", first));
+        assert!(state.is_describing("a"), "the second is still waited for");
+        assert!(state.finish_describing("a", second));
+        let (_, cancel) = state.start_describing("b").unwrap();
+        state.stop_all_describing();
+        assert!(cancel.load(Ordering::Relaxed) && !state.any_describing());
     }
 
     /// Issue #171: a click on a marker jumps there without scrolling the list.

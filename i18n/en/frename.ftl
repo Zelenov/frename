@@ -70,7 +70,7 @@ settings-ai-key-label = Anthropic API key
 settings-ai-key-placeholder = sk-ant-…
 settings-ai-key-get = Get a key at console.anthropic.com → API keys.
 settings-ai-key-remove-confirm = Remove the saved Anthropic key?
-settings-ai-used-by = Used by Describe with AI in batch mode.
+settings-ai-used-by = Used by Describe with AI in batch mode and on markers (✨, Ctrl+F2).
 settings-ai-model-label = Model
 settings-ai-language-label = Description language
 settings-ai-hint = Haiku is the cheapest; Sonnet and Opus notice more.
@@ -311,6 +311,7 @@ batch-ai-progress-saving = saving
 batch-ai-stop-no-key = Stopped: no Anthropic API key. Set one in Settings.
 batch-ai-fail-no-key = No API key
 batch-ai-fail-unreadable = Video could not be read
+batch-ai-fail-too-long = The clip is too long for AI (over 30 min)
 batch-ai-fail-not-saved = The description could not be saved
 batch-ai-stop-offline = Stopped: no connection to Anthropic. Run it again to describe the rest.
 
@@ -524,6 +525,9 @@ markers-ai-no-marker = No marker here
 markers-ai-no-key = No Anthropic API key: set one in Settings
 markers-ai-failed = Not described: { $reason }
 markers-ai-failed-unknown = something went wrong
+markers-read-only-notice = That marker is read-only
+markers-ai-gone = The marker is gone: its description was not added
+markers-ai-stopping-for-batch = Stopping the marker descriptions first…
 
 ## File workspace
 

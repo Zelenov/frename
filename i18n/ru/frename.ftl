@@ -100,7 +100,7 @@ settings-ai-key-label = Ключ API Anthropic
 settings-ai-key-placeholder = sk-ant-…
 settings-ai-key-get = Получить ключ на console.anthropic.com → API keys.
 settings-ai-key-remove-confirm = Удалить сохранённый ключ Anthropic?
-settings-ai-used-by = Используется действием «Описать с помощью AI» в пакетном режиме.
+settings-ai-used-by = Используется действием «Описать с помощью AI» в пакетном режиме и на маркерах (✨, Ctrl+F2).
 settings-ai-model-label = Модель
 settings-ai-language-label = Язык описания
 settings-ai-hint = Haiku дешевле всех; Sonnet и Opus замечают больше.
@@ -358,6 +358,7 @@ batch-ai-progress-saving = сохранение
 batch-ai-stop-no-key = Остановлено: нет ключа API Anthropic. Укажите его в настройках.
 batch-ai-fail-no-key = Нет ключа API
 batch-ai-fail-unreadable = Видео не удалось прочитать
+batch-ai-fail-too-long = Видео слишком длинное для AI (больше 30 мин)
 batch-ai-fail-not-saved = Не удалось сохранить описание
 batch-ai-stop-offline = Остановлено: нет соединения с Anthropic. Запустите ещё раз, чтобы описать оставшиеся.
 
@@ -577,6 +578,9 @@ markers-ai-no-marker = Здесь нет маркера
 markers-ai-no-key = Нет ключа Anthropic API: задайте его в настройках
 markers-ai-failed = Не описано: { $reason }
 markers-ai-failed-unknown = что-то пошло не так
+markers-read-only-notice = Этот маркер только для чтения
+markers-ai-gone = Маркера больше нет: описание не добавлено
+markers-ai-stopping-for-batch = Сначала останавливаю описание маркеров…
 
 ## File workspace
 

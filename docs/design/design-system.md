@@ -1066,7 +1066,7 @@ F2's auto-repeat is ignored; what an open marker row blocks is listed under the 
 | `F2` on a read-only marker | notice "That marker is read-only" and the marker list opens |
 | `F2` on a file that cannot hold markers | the marker list opens to say so |
 | `Shift`+`F2` | delete the nearest editable marker within 0.5 s; notice "Marker deleted" or "No marker here" |
-| `Ctrl`+`F2` | describe the marker the playhead is on (the lit row) with AI; auto-repeat ignored; notice "No marker here" or "That marker is read-only" |
+| `Ctrl`+`F2` | describe the marker the playhead is on (the lit row) with AI and open the marker list; auto-repeat ignored; notice "No marker here" or "That marker is read-only"; nothing when that marker is being described already |
 | `Shift`+`F1` / `Shift`+`F3` | jump to the previous / next marker start; "previous" skips a marker passed less than 750 ms ago |
 | the `map-pin` button | a click is `F2`; holding it draws a range like holding `F2` |
 
@@ -1167,10 +1167,25 @@ left to right, with the widths §13.9 folds by:
   `caption` `text.secondary`; `sparkles` becomes `circle-x` "Stop describing". Several rows can
   be describing at once. The answer names an unnamed marker (a name the editor gave stays) and adds
   the description to the comment on a line of its own (an empty comment becomes it; a comment
-  that already has it is left alone): one undo step. Notices: "Marker described", "Not described:
-  {reason}" (the AI's or the clip's reason), "The marker already has this description"; with no
-  key, "No Anthropic API key: set one in Settings" and Settings opens on Describe with AI.
-  Leaving the clip, or deleting the marker, stops its request.
+  that already has it is left alone, compared as one line, since a comment line joins its
+  lines): one undo step. Notices: "Marker described", "Not described: {reason}", "The marker
+  already has this description", "The marker is gone: its description was not added" (an undo
+  removed it meanwhile). The reasons are the batch action's own strings, shared
+  (`describe_ai::failure_reason`): "Video could not be read", "The clip is too long for AI (over
+  30 min)", the AI's reason (key rejected, no credit left, network error, no answer in time…).
+- **No key:** when the settings already said no key is saved, ✨ / `Ctrl+F2` send nothing:
+  notice "No Anthropic API key: set one in Settings" and Settings opens on Describe with AI. When
+  that was not known yet, the request finds it out, says so the same way once, and records it, so
+  later clicks and the other requests' answers stay quiet.
+- **Stopped:** ⊗ (or deleting the marker, leaving the clip, opening another folder) stops the
+  request: the row is back to ✨ at once, and its answer, if it still comes, is dropped. ✨ again
+  starts a new request; a late answer of the stopped one never passes for it.
+- **Already describing:** ✨ (it shows ⊗ instead) and `Ctrl+F2` on that marker do nothing, with no
+  notice. `Ctrl+F2` opens the marker list (in fullscreen too) so its row shows the progress and ⊗.
+- **Batch job:** Run stops the open clip's marker requests and waits until the last one lets go
+  of the clip (it may be reading its frames): notice "Stopping the marker descriptions first…",
+  then the job starts by itself. No request starts while a job runs or waits.
+- **Comment in the list:** at most 3 lines, then "…"; all of it while the row is open.
 - **Open row** (renaming): the name becomes a multi-line text field (§8.6) with the placeholder
   "Name"; Enter or Esc closes it.
 - **Color picker** (after a click on the dot): the first line becomes the 8 Premiere colors (Green,

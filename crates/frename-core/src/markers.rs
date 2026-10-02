@@ -66,15 +66,16 @@ impl Marker {
 /// does their comment, with the description added on a line of its own; a comment that already
 /// holds the description is left as it is, so asking again adds nothing twice.
 pub fn marker_text_with_moment(marker: &Marker, name: &str, description: &str) -> (String, String) {
-    let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
     let description = description.trim();
     let new_name = if marker.name.trim().is_empty() {
-        name
+        one_line(name)
     } else {
         marker.name.clone()
     };
     let comment = marker.comment.trim_end();
-    let new_comment = if description.is_empty() || comment.contains(description) {
+    // Compared on one line: a comment kept as a marker line in a comment comes back so.
+    let described = one_line(comment).contains(&one_line(description));
+    let new_comment = if description.is_empty() || described {
         marker.comment.clone()
     } else if comment.trim().is_empty() {
         description.to_string()
@@ -683,8 +684,13 @@ fn join_text(marker: &mut Marker, line: &MarkerLine) {
 /// Whether the marker already says what the line says. A line holds a comment on one line,
 /// its words separated by single spaces (see [`format_marker_line`]), so the marker's comment
 /// (which may break lines, or carry the `\r\n` of Premiere) is compared the same way.
+/// `text` on one line, its runs of whitespace (line breaks too) one space each: how a marker's
+/// text reads back from a comment line.
+fn one_line(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 fn has_text(marker: &Marker, line: &MarkerLine) -> bool {
-    let one_line = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
     one_line(&marker.name) == one_line(&line.name)
         && one_line(&marker.comment) == one_line(&line.comment)
 }
@@ -792,6 +798,15 @@ A lion walks.",
         );
         let again = marker_text_with_moment(&once, "Lion", "A lion walks.");
         assert_eq!(again, (once.name.clone(), once.comment.clone()));
+        // A comment line joins the description's lines: still the same description.
+        let joined = named("Lion", "A lion walks. It stops.");
+        let again = marker_text_with_moment(
+            &joined,
+            "Lion",
+            "A lion walks.
+It stops.",
+        );
+        assert_eq!(again, (joined.name.clone(), joined.comment.clone()));
         let empty = marker_text_with_moment(&named("", "note"), "", "  ");
         assert_eq!(empty, (String::new(), "note".to_string()));
     }

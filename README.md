@@ -185,8 +185,8 @@ The progress bar shows what you have noted about a clip:
   and the description goes into the marker's comment (shown under its name in the list; Premiere
   Pro shows it as the marker's comment). A name you gave stays, and your comment keeps its text
   with the description added below. One undo undoes it. Several markers can be described at once;
-  ✕ on a row stops one, and leaving the clip stops them all. It uses the key, model and language of
-  Describe with AI, and costs a fraction of a cent per marker.
+  ⊗ (where ✨ was) stops one, and leaving the clip stops them all. It uses the key, model and
+  language of Describe with AI; a marker costs under a cent with Haiku, a few cents with Opus.
 - **Frames:** `Alt+←` / `Alt+→` (or the buttons next to play) step one frame back or forward and pause
   there; paused, the time shows milliseconds (`00:10.250`), and `F2` marks that exact frame.
   `F12` or 📷 saves the current frame as a JPEG next to the video

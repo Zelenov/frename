@@ -2,6 +2,8 @@
 //! except the one row open for renaming. A row is as tall as its name's lines; the list is
 //! scrolled to a row by an estimate of the rows above it ([`row_offset`]), as the subtitle list is.
 
+use std::borrow::Cow;
+
 use frename_core::{format_marker_time, Marker, MarkerColor, AI_MARKER_COLOR, MARKER_SNAP_MS};
 use iced::widget::{
     button, column, container, hover, mouse_area, row, space, stack, text_editor, Column,
@@ -50,13 +52,49 @@ fn wrapped_lines(text: &str) -> usize {
         .max(1)
 }
 
+/// A comment shows at most this many lines in a row that is not open.
+const COMMENT_LINES: usize = 3;
+
+/// `comment` cut to [`COMMENT_LINES`] lines of a row (estimated like [`wrapped_lines`]), ending
+/// in "…" when cut.
+fn clamped_comment(comment: &str) -> Cow<'_, str> {
+    let per_line = (NAME_ROOM / NAME_CHAR_ADVANCE) as usize;
+    let all = comment.lines().count();
+    let mut left = COMMENT_LINES;
+    let mut kept: Vec<String> = Vec::new();
+    for line in comment.lines() {
+        let lines = line.chars().count().div_ceil(per_line).max(1);
+        if lines > left {
+            let cut: String = line.chars().take(left * per_line - 1).collect();
+            kept.push(format!("{}…", cut.trim_end()));
+            return Cow::Owned(kept.join(
+                "
+",
+            ));
+        }
+        kept.push(line.to_string());
+        left -= lines;
+        if left == 0 && kept.len() < all {
+            let last = kept.pop().unwrap_or_default();
+            kept.push(format!("{}…", last.trim_end()));
+            return Cow::Owned(kept.join(
+                "
+",
+            ));
+        }
+    }
+    Cow::Borrowed(comment)
+}
+
 /// Estimated height of `marker`'s row, for scrolling to a row only: the row itself is as tall as
-/// its content. Its comment, if any, adds its lines under the name.
+/// its content. Its comment, if any, adds its lines under the name (at most
+/// [`COMMENT_LINES`]).
 fn row_height(marker: &Marker) -> f32 {
     let comment = if marker.comment.trim().is_empty() {
         0.0
     } else {
-        SPACE_XXS + wrapped_lines(marker.comment.trim()) as f32 * LINE_BODY
+        let lines = wrapped_lines(&clamped_comment(marker.comment.trim()));
+        SPACE_XXS + lines as f32 * LINE_BODY
     };
     MARKER_ROW_HEIGHT + (wrapped_lines(&marker.name) - 1) as f32 * LINE_BODY + comment
 }
@@ -472,9 +510,16 @@ fn marker_row<'a>(
         None if marker.name.is_empty() => text::body("—").color(TEXT_SECONDARY).into(),
         None => text::body(marker.name.as_str()).into(),
     };
-    // The comment (an AI's description, or Premiere's comment) under the name, read-only.
-    let comment =
-        (!marker.comment.trim().is_empty()).then(|| text::secondary(marker.comment.trim()));
+    // The comment (an AI's description, or Premiere's comment) under the name, read-only: a few
+    // lines, the whole of it while the row is open.
+    let comment = (!marker.comment.trim().is_empty()).then(|| {
+        let comment = marker.comment.trim();
+        if open.is_some() {
+            text::secondary(comment)
+        } else {
+            text::secondary(clamped_comment(comment).into_owned())
+        }
+    });
     let body = column![first_line, name]
         .push(comment)
         .spacing(SPACE_XXS)
@@ -575,6 +620,33 @@ mod tests {
             name(20_000),
             Some(""),
             "unnamed: labelled so it can be named"
+        );
+    }
+
+    #[test]
+    fn a_long_comment_shows_three_lines_and_an_ellipsis() {
+        let per_line = (NAME_ROOM / NAME_CHAR_ADVANCE) as usize;
+        let short = "A lion walks past.";
+        assert_eq!(clamped_comment(short), short);
+        let long = "x".repeat(per_line * 5);
+        let cut = clamped_comment(&long);
+        assert!(cut.ends_with('…'), "{cut}");
+        assert_eq!(wrapped_lines(&cut), COMMENT_LINES);
+        let many = "one
+two
+three
+four";
+        assert_eq!(
+            clamped_comment(many),
+            "one
+two
+three…"
+        );
+        let mut marker = Marker::new(0);
+        marker.comment = long;
+        assert_eq!(
+            row_height(&marker),
+            MARKER_ROW_HEIGHT + SPACE_XXS + COMMENT_LINES as f32 * LINE_BODY
         );
     }
 

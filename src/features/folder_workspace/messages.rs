@@ -75,6 +75,8 @@ pub enum Message {
     MarkerDescribed {
         file: FileId,
         guid: String,
+        /// The request's number (see `MarkersState::start_describing`).
+        request: u64,
         outcome: crate::features::markers::MomentOutcome,
     },
     /// A second passed: write the open clip's unsaved edits into the recovery journal, if they
