@@ -46,8 +46,9 @@ pub const CAPTION_PADDING_Y: f32 = SPACE_S;
 pub const CAPTION_PADDING_X: f32 = 18.0;
 /// The volume slider.
 pub const VOLUME_WIDTH: f32 = 72.0;
-/// The time readout: a fixed width so it never moves.
-pub const TIME_READOUT_WIDTH: f32 = 104.0;
+/// The time readout: a fixed width so it never moves. Fits `00:10.250 / 00:30` (paused, with
+/// milliseconds) and `1:02:05 / 1:30:00`: 17 mono characters.
+pub const TIME_READOUT_WIDTH: f32 = 128.0;
 /// The notices' slot in the controls bar needs this much, otherwise they float over the picture.
 pub const NOTICE_SLOT_MIN_WIDTH: f32 = 120.0;
 /// A marker row's color dot.

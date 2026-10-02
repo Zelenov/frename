@@ -3,11 +3,12 @@
 //! Steps go by the timestamps of the decoded frames, not by an assumed `1 / fps`, so a
 //! variable-frame-rate clip (an iPhone recording) steps to its real previous or next frame.
 //!
-//! An accurate seek clips the frame it lands in to the seek's edge: played forward, the frame's
-//! timestamp becomes the seek target (its end stays true); played backward, its end becomes the
-//! seek's stop (its start stays true). So a step forward seeks to the true end of the frame on
-//! screen, which is the next frame's start, and a step back seeks backward to stop at the true
-//! start of the frame on screen, which shows the frame before it.
+//! A step forward asks GStreamer for the next decoded frame (a step event): cheap even in a clip
+//! with long groups of pictures, where every seek decodes from the previous keyframe. A step back
+//! has to seek. An accurate seek clips the frame it lands in to the seek's edge: played forward,
+//! the frame's timestamp becomes the seek target (its end stays true); played backward, its end
+//! becomes the seek's stop (its start stays true). So a step back seeks backward to stop at the
+//! true start of the frame on screen, which shows the frame before it, whole.
 
 use std::time::Duration;
 
@@ -38,11 +39,12 @@ impl ShownFrame {
 /// What a step does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StepTarget {
-    /// An accurate forward seek to this time: the frame starting there.
+    /// An accurate forward seek to this time: the frame starting there. Only after a step back,
+    /// when the pipeline runs backward and a step event would go backward too.
     Forward(Duration),
     /// An accurate backward seek stopping at this time: the frame just before it.
     Backward(Duration),
-    /// Forward from a frame of unknown length: ask GStreamer for the next decoded frame.
+    /// A step event: the next decoded frame.
     NextBuffer,
     /// At the first or last frame: nothing.
     Stay,
@@ -57,9 +59,9 @@ pub fn step_target(frame: ShownFrame, step: FrameStep, clip: Duration) -> StepTa
     match step {
         FrameStep::Forward => match frame.end() {
             Some(end) if end >= clip => StepTarget::Stay,
-            Some(end) => StepTarget::Forward(end),
+            Some(end) if frame.reversed => StepTarget::Forward(end),
             None if frame.reversed || frame.start >= clip => StepTarget::Stay,
-            None => StepTarget::NextBuffer,
+            _ => StepTarget::NextBuffer,
         },
         FrameStep::Back if !frame.start_exact => match frame.end() {
             Some(end) => StepTarget::Backward(end),
@@ -137,12 +139,23 @@ mod tests {
             })
         }
 
+        /// A step event from `frame`: the next frame, whole.
+        fn next(&self, frame: ShownFrame) -> ShownFrame {
+            let (start, end) = self.bounds(self.index_of(frame) + 1);
+            ShownFrame {
+                start,
+                duration: Some(end - start),
+                start_exact: true,
+                reversed: false,
+            }
+        }
+
         /// One step as the player takes it, including the second half of a step back.
         fn step(&self, frame: ShownFrame, step: FrameStep) -> ShownFrame {
             let shown = match step_target(frame, step, self.end) {
                 StepTarget::Forward(target) => self.forward(target),
                 StepTarget::Backward(stop) => self.backward(stop).unwrap_or(frame),
-                StepTarget::NextBuffer => panic!("every frame here has a length"),
+                StepTarget::NextBuffer => self.next(frame),
                 StepTarget::Stay => frame,
             };
             if only_found_the_start(frame, shown) {
@@ -234,6 +247,30 @@ mod tests {
     fn steps_visit_every_frame_of_a_variable_rate_clip_and_stop_at_the_ends() {
         walk(&variable(), 0);
         walk(&variable(), 3);
+    }
+
+    #[test]
+    fn forward_is_a_step_event_unless_a_step_back_left_the_pipeline_running_backward() {
+        let frame = ShownFrame {
+            start: Duration::from_secs(1),
+            duration: Some(Duration::from_millis(40)),
+            start_exact: false,
+            reversed: false,
+        };
+        let clip = Duration::from_secs(5);
+        assert_eq!(
+            step_target(frame, FrameStep::Forward, clip),
+            StepTarget::NextBuffer
+        );
+        let reversed = ShownFrame {
+            reversed: true,
+            start_exact: true,
+            ..frame
+        };
+        assert_eq!(
+            step_target(reversed, FrameStep::Forward, clip),
+            StepTarget::Forward(Duration::from_millis(1_040))
+        );
     }
 
     #[test]

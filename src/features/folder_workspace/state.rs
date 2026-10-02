@@ -935,6 +935,27 @@ impl FolderWorkspace {
         }
     }
 
+    /// A video key (`Ctrl+Alt+←/→` turns, `Alt+←/→` frame steps) pressed while a text field had
+    /// the keys: send `message`, unless the field is the comment box, where the keys belong to
+    /// the text (the search fields hold nothing the keys would do, so there they still act). In
+    /// batch mode the comment box is not shown, and asking about its focus would get no answer
+    /// at all.
+    fn unless_writing(&self, message: Message) -> Task<Message> {
+        if self.batch.is_active() {
+            return Task::done(message);
+        }
+        iced::widget::operation::is_focused(iced::widget::Id::new(
+            crate::features::file_workspace::view::COMMENT_EDITOR_ID,
+        ))
+        .map(move |writing| {
+            if writing {
+                Message::Noop
+            } else {
+                message.clone()
+            }
+        })
+    }
+
     /// Messages to drop now. Batch mode shows batch actions instead of the open file, so what
     /// would edit that file is off. A running job also locks the folder: no file may open or
     /// change while the job writes its files.

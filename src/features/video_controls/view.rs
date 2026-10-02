@@ -289,13 +289,15 @@ pub fn rotate(cannot_rotate: Option<String>) -> [Command<Message>; 2] {
     ]
 }
 
-/// `00:10 / 00:30`, fixed wide so it never moves.
+/// `00:10 / 00:30`, fixed wide so it never moves. Paused, the playhead shows its milliseconds
+/// (`00:10.250 / 00:30`): the exact time of a frame stepped to.
 pub fn time_readout<'a>(state: &VideoControlsState, position_secs: f32) -> Element<'a, Message> {
-    let readout = format!(
-        "{} / {}",
-        clock(position_secs),
-        clock(state.duration_secs())
-    );
+    let position = if state.is_playing() {
+        clock(position_secs)
+    } else {
+        precise_clock(position_secs)
+    };
+    let readout = format!("{position} / {}", clock(state.duration_secs()));
     container(text::mono(readout).wrapping(iced::widget::text::Wrapping::None))
         .width(TIME_READOUT_WIDTH)
         .align_right(TIME_READOUT_WIDTH)
@@ -311,6 +313,12 @@ pub fn clock(secs: f32) -> String {
     } else {
         format!("{minutes:02}:{seconds:02}")
     }
+}
+
+/// [`clock`] with milliseconds: `00:10.250`.
+pub fn precise_clock(secs: f32) -> String {
+    let millis = (f64::from(secs.max(0.0)) * 1000.0).round() as u64;
+    format!("{}.{:03}", clock((millis / 1000) as f32), millis % 1000)
 }
 
 /// The volume slider alone: in the bar after its icon, or in More.
@@ -542,6 +550,15 @@ mod tests {
         assert_eq!(clock(10.4), "00:10");
         assert_eq!(clock(3_725.0), "1:02:05");
         assert_eq!(clock(-1.0), "00:00");
+    }
+
+    #[test]
+    fn the_precise_clock_shows_milliseconds_of_a_frame() {
+        assert_eq!(precise_clock(10.25), "00:10.250");
+        // A frame's playhead (whole milliseconds) survives the trip through f32.
+        assert_eq!(precise_clock(7.517), "00:07.517");
+        assert_eq!(precise_clock(3_725.999_5), "1:02:06.000");
+        assert_eq!(precise_clock(-1.0), "00:00.000");
     }
 
     #[test]

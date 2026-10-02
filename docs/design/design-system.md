@@ -1068,12 +1068,13 @@ left to right, with the widths §13.9 folds by:
 | In/out (64) | text `[` "Set the in point `[`" · text `]` "Set the out point `]`" (text, as #44 says) |
 | Mark (64) | `camera` "Save this frame `F12`" · `map-pin` "Add a marker `F2` (hold for a range)"; disabled with the reason "This file cannot hold markers" |
 | Free space (flexible) | empty; notices (§13.2) show here when it is at least 120 wide, cut with "…" and the full text in the tooltip |
-| Time (104, #59) | `00:10 / 00:30` in `mono` `text.secondary`; a fixed width so it never moves |
+| Time (128, #59) | `00:10 / 00:30` in `mono` `text.secondary`; paused, the playhead shows milliseconds, `00:10.250 / 00:30` (the exact time of a stepped frame, #162); a fixed width (17 characters) so it never moves |
 | Volume (96) | `volume-2` icon 16 in `text.secondary` (not a button), 8 px, a 72 px slider (§8.8); folded: a 32 px icon button `volume-2` that opens the slider in a popover |
 | Views (96) | `captions` "Subtitle list" (only with subtitles) · `map-pin` "Marker list" with "`Shift`+`F1` / `Shift`+`F3` jump between markers" on its second line · **More** `ellipsis` (only when something is folded) · `maximize-2`/`minimize-2` "Full screen `F5`" |
 
-- **Rotate** `rotate-ccw` / `rotate-cw` (added after this spec) live in **More**, so More is always
-  shown; they are used rarely and have their keys (`Ctrl`+`Alt`+`←` / `→`).
+- **Rotate** (64) `rotate-ccw` / `rotate-cw` (added after this spec) sit after Mark when the pane
+  has room and are the first to move into **More**; they are used rarely and have their keys
+  (`Ctrl`+`Alt`+`←` / `→`).
 - **Latched** (list shown, fullscreen): `state.selected` fill and the icon in `accent.text`
   (§8.1), not only a blue glyph.
 - **Held** (`map-pin` while F2 or the button is held to draw a range): `state.pressed` fill and a
@@ -1654,18 +1655,21 @@ minimum.
 
 **Video pane** (min 320, no max)
 
-The controls bar folds by the widths of §13.3.5: padding 16 + Transport 96 + In/out 64 + Mark 64
-+ Time 104 + Volume 96 + Views 96 + five gaps of 12 = **596** with everything shown. Each step
-below takes away what the previous width no longer fits:
+The controls bar folds by the widths of §13.3.5 (`video_controls/fold.rs`, whose test pins these
+numbers): padding 16 + Transport 160 + In/out 64 + Mark 64 + Rotate 64 + Time 128 + Volume 96 +
+Views 96 + seven gaps of 12 (the free space counts as one more item of the row) = **772** with
+everything shown and a clip with subtitles. Each step below takes away what the previous width no
+longer fits:
 
 | Pane width | Controls bar | Needs |
 |---|---|---|
-| ≥ 596 | all groups (§13.3.5) | 596 |
-| 480–595 | the time readout hides (the timeline's hover tooltip still shows times) | 596 − 104 − 12 = 480 |
-| 416–479 | also the volume slider folds into its icon button | 480 − 64 = 416 |
-| | also the frame step buttons (`step-back`, `step-forward`, #162) move into **More**, before the Mark group; each threshold above is 64 higher while they are in the bar | |
-| 372–415 | also the Mark group (`camera`, `map-pin`) moves into **More** (More appears just before fullscreen) | 416 − 64 − 12 + 32 = 372 |
-| 320–371 | also the subtitle and marker list buttons move into **More**; transport, in/out, the volume icon, More and fullscreen stay | 372 − 64 = 308 |
+| ≥ 772 | all groups (§13.3.5) | 772 |
+| 728–771 | ↺ ↻ move into **More** (More appears just before fullscreen) | 772 − 64 − 12 + 32 = 728 |
+| 664–727 | also the frame steps (`step-back`, `step-forward`) move into **More**, before the readout hides: stepping, the readout shows the frame's time | 728 − 64 = 664 |
+| 524–663 | also the time readout hides (the timeline's hover tooltip still shows times) | 664 − 128 − 12 = 524 |
+| 460–523 | also the volume slider folds into its icon button | 524 − 64 = 460 |
+| 384–459 | also the Mark group (`camera`, `map-pin`) moves into **More** | 460 − 64 − 12 = 384 |
+| 320–383 | also the subtitle and marker list buttons move into **More**; transport, in/out, the volume icon, More and fullscreen stay | 384 − 64 = 320 |
 
 Without subtitles (no subtitle list button) each threshold is 32 lower. Notices use the free space
 when it is at least 120, otherwise the pill over the picture (§13.3.5).

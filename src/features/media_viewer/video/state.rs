@@ -27,9 +27,12 @@ const NOTICE_DURATION: Duration = Duration::from_secs(2);
 const LONG_NOTICE_DURATION: Duration = Duration::from_secs(20);
 /// How often a frame step looks whether its frame is on screen.
 const FRAME_STEP_TICK: Duration = Duration::from_millis(15);
-/// How long a frame step waits for a new frame before taking what is on screen: at the first
-/// frame (a clip whose first timestamp is not zero) or past the last one, none comes.
-const FRAME_STEP_TIMEOUT: Duration = Duration::from_millis(500);
+/// How long a frame step waits for a new frame once the pipeline has settled: past the first or
+/// last frame none comes. While the pipeline is still decoding toward the frame (a backward seek
+/// in a 4K clip with long groups of pictures takes seconds), it waits on.
+const FRAME_STEP_SETTLED_WAIT: Duration = Duration::from_millis(250);
+/// The longest a frame step waits at all, should the pipeline never settle.
+const FRAME_STEP_GIVE_UP: Duration = Duration::from_secs(20);
 
 /// What the list over the right of the picture shows. One list at a time, so a windowed
 /// video is not covered twice. Kept across files, like volume.
@@ -134,6 +137,10 @@ pub struct VideoPlayerState {
     /// A frame step whose frame is not on screen yet. Further steps wait for it: a held key
     /// would otherwise step again from the frame still shown and stand still.
     frame_step: Option<PendingStep>,
+    /// A step back left the pipeline running backward (see `seek_backward`); any forward seek
+    /// clears it. Kept here rather than read from the frame on screen: while the backward seek
+    /// is still on its way there is none, and playing then would play the clip backward.
+    reversed: bool,
 }
 
 impl Default for VideoPlayerState {
@@ -167,6 +174,7 @@ impl Default for VideoPlayerState {
             more_open: false,
             loading_ticks: 0,
             frame_step: None,
+            reversed: false,
         }
     }
 }
@@ -233,6 +241,7 @@ impl VideoPlayerState {
         self.cue_restore = Default::default();
         self.play_until = None;
         self.frame_step = None;
+        self.reversed = false;
         self.paused = paused;
         self.load_generation = self.load_generation.wrapping_add(1);
         let generation = self.load_generation;
@@ -395,13 +404,7 @@ impl VideoPlayerState {
                 self.frame_step = None;
                 // A step back left the pipeline running backward: turn it forward at the frame
                 // shown before playing.
-                if self.paused
-                    && self
-                        .current_video
-                        .as_ref()
-                        .and_then(shown_frame)
-                        .is_some_and(|frame| frame.reversed)
-                {
+                if self.paused && self.reversed {
                     self.seek_only(self.position, true);
                 } else if let Some(position) = self.current_video.as_ref().and_then(query_position)
                 {
@@ -772,7 +775,9 @@ impl VideoPlayerState {
                 Task::none()
             }
             StepTarget::Backward(stop) => {
-                seek_backward(video, stop);
+                if seek_backward(video, stop) {
+                    self.reversed = true;
+                }
                 Task::none()
             }
             StepTarget::Forward(target) => self.seek_to(target, true),
@@ -793,9 +798,13 @@ impl VideoPlayerState {
             return Task::none();
         };
         let shown = shown_frame(video).filter(|frame| *frame != pending.from);
-        let timed_out = pending.since.elapsed() >= FRAME_STEP_TIMEOUT;
-        if shown.is_none() && !timed_out {
-            return Task::none();
+        if shown.is_none() {
+            let waited = pending.since.elapsed();
+            let decoding = video.pipeline().state(gst::ClockTime::ZERO).0
+                == Ok(gst::StateChangeSuccess::Async);
+            if waited < FRAME_STEP_SETTLED_WAIT || (decoding && waited < FRAME_STEP_GIVE_UP) {
+                return Task::none();
+            }
         }
         self.frame_step = None;
         let Some(frame) = shown else {
@@ -833,6 +842,7 @@ impl VideoPlayerState {
             log::error!("Failed to seek: {e}");
             return false;
         }
+        self.reversed = false;
         self.position = target.min(video.duration());
         true
     }
@@ -855,19 +865,28 @@ impl VideoPlayerState {
     }
 
     fn capture_segment_start(&self) -> Task<Message> {
-        let Some(video) = self.current_video.as_ref() else {
+        let Some(position) = self.segment_point() else {
             return Task::none();
         };
-        let secs = video.position().as_secs_f32().floor();
-        Task::done(Message::SegmentStartMarked(secs))
+        Task::done(Message::SegmentStartMarked(position.as_secs_f32().floor()))
     }
 
     fn capture_segment_end(&self) -> Task<Message> {
-        let Some(video) = self.current_video.as_ref() else {
+        let Some(position) = self.segment_point() else {
             return Task::none();
         };
-        let secs = video.position().as_secs_f32().ceil();
-        Task::done(Message::SegmentEndMarked(secs))
+        Task::done(Message::SegmentEndMarked(position.as_secs_f32().ceil()))
+    }
+
+    /// Where `[` / `]` mark: paused, the playhead the view shows (a stepped frame's time, as `F2`
+    /// takes it); playing, the pipeline's own position, which the 4-a-second tick lags behind.
+    fn segment_point(&self) -> Option<Duration> {
+        let video = self.current_video.as_ref()?;
+        Some(if self.paused {
+            self.display_position()
+        } else {
+            video.position()
+        })
     }
 
     fn capture_screenshot(&self) -> Task<Message> {
@@ -961,8 +980,8 @@ fn shown_frame(video: &Video) -> Option<ShownFrame> {
 
 /// An accurate seek running backward and stopping at `stop`: paused, it shows the frame just
 /// before `stop`, whole from its true start. The pipeline keeps running backward until a seek
-/// turns it forward (see `TogglePause`).
-fn seek_backward(video: &Video, stop: Duration) {
+/// turns it forward (see `TogglePause`). False when the seek was refused.
+fn seek_backward(video: &Video, stop: Duration) -> bool {
     let result = video.pipeline().seek(
         -1.0,
         gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE,
@@ -971,9 +990,10 @@ fn seek_backward(video: &Video, stop: Duration) {
         gst::SeekType::Set,
         gst::ClockTime::from_nseconds(u64::try_from(stop.as_nanos()).unwrap_or(u64::MAX)),
     );
-    if let Err(e) = result {
+    if let Err(e) = &result {
         log::error!("Failed to seek backward: {e}");
     }
+    result.is_ok()
 }
 
 // ---------------------------------------------------------------------------
@@ -1563,6 +1583,33 @@ mod tests {
                 break;
             }
             assert!(Instant::now() < deadline, "playback did not go on forward");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        // Play pressed while a step back is still on its way (no frame on screen yet): it
+        // plays forward, not backward to the start.
+        let _ = player.update(Message::TogglePause);
+        assert!(player.paused);
+        let paused_at = shown(&player).end().expect("an end");
+        let _ = player.update(Message::Controls(video_controls::Message::StepFrame(
+            FrameStep::Back,
+        )));
+        let _ = player.update(Message::TogglePause);
+        assert!(!player.paused);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let frame = shown(&player);
+            if !frame.reversed
+                && frame
+                    .end()
+                    .is_some_and(|end| end > paused_at + Duration::from_millis(300))
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "playback did not go on forward: {frame:?}"
+            );
             std::thread::sleep(Duration::from_millis(10));
         }
     }

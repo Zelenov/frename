@@ -46,21 +46,23 @@ impl Fold {
             rotate: false,
             ..all
         };
+        // The frame steps give way before the time readout: stepping, the readout is what
+        // shows the frame's exact time.
+        let no_frame_step = Fold {
+            frame_step: false,
+            ..no_rotate
+        };
         let no_time = Fold {
             time: false,
-            ..no_rotate
+            ..no_frame_step
         };
         let no_slider = Fold {
             volume_slider: false,
             ..no_time
         };
-        let no_frame_step = Fold {
-            frame_step: false,
-            ..no_slider
-        };
         let no_mark = Fold {
             mark: false,
-            ..no_frame_step
+            ..no_slider
         };
         let no_lists = Fold {
             lists: false,
@@ -69,9 +71,9 @@ impl Fold {
         [
             all,
             no_rotate,
+            no_frame_step,
             no_time,
             no_slider,
-            no_frame_step,
             no_mark,
             no_lists,
         ]
@@ -133,20 +135,27 @@ mod tests {
         let full = Fold::ALL.width(2);
         let fold = Fold::for_width(full - 1.0, 2);
         assert!(!fold.rotate && fold.time && fold.has_more());
-        let fold = Fold::for_width(Fold::steps()[2].width(2), 2);
+        let fold = Fold::for_width(Fold::steps()[3].width(2), 2);
         assert!(!fold.time && fold.volume_slider && fold.mark);
     }
 
     #[test]
-    fn frame_steps_give_way_after_the_volume_slider_and_before_mark() {
-        let fold = Fold::for_width(Fold::steps()[3].width(2), 2);
-        assert!(!fold.volume_slider && fold.frame_step && fold.mark);
-        let fold = Fold::for_width(Fold::steps()[4].width(2), 2);
-        assert!(!fold.frame_step && fold.mark && fold.has_more());
+    fn frame_steps_give_way_after_rotate_and_before_the_time_readout() {
+        let fold = Fold::for_width(Fold::steps()[1].width(2), 2);
+        assert!(!fold.rotate && fold.frame_step && fold.time);
+        let fold = Fold::for_width(Fold::steps()[2].width(2), 2);
+        assert!(!fold.frame_step && fold.time && fold.mark && fold.has_more());
         assert_eq!(
-            Fold::steps()[3].width(2) - Fold::steps()[4].width(2),
+            Fold::steps()[1].width(2) - Fold::steps()[2].width(2),
             2.0 * BAR_HEIGHT
         );
+    }
+
+    /// The widths of each step, for the table in the design system (§13.9).
+    #[test]
+    fn the_fold_widths_match_the_design_system() {
+        let widths: Vec<f32> = Fold::steps().iter().map(|fold| fold.width(2)).collect();
+        assert_eq!(widths, [772.0, 728.0, 664.0, 524.0, 460.0, 384.0, 320.0]);
     }
 
     #[test]
