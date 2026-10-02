@@ -1,5 +1,8 @@
 //! Logging decorator for app state store: delegates to inner and adds logging.
 
+use std::path::Path;
+use std::time::Duration;
+
 use crate::FolderAndFile;
 
 use super::traits::{AppStateStore, Initializable};
@@ -39,6 +42,32 @@ impl<S: AppStateStore> AppStateStore for LoggingAppStateStore<S> {
         );
         self.inner.set_last_folder_and_file(value);
         log::debug!("AppStateStore::set_last_folder_and_file() done");
+    }
+
+    fn get_playback_position(&self, clip: &Path) -> Option<Duration> {
+        self.inner.get_playback_position(clip)
+    }
+
+    fn set_playback_position(&self, clip: &Path, position: Duration) {
+        self.inner.set_playback_position(clip, position);
+    }
+
+    fn move_playback_position(&self, from: &Path, to: &Path) {
+        log::debug!(
+            "AppStateStore::move_playback_position({} -> {})",
+            from.display(),
+            to.display()
+        );
+        self.inner.move_playback_position(from, to);
+    }
+
+    fn tidy_playback_positions(&self, folder: &Path, names: &[String]) {
+        log::debug!(
+            "AppStateStore::tidy_playback_positions({}, {} files)",
+            folder.display(),
+            names.len()
+        );
+        self.inner.tidy_playback_positions(folder, names);
     }
 }
 

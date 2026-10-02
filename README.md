@@ -50,7 +50,10 @@ Nothing is locked inside frename.
    first, so it arrives under its new name with everything you marked. Nothing is moved.
 
 Next time you start frename, it reopens the last folder and clip — and opening any other folder
-again, even after a restart, returns to the clip you last viewed in it.
+again, even after a restart, returns to the clip you last viewed in it. A clip you open again
+continues two seconds before where you stopped watching, with a note that says so: press `Home`
+or click the note to start it over. A clip watched to the end starts over (at its in point, if
+it has one).
 
 ---
 
@@ -92,6 +95,7 @@ again, even after a restart, returns to the clip you last viewed in it.
 | `F1` | Back 10 seconds |
 | `F3` | Forward 10 seconds |
 | `Alt+←` / `Alt+→` | One frame back / forward (pauses; hold to keep stepping) |
+| `Home` | Go to the start of the clip |
 | `[` | Set the in point |
 | `]` | Set the out point |
 | `F2` | Add a marker; `F2` again within a second and a half, or on a marker, names it |
@@ -113,7 +117,8 @@ again, even after a restart, returns to the clip you last viewed in it.
 | `Escape` | Close Settings (while you remove or replace a key, Esc cancels that first) |
 
 While a text box (tag search, file search, comment) has the cursor, it takes the keys it needs:
-arrows, `Delete`, `Space`, `Enter`, `Ctrl+C`, and in the comment box also `PageUp` / `PageDown`.
+arrows, `Delete`, `Space`, `Home` (except in a search field while the "Resumed at" note shows),
+`Enter`, `Ctrl+C`, and in the comment box also `PageUp` / `PageDown`.
 Press `Esc` first to give the keys back to the app. `[` and `]` set in and out points, except while
 you type in a marker's name. The F-keys always work, and so do `Ctrl+Alt+←` / `→` except in the
 comment box and a marker's name.

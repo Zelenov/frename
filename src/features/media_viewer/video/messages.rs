@@ -36,6 +36,9 @@ pub enum Message {
     TogglePause,
     /// Seek to position in seconds
     Seek(f32),
+    /// Back to the very start of the clip (`Home`, or a click on the note that says where it
+    /// continued).
+    GoToStart,
     /// Controls message
     Controls(video_controls::Message),
     /// Unload current video (e.g. before switching file). Emits VideoUnloaded when done.

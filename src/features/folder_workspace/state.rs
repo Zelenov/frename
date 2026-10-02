@@ -254,6 +254,7 @@ impl FolderWorkspace {
             | Message::PasteTags
             | Message::RotateVideoWhileTyping(_)
             | Message::StepFrameWhileTyping(_)
+            | Message::GoToStartWhileTyping
                 if self.markers.is_editing() =>
             {
                 Task::none()
@@ -401,6 +402,24 @@ impl FolderWorkspace {
                 )))
             }
             Message::StepFrameWhileTyping(step) => self.unless_writing(Message::StepFrame(step)),
+            Message::GoToStart => {
+                // Only a video shown has a start to go to: a clip hidden behind another file's
+                // placeholder is not touched.
+                if !self.media_viewer.is_previewable() {
+                    return Task::none();
+                }
+                Task::done(Message::MediaViewer(media_viewer::Message::Video(
+                    media_viewer_video::Message::GoToStart,
+                )))
+            }
+            Message::GoToStartWhileTyping => {
+                // Only the note's promise takes Home from a search field; a name being typed
+                // keeps it.
+                if self.inline_rename.is_some() || !self.media_viewer.resume_note_shown() {
+                    return Task::none();
+                }
+                self.unless_writing(Message::GoToStart)
+            }
             Message::ToggleMediaFullscreen => self.set_fullscreen(!self.media_fullscreen),
             Message::RestoreListScrolls { markers_y, cues_y } => {
                 // Only a list on screen reports back; armed otherwise it would fire much later.
@@ -924,7 +943,10 @@ impl FolderWorkspace {
             self.with_pending_edits(&file)
         };
         self.file_workspace.set_file(Some(opened));
-        if !same_file {
+        if same_file {
+            // Its path may have changed (an in-place rename); the video is not reopened.
+            self.media_viewer.follow_rename(&file);
+        } else {
             self.markers_loaded(file.id());
             self.journal_reset_baseline();
         }
@@ -2693,6 +2715,12 @@ impl FolderWorkspace {
         !self.pending_file_updates.is_empty()
     }
 
+    /// Test helper: the media viewer, to stand in for a real video.
+    #[cfg(test)]
+    pub fn media_viewer_mut(&mut self) -> &mut MediaViewerState {
+        &mut self.media_viewer
+    }
+
     /// State of the marker list (open row, color picker).
     pub fn markers(&self) -> &MarkersState {
         &self.markers
@@ -3007,6 +3035,162 @@ mod tests {
             FolderTagStore::get_last_viewed(test_dir.path()),
             "file_0.mp4"
         );
+    }
+
+    /// Issue #161: a clip left at 40 s and opened again looks up where it stopped, to continue
+    /// there once it is open; one never played has nothing to continue.
+    #[test]
+    fn a_clip_opened_again_continues_where_playback_stopped() {
+        use frename_core::AppStateStore;
+        use std::time::Duration;
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()), // file_0.mp4
+        });
+        flush_file_opened(&mut workspace);
+        assert_eq!(
+            workspace.media_viewer().video_resume_lookup(),
+            Some(None),
+            "never played"
+        );
+        workspace
+            .media_viewer_mut()
+            .pretend_video_shown_at(Duration::from_secs(40));
+
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        assert_eq!(
+            AppDatabase::new().get_playback_position(&test_dir.file_path("file_0.mp4")),
+            Some(Duration::from_secs(40))
+        );
+        // file_1 played for a moment only: nothing worth continuing in it.
+        workspace
+            .media_viewer_mut()
+            .pretend_video_shown_at(Duration::from_secs(1));
+
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        flush_file_opened(&mut workspace);
+        assert_eq!(
+            workspace.media_viewer().video_resume_lookup(),
+            Some(Some(Duration::from_secs(40)))
+        );
+        assert_eq!(
+            AppDatabase::new().get_playback_position(&test_dir.file_path("file_1.mp4")),
+            None
+        );
+    }
+
+    /// Issue #161: the open clip saved in place under a new name (a tag toggled, its save
+    /// waiting for the video to unload) reopens at the very moment it showed: no lookup, no
+    /// 2 s lead, no note, and the moment kept follows the rename.
+    #[test]
+    fn the_open_clip_saved_under_a_new_name_reopens_at_the_same_moment() {
+        use frename_core::AppStateStore;
+        use std::time::Duration;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        workspace
+            .media_viewer_mut()
+            .pretend_video_shown_at(Duration::from_secs(40));
+        let id = file_id_at(&workspace, 0);
+        let tagged = FileSnapshot::new(vec!["pick".to_string()], "file_0", ".mp4", "file_0.mp4");
+        workspace.inject_pending_rename(id, tagged);
+
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unload,
+        ));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+
+        let renamed = test_dir.file_path("pick.file_0.mp4");
+        assert_eq!(
+            workspace
+                .directory()
+                .and_then(|d| d.file_by_id(id))
+                .map(|f| f.file_path().to_path_buf()),
+            Some(renamed.clone()),
+            "saved under its new name"
+        );
+        assert_eq!(
+            workspace.media_viewer().video_resume_lookup(),
+            None,
+            "no lookup"
+        );
+        assert_eq!(
+            workspace.media_viewer().video_reopens_at(),
+            Some(Duration::from_secs(40))
+        );
+        assert_eq!(workspace.media_viewer().notice(), None);
+        assert_eq!(
+            AppDatabase::new().get_playback_position(&renamed),
+            Some(Duration::from_secs(40)),
+            "the kept moment followed the rename"
+        );
+    }
+
+    /// Issue #161: `Home` acts only on a video shown; with nothing shown it does nothing.
+    #[test]
+    fn home_acts_only_on_a_video_shown() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = FolderWorkspace::new();
+        assert_eq!(
+            workspace.update(Message::GoToStart).units(),
+            0,
+            "nothing shown"
+        );
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        assert_eq!(workspace.update(Message::GoToStart).units(), 1);
+    }
+
+    /// Issue #161 end to end through the workspace, on a real clip: a clip left at 10 s opens
+    /// at 8 s once its video has loaded, with the note; `Home` goes to the start.
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn a_clip_opens_where_playback_stopped_once_its_video_loads() {
+        use crate::features::media_viewer::{self, video};
+        use frename_core::AppStateStore;
+        use std::sync::{Arc, Mutex};
+        use std::time::Duration;
+        let test_dir = TestDirectory::new(1);
+        AppDatabase::new().set_playback_position(&test_dir.target_file(), Duration::from_secs(10));
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/folder/file_example_MP4_480_1_5MG.mp4");
+        let video = video::open_for_test(&fixture);
+        let generation = workspace.media_viewer().video_loads_started();
+        let _ = workspace.update(Message::MediaViewer(media_viewer::Message::Video(
+            video::Message::VideoLoaded {
+                video: Arc::new(Mutex::new(Some(video))),
+                rotation: None,
+                generation,
+            },
+        )));
+        assert_eq!(workspace.media_viewer().video_position_ms(), Some(8_000));
+        assert!(workspace.media_viewer().resume_note_shown());
+
+        let _ = workspace.update(Message::MediaViewer(media_viewer::Message::Video(
+            video::Message::GoToStart,
+        )));
+        assert_eq!(workspace.media_viewer().video_position_ms(), Some(0));
+        assert_eq!(workspace.media_viewer().notice(), None);
     }
 
     /// Helper: get the FileId of the file at the given directory index.
@@ -4150,6 +4334,31 @@ mod tests {
         assert_eq!(loads(&workspace), before + 3, "the redo reopens it once");
         assert!(workspace.pending_file_updates.is_empty());
         assert_eq!(degrees(), Ok(90));
+    }
+
+    /// Issue #161: `Home` taken by a text field goes to the start of the clip only while the
+    /// note says Home starts it over, and never while a marker's name or a file name is being
+    /// typed; otherwise the field keeps it.
+    #[test]
+    fn home_from_a_text_field_starts_the_clip_over_only_while_the_note_says_so() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        assert_eq!(
+            workspace.update(Message::GoToStartWhileTyping).units(),
+            0,
+            "no note: the field keeps Home"
+        );
+        workspace.media_viewer_mut().pretend_resume_note();
+        assert!(workspace.media_viewer().resume_note_shown());
+        // The comment box check: a widget operation, then the message.
+        assert_eq!(workspace.update(Message::GoToStartWhileTyping).units(), 1);
+        let _ = workspace.update(Message::Folder(folder::Message::StartRename(0)));
+        assert!(workspace.inline_rename.is_some(), "renaming by hand");
+        assert_eq!(
+            workspace.update(Message::GoToStartWhileTyping).units(),
+            0,
+            "a file name being typed keeps Home"
+        );
     }
 
     /// In batch mode the comment box is not shown, so `Ctrl+Alt+→` after typing in the file

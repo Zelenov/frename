@@ -1106,6 +1106,16 @@ left to right, with the widths §13.9 folds by:
   saved: the file is read-only or in use". It never pushes a button. When the free space is under
   120 (the pane is under about 916 with every group shown), the notice shows instead as a pill over
   the bottom-left of the picture (`bg.overlay`, radius 6, padding 4×8), with the same lifetime.
+  One notice is the app's own, not a confirmation: "Resumed at 12:34 · Home: start over" when a
+  clip opens where playback stopped last time (#161). It is always the pill over the picture,
+  whatever the free space (fullscreen too), and stays 6 s, long enough to act on; a click on it
+  (hand pointer) starts the clip over like `Home` does. The click is a shortcut: the key is in
+  the text. It belongs to its clip: opening another clip or closing this one takes it away (other
+  notices outlive that, #84). A newer notice within the 6 s replaces it like any other, and the
+  pill no longer starts anything; `Home` still goes to the start. While the note shows, `Home`
+  works from the tag and file searches too (the editor has usually just typed a tag), but not in
+  the comment box or a name being typed. `Home` does nothing while no video is shown, and a
+  file that is not a video opening lets the clip go after keeping where it was.
 - **Narrow pane:** what gives way and when is in §13.9. The **More** button (`ellipsis`) sits just
   before fullscreen; its menu opens upward, lists each moved control with its icon, name and key,
   and marks a latched one with a `check`.
