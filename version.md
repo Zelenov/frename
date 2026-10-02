@@ -1,7 +1,37 @@
-# 0.93
+# 0.99
 ## Fixed
 - Moving markers between the video and the comment no longer leaves two markers on one moment: a comment line for a moment that already has a marker renames it, and more lines for that moment join its text.
 - A clip that already has doubled markers is repaired by running either "Markers ⇄ comment" action on it; the result lists the clips where markers were merged. Names that differ are kept as `name — other name`, which reads back as a name and a comment after the next move.
+
+# 0.98
+## Fixed
+- In fullscreen, buttons no longer show tooltips over the picture: not on the controls bar, not on the ⋯ button, not in the marker list. Outside fullscreen nothing changes.
+
+# 0.97
+## Changed
+- Describe with AI: frames are chosen where the picture changes the most instead of a fixed interval, and a description's moments now cover only what stands out (a static or uniform clip can get none) instead of always tiling the whole clip, and a moment that only repeats the summary is left out.
+
+# 0.96
+## Added
+- Your unsaved work on the open clip (tags, comment, in/out points, markers) is saved to a recovery file a second after each change. After a crash, a killed program or a power cut, the next start applies it, opens that clip and says so ("frename closed unexpectedly. Restored your unsaved work on …").
+- A clip that changed in the meantime is never overwritten: the message says so and names the folder where a readable copy of your work is kept. Undo history is not restored.
+
+# 0.95
+## Fixed
+- The marker list and the subtitle list keep their scroll position when you switch fullscreen on or off (the lit marker or cue is brought into view if it would be hidden).
+
+# 0.94
+## Added
+- Undo (`Ctrl+Z`) and Redo (`Ctrl+Y`) also cover a rename by hand (double-click), the comment (what you type until the box loses the keys is one step), a marker's name (one step per row), and Sync up, Sync down and the lock.
+
+## Fixed
+- Two quick moves to other clips, before the video has let go of the first, are two undo steps, not one.
+- Dropping a tag chip on 🗑 can be undone.
+- `Shift+F2` on a marker another tool wrote without an id says that marker is read-only, not "No marker here".
+
+# 0.93
+## Fixed
+- In the batch window's action list and in Settings' navigation, the mouse cursor no longer drops to an arrow between two items.
 
 # 0.92
 ## Fixed

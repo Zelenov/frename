@@ -9,9 +9,10 @@ pub mod commands;
 
 pub use commands::{
     AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, NavigateFileCommand,
-    PasteTagsCommand, ReorderTagCommand, RotateVideoCommand, SaveTagCommand, SetMarkerColorCommand,
-    SetMarkerDurationCommand, SetMarkerSpanCommand, SetSegmentEndCommand, SetSegmentStartCommand,
-    StarTagCommand, ToggleTagCommand,
+    PasteTagsCommand, RenameFileCommand, ReorderTagCommand, RotateVideoCommand, SaveTagCommand,
+    SetCommentCommand, SetMarkerColorCommand, SetMarkerNameCommand, SetMarkerSpanCommand,
+    SetSegmentEndCommand, SetSegmentStartCommand, StarTagCommand, SyncTagOrderCommand,
+    ToggleTagCommand,
 };
 pub use context::UndoContext;
 pub use error::UndoError;

@@ -14,13 +14,15 @@ use super::view::{cue_offset, CUE_LIST_SCROLLABLE_ID};
 use super::Message;
 use crate::features::markers;
 use crate::features::video_controls::{self, VideoControlsState};
-use crate::ui::tokens::SPINNER_TICK;
+use crate::ui::tokens::{SPACE_XXS, SPINNER_TICK};
 use frename_core::{
     load_subtitles, AppDatabase, AppStateStore, FileTagger, Rotation, RotationError, Subtitles,
 };
 
 /// How long a note over the picture stays.
 const NOTICE_DURATION: Duration = Duration::from_secs(2);
+/// How long a note that must be read stays: the report of a crash and what was restored.
+const LONG_NOTICE_DURATION: Duration = Duration::from_secs(20);
 
 /// What the list over the right of the picture shows. One list at a time, so a windowed
 /// video is not covered twice. Kept across files, like volume.
@@ -88,6 +90,10 @@ pub struct VideoPlayerState {
     /// Cue the list last scrolled to; the list follows only when this changes, so a
     /// user scrolling it by hand is not fought on every tick.
     followed_cue: Option<usize>,
+    /// Where the subtitle list is scrolled to; put back when fullscreen rebuilds the list.
+    cue_scroll_y: f32,
+    /// Set when the list was just put back at this offset; see `CueListScrolled`.
+    cue_restore: crate::ui::scroll::ScrollRestore,
     /// A clicked range is playing: pause when playback reaches its end. Any seek or pause by
     /// the user forgets it.
     play_until: Option<RangePlay>,
@@ -132,6 +138,8 @@ impl Default for VideoPlayerState {
             notice_count: 0,
             position: Duration::ZERO,
             followed_cue: None,
+            cue_scroll_y: 0.0,
+            cue_restore: Default::default(),
             play_until: None,
             resume_at: None,
             rotation: None,
@@ -171,6 +179,18 @@ impl VideoPlayerState {
         self.rotation.as_ref()
     }
 
+    /// Scroll the subtitle list to `y`.
+    fn scroll_cue_list_to(y: f32) -> Task<Message> {
+        iced::widget::operation::scroll_to::<()>(
+            iced::widget::Id::new(CUE_LIST_SCROLLABLE_ID),
+            iced::widget::scrollable::AbsoluteOffset {
+                x: None,
+                y: Some(y),
+            },
+        )
+        .discard()
+    }
+
     /// How many loads have started (see `load_generation`), for tests of reopens.
     #[cfg(test)]
     pub fn loads_started(&self) -> u64 {
@@ -190,6 +210,8 @@ impl VideoPlayerState {
         self.subtitles = None;
         self.position = Duration::ZERO;
         self.followed_cue = None;
+        self.cue_scroll_y = 0.0;
+        self.cue_restore = Default::default();
         self.play_until = None;
         self.paused = paused;
         self.load_generation = self.load_generation.wrapping_add(1);
@@ -473,20 +495,45 @@ impl VideoPlayerState {
                 self.play_until = None;
                 self.seek_to(Duration::from_millis(ms), true)
             }
-            Message::ShowNotice(text) => {
-                self.notice_count += 1;
-                let number = self.notice_count;
-                self.notice = Some((text, number));
-                Task::future(async move {
-                    tokio::time::sleep(NOTICE_DURATION).await;
-                    Message::ClearNotice(number)
-                })
-            }
+            Message::ShowNotice(text) => self.show_notice(text, NOTICE_DURATION),
+            Message::ShowLongNotice(text) => self.show_notice(text, LONG_NOTICE_DURATION),
             Message::ClearNotice(number) => {
                 if self.notice.as_ref().is_some_and(|(_, n)| *n == number) {
                     self.notice = None;
                 }
                 Task::none()
+            }
+            Message::CueListScrolled(y, viewport) => {
+                self.cue_scroll_y = y;
+                if !self.cue_restore.report(y) {
+                    return Task::none();
+                }
+                // The list was just put back here: if the lit cue is out of the new viewport,
+                // bring it in, as the follow does.
+                let Some(subtitles) = self.subtitles.as_ref() else {
+                    return Task::none();
+                };
+                let Some(cue) = subtitles.last_started_index(self.display_position()) else {
+                    return Task::none();
+                };
+                let wanted = crate::ui::scroll::keep_row_in_view(
+                    y,
+                    viewport,
+                    cue_offset(subtitles, cue),
+                    cue_offset(subtitles, cue + 1) - SPACE_XXS,
+                    cue_offset(subtitles, cue.saturating_sub(1)),
+                );
+                if wanted == y {
+                    return Task::none();
+                }
+                Self::scroll_cue_list_to(wanted)
+            }
+            Message::RestoreCueScroll(y) => {
+                // Only a list on screen reports back; armed otherwise it would fire much later.
+                if self.show_cue_list() && self.subtitles.is_some() {
+                    self.cue_restore.arm(y);
+                }
+                Self::scroll_cue_list_to(y)
             }
             Message::SeekToCue(index) => {
                 let Some(cue) = self.subtitles.as_ref().and_then(|s| s.cues().get(index)) else {
@@ -565,6 +612,11 @@ impl VideoPlayerState {
     pub fn subtitles(&self) -> Option<&Subtitles> {
         self.subtitles.as_deref()
     }
+    /// Where the subtitle list is scrolled to.
+    pub fn cue_scroll_y(&self) -> f32 {
+        self.cue_scroll_y
+    }
+
     /// Whether the subtitle list is open.
     pub fn show_cue_list(&self) -> bool {
         self.overlay == Overlay::Subtitles
@@ -591,6 +643,17 @@ impl VideoPlayerState {
     /// Steps of the spinner clock since the load started.
     pub fn loading_ticks(&self) -> usize {
         self.loading_ticks
+    }
+
+    /// Show `text` over the picture for `duration`; a newer note replaces it.
+    fn show_notice(&mut self, text: String, duration: Duration) -> Task<Message> {
+        self.notice_count += 1;
+        let number = self.notice_count;
+        self.notice = Some((text, number));
+        Task::future(async move {
+            tokio::time::sleep(duration).await;
+            Message::ClearNotice(number)
+        })
     }
 
     /// The note to show over the picture, if any.
@@ -664,15 +727,7 @@ impl VideoPlayerState {
         self.followed_cue = cue;
         // One cue of context above the current one.
         let rows_above = cue.unwrap_or(0).saturating_sub(1);
-        let offset = iced::widget::scrollable::AbsoluteOffset {
-            x: None,
-            y: Some(cue_offset(subtitles, rows_above)),
-        };
-        iced::widget::operation::scroll_to::<()>(
-            iced::widget::Id::new(CUE_LIST_SCROLLABLE_ID),
-            offset,
-        )
-        .discard()
+        Self::scroll_cue_list_to(cue_offset(subtitles, rows_above))
     }
 
     fn capture_segment_start(&self) -> Task<Message> {
@@ -1246,5 +1301,15 @@ mod tests {
         assert_eq!(size(flagged), (height, width));
         assert_eq!(size(Rotation::UPRIGHT.turned(1)), (height, width));
         assert_eq!(size(Rotation::UPRIGHT.turned(2)), (width, height));
+    }
+
+    #[test]
+    fn the_subtitle_list_offset_is_kept_and_a_load_starts_it_over() {
+        let mut state = VideoPlayerState::default();
+        let _ = state.update(Message::CueListScrolled(80.0, 300.0));
+        assert_eq!(state.cue_scroll_y(), 80.0);
+        let _ = state.update(Message::RestoreCueScroll(80.0));
+        // Nothing is armed for a list that is not shown.
+        assert!(!state.cue_restore.report(80.0));
     }
 }

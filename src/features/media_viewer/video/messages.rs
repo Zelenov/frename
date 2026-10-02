@@ -68,6 +68,8 @@ pub enum Message {
     SeekExact(u64),
     /// Show a short note over the picture (e.g. `Frame saved`) for a moment.
     ShowNotice(String),
+    /// A note that must be read, not glanced at (what a crash left): it stays long.
+    ShowLongNotice(String),
     /// Hide the note with this number, unless a newer one replaced it (internal).
     ClearNotice(u64),
     /// Subtitle file next to `video_path` was read; `None` when there is none.
@@ -77,6 +79,10 @@ pub enum Message {
     },
     /// User picked a cue in the subtitle list: seek to its start.
     SeekToCue(usize),
+    /// The subtitle list scrolled: its offset from the top and its viewport's height.
+    CueListScrolled(f32, f32),
+    /// Put the subtitle list back at this offset (fullscreen went on or off).
+    RestoreCueScroll(f32),
     /// Show or hide the subtitle list over the picture.
     ToggleCueList,
     /// Autoplay setting changed: whether videos opened from now on start playing.

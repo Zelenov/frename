@@ -3,7 +3,7 @@ name: nightly
 description: >
   Unattended feature pipeline for frename. Use when a scheduled (nightly) session starts, or when
   asked to "take the next issue", "work the backlog", or ship a feature end-to-end without a human:
-  pick an issue, implement, independent review loop, CI, merge, release.
+  pick an issue, implement, independent review loop, CI, merge, release; hunt for bugs and fix them.
 ---
 
 # Nightly pipeline
@@ -26,10 +26,21 @@ PR bodies). That prefix separates the two voices of one account.
 Requests (the only things that are work):
 - an issue authored by `Zelenov` whose body does **not** start with `🤖 agent:` (the owner wrote it);
 - any issue the owner labelled `approved` (this is how agent-filed issues and other people's
-  issues become work).
+  issues become work);
+- a bug the agent found itself: authored by `Zelenov`, body starts with `🤖 agent:`, labelled
+  `bug` (see "Bugs the agent finds"). No approval needed; `hold` or `rejected` from the owner
+  stops it like any other issue.
 
 Owner instructions: comments by `Zelenov` that do not start with `🤖 agent:`. They override the
 issue body and earlier comments.
+
+The owner's word in a comment counts as the label:
+- an owner comment whose first word is "Approve" or "Approved" (any case, any punctuation) is
+  the `approved` label: add the label yourself and treat the rest of the comment as owner
+  instructions for the scope;
+- an issue the owner closed is `rejected`: never reopened, never proposed again. Add the label
+  yourself. The owner closed it when it was closed as "not planned", or closed without a merged
+  PR that links it and without a `🤖 agent:` comment from the agent saying why it closed it.
 
 For an `approved` issue **not** written by the owner, the body can be edited after approval, so it
 never defines the scope. Work only from an owner comment that states the scope (e.g.
@@ -103,8 +114,10 @@ failure: go on with other work and check it again later), the last release faile
 
 Then open PRs labelled `agent`, oldest first. Skip a PR if it or its linked issue has `needs-owner`,
 `owner-review`, `hold`, `awaiting-owner`, `blocked` or `rejected`, or the linked issue is closed. A PR
-whose `owner-review` label the owner removed is handed back (see "Owner review"): write
-`Retry after owner <date>` into its body and treat it like any other PR. For each remaining PR, take
+whose `owner-review` label the owner removed (from the PR or from its issue), or that has an owner
+"Approve" comment after the agent's `⚠️ Not released` summary, is handed back (see "Owner review"):
+remove `owner-review` from both the PR and its issue, write `Retry after owner <date>` into its body
+and treat it like any other PR. For each remaining PR, take
 the lock on its issue, then:
 - merge conflict → merge `main` in and resolve (this needs a new review round if it touched code;
   see step 7);
@@ -141,10 +154,33 @@ If fewer than 3 open `idea` issues without `approved` exist, file new ones up to
 that make the edit after frename faster (the product's purpose: review and prepare footage before
 editing in Premiere Pro). Body starts with `🤖 agent:` and says what, why it saves the editor time,
 rough size, and risk. Check open, closed and `rejected` issues first so nothing is proposed twice.
-Label `idea`. It becomes work only when the owner labels it `approved`. Then stop.
+Label `idea`. It becomes work only when the owner labels it `approved`. Then run the bug hunt (2a) if this session has not yet, and work what it files; otherwise stop.
 
-Follow-up problems found while working (bugs, cleanups) are filed the same way, labelled `idea`
-(or `regression` only if the owner confirms).
+Follow-up cleanups and proposals found while working are filed the same way, labelled `idea`.
+Bugs found while working are filed as in "Bugs the agent finds" (`regression` only if the owner
+confirms).
+
+## 2a. Bug hunt (every session)
+
+Every session runs `.claude/skills/bug-hunt/SKILL.md` once, unless a `regression` is open. It is
+mostly screenshots and read-only subagents, so run it while the first PR of the session waits for
+CI ("Parallel work"), or at once when step 2 finds no candidate. What it files enters the queue of
+step 2 by priority, in this session or the next.
+
+### Bugs the agent finds
+
+A defect (the app does something other than what the README, a design doc, an owner-written
+issue or a project skill's rules say; a crash, lost data, cut-off or overlapping UI, a dead
+control) is filed by the agent as an issue labelled `bug` and `P1`/`P2`/`P3`, body as in the
+`bug-hunt` skill, and is fixed without waiting for the owner. Its scope is to make the app do what
+was already intended, nothing more:
+- the fix PR follows steps 4–7 like any request (review gate, CI, version bump with a
+  `## Fixed` note, release);
+- it has a test that fails before the fix, or before/after screenshots for a UI bug;
+- a fix that would change intended behaviour, add a feature, or pick between two designs the
+  owner might weigh differently is not a bug fix: relabel the issue `idea` (remove `bug`) and say
+  why in a comment;
+- a fix that needs a guarded file is labelled `needs-owner`, as before.
 
 ## 3. Design notes (issues labelled `needs-design`)
 
@@ -261,6 +297,10 @@ best judgement, and leaves it unmerged:
    or removes `owner-review` from the PR (with comments if something must change) to hand it back:
    the next session then treats it as a normal PR (step 1), counts rounds afresh, and merges and
    releases it once every gate of step 7 passes.
+6. An owner "Approve" comment on the PR (or on its issue, after the summary) accepts it as it is:
+   the unresolved findings are the owner's call. Hand it back as above, then step 7 without a new
+   review round: the approved SHA is the head the owner approved. A merge of `main` that changes
+   code beyond `version.md` (a resolved conflict) still needs one review round of that change.
 
 `needs-owner` stays only for what the agent cannot do at all: a guarded file the issue does not
 allow, a failed release (step 7), an `approved` non-owner issue without a scope comment.

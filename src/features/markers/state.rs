@@ -40,6 +40,8 @@ pub struct MarkerEdit {
     pub guid: String,
     /// The name field's text and cursor.
     pub name: iced::widget::text_editor::Content,
+    /// The marker's name when the row opened, to record the editing as one undo step.
+    pub original_name: String,
 }
 
 #[derive(Debug, Default)]
@@ -54,6 +56,12 @@ pub struct MarkersState {
     followed: Option<usize>,
     /// The marker `F2` is held on; it grows with the playhead.
     recording: Option<Recording>,
+    /// Where the list is scrolled to (from the top). The list's own offset is lost when the
+    /// view builds it somewhere else in the tree (fullscreen on or off), so it is put back.
+    scroll_y: f32,
+    /// The list being put back after fullscreen; its end report carries the new viewport's
+    /// height, to see whether the lit marker is still shown.
+    restore: crate::ui::scroll::ScrollRestore,
 }
 
 impl MarkersState {
@@ -74,6 +82,7 @@ impl MarkersState {
         self.edit = Some(MarkerEdit {
             guid,
             name: content,
+            original_name: name.to_string(),
         });
         self.color_picker = None;
         self.last_added = None;
@@ -155,6 +164,22 @@ impl MarkersState {
     /// Record the row the list follows; returns whether it changed.
     pub fn follow(&mut self, row: Option<usize>) -> bool {
         std::mem::replace(&mut self.followed, row) != row
+    }
+
+    pub fn scroll_y(&self) -> f32 {
+        self.scroll_y
+    }
+
+    /// Record where the list is scrolled to; true when this is the report of a restore (see
+    /// [`Self::restored`]), which is then done.
+    pub fn set_scroll_y(&mut self, y: f32) -> bool {
+        self.scroll_y = y;
+        self.restore.report(y)
+    }
+
+    /// The list is being put back at `y`.
+    pub fn restored(&mut self, y: f32) {
+        self.restore.arm(y);
     }
 
     /// Start over for another file.

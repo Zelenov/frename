@@ -70,6 +70,14 @@ pub enum Message {
     CopyTags,
     /// Paste previously copied tags onto the current file (replace semantics).
     PasteTags,
+    /// A second passed: write the open clip's unsaved edits into the recovery journal, if they
+    /// changed (see `frename_core::recovery`).
+    JournalTick,
+    /// A journal write finished (what was written, or why not).
+    JournalWritten(
+        frename_core::FileId,
+        Option<(frename_core::recovery::Entry, Result<(), String>)>,
+    ),
     /// Undo the last undoable action (Ctrl+Z).
     Undo,
     /// Redo the last undone action (Ctrl+Y / Ctrl+Shift+Z).
@@ -78,6 +86,9 @@ pub enum Message {
     ScrollFolderListToSelected,
     /// Internal: update cached folder list scroll Y after programmatic scroll.
     FolderListScrollAdjusted(f32),
+    /// Fullscreen went on or off: put the marker list and the subtitle list back at the offsets
+    /// they had (the view built them anew).
+    RestoreListScrolls { markers_y: f32, cues_y: f32 },
     /// Toggle fullscreen mode for the media viewer (F5).
     ToggleMediaFullscreen,
     /// Escape pressed globally: exits fullscreen if active, otherwise clears the search bar filter.
