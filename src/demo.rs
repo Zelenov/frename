@@ -160,7 +160,12 @@ impl DemoRun {
 fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace::Message> {
     let video =
         |message| folder_workspace::Message::MediaViewer(media_viewer::Message::Video(message));
-    let mut steps = vec![video(video::Message::Seek(scenario.seek))];
+    // A clip opened where playback stopped is already there (#161): a seek would move it on.
+    let mut steps = if scenario.resume.is_some() {
+        Vec::new()
+    } else {
+        vec![video(video::Message::Seek(scenario.seek))]
+    };
     if scenario.subtitle_list {
         steps.push(video(video::Message::ToggleCueList));
     }

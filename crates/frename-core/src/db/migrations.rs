@@ -83,6 +83,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 18,
         sql: schema::M18_DROP_AI_LEDGER,
     },
+    Migration {
+        version: 19,
+        sql: schema::M19_PLAYBACK_POSITION,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
@@ -156,6 +160,7 @@ mod tests {
             "window_state",
             "video_settings",
             "app_settings",
+            "playback_position",
         ] {
             assert!(table_exists(&conn, table), "{table} must survive");
         }
@@ -166,7 +171,7 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 18);
+        assert_eq!(current_version(&conn).expect("version"), 19);
     }
 
     #[test]

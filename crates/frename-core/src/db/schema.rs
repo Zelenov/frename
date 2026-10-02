@@ -174,3 +174,15 @@ DROP INDEX IF EXISTS ai_spend_service_at;
 DROP TABLE IF EXISTS ai_spend;
 DROP TABLE IF EXISTS ai_top_up;
 ";
+
+/// Migration 19: where playback stopped in each clip (#161), by its folder and file name, and
+/// when that was saved (Unix milliseconds), so the oldest go first once there are too many.
+pub const M19_PLAYBACK_POSITION: &str = "
+CREATE TABLE IF NOT EXISTS playback_position (
+    folder TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    position_ms INTEGER NOT NULL,
+    saved_at_ms INTEGER NOT NULL,
+    PRIMARY KEY (folder, file_name)
+);
+";

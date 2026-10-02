@@ -128,8 +128,17 @@ pub fn view<'a>(
     ) {
         layers.push(side);
     }
-    if let Some(notice) = state.notice().filter(|_| !fold.notice_in_bar) {
-        layers.push(placeholder::floating_notice(notice));
+    // The note that says where the clip continued is always over the picture, and starts the
+    // clip over when clicked (#161).
+    let starts_over = state.notice_starts_over();
+    if let Some(notice) = state
+        .notice()
+        .filter(|_| starts_over || !fold.notice_in_bar)
+    {
+        layers.push(placeholder::floating_notice(
+            notice,
+            starts_over.then_some(Message::GoToStart),
+        ));
     }
     if state.more_open() && fold.has_more() {
         layers.push(more_popover(state, markers, fold));
@@ -304,7 +313,10 @@ fn controls_bar<'a>(
     }
     // The free space holds the notice when it is wide enough (otherwise it floats over the
     // picture).
-    let notice: Element<'a, Message> = match state.notice().filter(|_| fold.notice_in_bar) {
+    let notice: Element<'a, Message> = match state
+        .notice()
+        .filter(|_| fold.notice_in_bar && !state.notice_starts_over())
+    {
         Some(notice) => tooltip::tip_text(
             text::secondary(notice).wrapping(iced::widget::text::Wrapping::None),
             notice,

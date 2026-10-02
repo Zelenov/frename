@@ -274,6 +274,20 @@ fn main_window_event(
             };
             Some(Message::FolderWorkspace(step))
         }
+        // Home goes to the start of the clip. A text field that took it keeps it, except a
+        // search field while the note says Home starts the clip over: typing a tag is how the
+        // editor works, and the note's promise must hold then (#161).
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(keyboard::key::Named::Home),
+            modifiers,
+            ..
+        }) if modifiers.is_empty() => Some(Message::FolderWorkspace(
+            if matches!(status, event::Status::Ignored) {
+                folder_workspace::Message::GoToStart
+            } else {
+                folder_workspace::Message::GoToStartWhileTyping
+            },
+        )),
         // Escape: handled by FolderWorkspace (exits fullscreen or clears search filter).
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
             key: keyboard::Key::Named(keyboard::key::Named::Escape),
@@ -1202,6 +1216,30 @@ mod tests {
         assert!(matches!(
             arrow(Named::ArrowLeft, keyboard::Modifiers::empty(), idle),
             Some(W::TagPanel(_))
+        ));
+    }
+
+    #[test]
+    fn home_goes_to_the_start_and_a_text_field_s_home_asks_the_workspace() {
+        use folder_workspace::Message as W;
+        use keyboard::key::Named;
+        let none = keyboard::Modifiers::empty();
+        assert!(matches!(
+            arrow(Named::Home, none, event::Status::Ignored),
+            Some(W::GoToStart)
+        ));
+        assert!(matches!(
+            arrow(Named::Home, none, event::Status::Captured),
+            Some(W::GoToStartWhileTyping)
+        ));
+        // Shift+Home selects text in a field; it is not this key.
+        assert!(!matches!(
+            arrow(
+                Named::Home,
+                keyboard::Modifiers::SHIFT,
+                event::Status::Captured
+            ),
+            Some(W::GoToStartWhileTyping)
         ));
     }
 

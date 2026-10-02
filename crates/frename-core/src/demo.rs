@@ -25,6 +25,10 @@ pub struct DemoScenario {
     /// Where to pause the video, in seconds.
     #[serde(default)]
     pub seek: f32,
+    /// Where playback stopped in the open clip last time, in seconds (#161): it opens a little
+    /// before, with the note that says so, instead of seeking to `seek`.
+    #[serde(default)]
+    pub resume: Option<f32>,
     /// Window size in logical pixels: width, height.
     pub window: [u32; 2],
     /// Widths of the video panel and the file list panel.
@@ -255,6 +259,9 @@ pub fn seed(
         ..AppSettings::default()
     });
     store.set_last_folder_and_file(&FolderAndFile::new(folder, Some(file)));
+    if let Some(resume) = scenario.resume {
+        store.set_playback_position(file, std::time::Duration::from_secs_f32(resume.max(0.0)));
+    }
 }
 
 #[cfg(test)]
@@ -276,6 +283,7 @@ name = "pick.a.mp4"
     fn a_minimal_scenario_gets_defaults() {
         let scenario = DemoScenario::parse(MINIMAL).unwrap();
         assert_eq!(scenario.seek, 0.0);
+        assert_eq!(scenario.resume, None);
         assert!(!scenario.more);
         assert_eq!(scenario.files[0].comment, None);
         assert!(scenario.files[0].markers.is_empty());
@@ -410,6 +418,7 @@ markers = ["0:00.100 — Start — first frames"]
         window: Mutex<Option<WindowGeometry>>,
         settings: Mutex<Option<AppSettings>>,
         session: Mutex<Option<FolderAndFile>>,
+        playback: Mutex<Option<(std::path::PathBuf, std::time::Duration)>>,
     }
 
     impl AppStateStore for Recorder {
@@ -424,6 +433,9 @@ markers = ["0:00.100 — Start — first frames"]
         }
         fn set_app_settings(&self, settings: AppSettings) {
             *self.settings.lock().unwrap() = Some(settings);
+        }
+        fn set_playback_position(&self, clip: &Path, position: std::time::Duration) {
+            *self.playback.lock().unwrap() = Some((clip.to_path_buf(), position));
         }
     }
 
@@ -459,6 +471,33 @@ markers = ["0:00.100 — Start — first frames"]
         assert_eq!(
             store.get_last_session(),
             Some(FolderAndFile::new("/f", Some("/f/pick.a.mp4")))
+        );
+        assert_eq!(*store.playback.lock().unwrap(), None, "nothing to resume");
+    }
+
+    #[test]
+    fn a_scenario_can_open_its_clip_where_playback_stopped() {
+        let text = MINIMAL.replace(
+            "[[files]]",
+            "resume = 41.5
+[[files]]",
+        );
+        let scenario = DemoScenario::parse(&text).unwrap();
+        let store = Recorder::default();
+        seed(
+            &store,
+            &scenario,
+            Path::new("/f"),
+            Path::new("/f/pick.a.mp4"),
+            false,
+            "en",
+        );
+        assert_eq!(
+            *store.playback.lock().unwrap(),
+            Some((
+                Path::new("/f/pick.a.mp4").to_path_buf(),
+                std::time::Duration::from_millis(41_500)
+            ))
         );
     }
 }

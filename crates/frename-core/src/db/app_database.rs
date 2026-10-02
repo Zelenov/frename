@@ -38,6 +38,99 @@ fn decode_options(text: &str) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The key a clip's playback position is kept under: its folder ([`folder_key`]) and its file
+/// name, exactly.
+fn clip_key(clip: &Path) -> Option<(String, String)> {
+    let folder = folder_key(clip.parent()?);
+    let file_name = clip.file_name()?.to_string_lossy().to_string();
+    Some((folder, file_name))
+}
+
+/// A folder as playback positions are kept under it: without a trailing separator, and on
+/// Windows, where paths ignore case and take either slash, in lower case with backslashes, so
+/// one folder reached by two spellings (a dropped folder, the last session) is one folder.
+fn folder_key(folder: &Path) -> String {
+    let text = folder.to_string_lossy();
+    if cfg!(windows) {
+        text.replace('/', "\\")
+            .trim_end_matches('\\')
+            .to_lowercase()
+    } else {
+        text.trim_end_matches('/').to_string()
+    }
+}
+
+/// Now, in milliseconds since the Unix epoch.
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| {
+            i64::try_from(since.as_millis()).unwrap_or(i64::MAX)
+        })
+}
+
+/// Move the position kept under `from` to `to`, replacing what `to` had.
+fn move_position(
+    conn: &Connection,
+    from: &(String, String),
+    to: &(String, String),
+) -> Result<(), rusqlite::Error> {
+    let moved: Option<i64> = conn
+        .query_row(
+            "SELECT position_ms FROM playback_position WHERE folder = ?1 AND file_name = ?2",
+            rusqlite::params![from.0, from.1],
+            |row| row.get(0),
+        )
+        .ok();
+    if moved.is_none() {
+        return Ok(());
+    }
+    conn.execute(
+        "DELETE FROM playback_position WHERE folder = ?1 AND file_name = ?2",
+        rusqlite::params![to.0, to.1],
+    )?;
+    conn.execute(
+        "UPDATE playback_position SET folder = ?3, file_name = ?4
+         WHERE folder = ?1 AND file_name = ?2",
+        rusqlite::params![from.0, from.1, to.0, to.1],
+    )?;
+    Ok(())
+}
+
+/// Apply [`crate::playback::tidy`] to `folder`'s positions, then drop the oldest beyond
+/// [`crate::playback::MOST_KEPT`].
+fn tidy_positions(
+    conn: &Connection,
+    folder: &str,
+    names: &[String],
+) -> Result<(), rusqlite::Error> {
+    let remembered: Vec<String> = conn
+        .prepare("SELECT file_name FROM playback_position WHERE folder = ?1")?
+        .query_map([folder], |row| row.get(0))?
+        .collect::<Result<_, _>>()?;
+    for (name, change) in crate::playback::tidy(&remembered, names, cfg!(windows)) {
+        match change {
+            crate::playback::Tidy::Follow(renamed) => move_position(
+                conn,
+                &(folder.to_string(), name),
+                &(folder.to_string(), renamed),
+            )?,
+            crate::playback::Tidy::Forget => {
+                conn.execute(
+                    "DELETE FROM playback_position WHERE folder = ?1 AND file_name = ?2",
+                    rusqlite::params![folder, name],
+                )?;
+            }
+        }
+    }
+    conn.execute(
+        "DELETE FROM playback_position WHERE rowid NOT IN
+             (SELECT rowid FROM playback_position ORDER BY saved_at_ms DESC LIMIT ?1)",
+        [i64::try_from(crate::playback::MOST_KEPT).unwrap_or(i64::MAX)],
+    )?;
+    Ok(())
+}
+
 /// Open connections, keyed by database path.
 ///
 /// Opening a SQLite file costs ~2.5 ms on Windows (file open + journal setup), which is paid on
@@ -330,6 +423,73 @@ impl AppStateStore for AppDatabase {
         }
     }
 
+    fn get_playback_position(&self, clip: &Path) -> Option<Duration> {
+        let (folder, file_name) = clip_key(clip)?;
+        let conn = self.conn().ok()?;
+        let conn = lock_connection(&conn);
+        conn.query_row(
+            "SELECT position_ms FROM playback_position WHERE folder = ?1 AND file_name = ?2",
+            rusqlite::params![folder, file_name],
+            |row| row.get::<_, i64>(0),
+        )
+        .ok()
+        .map(|ms| Duration::from_millis(u64::try_from(ms).unwrap_or(0)))
+    }
+
+    fn set_playback_position(&self, clip: &Path, position: Duration) {
+        let Some((folder, file_name)) = clip_key(clip) else {
+            return;
+        };
+        let Ok(conn) = self.conn() else { return };
+        let conn = lock_connection(&conn);
+        let result = if crate::playback::worth_remembering(position) {
+            conn.execute(
+                "INSERT INTO playback_position (folder, file_name, position_ms, saved_at_ms)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(folder, file_name) DO UPDATE SET
+                     position_ms = excluded.position_ms,
+                     saved_at_ms = excluded.saved_at_ms",
+                rusqlite::params![
+                    folder,
+                    file_name,
+                    i64::try_from(position.as_millis()).unwrap_or(i64::MAX),
+                    now_ms(),
+                ],
+            )
+        } else {
+            conn.execute(
+                "DELETE FROM playback_position WHERE folder = ?1 AND file_name = ?2",
+                rusqlite::params![folder, file_name],
+            )
+        };
+        if let Err(e) = result {
+            log::warn!("set_playback_position failed: {e}");
+        }
+    }
+
+    fn move_playback_position(&self, from: &Path, to: &Path) {
+        let (Some(from), Some(to)) = (clip_key(from), clip_key(to)) else {
+            return;
+        };
+        if from == to {
+            return;
+        }
+        let Ok(conn) = self.conn() else { return };
+        let conn = lock_connection(&conn);
+        if let Err(e) = move_position(&conn, &from, &to) {
+            log::warn!("move_playback_position failed: {e}");
+        }
+    }
+
+    fn tidy_playback_positions(&self, folder: &Path, names: &[String]) {
+        let folder = folder_key(folder);
+        let Ok(conn) = self.conn() else { return };
+        let conn = lock_connection(&conn);
+        if let Err(e) = tidy_positions(&conn, &folder, names) {
+            log::warn!("tidy_playback_positions failed: {e}");
+        }
+    }
+
     fn set_window_state(&self, geometry: WindowGeometry) {
         if let Ok(conn) = self.conn() {
             let conn = lock_connection(&conn);
@@ -429,6 +589,119 @@ mod tests {
         settings.ui_language = "ru".to_string();
         db.set_app_settings(settings.clone());
         assert_eq!(db.get_app_settings(), Some(settings));
+    }
+
+    /// A migrated database of its own, for one test.
+    fn database(name: &str) -> AppDatabase {
+        let path = std::env::temp_dir().join(format!("frename-{name}-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let db = AppDatabase::with_path(&path);
+        db.initialize().expect("migrate");
+        db
+    }
+
+    fn secs(secs: u64) -> Duration {
+        Duration::from_secs(secs)
+    }
+
+    #[test]
+    fn a_playback_position_round_trips_and_survives_a_restart() {
+        let db = database("playback-round-trip");
+        let clip = Path::new("/footage/day1/MVI_0410.mp4");
+        assert_eq!(db.get_playback_position(clip), None, "never saved");
+        db.set_playback_position(clip, Duration::from_millis(40_250));
+        assert_eq!(
+            db.get_playback_position(clip),
+            Some(Duration::from_millis(40_250))
+        );
+        // A later save replaces it.
+        db.set_playback_position(clip, secs(75));
+        assert_eq!(db.get_playback_position(clip), Some(secs(75)));
+        // Another clip of the same name elsewhere is another clip.
+        assert_eq!(
+            db.get_playback_position(Path::new("/footage/day2/MVI_0410.mp4")),
+            None
+        );
+        // What a new start of frename reads.
+        let reopened = AppDatabase::with_path(&db.path);
+        reopened.initialize().expect("migrate again");
+        assert_eq!(reopened.get_playback_position(clip), Some(secs(75)));
+    }
+
+    #[test]
+    fn a_position_near_the_start_forgets_the_clip() {
+        let db = database("playback-near-start");
+        let clip = Path::new("/footage/MVI_0410.mp4");
+        db.set_playback_position(clip, secs(40));
+        db.set_playback_position(clip, secs(1));
+        assert_eq!(db.get_playback_position(clip), None);
+    }
+
+    #[test]
+    fn a_rename_carries_the_position_along() {
+        let db = database("playback-rename");
+        let before = Path::new("/footage/MVI_0410.mp4");
+        let after = Path::new("/footage/pick.MVI_0410.mp4");
+        db.set_playback_position(before, secs(40));
+        // A stale position under the new name is replaced, not kept.
+        db.set_playback_position(after, secs(90));
+        db.move_playback_position(before, after);
+        assert_eq!(db.get_playback_position(before), None);
+        assert_eq!(db.get_playback_position(after), Some(secs(40)));
+        // Moving a clip with no position leaves the other one alone.
+        db.move_playback_position(Path::new("/footage/other.mp4"), after);
+        assert_eq!(db.get_playback_position(after), Some(secs(40)));
+    }
+
+    #[test]
+    fn a_folder_spelled_another_way_is_the_same_folder() {
+        let db = database("playback-folder-key");
+        db.set_playback_position(Path::new("/footage/day1/clip.mp4"), secs(40));
+        assert_eq!(
+            db.get_playback_position(Path::new("/footage/day1//clip.mp4")),
+            Some(secs(40))
+        );
+        if cfg!(windows) {
+            db.set_playback_position(Path::new(r"C:\Footage\Day1\clip.mp4"), secs(50));
+            assert_eq!(
+                db.get_playback_position(Path::new("c:/footage/day1/clip.mp4")),
+                Some(secs(50))
+            );
+            assert_eq!(
+                db.get_playback_position(Path::new(r"C:\Footage\Day1\CLIP.mp4")),
+                None,
+                "the file name is kept exactly"
+            );
+        }
+    }
+
+    #[test]
+    fn listing_a_folder_forgets_gone_files_and_follows_outside_renames() {
+        let db = database("playback-tidy");
+        let folder = Path::new("/footage");
+        db.set_playback_position(&folder.join("kept.mp4"), secs(10));
+        db.set_playback_position(&folder.join("gone.mp4"), secs(20));
+        db.set_playback_position(&folder.join("MVI_0410.mp4"), secs(30));
+        let elsewhere = Path::new("/other/gone.mp4");
+        db.set_playback_position(elsewhere, secs(40));
+
+        let listed = ["kept.mp4", "skip.MVI_0410.mp4", "new.mp4"].map(str::to_string);
+        db.tidy_playback_positions(folder, &listed);
+
+        assert_eq!(
+            db.get_playback_position(&folder.join("kept.mp4")),
+            Some(secs(10))
+        );
+        assert_eq!(db.get_playback_position(&folder.join("gone.mp4")), None);
+        assert_eq!(
+            db.get_playback_position(&folder.join("skip.MVI_0410.mp4")),
+            Some(secs(30))
+        );
+        assert_eq!(
+            db.get_playback_position(elsewhere),
+            Some(secs(40)),
+            "another folder is left alone"
+        );
     }
 
     #[test]
