@@ -129,11 +129,6 @@ impl<M: Clone> IconButton<M> {
         self
     }
 
-    /// Whether hovering the button shows a tooltip.
-    pub fn has_tip(&self) -> bool {
-        self.tip.is_some()
-    }
-
     fn kind(&self) -> ButtonKind {
         if self.overlay {
             ButtonKind::OverlayIcon

@@ -83,27 +83,23 @@ impl<M: Clone> Command<M> {
         }
     }
 
-    /// The bare icon button, with its tooltip above it.
-    pub fn tipped(&self) -> IconButton<M> {
-        let base = match self.face {
-            Face::Icon(glyph) => IconButton::new(glyph),
-            Face::Glyph(word) => IconButton::glyph(word),
-        };
-        let mut tip = Tip::new(self.label.clone()).keys(self.keys);
-        if let Some(detail) = &self.detail {
-            tip = tip.detail(detail.clone());
-        }
-        base.latched(self.latched)
-            .held(self.held)
-            .tip(tip, Position::Top)
-    }
-
     /// The icon button in the bar, with its tooltip above it.
     pub fn button<'a>(self) -> Element<'a, M>
     where
         M: 'a,
     {
-        let base = self.tipped();
+        let base = match self.face {
+            Face::Icon(glyph) => IconButton::new(glyph),
+            Face::Glyph(word) => IconButton::glyph(word),
+        };
+        let mut tip = Tip::new(self.label).keys(self.keys);
+        if let Some(detail) = self.detail {
+            tip = tip.detail(detail);
+        }
+        let base = base
+            .latched(self.latched)
+            .held(self.held)
+            .tip(tip, Position::Top);
         let pressable: Element<'a, M> = match (self.hold, self.on_press.is_some()) {
             (Some((down, up)), true) => base.on_hold(down, up).into(),
             _ => base.on_press_maybe(self.on_press).into(),

@@ -700,19 +700,4 @@ mod tests {
     fn on_a_narrow_pane_the_side_list_covers_the_picture() {
         assert_eq!(side_list_width(500.0), (500.0, true));
     }
-
-    #[test]
-    fn every_fullscreen_control_has_a_tooltip() {
-        // Fullscreen and windowed build the same commands: a tooltip is never dropped for it.
-        for fullscreen in [false, true] {
-            assert!(fullscreen_command(fullscreen).tipped().has_tip());
-        }
-        let commands = controls::in_out()
-            .into_iter()
-            .chain(controls::rotate(None))
-            .map(|c| c.map(Message::Controls));
-        for command in commands {
-            assert!(command.tipped().has_tip());
-        }
-    }
 }

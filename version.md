@@ -1,6 +1,6 @@
 # 0.112
 ## Fixed
-- Fullscreen: the buttons show their tooltips again, above the picture (they had been switched off there).
+- Fullscreen: the buttons show their tooltips again, above the picture (they had been switched off there). A tooltip goes with the controls when they fade out.
 
 # 0.111
 ## Added
