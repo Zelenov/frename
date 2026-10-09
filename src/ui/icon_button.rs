@@ -35,7 +35,6 @@ pub struct IconButton<M> {
     on_press: Option<M>,
     hold: Option<(M, M)>,
     tip: Option<(Tip, Position)>,
-    quiet: bool,
 }
 
 impl<M: Clone> IconButton<M> {
@@ -62,7 +61,6 @@ impl<M: Clone> IconButton<M> {
             on_press: None,
             hold: None,
             tip: None,
-            quiet: false,
         }
     }
 
@@ -128,12 +126,6 @@ impl<M: Clone> IconButton<M> {
 
     pub fn tip(mut self, tip: impl Into<Tip>, position: Position) -> Self {
         self.tip = Some((tip.into(), position));
-        self
-    }
-
-    /// No tooltip, whatever `tip` set: in fullscreen, where nothing pops up over the picture.
-    pub fn quiet(mut self, quiet: bool) -> Self {
-        self.quiet = quiet;
         self
     }
 
@@ -207,27 +199,9 @@ impl<'a, M: Clone + 'a> From<IconButton<M>> for Element<'a, M> {
         } else {
             pressable.into()
         };
-        match shown(b.tip, b.quiet) {
+        match b.tip {
             Some((tip, position)) => tooltip::tip(body, tip, position),
             None => body,
         }
-    }
-}
-
-/// The tooltip a button shows: none when quiet.
-fn shown(tip: Option<(Tip, Position)>, quiet: bool) -> Option<(Tip, Position)> {
-    tip.filter(|_| !quiet)
-}
-
-#[cfg(test)]
-mod quiet_tests {
-    use super::*;
-
-    #[test]
-    fn a_quiet_button_has_no_tooltip() {
-        let tip = || Some((Tip::new("Play"), Position::Top));
-        assert!(shown(tip(), true).is_none());
-        assert!(shown(tip(), false).is_some());
-        assert!(shown(None, false).is_none());
     }
 }

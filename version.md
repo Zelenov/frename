@@ -1,3 +1,7 @@
+# 0.112
+## Fixed
+- Fullscreen: the buttons show their tooltips again, above the picture (they had been switched off there). A tooltip goes with the controls when they fade out.
+
 # 0.111
 ## Added
 - frename is available as a Microsoft Store package (Windows). It updates through the Store, and on its first start it copies the settings of an installed frename.
