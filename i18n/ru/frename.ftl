@@ -633,6 +633,7 @@ file-name-panel-apply-suggested-in-out = Поставить вход и выхо
 
 updates-check = Проверить обновления
 updates-not-installed = Обновления работают только в установленной версии
+updates-from-store = Обновления приходят из Microsoft Store
 updates-checking = Проверка…
 updates-downloading-named = Загрузка { $version }… { $percent }%
 updates-downloading = Загрузка… { $percent }%

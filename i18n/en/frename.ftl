@@ -581,6 +581,7 @@ file-name-panel-apply-suggested-in-out = Set In and Out to what the AI suggests
 
 updates-check = Check for updates
 updates-not-installed = Updates work in the installed version
+updates-from-store = Updates come from the Microsoft Store
 updates-checking = Checking…
 updates-downloading-named = Downloading { $version }… { $percent }%
 updates-downloading = Downloading… { $percent }%

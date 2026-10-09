@@ -1,7 +1,6 @@
 //! UI for the settings window (`docs/design/design-system.md` §14): a list of pages on the left,
 //! the page on the right, one option per row, and a button bar with Close.
 
-use clipscribe::{Model, MODELS};
 use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::ai::{MomentsMode, SummaryLanguage};
 use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage};
@@ -255,8 +254,8 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
                 fl!("settings-ai-model-label"),
                 layout::controls([
                     form::dropdown(
-                        MODELS,
-                        Some(Model::from_id(&settings.ai_model)),
+                        frename_core::ai::models(),
+                        Some(frename_core::ai::model_from_id(&settings.ai_model)),
                         Message::SetAiModel,
                     )
                     .width(FIELD_WIDTH_L)
@@ -385,8 +384,9 @@ fn updates_page(state: &SettingsState, batch_running: bool) -> Element<'_, Messa
         fl!("settings-version"),
         updates::view::view(state.updates(), batch_running).map(Message::Updates),
     )];
-    // Only a package keeps its settings away from the exe; elsewhere they are next to it.
-    if state.updates().installed() {
+    // Only a package or the Store build keeps its settings away from the exe; elsewhere they are
+    // next to it.
+    if state.updates().installed() || state.updates().is_store_build() {
         rows.push(layout::setting_row(
             fl!("settings-old-title"),
             old_settings_import(state.old_settings_import()),
