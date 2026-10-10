@@ -497,6 +497,7 @@ impl VideoPlayerState {
         self.cue_restore = Default::default();
         self.play_until = None;
         self.frame_step = None;
+        self.stepped_onto = None;
         self.reversed = false;
         self.at_end = false;
         self.remembered_at = None;
@@ -899,6 +900,7 @@ impl VideoPlayerState {
                 self.load_generation = self.load_generation.wrapping_add(1);
                 self.resume_at = None;
                 self.frame_step = None;
+                self.stepped_onto = None;
                 self.current_video = None;
                 self.current_path = None;
                 self.subtitles = None;
@@ -1813,6 +1815,28 @@ mod tests {
         assert!(player.loading, "a stale load does not end the latest one");
         assert!(!player.load_failed);
         assert_eq!(player.resume_at, Some(Duration::from_secs(42)));
+    }
+
+    /// Issue #200: the frame a step landed on belongs to its clip. Left over, the first step
+    /// back in the next clip could mistake a frame for it and not change the picture.
+    #[test]
+    fn a_clip_loading_or_unloading_forgets_the_frame_stepped_onto() {
+        let frame = ShownFrame {
+            start: Duration::from_millis(40),
+            duration: Some(Duration::from_millis(40)),
+            start_exact: true,
+            reversed: false,
+        };
+        let mut player = VideoPlayerState {
+            stepped_onto: Some(frame),
+            ..VideoPlayerState::default()
+        };
+        let _ = player.open(PathBuf::from("next.mp4"), true);
+        assert_eq!(player.stepped_onto, None, "a load");
+
+        player.stepped_onto = Some(frame);
+        let _ = player.update(Message::Unload);
+        assert_eq!(player.stepped_onto, None, "an unload");
     }
 
     /// Issue #91: `Unload` while a load is still opening the file on a blocking thread must
