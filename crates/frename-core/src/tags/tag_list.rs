@@ -1137,6 +1137,19 @@ mod tests {
     }
 
     #[test]
+    fn an_unsaved_tag_goes_back_ahead_of_the_stored_ones_after_unsave() {
+        let mut list = list_with_unsaved_zork();
+        let id = list
+            .insert_new_tag("Tail", Position::Last)
+            .expect("a new tag");
+        list.save_tag(id).unwrap();
+        assert_unsaved_first(&list, "saved");
+
+        list.unsave_tag(id).unwrap();
+        assert_unsaved_first(&list, "unsaved (undo)");
+    }
+
+    #[test]
     fn test_tag_creation() {
         let id = Uuid::new_v4();
         let tag = Tag::with_id(TagId(id), "Action", 0, true);
