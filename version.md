@@ -1,3 +1,7 @@
+# 0.132
+## Fixed
+- Closing frename while a batch job runs no longer drops the tags, comment and in/out you just set on the open clip.
+
 # 0.129
 ## Fixed
 - Closing the Settings window while the main window is closing no longer stops frename from quitting on the first close, and closing Settings no longer stops a running batch.

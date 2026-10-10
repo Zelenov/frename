@@ -815,19 +815,25 @@ impl FrenameApp {
                     return window::close(id);
                 }
                 crate::crash_guard::mark_closing();
-                // A batch job may be writing a file: stop it after that file, then close.
-                if self.folder_workspace.is_batch_running() {
-                    self.pending_close = Some(id);
-                    return Task::done(Message::FolderWorkspace(folder_workspace::Message::Batch(
-                        crate::features::batch::Message::Cancel,
-                    )));
-                }
                 // Save the open file's tags, comment and in/out before closing: otherwise they
-                // are lost silently (issue #21).
+                // are lost silently (issue #21). Also while a batch job runs (issue #251). That
+                // is safe: the job closes the open file when it starts, so once it runs there is
+                // nothing to save; while it still waits for the video to unload, the save only
+                // queues, and the job's start applies it before its first file.
                 let save = self
                     .folder_workspace
                     .flush_open_file()
                     .map(Message::FolderWorkspace);
+                // A batch job may be writing a file: stop it after that file, then close.
+                if self.folder_workspace.is_batch_running() {
+                    self.pending_close = Some(id);
+                    return Task::batch([
+                        save,
+                        Task::done(Message::FolderWorkspace(folder_workspace::Message::Batch(
+                            crate::features::batch::Message::Cancel,
+                        ))),
+                    ]);
+                }
                 if !self.folder_workspace.needs_media_unload() {
                     return Task::batch([save, window::close(id)]);
                 }
@@ -1226,6 +1232,94 @@ mod tests {
         // Once unloaded, a close needs no waiting at all.
         let _ = app.update(Message::CloseRequested(main));
         assert_eq!(app.pending_close, None);
+    }
+
+    /// Issue #251: closing while a batch job waits for the playing video to unload used to
+    /// return before the open file's pending edits were captured for save.
+    #[test]
+    fn closing_the_main_window_with_a_batch_running_still_saves_the_open_files_edits() {
+        use crate::features::{batch, tag_panel};
+        use frename_core::{AppDatabase, File, Initializable, LoggingAppStateStore};
+
+        let path = std::env::temp_dir().join(format!("frename-test-{}-251", std::process::id()));
+        std::fs::create_dir_all(&path).expect("create test folder");
+        let db = AppDatabase::with_path(path.join("app.db"));
+        let store = LoggingAppStateStore::new(db.clone());
+        store.initialize().expect("migrate");
+        let files: Vec<File> = (0..2)
+            .map(|i| {
+                File::from_path(
+                    path.join(format!("file_{i}.mp4")),
+                    std::time::SystemTime::UNIX_EPOCH,
+                )
+            })
+            .collect();
+        let directory = folder_workspace::Directory::with_files(&path, files, store);
+
+        let main = window::Id::unique();
+        let mut app = FrenameApp::new(main, None);
+        let send = |app: &mut FrenameApp, msg: folder_workspace::Message| {
+            let _ = app.update(Message::FolderWorkspace(msg));
+        };
+        send(
+            &mut app,
+            folder_workspace::Message::FolderLoaded {
+                directory: directory.clone(),
+                target_file: Some(path.join("file_0.mp4")),
+            },
+        );
+        let open = directory.files_in_order().next().expect("a file").clone();
+        send(&mut app, folder_workspace::Message::FileOpened(open));
+
+        let tag_list = app.folder_workspace.file_workspace().tag_list();
+        let pick = tag_list
+            .filtered_display_tag_ids()
+            .iter()
+            .copied()
+            .find(|id| tag_list.get_tag(*id).is_some_and(|t| t.tag() == "pick"))
+            .expect("pick is a built-in tag");
+        send(
+            &mut app,
+            folder_workspace::Message::TagPanel(tag_panel::Message::ToggleTag(pick)),
+        );
+
+        // The job is started while the video still plays: it waits for the unload, and the open
+        // file is still open.
+        app.folder_workspace
+            .media_viewer_mut()
+            .pretend_video_loading(true);
+        let ids: Vec<_> = directory.files_in_order().map(|f| f.id()).collect();
+        send(
+            &mut app,
+            folder_workspace::Message::Batch(batch::Message::SetActive(true)),
+        );
+        send(
+            &mut app,
+            folder_workspace::Message::Batch(batch::Message::CheckAll(ids)),
+        );
+        send(
+            &mut app,
+            folder_workspace::Message::Batch(batch::Message::Run),
+        );
+        assert!(app.folder_workspace.is_batch_running());
+
+        let _ = app.update(Message::CloseRequested(main));
+        assert_eq!(app.pending_close, Some(main), "waits for the batch");
+        assert!(
+            app.folder_workspace.has_pending_rename(),
+            "the open file's edit must be captured for save when closing during a batch"
+        );
+
+        // The unload lets the job start; it saves the edit first.
+        unload(&mut app);
+        let saved = app
+            .folder_workspace
+            .directory()
+            .and_then(|d| d.files_in_order().next())
+            .is_some_and(|f| f.snapshot().has_tag("pick"));
+        assert!(saved, "the tag toggled just before closing must be saved");
+        db.close();
+        let _ = std::fs::remove_dir_all(&path);
     }
 
     fn ctrl_key(
