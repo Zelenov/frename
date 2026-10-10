@@ -1,3 +1,7 @@
+# 0.134
+## Fixed
+- After typing in the tag search and toggling a tag with Shift+Space, the keys (Ctrl+C, Delete, the arrows, Space) go to the app again instead of the search box.
+
 # 0.131
 ## Fixed
 - Undo and redo of a rename no longer replace another clip that has taken the old name; the step is refused with a note and stays in the history.

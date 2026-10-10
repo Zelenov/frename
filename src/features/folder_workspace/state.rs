@@ -2226,7 +2226,17 @@ impl FolderWorkspace {
                         self.tag_panel.set_selected(Some(id));
                     }
                 }
-                Task::none()
+                // The search bar kept the keys after typing: Ctrl+C, Delete, the arrows and
+                // Space would go to its text. Let go of them (typing a letter takes them back);
+                // the comment box is left alone, it is typed in on purpose.
+                if self.file_workspace.comment_focused() {
+                    Task::none()
+                } else {
+                    iced::advanced::widget::operate(
+                        iced::advanced::widget::operation::focusable::unfocus::<()>(),
+                    )
+                    .map(|()| Message::Noop)
+                }
             }
             tag_panel::Message::DeleteTag(id) => {
                 // Find the deleted tag's position in the filtered list before removal.
@@ -7073,6 +7083,20 @@ mod tests {
         send_marker(&mut workspace, type_name("name"), 1_000);
         let _ = workspace.update(Message::Undo);
         assert_eq!(marker_names(&workspace), [(1_000, String::new())]);
+    }
+
+    /// Issue #32: after Shift+Space toggled a tag the search bar kept the keys, so Ctrl+C went
+    /// to its text. The toggle lets go of the focus, except from the comment box.
+    #[test]
+    fn shift_space_gives_the_keys_back_from_the_search_bar() {
+        use crate::features::tag_panel;
+        let (_test_dir, mut workspace) = open_folder(1);
+        let toggle = Message::TagPanel(tag_panel::Message::ToggleSelectedTag);
+        let task = workspace.update(toggle.clone());
+        assert_eq!(task.units(), 1, "the focus is released");
+        workspace.file_workspace.set_comment_focused(true);
+        let task = workspace.update(toggle);
+        assert_eq!(task.units(), 0, "the comment box keeps its focus");
     }
 
     #[test]
