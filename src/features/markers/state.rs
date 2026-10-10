@@ -1,6 +1,7 @@
 //! State of the marker list that is not the markers themselves: the row being edited, the
 //! open color picker, and what `F2` did last.
 
+use crate::ui::tokens::MARKER_ROW_HEIGHT;
 use frename_core::Marker;
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -69,6 +70,9 @@ pub struct MarkersState {
     scroll_y: f32,
     /// The list's viewport height as last reported; 0 until it is.
     viewport: f32,
+    /// Each row's height as laid out, by index; the list is scrolled to a row by them. Kept when
+    /// another file is opened: a row's widget reports only when its height changes.
+    row_heights: Vec<f32>,
     /// The list being put back after fullscreen; its end report carries the new viewport's
     /// height, to see whether the lit marker is still shown.
     restore: crate::ui::scroll::ScrollRestore,
@@ -201,6 +205,19 @@ impl MarkersState {
     /// The list's viewport height as last reported by a scroll; 0 when none was yet.
     pub fn viewport(&self) -> f32 {
         self.viewport
+    }
+
+    /// The heights the rows reported, by index (a row not reported yet is missing).
+    pub fn row_heights(&self) -> &[f32] {
+        &self.row_heights
+    }
+
+    /// Row `index` was laid out `height` tall.
+    pub fn set_row_height(&mut self, index: usize, height: f32) {
+        if self.row_heights.len() <= index {
+            self.row_heights.resize(index + 1, MARKER_ROW_HEIGHT);
+        }
+        self.row_heights[index] = height;
     }
 
     pub fn set_viewport(&mut self, viewport: f32) {
@@ -367,8 +384,10 @@ impl MarkersState {
     pub fn reset(&mut self) {
         self.stop_all_describing();
         let next_request = self.next_request;
+        let row_heights = std::mem::take(&mut self.row_heights);
         *self = Self {
             next_request,
+            row_heights,
             ..Self::default()
         };
     }
@@ -484,6 +503,19 @@ mod tests {
     }
 
     /// Issue #171: a click on a marker jumps there without scrolling the list.
+    #[test]
+    fn reported_row_heights_are_kept_by_index_and_survive_another_file() {
+        let mut state = MarkersState::default();
+        state.set_row_height(2, 90.0);
+        assert_eq!(
+            state.row_heights(),
+            [MARKER_ROW_HEIGHT, MARKER_ROW_HEIGHT, 90.0]
+        );
+        state.set_row_height(0, 40.0);
+        state.reset();
+        assert_eq!(state.row_heights()[0], 40.0);
+    }
+
     #[test]
     fn a_click_on_a_marker_does_not_scroll_the_list() {
         let mut state = MarkersState::default();

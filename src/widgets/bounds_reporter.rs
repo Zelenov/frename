@@ -16,13 +16,21 @@ struct State {
 /// Fill-sized widget that reports its layout bounds whenever they change (on any event).
 pub struct BoundsReporter<'a, Message> {
     on_bounds: Box<dyn Fn(Rectangle) -> Message + 'a>,
+    passive: bool,
 }
 
 impl<'a, Message> BoundsReporter<'a, Message> {
     pub fn new(on_bounds: impl Fn(Rectangle) -> Message + 'a) -> Self {
         Self {
             on_bounds: Box::new(on_bounds),
+            passive: false,
         }
+    }
+
+    /// Only report: leave the mouse cursor to the widgets under or over it.
+    pub fn passive(mut self) -> Self {
+        self.passive = true;
+        self
     }
 }
 
@@ -100,7 +108,7 @@ where
         _viewport: &Rectangle,
         _renderer: &Renderer,
     ) -> mouse::Interaction {
-        if cursor.is_over(layout.bounds()) {
+        if !self.passive && cursor.is_over(layout.bounds()) {
             mouse::Interaction::Pointer
         } else {
             mouse::Interaction::default()
