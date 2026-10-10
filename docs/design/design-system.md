@@ -1793,6 +1793,7 @@ Colors that belong to the content, not to the chrome, and are tokens too (§3.3)
 | `overlay.list` | black 72 % | side list over the picture |
 | `overlay.caption` | black 62 % | fullscreen caption pill |
 | `marker.*` | the 9 Premiere colors of `theme::marker_color` | pins, bands, dots, label edges |
+| `marker.label.tint` | 25 % of the marker color over `bg.raised` | marker label fill |
 | `tag.palette.*` | the 16 colors of `tag_colors.rs` | chips |
 | `tag.text` | black | chip labels and icons (70 % for icons) |
 | `tag.star` | black 70 % (on the chip) | star; the gold star of today reads poorly on yellow chips |

@@ -84,13 +84,7 @@ pub fn view(props: ToolbarProps) -> Element<'static, folder::Message> {
         .tip(settings_tip, Position::Top)
         .on_press(M::OpenSettings);
     // Esc leaves batch mode (`EscapePressed`), but not while its job runs.
-    let batch_tip = if props.batch_mode && !props.batch_running {
-        Tip::new(fl!("folder-controls-batch-back")).keys(&["Esc"])
-    } else if props.batch_mode {
-        Tip::new(fl!("folder-controls-batch-back"))
-    } else {
-        Tip::new(fl!("folder-controls-batch"))
-    };
+    let batch_tip = batch_toggle_tip(props.batch_mode, props.batch_running);
     let batch = IconButton::new(Icon::ListChecks)
         .latched(props.batch_mode)
         .tip(batch_tip, Position::Top)
@@ -120,4 +114,36 @@ pub fn view(props: ToolbarProps) -> Element<'static, folder::Message> {
             .style(style::panel),
     ]
     .into()
+}
+
+/// The batch toggle's tip: its name, and `Esc` when `Esc` would leave batch mode.
+fn batch_toggle_tip(batch_mode: bool, batch_running: bool) -> Tip {
+    let tip = Tip::new(if batch_mode {
+        fl!("folder-controls-batch-back")
+    } else {
+        fl!("folder-controls-batch")
+    });
+    if batch_mode && !batch_running {
+        tip.keys(&["Esc"])
+    } else {
+        tip
+    }
+}
+
+#[cfg(test)]
+mod batch_tip_tests {
+    use super::*;
+
+    #[test]
+    fn the_batch_toggle_tip_names_the_way_back_and_shows_esc_only_when_idle() {
+        let enter = batch_toggle_tip(false, false);
+        assert_eq!(enter.label, fl!("folder-controls-batch"));
+        assert!(enter.keys.is_empty());
+        let back = batch_toggle_tip(true, false);
+        assert_eq!(back.label, fl!("folder-controls-batch-back"));
+        assert_eq!(back.keys, vec!["Esc"]);
+        let running = batch_toggle_tip(true, true);
+        assert_eq!(running.label, fl!("folder-controls-batch-back"));
+        assert!(running.keys.is_empty());
+    }
 }
