@@ -1,6 +1,6 @@
 //! State of a drag out of the window, and the pure decisions around it.
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use frename_core::{FileId, FileSnapshot};
 use iced::{event, mouse, Point, Subscription};
@@ -190,24 +190,34 @@ pub fn files_to_drag(
 /// save). Only the tags, the name and the extension are compared: they are always in the file
 /// name, so a failed rename shows there. In/out are not: where they are kept depends on the
 /// settings, and reading them back normalises them (an in point at 0 s reads as none).
-/// `wanted` is compared as the name it makes reads back, not as it is held: a tag with a dot
-/// (`v1.2`) reads back as two tags (`v1`, `2`), and that save worked.
+/// The save worked when `saved` is `wanted` as held (the in-memory backend of debug builds
+/// returns what it stored) or `wanted` as its name reads back (a tag with a dot, `v1.2`, reads
+/// back as two tags, `v1` and `2`, from a real file).
 pub fn save_failed(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
-    let expected = FileSnapshot::parse(&wanted.file_name());
-    expected.tags() != saved.tags()
-        || expected.name_without_extension() != saved.name_without_extension()
-        || !expected.extension().eq_ignore_ascii_case(saved.extension())
+    let same_name = |a: &FileSnapshot| {
+        a.tags() == saved.tags()
+            && a.name_without_extension() == saved.name_without_extension()
+            && a.extension().eq_ignore_ascii_case(saved.extension())
+    };
+    !same_name(wanted) && !same_name(&FileSnapshot::parse(&wanted.file_name()))
 }
 
 /// `path` made absolute against the current directory (without touching the disk), as the
-/// Windows shell needs it for a drag; unchanged when that is not possible.
+/// Windows shell needs it for a drag. `.` components are dropped; `..` and a drive-relative
+/// `C:foo` are left as they are. Unchanged when the current directory cannot be read.
 pub fn absolute_path(path: &Path) -> PathBuf {
     if path.is_absolute() {
         return path.to_path_buf();
     }
     match std::env::current_dir() {
-        Ok(cwd) => cwd.join(path),
-        Err(_) => path.to_path_buf(),
+        Ok(cwd) => path
+            .components()
+            .filter(|part| !matches!(part, Component::CurDir))
+            .fold(cwd, |joined, part| joined.join(part.as_os_str())),
+        Err(error) => {
+            log::warn!("Cannot make {} absolute: {error}", path.display());
+            path.to_path_buf()
+        }
     }
 }
 
@@ -364,6 +374,8 @@ mod tests {
         let cwd = std::env::current_dir().expect("a current directory");
         assert_eq!(made, cwd.join(&relative));
         assert_eq!(absolute_path(&made), made);
+        let dotted = absolute_path(&Path::new(".").join("clip.mp4"));
+        assert_eq!(dotted, cwd.join("clip.mp4"), "no `.` left in the middle");
     }
 
     #[test]

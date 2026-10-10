@@ -126,12 +126,7 @@ impl FolderWorkspace {
                 Self::notice(&fl!("drag-out-not-saved"))
             }
             Readiness::Start => {
-                let paths: Vec<PathBuf> = ids
-                    .iter()
-                    .filter_map(|id| dir.file_by_id(*id))
-                    // Where the file really is (debug builds rename only in memory).
-                    .map(|file| drag_out::absolute_path(&FileTagger::disk_path(file.file_path())))
-                    .collect();
+                let paths = Self::drag_paths(dir, &ids);
                 if paths.is_empty() {
                     self.drag_out.release();
                     return Task::none();
@@ -140,6 +135,15 @@ impl FolderWorkspace {
                 Task::done(Message::StartDragOut(paths))
             }
         }
+    }
+
+    /// Where the dragged files really are (debug builds rename only in memory), as absolute
+    /// paths: the Windows shell refuses relative ones.
+    pub(super) fn drag_paths(dir: &super::Directory, ids: &[FileId]) -> Vec<PathBuf> {
+        ids.iter()
+            .filter_map(|id| dir.file_by_id(*id))
+            .map(|file| drag_out::absolute_path(&FileTagger::disk_path(file.file_path())))
+            .collect()
     }
 
     /// Whether the open file `id` may have edits that are not on disk: its name on disk is not
