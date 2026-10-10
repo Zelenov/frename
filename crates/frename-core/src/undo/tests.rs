@@ -892,6 +892,39 @@ mod tests {
         assert!(tag_list.get_tag(id).unwrap().is_stored());
     }
 
+    /// Issue #97: saving a tag that is stored already changes nothing, so no step is recorded
+    /// and undo leaves the tag stored.
+    #[test]
+    fn saving_a_stored_tag_again_is_not_a_step() {
+        let store = FakeAppStorage::new();
+        let mut tag_list = TagList::new(store, FileSnapshot::default());
+        let mut dir = empty_directory();
+        let id = tag_list.create_new_tag("NewTag").unwrap();
+        let mut history = History::new(50);
+
+        // A real save is a step.
+        assert!(tag_list.save_tag_once(id).unwrap());
+        let color_index = tag_list.get_tag(id).unwrap().color_index();
+        history.push(Box::new(SaveTagCommand {
+            tag_id: id,
+            color_index,
+        }));
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).unwrap();
+        assert!(!ctx.tag_list.get_tag(id).unwrap().is_stored());
+        history.redo(&mut ctx).unwrap();
+        assert!(ctx.tag_list.get_tag(id).unwrap().is_stored());
+
+        // Saving it again reports "already saved": the caller pushes nothing.
+        history = History::new(50);
+        assert!(!ctx.tag_list.save_tag_once(id).unwrap());
+        assert!(!history.can_undo());
+        assert!(ctx.tag_list.get_tag(id).unwrap().is_stored());
+    }
+
     // --- StarTagCommand ---
 
     #[test]

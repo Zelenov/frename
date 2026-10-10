@@ -1,3 +1,7 @@
+# 0.132
+## Fixed
+- Pressing Enter on a tag that is already saved no longer counts as a step, so Ctrl+Z after it no longer removes the tag from the folder.
+
 # 0.129
 ## Fixed
 - Closing the Settings window while the main window is closing no longer stops frename from quitting on the first close, and closing Settings no longer stops a running batch.
