@@ -8,6 +8,9 @@ pub enum UndoError {
     FileNotFound(PathBuf),
     TagNotFound(TagId),
     Io(std::io::Error),
+    /// A rename step would put a file on a name another file (or its comment, subtitle or
+    /// transcript) already has; nothing was changed.
+    NameTaken(PathBuf),
     /// A video could not be turned (back).
     Rotation(PathBuf, RotationError),
 }
@@ -18,6 +21,7 @@ impl fmt::Display for UndoError {
             UndoError::FileNotFound(p) => write!(f, "File not found: {}", p.display()),
             UndoError::TagNotFound(id) => write!(f, "Tag not found: {:?}", id),
             UndoError::Io(e) => write!(f, "I/O: {}", e),
+            UndoError::NameTaken(p) => write!(f, "Name already taken: {}", p.display()),
             UndoError::Rotation(p, e) => write!(f, "{} not turned: {}", p.display(), e),
         }
     }

@@ -521,6 +521,7 @@ rotate-flag-none = none
 rotate-now = Rotation: { $flag }
 rotate-turned = Turned { $turn } · rotation now { $flag }
 rotate-failed = Not rotated: { $reason }
+undo-name-taken = Not changed: another file is already named { $name }
 undo-back-on-clip = Back on this clip (undid the move). Ctrl+Z again undoes its last change.
 redo-on-clip = On this clip again (redid the move).
 rotate-reason-in-use = the file is read-only or in use
