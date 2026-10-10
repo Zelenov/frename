@@ -99,8 +99,7 @@ mod tests {
     use super::*;
 
     fn temp_folder(name: &str) -> PathBuf {
-        let dir = crate::test_support::fresh_dir(&format!("comment-{name}",));
-        dir
+        crate::test_support::fresh_dir(&format!("comment-{name}"))
     }
 
     #[test]

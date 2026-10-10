@@ -14,6 +14,14 @@ pub fn fresh_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("frename-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir).or_else(|_| std::fs::remove_file(&dir));
     std::fs::create_dir_all(&dir).expect("temp dir");
+    // A failed delete (a file another process holds open on Windows) must not pass silently.
+    let left = std::fs::read_dir(&dir).map_or(0, Iterator::count);
+    assert_eq!(
+        left,
+        0,
+        "{} was not emptied: {left} entries left",
+        dir.display()
+    );
     dir
 }
 
