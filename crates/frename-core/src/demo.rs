@@ -77,6 +77,10 @@ pub struct DemoScenario {
     /// A word to type in the file search bar (issue #99).
     #[serde(default)]
     pub search: Option<String>,
+    /// Text to type into the open clip's comment (at its start), an edit that is not saved yet: after a
+    /// second it is in the recovery journal, so the file name card says so (#155). Demo only.
+    #[serde(default)]
+    pub type_in_comment: Option<String>,
     /// The name of the staged folder (it shows in the recent folders); `folder` when not given.
     #[serde(default)]
     pub folder_name: Option<String>,
