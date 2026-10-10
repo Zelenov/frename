@@ -126,7 +126,10 @@ impl FolderWorkspace {
         if self.file_workspace.file().is_none() {
             return Task::none();
         }
-        if !matches!(msg, M::Add | M::KeyDown | M::KeyUp | M::Scrolled(..)) {
+        if !matches!(
+            msg,
+            M::Add | M::KeyDown | M::KeyUp | M::Scrolled(..) | M::RowHeight(..)
+        ) {
             self.markers.forget_added();
         }
         match msg {
@@ -212,6 +215,10 @@ impl FolderWorkspace {
                 self.markers.stop_all_describing();
                 Task::none()
             }
+            M::RowHeight(index, height) => {
+                self.markers.set_row_height(index, height);
+                Task::none()
+            }
             M::Scrolled(y, viewport) => {
                 self.markers.set_viewport(viewport);
                 // The list was just put back (fullscreen): keep the lit marker in view.
@@ -225,7 +232,12 @@ impl FolderWorkspace {
                     return Task::none();
                 };
                 let passed = markers::view::passed_index(markers, position_ms);
-                match markers::view::offset_showing_lit(markers, passed, y, viewport) {
+                match markers::view::offset_showing_lit(
+                    self.markers.row_heights(),
+                    passed,
+                    y,
+                    viewport,
+                ) {
                     Some(wanted) => scroll_marker_list_to(wanted),
                     None => Task::none(),
                 }
@@ -433,14 +445,16 @@ impl FolderWorkspace {
         let name = iced::widget::Id::new(markers::view::MARKER_NAME_INPUT_ID);
         // A click on a row in view does not scroll the list (§13.2); a row out of view (opened by
         // key) is brought in with a row of context above it.
-        let fallback = markers::view::row_offset(markers, index.saturating_sub(1));
+        let fallback =
+            markers::view::row_offset(self.markers.row_heights(), index.saturating_sub(1));
         let (offset, viewport) = (self.markers.scroll_y(), self.markers.viewport());
         let wanted = if viewport > 0.0 {
             crate::ui::scroll::keep_row_in_view(
                 offset,
                 viewport,
-                markers::view::row_offset(markers, index),
-                markers::view::row_offset(markers, index + 1) - crate::ui::tokens::SPACE_XXS,
+                markers::view::row_offset(self.markers.row_heights(), index),
+                markers::view::row_offset(self.markers.row_heights(), index + 1)
+                    - crate::ui::tokens::SPACE_XXS,
                 fallback,
             )
         } else {
@@ -476,7 +490,7 @@ impl FolderWorkspace {
             return Task::none();
         }
         scroll_marker_list_to(markers::view::row_offset(
-            markers,
+            self.markers.row_heights(),
             passed.unwrap_or(0).saturating_sub(1),
         ))
     }
