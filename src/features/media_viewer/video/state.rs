@@ -1292,7 +1292,6 @@ impl VideoPlayerState {
     }
 }
 
-/// Seconds on the bar as whole milliseconds.
 /// Whether an item of More is a frame step: the one item that leaves More open.
 fn is_frame_step(messages: &[Message]) -> bool {
     matches!(
@@ -1301,6 +1300,7 @@ fn is_frame_step(messages: &[Message]) -> bool {
     )
 }
 
+/// Seconds on the bar as whole milliseconds.
 fn secs_to_ms(secs: f32) -> u64 {
     (secs.max(0.0) as f64 * 1000.0).round() as u64
 }
