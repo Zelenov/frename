@@ -622,6 +622,16 @@ markers-read-only = только чтение
 markers-name-placeholder = Имя
 markers-ai-describe = Описать с помощью AI: назвать маркер и добавить, что происходит
 markers-ai-stop = Остановить описание
+markers-ai-describe-unnamed = { $count ->
+    [one] Описать { $count } безымянный
+    [few] Описать { $count } безымянных
+   *[many] Описать { $count } безымянных
+}
+markers-ai-describe-unnamed-hint = Дать имя и описание с помощью AI каждому маркеру без имени, по несколько за раз. Один запрос на маркер; имя, которое вы впишете за это время, сохранится.
+markers-ai-waiting = Ждёт очереди…
+markers-ai-run = Идёт: { $describing } · ждут: { $waiting }
+markers-ai-run-last = Идёт: { $describing }
+markers-ai-stop-all = Остановить
 markers-ai-describing = Описываю…
 markers-ai-done = Маркер описан
 markers-ai-nothing-new = У маркера уже есть это описание
@@ -672,7 +682,7 @@ file-name-panel-untag = Снять тег
 file-name-panel-clear-in = Убрать точку входа
 file-name-panel-clear-out = Убрать точку выхода
 file-name-panel-suggested-in-out = AI
-file-name-panel-apply-suggested-in-out = Поставить вход и выход, которые предлагает AI
+file-name-panel-apply-suggested-in-out = Поставить вход и выход, которые предлагает AI (округлено до целых секунд)
 file-name-panel-suggested-tags = Теги AI
 file-name-panel-add-suggested-tag = Добавить тег «{ $tag }» (уверенность { $percent }%)
 file-name-panel-add-suggested-tag-unsure = Добавить тег «{ $tag }»

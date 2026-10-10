@@ -183,6 +183,9 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
     if let Some(name) = &scenario.describing {
         steps.push(folder_workspace::Message::ShowDescribing(name.clone()));
     }
+    if scenario.describing_unnamed {
+        steps.push(folder_workspace::Message::ShowDescribingUnnamed);
+    }
     if scenario.rotate != 0 {
         steps.push(folder_workspace::Message::RotateVideo(scenario.rotate));
     }

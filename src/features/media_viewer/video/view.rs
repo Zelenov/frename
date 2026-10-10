@@ -68,6 +68,8 @@ pub struct MarkersView<'a> {
     pub pane_width: f32,
     /// Frame of the app's spinner, for the markers being described.
     pub spinner_frame: usize,
+    /// How many markers "Describe N unnamed" would send now.
+    pub unnamed: usize,
 }
 
 /// Render the video player with its strip, timeline and controls below.
@@ -534,6 +536,7 @@ fn side_overlay<'a>(
             state.position_ms(),
             in_out,
             markers.spinner_frame,
+            markers.unnamed,
         )
         .map(Message::Markers),
     };

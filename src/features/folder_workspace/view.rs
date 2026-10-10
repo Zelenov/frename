@@ -34,6 +34,7 @@ pub fn view(
         state: state.markers(),
         pane_width: state.left_width(),
         spinner_frame: state.spinner_frame(),
+        unnamed: state.unnamed_marker_guids().len(),
     };
 
     if state.directory().is_none() && !state.media_fullscreen() {
