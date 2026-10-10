@@ -1,3 +1,8 @@
+# 0.131
+## Fixed
+- Undo and redo of a rename no longer replace another clip that has taken the old name; the step is refused with a note and stays in the history.
+- Undo and redo of a rename move the clip's comment along with it, as they already did for subtitles.
+
 # 0.128
 ## Fixed
 - Pressing next or previous quickly while a clip loads no longer makes the switch wait on the newer clip's load.
