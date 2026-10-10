@@ -36,6 +36,60 @@ pub(crate) fn screenshot_path(file_path: &Path, position_ms: u64) -> PathBuf {
         .join(sidecar_name)
 }
 
+/// Positions (ms) of the screenshots saved for the clip at `file_path`: the files named exactly
+/// `<clip file name>.snap.<time>.jpg` next to it. A longer clip name that merely starts with
+/// this one (`foo.mp4.bak.snap.…`) is not matched.
+pub(crate) fn screenshot_positions(file_path: &Path) -> Vec<u64> {
+    let Some(name) = file_path.file_name().and_then(|n| n.to_str()) else {
+        return Vec::new();
+    };
+    let prefix = format!("{name}.snap.");
+    let dir = file_path.parent().unwrap_or(Path::new("."));
+    let dir = if dir.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        dir
+    };
+    let mut positions: Vec<u64> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| {
+            let entry_name = entry.file_name();
+            let time = entry_name
+                .to_str()?
+                .strip_prefix(&prefix)?
+                .strip_suffix(".jpg")?
+                .to_owned();
+            Screenshot::parse_time(&time)
+        })
+        .collect();
+    positions.sort_unstable();
+    positions.dedup();
+    positions
+}
+
+/// Move the screenshots of `old_path` to the names of `new_path`, keeping their times. Never
+/// overwrites; failures are logged only, like the other sidecars.
+pub(crate) fn rename_screenshots(old_path: &Path, new_path: &Path) {
+    for position_ms in screenshot_positions(old_path) {
+        let (old, new) = (
+            screenshot_path(old_path, position_ms),
+            screenshot_path(new_path, position_ms),
+        );
+        if old == new {
+            continue;
+        }
+        if new.exists() {
+            log::warn!("screenshot: not renaming {old:?}: {new:?} already exists");
+            continue;
+        }
+        if let Err(e) = std::fs::rename(&old, &new) {
+            log::warn!("screenshot: failed to rename {old:?} → {new:?}: {e}");
+        }
+    }
+}
+
 pub(super) fn is_screenshot_sidecar(name: &str) -> bool {
     if let Some(idx) = name.find(".snap.") {
         let rest = &name[idx + 6..];
@@ -492,6 +546,40 @@ mod tests {
             !tagger.metadata_move_needed(&path, MetadataMove::Comments(CommentStorage::InVideo))
         );
         assert!(!tagger.metadata_move_needed(&path, MetadataMove::InOut(InOutStorage::InVideo)));
+    }
+
+    #[test]
+    fn a_save_that_renames_moves_the_same_sidecars_as_undo_does() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("rename-sidecars", "goat.mov");
+        crate::comment::save_comment(&path, "note");
+        let mut old_sidecars = crate::subtitles::subtitle_candidates(&path);
+        old_sidecars.push(crate::subtitles::transcript_path(&path));
+        old_sidecars.push(crate::comment::comment_path(&path));
+        old_sidecars.push(screenshot_path(&path, 10_936));
+        old_sidecars.push(screenshot_path(&path, 0));
+        for p in &old_sidecars {
+            std::fs::write(p, "x").expect("sidecar");
+        }
+        let bak = path.with_file_name("goat.mov.bak.snap.00-00-01-000.jpg");
+        std::fs::write(&bak, "other").expect("other clip's screenshot");
+        let mut snapshot = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        snapshot.set_tags(["Food"]);
+        let new_path = tagger.save_with(&snapshot, &path, TEXT);
+        assert_ne!(new_path, path);
+
+        let mut expected = crate::subtitles::subtitle_candidates(&new_path);
+        expected.push(crate::subtitles::transcript_path(&new_path));
+        expected.push(crate::comment::comment_path(&new_path));
+        expected.push(screenshot_path(&new_path, 10_936));
+        expected.push(screenshot_path(&new_path, 0));
+        for p in &expected {
+            assert!(p.exists(), "{p:?} should have moved with the clip");
+        }
+        for p in &old_sidecars {
+            assert!(!p.exists(), "{p:?} should have left the old name");
+        }
+        assert!(bak.exists());
     }
 
     #[test]

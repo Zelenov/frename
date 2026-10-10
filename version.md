@@ -1,3 +1,7 @@
+# 0.133
+## Fixed
+- A clip's screenshots (`*.snap.*.jpg`) now follow it when it is renamed, and undo and redo of the rename move them back; a screenshot already under the target name stops the undo instead of being replaced.
+
 # 0.131
 ## Fixed
 - Undo and redo of a rename no longer replace another clip that has taken the old name; the step is refused with a note and stays in the history.

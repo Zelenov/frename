@@ -324,7 +324,7 @@ impl FileTagger {
 }
 
 /// Whether `new_path`, or one of the sidecars that travel with it (comment, subtitle,
-/// transcript), already exists — checked before any write a rename would otherwise make, since
+/// transcript, screenshot at a time the old clip has one), already exists — checked before any write a rename would otherwise make, since
 /// renaming onto an existing file (issue #84) or its sidecar would silently replace it.
 ///
 /// A `new_path` that differs from `old_path` only by case is never "taken": on Windows' case-
@@ -346,13 +346,18 @@ pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
     .iter()
     .chain(crate::subtitles::subtitle_candidates(new_path).iter())
     .any(|p| p.exists())
+        || super::production_file_tagger::screenshot_positions(old_path)
+            .into_iter()
+            .any(|ms| super::production_file_tagger::screenshot_path(new_path, ms).exists())
 }
 
-/// Move the sidecars that travel with a renamed clip (comment, subtitles, transcript) from the
+/// Move the sidecars that travel with a renamed clip (comment, subtitles, transcript,
+/// screenshots) from the
 /// names of `old_path` to those of `new_path`. The one list for the save that renames a clip and
 /// for its undo and redo, so they cannot drift apart; it matches the set `target_name_taken`
-/// guards. Screenshots (`*.snap.*.jpg`) are not among them: nothing links them to a clip's name.
+/// guards.
 pub(crate) fn rename_sidecars(old_path: &Path, new_path: &Path) {
+    super::production_file_tagger::rename_screenshots(old_path, new_path);
     crate::comment::rename_comment_file(old_path, new_path);
     crate::subtitles::rename_subtitle_file(old_path, new_path);
 }

@@ -1602,9 +1602,11 @@ mod tests {
         for p in sidecars(&after) {
             write(&p, "sidecar");
         }
-        // A screenshot is not moved by the save that renamed the clip, so not by its undo.
-        let snap = dir_path.join("foo.GOAT.mp4.snap.00-00-10-936.jpg");
-        write(&snap, "jpg");
+        let snap = |clip: &str| dir_path.join(format!("{clip}.snap.00-00-10-936.jpg"));
+        write(&snap("foo.GOAT.mp4"), "jpg");
+        // Another clip whose name starts with this one keeps its screenshot.
+        let other = snap("foo.GOAT.mp4.bak");
+        write(&other, "other");
         let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
         let mut history = History::new(50);
         history.push(Box::new(cmd));
@@ -1619,7 +1621,8 @@ mod tests {
         for (old, new) in sidecars(&after).iter().zip(sidecars(&before).iter()) {
             assert!(new.exists() && !old.exists(), "{old:?} -> {new:?}");
         }
-        assert!(snap.exists());
+        assert!(snap("foo.mp4").exists() && !snap("foo.GOAT.mp4").exists());
+        assert!(other.exists());
 
         history.redo(&mut ctx).expect("redo");
         assert!(after.exists() && !before.exists());
@@ -1627,5 +1630,46 @@ mod tests {
         for (old, new) in sidecars(&before).iter().zip(sidecars(&after).iter()) {
             assert!(new.exists() && !old.exists(), "{old:?} -> {new:?}");
         }
+        assert!(snap("foo.GOAT.mp4").exists() && !snap("foo.mp4").exists());
+        assert!(other.exists());
+    }
+
+    #[test]
+    fn undo_refuses_when_a_screenshot_name_is_taken() {
+        let (dir_path, mut directory, cmd, _) =
+            rename_fixture("snap-taken", "foo.mp4", "foo.GOAT.mp4");
+        let after = dir_path.join("foo.GOAT.mp4");
+        write(&after, "clip A");
+        let snap = |clip: &str| dir_path.join(format!("{clip}.snap.00-00-01-000.jpg"));
+        write(&snap("foo.GOAT.mp4"), "A");
+        write(&snap("foo.mp4"), "stray");
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+        history.push(Box::new(cmd));
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+        let err = history.undo(&mut ctx).expect_err("must refuse");
+        assert!(matches!(err, crate::undo::UndoError::NameTaken(_)), "{err}");
+        assert!(after.exists());
+        assert_eq!(std::fs::read(snap("foo.mp4")).unwrap(), b"stray");
+        assert_eq!(std::fs::read(snap("foo.GOAT.mp4")).unwrap(), b"A");
+    }
+
+    #[test]
+    fn a_rename_of_a_clip_without_screenshots_moves_nothing_else() {
+        let (dir_path, mut directory, cmd, _) =
+            rename_fixture("no-snaps", "foo.mp4", "foo.GOAT.mp4");
+        write(&dir_path.join("foo.GOAT.mp4"), "clip A");
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+        history.push(Box::new(cmd));
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).expect("undo");
+        assert!(dir_path.join("foo.mp4").exists());
     }
 }
