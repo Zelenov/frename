@@ -96,8 +96,9 @@ pub struct FolderWorkspace {
     filter_menu_open: bool,
     /// The folders opened recently: the dropdown by the open button and the empty screen's list.
     recent_folders: RecentFoldersState,
-    /// Where the recent folders are read from and written to: the app database, or a test's own.
-    recent_store: AppDatabase,
+    /// The app database every read and write of the workspace goes to: the recent folders, the
+    /// last batch run, the panel widths, the last session. A test gives each workspace its own.
+    app_db: AppDatabase,
     /// Bumped per folder, so a comment batch for a folder no longer open is dropped.
     comment_load_generation: u64,
     /// Frame of the loading spinner shown in rows whose comment is still loading.
@@ -186,7 +187,12 @@ fn column_widths(video: f32, file_list: f32) -> (f32, f32) {
 
 impl FolderWorkspace {
     pub fn new() -> Self {
-        let (left_width, folder_width) = AppDatabase::new()
+        Self::with_app_db(AppDatabase::new())
+    }
+
+    /// A workspace that reads and writes `app_db` instead of the global app database.
+    pub fn with_app_db(app_db: AppDatabase) -> Self {
+        let (left_width, folder_width) = app_db
             .get_window_state()
             .and_then(|w| {
                 if w.left_panel_width > 0.0 && w.folder_panel_width > 0.0 {
@@ -198,14 +204,13 @@ impl FolderWorkspace {
             .unwrap_or((VIDEO_WIDTH, FILE_LIST_WIDTH));
         // A width saved by an older version or on a smaller screen is raised to the minimum.
         let (left_width, folder_width) = column_widths(left_width, folder_width);
-        let recent_store = AppDatabase::new();
         let mut recent_folders = RecentFoldersState::default();
         recent_folders.set_entries(
-            recent_store.get_recent_folders(),
+            app_db.get_recent_folders(),
             frename_core::recent_folders::now_ms(),
         );
         let mut batch = BatchState::default();
-        if let Some(run) = AppDatabase::new().get_batch_run() {
+        if let Some(run) = app_db.get_batch_run() {
             batch.restore_last_run(run);
         }
         Self {
@@ -224,7 +229,7 @@ impl FolderWorkspace {
             inline_rename: None,
             filter_menu_open: false,
             recent_folders,
-            recent_store,
+            app_db,
             comment_load_generation: 0,
             spinner_frame: 0,
             pending_to_file_id: None,
@@ -394,14 +399,16 @@ impl FolderWorkspace {
                 let new_folder_width = folder_end - x - SPLITTER_HIT;
                 self.folder_width =
                     new_folder_width.clamp(FILE_LIST_MIN_WIDTH, FILE_LIST_MAX_WIDTH);
-                AppDatabase::new().set_panel_widths(self.left_width, self.folder_width);
+                self.app_db
+                    .set_panel_widths(self.left_width, self.folder_width);
                 Task::none()
             }
             Message::RightSplitterDragged(x) => {
                 let new_folder_width = x - self.left_width - SPLITTER_HIT;
                 self.folder_width =
                     new_folder_width.clamp(FILE_LIST_MIN_WIDTH, FILE_LIST_MAX_WIDTH);
-                AppDatabase::new().set_panel_widths(self.left_width, self.folder_width);
+                self.app_db
+                    .set_panel_widths(self.left_width, self.folder_width);
                 Task::none()
             }
             Message::FocusSearchBarAndKey(key) => self.focus_search_bar_and_key(key),
@@ -738,7 +745,7 @@ impl FolderWorkspace {
     }
 
     fn load_last_session(&self) -> Task<Message> {
-        let store = LoggingAppStateStore::new(AppDatabase::new());
+        let store = LoggingAppStateStore::new(self.app_db.clone());
         let Some(session) = store.get_last_session() else {
             return Task::none();
         };
@@ -817,7 +824,7 @@ impl FolderWorkspace {
         self.comment_load_generation += 1;
         let folder = pair.folder().to_path_buf();
         let target_file = pair.file().map(|p| p.to_path_buf());
-        let store = LoggingAppStateStore::new(AppDatabase::new());
+        let store = LoggingAppStateStore::new(self.app_db.clone());
         self.loading = true;
         self.file_workspace.set_file(None);
         // Any deferred save must already be applied by now: `save_then_scan` only reaches this
@@ -1338,7 +1345,7 @@ impl FolderWorkspace {
             return Task::none();
         }
         let action = self.batch.action();
-        AppDatabase::new().set_batch_run(BatchRun {
+        self.app_db.set_batch_run(BatchRun {
             action: action.id().to_string(),
             options: self.batch.actions().persist(action),
         });
@@ -3088,6 +3095,22 @@ mod tests {
         }
     }
 
+    /// A workspace with an app database of its own, so tests running at the same time never
+    /// share the last batch run, the panel widths or the recent folders, and none of them reads
+    /// or writes the developer's `frename.db`.
+    fn test_workspace() -> FolderWorkspace {
+        FolderWorkspace::with_app_db(fresh_app_db())
+    }
+
+    /// A migrated app database in a folder of its own (swept like the test folders).
+    fn fresh_app_db() -> AppDatabase {
+        let dir = unique_test_folder();
+        std::fs::create_dir_all(&dir).expect("create test folder");
+        let db = AppDatabase::with_path(dir.join("workspace.db"));
+        db.initialize().expect("migrate");
+        db
+    }
+
     /// A folder name no other test, and no concurrent test run, will pick.
     fn unique_test_folder() -> PathBuf {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -3124,7 +3147,7 @@ mod tests {
     #[test]
     fn a_test_folder_leaves_nothing_behind() {
         let test_dir = TestDirectory::new(1);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -3142,7 +3165,7 @@ mod tests {
     #[test]
     fn open_folder_with_two_files_shows_two_in_folder_panel() {
         let test_dir = TestDirectory::new(2);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _task = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -3162,7 +3185,7 @@ mod tests {
     fn opening_a_folder_with_no_target_selects_the_remembered_file() {
         let test_dir = TestDirectory::new(2);
         FolderTagStore::set_last_viewed(test_dir.path(), "file_1.mp4");
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: None,
@@ -3183,7 +3206,7 @@ mod tests {
     #[test]
     fn opening_a_folder_with_no_target_and_nothing_remembered_opens_the_first_file() {
         let test_dir = TestDirectory::new(2);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: None,
@@ -3199,7 +3222,7 @@ mod tests {
     fn opening_a_specific_file_wins_over_the_remembered_one() {
         let test_dir = TestDirectory::new(2);
         FolderTagStore::set_last_viewed(test_dir.path(), "file_1.mp4");
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()), // file_0.mp4
@@ -3216,7 +3239,7 @@ mod tests {
     #[test]
     fn a_gone_specific_target_falls_back_like_an_unset_one() {
         let test_dir = TestDirectory::new(2);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.file_path("gone.mp4")),
@@ -3232,7 +3255,7 @@ mod tests {
     #[test]
     fn leaving_a_file_remembers_it_as_the_folder_s_last_viewed_file() {
         let test_dir = TestDirectory::new(2);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()), // file_0.mp4
@@ -3267,7 +3290,7 @@ mod tests {
         use frename_core::AppStateStore;
         use std::time::Duration;
         let test_dir = TestDirectory::new(2);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()), // file_0.mp4
@@ -3313,7 +3336,7 @@ mod tests {
         use frename_core::AppStateStore;
         use std::time::Duration;
         let test_dir = TestDirectory::sharing_app_database(1);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -3363,7 +3386,7 @@ mod tests {
     #[test]
     fn home_acts_only_on_a_video_shown() {
         let test_dir = TestDirectory::new(1);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         assert_eq!(
             workspace.update(Message::GoToStart).units(),
             0,
@@ -3388,7 +3411,7 @@ mod tests {
         use std::time::Duration;
         let test_dir = TestDirectory::new(1);
         AppDatabase::new().set_playback_position(&test_dir.target_file(), Duration::from_secs(10));
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -3428,7 +3451,7 @@ mod tests {
     #[test]
     fn a_click_on_the_open_file_does_not_open_it_again() {
         let test_dir = TestDirectory::new(2);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -3445,7 +3468,7 @@ mod tests {
     #[test]
     fn tags_are_saved_after_selecting_another_file() {
         let test_dir = TestDirectory::new(2);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -3498,7 +3521,7 @@ mod tests {
     #[test]
     fn pasting_tags_keeps_the_in_out_points() {
         let test_dir = TestDirectory::new(1);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -3522,7 +3545,7 @@ mod tests {
     fn the_ai_suggested_tags_are_added_only_on_request_and_undone_in_one_step() {
         use crate::features::file_name_panel::{self as panel, Message as P};
         let test_dir = TestDirectory::new(1);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -3608,7 +3631,7 @@ mod tests {
     #[test]
     fn the_ai_suggested_in_out_is_applied_as_one_undo_step() {
         let test_dir = TestDirectory::new(1);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -3664,7 +3687,7 @@ mod tests {
     #[test]
     fn pasting_tags_keeps_the_comment() {
         let test_dir = TestDirectory::new(1);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -3695,7 +3718,7 @@ mod tests {
     #[test]
     fn deferred_rename_fires_after_media_unloaded() {
         let test_dir = TestDirectory::new(2);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         // Load folder; file_0 is selected and the video pipeline starts loading.
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
@@ -3774,7 +3797,7 @@ mod tests {
     fn pending_rename_is_consumed_on_media_unloaded() {
         let test_dir = TestDirectory::new(2);
 
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -3813,7 +3836,7 @@ mod tests {
     #[test]
     fn closing_the_window_saves_the_open_files_pending_edits() {
         let test_dir = TestDirectory::new(1);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -3864,7 +3887,7 @@ mod tests {
     #[test]
     fn opening_a_new_folder_saves_the_open_files_pending_edits() {
         let test_dir = TestDirectory::new(1);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -3922,7 +3945,7 @@ mod tests {
     #[test]
     fn a_second_deferred_save_does_not_drop_an_earlier_one() {
         let test_dir = TestDirectory::new(2);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -3981,7 +4004,7 @@ mod tests {
     #[test]
     fn closing_does_not_reopen_the_video() {
         let test_dir = TestDirectory::new(1);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -4019,7 +4042,7 @@ mod tests {
         directory.rename_file(id, &path, &snapshot);
         assert_eq!(directory.loading_comment_count(), 1);
 
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory,
             target_file: Some(path.clone()),
@@ -4040,7 +4063,7 @@ mod tests {
 
     /// Loads a folder and turns batch mode on with every file checked.
     fn batch_workspace(test_dir: &TestDirectory) -> FolderWorkspace {
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -4061,7 +4084,7 @@ mod tests {
     #[test]
     fn batch_mode_starts_with_the_open_file_checked() {
         let test_dir = TestDirectory::new(2);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -4158,7 +4181,7 @@ mod tests {
     fn the_commented_tag_follows_a_comment_appearing_and_disappearing() {
         use iced::widget::text_editor::{Action, Edit};
         let test_dir = TestDirectory::new(1);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -4203,7 +4226,7 @@ mod tests {
     fn a_cleared_comment_is_still_cleared_after_leaving_the_clip_and_coming_back() {
         use iced::widget::text_editor::{Action, Edit};
         let test_dir = TestDirectory::new(2);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -4257,7 +4280,7 @@ mod tests {
     fn a_comment_cleared_just_before_leaving_is_not_shown_again_while_its_save_waits() {
         use iced::widget::text_editor::{Action, Edit};
         let test_dir = TestDirectory::new(2);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -4325,7 +4348,7 @@ mod tests {
     #[test]
     fn unload_saves_the_selected_file_before_reopening_it() {
         let test_dir = TestDirectory::new(2);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -4361,7 +4384,7 @@ mod tests {
     #[test]
     fn untagged_filter_keeps_the_cursor_row_when_a_file_is_tagged() {
         let test_dir = TestDirectory::new(3);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -4399,7 +4422,7 @@ mod tests {
     #[test]
     fn file_search_narrows_the_list() {
         let test_dir = TestDirectory::new(3);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -4432,7 +4455,7 @@ mod tests {
     #[test]
     fn file_updated_renames_file_path_in_directory() {
         let test_dir = TestDirectory::new(2);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -4479,7 +4502,7 @@ mod tests {
         // TestDirectory's own files are virtual (never written to disk); write file_1 for real,
         // so the guard (which checks real files) has something on disk to find.
         std::fs::write(test_dir.file_path("file_1.mp4"), []).expect("write file_1");
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -4573,7 +4596,7 @@ mod tests {
         for i in 0..files {
             std::fs::copy(&clip, test_dir.file_path(&format!("file_{i}.mp4"))).expect("clip");
         }
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -5792,7 +5815,7 @@ mod tests {
         // Now markers are kept in the comment: the clip shows its two, and opening wrote nothing.
         drop(in_video);
         let _storage = comment_file_storage(frename_core::MarkerStorage::Comment);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(file.clone()),
@@ -5880,7 +5903,7 @@ mod tests {
         let _ = workspace.update(Message::FileUpdated { id, snapshot });
         drop(in_video);
         let _storage = comment_file_storage(frename_core::MarkerStorage::Comment);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -6161,7 +6184,7 @@ mod tests {
     #[test]
     fn the_open_file_is_unsaved_for_a_drag_until_its_edits_are_on_disk() {
         let test_dir = TestDirectory::new(2);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -6190,7 +6213,7 @@ mod tests {
 
     /// A folder with the open file's tags changed (not saved yet), for the drag-out tests.
     fn workspace_with_unsaved_tag(test_dir: &TestDirectory) -> FolderWorkspace {
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -6349,7 +6372,7 @@ mod tests {
     /// Opens a fresh folder of `file_count` files with `file_0` open, ready for `SelectFile`.
     fn open_folder(file_count: usize) -> (TestDirectory, FolderWorkspace) {
         let test_dir = TestDirectory::new(file_count);
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::FolderLoaded {
             directory: test_dir.directory(),
             target_file: Some(test_dir.target_file()),
@@ -6374,7 +6397,7 @@ mod tests {
 
     #[test]
     fn the_modifiers_held_are_tracked_from_modifiers_changed_and_cleared_on_unfocus() {
-        let mut workspace = FolderWorkspace::new();
+        let mut workspace = test_workspace();
         let _ = workspace.update(Message::ModifiersChanged(Modifiers::COMMAND));
         assert!(workspace.modifiers.command());
         let _ = workspace.update(Message::ModifiersChanged(Modifiers::empty()));
@@ -7008,11 +7031,10 @@ mod tests {
                 2_000 - age as i64,
             );
         }
-        let mut workspace = FolderWorkspace::new();
-        workspace.recent_store = store;
+        let mut workspace = FolderWorkspace::with_app_db(store);
         workspace
             .recent_folders
-            .set_entries(workspace.recent_store.get_recent_folders(), 0);
+            .set_entries(workspace.app_db.get_recent_folders(), 0);
         workspace
     }
 
@@ -7109,5 +7131,75 @@ mod tests {
         assert!(workspace.recent_folders.is_open());
         let _ = workspace.start_batch();
         assert!(!workspace.recent_folders.is_open());
+    }
+
+    /// Issue #213: a workspace reads and writes only the app database it was given. What one
+    /// saves (the panel widths, the last batch run) a second one with a database of its own
+    /// does not see, and the global `frename.db` is not touched.
+    #[test]
+    fn workspaces_with_their_own_app_database_share_no_panel_widths_or_batch_run() {
+        use crate::features::batch;
+        let global = AppDatabase::new();
+        let widths_of = |db: &AppDatabase| {
+            db.get_window_state()
+                .map(|w| (w.left_panel_width, w.folder_panel_width))
+        };
+        let widths_before = widths_of(&global);
+        let run_before = global.get_batch_run();
+
+        let test_dir = TestDirectory::new(2);
+        let db_a = fresh_app_db();
+        // `main` saves the window at startup; the panel widths update that row.
+        db_a.set_window_state(frename_core::WindowGeometry {
+            x: 0.0,
+            y: 0.0,
+            width: 1600.0,
+            height: 900.0,
+            is_maximized: false,
+            monitor_width: 0.0,
+            monitor_height: 0.0,
+            left_panel_width: 0.0,
+            folder_panel_width: 0.0,
+        });
+        let mut a = FolderWorkspace::with_app_db(db_a.clone());
+        let _ = a.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        let _ = a.update(Message::LeftSplitterDragged(777.0));
+        assert_eq!(
+            db_a.get_window_state().map(|w| w.left_panel_width),
+            Some(777.0)
+        );
+        let ids: Vec<_> = a
+            .directory
+            .as_ref()
+            .unwrap()
+            .all_files()
+            .map(|f| f.id())
+            .collect();
+        let _ = a.update(Message::Batch(batch::Message::SelectAction(
+            batch::Action::FixTags,
+        )));
+        let _ = a.update(Message::Batch(batch::Message::CheckAll(ids)));
+        let _ = a.start_batch();
+        assert_eq!(
+            db_a.get_batch_run().map(|r| r.action),
+            Some(batch::Action::FixTags.id().to_string()),
+            "the batch run went to the workspace's own database"
+        );
+
+        // A second workspace with a database of its own starts from the defaults.
+        let b = test_workspace();
+        assert_ne!(b.left_width, 777.0);
+        assert_eq!(b.batch.action(), super::BatchState::default().action());
+        // One built on A's database sees what A saved.
+        let c = FolderWorkspace::with_app_db(db_a);
+        assert_eq!(c.left_width, 777.0);
+        assert_eq!(c.batch.action(), batch::Action::FixTags);
+
+        let global = AppDatabase::new();
+        assert_eq!(widths_of(&global), widths_before);
+        assert_eq!(global.get_batch_run(), run_before);
     }
 }

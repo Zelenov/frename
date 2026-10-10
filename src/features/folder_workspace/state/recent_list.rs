@@ -65,11 +65,11 @@ impl FolderWorkspace {
             ]),
             Effect::Open(pair) => Task::done(Message::ScanFolder(pair)),
             Effect::Forget(folder) => {
-                self.recent_store.forget_recent_folder(&folder);
+                self.app_db.forget_recent_folder(&folder);
                 Task::none()
             }
             Effect::Clear => {
-                self.recent_store.clear_recent_folders();
+                self.app_db.clear_recent_folders();
                 Task::none()
             }
         }
@@ -79,7 +79,7 @@ impl FolderWorkspace {
     /// folders exist: a disconnected network drive can take seconds to answer.
     pub(super) fn reload_recent_folders(&mut self) -> Task<Message> {
         self.recent_folders
-            .set_entries(self.recent_store.get_recent_folders(), now_ms());
+            .set_entries(self.app_db.get_recent_folders(), now_ms());
         let folders = self.recent_folders.folders();
         if folders.is_empty() {
             return Task::none();
