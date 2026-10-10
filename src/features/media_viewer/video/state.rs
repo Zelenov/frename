@@ -126,6 +126,7 @@ struct Closed {
     id: FileId,
     position: Duration,
     continued: Option<Continued>,
+    at_in_point: Option<Duration>,
 }
 
 /// Video player component state.
@@ -213,6 +214,10 @@ pub struct VideoPlayerState {
     /// The shown clip continued a little before where it had stopped: until playback moves past
     /// that, the latter is the moment kept, so opening and leaving it does not creep back.
     continued: Option<Continued>,
+    /// The shown clip was watched to the end and opened at its in point: while the playhead is
+    /// still there, leaving it keeps nothing, so it opens at its in point again and not two
+    /// seconds before it with a note.
+    at_in_point: Option<Duration>,
     /// The clip the last unload closed; see [`Closed`].
     closed: Option<Closed>,
     /// When the position was last kept while playing.
@@ -260,6 +265,7 @@ impl Default for VideoPlayerState {
             clip: None,
             pending_resume: None,
             continued: None,
+            at_in_point: None,
             closed: None,
             remembered_at: None,
         }
@@ -284,17 +290,18 @@ impl VideoPlayerState {
         self.drop_resume_note();
         let shown = !self.loading && !self.load_failed;
         let reopened = match self.closed.take().filter(|closed| closed.id == id) {
-            Some(closed) => Some((closed.position, closed.continued)),
+            Some(closed) => Some((closed.position, closed.continued, closed.at_in_point)),
             None if shown && self.clip.as_ref().is_some_and(|shown| shown.id == id) => {
-                Some((self.position, self.continued))
+                Some((self.position, self.continued, self.at_in_point))
             }
             None => None,
         };
         let clip = Clip { id, path: clip };
         match reopened {
-            Some((position, continued)) => {
+            Some((position, continued, at_in_point)) => {
                 self.pending_resume = None;
                 self.continued = continued;
+                self.at_in_point = at_in_point;
                 self.clip = Some(clip);
                 let task = self.open(path, !self.autoplay);
                 self.resume_at = Some(position);
@@ -303,6 +310,7 @@ impl VideoPlayerState {
             None => {
                 self.resume_at = None;
                 self.continued = None;
+                self.at_in_point = None;
                 self.pending_resume = Some(PendingResume {
                     stopped: AppDatabase::new().get_playback_position(&clip.path),
                     in_point,
@@ -310,14 +318,6 @@ impl VideoPlayerState {
                 self.clip = Some(clip);
                 self.open(path, !self.autoplay)
             }
-        }
-    }
-
-    /// The shown clip was renamed (an in-place rename or an undo, which does not reopen it):
-    /// where playback stops is kept for its new path from now on.
-    pub fn follow_rename(&mut self, path: PathBuf) {
-        if let Some(clip) = self.clip.as_mut() {
-            clip.path = path;
         }
     }
 
@@ -330,6 +330,7 @@ impl VideoPlayerState {
         self.closed = None;
         self.pending_resume = None;
         self.continued = None;
+        self.at_in_point = None;
     }
 
     /// Keep where playback is in the shown clip, for when it is opened again (#161). Nothing
@@ -343,6 +344,9 @@ impl VideoPlayerState {
         }
         // Continued a little before where it had stopped, and not past that yet (a glance, or
         // the first seconds of playing on): where it had stopped stays the moment to keep.
+        if self.at_in_point == Some(self.position) {
+            return;
+        }
         let position = match self.continued {
             Some(continued) if (continued.at..=continued.stopped).contains(&self.position) => {
                 continued.stopped
@@ -362,7 +366,11 @@ impl VideoPlayerState {
         };
         match playback::open_at(pending.stopped, duration, pending.in_point) {
             OpenAt::Start => Task::none(),
-            OpenAt::InPoint(at) => self.seek_to(at, true),
+            OpenAt::InPoint(at) => {
+                let task = self.seek_to(at, true);
+                self.at_in_point = Some(self.position);
+                task
+            }
             OpenAt::Resume { at, stopped } => {
                 // No note about a moment the clip did not go to.
                 if !self.seek_only(at, true) {
@@ -882,6 +890,7 @@ impl VideoPlayerState {
                     id: clip.id,
                     position: self.position,
                     continued: self.continued,
+                    at_in_point: self.at_in_point,
                 });
                 self.pending_resume = None;
                 self.load_generation = self.load_generation.wrapping_add(1);
@@ -1440,12 +1449,6 @@ fn open_video_with(
     }
 }
 
-/// The `videoflip` direction that shows a picture stored with `rotation` upright: `None` for
-/// one shown as stored, or when GStreamer has no `videoflip` (the video then plays as stored).
-///
-/// The direction is set from frename's own reading of the file rather than left to `auto`
-/// (GStreamer's orientation tag), so a debug build shows a turn it keeps in memory. A mirrored
-/// picture is left to `auto`, which knows GStreamer's own naming of mirror and turn.
 /// For tests: the video at `path` opened for real, its picture going nowhere.
 #[cfg(all(test, any(target_os = "linux", windows)))]
 pub(crate) fn open_for_test(path: &std::path::Path) -> Video {
@@ -1456,6 +1459,34 @@ pub(crate) fn open_for_test(path: &std::path::Path) -> Video {
         .expect("open")
 }
 
+/// For tests: the fixture clip, opened for real, and how long it is.
+#[cfg(all(test, any(target_os = "linux", windows)))]
+pub(crate) fn real_clip() -> (Video, Duration) {
+    let video = open_for_test(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/folder/file_example_MP4_480_1_5MG.mp4"),
+    );
+    let duration = video.duration();
+    (video, duration)
+}
+
+/// For tests: the load a player started lands with `video`, as the open on its blocking thread
+/// would.
+#[cfg(all(test, any(target_os = "linux", windows)))]
+pub(crate) fn video_loaded(video: Video, generation: u64) -> Message {
+    Message::VideoLoaded {
+        video: Arc::new(Mutex::new(Some(video))),
+        rotation: None,
+        generation,
+    }
+}
+
+/// The `videoflip` direction that shows a picture stored with `rotation` upright: `None` for
+/// one shown as stored, or when GStreamer has no `videoflip` (the video then plays as stored).
+///
+/// The direction is set from frename's own reading of the file rather than left to `auto`
+/// (GStreamer's orientation tag), so a debug build shows a turn it keeps in memory. A mirrored
+/// picture is left to `auto`, which knows GStreamer's own naming of mirror and turn.
 fn flip_direction(rotation: Option<Rotation>) -> Option<&'static str> {
     let rotation = rotation?;
     let direction = match (rotation.mirrored(), rotation.degrees()) {
@@ -2046,27 +2077,6 @@ mod tests {
         })
     }
 
-    /// The fixture clip, opened for real, and how long it is.
-    #[cfg(any(target_os = "linux", windows))]
-    fn real_clip() -> (Video, Duration) {
-        let video = open_for_test(
-            &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("tests/folder/file_example_MP4_480_1_5MG.mp4"),
-        );
-        let duration = video.duration();
-        (video, duration)
-    }
-
-    /// The load `player` started lands with `video`, as the open on its blocking thread would.
-    #[cfg(any(target_os = "linux", windows))]
-    fn video_loaded(video: Video, generation: u64) -> Message {
-        Message::VideoLoaded {
-            video: Arc::new(Mutex::new(Some(video))),
-            rotation: None,
-            generation,
-        }
-    }
-
     /// Issue #161: opening another clip keeps where playback was in the one shown; the one
     /// opened looks up where it stopped last time, to continue there once it is open.
     #[test]
@@ -2267,8 +2277,7 @@ mod tests {
 
     /// Issue #161 end to end on a real clip: opened through `load_video` and its `VideoLoaded`,
     /// it lands two seconds before where playback stopped, with a note that says so; left again
-    /// without moving, where it stopped is kept; a turn (which reopens it) keeps that; `Home`
-    /// goes to the start, takes the note away, and a clip left there has nothing to continue.
+    /// without moving, where it stopped is kept; `Home` goes to the start, takes the note away, and a clip left there has nothing to continue.
     #[cfg(any(target_os = "linux", windows))]
     #[test]
     fn a_clip_continues_where_playback_stopped_and_home_starts_it_over() {
@@ -2306,6 +2315,43 @@ mod tests {
             AppDatabase::new().get_playback_position(&clip),
             None,
             "back at the start: nothing to continue"
+        );
+    }
+
+    /// Issue #205: a clip watched to the end opens at its in point; left again without moving
+    /// the playhead, it keeps nothing new, so it opens at its in point again and not two seconds
+    /// before it with a note. Moved on, where it was left is kept.
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn a_clip_left_at_its_in_point_is_not_remembered_there() {
+        let (video, duration) = real_clip();
+        // Whole seconds: positions are kept to the millisecond.
+        let duration = Duration::from_secs(duration.as_secs());
+        let in_point = Duration::from_secs(6);
+        assert!(playback::worth_remembering(in_point));
+        let clip = unique_clip("in-point");
+        AppDatabase::new().set_playback_position(&clip, duration);
+
+        let mut player = VideoPlayerState::default();
+        let _ = player.load_video(clip.clone(), clip.clone(), FileId::new(), Some(in_point));
+        let generation = player.loads_started();
+        let _ = player.update(video_loaded(video, generation));
+        assert_eq!(player.position, in_point);
+        assert!(!player.notice_starts_over(), "no note for a fresh start");
+
+        player.remember_position();
+        assert_eq!(
+            AppDatabase::new().get_playback_position(&clip),
+            Some(duration),
+            "still watched to the end"
+        );
+
+        let _ = player.update(Message::SeekExact(8_000));
+        player.remember_position();
+        assert_eq!(
+            AppDatabase::new().get_playback_position(&clip),
+            Some(Duration::from_secs(8)),
+            "moved on: kept"
         );
     }
 

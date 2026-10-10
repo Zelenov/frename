@@ -8,5 +8,5 @@ pub mod view;
 pub use messages::Message;
 pub(crate) use state::check_decodes;
 #[cfg(all(test, any(target_os = "linux", windows)))]
-pub(crate) use state::open_for_test;
+pub(crate) use state::{real_clip, video_loaded};
 pub use state::{Overlay, VideoPlayerState};

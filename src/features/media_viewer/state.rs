@@ -58,14 +58,6 @@ impl MediaViewerState {
         }
     }
 
-    /// The shown file was renamed without being opened again (an in-place rename, an undo):
-    /// where playback stops in it is kept under its new name.
-    pub fn follow_rename(&mut self, file: &File) {
-        if matches!(self.active, ActiveMedia::Video) {
-            self.video.follow_rename(file.file_path().to_path_buf());
-        }
-    }
-
     /// Open the shown video again where it was, e.g. after its rotation changed.
     pub fn reload_video(&mut self) -> Task<Message> {
         match self.active {
