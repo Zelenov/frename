@@ -34,6 +34,58 @@ pub enum Status {
     UpdateFailed(String),
 }
 
+/// How this frename was delivered, as far as updating goes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Build {
+    /// The Microsoft Store build: the Store updates it.
+    Store,
+    /// An installed or portable Windows package: it updates itself.
+    Package,
+    /// The Mac download or the Linux AppImage: new versions are downloaded by hand.
+    Download,
+    /// Anything else (`cargo run`, a bare exe, a Linux binary outside an AppImage).
+    Bare,
+}
+
+/// What the Updates section shows for a build.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Section {
+    /// The version and "Updates come from the Microsoft Store".
+    Store,
+    /// The version and "download new versions from the releases page" with the link.
+    ReleasesPage,
+    /// The version, the status, **Check for updates** and the start-up check box.
+    Updater,
+}
+
+impl Build {
+    /// The Store wins over a package found on disk; a package over the download kinds.
+    fn detect(from_store: bool, installed: bool, download: bool) -> Self {
+        if from_store {
+            Self::Store
+        } else if installed {
+            Self::Package
+        } else if download {
+            Self::Download
+        } else {
+            Self::Bare
+        }
+    }
+
+    pub fn section(self) -> Section {
+        match self {
+            Self::Store => Section::Store,
+            Self::Download => Section::ReleasesPage,
+            Self::Package | Self::Bare => Section::Updater,
+        }
+    }
+}
+
+/// Whether this process is the Mac download or the Linux AppImage.
+fn is_download_build() -> bool {
+    cfg!(target_os = "macos") || frename_core::is_appimage()
+}
+
 /// What `apply` asks `update` to run.
 #[derive(Debug)]
 enum Effect {
@@ -41,12 +93,18 @@ enum Effect {
     Check { silent: bool },
     Download(Release),
     Restart(Release),
+    OpenReleases,
 }
 
 /// The Updates section: running version, check state and the newest release found.
 pub struct UpdatesState {
     /// Updates work only in an installed or portable package.
     installed: bool,
+    /// The Microsoft Store build: the Store updates it, frename never checks.
+    from_store: bool,
+    /// The Mac download or the Linux AppImage: no updater, new versions come from the releases
+    /// page.
+    download_build: bool,
     /// The running version, `0.67.0` (or `dev`).
     current_version: String,
     saved: UpdateCheckState,
@@ -58,21 +116,33 @@ pub struct UpdatesState {
 impl Default for UpdatesState {
     fn default() -> Self {
         let package = package::current();
-        Self::new(
+        let mut state = Self::new(
             package.is_some(),
+            package::STORE_BUILD,
             package.map_or_else(
                 || option_env!("APP_VERSION").unwrap_or("dev").to_string(),
                 |p| p.version.clone(),
             ),
             AppDatabase::new().get_update_check().unwrap_or_default(),
-        )
+        );
+        state.download_build = is_download_build();
+        state
     }
 }
 
 impl UpdatesState {
-    fn new(installed: bool, current_version: String, saved: UpdateCheckState) -> Self {
+    /// `from_store` wins over `installed`: the Store build never updates itself, whatever it
+    /// finds on disk.
+    fn new(
+        installed: bool,
+        from_store: bool,
+        current_version: String,
+        saved: UpdateCheckState,
+    ) -> Self {
         Self {
-            installed,
+            installed: installed && !from_store,
+            from_store,
+            download_build: false,
             current_version,
             saved,
             status: Status::Idle,
@@ -98,11 +168,16 @@ impl UpdatesState {
             ),
             Effect::Download(release) => download(release),
             Effect::Restart(release) => Task::done(Message::ApplyAndRestart(release)),
+            Effect::OpenReleases => {
+                open_releases_page();
+                Task::none()
+            }
         }
     }
 
     fn apply(&mut self, message: Message, now: u64) -> Effect {
         match message {
+            Message::OpenReleases => Effect::OpenReleases,
             Message::CheckNow => self.start_check(false, false),
             Message::Tick => {
                 if self.background_check_due(now) {
@@ -233,6 +308,16 @@ impl UpdatesState {
         self.installed
     }
 
+    /// Whether this is the Microsoft Store build, which the Store updates.
+    pub fn is_store_build(&self) -> bool {
+        self.from_store
+    }
+
+    /// What the Updates section shows for this build.
+    pub fn section(&self) -> Section {
+        Build::detect(self.from_store, self.installed, self.download_build).section()
+    }
+
     /// The running version as the UI shows it, `0.67`.
     pub fn current_version(&self) -> String {
         short_version(&self.current_version)
@@ -257,6 +342,11 @@ impl UpdatesState {
     /// The controls of the Version row that take a click now, in page order: the ones Tab
     /// reaches in Settings (#167). `batch_running` holds **Update and restart** back.
     pub fn controls(&self, batch_running: bool) -> Vec<Control> {
+        match self.section() {
+            Section::Store => return Vec::new(),
+            Section::ReleasesPage => return vec![Control::OpenReleases],
+            Section::Updater => {}
+        }
         [
             (Control::Check, self.check_enabled()),
             (
@@ -287,6 +377,7 @@ impl UpdatesState {
             Control::Check => Message::CheckNow,
             Control::UpdateAndRestart => Message::UpdateAndRestart,
             Control::CheckOnStart => Message::SetCheckOnStart(!self.check_on_start()),
+            Control::OpenReleases => Message::OpenReleases,
         }
     }
 }
@@ -297,6 +388,27 @@ pub enum Control {
     Check,
     UpdateAndRestart,
     CheckOnStart,
+    /// The link to the releases page of a build that is updated by hand.
+    OpenReleases,
+}
+
+/// Open the releases page in the browser.
+fn open_releases_page() {
+    #[cfg(windows)]
+    let result = std::process::Command::new("explorer")
+        .arg(source::RELEASES_PAGE)
+        .spawn();
+    #[cfg(target_os = "macos")]
+    let result = std::process::Command::new("open")
+        .arg(source::RELEASES_PAGE)
+        .spawn();
+    #[cfg(not(any(windows, target_os = "macos")))]
+    let result = std::process::Command::new("xdg-open")
+        .arg(source::RELEASES_PAGE)
+        .spawn();
+    if let Err(e) = result {
+        log::warn!("could not open {}: {e}", source::RELEASES_PAGE);
+    }
 }
 
 /// Download `release`, forwarding Velopack's progress as messages. Velopack reports on a
@@ -349,6 +461,7 @@ mod tests {
     fn installed(last_check: u64) -> UpdatesState {
         UpdatesState::new(
             true,
+            false,
             "0.67.0".to_string(),
             UpdateCheckState {
                 check_on_start: true,
@@ -356,6 +469,46 @@ mod tests {
                 newest_version: String::new(),
             },
         )
+    }
+
+    #[test]
+    fn each_build_shows_its_own_updates_section() {
+        use Build::*;
+        assert_eq!(Build::detect(true, true, true), Store);
+        assert_eq!(Build::detect(false, true, true), Package);
+        assert_eq!(Build::detect(false, false, true), Download);
+        assert_eq!(Build::detect(false, false, false), Bare);
+        assert_eq!(Store.section(), Section::Store);
+        assert_eq!(Package.section(), Section::Updater);
+        assert_eq!(Download.section(), Section::ReleasesPage);
+        assert_eq!(Bare.section(), Section::Updater);
+    }
+
+    #[test]
+    fn a_download_build_shows_the_releases_page_and_opens_it_without_checking() {
+        let mut state = UpdatesState::new(
+            false,
+            false,
+            "0.67.0".to_string(),
+            UpdateCheckState::default(),
+        );
+        assert_eq!(state.section(), Section::Updater);
+        state.download_build = true;
+        assert_eq!(state.section(), Section::ReleasesPage);
+        assert!(matches!(
+            state.apply(Message::OpenReleases, 10),
+            Effect::OpenReleases
+        ));
+        assert!(matches!(state.apply(Message::CheckNow, 10), Effect::None));
+        assert_eq!(state.current_version(), "0.67");
+    }
+
+    #[test]
+    fn the_releases_link_is_the_repository_releases_page() {
+        assert_eq!(
+            source::RELEASES_PAGE,
+            "https://github.com/Zelenov/frename/releases/latest"
+        );
     }
 
     #[test]
@@ -505,7 +658,8 @@ mod tests {
 
     #[test]
     fn an_unpackaged_build_never_checks() {
-        let mut state = UpdatesState::new(false, "dev".to_string(), UpdateCheckState::default());
+        let mut state =
+            UpdatesState::new(false, false, "dev".to_string(), UpdateCheckState::default());
         assert!(matches!(state.apply(Message::CheckNow, 10), Effect::None));
         assert!(matches!(state.apply(Message::Tick, 10 * DAY), Effect::None));
         assert!(matches!(
@@ -513,5 +667,31 @@ mod tests {
             Effect::None
         ));
         assert_eq!(state.status(), &Status::Idle);
+    }
+
+    /// The Store build takes the installed version's database on its first start, with its saved
+    /// check (on at start-up, a newer version found): that must not make the Store build check
+    /// GitHub or offer that version, since the Store updates it.
+    #[test]
+    fn the_store_build_never_checks_even_with_a_saved_newer_version() {
+        // Even where something reports it as installed.
+        let mut state = UpdatesState::new(
+            true,
+            true,
+            "0.67.0".to_string(),
+            UpdateCheckState {
+                check_on_start: true,
+                last_check: 0,
+                newest_version: "0.68.0".to_string(),
+            },
+        );
+        assert!(state.is_store_build());
+        assert!(matches!(state.apply(Message::Tick, 10 * DAY), Effect::None));
+        assert!(matches!(state.apply(Message::CheckNow, 10), Effect::None));
+        assert!(matches!(
+            state.apply(Message::UpdateAndRestart, 10),
+            Effect::None
+        ));
+        assert_eq!(state.available_version(), None);
     }
 }

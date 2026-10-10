@@ -21,6 +21,8 @@ impl std::fmt::Debug for Release {
 
 #[derive(Debug, Clone)]
 pub enum Message {
+    /// The link to the releases page, shown on the builds that cannot update themselves.
+    OpenReleases,
     /// The **Check for updates** button.
     CheckNow,
     /// Sent at start-up and every hour: checks in the background when a day has passed since

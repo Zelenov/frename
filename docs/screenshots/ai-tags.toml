@@ -1,0 +1,21 @@
+# PR screenshots for #175: the open clip's AI description suggests two of the folder's tags the
+# clip does not have and notices two the folder lacks, so the file name card shows the AI tags line
+# under the name. Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.night.city.MVI_0410.mp4"
+seek = 10.0
+window = [1440, 720]
+panels = [640, 360]
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.drone.landscape.MVI_0404.mp4"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.MVI_0410.mp4"
+comment = """City lights over Europe, keep this one
+
+AI: A night timelapse of a city seen from space, lights spreading along the coast.
+Suggested tags: timelapse (92%) · landscape (64%)
+Tag ideas: coastline · satellite view"""

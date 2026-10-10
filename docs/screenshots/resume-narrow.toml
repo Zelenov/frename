@@ -1,0 +1,19 @@
+# A clip opened where playback stopped last time (#161) on a narrow video pane: the note floats
+# over the picture. Not a README image; for looking at the feature (`frename --demo`).
+source = "../../tests/folder"
+open = "pick.wide.MVI_1601.mp4"
+resume = 12.5
+window = [1100, 680]
+panels = [420, 260]
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_1601.mp4"
+subtitles = """1
+00:00:09,000 --> 00:00:12,000
+Stepping frame by frame
+"""
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "review.people.MVI_1602.mov"

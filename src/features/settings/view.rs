@@ -1,9 +1,8 @@
 //! UI for the settings window (`docs/design/design-system.md` §14): a list of pages on the left,
 //! the page on the right, one option per row, and a button bar with Close.
 
-use clipscribe::{Model, MODELS};
 use frename_core::ai::key::{ApiKey, KeyState};
-use frename_core::ai::SummaryLanguage;
+use frename_core::ai::{MomentsMode, SummaryLanguage};
 use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage};
 use std::borrow::Borrow;
 
@@ -306,8 +305,8 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
                 layout::controls([
                     focusable_dropdown(
                         form::dropdown(
-                            MODELS,
-                            Some(Model::from_id(&settings.ai_model)),
+                            frename_core::ai::models(),
+                            Some(frename_core::ai::model_from_id(&settings.ai_model)),
                             Message::SetAiModel,
                         )
                         .width(FIELD_WIDTH_L),
@@ -327,6 +326,45 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
                     .width(FIELD_WIDTH_L),
                     focused(state, Control::SummaryLanguage),
                 ),
+            ),
+            layout::setting_row(
+                fl!("settings-ai-moments-label"),
+                layout::aligned([
+                    ring(
+                        form::radio_option(
+                            fl!("settings-ai-moments-important"),
+                            Some(form::description(fl!("settings-ai-moments-important-hint"))),
+                            MomentsMode::Important,
+                            Some(settings.ai_moments),
+                            Message::SetAiMoments,
+                        ),
+                        focused(state, Control::AiMoments(MomentsMode::Important)),
+                    ),
+                    ring(
+                        form::radio_option(
+                            fl!("settings-ai-moments-full"),
+                            Some(form::description(fl!("settings-ai-moments-full-hint"))),
+                            MomentsMode::Full,
+                            Some(settings.ai_moments),
+                            Message::SetAiMoments,
+                        ),
+                        focused(state, Control::AiMoments(MomentsMode::Full)),
+                    ),
+                ]),
+            ),
+            layout::setting_row(
+                fl!("batch-option-tag-suggestions"),
+                layout::aligned([form::checkbox_with_hint(
+                    ring(
+                        form::checkbox(
+                            fl!("settings-ai-tag-suggestions"),
+                            settings.ai_tag_suggestions,
+                        )
+                        .on_toggle(Message::SetAiTagSuggestions),
+                        focused(state, Control::AiTagSuggestions),
+                    ),
+                    text::secondary(fl!("settings-ai-tag-suggestions-hint")),
+                )]),
             ),
         ],
     )
@@ -432,8 +470,9 @@ fn updates_page(state: &SettingsState, batch_running: bool) -> Element<'_, Messa
         fl!("settings-version"),
         updates::view::view(state.updates(), batch_running, updates_focus).map(Message::Updates),
     )];
-    // Only a package keeps its settings away from the exe; elsewhere they are next to it.
-    if state.updates().installed() {
+    // Only a package or the Store build keeps its settings away from the exe; elsewhere they are
+    // next to it.
+    if state.updates().installed() || state.updates().is_store_build() {
         rows.push(layout::setting_row(
             fl!("settings-old-title"),
             old_settings_import(

@@ -568,9 +568,7 @@ mod tests {
     /// A fresh copy of a tiny 0.2 s QuickTime clip with no XMP, in its own temp folder.
     fn copy_of_clip(name: &str) -> PathBuf {
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
-        let dir =
-            std::env::temp_dir().join(format!("frename-metadata-{name}-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir(&format!("metadata-{name}"));
         let file = dir.join("clip.mov");
         std::fs::copy(fixture, &file).expect("copy fixture");
         file
@@ -953,12 +951,10 @@ mod tests {
             let source = Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("tests/fixtures")
                 .join(fixture);
-            let dir = std::env::temp_dir().join(format!(
-                "frename-metadata-rotation-{}-{}",
-                fixture.replace('.', "-"),
-                std::process::id()
+            let dir = crate::test_support::fresh_dir(&format!(
+                "metadata-rotation-{}",
+                fixture.replace('.', "-")
             ));
-            std::fs::create_dir_all(&dir).expect("temp dir");
             let file = dir.join(fixture);
             std::fs::copy(source, &file).expect("copy fixture");
 
@@ -1029,9 +1025,21 @@ mod tests {
     }
 
     fn temp_clip_path(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("frename-meta-{name}-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir(&format!("meta-{name}"));
         dir.join("clip.mp4")
+    }
+
+    /// Issue #212: Windows reuses process ids, so a folder an earlier run left under this name
+    /// must not leak its comment into this run.
+    #[test]
+    fn a_folder_left_by_an_earlier_run_does_not_leak_into_this_one() {
+        let stale = std::env::temp_dir().join(format!("frename-meta-stale-{}", std::process::id()));
+        std::fs::create_dir_all(&stale).expect("stale folder");
+        std::fs::write(stale.join("clip.mp4.comment.txt"), "0:05").expect("stale comment");
+
+        let file = temp_clip_path("stale");
+        assert_eq!(file, stale.join("clip.mp4"));
+        assert_eq!(crate::comment::load_comment(&file), "");
     }
 
     #[test]

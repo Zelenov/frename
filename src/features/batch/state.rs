@@ -24,6 +24,8 @@ struct ItemStep {
     /// A step of unknown length: when it began, the fraction it heads for and how long it
     /// usually takes.
     creep: Option<(Instant, f32, Duration)>,
+    /// A label shown instead of `label` until the instant, then `label` again.
+    note: Option<(String, Instant)>,
 }
 
 impl ItemProgress {
@@ -34,6 +36,7 @@ impl ItemProgress {
                 fraction,
                 label: label.into(),
                 creep: None,
+                note: None,
             };
         }
     }
@@ -46,7 +49,16 @@ impl ItemProgress {
                 fraction,
                 label: label.into(),
                 creep: Some((Instant::now(), to, usual)),
+                note: None,
             };
+        }
+    }
+
+    /// Say `label` for `hold`, without moving the bar; after that the label from `set` or
+    /// `creep` shows again. For a wait of known length inside a step.
+    pub fn note(&self, label: impl Into<String>, hold: Duration) {
+        if let Ok(mut step) = self.0.lock() {
+            step.note = Some((label.into(), Instant::now() + hold));
         }
     }
 
@@ -62,7 +74,11 @@ impl ItemProgress {
             }
             None => step.fraction,
         };
-        (fraction.clamp(0.0, 1.0), step.label.clone())
+        let label = match &step.note {
+            Some((note, until)) if Instant::now() < *until => note.clone(),
+            _ => step.label.clone(),
+        };
+        (fraction.clamp(0.0, 1.0), label)
     }
 }
 
@@ -217,6 +233,9 @@ pub struct BatchState {
     actions: Actions,
     checked: HashSet<FileId>,
     job: Option<Job>,
+    /// Run was pressed while the open clip's marker requests still hold it: the job starts once
+    /// they let go (the workspace knows), unless it is cancelled first.
+    waiting_for_markers: bool,
 }
 
 impl Default for BatchState {
@@ -227,6 +246,7 @@ impl Default for BatchState {
             actions: Actions::default(),
             checked: HashSet::new(),
             job: None,
+            waiting_for_markers: false,
         }
     }
 }
@@ -236,6 +256,11 @@ impl BatchState {
     pub fn update(&mut self, message: Message) {
         // Nothing changes under a running job but its own cancel, and what background reads
         // bring in (clip lengths, the key's state).
+        // A run waiting for the open clip's marker requests is given up by anything but an
+        // option change and Run itself: leaving batch mode, Cancel, another action, other files.
+        if !matches!(message, Message::Action(_) | Message::Run) {
+            self.waiting_for_markers = false;
+        }
         let background = matches!(&message, Message::Action(m) if m.applies_while_running());
         if self.is_running() && !matches!(message, Message::Cancel) && !background {
             return;
@@ -292,6 +317,9 @@ impl BatchState {
                 }
             }
             Message::CloseReport => self.job = None,
+            // Cleared above, with every message that gives the wait up.
+            Message::StopWaiting => {}
+            Message::WaitForMarkers => self.waiting_for_markers = true,
             Message::Run | Message::Retry | Message::OpenLog | Message::OpenBilling(_) => {}
         }
     }
@@ -505,6 +533,16 @@ impl BatchState {
         }
         let options = self.actions.describe_ai_mut();
         (options.missing_probes(checked), options.request_key_state())
+    }
+
+    /// Whether Run waits for the open clip's marker requests to let go of it.
+    pub fn is_waiting_for_markers(&self) -> bool {
+        self.waiting_for_markers
+    }
+
+    /// The open folder's own tags, which "Describe with AI" may suggest from.
+    pub fn set_folder_tags(&mut self, tags: Vec<String>) {
+        self.actions.set_folder_tags(tags);
     }
 
     /// Whether the right half shows the batch panel instead of the open file.
@@ -945,6 +983,22 @@ mod tests {
         let (fraction, label) = item.now();
         assert!(fraction > 0.5 && fraction < 0.9, "{fraction}");
         assert_eq!(label, "waiting for Claude");
+    }
+
+    #[test]
+    fn a_note_replaces_the_label_for_its_time_only() {
+        let item = ItemProgress::default();
+        item.set(0.4, "waiting for Claude");
+        item.note("retrying in 8 s (rate limit)", Duration::from_secs(60));
+        assert_eq!(
+            item.now(),
+            (0.4, "retrying in 8 s (rate limit)".to_string())
+        );
+        item.note("retrying", Duration::ZERO);
+        assert_eq!(item.now().1, "waiting for Claude", "the wait is over");
+        item.note("retrying", Duration::from_secs(60));
+        item.set(0.5, "saving");
+        assert_eq!(item.now().1, "saving", "a new step drops the note");
     }
 
     #[test]

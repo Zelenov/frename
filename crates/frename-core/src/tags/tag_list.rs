@@ -461,7 +461,33 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             self.store.update_tag_orders(&tag_orders)?;
             self.display_tags_rebalanced = false;
         }
+        // Saved tags move from the unsaved section to the stored one.
+        self.rebuild_filtered_display_tag_ids();
         Ok(())
+    }
+
+    /// Save a tag to the store only if it is not stored yet (Enter / the save button).
+    /// Returns `true` when it was saved now, `false` when it was already stored (nothing is
+    /// written), so a caller records an undo step only for a real save.
+    pub fn save_tag_once(
+        &mut self,
+        id: TagId,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        let stored = self
+            .tags_by_id
+            .get(&id)
+            .ok_or_else(|| {
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "tag not found",
+                )) as Box<dyn std::error::Error + Send + Sync>
+            })?
+            .is_stored();
+        if stored {
+            return Ok(false);
+        }
+        self.save_tag(id)?;
+        Ok(true)
     }
 
     /// Reorders tags (file name panel): place `moved_id` at `index` in the checked (selected) list. Index is in the checked-only view; order is changed only in [selected_tag_ids].
@@ -771,6 +797,8 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             self.store.update_tag_orders(&tag_orders)?;
             self.display_tags_rebalanced = false;
         }
+        // Saved tags move from the unsaved section to the stored one.
+        self.rebuild_filtered_display_tag_ids();
         Ok(())
     }
 
@@ -785,6 +813,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         if let Some(t) = self.tags_by_id.get_mut(&id) {
             t.set_stored(false);
         }
+        self.rebuild_filtered_display_tag_ids();
         Ok(())
     }
 
@@ -907,6 +936,25 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     /// Whether the list has any tag at all, whatever the filter.
     pub fn has_tags(&self) -> bool {
         !self.display_tag_ids.is_empty()
+    }
+
+    /// The folder's own tags (the saved ones), in the tag panel's order, whatever the filter:
+    /// what "Describe with AI" may suggest from.
+    pub fn saved_tag_names(&self) -> Vec<String> {
+        self.display_tag_ids
+            .iter()
+            .filter_map(|(id, _, _)| self.tags_by_id.get(id))
+            .filter(|t| t.is_stored())
+            .map(|t| t.tag().to_string())
+            .collect()
+    }
+
+    /// The id of the tag named `name` (case-insensitive), saved or not.
+    pub fn tag_id_by_name(&self, name: &str) -> Option<TagId> {
+        self.tags_by_id
+            .values()
+            .find(|t| t.tag().eq_ignore_ascii_case(name))
+            .map(|t| t.id())
     }
 
     /// Cached result of whether the checked-tag order matches in both collections.
@@ -1034,6 +1082,72 @@ mod tests {
     use crate::db::fake_app_storage::FakeAppStorage;
 
     use super::*;
+
+    /// A folder with the stored tags `pick`, `wide`, and a file named `wide.Zork`: `Zork` is unsaved.
+    fn list_with_unsaved_zork() -> TagList<FakeAppStorage> {
+        let store = FakeAppStorage::new()
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "pick", 1, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "wide", 2, false), 1);
+        let snapshot = FileSnapshot::new(
+            vec!["wide".to_string(), "Zork".to_string()],
+            "file",
+            "mp4",
+            "file.mp4",
+        );
+        TagList::new(store, snapshot)
+    }
+
+    fn stored_flags(list: &TagList<FakeAppStorage>) -> Vec<bool> {
+        list.filtered_display_tag_ids()
+            .iter()
+            .map(|&id| list.get_tag(id).unwrap().is_stored())
+            .collect()
+    }
+
+    /// The unsaved tags come first in the filtered order, whatever the save/unsave history
+    /// (the tag grid groups them under their own caption).
+    fn assert_unsaved_first(list: &TagList<FakeAppStorage>, when: &str) {
+        let flags = stored_flags(list);
+        let unsaved = flags.iter().take_while(|stored| !**stored).count();
+        assert!(
+            flags[unsaved..].iter().all(|stored| *stored),
+            "{when}: unsaved tags are not all first: stored flags {flags:?}"
+        );
+    }
+
+    #[test]
+    fn unsaved_tags_stay_first_after_save_undo_redo_of_a_new_tag() {
+        let mut list = list_with_unsaved_zork();
+        let id = list.create_new_tag("Mew").unwrap();
+        assert_unsaved_first(&list, "created");
+
+        list.save_tag(id).unwrap();
+        assert_unsaved_first(&list, "saved");
+        let color_index = list.get_tag(id).unwrap().color_index();
+
+        list.unsave_tag(id).unwrap();
+        assert_unsaved_first(&list, "unsaved (undo)");
+
+        list.save_tag_with_color(id, color_index).unwrap();
+        assert_unsaved_first(&list, "saved again (redo)");
+        assert!(
+            !stored_flags(&list)[0],
+            "Zork (unsaved) leads, then the stored tags"
+        );
+    }
+
+    #[test]
+    fn an_unsaved_tag_goes_back_ahead_of_the_stored_ones_after_unsave() {
+        let mut list = list_with_unsaved_zork();
+        let id = list
+            .insert_new_tag("Tail", Position::Last)
+            .expect("a new tag");
+        list.save_tag(id).unwrap();
+        assert_unsaved_first(&list, "saved");
+
+        list.unsave_tag(id).unwrap();
+        assert_unsaved_first(&list, "unsaved (undo)");
+    }
 
     #[test]
     fn test_tag_creation() {

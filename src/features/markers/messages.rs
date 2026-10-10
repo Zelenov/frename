@@ -35,6 +35,22 @@ pub enum Message {
     ToggleColorPicker(String),
     SetColor(String, MarkerColor),
     Delete(String),
+    /// A row's ✨: name and describe this marker with AI, in the background.
+    Describe(String),
+    /// `Ctrl+F2`: [`Message::Describe`] the marker the playhead is on.
+    DescribeAtPlayhead,
+    /// "Describe N unnamed": [`Message::Describe`] every marker without a name, a few at a time.
+    DescribeUnnamed,
+    /// "Describe N unnamed" asked how much it costs (see `describe::CONFIRM_ABOVE`): go on.
+    ConfirmDescribeUnnamed,
+    /// ... or do not send anything.
+    CancelDescribeUnnamed,
+    /// Stop every request, the ones waiting for their turn too.
+    StopDescribingAll,
+    /// Stop describing this marker.
+    StopDescribing(String),
     /// The list scrolled: its offset from the top and its viewport's height.
     Scrolled(f32, f32),
+    /// A row (by index) was laid out this tall.
+    RowHeight(usize, f32),
 }

@@ -2,7 +2,9 @@
 //! most) and its subtitles go to Claude, and the summary and time-ranged segments it returns —
 //! only what stands out, possibly none for a static or uniform clip — are written into the AI
 //! block of the video's comment (see `frename_core::ai::block`). The editor's own text is never
-//! touched.
+//! touched. While tag suggestions are on (Settings) and the folder has tags of its own, the same
+//! request also suggests which of them fit; they go into the block as suggestions, and the clip's
+//! tags change only when the editor adds them.
 //!
 //! Before running, the panel shows what will be sent and about what it costs: clip lengths are
 //! read in the background (see [`Options::missing_probes`]) and kept per file.
@@ -12,8 +14,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
 use clipscribe::{
-    self as describe, AiError, AiUsage, FrameSampling, Model, MomentsMode, Stage, SummaryLanguage,
-    MAX_DURATION_S,
+    self as describe, AiError, AiUsage, FrameSampling, Model, MomentsMode, RetryReason, Stage,
+    SummaryLanguage, MAX_DURATION_S,
 };
 use frename_core::ai::block;
 use frename_core::ai::key::{self, KeyState};
@@ -52,15 +54,23 @@ pub enum Message {
     SetLanguage(SummaryLanguage),
     /// The model descriptions are written with, from the settings.
     SetModel(Model),
+    /// Which moments descriptions get, from the settings.
+    SetMoments(MomentsMode),
+    /// Whether to suggest tags from the folder's tags too, from the settings.
+    SetTagSuggestions(bool),
 }
 
 /// What the job does to each file: the options it started with.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Run {
     pub language: SummaryLanguage,
     pub redo: bool,
     /// The model's id (see [`Model::from_id`]).
     pub model: &'static str,
+    /// Only what stands out (which alone suggests an In/Out), or the whole clip.
+    pub moments: MomentsMode,
+    /// The folder's tags to suggest from; none when tag suggestions are off.
+    pub tags: Vec<String>,
 }
 
 impl Run {
@@ -74,6 +84,7 @@ pub struct Options {
     redo: bool,
     language: SummaryLanguage,
     model: Model,
+    moments: MomentsMode,
     /// What is known about each checked video, kept while the folder is open.
     probes: HashMap<FileId, Probe>,
     /// Videos whose length is being read.
@@ -82,6 +93,10 @@ pub struct Options {
     key: Option<KeyState>,
     /// The key's state has been asked for; the answer is on its way.
     key_requested: bool,
+    /// Suggest tags from the folder's tags too (Settings).
+    suggest_tags: bool,
+    /// The open folder's own tags, kept up to date by the folder workspace.
+    folder_tags: Vec<String>,
 }
 
 impl Options {
@@ -97,6 +112,22 @@ impl Options {
             Message::KeyState(state) => self.key = Some(state),
             Message::SetLanguage(language) => self.language = language,
             Message::SetModel(model) => self.model = model,
+            Message::SetMoments(moments) => self.moments = moments,
+            Message::SetTagSuggestions(on) => self.suggest_tags = on,
+        }
+    }
+
+    /// The open folder's own tags: what a run may suggest from.
+    pub fn set_folder_tags(&mut self, tags: Vec<String>) {
+        self.folder_tags = tags;
+    }
+
+    /// The tags a run suggests from: the folder's, while tag suggestions are on.
+    fn tags_to_suggest(&self) -> &[String] {
+        if self.suggest_tags {
+            &self.folder_tags
+        } else {
+            &[]
         }
     }
 
@@ -105,7 +136,14 @@ impl Options {
             language: self.language,
             redo: self.redo,
             model: self.model.id,
+            moments: self.moments,
+            tags: self.tags_to_suggest().to_vec(),
         })
+    }
+
+    /// The model and language set in the settings.
+    pub fn model_and_language(&self) -> (Model, SummaryLanguage) {
+        (self.model, self.language)
     }
 
     /// Whether clip lengths are being read (they keep the clips open: no job may rename them).
@@ -160,6 +198,7 @@ impl Options {
                 .count(),
             ..Plan::default()
         };
+        let vocabulary = vocabulary(self.tags_to_suggest());
         for file in checked {
             // The file list only lists videos, so nothing else is ever checked; a file of another
             // kind is left out quietly (it has no length to read, so the estimate would wait
@@ -186,7 +225,17 @@ impl Options {
                 Some(d) => {
                     plan.send.push(file.id());
                     plan.seconds += d;
-                    plan.usage += describe::estimate_usage(self.model, d, probe.subtitle_bytes);
+                    plan.usage += if vocabulary.is_empty() {
+                        describe::estimate_usage(self.model, d, probe.subtitle_bytes)
+                    } else {
+                        describe::estimate_tags_usage(
+                            self.model,
+                            d,
+                            probe.subtitle_bytes,
+                            &vocabulary,
+                            None,
+                        )
+                    };
                     plan.run_seconds +=
                         SECONDS_PER_REQUEST + SECONDS_PER_FRAME * describe::frame_count(d) as f64;
                     if !file.has_subtitles() {
@@ -252,6 +301,12 @@ impl Options {
                 fl!("batch-ai-change"),
                 ActionMessage::OpenAiSettings,
             ),
+            page::linked_row(
+                fl!("batch-option-tag-suggestions"),
+                self.tag_suggestions_text(),
+                fl!("batch-ai-change"),
+                ActionMessage::OpenAiSettings,
+            ),
             page::option_row(
                 fl!("batch-option-described"),
                 layout::choices([
@@ -270,6 +325,20 @@ impl Options {
                 .chain(std::iter::once(self.estimate(plan)))
                 .chain(self.key_notice()),
         )
+    }
+
+    /// What the tag suggestions row says: off, or how many of the folder's tags it suggests from.
+    fn tag_suggestions_text(&self) -> String {
+        if !self.suggest_tags {
+            fl!("batch-ai-tag-suggestions-off")
+        } else if self.folder_tags.is_empty() {
+            fl!("batch-ai-tag-suggestions-no-tags")
+        } else {
+            fl!(
+                "batch-ai-tag-suggestions-on",
+                tags = (self.folder_tags.len() as i64)
+            )
+        }
     }
 
     /// The plan's figures and what is skipped, or how far the estimate is.
@@ -337,6 +406,16 @@ impl Options {
                 .into()],
         ))
     }
+}
+
+/// `tags` as clipscribe's vocabulary: names only, frename keeps no hints.
+fn vocabulary(tags: &[String]) -> Vec<describe::Tag> {
+    tags.iter()
+        .map(|name| describe::Tag {
+            name: name.clone(),
+            hint: None,
+        })
+        .collect()
 }
 
 /// What a run on the checked files would do.
@@ -442,9 +521,7 @@ fn probe(path: &Path) -> Probe {
     let path = &FileTagger::disk_path(path);
     Probe {
         duration_s: describe::frames::clip_duration_s(path),
-        subtitle_bytes: std::fs::metadata(frename_core::subtitle_path(path))
-            .map(|m| m.len() as usize)
-            .unwrap_or(0),
+        subtitle_bytes: frename_core::subtitle_bytes(path),
     }
 }
 
@@ -469,10 +546,27 @@ pub fn probe_all(clips: Vec<(FileId, PathBuf)>) -> Vec<(FileId, Probe)> {
     })
 }
 
+/// What an item says while its request waits `after` before it is sent again: the whole seconds
+/// of the wait, rounded up, once (it is not counted down).
+fn retry_label(after: std::time::Duration, reason: RetryReason) -> String {
+    let seconds = (after.as_secs() + u64::from(after.subsec_nanos() > 0)).max(1) as i64;
+    match reason {
+        RetryReason::RateLimit => fl!("batch-ai-progress-retry-rate-limit", seconds = seconds),
+        _ => fl!("batch-ai-progress-retry-temporary", seconds = seconds),
+    }
+}
+
+/// Demo: `progress` as it is while the request waits `seconds` for a rate limit.
+pub fn show_retry(progress: &ItemProgress, seconds: u64) {
+    let after = std::time::Duration::from_secs(seconds);
+    progress.set(0.45, fl!("batch-ai-progress-waiting"));
+    progress.note(retry_label(after, RetryReason::RateLimit), after * 3600);
+}
+
 /// Describe the video at `path` and write the description into its comment, and its moments
 /// into the video as markers while markers are kept there (Settings), where Premiere Pro shows
 /// them on the clip; with markers kept in comments, into the comment too.
-pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress) -> ItemResult {
+pub fn run(options: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress) -> ItemResult {
     let is_video = path
         .extension()
         .and_then(|e| e.to_str())
@@ -486,64 +580,68 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
         return ItemResult::new(ItemStatus::Skipped, None);
     }
     // Removed in the settings while the job runs: every later video would fail the same way.
-    let Some(api_key) = key::read_key(key::ApiKey::Anthropic) else {
+    let Some(request) = Request::for_clip(path, options.model(), options.language, options.moments)
+    else {
         return ItemResult {
             stop_job: Some(fl!("batch-ai-stop-no-key")),
             ..ItemResult::failed(fl!("batch-ai-fail-no-key"))
         };
     };
-    // A debug build renames in memory only: the clip and its subtitles are read by the name on disk.
-    let on_disk = FileTagger::disk_path(path);
-    let subtitles = describe::srt::load_for(&on_disk).unwrap_or_else(|e| {
-        log::warn!("ai: subtitles of {} not read: {e}", path.display());
-        Vec::new()
-    });
-    let describe_options = describe::Options {
-        api_key,
-        model: options.model(),
-        language: options.language,
-        frame_sampling: FrameSampling::KeyFrames,
-        moments: MomentsMode::Important,
-    };
+    let Request {
+        on_disk,
+        subtitles,
+        options: describe_options,
+    } = request;
     // The file's share of reading frames, as the estimate counts it; waiting for the answer
     // takes the rest.
     let mut asked_at = 0.0;
-    let described =
-        describe::describe(
+    let on_stage = |stage: Stage| match stage {
+        Stage::Frame { done, total } => {
+            let sampling_s = SECONDS_PER_FRAME * total as f64;
+            asked_at = (sampling_s / (sampling_s + SECONDS_PER_REQUEST)) as f32;
+            progress.set(
+                asked_at * done as f32 / total.max(1) as f32,
+                fl!(
+                    "batch-ai-progress-frame",
+                    done = ((done + 1) as i64),
+                    total = (total as i64)
+                ),
+            );
+        }
+        Stage::Asking { .. } => progress.creep(
+            asked_at,
+            0.97,
+            std::time::Duration::from_secs_f64(SECONDS_PER_REQUEST),
+            fl!("batch-ai-progress-waiting"),
+        ),
+        // The wait is said for as long as it lasts; the bar keeps creeping, and the "waiting"
+        // text comes back when the request is sent again.
+        Stage::Retrying { after, reason } => progress.note(retry_label(after, reason), after),
+        // A stage this version does not know keeps the text it has.
+        _ => {}
+    };
+    let vocabulary = vocabulary(&options.tags);
+    // One request either way: with tags to suggest from, it suggests them too.
+    let described = if vocabulary.is_empty() {
+        describe::describe(&on_disk, &subtitles, &describe_options, cancel, on_stage)
+            .map(|d| (d.description, None, d.usage, d.frames))
+    } else {
+        describe::describe_with_tags(
             &on_disk,
             &subtitles,
+            &vocabulary,
             &describe_options,
             cancel,
-            |stage| match stage {
-                Stage::Frame { done, total } => {
-                    let sampling_s = SECONDS_PER_FRAME * total as f64;
-                    asked_at = (sampling_s / (sampling_s + SECONDS_PER_REQUEST)) as f32;
-                    progress.set(
-                        asked_at * done as f32 / total.max(1) as f32,
-                        fl!(
-                            "batch-ai-progress-frame",
-                            done = ((done + 1) as i64),
-                            total = (total as i64)
-                        ),
-                    );
-                }
-                Stage::Asking { .. } => progress.creep(
-                    asked_at,
-                    0.97,
-                    std::time::Duration::from_secs_f64(SECONDS_PER_REQUEST),
-                    fl!("batch-ai-progress-waiting"),
-                ),
-                // A wait before the request is sent again keeps the "waiting" text it has.
-                _ => {}
-            },
-        );
-    let described = match described {
+            on_stage,
+        )
+        .map(|d| (d.description, Some(d.tags), d.usage, d.frames))
+    };
+    let (description, tags, usage, frames) = match described {
         Ok(described) => described,
         Err(describe::Error::Cancelled) => return ItemResult::new(ItemStatus::Pending, None),
         Err(describe::Error::TooLong(_)) => return ItemResult::new(ItemStatus::Skipped, None),
-        Err(describe::Error::Unreadable(e)) => {
-            log::warn!("ai: cannot read {}: {e}", path.display());
-            return ItemResult::failed(fl!("batch-ai-fail-unreadable"));
+        Err(e @ describe::Error::Unreadable(_)) => {
+            return ItemResult::failed(failure_reason(&e, path));
         }
         Err(describe::Error::Ai(e)) => return ai_failed(e),
         Err(describe::Error::BadAnswer { reason, usage }) => {
@@ -553,15 +651,14 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
             }
         }
     };
-    let usage = Some(described.usage);
     progress.set(0.98, fl!("batch-ai-progress-saving"));
-    let new_block = match frename_core::marker_storage() {
-        MarkerStorage::Comment => block::format_block(&described.description),
+    let mut new_block = match frename_core::marker_storage() {
+        MarkerStorage::Comment => block::format_block(&description),
         MarkerStorage::InVideo => {
             // Markers first, before the comment's save may rename the file.
-            let segments = block::segment_lines(&described.description);
+            let segments = block::segment_lines(&description);
             match FileTagger::save_ai_markers(path, &segments) {
-                Ok(()) => block::format_summary_block(&described.description),
+                Ok(()) => block::format_summary_block(&description),
                 // A format without markers, or a file in use: the moments go into the
                 // comment instead, so the paid answer is not lost.
                 Err(e) => {
@@ -569,20 +666,24 @@ pub fn run(options: Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgre
                         "ai: moments of {} not written as markers: {e}",
                         path.display()
                     );
-                    block::format_block(&described.description)
+                    block::format_block(&description)
                 }
             }
         }
     };
+    if let Some(tags) = &tags {
+        block::push_tag_lines(&mut new_block, tags);
+    }
     snapshot.set_comment(block::replace_block(snapshot.comment(), &new_block));
     let new_path = FileTagger::save(&snapshot, path);
     log::info!(
         "ai: described {} ({} frames, {} in / {} out tokens)",
         new_path.display(),
-        described.frames,
-        described.usage.input_tokens,
-        described.usage.output_tokens
+        frames,
+        usage.input_tokens,
+        usage.output_tokens
     );
+    let usage = Some(usage);
     // A save that failed (a read-only share) only logs: check the description is there, so a
     // paid answer that was lost is reported, not counted as done.
     let (new_path, saved) = super::reparsed(new_path);
@@ -615,6 +716,62 @@ fn ai_failed(error: AiError) -> ItemResult {
     }
 }
 
+/// What a request about one clip sends besides its frames: the same for a batch run and for
+/// "Describe with AI" on a marker, so the two cannot drift apart.
+pub struct Request {
+    /// Where the clip is on disk: a debug build renames in memory only, so the clip and its
+    /// subtitles are read by the name on disk.
+    pub on_disk: PathBuf,
+    /// The clip's `.srt`, if it has one (none when it cannot be read).
+    pub subtitles: Vec<describe::Cue>,
+    pub options: describe::Options,
+}
+
+impl Request {
+    /// The request for the clip at `path` with `model`, `language` and `moments`; `None` when
+    /// no Anthropic key is saved. Reads the key and the subtitles: blocking.
+    pub fn for_clip(
+        path: &Path,
+        model: Model,
+        language: SummaryLanguage,
+        moments: MomentsMode,
+    ) -> Option<Self> {
+        let api_key = key::read_key(key::ApiKey::Anthropic)?;
+        let on_disk = FileTagger::disk_path(path);
+        let subtitles = frename_core::subtitle_cues(&on_disk).unwrap_or_else(|e| {
+            log::warn!("ai: subtitles of {} not read: {e}", path.display());
+            Vec::new()
+        });
+        Some(Self {
+            on_disk,
+            subtitles,
+            options: describe::Options {
+                api_key,
+                model,
+                language,
+                frame_sampling: FrameSampling::KeyFrames,
+                moments,
+            },
+        })
+    }
+}
+
+/// Why a request about the clip at `path` failed, as the batch report and the marker notice
+/// say it: the AI's own reason (a rejected key, no credit left, the network…), or the clip's.
+/// A cancelled request has no reason to show: its callers handle it before asking.
+pub fn failure_reason(error: &describe::Error, path: &Path) -> String {
+    match error {
+        describe::Error::Unreadable(e) => {
+            log::warn!("ai: cannot read {}: {e}", path.display());
+            fl!("batch-ai-fail-unreadable")
+        }
+        describe::Error::TooLong(_) => fl!("batch-ai-fail-too-long"),
+        describe::Error::Ai(e) => e.reason(),
+        describe::Error::BadAnswer { reason, .. } => reason.clone(),
+        describe::Error::Cancelled => String::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -636,6 +793,25 @@ mod tests {
     }
 
     const BLOCK: &str = "AI: x";
+
+    #[test]
+    fn a_retry_wait_is_told_in_whole_seconds_with_its_reason() {
+        use std::time::Duration;
+        let text = |ms, reason| retry_label(Duration::from_millis(ms), reason);
+        let strip = |s: String| s.replace(['\u{2068}', '\u{2069}'], "");
+        assert_eq!(
+            strip(text(8000, RetryReason::RateLimit)),
+            "retrying in 8 s (rate limit)"
+        );
+        assert_eq!(
+            strip(text(2100, RetryReason::Temporary)),
+            "retrying in 3 s (temporary failure)"
+        );
+        assert_eq!(
+            strip(text(0, RetryReason::RateLimit)),
+            "retrying in 1 s (rate limit)"
+        );
+    }
 
     #[test]
     fn the_plan_sends_only_readable_short_undescribed_videos() {
@@ -748,6 +924,46 @@ mod tests {
     }
 
     #[test]
+    fn a_run_suggests_from_the_folders_tags_only_while_suggestions_are_on() {
+        let files = [file("a.mp4", "")];
+        let checked: Vec<&File> = files.iter().collect();
+        let mut options = Options::default();
+        options.update(Message::Probed(vec![(files[0].id(), probe(Some(60.0)))]));
+        let tags_of = |options: &Options| match options.operation() {
+            super::super::Operation::DescribeAi(run) => run.tags,
+            _ => unreachable!(),
+        };
+        let without = options.plan(&checked).usage;
+        assert_eq!(
+            options.tag_suggestions_text(),
+            fl!("batch-ai-tag-suggestions-off")
+        );
+
+        options.update(Message::SetTagSuggestions(true));
+        assert_eq!(
+            options.tag_suggestions_text(),
+            fl!("batch-ai-tag-suggestions-no-tags")
+        );
+        assert!(tags_of(&options).is_empty(), "the folder has no tags");
+
+        options.set_folder_tags(vec!["night".to_string(), "beach".to_string()]);
+        assert_eq!(tags_of(&options), ["night", "beach"]);
+        assert_eq!(
+            options.tag_suggestions_text(),
+            fl!("batch-ai-tag-suggestions-on", tags = 2)
+        );
+        let with = options.plan(&checked).usage;
+        assert!(
+            with.input_tokens > without.input_tokens && with.output_tokens > without.output_tokens,
+            "the estimate counts the tags sent and the suggestions that come back"
+        );
+
+        options.update(Message::SetTagSuggestions(false));
+        assert!(tags_of(&options).is_empty());
+        assert_eq!(options.plan(&checked).usage, without);
+    }
+
+    #[test]
     fn money_and_minutes_read_short() {
         assert_eq!(dollars(0.347), "$0.35");
         assert_eq!(dollars(0.001), fl!("batch-ai-dollars-under"));
@@ -765,15 +981,29 @@ mod tests {
     #[test]
     fn a_photo_is_left_alone() {
         let result = run(
-            Run {
+            &Run {
                 language: SummaryLanguage::English,
                 redo: false,
                 model: Model::default().id,
+                moments: MomentsMode::default(),
+                tags: Vec::new(),
             },
             Path::new("C:/clips/photo.jpg"),
             &AtomicBool::new(false),
             &ItemProgress::default(),
         );
         assert_eq!(result.status, ItemStatus::Skipped);
+    }
+
+    #[test]
+    fn the_moments_set_in_the_settings_go_into_the_run() {
+        let mut options = Options::default();
+        let moments = |options: &Options| match options.operation() {
+            super::super::Operation::DescribeAi(run) => run.moments,
+            other => panic!("not a Describe with AI run: {other:?}"),
+        };
+        assert_eq!(moments(&options), MomentsMode::Important, "the default");
+        options.update(Message::SetMoments(MomentsMode::Full));
+        assert_eq!(moments(&options), MomentsMode::Full);
     }
 }

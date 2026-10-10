@@ -596,6 +596,14 @@ fn plan_with(files: &[PathBuf], replace: bool, formats: Formats, ffmpeg: bool) -
                 .insert(file.clone(), fl!("batch-subtitles-shared-name-reason"));
             continue;
         }
+        // Subtitles in another format (`.ass`, `.ssa`) are subtitles the editor already has: the
+        // `.srt` is not written over them unless Replace is on, so nobody pays for them twice.
+        if !replace && formats.srt && has_other_subtitles(file) {
+            plan.already_subtitled += 1;
+            plan.excluded
+                .insert(file.clone(), fl!("batch-subtitles-reason-already"));
+            continue;
+        }
         names.extend(taken);
         items.push(plan_batch::Item {
             input: file.clone(),
@@ -627,11 +635,17 @@ fn plan_with(files: &[PathBuf], replace: bool, formats: Formats, ffmpeg: bool) -
     plan.transcribe = totals.transcribe;
     plan.audio_s = totals.audio_s;
     plan.unknown_length = totals.unknown_length;
-    plan.already_subtitled = totals.skip;
+    plan.already_subtitled += totals.skip;
     plan.rebuilt_free = totals.cached + totals.from_transcript;
     plan.no_speech_before = totals.cached_silent;
     plan.no_audio = totals.no_audio;
     plan
+}
+
+/// Whether the video has a `.ass` / `.ssa` and no `.srt`: subtitles frename shows that sonisub's
+/// own "already there" check, which looks at `.srt` only, does not see.
+fn has_other_subtitles(video: &Path) -> bool {
+    !subtitle_path(video).exists() && clipscribe::ass::existing_path(video).is_some()
 }
 
 /// Whether `ffmpeg` is on `PATH`, for the formats the built-in decoder cannot read.
@@ -1019,10 +1033,7 @@ mod tests {
 
     impl Folder {
         fn new(name: &str) -> Self {
-            let dir = std::env::temp_dir()
-                .join(format!("frename-subtitles-{name}-{}", std::process::id()));
-            let _ = std::fs::remove_dir_all(&dir);
-            std::fs::create_dir_all(&dir).expect("temp dir");
+            let dir = frename_core::test_support::fresh_dir(&format!("subtitles-{name}"));
             Self(dir)
         }
 
@@ -1117,6 +1128,47 @@ mod tests {
         assert_eq!(plan.already_subtitled + plan.rebuilt_free, 0);
         assert_eq!(plan.transcribe, 4);
         assert_eq!(plan.shared_name, 1);
+    }
+
+    #[test]
+    fn a_video_with_only_an_ass_counts_as_already_subtitled_until_replace() {
+        let folder = Folder::new("plan-ass");
+        let video = folder.file("clip.mp4", "x");
+        folder.file("clip.ass", "[Events]\n");
+        let files = vec![video.clone()];
+
+        let plan = plan_with(&files, false, Formats::default(), true);
+        assert_eq!((plan.already_subtitled, plan.transcribe), (1, 0));
+        assert_eq!(
+            plan.excluded.get(&video),
+            Some(&fl!("batch-subtitles-reason-already"))
+        );
+
+        let plan = plan_with(&files, true, Formats::default(), true);
+        assert_eq!((plan.already_subtitled, plan.transcribe), (0, 1));
+
+        // Only a Premiere transcript asked for: the .ass says nothing about it.
+        let plan = plan_with(&files, false, PREMIERE_ONLY, true);
+        assert_eq!(plan.already_subtitled, 0);
+    }
+
+    #[test]
+    fn a_video_with_only_a_premiere_transcript_is_still_transcribed_for_its_srt() {
+        let folder = Folder::new("plan-premiere");
+        let video = folder.file("clip.mp4", "x");
+        folder.file("clip.premiere.json", "{}");
+        let plan = plan_with(
+            std::slice::from_ref(&video),
+            false,
+            Formats::default(),
+            true,
+        );
+        assert_eq!(
+            plan.already_subtitled, 0,
+            "the existing rule stays as it is"
+        );
+        assert!(!plan.excluded.contains_key(&video));
+        assert_eq!(plan.transcribe, 1);
     }
 
     const BOTH: Formats = Formats {

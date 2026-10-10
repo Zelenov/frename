@@ -1,0 +1,31 @@
+# .ass subtitles (#218): a clip that has only `clip.ass` next to it shows its text under the
+# picture and in the CC list, and the file list marks it as subtitled. Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.night.MVI_0510.mp4"
+seek = 4.0
+window = [1440, 720]
+panels = [790, 300]
+subtitle_list = true
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.MVI_0510.mp4"
+subtitles_ass = """[Script Info]
+Title: Harbour
+ScriptType: v4.00+
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize
+Style: Default,Arial,20
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:03.50,Default,,0,0,0,,{\\an8\\b1}Evening at the harbour{\\b0}
+Dialogue: 0,0:00:03.80,0:00:06.20,Default,,0,0,0,,The boats come in\\Nbefore the light goes
+Comment: 0,0:00:06.30,0:00:07.00,Default,,0,0,0,,Not shown
+Dialogue: 0,0:00:06.50,0:00:09.00,Default,,0,0,0,,Gulls, {\\i1}hundreds{\\i0} of them
+"""
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "review.drone.MVI_0511.mp4"

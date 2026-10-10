@@ -173,3 +173,45 @@ where
         Ok(())
     }
 }
+
+/// Records changing a marker's name and comment together: "Describe with AI" on a marker fills
+/// both in one step.
+pub struct SetMarkerTextCommand {
+    pub guid: String,
+    /// `(name, comment)` before the change.
+    pub old: (String, String),
+    /// `(name, comment)` after it.
+    pub new: (String, String),
+}
+
+impl SetMarkerTextCommand {
+    fn set<SD, ST>(&self, ctx: &mut UndoContext<'_, SD, ST>, (name, comment): &(String, String))
+    where
+        ST: StoredTagStore + Clone,
+    {
+        ctx.tag_list.update_marker(&self.guid, |m| {
+            m.name = name.clone();
+            m.comment = comment.clone();
+        });
+    }
+}
+
+impl<SD, ST> Undoable<SD, ST> for SetMarkerTextCommand
+where
+    SD: AppStateStore + Clone,
+    ST: StoredTagStore + Clone,
+{
+    fn edits_open_video(&self) -> bool {
+        true
+    }
+
+    fn undo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
+        self.set(ctx, &self.old);
+        Ok(())
+    }
+
+    fn redo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
+        self.set(ctx, &self.new);
+        Ok(())
+    }
+}

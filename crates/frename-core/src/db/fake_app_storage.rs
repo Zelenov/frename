@@ -1,10 +1,13 @@
 //! Single in-memory fake for app storage in tests. Implements AppStateStore and StoredTagStore; no database.
 
 use std::collections::HashMap;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 use indexmap::IndexMap;
 use uuid::Uuid;
 
+use crate::recent_folders::{self, RecentFolder};
 use crate::FolderAndFile;
 use crate::StoredTag;
 use crate::TagColorMapping;
@@ -17,6 +20,8 @@ use super::traits::{AppStateStore, StoredTagStore};
 #[derive(Clone, Debug, Default)]
 pub(crate) struct FakeAppStorage {
     last_session: Option<FolderAndFile>,
+    /// The recent folders, newest first (shared by clones, like a database).
+    recent_folders: Arc<Mutex<Vec<RecentFolder>>>,
     /// Tag id -> tag; insertion order preserved for get_stored_tags.
     stored_tags: IndexMap<Uuid, StoredTag>,
     /// Tag name -> color index (mirrors tag_color_mapping table).
@@ -55,7 +60,37 @@ impl AppStateStore for FakeAppStorage {
     }
 
     fn set_last_folder_and_file(&self, value: &FolderAndFile) {
-        let _ = value;
+        self.record_recent_folder(value, crate::recent_folders::now_ms());
+    }
+
+    fn get_recent_folders(&self) -> Vec<RecentFolder> {
+        self.recent_folders.lock().map_or_else(
+            |poisoned| poisoned.into_inner().clone(),
+            |list| list.clone(),
+        )
+    }
+
+    fn record_recent_folder(&self, value: &FolderAndFile, opened_at_ms: i64) {
+        let mut list = self
+            .recent_folders
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        recent_folders::record(&mut list, value, opened_at_ms);
+    }
+
+    fn forget_recent_folder(&self, folder: &Path) {
+        let mut list = self
+            .recent_folders
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        recent_folders::forget(&mut list, folder);
+    }
+
+    fn clear_recent_folders(&self) {
+        self.recent_folders
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clear();
     }
 }
 
@@ -105,5 +140,26 @@ impl StoredTagStore for FakeAppStorage {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_fake_keeps_recent_folders_like_the_database() {
+        let store = FakeAppStorage::new();
+        store.set_last_folder_and_file(&FolderAndFile::new("/a", Some("/a/x.mp4")));
+        store.set_last_folder_and_file(&FolderAndFile::new("/b", None::<&str>));
+        store.set_last_folder_and_file(&FolderAndFile::new("/a", None::<&str>));
+        let recent = store.get_recent_folders();
+        assert_eq!(recent.len(), 2);
+        assert_eq!(recent[0].folder, Path::new("/a"));
+        assert_eq!(recent[0].last_file.as_deref(), Some(Path::new("/a/x.mp4")));
+        store.forget_recent_folder(Path::new("/a"));
+        assert_eq!(store.get_recent_folders().len(), 1);
+        store.clear_recent_folders();
+        assert!(store.get_recent_folders().is_empty());
     }
 }

@@ -174,3 +174,48 @@ DROP INDEX IF EXISTS ai_spend_service_at;
 DROP TABLE IF EXISTS ai_spend;
 DROP TABLE IF EXISTS ai_top_up;
 ";
+
+/// Migration 19: where playback stopped in each clip (#161), by its folder and file name, and
+/// when that was saved (Unix milliseconds), so the oldest go first once there are too many.
+pub const M19_PLAYBACK_POSITION: &str = "
+CREATE TABLE IF NOT EXISTS playback_position (
+    folder TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    position_ms INTEGER NOT NULL,
+    saved_at_ms INTEGER NOT NULL,
+    PRIMARY KEY (folder, file_name)
+);
+";
+
+/// Migration 20: which moments AI descriptions get (`ai::moments_as_str`): only what stands out,
+/// or the whole clip (#176).
+pub const M20_AI_MOMENTS: &str = "
+ALTER TABLE app_settings ADD COLUMN ai_moments TEXT NOT NULL DEFAULT 'important';
+";
+
+/// Migration 21: whether "Describe with AI" also suggests tags from the folder's tags (#175).
+/// On by default.
+pub const M21_AI_TAG_SUGGESTIONS: &str = "
+ALTER TABLE app_settings ADD COLUMN ai_tag_suggestions INTEGER NOT NULL DEFAULT 1;
+";
+
+/// Migration 22: the folders opened recently (#63), newest first by `position` (0 is the newest),
+/// with when each was opened (Unix milliseconds) and the file that was open in it. Seeded with the
+/// ten most recent rows of `folder_history`, so the list does not start empty after an update.
+/// `last_file_path` is empty for none.
+pub const M22_RECENT_FOLDERS: &str = "
+CREATE TABLE IF NOT EXISTS recent_folders (
+    position INTEGER PRIMARY KEY,
+    folder_path TEXT NOT NULL,
+    opened_at_ms INTEGER NOT NULL,
+    last_file_path TEXT NOT NULL DEFAULT ''
+);
+INSERT INTO recent_folders (position, folder_path, opened_at_ms, last_file_path)
+SELECT ROW_NUMBER() OVER (ORDER BY opened_at DESC, id DESC) - 1,
+       folder_path,
+       COALESCE(CAST(strftime('%s', opened_at) AS INTEGER), 0) * 1000,
+       last_file_path
+FROM folder_history
+ORDER BY opened_at DESC, id DESC
+LIMIT 10;
+";

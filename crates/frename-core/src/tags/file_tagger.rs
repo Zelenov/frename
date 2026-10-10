@@ -324,7 +324,7 @@ impl FileTagger {
 }
 
 /// Whether `new_path`, or one of the sidecars that travel with it (comment, subtitle,
-/// transcript), already exists — checked before any write a rename would otherwise make, since
+/// transcript, screenshot at a time the old clip has one), already exists — checked before any write a rename would otherwise make, since
 /// renaming onto an existing file (issue #84) or its sidecar would silently replace it.
 ///
 /// A `new_path` that differs from `old_path` only by case is never "taken": on Windows' case-
@@ -341,11 +341,25 @@ pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
     [
         new_path.to_path_buf(),
         crate::comment::comment_path(new_path),
-        crate::subtitles::subtitle_path(new_path),
         crate::subtitles::transcript_path(new_path),
     ]
     .iter()
+    .chain(crate::subtitles::subtitle_candidates(new_path).iter())
     .any(|p| p.exists())
+        || super::production_file_tagger::screenshot_positions(old_path)
+            .into_iter()
+            .any(|ms| super::production_file_tagger::screenshot_path(new_path, ms).exists())
+}
+
+/// Move the sidecars that travel with a renamed clip (comment, subtitles, transcript,
+/// screenshots) from the
+/// names of `old_path` to those of `new_path`. The one list for the save that renames a clip and
+/// for its undo and redo, so they cannot drift apart; it matches the set `target_name_taken`
+/// guards.
+pub(crate) fn rename_sidecars(old_path: &Path, new_path: &Path) {
+    super::production_file_tagger::rename_screenshots(old_path, new_path);
+    crate::comment::rename_comment_file(old_path, new_path);
+    crate::subtitles::rename_subtitle_file(old_path, new_path);
 }
 
 /// Extension trait: save this snapshot then re-parse from the new path.
@@ -390,8 +404,7 @@ mod tests {
     /// Tags follow the folder's order; a file already in order is left alone.
     #[test]
     fn tags_are_sorted_in_the_folder_order() {
-        let folder = std::env::temp_dir().join(format!("frename-sort-test-{}", std::process::id()));
-        std::fs::create_dir_all(&folder).expect("temp dir");
+        let folder = crate::test_support::fresh_dir("sort-test");
         let mut store = FolderTagStore::for_folder(&folder);
         // Orders after the built-in tags', Zeta first.
         store
@@ -452,9 +465,7 @@ mod tests {
     /// Both directions of "Markers ⇄ comment", run twice: the second run changes nothing.
     #[test]
     fn comment_lines_and_markers_convert_both_ways_and_reruns_change_nothing() {
-        let dir =
-            std::env::temp_dir().join(format!("frename-markers-batch-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir("markers-batch");
         let file = dir.join("clip.mov");
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
         std::fs::copy(fixture, &file).expect("copy fixture");
@@ -507,8 +518,7 @@ mod tests {
     /// them.
     #[test]
     fn ai_segments_become_white_ranged_markers_in_the_xmp() {
-        let dir = std::env::temp_dir().join(format!("frename-markers-ai-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir("markers-ai");
         let file = dir.join("clip.mov");
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
         std::fs::copy(fixture, &file).expect("copy fixture");
@@ -558,8 +568,7 @@ AI: A walk.
     /// A second AI run replaces the markers of the first, and leaves the editor's alone.
     #[test]
     fn ai_markers_written_again_replace_the_previous_run() {
-        let dir = std::env::temp_dir().join(format!("frename-ai-markers-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir("ai-markers");
         let file = dir.join("clip.mov");
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
         std::fs::copy(fixture, &file).expect("copy fixture");
@@ -638,8 +647,7 @@ AI: A walk.
     }
 
     fn clip_with_markers(name: &str, markers: &[Marker]) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("frename-{name}-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir(name);
         let file = dir.join("clip.mov");
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
         std::fs::copy(fixture, &file).expect("copy fixture");

@@ -47,6 +47,8 @@ pub enum Message {
     PlayRange(f32, f32),
     /// Delete the marker under the playhead (Shift+F2).
     DeleteMarker,
+    /// `Ctrl+F2`: describe the marker the playhead is on with AI.
+    DescribeMarker,
     /// Jump to the previous marker (Shift+F1).
     PreviousMarker,
     /// Jump to the next marker (Shift+F3).

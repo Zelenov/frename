@@ -100,10 +100,17 @@ settings-ai-key-label = Ключ API Anthropic
 settings-ai-key-placeholder = sk-ant-…
 settings-ai-key-get = Получить ключ на console.anthropic.com → API keys.
 settings-ai-key-remove-confirm = Удалить сохранённый ключ Anthropic?
-settings-ai-used-by = Используется действием «Описать с помощью AI» в пакетном режиме.
+settings-ai-used-by = Используется действием «Описать с помощью AI» в пакетном режиме и на маркерах (✨, Ctrl+F2).
 settings-ai-model-label = Модель
 settings-ai-language-label = Язык описания
 settings-ai-hint = Haiku дешевле всех; Sonnet и Opus замечают больше.
+settings-ai-moments-label = Моменты
+settings-ai-moments-important = Только то, что выделяется
+settings-ai-moments-full = На весь клип
+settings-ai-moments-important-hint = Ещё AI предлагает точки входа и выхода (метка AI рядом с IN и OUT)
+settings-ai-moments-full-hint = Момент на каждую часть клипа, даже спокойную; без предложенных точек входа и выхода
+settings-ai-tag-suggestions = Ещё и предлагать теги из тегов папки
+settings-ai-tag-suggestions-hint = В том же запросе AI говорит, какие теги папки подходят к клипу. Предложенный тег добавляется, только когда вы на него нажмёте.
 settings-subtitles = Субтитры
 settings-subtitles-key-label = Ключ API Soniox
 settings-subtitles-key-placeholder = Вставьте ключ
@@ -240,6 +247,7 @@ batch-change-subtitles = Пишет файлы субтитров рядом с 
 batch-change-records = Меняет только записи самого frename
 batch-option-direction = Направление
 batch-option-language = Язык
+batch-option-tag-suggestions = Предложения тегов
 batch-option-described = Уже описанные
 batch-option-subtitled = С субтитрами
 batch-option-subtitles-write = Какие файлы записать
@@ -326,6 +334,13 @@ batch-action-describe-ai-no-subtitles = Без субтитров (описан�
 batch-action-describe-ai-redo = Переописать видео, у которых уже есть описание от AI
 batch-action-describe-ai-hint-panel = Описывает происходящее в каждом отмеченном видео с привязкой ко времени: краткое содержание и отрезки по времени добавляются в описание от AI в его комментарии; ваш собственный текст сохраняется. Кадры и субтитры отправляются в Anthropic.
 batch-ai-change = Изменить
+batch-ai-tag-suggestions-off = Выключены
+batch-ai-tag-suggestions-no-tags = Включены, но у этой папки пока нет тегов
+batch-ai-tag-suggestions-on = { $tags ->
+    [one] Из { $tags } тега папки
+    [few] Из { $tags } тегов папки
+   *[many] Из { $tags } тегов папки
+}
 batch-ai-key-missing = Укажите ключ API Anthropic в настройках
 batch-ai-key-unavailable = Не удалось открыть системное хранилище паролей: оно может быть заблокировано или отсутствовать (например, GNOME Keyring или KWallet).
 ## AI description language names: the Settings picker and { $language } above.
@@ -355,9 +370,12 @@ batch-ai-skipped = Пропущено: { $parts }.
 batch-ai-progress-frame = кадр { $done } из { $total }
 batch-ai-progress-waiting = ожидание ответа Claude
 batch-ai-progress-saving = сохранение
+batch-ai-progress-retry-rate-limit = повтор через { $seconds } с (лимит запросов)
+batch-ai-progress-retry-temporary = повтор через { $seconds } с (временный сбой)
 batch-ai-stop-no-key = Остановлено: нет ключа API Anthropic. Укажите его в настройках.
 batch-ai-fail-no-key = Нет ключа API
 batch-ai-fail-unreadable = Видео не удалось прочитать
+batch-ai-fail-too-long = Видео слишком длинное для AI (больше 30 мин)
 batch-ai-fail-not-saved = Не удалось сохранить описание
 batch-ai-stop-offline = Остановлено: нет соединения с Anthropic. Запустите ещё раз, чтобы описать оставшиеся.
 
@@ -436,7 +454,7 @@ folder-has-subtitles = Есть субтитры
 folder-closed-by-job = Закрыт, пока его меняет пакетное действие
 folder-filter-tip = Показать только…
 
-folder-search-placeholder = Найти файл или слово в комментарии
+folder-search-placeholder = Найти файл или комментарий
 folder-search-comments-loading = Ищем в комментариях… осталось { $n }
 folder-search-clear = Очистить
 folder-all = Все
@@ -470,6 +488,41 @@ folder-window-empty-title = Откройте папку с клипами
 folder-window-empty-line = Или перетащите папку в окно. Правый клик по кнопке открывает один файл.
 folder-window-open = Открыть папку…
 
+## Недавние папки (стрелка рядом с кнопкой «Открыть папку» и пустой экран)
+
+recent-folders-tip = Недавние папки
+recent-folders-title = Недавние папки
+recent-folders-none = Пока нет открытых папок
+recent-folders-not-found = Не найдена
+recent-folders-remove-tip = Убрать из списка
+recent-folders-clear = Очистить список
+recent-folders-remove = Убрать
+recent-folders-keep = Оставить
+recent-folders-missing-line = Не найдена. Убрать?
+recent-folders-just-now = Только что
+recent-folders-minutes = { $count } мин назад
+recent-folders-hours = { $count } ч назад
+recent-folders-days = { $count ->
+    [one] { $count } день назад
+    [few] { $count } дня назад
+   *[many] { $count } дней назад
+}
+recent-folders-weeks = { $count ->
+    [one] { $count } неделю назад
+    [few] { $count } недели назад
+   *[many] { $count } недель назад
+}
+recent-folders-months = { $count ->
+    [one] { $count } месяц назад
+    [few] { $count } месяца назад
+   *[many] { $count } месяцев назад
+}
+recent-folders-years = { $count ->
+    [one] { $count } год назад
+    [few] { $count } года назад
+   *[many] { $count } лет назад
+}
+
 ## File menu (right-click on a file, or F11 / Shift+F11 / Ctrl+F11)
 
 file-menu-show-in-explorer = Показать в проводнике
@@ -493,6 +546,7 @@ folder-controls-batch-back = Назад к открытому файлу
 folder-controls-update-available = Доступно обновление: { $version }
 folder-controls-previous = Предыдущий файл
 folder-controls-next = Следующий файл
+folder-controls-more = Ещё
 folder-controls-open-file = Правый клик: открыть один файл
 
 ## Video
@@ -526,6 +580,7 @@ rotate-flag-none = нет
 rotate-now = Поворот: { $flag }
 rotate-turned = Повёрнуто на { $turn } · теперь поворот: { $flag }
 rotate-failed = Не повёрнуто: { $reason }
+undo-name-taken = Не изменено: файл с именем { $name } уже есть
 undo-back-on-clip = Снова на этом ролике (переход отменён). Ещё раз Ctrl+Z — отмена его последнего изменения.
 redo-on-clip = Снова на этом ролике (переход повторён).
 rotate-reason-in-use = файл только для чтения или занят
@@ -545,6 +600,7 @@ media-viewer-video-markers-hint = Shift+F1 / Shift+F3 — переход меж�
 media-viewer-video-tab-markers = Маркеры
 media-viewer-video-fullscreen = Во весь экран
 media-viewer-video-close-list = Закрыть список
+media-viewer-video-resumed = Продолжено с { $time } · Home: с начала
 
 ## Markers list
 markers-in-out = Точки входа и выхода
@@ -568,6 +624,43 @@ markers-color-magenta = Пурпурный
 markers-color-other = Другой цвет
 markers-read-only = только чтение
 markers-name-placeholder = Имя
+markers-ai-describe = Описать с помощью AI: назвать маркер и добавить, что происходит
+markers-ai-stop = Остановить описание
+markers-ai-describe-unnamed = { $count ->
+    [one] Описать { $count } безымянный
+    [few] Описать { $count } безымянных
+   *[many] Описать { $count } безымянных
+}
+markers-ai-describe-unnamed-hint = Дать имя и описание с помощью AI каждому маркеру без имени, по несколько за раз. Один запрос на маркер; имя, которое вы впишете за это время, сохранится.
+markers-ai-price-about = около { $dollars }
+markers-ai-describe-unnamed-cost = Один запрос на маркер: { $each } за маркер, { $total } за все.
+markers-ai-confirm = { $count ->
+    [one] Описать { $count } маркер? По запросу на каждый: { $total } всего.
+    [few] Описать { $count } маркера? По запросу на каждый: { $total } всего.
+   *[many] Описать { $count } маркеров? По запросу на каждый: { $total } всего.
+}
+markers-ai-confirm-unpriced = { $count ->
+    [one] Описать { $count } маркер? По платному запросу на каждый.
+    [few] Описать { $count } маркера? По платному запросу на каждый.
+   *[many] Описать { $count } маркеров? По платному запросу на каждый.
+}
+markers-ai-confirm-yes = Описать
+markers-ai-confirm-no = Отмена
+markers-ai-waiting = Ждёт очереди…
+markers-ai-run = Идёт: { $describing } · ждут: { $waiting }
+markers-ai-run-last = Идёт: { $describing }
+markers-ai-stop-all = Остановить
+markers-ai-describing = Описываю…
+markers-ai-done = Маркер описан
+markers-ai-nothing-new = У маркера уже есть это описание
+markers-no-marker-notice = Здесь нет маркера
+markers-ai-no-key = Нет ключа Anthropic API: задайте его в настройках
+markers-ai-failed = Не описано: { $reason }
+markers-ai-failed-unknown = что-то пошло не так
+markers-read-only-notice = Этот маркер только для чтения
+markers-ai-gone = Маркера больше нет: описание не добавлено
+markers-ai-stopping-for-batch = Сначала останавливаю описание маркеров… Это обычно занимает несколько секунд.
+folder-not-saved-marker-ai = Не сохранено: описание маркера ещё читало клип. Попробуйте ещё раз через минуту.
 
 ## File workspace
 
@@ -608,12 +701,24 @@ file-name-panel-untag = Снять тег
 file-name-panel-clear-in = Убрать точку входа
 file-name-panel-clear-out = Убрать точку выхода
 file-name-panel-suggested-in-out = AI
-file-name-panel-apply-suggested-in-out = Поставить вход и выход, которые предлагает AI
+file-name-panel-apply-suggested-in-out = Поставить вход и выход, которые предлагает AI (округлено до целых секунд)
+file-name-panel-suggested-tags = Теги AI
+file-name-panel-add-suggested-tag = Добавить тег «{ $tag }» (уверенность { $percent }%)
+file-name-panel-add-suggested-tag-unsure = Добавить тег «{ $tag }»
+file-name-panel-add-all-suggested-tags = Добавить все
+file-name-panel-add-all-suggested-tags-tip = Добавить все теги, которые предлагает AI
+file-name-panel-tag-ideas = Идеи: { $ideas }
+file-name-panel-tag-ideas-tip = Теги, которые AI заметил, но которых нет у этой папки. Они не добавляются.
+file-name-panel-saved = Все изменения сохранены
+file-name-panel-saved-to-recovery = Сохранено для восстановления, применится, когда вы покинете клип
 
 ## Updates (Settings)
 
 updates-check = Проверить обновления
 updates-not-installed = Обновления работают только в установленной версии
+updates-from-store = Обновления приходят из Microsoft Store
+updates-from-releases = Новые версии: скачайте их на странице релизов
+updates-open-releases = Открыть страницу релизов
 updates-checking = Проверка…
 updates-downloading-named = Загрузка { $version }… { $percent }%
 updates-downloading = Загрузка… { $percent }%
@@ -646,3 +751,8 @@ recovery-markers = { $count ->
 recovery-comment = комментарий
 recovery-in-out = точки входа и выхода
 recovery-edits = правки
+folder-frame-saved = Кадр сохранён
+folder-not-saved = Не сохранено: файл с таким именем уже есть, либо он только для чтения или занят
+markers-deleted-notice = Маркер удалён
+markers-not-saved-notice = Маркеры не сохранены: файл только для чтения или занят
+markers-comment-not-saved-notice = Маркеры не сохранены: файл комментария только для чтения или занят

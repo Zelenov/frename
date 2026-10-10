@@ -6,9 +6,8 @@
 //! radio is picked, a dropdown moves to its next option, a button is pressed); Enter presses a
 //! focused button. A text field takes real iced focus, so typing goes into it.
 
-use clipscribe::MODELS;
 use frename_core::ai::key::{ApiKey, KeyState};
-use frename_core::ai::SummaryLanguage;
+use frename_core::ai::{MomentsMode, SummaryLanguage};
 use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage};
 
 use super::state::{KeySection, SettingsState};
@@ -43,6 +42,8 @@ pub enum Control {
     Key(ApiKey, KeyControl),
     AiModel,
     SummaryLanguage,
+    AiMoments(MomentsMode),
+    AiTagSuggestions,
     CueLength(CueLength),
     /// A language spoken in the footage, by its code.
     SubtitleLanguage(String),
@@ -90,9 +91,11 @@ impl Control {
             | Control::MoveInOut
             | Control::ImportOldSettings
             | Control::Close
-            | Control::Updates(updates::Control::Check | updates::Control::UpdateAndRestart) => {
-                true
-            }
+            | Control::Updates(
+                updates::Control::Check
+                | updates::Control::UpdateAndRestart
+                | updates::Control::OpenReleases,
+            ) => true,
             Control::Key(_, key) => *key != KeyControl::Field,
             _ => false,
         }
@@ -196,7 +199,13 @@ pub fn controls(state: &SettingsState, batch_running: bool) -> Vec<Control> {
         }
         Page::Ai => {
             controls.extend(key_controls(state, ApiKey::Anthropic));
-            controls.extend([Control::AiModel, Control::SummaryLanguage]);
+            controls.extend([
+                Control::AiModel,
+                Control::SummaryLanguage,
+                Control::AiMoments(MomentsMode::Important),
+                Control::AiMoments(MomentsMode::Full),
+                Control::AiTagSuggestions,
+            ]);
         }
         Page::Subtitles => {
             controls.extend(key_controls(state, ApiKey::Soniox));
@@ -250,18 +259,39 @@ pub fn key_controls(state: &SettingsState, which: ApiKey) -> Vec<Control> {
         .collect()
 }
 
-/// The control `steps` away from `from` among `controls`, wrapping around; from none (or from
-/// one no longer shown), Tab starts at the first and Shift+Tab at the last.
-pub fn step(controls: &[Control], from: Option<&Control>, steps: isize) -> Option<Control> {
+/// The control `steps` away from `from` among `controls`, wrapping around; from none, Tab starts
+/// at the first and Shift+Tab at the last. From a control no longer shown (a button disabled while
+/// it had the focus), the step goes on from where it stood in `before`, the controls of the step
+/// before: Tab to the next one still shown, Shift+Tab to the previous one.
+pub fn step(
+    controls: &[Control],
+    before: &[Control],
+    from: Option<&Control>,
+    steps: isize,
+) -> Option<Control> {
     let count = controls.len() as isize;
     if count == 0 {
         return None;
     }
-    let at = from.and_then(|from| controls.iter().position(|c| c == from));
+    let shown = |control: &Control| controls.iter().position(|c| c == control);
+    let at = from.and_then(shown);
     let next = match at {
         Some(at) => (at as isize + steps).rem_euclid(count),
-        None if steps < 0 => count - 1,
-        None => 0,
+        None => {
+            let gone = from.and_then(|from| before.iter().position(|c| c == from));
+            match (gone, steps < 0) {
+                (Some(gone), false) => {
+                    before[gone + 1..].iter().find_map(shown).unwrap_or(0) as isize
+                }
+                (Some(gone), true) => before[..gone]
+                    .iter()
+                    .rev()
+                    .find_map(shown)
+                    .unwrap_or(count as usize - 1) as isize,
+                (None, true) => count - 1,
+                (None, false) => 0,
+            }
+        }
     };
     Some(controls[next as usize].clone())
 }
@@ -309,13 +339,16 @@ pub fn press(state: &SettingsState, control: &Control, press: Press) -> Option<M
             Message::Key(*which, message)
         }
         Control::AiModel => {
-            let ids: Vec<&str> = MODELS.iter().map(|model| model.id).collect();
-            let current = clipscribe::Model::from_id(&settings.ai_model).id;
-            Message::SetAiModel(clipscribe::Model::from_id(next_of(&ids, &current)))
+            let models = frename_core::ai::models();
+            let ids: Vec<&str> = models.iter().map(|model| model.id).collect();
+            let current = frename_core::ai::model_from_id(&settings.ai_model).id;
+            Message::SetAiModel(frename_core::ai::model_from_id(next_of(&ids, &current)))
         }
         Control::SummaryLanguage => {
             Message::SetSummaryLanguage(*next_of(&SummaryLanguage::ALL, &settings.summary_language))
         }
+        Control::AiMoments(moments) => Message::SetAiMoments(*moments),
+        Control::AiTagSuggestions => Message::SetAiTagSuggestions(!settings.ai_tag_suggestions),
         Control::CueLength(length) => Message::SetSubtitleCueLength(*length),
         Control::SubtitleLanguage(code) => {
             Message::SetSubtitleLanguage(code.clone(), !settings.subtitle_languages.contains(code))
@@ -443,24 +476,79 @@ mod tests {
     }
 
     #[test]
+    fn the_ai_page_reaches_the_moments_choice_and_the_tag_suggestions_checkbox() {
+        let ai = controls_of(Page::Ai);
+        for control in [
+            Control::AiMoments(MomentsMode::Important),
+            Control::AiMoments(MomentsMode::Full),
+            Control::AiTagSuggestions,
+        ] {
+            assert!(ai.contains(&control), "{control:?}");
+        }
+        let state = SettingsState::for_tests();
+        assert!(matches!(
+            press(&state, &Control::AiMoments(MomentsMode::Full), Press::Space),
+            Some(Message::SetAiMoments(MomentsMode::Full))
+        ));
+        let on = state.settings().ai_tag_suggestions;
+        assert!(matches!(
+            press(&state, &Control::AiTagSuggestions, Press::Space),
+            Some(Message::SetAiTagSuggestions(next)) if next == !on
+        ));
+    }
+
+    #[test]
+    fn tab_from_a_control_that_went_away_goes_on_from_its_place() {
+        let before = [
+            Control::Updates(updates::Control::Check),
+            Control::Updates(updates::Control::UpdateAndRestart),
+            Control::Updates(updates::Control::CheckOnStart),
+            Control::Close,
+        ];
+        // Check for updates was focused and became disabled.
+        let now = [
+            Control::Updates(updates::Control::UpdateAndRestart),
+            Control::Updates(updates::Control::CheckOnStart),
+            Control::Close,
+        ];
+        let gone = Control::Updates(updates::Control::Check);
+        assert_eq!(
+            step(&now, &before, Some(&gone), 1),
+            Some(Control::Updates(updates::Control::UpdateAndRestart))
+        );
+        assert_eq!(step(&now, &before, Some(&gone), -1), Some(Control::Close));
+        // The one after it is gone too: the next shown one.
+        let gone = Control::Updates(updates::Control::UpdateAndRestart);
+        let now = [
+            Control::Updates(updates::Control::CheckOnStart),
+            Control::Close,
+        ];
+        assert_eq!(
+            step(&now, &before, Some(&gone), 1),
+            Some(Control::Updates(updates::Control::CheckOnStart))
+        );
+        assert_eq!(step(&now, &before, Some(&gone), -1), Some(Control::Close));
+    }
+
+    #[test]
     fn stepping_wraps_and_starts_at_either_end() {
         let all = controls_of(Page::Interface);
-        assert_eq!(step(&all, None, 1), Some(Control::UiLanguage));
-        assert_eq!(step(&all, None, -1), Some(Control::Close));
+        assert_eq!(step(&all, &[], None, 1), Some(Control::UiLanguage));
+        assert_eq!(step(&all, &[], None, -1), Some(Control::Close));
         assert_eq!(
-            step(&all, Some(&Control::Close), 1),
+            step(&all, &[], Some(&Control::Close), 1),
             Some(Control::UiLanguage)
         );
         assert_eq!(
-            step(&all, Some(&Control::UiLanguage), -1),
+            step(&all, &[], Some(&Control::UiLanguage), -1),
             Some(Control::Close)
         );
         assert_eq!(
-            step(&all, Some(&Control::MoveComments), 1),
+            step(&all, &[], Some(&Control::MoveComments), 1),
             Some(Control::UiLanguage),
             "a control no longer shown starts over"
         );
-        assert_eq!(step(&[], None, 1), None);
+        assert_eq!(step(&[], &[], None, 1), None);
     }
 
     #[test]
@@ -514,7 +602,7 @@ mod tests {
         };
         assert_ne!(
             model.id,
-            clipscribe::Model::from_id(&state.settings().ai_model).id
+            frename_core::ai::model_from_id(&state.settings().ai_model).id
         );
     }
 

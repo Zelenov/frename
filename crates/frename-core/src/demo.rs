@@ -25,6 +25,10 @@ pub struct DemoScenario {
     /// Where to pause the video, in seconds.
     #[serde(default)]
     pub seek: f32,
+    /// Where playback stopped in the open clip last time, in seconds (#161): it opens a little
+    /// before, with the note that says so, instead of seeking to `seek`.
+    #[serde(default)]
+    pub resume: Option<f32>,
     /// Window size in logical pixels: width, height.
     pub window: [u32; 2],
     /// Widths of the video panel and the file list panel.
@@ -39,6 +43,25 @@ pub struct DemoScenario {
     /// into it.
     #[serde(default)]
     pub more: bool,
+    /// Show the time readout as it looks while a frame step is slow (#196).
+    #[serde(default)]
+    pub slow_step: bool,
+    /// Show the open clip's marker with this name as being described with AI (its row's turning
+    /// loader and stop button), without sending a request.
+    #[serde(default)]
+    pub describing: Option<String>,
+    /// Show every unnamed marker of the open clip as "Describe N unnamed" would leave them (the
+    /// first few being described, the others waiting), without sending a request.
+    #[serde(default)]
+    pub describing_unnamed: bool,
+    /// Show "Describe N unnamed" asking whether to send, with the price (for more unnamed markers
+    /// than it sends without asking), without sending a request.
+    #[serde(default)]
+    pub confirming_describe_unnamed: bool,
+    /// In batch mode, show the running "Describe with AI" job on its first file as a request
+    /// that waits this many seconds (rate limit) before it is sent again, without sending one.
+    #[serde(default)]
+    pub ai_retry_wait_s: Option<u64>,
     /// Turn the open clip by this many quarter turns clockwise (negative: counter-clockwise),
     /// as `Ctrl+Alt+→` / `←` do, after the seek. The shot is then taken while the note is still
     /// shown over the picture.
@@ -58,8 +81,38 @@ pub struct DemoScenario {
     /// A word to type in the file search bar (issue #99).
     #[serde(default)]
     pub search: Option<String>,
+    /// Text to type into the open clip's comment (at its start), an edit that is not saved yet: after a
+    /// second it is in the recovery journal, so the file name card says so (#155). Demo only.
+    #[serde(default)]
+    pub type_in_comment: Option<String>,
+    /// The name of the staged folder (it shows in the recent folders); `folder` when not given.
+    #[serde(default)]
+    pub folder_name: Option<String>,
+    /// Folders opened before this one, newest first (#63): they fill the recent folders list.
+    #[serde(default)]
+    pub recent: Vec<DemoRecent>,
+    /// Open the recent folders dropdown (the ▾ next to the open button).
+    #[serde(default)]
+    pub recent_menu: bool,
+    /// Open the toolbar's More menu (demo only: the screenshot of a narrow file list, #228).
+    #[serde(default)]
+    pub toolbar_more: bool,
     /// The staged files, oldest first: the file list shows them in this order.
     pub files: Vec<DemoFile>,
+}
+
+/// A folder opened before the staged one, for the recent folders list.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DemoRecent {
+    /// Where it is, under the work folder's `recent` folder (`Shoots/2026-09 Lisbon`).
+    pub folder: String,
+    /// The folder does not exist (a disconnected drive): it is listed, shown as not found.
+    #[serde(default)]
+    pub missing: bool,
+    /// How long ago it was opened.
+    #[serde(default)]
+    pub minutes_ago: u64,
 }
 
 /// One staged file.
@@ -76,6 +129,12 @@ pub struct DemoFile {
     /// Subtitles, saved as the `.srt` next to the copy.
     #[serde(default)]
     pub subtitles: Option<String>,
+    /// Subtitles, saved as the `.ass` next to the copy (#218).
+    #[serde(default)]
+    pub subtitles_ass: Option<String>,
+    /// A Premiere Pro transcript (its JSON), saved as the `.premiere.json` next to the copy (#219).
+    #[serde(default)]
+    pub transcript: Option<String>,
     /// Clip markers written into the copy's XMP, one line each as a comment holds them:
     /// `0:06.120 — City lights`, `0:41-0:47 — Lion — roars twice`.
     #[serde(default)]
@@ -150,6 +209,24 @@ impl DemoScenario {
         if self.window.contains(&0) {
             return Err(DemoError("window size must not be zero".into()));
         }
+        for recent in &self.recent {
+            let relative = Path::new(&recent.folder);
+            if recent.folder.is_empty()
+                || !relative
+                    .components()
+                    .all(|part| matches!(part, Component::Normal(_)))
+            {
+                return Err(DemoError(format!(
+                    "recent folder {:?} is not a plain relative path",
+                    recent.folder
+                )));
+            }
+        }
+        if let Some(name) = &self.folder_name {
+            if name.is_empty() || name.contains(['/', '\\']) {
+                return Err(DemoError(format!("not a plain folder name: {name:?}")));
+            }
+        }
         let staged = |name: &str| self.files.iter().any(|f| f.name == name);
         for name in &self.ctrl_click {
             if !staged(name) {
@@ -198,6 +275,12 @@ pub fn stage(
         if let Some(subtitles) = &file.subtitles {
             std::fs::write(crate::subtitle_path(&target), subtitles)?;
         }
+        if let Some(subtitles) = &file.subtitles_ass {
+            std::fs::write(target.with_extension("ass"), subtitles)?;
+        }
+        if let Some(transcript) = &file.transcript {
+            std::fs::write(target.with_extension("premiere.json"), transcript)?;
+        }
         if !file.markers.is_empty() {
             // Each line was checked by `DemoScenario::check`.
             let markers: Vec<crate::Marker> = file
@@ -216,7 +299,16 @@ pub fn stage(
                 .map_err(|e| std::io::Error::other(format!("{}: {e}", file.name)))?;
         }
     }
+    // The folders opened before: empty ones, except those that are meant to be gone.
+    for recent in scenario.recent.iter().filter(|r| !r.missing) {
+        std::fs::create_dir_all(recent_root(into).join(&recent.folder))?;
+    }
     Ok(into.join(&scenario.open))
+}
+
+/// Where a scenario's recent folders are: next to the staged folder, in `recent`.
+fn recent_root(staged: &Path) -> PathBuf {
+    staged.parent().unwrap_or(staged).join("recent")
 }
 
 /// Store the app state the scenario shows: window at the top left with its size and panel
@@ -250,7 +342,22 @@ pub fn seed(
         ui_language: ui_language.to_string(),
         ..AppSettings::default()
     });
+    // Oldest first, so the newest ends on top; the staged folder is the newest of all.
+    let now = crate::recent_folders::now_ms();
+    for recent in scenario.recent.iter().rev() {
+        let opened = now - i64::try_from(recent.minutes_ago * 60_000).unwrap_or(0);
+        store.record_recent_folder(
+            &FolderAndFile::new(
+                recent_root(folder).join(&recent.folder),
+                None::<std::path::PathBuf>,
+            ),
+            opened,
+        );
+    }
     store.set_last_folder_and_file(&FolderAndFile::new(folder, Some(file)));
+    if let Some(resume) = scenario.resume {
+        store.set_playback_position(file, std::time::Duration::from_secs_f32(resume.max(0.0)));
+    }
 }
 
 #[cfg(test)]
@@ -272,9 +379,17 @@ name = "pick.a.mp4"
     fn a_minimal_scenario_gets_defaults() {
         let scenario = DemoScenario::parse(MINIMAL).unwrap();
         assert_eq!(scenario.seek, 0.0);
+        assert_eq!(scenario.resume, None);
         assert!(!scenario.more);
         assert_eq!(scenario.files[0].comment, None);
         assert!(scenario.files[0].markers.is_empty());
+    }
+
+    #[test]
+    fn a_scenario_can_show_a_slow_step() {
+        assert!(!DemoScenario::parse(MINIMAL).unwrap().slow_step);
+        let text = MINIMAL.replace("[[files]]", "slow_step = true\n[[files]]");
+        assert!(DemoScenario::parse(&text).unwrap().slow_step);
     }
 
     #[test]
@@ -285,6 +400,43 @@ name = "pick.a.mp4"
 [[files]]",
         );
         assert!(DemoScenario::parse(&text).unwrap().more);
+    }
+
+    #[test]
+    fn a_scenario_can_show_a_marker_being_described() {
+        let text = MINIMAL.replace("[[files]]", "describing = \"Lion\"\n[[files]]");
+        let scenario = DemoScenario::parse(&text).unwrap();
+        assert_eq!(scenario.describing.as_deref(), Some("Lion"));
+        assert_eq!(DemoScenario::parse(MINIMAL).unwrap().describing, None);
+    }
+
+    #[test]
+    fn a_scenario_can_show_a_batch_request_waiting_to_retry() {
+        let text = MINIMAL.replace("[[files]]", "ai_retry_wait_s = 8\n[[files]]");
+        assert_eq!(DemoScenario::parse(&text).unwrap().ai_retry_wait_s, Some(8));
+        assert_eq!(DemoScenario::parse(MINIMAL).unwrap().ai_retry_wait_s, None);
+    }
+
+    #[test]
+    fn a_scenario_can_show_the_describe_all_question() {
+        let text = MINIMAL.replace("[[files]]", "confirming_describe_unnamed = true\n[[files]]");
+        assert!(
+            DemoScenario::parse(&text)
+                .unwrap()
+                .confirming_describe_unnamed
+        );
+        assert!(
+            !DemoScenario::parse(MINIMAL)
+                .unwrap()
+                .confirming_describe_unnamed
+        );
+    }
+
+    #[test]
+    fn a_scenario_can_show_the_unnamed_markers_being_described() {
+        let text = MINIMAL.replace("[[files]]", "describing_unnamed = true\n[[files]]");
+        assert!(DemoScenario::parse(&text).unwrap().describing_unnamed);
+        assert!(!DemoScenario::parse(MINIMAL).unwrap().describing_unnamed);
     }
 
     #[test]
@@ -332,11 +484,7 @@ name = "pick.a.mp4"
     }
 
     fn temp_dir(name: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("frename-demo-test-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
+        crate::test_support::fresh_dir(&format!("demo-test-{name}"))
     }
 
     #[test]
@@ -398,6 +546,7 @@ markers = ["0:00.100 — Start — first frames"]
         window: Mutex<Option<WindowGeometry>>,
         settings: Mutex<Option<AppSettings>>,
         session: Mutex<Option<FolderAndFile>>,
+        playback: Mutex<Option<(std::path::PathBuf, std::time::Duration)>>,
     }
 
     impl AppStateStore for Recorder {
@@ -412,6 +561,9 @@ markers = ["0:00.100 — Start — first frames"]
         }
         fn set_app_settings(&self, settings: AppSettings) {
             *self.settings.lock().unwrap() = Some(settings);
+        }
+        fn set_playback_position(&self, clip: &Path, position: std::time::Duration) {
+            *self.playback.lock().unwrap() = Some((clip.to_path_buf(), position));
         }
     }
 
@@ -448,5 +600,93 @@ markers = ["0:00.100 — Start — first frames"]
             store.get_last_session(),
             Some(FolderAndFile::new("/f", Some("/f/pick.a.mp4")))
         );
+        assert_eq!(*store.playback.lock().unwrap(), None, "nothing to resume");
+    }
+
+    #[test]
+    fn a_scenario_can_open_its_clip_where_playback_stopped() {
+        let text = MINIMAL.replace(
+            "[[files]]",
+            "resume = 41.5
+[[files]]",
+        );
+        let scenario = DemoScenario::parse(&text).unwrap();
+        let store = Recorder::default();
+        seed(
+            &store,
+            &scenario,
+            Path::new("/f"),
+            Path::new("/f/pick.a.mp4"),
+            false,
+            "en",
+        );
+        assert_eq!(
+            *store.playback.lock().unwrap(),
+            Some((
+                Path::new("/f/pick.a.mp4").to_path_buf(),
+                std::time::Duration::from_millis(41_500)
+            ))
+        );
+    }
+
+    #[test]
+    fn recent_folders_are_checked_staged_and_seeded_newest_first() {
+        let text = MINIMAL.replace(
+            "[[files]]",
+            r#"folder_name = "2026-09 Lisbon"
+recent_menu = true
+[[recent]]
+folder = "Shoots/Porto"
+minutes_ago = 30
+[[recent]]
+folder = "Drive/Wedding"
+missing = true
+minutes_ago = 3000
+[[files]]"#,
+        );
+        let scenario = DemoScenario::parse(&text).unwrap();
+        assert!(scenario.recent_menu);
+        assert_eq!(scenario.recent.len(), 2);
+        assert!(scenario.recent[1].missing);
+
+        let root = std::env::temp_dir().join(format!("frename-demo-recent-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let clips = root.join("clips");
+        std::fs::create_dir_all(&clips).unwrap();
+        std::fs::write(clips.join("a.mp4"), b"video").unwrap();
+        let staged = root.join("work").join("2026-09 Lisbon");
+        stage(&scenario, &root, &staged).unwrap();
+        let recent = root.join("work").join("recent");
+        assert!(recent.join("Shoots").join("Porto").is_dir());
+        assert!(
+            !recent.join("Drive").exists(),
+            "a missing folder is not made"
+        );
+
+        let store = crate::db::fake_app_storage::FakeAppStorage::new();
+        seed(
+            &store,
+            &scenario,
+            &staged,
+            &staged.join("pick.a.mp4"),
+            false,
+            "en",
+        );
+        let listed = store.get_recent_folders();
+        let names: Vec<_> = listed.iter().map(|e| e.name()).collect();
+        assert_eq!(names, ["2026-09 Lisbon", "Porto", "Wedding"]);
+        assert!(listed[1].opened_at_ms > listed[2].opened_at_ms);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_recent_folder_must_be_a_plain_relative_path() {
+        for bad in ["", "../x", "/x"] {
+            let text = MINIMAL.replace(
+                "[[files]]",
+                &format!("[[recent]]\nfolder = {bad:?}\n[[files]]"),
+            );
+            assert!(DemoScenario::parse(&text).is_err(), "{bad:?}");
+        }
     }
 }

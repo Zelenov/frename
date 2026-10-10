@@ -1,0 +1,16 @@
+# PR screenshot for #181: "Describe with AI" is running (`--batch --ai`) and the first clip's
+# request waits 8 seconds for a rate limit before it is sent again; the item's progress text says
+# so. The demo shows it without sending a request (`ai_retry_wait_s`). Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.night.city.MVI_0410.mp4"
+window = [1440, 720]
+panels = [640, 360]
+ai_retry_wait_s = 8
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.drone.landscape.MVI_0404.mp4"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.MVI_0410.mp4"

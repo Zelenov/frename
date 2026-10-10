@@ -104,7 +104,8 @@ pub fn timecode<'a, M: Clone + 'a>(
 }
 
 /// A suggested timecode range: `mono` on the accent tint, with who suggests it (`name`, "AI")
-/// before it and a `check` after it. The whole pill applies it on a click, with what that does
+/// before it and an `arrow-right` (apply) after it. The whole pill applies it on a click, with
+/// what that does
 /// as its tooltip.
 pub fn suggested_timecode<'a, M: Clone + 'a>(
     name: String,
@@ -117,7 +118,7 @@ pub fn suggested_timecode<'a, M: Clone + 'a>(
             icon(Icon::Sparkles, ICON_S, ACCENT_TEXT),
             text::caption(name).color(ACCENT_TEXT),
             text::mono(time).color(TEXT),
-            icon(Icon::Check, ICON_S, ACCENT_TEXT),
+            icon(Icon::ArrowRight, ICON_S, ACCENT_TEXT),
         ]
         .spacing(SPACE_XS)
         .align_y(Alignment::Center),
@@ -126,6 +127,64 @@ pub fn suggested_timecode<'a, M: Clone + 'a>(
     .style(style::badge(ACCENT_TINT));
     tooltip::tip_text(
         mouse_area(pill)
+            .on_press(on_apply)
+            .interaction(mouse::Interaction::Pointer),
+        tip,
+        tooltip::Position::Top,
+    )
+}
+
+/// A tag the AI suggests (§8.16): a `plus`, its name and how sure the AI is, on the accent tint.
+/// The whole pill adds it on a click, with what that does (and its key) as the tooltip.
+pub fn suggested_tag<'a, M: Clone + 'a>(
+    name: String,
+    percent: Option<u8>,
+    on_add: M,
+    tip: tooltip::Tip,
+) -> Element<'a, M> {
+    let sure = percent.map(|p| text::caption(format!("{p}%")).color(TEXT_SECONDARY));
+    let pill = container(
+        row![
+            icon(Icon::Plus, ICON_S, ACCENT_TEXT),
+            text::caption_strong(name)
+                .color(TEXT)
+                .wrapping(Wrapping::None),
+        ]
+        .push(sure)
+        .spacing(SPACE_XS)
+        .align_y(Alignment::Center),
+    )
+    .padding(BADGE_PADDING)
+    .style(style::badge(ACCENT_TINT));
+    tooltip::tip(
+        mouse_area(pill)
+            .on_press(on_add)
+            .interaction(mouse::Interaction::Pointer),
+        tip,
+        tooltip::Position::Top,
+    )
+}
+
+/// What applies every suggestion at once (§8.16): a `check` and `label` in the accent text, on
+/// no surface of its own, after the suggestions it applies.
+pub fn apply_all<'a, M: Clone + 'a>(
+    label: String,
+    on_apply: M,
+    tip: tooltip::Tip,
+) -> Element<'a, M> {
+    let link = container(
+        row![
+            icon(Icon::Check, ICON_S, ACCENT_TEXT),
+            text::caption_strong(label)
+                .color(ACCENT_TEXT)
+                .wrapping(Wrapping::None),
+        ]
+        .spacing(SPACE_XS)
+        .align_y(Alignment::Center),
+    )
+    .padding(BADGE_PADDING);
+    tooltip::tip(
+        mouse_area(link)
             .on_press(on_apply)
             .interaction(mouse::Interaction::Pointer),
         tip,

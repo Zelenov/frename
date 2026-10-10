@@ -99,10 +99,7 @@ mod tests {
     use super::*;
 
     fn temp_folder(name: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("frename-comment-{name}-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        dir
+        crate::test_support::fresh_dir(&format!("comment-{name}"))
     }
 
     #[test]

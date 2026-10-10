@@ -1,8 +1,12 @@
 //! Traits for app state storage: session read/write, stored tags, tag color mapping, and one-time initialization.
 
+use std::path::Path;
+use std::time::Duration;
+
 use uuid::Uuid;
 
-use crate::ai::SummaryLanguage;
+use crate::ai::{MomentsMode, SummaryLanguage};
+use crate::recent_folders::RecentFolder;
 use crate::{
     CommentStorage, CueLength, FolderAndFile, InOutStorage, MarkerStorage, StoredTag,
     TagColorMapping,
@@ -65,6 +69,12 @@ pub struct AppSettings {
     /// The id of the model AI descriptions are written with (see
     /// [`clipscribe::Model::from_id`]). Defaults to the cheapest.
     pub ai_model: String,
+    /// Which moments AI descriptions get: only what stands out (the default, which alone
+    /// suggests an In/Out) or the whole clip.
+    pub ai_moments: MomentsMode,
+    /// Whether "Describe with AI" also suggests tags from the folder's own tags, in the same
+    /// request. Defaults to true.
+    pub ai_tag_suggestions: bool,
     /// Languages spoken in the footage, as hints for generating subtitles (codes such as
     /// "en"). Empty: detect automatically. Defaults to
     /// [`crate::DEFAULT_SUBTITLE_LANGUAGES`].
@@ -89,6 +99,8 @@ impl Default for AppSettings {
             space_after_tags: false,
             summary_language: SummaryLanguage::default(),
             ai_model: clipscribe::MODELS[0].id.to_string(),
+            ai_moments: MomentsMode::default(),
+            ai_tag_suggestions: true,
             subtitle_languages: crate::DEFAULT_SUBTITLE_LANGUAGES
                 .iter()
                 .map(|code| code.to_string())
@@ -150,8 +162,27 @@ pub trait AppStateStore: Send + Sync {
     /// Returns the last opened folder and file in it, if any.
     fn get_last_session(&self) -> Option<FolderAndFile>;
 
-    /// Sets the last opened folder and file in it (inserts or updates).
+    /// Sets the last opened folder and file in it (inserts or updates). It also records the
+    /// folder as opened now in the recent folders ([`Self::record_recent_folder`]), so every way of
+    /// opening a folder lands in that list.
     fn set_last_folder_and_file(&self, value: &FolderAndFile);
+
+    /// The folders opened recently, newest first, each once, at most
+    /// [`crate::recent_folders::MAX_RECENT_FOLDERS`] (#63).
+    fn get_recent_folders(&self) -> Vec<RecentFolder> {
+        Vec::new()
+    }
+
+    /// Records that `value`'s folder was opened at `opened_at_ms` (Unix milliseconds): it moves to
+    /// the top of the recent folders, and with a file in `value` remembers that file (see
+    /// [`crate::recent_folders::record`]).
+    fn record_recent_folder(&self, _value: &FolderAndFile, _opened_at_ms: i64) {}
+
+    /// Takes one folder off the recent folders.
+    fn forget_recent_folder(&self, _folder: &Path) {}
+
+    /// Empties the recent folders.
+    fn clear_recent_folders(&self) {}
 
     /// Returns the saved window geometry, if any.
     fn get_window_state(&self) -> Option<WindowGeometry> {
@@ -192,6 +223,22 @@ pub trait AppStateStore: Send + Sync {
 
     /// Saves the last batch action run and its options.
     fn set_batch_run(&self, _run: BatchRun) {}
+
+    /// Where playback stopped in the clip at `clip` (#161), if that is remembered.
+    fn get_playback_position(&self, _clip: &Path) -> Option<Duration> {
+        None
+    }
+
+    /// Remembers where playback stopped in the clip at `clip`; a moment too near its start to be
+    /// worth continuing ([`crate::playback::worth_remembering`]) forgets it instead.
+    fn set_playback_position(&self, _clip: &Path, _position: Duration) {}
+
+    /// The clip at `from` was renamed to `to`: its remembered position goes along.
+    fn move_playback_position(&self, _from: &Path, _to: &Path) {}
+
+    /// `folder` now lists the files `names`: positions of files that are gone are dropped, or
+    /// follow a file renamed outside frename (see [`crate::playback::tidy`]).
+    fn tidy_playback_positions(&self, _folder: &Path, _names: &[String]) {}
 }
 
 /// Interface for stored tags and tag color mapping. Tags are keyed by tag id (UUID); tag colors are keyed by tag name.

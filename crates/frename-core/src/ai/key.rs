@@ -119,6 +119,9 @@ mod tests {
     #[test]
     fn the_key_round_trips_or_the_store_says_it_is_unavailable() {
         let user = format!("{}-test-{}", ApiKey::Soniox.user(), std::process::id());
+        // An entry an earlier run with this process id left (it failed between save and delete)
+        // must not leak into this one.
+        let _ = delete_key_of(&user);
         match key_state_of(&user) {
             KeyState::Unavailable => {
                 if cfg!(windows) {

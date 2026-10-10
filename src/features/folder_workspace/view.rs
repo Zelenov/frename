@@ -8,7 +8,9 @@ use iced::{Alignment, Element, Length};
 
 use crate::features::folder::view::ListProps;
 use crate::features::folder_controls::view::ToolbarProps;
-use crate::features::{batch, file_menu, file_workspace, folder, folder_controls, media_viewer};
+use crate::features::{
+    batch, file_menu, file_workspace, folder, folder_controls, media_viewer, recent_folders,
+};
 use crate::ui::icons::{icon, spinner, Icon};
 use crate::ui::palette::TagPalette;
 use crate::ui::tokens::*;
@@ -31,10 +33,17 @@ pub fn view(
         markers: state.file_workspace().markers(),
         state: state.markers(),
         pane_width: state.left_width(),
+        spinner_frame: state.spinner_frame(),
+        unnamed: state.unnamed_marker_guids().len(),
+        marker_price_usd: state.marker_price_usd(),
     };
 
     if state.directory().is_none() && !state.media_fullscreen() {
-        return empty_window(state.is_loading(), state.spinner_frame());
+        return empty_window(
+            state.is_loading(),
+            state.spinner_frame(),
+            state.recent_folders(),
+        );
     }
 
     // When fullscreen overlay is active, render blank space here — otherwise the video
@@ -56,6 +65,22 @@ pub fn view(
     let (has_previous, has_next) = state.has_previous_next();
     let has_selected = state.current_file().is_some();
 
+    let toolbar = ToolbarProps {
+        has_previous,
+        has_next,
+        has_selected,
+        batch_mode: state.batch().is_active(),
+        batch_running: state.batch().is_running(),
+        recent_open: state.recent_folders().is_open(),
+        update_available,
+        width: state.folder_width(),
+        more_open: state.toolbar_more_open(),
+    };
+    // The More menu over the toolbar, while it is open.
+    let toolbar_more =
+        folder_controls::view::more_menu(&toolbar, state.left_width(), state.folder_width())
+            .map(Message::Folder);
+
     // Bound to a local so the folder list can borrow it instead of taking a clone per frame.
     let tag_color_mapping = state.file_workspace().tag_color_mapping();
     let folder_col: Element<'_, folder::Message> = column![
@@ -72,14 +97,7 @@ pub fn view(
             width: state.folder_width(),
         }))
         .height(Length::Fill),
-        folder_controls::view::view(ToolbarProps {
-            has_previous,
-            has_next,
-            has_selected,
-            batch_mode: state.batch().is_active(),
-            batch_running: state.batch().is_running(),
-            update_available,
-        }),
+        folder_controls::view::view(toolbar),
     ]
     .height(Length::Fill)
     .into();
@@ -96,7 +114,8 @@ pub fn view(
 
     // Batch mode shows the batch actions where the open file's tags and name are.
     let right_panel: Element<'_, Message> = if state.batch().is_active() {
-        batch::view::view(state.batch(), state.directory()).map(Message::Batch)
+        batch::view::view(state.batch(), state.directory(), state.spinner_frame())
+            .map(Message::Batch)
     } else {
         let file_ws = state.file_workspace();
         let is_synced = file_ws.tag_list().is_selected_match_display_order();
@@ -106,8 +125,8 @@ pub fn view(
             state.file_name_panel(),
             is_synced,
             state.sync_locked(),
-            file_ws.tag_list(),
             tag_palette,
+            state.save_status(),
         )
         .map(|m| match m {
             file_workspace::Message::TagPanel(m) => Message::TagPanel(m),
@@ -153,11 +172,14 @@ pub fn view(
 
     // The file menu over everything, once a file is right-clicked (nothing otherwise).
     let file_menu = file_menu::view::view(state.file_menu()).map(Message::FileMenu);
+    // The recent folders over the toolbar's open button, while their list is open.
+    let recent = recent_folders::view::dropdown(state.recent_folders(), state.left_width())
+        .map(Message::RecentFolders);
 
     // The right button's position is taken here, over the whole window: a row inside the
     // scrolled file list does not know where it is on screen.
     RightPressReporter::new(
-        stack![normal_layout, overlay, file_menu]
+        stack![normal_layout, overlay, file_menu, recent, toolbar_more]
             .width(Length::Fill)
             .height(Length::Fill),
         |position| Message::FileMenu(file_menu::Message::RightPressed(position)),
@@ -167,7 +189,12 @@ pub fn view(
 
 /// The whole window when no folder is open (§13.7): what to do first and the button that does
 /// it, or the folder opening. A click anywhere picks a folder too; a right-click picks one file.
-fn empty_window<'a>(loading: bool, spinner_frame: usize) -> Element<'a, Message> {
+/// With folders opened before, their list stands beside it, so the first click can be one of them.
+fn empty_window<'a>(
+    loading: bool,
+    spinner_frame: usize,
+    recent: &'a recent_folders::RecentFoldersState,
+) -> Element<'a, Message> {
     if loading {
         return container(
             column![
@@ -189,8 +216,24 @@ fn empty_window<'a>(loading: bool, spinner_frame: usize) -> Element<'a, Message>
     ]
     .spacing(SPACE_M)
     .max_width(EMPTY_SCREEN_MAX_WIDTH);
-    mouse_area(container(block).center(Length::Fill).style(style::panel))
-        .on_press(Message::OpenFolderPicker)
-        .on_right_press(Message::OpenFilePicker)
+    let content: Element<'a, Message> = if recent.is_empty() {
+        block.into()
+    } else {
+        row![
+            block,
+            recent_folders::view::on_empty_screen(recent).map(Message::RecentFolders)
+        ]
+        .spacing(SPACE_XL)
+        .align_y(Alignment::Center)
         .into()
+    };
+    mouse_area(
+        container(content)
+            .center(Length::Fill)
+            .padding(PAGE_PADDING_Y)
+            .style(style::panel),
+    )
+    .on_press(Message::OpenFolderPicker)
+    .on_right_press(Message::OpenFilePicker)
+    .into()
 }

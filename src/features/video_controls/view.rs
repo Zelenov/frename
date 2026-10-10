@@ -2,6 +2,8 @@
 //! [`Command`]: the same one is drawn as an icon button in the bar or as an item of **More**
 //! when the pane is too narrow for it (see [`super::Fold`]).
 
+use std::time::Duration;
+
 use iced::widget::{button as iced_button, container, mouse_area, row, stack, Row};
 use iced::{mouse, Alignment, Element, Length, Padding};
 
@@ -39,8 +41,6 @@ pub struct Command<M> {
     pub hold: Option<(M, M)>,
     /// Drawn pressed, with the recording dot: something holds it down.
     pub held: bool,
-    /// No tooltip on its button (fullscreen).
-    quiet: bool,
 }
 
 impl<M: Clone> Command<M> {
@@ -54,7 +54,6 @@ impl<M: Clone> Command<M> {
             on_press,
             hold: None,
             held: false,
-            quiet: false,
         }
     }
 
@@ -64,12 +63,6 @@ impl<M: Clone> Command<M> {
 
     pub fn latched(mut self, latched: bool) -> Self {
         self.latched = latched;
-        self
-    }
-
-    /// No tooltip on its button (fullscreen).
-    pub fn quiet(mut self, quiet: bool) -> Self {
-        self.quiet = quiet;
         self
     }
 
@@ -89,7 +82,6 @@ impl<M: Clone> Command<M> {
             on_press: self.on_press.map(&f),
             hold: self.hold.map(|(down, up)| (f(down), f(up))),
             held: self.held,
-            quiet: self.quiet,
         }
     }
 
@@ -109,7 +101,6 @@ impl<M: Clone> Command<M> {
         let base = base
             .latched(self.latched)
             .held(self.held)
-            .quiet(self.quiet)
             .tip(tip, Position::Top);
         let pressable: Element<'a, M> = match (self.hold, self.on_press.is_some()) {
             (Some((down, up)), true) => base.on_hold(down, up).into(),
@@ -291,14 +282,22 @@ pub fn rotate(cannot_rotate: Option<String>) -> [Command<Message>; 2] {
 
 /// `00:10 / 00:30`, fixed wide so it never moves. Paused, the playhead shows its milliseconds
 /// (`00:10.250 / 00:30`): the exact time of a frame stepped to.
-pub fn time_readout<'a>(state: &VideoControlsState, position_secs: f32) -> Element<'a, Message> {
+///
+/// `slow`: a frame step has waited long (#196); the readout dims to `text.disabled` while it does.
+pub fn time_readout<'a>(
+    state: &VideoControlsState,
+    position: Duration,
+    slow: bool,
+) -> Element<'a, Message> {
     let position = if state.is_playing() {
-        clock(position_secs)
+        clock(position.as_secs_f32())
     } else {
-        precise_clock(position_secs)
+        precise_clock(position)
     };
     let readout = format!("{position} / {}", clock(state.duration_secs()));
-    container(text::mono(readout).wrapping(iced::widget::text::Wrapping::None))
+    let readout = text::mono(readout).wrapping(iced::widget::text::Wrapping::None);
+    let readout = readout.color(time_readout_color(slow));
+    container(readout)
         .width(TIME_READOUT_WIDTH)
         .align_right(TIME_READOUT_WIDTH)
         .into()
@@ -316,8 +315,8 @@ pub fn clock(secs: f32) -> String {
 }
 
 /// [`clock`] with milliseconds: `00:10.250`.
-pub fn precise_clock(secs: f32) -> String {
-    let millis = (f64::from(secs.max(0.0)) * 1000.0).round() as u64;
+pub fn precise_clock(position: Duration) -> String {
+    let millis = position.as_millis();
     format!("{}.{:03}", clock((millis / 1000) as f32), millis % 1000)
 }
 
@@ -496,6 +495,12 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_readout_dims_only_while_a_step_is_slow() {
+        assert_eq!(time_readout_color(false), TEXT_SECONDARY);
+        assert_eq!(time_readout_color(true), TEXT_DISABLED);
+    }
+
+    #[test]
     fn scrolling_up_raises_volume_and_down_lowers_it_clamped() {
         let up = mouse::ScrollDelta::Lines { x: 0.0, y: 1.0 };
         let down = mouse::ScrollDelta::Lines { x: 0.0, y: -1.0 };
@@ -557,17 +562,30 @@ mod tests {
 
     #[test]
     fn the_precise_clock_shows_milliseconds_of_a_frame() {
-        assert_eq!(precise_clock(10.25), "00:10.250");
-        // A frame's playhead (whole milliseconds) survives the trip through f32.
-        assert_eq!(precise_clock(7.517), "00:07.517");
-        assert_eq!(precise_clock(3_725.999_5), "1:02:06.000");
-        assert_eq!(precise_clock(-1.0), "00:00.000");
+        assert_eq!(precise_clock(Duration::from_millis(10_250)), "00:10.250");
+        // Whole milliseconds are shown as they are, however long the clip (an f32 of seconds
+        // is 1-2 ms off past ~2.3 h).
+        assert_eq!(
+            precise_clock(Duration::from_millis(35_999_999)),
+            "9:59:59.999"
+        );
+        assert_eq!(precise_clock(Duration::from_millis(7_517)), "00:07.517");
+        assert_eq!(
+            precise_clock(Duration::from_millis(3_725_999)),
+            "1:02:05.999"
+        );
+        assert_eq!(precise_clock(Duration::ZERO), "00:00.000");
     }
 
-    /// The longest readout, a clip of hours paused, fits the readout's fixed width.
+    /// The longest readout, a clip of under 10 hours paused, fits the readout's fixed width
+    /// (a clip of 10 h or more overflows it, `10:00:00.000 / 10:00:00`; §13.3.5).
     #[test]
-    fn the_longest_readout_fits_its_width() {
-        let longest = format!("{} / {}", precise_clock(35_999.5), clock(35_999.0));
+    fn the_longest_readout_under_10_h_fits_its_width() {
+        let longest = format!(
+            "{} / {}",
+            precise_clock(Duration::from_millis(35_999_500)),
+            clock(35_999.0)
+        );
         assert_eq!(longest, "9:59:59.500 / 9:59:59");
         let width = longest.chars().count() as f32 * MONO_CHAR_WIDTH;
         assert!(
@@ -583,16 +601,5 @@ mod tests {
         assert!(matches!(item.on_press, Some(Message::SetVolume(n)) if n == 2.0));
         let [_, marker] = mark(false, false);
         assert!(marker.menu_item(|_| Message::SeekBack10).on_press.is_none());
-    }
-}
-
-#[cfg(test)]
-mod quiet_tests {
-    use super::*;
-
-    #[test]
-    fn a_command_stays_quiet_when_mapped() {
-        let command = Command::icon(Icon::Play, "Play".to_string(), &[], Some(1u8)).quiet(true);
-        assert!(command.map(u32::from).quiet);
     }
 }

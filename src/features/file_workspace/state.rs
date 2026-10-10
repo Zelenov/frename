@@ -111,6 +111,13 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         }
     }
 
+    /// Show `markers` for the open clip instead of the ones read from its comment or video: the
+    /// clip was opened from edits not saved yet, which hold the markers they were left with.
+    /// What the video holds stays noted: the save of those edits has still to take it out.
+    pub fn take_markers(&mut self, markers: Vec<frename_core::Marker>) {
+        self.tag_list.set_markers(Some(markers));
+    }
+
     /// The markers the open clip's video holds that are shown because the comment has none, as
     /// they were read; see [`Self::set_file`].
     pub fn markers_from_video(&self) -> Option<&[frename_core::Marker]> {
@@ -232,9 +239,13 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.tag_list.remove_stored_tag_by_id(id)
     }
 
-    /// Save a snapshot-only tag to the store (add to DB). Delegates to TagList.
-    pub fn save_tag(&mut self, id: TagId) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.tag_list.save_tag(id)
+    /// Save a snapshot-only tag to the store (add to DB). Delegates to TagList. `Ok(false)`: it
+    /// was stored already and nothing changed.
+    pub fn save_tag(
+        &mut self,
+        id: TagId,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        self.tag_list.save_tag_once(id)
     }
 
     /// Returns true if any tag in the list has the given name (case-insensitive exact match). Used to

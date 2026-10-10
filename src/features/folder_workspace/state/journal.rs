@@ -9,17 +9,22 @@ use frename_core::FileId;
 use iced::Task;
 
 use super::FolderWorkspace;
+use crate::features::file_name_panel::{save_status, SaveStatus};
 use crate::features::folder_workspace::Message;
 use crate::features::media_viewer::{self, video};
 
 impl FolderWorkspace {
     /// The open clip as it is now, as a journal entry.
     fn journal_entry(&self) -> Option<(FileId, Entry)> {
-        let (id, _) = self.file_workspace.get_snapshot()?;
-        // Where the clip is on disk now: an in-place rename reaches the open file's own path
-        // only with its next open, but the directory knows at once.
-        let path = self
-            .directory
+        let path = self.open_clip_path()?;
+        self.journal_entry_at(&path)
+    }
+
+    /// Where the open clip is on disk now: an in-place rename reaches the open file's own path
+    /// only with its next open, but the directory knows at once.
+    fn open_clip_path(&self) -> Option<std::path::PathBuf> {
+        let id = self.file_workspace.file()?.id();
+        self.directory
             .as_ref()
             .and_then(|dir| dir.file_by_id(id))
             .map(|file| file.file_path().to_path_buf())
@@ -27,8 +32,7 @@ impl FolderWorkspace {
                 self.file_workspace
                     .file()
                     .map(|f| f.file_path().to_path_buf())
-            })?;
-        self.journal_entry_at(&path)
+            })
     }
 
     /// The open clip's state as an entry for the clip at `path`.
@@ -172,6 +176,33 @@ impl FolderWorkspace {
                 None => self.journal_force = true,
             }
         }
+    }
+
+    /// What the line at the foot of the file name card says about the open clip: whether its
+    /// edits are in its file, or only in the recovery journal. Asked on every frame, so it
+    /// compares without touching the disk.
+    pub fn save_status(&self) -> Option<SaveStatus> {
+        let file = self.file_workspace.file()?;
+        let id = file.id();
+        let (baseline_id, baseline) = self.journal_baseline.as_ref()?;
+        if *baseline_id != id || self.batch.is_running() {
+            return None;
+        }
+        let path = self.open_clip_path()?;
+        let snapshot = self.file_workspace.tag_list().file_snapshot();
+        let unsaved = self.journal_force
+            || !baseline.same_state_as(&snapshot)
+            || self.unsaved_markers.contains_key(&id);
+        // Size and modification time are not compared (that needs the disk): a clip changed on
+        // disk keeps "in recovery" for at most a tick.
+        let in_journal = self
+            .journal_written
+            .as_ref()
+            .is_some_and(|(written_id, entry)| {
+                // The journal keeps an entry per path: a clip renamed since has none yet.
+                *written_id == id && entry.path == path && entry.same_state_as(&snapshot)
+            });
+        save_status(unsaved, in_journal)
     }
 
     /// A message from the start (edits restored after a crash) to show once a clip is open.

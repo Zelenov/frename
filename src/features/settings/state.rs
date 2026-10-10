@@ -44,6 +44,9 @@ pub struct SettingsState {
     subtitle_languages: LanguageList,
     /// The control keyboard focus is on (#167); `None` until Tab is pressed, and after a click.
     focus: Option<Control>,
+    /// The controls Tab last stepped over: where a control that has since gone (a button that
+    /// became disabled while focused) stood, so Tab goes on from its place.
+    tab_order: Vec<Control>,
 }
 
 /// Where the list of languages Soniox recognises stands.
@@ -99,6 +102,7 @@ impl Default for SettingsState {
             keys: Keys::default(),
             subtitle_languages: LanguageList::default(),
             focus: None,
+            tab_order: Vec::new(),
         }
     }
 }
@@ -220,7 +224,8 @@ impl SettingsState {
     /// page, focus or leave its text fields, and scroll the control into view.
     pub fn move_focus(&mut self, steps: isize, batch_running: bool) -> Task<Message> {
         let controls = focus::controls(self, batch_running);
-        self.focus = focus::step(&controls, self.focus.as_ref(), steps);
+        let before = std::mem::replace(&mut self.tab_order, controls.clone());
+        self.focus = focus::step(&controls, &before, self.focus.as_ref(), steps);
         self.focus_effects()
     }
 
@@ -498,6 +503,8 @@ impl SettingsState {
             Message::OpenBatchAction(Operation::RespaceTags) => self.tag_spacing_changed = false,
             Message::SetSummaryLanguage(language) => self.settings.summary_language = language,
             Message::SetAiModel(model) => self.settings.ai_model = model.id.to_string(),
+            Message::SetAiMoments(moments) => self.settings.ai_moments = moments,
+            Message::SetAiTagSuggestions(on) => self.settings.ai_tag_suggestions = on,
             Message::SetSubtitleLanguage(code, on) => {
                 let languages = &mut self.settings.subtitle_languages;
                 languages.retain(|l| *l != code);
@@ -562,6 +569,7 @@ impl SettingsState {
             keys: Keys::default(),
             subtitle_languages: LanguageList::default(),
             focus: None,
+            tab_order: Vec::new(),
         }
     }
 

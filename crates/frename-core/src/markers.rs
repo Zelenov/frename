@@ -51,6 +51,11 @@ impl Marker {
         self.guid.is_some()
     }
 
+    /// Whether it has no name yet and frename may name it: what "Describe all unnamed" sends.
+    pub fn is_unnamed(&self) -> bool {
+        self.is_editable() && self.name.trim().is_empty()
+    }
+
     pub fn end_ms(&self) -> u64 {
         self.start_ms.saturating_add(self.duration_ms)
     }
@@ -59,6 +64,41 @@ impl Marker {
     pub fn has_guid(&self, guid: &str) -> bool {
         self.guid.as_deref() == Some(guid)
     }
+}
+
+/// The name and comment `marker` gets from an AI's `name` and `description` of its moment
+/// ("Describe with AI" on a marker). Offered, not forced: a name the editor gave stays, and so
+/// does their comment, with the description added on a line of its own; a comment that already
+/// holds the description is left as it is, so asking again adds nothing twice.
+pub fn marker_text_with_moment(marker: &Marker, name: &str, description: &str) -> (String, String) {
+    let description = description.trim();
+    let new_name = if marker.name.trim().is_empty() {
+        one_line(name)
+    } else {
+        marker.name.clone()
+    };
+    let comment = marker.comment.trim_end();
+    // Already there as a line of its own, or at the end of the comment once joined into one line
+    // (a multi-line description under the editor's note; a marker line in a comment joins its
+    // lines); not merely inside a longer line of the editor's.
+    let wanted = one_line(description);
+    let described = comment.lines().any(|line| one_line(line) == wanted)
+        || ends_with_words(&one_line(comment), &wanted);
+    let new_comment = if description.is_empty() || described {
+        marker.comment.clone()
+    } else if comment.trim().is_empty() {
+        description.to_string()
+    } else {
+        format!("{comment}\n{description}")
+    };
+    (new_name, new_comment)
+}
+
+/// Whether `text` ends with `tail` starting at a word: at the start of `text`, or after a space
+/// (not in the middle of a longer word).
+fn ends_with_words(text: &str, tail: &str) -> bool {
+    text.strip_suffix(tail)
+        .is_some_and(|rest| rest.is_empty() || rest.ends_with(char::is_whitespace))
 }
 
 /// Sort markers by time, the order every list shows them in.
@@ -437,6 +477,30 @@ pub fn markers_into_comment(comment: &str, markers: &[Marker]) -> String {
     result
 }
 
+/// The marker lines of `markers`, sorted, for comparing one set of markers with another.
+fn sorted_marker_lines(markers: &[Marker]) -> Vec<String> {
+    let mut lines: Vec<String> = markers.iter().map(format_marker_line).collect();
+    lines.sort();
+    lines
+}
+
+/// `comment` holds exactly `markers`, each as it is: none was merged into another or lost a part
+/// the line format cannot hold. Only then may the markers leave the video, since after that the
+/// comment is all there is.
+pub fn comment_holds_markers(comment: &str, markers: &[Marker]) -> bool {
+    sorted_marker_lines(markers) == sorted_marker_lines(&markers_from_comment(comment).1)
+}
+
+/// The `saved` comment has every marker of the `written` one, both as read back from a comment
+/// (so what the line format cannot hold counts on neither side); it may hold more, such as a
+/// line typed into it. Whether a write of the markers took.
+pub fn comment_kept_markers(written: &str, saved: &str) -> bool {
+    let saved = sorted_marker_lines(&markers_from_comment(saved).1);
+    sorted_marker_lines(&markers_from_comment(written).1)
+        .iter()
+        .all(|line| saved.contains(line))
+}
+
 /// What "comment → markers" does to one file: the markers to add and the comment left over.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommentToMarkers {
@@ -654,11 +718,16 @@ fn join_text(marker: &mut Marker, line: &MarkerLine) {
     marker.comment = merge_text(&marker.comment, &line.comment);
 }
 
+/// `text` on one line, its runs of whitespace (line breaks too) one space each: how a marker's
+/// text reads back from a comment line.
+fn one_line(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 /// Whether the marker already says what the line says. A line holds a comment on one line,
 /// its words separated by single spaces (see [`format_marker_line`]), so the marker's comment
 /// (which may break lines, or carry the `\r\n` of Premiere) is compared the same way.
 fn has_text(marker: &Marker, line: &MarkerLine) -> bool {
-    let one_line = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
     one_line(&marker.name) == one_line(&line.name)
         && one_line(&marker.comment) == one_line(&line.comment)
 }
@@ -720,6 +789,80 @@ fn merge_text(a: &str, b: &str) -> String {
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_marker_is_unnamed_when_it_is_editable_and_its_name_is_blank() {
+        let mut marker = Marker::new(1_000);
+        assert!(marker.is_unnamed());
+        marker.name = "  ".to_string();
+        assert!(marker.is_unnamed());
+        marker.comment = "A comment is not a name".to_string();
+        assert!(marker.is_unnamed());
+        marker.name = "Lion".to_string();
+        assert!(!marker.is_unnamed());
+        let mut read_only = Marker::new(2_000);
+        read_only.guid = None;
+        assert!(!read_only.is_unnamed(), "frename may not name it");
+    }
+
+    fn named(name: &str, comment: &str) -> Marker {
+        let mut marker = Marker::new(1_000);
+        marker.name = name.to_string();
+        marker.comment = comment.to_string();
+        marker
+    }
+
+    #[test]
+    fn a_moment_names_an_unnamed_marker_and_describes_it() {
+        let text = marker_text_with_moment(&named("", ""), " Lion\nat dusk ", " A lion walks. ");
+        assert_eq!(
+            text,
+            ("Lion at dusk".to_string(), "A lion walks.".to_string())
+        );
+    }
+
+    #[test]
+    fn a_moment_keeps_the_editors_name_and_comment() {
+        let text = marker_text_with_moment(&named("Mine", "My note"), "Lion", "A lion walks.");
+        assert_eq!(
+            text,
+            ("Mine".to_string(), "My note\nA lion walks.".to_string())
+        );
+        let blank = marker_text_with_moment(&named("  ", "  "), "Lion", "A lion walks.");
+        assert_eq!(blank, ("Lion".to_string(), "A lion walks.".to_string()));
+    }
+
+    #[test]
+    fn asking_again_adds_the_same_description_once() {
+        let once = named("Lion", "My note\nA lion walks.");
+        let again = marker_text_with_moment(&once, "Lion", "A lion walks.");
+        assert_eq!(again, (once.name.clone(), once.comment.clone()));
+        // A comment line joins the description's lines: still the same description.
+        let joined = named("Lion", "A lion walks. It stops.");
+        let again = marker_text_with_moment(&joined, "Lion", "A lion walks.\nIt stops.");
+        assert_eq!(again, (joined.name.clone(), joined.comment.clone()));
+        // A multi-line description under the editor's note, as written and as reloaded from a
+        // comment line, which joins it.
+        let twice = "A lion walks.\nIt stops.";
+        for comment in [
+            "Note\nA lion walks.\nIt stops.",
+            "Note A lion walks. It stops.",
+        ] {
+            let noted = named("Lion", comment);
+            let again = marker_text_with_moment(&noted, "Lion", twice);
+            assert_eq!(again.1, comment, "added once");
+        }
+        // Inside a longer line of the editor's: not the description, so it is added.
+        let inside = named("Lion", "Note: A lion walks. Keep it.");
+        let added = marker_text_with_moment(&inside, "Lion", "A lion walks.");
+        assert_eq!(added.1, "Note: A lion walks. Keep it.\nA lion walks.");
+        // The end of a longer word is not the description either.
+        let word = named("Lion", "Note: it stops.");
+        let added = marker_text_with_moment(&word, "Lion", "tops.");
+        assert_eq!(added.1, "Note: it stops.\ntops.");
+        let empty = marker_text_with_moment(&named("", "note"), "", "  ");
+        assert_eq!(empty, (String::new(), "note".to_string()));
+    }
+
     fn line(start_ms: u64, duration_ms: u64, name: &str, comment: &str) -> MarkerLine {
         MarkerLine {
             start_ms,
@@ -736,6 +879,80 @@ mod tests {
         m.name = name.to_string();
         m.comment = comment.to_string();
         m
+    }
+
+    /// Markers written into a comment, checked the way a save is checked.
+    fn written(comment: &str, markers: &[Marker]) -> String {
+        markers_into_comment(comment, markers)
+    }
+
+    #[test]
+    fn plain_markers_are_held_exactly_and_kept() {
+        let markers = [
+            marker(1_000, 0, "Lion", ""),
+            marker(5_000, 3_000, "Run", ""),
+        ];
+        let comment = written("A note", &markers);
+        assert!(comment_holds_markers(&comment, &markers));
+        assert!(comment_kept_markers(&comment, &comment));
+        assert!(
+            !comment_kept_markers(&comment, "A note"),
+            "the save lost them"
+        );
+        // A line typed into the comment is more, not less.
+        let more = format!(
+            "{comment}
+0:41 — Typed"
+        );
+        assert!(comment_kept_markers(&comment, &more));
+        // A marker comment with a line break goes through as well.
+        let markers = [marker(
+            65_000,
+            0,
+            "Lion",
+            "two
+lines",
+        )];
+        let comment = written("", &markers);
+        assert!(comment_holds_markers(&comment, &markers));
+        assert!(comment_kept_markers(&comment, &comment));
+    }
+
+    /// What the line format cannot hold as it is: kept (the write took), not held exactly (the
+    /// markers must stay in the video).
+    #[test]
+    fn markers_the_line_format_changes_are_kept_but_not_held_exactly() {
+        let cases = [
+            vec![marker(65_000, 0, "intro -- take 2", "")],
+            vec![marker(65_000, 0, "— dash first", "")],
+        ];
+        for markers in cases {
+            let comment = written("", &markers);
+            assert!(comment_kept_markers(&comment, &comment), "{markers:?}");
+            assert!(!comment_holds_markers(&comment, &markers), "{markers:?}");
+        }
+    }
+
+    #[test]
+    fn markers_merged_or_cut_by_the_comment_are_not_held_exactly() {
+        // Two unnamed points close by read back as one.
+        let close = [marker(1_000, 0, "", ""), marker(1_300, 0, "", "")];
+        // Two markers at one time read back as one.
+        let mut red = marker(1_000, 0, "B", "");
+        red.color = MarkerColor::Red;
+        let same_time = [marker(1_000, 0, "A", ""), red];
+        // An AI-color marker's line in the AI block has no room for its comment.
+        let mut ai = marker(2_000, 0, "Street", "keep this note");
+        ai.color = AI_MARKER_COLOR;
+        let ai_block = "AI: Two lions.";
+        for (comment, markers) in [
+            ("", close.to_vec()),
+            ("", same_time.to_vec()),
+            (ai_block, vec![ai]),
+        ] {
+            let comment = written(comment, &markers);
+            assert!(!comment_holds_markers(&comment, &markers), "{markers:?}");
+        }
     }
 
     #[test]

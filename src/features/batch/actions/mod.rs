@@ -243,7 +243,7 @@ impl Operation {
             Self::FixTags => fix_tags::run(path),
             Self::RespaceTags => tag_spacing::run(path),
             Self::ReloadFiles => reload_files::run(path),
-            Self::DescribeAi(options) => describe_ai::run(*options, path, cancel, progress),
+            Self::DescribeAi(options) => describe_ai::run(options, path, cancel, progress),
             Self::GenerateSubtitles(run) => generate_subtitles::run(run, path, cancel, progress),
         }
     }
@@ -343,6 +343,11 @@ pub struct Actions {
 }
 
 impl Actions {
+    /// The open folder's own tags, which "Describe with AI" may suggest from.
+    pub fn set_folder_tags(&mut self, tags: Vec<String>) {
+        self.describe_ai.set_folder_tags(tags);
+    }
+
     pub fn update(&mut self, message: ActionMessage) {
         match message {
             ActionMessage::MoveComments(message) => self.move_comments.update(message),
@@ -357,6 +362,16 @@ impl Actions {
             | ActionMessage::OpenSubtitleSettings
             | ActionMessage::ReadSonioxKeyState => {}
         }
+    }
+
+    /// Whether the settings said no Anthropic key is saved ("Describe with AI", on a marker too).
+    pub fn ai_key_missing(&self) -> bool {
+        self.describe_ai.key_missing()
+    }
+
+    /// The model and language of "Describe with AI", which describing a marker uses too.
+    pub fn ai_model_and_language(&self) -> (Model, clipscribe::SummaryLanguage) {
+        self.describe_ai.model_and_language()
     }
 
     pub(super) fn describe_ai_mut(&mut self) -> &mut describe_ai::Options {

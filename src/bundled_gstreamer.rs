@@ -76,11 +76,7 @@ mod tests {
     use super::*;
 
     fn temp_folder(name: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("frename-bundled-gst-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        dir
+        frename_core::test_support::fresh_dir(&format!("bundled-gst-{name}"))
     }
 
     #[test]

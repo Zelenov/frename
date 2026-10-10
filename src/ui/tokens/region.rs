@@ -47,7 +47,7 @@ pub const CAPTION_PADDING_X: f32 = 18.0;
 /// The volume slider.
 pub const VOLUME_WIDTH: f32 = 72.0;
 /// The time readout: a fixed width so it never moves. Fits the longest it shows, a clip of hours
-/// paused (`1:02:05.250 / 1:30:00`): 21 mono characters, 151.2 px.
+/// paused (`9:59:59.500 / 9:59:59`): 21 mono characters, 151.2 px. A clip of 10 h or more overflows.
 pub const TIME_READOUT_WIDTH: f32 = 152.0;
 /// The notices' slot in the controls bar needs this much, otherwise they float over the picture.
 pub const NOTICE_SLOT_MIN_WIDTH: f32 = 120.0;
@@ -96,6 +96,12 @@ pub const STATUS_COLUMN: f32 = 32.0;
 pub const NAME_MIN_WIDTH: f32 = 80.0;
 /// The line over the list that says why it is locked.
 pub const LOCK_LINE_HEIGHT: f32 = CONTROL_HEIGHT;
+
+// Recent folders (#63, §13.4.3, §13.7).
+/// A recent folder's row: its name with when it was opened, and the folder it is in under it.
+pub const RECENT_ROW_HEIGHT: f32 = LINE_BODY + LINE_CAPTION + 2.0 * SPACE_XS;
+/// The list of recent folders, in the dropdown and on the empty screen.
+pub const RECENT_LIST_WIDTH: f32 = MENU_MAX_WIDTH;
 
 // Tags area (§13.5).
 pub const CHIP_HEIGHT: f32 = CONTROL_HEIGHT;

@@ -1,10 +1,12 @@
 //! The Version row of the settings window's Updates page.
 
+use iced::widget::row;
 use iced::Element;
 
-use super::state::Status;
+use super::state::{Section, Status};
 use super::{Control, Message, UpdatesState};
 use crate::ui::layout;
+use crate::ui::tokens::SPACE_S;
 use crate::ui::tooltip::{self, Position};
 use crate::ui::{button, form, text};
 use crate::widgets::focus_ring::ring;
@@ -18,6 +20,35 @@ pub fn view(
     batch_running: bool,
     focus: Option<Control>,
 ) -> Element<'_, Message> {
+    let version = || {
+        text::strong(fl!(
+            "updates-current-version",
+            version = state.current_version()
+        ))
+        .into()
+    };
+    match state.section() {
+        // The Store build has no updater of its own: nothing to check or to switch on.
+        Section::Store => {
+            return layout::aligned([version(), text::secondary(fl!("updates-from-store")).into()])
+                .into();
+        }
+        // The Mac download and the Linux AppImage: new versions are downloaded by hand.
+        Section::ReleasesPage => {
+            let line = row![
+                text::secondary(fl!("updates-from-releases")),
+                ring(
+                    button::link(fl!("updates-open-releases")).on_press(Message::OpenReleases),
+                    focus == Some(Control::OpenReleases),
+                ),
+            ]
+            .spacing(SPACE_S)
+            .wrap();
+            return layout::aligned([version(), line.into()]).into();
+        }
+        Section::Updater => {}
+    }
+
     let status = state.status();
     let focused = |control| focus == Some(control);
     let available = state.available_version();
@@ -74,21 +105,17 @@ pub fn view(
     let actions = layout::buttons(std::iter::once(check).chain(update));
 
     layout::aligned(
-        [text::strong(fl!(
-            "updates-current-version",
-            version = state.current_version()
-        ))
-        .into()]
-        .into_iter()
-        .chain(note.map(Element::from))
-        .chain([
-            actions,
-            ring(
-                form::checkbox(fl!("updates-check-on-start"), state.check_on_start())
-                    .on_toggle_maybe(state.installed().then_some(Message::SetCheckOnStart)),
-                focused(Control::CheckOnStart),
-            ),
-        ]),
+        [version()]
+            .into_iter()
+            .chain(note.map(Element::from))
+            .chain([
+                actions,
+                ring(
+                    form::checkbox(fl!("updates-check-on-start"), state.check_on_start())
+                        .on_toggle_maybe(state.installed().then_some(Message::SetCheckOnStart)),
+                    focused(Control::CheckOnStart),
+                ),
+            ]),
     )
     .into()
 }

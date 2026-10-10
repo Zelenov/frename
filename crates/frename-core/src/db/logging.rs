@@ -1,5 +1,9 @@
 //! Logging decorator for app state store: delegates to inner and adds logging.
 
+use std::path::Path;
+use std::time::Duration;
+
+use crate::recent_folders::RecentFolder;
 use crate::FolderAndFile;
 
 use super::traits::{AppStateStore, Initializable};
@@ -39,6 +43,50 @@ impl<S: AppStateStore> AppStateStore for LoggingAppStateStore<S> {
         );
         self.inner.set_last_folder_and_file(value);
         log::debug!("AppStateStore::set_last_folder_and_file() done");
+    }
+
+    fn get_recent_folders(&self) -> Vec<RecentFolder> {
+        self.inner.get_recent_folders()
+    }
+
+    fn record_recent_folder(&self, value: &FolderAndFile, opened_at_ms: i64) {
+        self.inner.record_recent_folder(value, opened_at_ms);
+    }
+
+    fn forget_recent_folder(&self, folder: &Path) {
+        log::debug!("AppStateStore::forget_recent_folder({})", folder.display());
+        self.inner.forget_recent_folder(folder);
+    }
+
+    fn clear_recent_folders(&self) {
+        log::debug!("AppStateStore::clear_recent_folders()");
+        self.inner.clear_recent_folders();
+    }
+
+    fn get_playback_position(&self, clip: &Path) -> Option<Duration> {
+        self.inner.get_playback_position(clip)
+    }
+
+    fn set_playback_position(&self, clip: &Path, position: Duration) {
+        self.inner.set_playback_position(clip, position);
+    }
+
+    fn move_playback_position(&self, from: &Path, to: &Path) {
+        log::debug!(
+            "AppStateStore::move_playback_position({} -> {})",
+            from.display(),
+            to.display()
+        );
+        self.inner.move_playback_position(from, to);
+    }
+
+    fn tidy_playback_positions(&self, folder: &Path, names: &[String]) {
+        log::debug!(
+            "AppStateStore::tidy_playback_positions({}, {} files)",
+            folder.display(),
+            names.len()
+        );
+        self.inner.tidy_playback_positions(folder, names);
     }
 }
 
