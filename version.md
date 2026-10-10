@@ -1,6 +1,6 @@
 # 0.126
 ## Added
-- A small line under the file name says "All changes saved" when the clip you are working on matches its file, and "Saved to recovery, applied when you leave the clip" while your edits wait only in the recovery copy, so you can see your work is safe.
+- A line under the file name says "All changes saved", or that your changes wait in recovery until you leave the clip.
 
 # 0.124
 ## Added

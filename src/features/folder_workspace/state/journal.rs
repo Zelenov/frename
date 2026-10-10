@@ -16,11 +16,15 @@ use crate::features::media_viewer::{self, video};
 impl FolderWorkspace {
     /// The open clip as it is now, as a journal entry.
     fn journal_entry(&self) -> Option<(FileId, Entry)> {
-        let (id, _) = self.file_workspace.get_snapshot()?;
-        // Where the clip is on disk now: an in-place rename reaches the open file's own path
-        // only with its next open, but the directory knows at once.
-        let path = self
-            .directory
+        let path = self.open_clip_path()?;
+        self.journal_entry_at(&path)
+    }
+
+    /// Where the open clip is on disk now: an in-place rename reaches the open file's own path
+    /// only with its next open, but the directory knows at once.
+    fn open_clip_path(&self) -> Option<std::path::PathBuf> {
+        let id = self.file_workspace.file()?.id();
+        self.directory
             .as_ref()
             .and_then(|dir| dir.file_by_id(id))
             .map(|file| file.file_path().to_path_buf())
@@ -28,8 +32,7 @@ impl FolderWorkspace {
                 self.file_workspace
                     .file()
                     .map(|f| f.file_path().to_path_buf())
-            })?;
-        self.journal_entry_at(&path)
+            })
     }
 
     /// The open clip's state as an entry for the clip at `path`.
@@ -185,6 +188,7 @@ impl FolderWorkspace {
         if *baseline_id != id || self.batch.is_running() {
             return None;
         }
+        let path = self.open_clip_path()?;
         let snapshot = self.file_workspace.tag_list().file_snapshot();
         let unsaved = self.journal_force
             || !baseline.same_state_as(&snapshot)
@@ -192,7 +196,10 @@ impl FolderWorkspace {
         let in_journal = self
             .journal_written
             .as_ref()
-            .is_some_and(|(written_id, entry)| *written_id == id && entry.same_state_as(&snapshot));
+            .is_some_and(|(written_id, entry)| {
+                // The journal keeps an entry per path: a clip renamed since has none yet.
+                *written_id == id && entry.path == path && entry.same_state_as(&snapshot)
+            });
         save_status(unsaved, in_journal)
     }
 

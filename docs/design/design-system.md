@@ -1571,12 +1571,14 @@ Both buttons, and the lock, are undoable (#139); a press that changes nothing pu
   |---|---|---|---|
   | Saved | the clip's edits equal the file (just opened, saved, or undone back to it) | `circle-check` in `success` | "All changes saved" |
   | In recovery | edits differ from the file and the journal holds exactly these edits | `circle-dashed` in `text.secondary` (not final yet) | "Saved to recovery, applied when you leave the clip" |
-  | none | edits differ from the file and the journal does not hold them yet (up to a second after an edit) or its write failed | – | the line is left out |
+  | none | edits differ from the file and the journal does not hold them yet (up to a second after an edit) or its write failed | – | an empty line of the same height |
 
   The line says nothing rather than something untrue: "All changes saved" is never shown over an
-  edit, and the line does not flicker through a "saving" state of a second (the editor did not
-  ask to see the journal's rhythm). It is also left out while no clip is open and in batch mode
-  (the card is not there). The state comes from `FolderWorkspace::save_status`, a comparison of
+  edit, and there is no "saving" state of a second (the editor did not ask to see the journal's
+  rhythm). The line keeps its height when it says nothing (one `caption` line), so the card and
+  the trash in it, a drag target, do not move with an edit or when the journal catches up. A
+  text that wraps (a long translation in a narrow card) is the one case that changes the height.
+  There is no line while no clip is open and in batch mode (the card is not there). The state comes from `FolderWorkspace::save_status`, a comparison of
   the open clip's edits with the journal's baseline and last write that touches no disk, so the
   view can ask on every frame; the mapping from the two facts to the line is
   `file_name_panel::save_status`. Screenshots: `docs/screenshots/save-status-saved.toml` and

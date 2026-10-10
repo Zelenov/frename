@@ -94,7 +94,7 @@ where
     let inner = container(
         column![top_row, bottom_row]
             .push(suggested_tags_row(tag_list))
-            .push(save_status.map(save_status_line))
+            .push(save_status_line(save_status))
             .spacing(SPACE_S)
             .width(Length::Fill),
     )
@@ -110,7 +110,16 @@ where
 
 /// The card's last line: whether the clip's edits are in its file or wait in the recovery
 /// journal (§13.5.6). An icon and a `caption`, quiet: the editor looks for it only to be sure.
-fn save_status_line<'a>(status: SaveStatus) -> Element<'a, Message> {
+/// With nothing to say it is an empty line of the same height, so the card (and the trash, a
+/// drag target, in it) does not move when the status comes and goes.
+fn save_status_line<'a>(status: Option<SaveStatus>) -> Element<'a, Message> {
+    let height = Length::Fixed(LINE_CAPTION.max(ICON_S));
+    let Some(status) = status else {
+        return container(iced::widget::Space::new())
+            .width(Length::Fill)
+            .height(height)
+            .into();
+    };
     let (glyph, color, label) = match status {
         SaveStatus::Saved => (Icon::CircleCheck, SUCCESS, fl!("file-name-panel-saved")),
         SaveStatus::InRecovery => (
@@ -122,6 +131,7 @@ fn save_status_line<'a>(status: SaveStatus) -> Element<'a, Message> {
     row![icon(glyph, ICON_S, color), text::caption(label)]
         .spacing(SPACE_XS)
         .align_y(Alignment::Center)
+        .height(height)
         .into()
 }
 
