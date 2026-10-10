@@ -546,6 +546,7 @@ folder-controls-batch-back = Назад к открытому файлу
 folder-controls-update-available = Доступно обновление: { $version }
 folder-controls-previous = Предыдущий файл
 folder-controls-next = Следующий файл
+folder-controls-more = Ещё
 folder-controls-open-file = Правый клик: открыть один файл
 
 ## Video

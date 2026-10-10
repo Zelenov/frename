@@ -65,6 +65,22 @@ pub fn view(
     let (has_previous, has_next) = state.has_previous_next();
     let has_selected = state.current_file().is_some();
 
+    let toolbar = ToolbarProps {
+        has_previous,
+        has_next,
+        has_selected,
+        batch_mode: state.batch().is_active(),
+        batch_running: state.batch().is_running(),
+        recent_open: state.recent_folders().is_open(),
+        update_available,
+        width: state.folder_width(),
+        more_open: state.toolbar_more_open(),
+    };
+    // The More menu over the toolbar, while it is open.
+    let toolbar_more =
+        folder_controls::view::more_menu(&toolbar, state.left_width(), state.folder_width())
+            .map(Message::Folder);
+
     // Bound to a local so the folder list can borrow it instead of taking a clone per frame.
     let tag_color_mapping = state.file_workspace().tag_color_mapping();
     let folder_col: Element<'_, folder::Message> = column![
@@ -81,15 +97,7 @@ pub fn view(
             width: state.folder_width(),
         }))
         .height(Length::Fill),
-        folder_controls::view::view(ToolbarProps {
-            has_previous,
-            has_next,
-            has_selected,
-            batch_mode: state.batch().is_active(),
-            batch_running: state.batch().is_running(),
-            recent_open: state.recent_folders().is_open(),
-            update_available,
-        }),
+        folder_controls::view::view(toolbar),
     ]
     .height(Length::Fill)
     .into();
@@ -171,7 +179,7 @@ pub fn view(
     // The right button's position is taken here, over the whole window: a row inside the
     // scrolled file list does not know where it is on screen.
     RightPressReporter::new(
-        stack![normal_layout, overlay, file_menu, recent]
+        stack![normal_layout, overlay, file_menu, recent, toolbar_more]
             .width(Length::Fill)
             .height(Length::Fill),
         |position| Message::FileMenu(file_menu::Message::RightPressed(position)),

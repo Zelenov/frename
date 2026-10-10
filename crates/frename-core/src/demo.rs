@@ -94,6 +94,9 @@ pub struct DemoScenario {
     /// Open the recent folders dropdown (the ▾ next to the open button).
     #[serde(default)]
     pub recent_menu: bool,
+    /// Open the toolbar's More menu (demo only: the screenshot of a narrow file list, #228).
+    #[serde(default)]
+    pub toolbar_more: bool,
     /// The staged files, oldest first: the file list shows them in this order.
     pub files: Vec<DemoFile>,
 }

@@ -1,0 +1,27 @@
+# The toolbar under the file list at a file list 300 px wide (#228): everything fits.
+# Not a README image; for looking at the feature (`frename --demo`).
+source = "../../tests/folder"
+open = "pick.wide.night.city.MVI_0410.mp4"
+window = [1440, 800]
+panels = [560, 300]
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.landscape.golden-hour.MVI_0401.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "skip.handheld.MVI_0402.mov"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.drone.landscape.MVI_0404.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "review.people.close.MVI_0405.mov"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.MVI_0410.mp4"
+comment = "City lights over Europe, keep this one"

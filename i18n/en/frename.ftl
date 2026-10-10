@@ -488,6 +488,7 @@ folder-controls-batch-back = Back to the open file
 folder-controls-update-available = Update available: { $version }
 folder-controls-previous = Previous file
 folder-controls-next = Next file
+folder-controls-more = More
 folder-controls-open-file = Right-click: open one file
 
 ## Video
