@@ -1,3 +1,7 @@
+# 0.127
+## Added
+- A line under the file name says "All changes saved", or that your changes wait in recovery until you leave the clip.
+
 # 0.126
 ## Fixed
 - The marker list scrolls a far marker fully into view in a long list of long names, also in a narrow panel, instead of leaving it partly out of view.

@@ -116,8 +116,8 @@ pub fn view(
             state.file_name_panel(),
             is_synced,
             state.sync_locked(),
-            file_ws.tag_list(),
             tag_palette,
+            state.save_status(),
         )
         .map(|m| match m {
             file_workspace::Message::TagPanel(m) => Message::TagPanel(m),

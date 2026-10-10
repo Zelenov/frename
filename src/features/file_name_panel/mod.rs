@@ -23,6 +23,27 @@ pub const TAG_CHIP_SPACING: f32 = SPACE_XS;
 pub const TAG_CHIP_ESTIMATED_WIDTH: f32 = CHIP_DROP_ESTIMATE_WIDTH;
 pub const TAG_CHIP_CELL_HEIGHT: f32 = CHIP_HEIGHT + CHIP_DRAG_LIFT;
 
+/// Where the open clip's edits are, for the line at the foot of the file name card (§13.5.6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SaveStatus {
+    /// The clip matches its file: nothing is waiting.
+    Saved,
+    /// The edits wait in the recovery journal and reach the file when the clip is left.
+    InRecovery,
+}
+
+/// What the line says, from two facts about the open clip: its edits differ from its file
+/// (`unsaved`), and the recovery journal holds exactly these edits (`in_journal`). `None` while
+/// edits are not in the journal yet (a second at most, or a write that failed): saying "saved"
+/// then would be false, and "saved to recovery" too.
+pub fn save_status(unsaved: bool, in_journal: bool) -> Option<SaveStatus> {
+    match (unsaved, in_journal) {
+        (false, _) => Some(SaveStatus::Saved),
+        (true, true) => Some(SaveStatus::InRecovery),
+        (true, false) => None,
+    }
+}
+
 /// The In and Out the open clip's AI description suggests, while they differ from the clip's
 /// own: once applied, or set the same by hand, there is nothing left to offer.
 pub fn suggested_in_out<S>(tag_list: &TagList<S>) -> Option<Segment>
@@ -69,4 +90,25 @@ where
                 .is_some_and(|tag| tag.is_stored())
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_clip_that_matches_its_file_is_saved_whatever_the_journal_holds() {
+        assert_eq!(save_status(false, false), Some(SaveStatus::Saved));
+        assert_eq!(save_status(false, true), Some(SaveStatus::Saved));
+    }
+
+    #[test]
+    fn edits_held_only_by_the_journal_are_in_recovery() {
+        assert_eq!(save_status(true, true), Some(SaveStatus::InRecovery));
+    }
+
+    #[test]
+    fn edits_the_journal_does_not_hold_yet_say_nothing() {
+        assert_eq!(save_status(true, false), None);
+    }
 }
