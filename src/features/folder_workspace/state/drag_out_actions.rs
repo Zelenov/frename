@@ -26,6 +26,14 @@ impl FolderWorkspace {
             .map(|file| file.id());
         if let Some(id) = pressed {
             self.drag_out.press(id);
+            // Pressing another row saves the file it leaves (its `FileOpened` is queued, or it
+            // waits for the video to unload): pending from now on, so a fast drag cannot start
+            // before that save ran. A press on the open file itself saves nothing.
+            if !self.is_open_at(index) {
+                if let Some((left, _)) = self.file_workspace.get_snapshot() {
+                    self.drag_out.ask_save(left);
+                }
+            }
         }
     }
 
@@ -122,7 +130,7 @@ impl FolderWorkspace {
                     .iter()
                     .filter_map(|id| dir.file_by_id(*id))
                     // Where the file really is (debug builds rename only in memory).
-                    .map(|file| FileTagger::disk_path(file.file_path()))
+                    .map(|file| drag_out::absolute_path(&FileTagger::disk_path(file.file_path())))
                     .collect();
                 if paths.is_empty() {
                     self.drag_out.release();

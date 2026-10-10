@@ -1,3 +1,9 @@
+# 0.130
+## Fixed
+- Dragging a clip out to Premiere is no longer refused with "Not dragged: can't save the file" (nor a false "Not saved" shown) after a tag with a dot, such as v1.2, was saved.
+- Dragging works when frename was opened with a relative path (`frename .`, `frename clip.mp4`).
+- A very fast drag no longer starts before the press's own save of the open file ran, so Premiere does not get stale metadata.
+
 # 0.126
 ## Fixed
 - The marker list scrolls a far marker fully into view in a long list of long names, also in a narrow panel, instead of leaving it partly out of view.

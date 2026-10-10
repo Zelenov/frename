@@ -1,5 +1,7 @@
 //! State of a drag out of the window, and the pure decisions around it.
 
+use std::path::{Path, PathBuf};
+
 use frename_core::{FileId, FileSnapshot};
 use iced::{event, mouse, Point, Subscription};
 
@@ -188,10 +190,25 @@ pub fn files_to_drag(
 /// save). Only the tags, the name and the extension are compared: they are always in the file
 /// name, so a failed rename shows there. In/out are not: where they are kept depends on the
 /// settings, and reading them back normalises them (an in point at 0 s reads as none).
+/// `wanted` is compared as the name it makes reads back, not as it is held: a tag with a dot
+/// (`v1.2`) reads back as two tags (`v1`, `2`), and that save worked.
 pub fn save_failed(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
-    wanted.tags() != saved.tags()
-        || wanted.name_without_extension() != saved.name_without_extension()
-        || !wanted.extension().eq_ignore_ascii_case(saved.extension())
+    let expected = FileSnapshot::parse(&wanted.file_name());
+    expected.tags() != saved.tags()
+        || expected.name_without_extension() != saved.name_without_extension()
+        || !expected.extension().eq_ignore_ascii_case(saved.extension())
+}
+
+/// `path` made absolute against the current directory (without touching the disk), as the
+/// Windows shell needs it for a drag; unchanged when that is not possible.
+pub fn absolute_path(path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        return path.to_path_buf();
+    }
+    match std::env::current_dir() {
+        Ok(cwd) => cwd.join(path),
+        Err(_) => path.to_path_buf(),
+    }
 }
 
 /// What the drag decision looks at, over all the dragged files.
@@ -324,6 +341,29 @@ mod tests {
         assert!(!save_failed(&wanted, &in_video), "in/out not in the name");
         let old_name = FileSnapshot::parse("clip.mp4");
         assert!(save_failed(&wanted, &old_name), "the rename did not happen");
+    }
+
+    /// A tag with a dot reads back as two tags, so the saved file never equals the held tags.
+    #[test]
+    fn a_save_with_a_dotted_tag_that_worked_is_not_a_failure() {
+        let mut wanted = FileSnapshot::parse("clip.mp4");
+        wanted.set_tags(["v1.2"]);
+        let read_back = FileSnapshot::parse(&wanted.file_name());
+        assert_eq!(read_back.tags(), ["v1", "2"]);
+        assert!(!save_failed(&wanted, &read_back), "the rename happened");
+        let old_name = FileSnapshot::parse("clip.mp4");
+        assert!(save_failed(&wanted, &old_name), "the rename did not happen");
+    }
+
+    #[test]
+    fn a_relative_path_is_made_absolute_and_an_absolute_one_is_kept() {
+        let relative = Path::new("clips").join("clip.mp4");
+        let made = absolute_path(&relative);
+        assert!(made.is_absolute());
+        assert!(made.ends_with(&relative));
+        let cwd = std::env::current_dir().expect("a current directory");
+        assert_eq!(made, cwd.join(&relative));
+        assert_eq!(absolute_path(&made), made);
     }
 
     #[test]

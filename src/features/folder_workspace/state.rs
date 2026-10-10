@@ -6354,6 +6354,29 @@ mod tests {
         );
     }
 
+    /// The press on another row saves the open file, and that save counts as pending from the
+    /// press, so a drag asked for before it ran waits instead of using stale metadata.
+    #[test]
+    fn the_press_on_another_row_records_its_own_save_as_pending() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = workspace_with_unsaved_tag(&test_dir);
+        let (a, b) = (file_id_at(&workspace, 0), file_id_at(&workspace, 1));
+        // Batch mode with both checked: the file the press leaves is dragged too.
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        let _ = workspace.update(Message::Batch(batch::Message::CheckAll(vec![a])));
+        let _ = workspace.update(Message::Batch(batch::Message::Toggle(b)));
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        assert_eq!(
+            workspace.drag_out.save_of(a),
+            Some(crate::features::drag_out::Save::Pending)
+        );
+        assert_eq!(workspace.drag_out.save_of(b), None);
+        // A fast drag before the save ran waits.
+        drag_move(&mut workspace, 0.0);
+        drag_move(&mut workspace, 10.0);
+        assert!(workspace.drag_out.is_pressed() && !workspace.drag_out.is_dragging());
+    }
+
     /// A double-click opens the rename editor: the held button then selects its text, it does
     /// not drag the file.
     #[test]
