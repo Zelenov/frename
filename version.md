@@ -1,3 +1,7 @@
+# 0.135
+## Changed
+- Settings → Updates on the Mac download and the Linux AppImage now says where new versions come from ("download them from the releases page") with a link to it, and keeps the running version, instead of a disabled Check for updates button.
+
 # 0.133
 ## Fixed
 - A clip's screenshots (`*.snap.*.jpg`) now follow it when it is renamed, and undo and redo of the rename move them back; a screenshot already under the target name stops the undo instead of being replaced.

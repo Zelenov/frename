@@ -80,6 +80,13 @@ fn runs_from_appimage(exe: Option<&Path>, var: &impl Fn(&str) -> Option<OsString
     !appdir.is_empty() && exe.starts_with(Path::new(&appdir))
 }
 
+/// Whether this process runs from a mounted AppImage (the Linux download).
+pub fn is_appimage() -> bool {
+    runs_from_appimage(std::env::current_exe().ok().as_deref(), &|name| {
+        std::env::var_os(name)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
