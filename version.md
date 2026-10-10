@@ -1,6 +1,10 @@
 # 0.117
 ## Added
-- The last ten folders you opened are listed under the arrow next to **Open a folder** (or press `Ctrl+R`) and on the start screen. Click one to open it with the clip that was open there; a folder that is gone shows "Not found" and is only removed when you say so.
+- Recent folders: the last ten you opened are under the arrow next to **Open a folder** (or `Ctrl+R`) and on the start screen; click one to reopen it with the clip you had open.
+
+# 0.116
+## Fixed
+- Tag grid: the "+" on a tag that is not in the folder's tags is as easy to read as its name (it was dark grey on the dark chip).
 
 # 0.115
 ## Added

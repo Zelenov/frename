@@ -64,7 +64,7 @@ fn cursor_ring(cursor: bool) -> container::Style {
 fn chip<'a>(tag: &'a Tag, color: Color, cursor: bool, width: f32) -> Element<'a, Message> {
     let id = tag.id();
     let stored = tag.is_stored();
-    let label_color = if stored { TAG_TEXT } else { TEXT_SECONDARY };
+    let label_color = chip_label_ink(stored);
     let name = fit_label(tag.tag(), width);
     let cut = name.len() != tag.tag().len();
     let label = if tag.is_checked() {
@@ -106,9 +106,9 @@ fn chip<'a>(tag: &'a Tag, color: Color, cursor: bool, width: f32) -> Element<'a,
     list::hoverable(body, hover, RADIUS_S)
 }
 
-/// A 14-px mark on the chip that does `message`, with its tooltip.
-fn mark<'a>(glyph: Icon, message: Message, tip: Tip) -> Element<'a, Message> {
-    let target = mouse_area(icon(glyph, ICON_MARK, TAG_ICON))
+/// A 14-px mark on the chip that does `message`, with its tooltip, in `ink`.
+fn mark<'a>(glyph: Icon, ink: Color, message: Message, tip: Tip) -> Element<'a, Message> {
+    let target = mouse_area(icon(glyph, ICON_MARK, ink))
         .on_press(message)
         .interaction(mouse::Interaction::Pointer);
     tooltip::tip(target, tip, Position::Top)
@@ -129,7 +129,12 @@ fn star<'a>(tag: &'a Tag) -> Element<'a, Message> {
     } else {
         (Icon::Star, fl!("tag-grid-star"))
     };
-    mark(glyph, Message::ToggleStar(tag.id()), Tip::new(tip))
+    mark(
+        glyph,
+        chip_mark_ink(true),
+        Message::ToggleStar(tag.id()),
+        Tip::new(tip),
+    )
 }
 
 /// The action: adding an unsaved tag to the folder's tags, or deleting the cursor's tag.
@@ -138,11 +143,13 @@ fn action<'a>(tag: &'a Tag, cursor: bool) -> Element<'a, Message> {
     match (tag.is_stored(), cursor) {
         (false, _) => mark(
             Icon::Plus,
+            chip_mark_ink(false),
             Message::SaveTag(id),
             Tip::new(fl!("tag-grid-save")).keys(&["Enter"]),
         ),
         (true, true) => mark(
             Icon::Trash,
+            chip_mark_ink(true),
             Message::DeleteTag(id),
             Tip::new(fl!("tag-grid-delete", tag = tag.tag())).keys(&["Delete"]),
         ),
