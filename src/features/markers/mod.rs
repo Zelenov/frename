@@ -9,9 +9,9 @@ pub mod view;
 
 pub use describe::MomentOutcome;
 pub use messages::Message;
-pub use state::{MarkersState, MAX_DESCRIBING_AT_ONCE, MIN_RANGE_MS};
+pub use state::{MarkersState, MIN_RANGE_MS};
 
 #[cfg(test)]
 pub mod state_for_tests {
-    pub use super::state::RANGE_HOLD;
+    pub use super::state::{MAX_DESCRIBING_AT_ONCE, RANGE_HOLD};
 }

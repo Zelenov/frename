@@ -304,12 +304,11 @@ impl FolderWorkspace {
                 let guids = self.unnamed_marker_guids();
                 self.markers.queue_describing(guids);
                 // As `send_waiting_markers` starts them, but nothing is sent.
-                while self.markers.in_flight() < crate::features::markers::MAX_DESCRIBING_AT_ONCE {
-                    let Some(guid) = self.markers.next_waiting() else {
-                        break;
-                    };
-                    let _ = self.markers.start_describing(&guid);
-                }
+                while self
+                    .markers
+                    .start_next_waiting(self.markers.in_flight(), |_| true)
+                    .is_some()
+                {}
                 Task::none()
             }
             Message::MarkerDescribed {
@@ -4948,14 +4947,12 @@ mod tests {
 
     #[test]
     fn describe_unnamed_sends_a_few_at_a_time_and_each_answer_is_its_own_undo_step() {
-        use crate::features::markers::{Message as M, MAX_DESCRIBING_AT_ONCE};
+        use crate::features::markers::state_for_tests::MAX_DESCRIBING_AT_ONCE;
+        use crate::features::markers::Message as M;
         let test_dir = TestDirectory::new(1);
         let (mut workspace, guids) = unnamed_markers_workspace(&test_dir, 5);
         assert_eq!(
-            crate::features::markers::view::unnamed_count(
-                workspace.file_workspace().markers().unwrap_or_default(),
-                workspace.markers()
-            ),
+            workspace.unnamed_marker_guids().len(),
             5,
             "the named marker is not counted"
         );
@@ -4972,10 +4969,7 @@ mod tests {
         }
         assert!(workspace.markers().is_waiting(&guids[3]));
         assert_eq!(
-            crate::features::markers::view::unnamed_count(
-                workspace.file_workspace().markers().unwrap_or_default(),
-                workspace.markers()
-            ),
+            workspace.unnamed_marker_guids().len(),
             0,
             "all on their way or waiting: nothing to offer twice"
         );
@@ -5064,6 +5058,46 @@ mod tests {
         assert!(!workspace.markers().any_describing());
         let _ = workspace.update(late);
         assert!(marker_names(&workspace).iter().all(|(_, n)| n != "Lion"));
+    }
+
+    #[test]
+    fn describe_unnamed_gives_one_failed_notice_per_run() {
+        use crate::features::markers::{Message as M, MomentOutcome};
+        let test_dir = TestDirectory::new(1);
+        let (mut workspace, guids) = unnamed_markers_workspace(&test_dir, 3);
+        send_marker(&mut workspace, M::DescribeUnnamed, 0);
+        let failed = || MomentOutcome::Failed("Network error".to_string());
+        let first = workspace.update(answer(&workspace, &guids[0], failed()));
+        let second = workspace.update(answer(&workspace, &guids[1], failed()));
+        let third = workspace.update(answer(&workspace, &guids[2], failed()));
+        assert!(first.units() > second.units(), "the first says it");
+        assert_eq!(second.units(), third.units(), "the others stay quiet");
+        // A new request is a new run: it says its failure again.
+        send_marker(&mut workspace, M::Describe(guids[0].clone()), 0);
+        let again = workspace.update(answer(&workspace, &guids[0], failed()));
+        assert_eq!(again.units(), first.units());
+    }
+
+    #[test]
+    fn a_stopped_request_keeps_its_slot_until_its_answer_is_back() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let (mut workspace, guids) = unnamed_markers_workspace(&test_dir, 5);
+        send_marker(&mut workspace, M::DescribeUnnamed, 0);
+        let stopped = described(&workspace, &guids[0], "One", "First.");
+        send_marker(&mut workspace, M::StopDescribing(guids[0].clone()), 0);
+        assert_eq!(workspace.marker_requests, 3, "it still reads the clip");
+        assert_eq!(workspace.markers().in_flight(), 2);
+        assert_eq!(workspace.markers().waiting_count(), 2);
+        // Another answer frees a real slot only once: no fourth request alive.
+        let _ = workspace.update(described(&workspace, &guids[1], "Two", "Second."));
+        assert_eq!(workspace.marker_requests, 3, "one back, one sent");
+        assert_eq!(workspace.markers().waiting_count(), 1);
+        // The stopped one comes back: its answer is dropped and the slot is used.
+        let _ = workspace.update(stopped);
+        assert_eq!(workspace.marker_requests, 3);
+        assert_eq!(workspace.markers().waiting_count(), 0);
+        assert!(marker_names(&workspace).iter().all(|(_, n)| n != "One"));
     }
 
     #[test]

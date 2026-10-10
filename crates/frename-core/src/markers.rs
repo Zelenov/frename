@@ -51,6 +51,11 @@ impl Marker {
         self.guid.is_some()
     }
 
+    /// Whether it has no name yet and frename may name it: what "Describe all unnamed" sends.
+    pub fn is_unnamed(&self) -> bool {
+        self.is_editable() && self.name.trim().is_empty()
+    }
+
     pub fn end_ms(&self) -> u64 {
         self.start_ms.saturating_add(self.duration_ms)
     }
@@ -752,6 +757,21 @@ fn merge_text(a: &str, b: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_marker_is_unnamed_when_it_is_editable_and_its_name_is_blank() {
+        let mut marker = Marker::new(1_000);
+        assert!(marker.is_unnamed());
+        marker.name = "  ".to_string();
+        assert!(marker.is_unnamed());
+        marker.comment = "A comment is not a name".to_string();
+        assert!(marker.is_unnamed());
+        marker.name = "Lion".to_string();
+        assert!(!marker.is_unnamed());
+        let mut read_only = Marker::new(2_000);
+        read_only.guid = None;
+        assert!(!read_only.is_unnamed(), "frename may not name it");
+    }
 
     fn named(name: &str, comment: &str) -> Marker {
         let mut marker = Marker::new(1_000);

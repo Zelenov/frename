@@ -13,12 +13,15 @@
 //! `apply_file_updated`).
 
 use frename_core::{marker_text_with_moment, FileId, SetMarkerTextCommand};
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+
 use iced::Task;
 
 use super::FolderWorkspace;
 use crate::features::batch;
 use crate::features::folder_workspace::Message;
-use crate::features::markers::{self, describe, MomentOutcome, MAX_DESCRIBING_AT_ONCE};
+use crate::features::markers::{self, describe, MomentOutcome};
 
 impl FolderWorkspace {
     /// Send the marker `guid` of the open clip to the AI, unless it is on its way already. With
@@ -28,29 +31,40 @@ impl FolderWorkspace {
         if self.batch.is_running() || self.batch.is_waiting_for_markers() {
             return Task::none();
         }
-        let Some(file) = self.file_workspace.file() else {
-            return Task::none();
-        };
-        let (id, path) = (file.id(), file.file_path().to_path_buf());
-        let Some(marker) = self
+        let editable = self
             .file_workspace
             .tag_list()
             .marker(guid)
-            .filter(|m| m.is_editable())
-            .cloned()
-        else {
+            .is_some_and(|m| m.is_editable());
+        if !editable || self.file_workspace.file().is_none() {
             return Task::none();
-        };
+        }
         if self.batch.actions().ai_key_missing() {
             return Self::no_key();
         }
         let Some((request, cancel)) = self.markers.start_describing(guid) else {
             return Task::none();
         };
+        self.send_request(guid.to_string(), request, cancel)
+    }
+
+    /// Send the request just started for the marker `guid` (see `MarkersState::start_describing`)
+    /// on a worker thread. `marker_requests` counts it until its answer is back, stopped or not.
+    fn send_request(
+        &mut self,
+        guid: String,
+        request: u64,
+        cancel: Arc<AtomicBool>,
+    ) -> Task<Message> {
+        let marker = self.file_workspace.tag_list().marker(&guid).cloned();
+        let (Some(file), Some(marker)) = (self.file_workspace.file(), marker) else {
+            self.markers.finish_describing(&guid, request);
+            return Task::none();
+        };
+        let (id, path) = (file.id(), file.file_path().to_path_buf());
         self.marker_requests += 1;
         let (model, language) = self.batch.actions().ai_model_and_language();
         let at_s = describe::moment_s(&marker);
-        let guid = guid.to_string();
         Task::future(async move {
             let outcome = tokio::task::spawn_blocking(move || {
                 describe::describe_moment(&path, at_s, model, language, &cancel)
@@ -88,42 +102,43 @@ impl FolderWorkspace {
         self.send_waiting_markers()
     }
 
-    /// The markers of the open clip "Describe N unnamed" would send: editable, without a name,
-    /// not on their way, in the list's order.
-    pub(super) fn unnamed_marker_guids(&self) -> Vec<String> {
-        self.file_workspace
-            .markers()
-            .unwrap_or_default()
-            .iter()
-            .filter(|m| m.is_editable() && m.name.trim().is_empty())
-            .filter_map(|m| m.guid.clone())
-            .filter(|guid| !self.markers.is_describing(guid))
-            .collect()
+    /// The markers "Describe N unnamed" would send now (see `MarkersState::unnamed_guids`).
+    pub fn unnamed_marker_guids(&self) -> Vec<String> {
+        self.markers
+            .unnamed_guids(self.file_workspace.markers().unwrap_or_default())
     }
 
     /// Send the markers waiting for their turn while fewer than `MAX_DESCRIBING_AT_ONCE`
-    /// requests are on their way. One that got a name (or went) while it waited is skipped.
+    /// requests are really alive (`marker_requests`: a stopped request counts until its answer
+    /// is back, as it still reads the clip). Called when the run starts and whenever an answer
+    /// comes back, which is when a slot frees. One that got a name (or went) while it waited
+    /// is skipped.
     pub(super) fn send_waiting_markers(&mut self) -> Task<Message> {
+        if self.markers.waiting_count() == 0 {
+            return Task::none();
+        }
+        // A batch job is about to close the clip, or has.
+        if self.batch.is_running() || self.batch.is_waiting_for_markers() {
+            self.markers.clear_waiting();
+            return Task::none();
+        }
+        // The key was removed meanwhile: the rest would find out the same.
+        if self.batch.actions().ai_key_missing() {
+            self.markers.clear_waiting();
+            return Self::no_key();
+        }
         let mut tasks = Vec::new();
-        while self.markers.in_flight() < MAX_DESCRIBING_AT_ONCE {
-            let Some(guid) = self.markers.next_waiting() else {
+        loop {
+            let tag_list = self.file_workspace.tag_list();
+            let next = self
+                .markers
+                .start_next_waiting(self.marker_requests, |guid| {
+                    tag_list.marker(guid).is_some_and(|m| m.is_unnamed())
+                });
+            let Some((guid, request, cancel)) = next else {
                 break;
             };
-            let unnamed = self
-                .file_workspace
-                .tag_list()
-                .marker(&guid)
-                .is_some_and(|m| m.name.trim().is_empty());
-            if !unnamed {
-                continue;
-            }
-            // The key was removed meanwhile: the rest would find out the same.
-            if self.batch.actions().ai_key_missing() {
-                self.markers.clear_waiting();
-                tasks.push(Self::no_key());
-                break;
-            }
-            tasks.push(self.describe_marker(&guid));
+            tasks.push(self.send_request(guid, request, cancel));
         }
         Task::batch(tasks)
     }
@@ -211,8 +226,13 @@ impl FolderWorkspace {
                 }
             }
             MomentOutcome::Cancelled => Task::none(),
+            // Said once, even when several requests of a run fail.
             MomentOutcome::Failed(reason) => {
-                Self::notice(&fl!("markers-ai-failed", reason = reason))
+                if self.markers.failed_said() {
+                    Task::none()
+                } else {
+                    Self::notice(&fl!("markers-ai-failed", reason = reason))
+                }
             }
         };
         Task::batch([done, answered, self.send_waiting_markers()])

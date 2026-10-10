@@ -163,39 +163,36 @@ pub fn view<'a>(
     position_ms: u64,
     in_out: Option<(u64, u64)>,
     spinner_frame: usize,
+    unnamed: usize,
 ) -> Element<'a, Message> {
     let list = marker_list(markers, state, position_ms, spinner_frame);
-    let describe_all = markers.and_then(|markers| describe_all_bar(markers, state, spinner_frame));
-    let in_out = in_out.map(in_out_line);
-    column![].push(in_out).push(describe_all).push(list).into()
+    let describe_all = markers.and_then(|_| describe_all_bar(state, spinner_frame, unnamed));
+    column![]
+        .push(in_out.map(in_out_line))
+        .push(describe_all)
+        .push(list)
+        .into()
 }
 
-/// The markers "Describe N unnamed" would send: editable, without a name, not on their way.
-pub fn unnamed_count(markers: &[Marker], state: &MarkersState) -> usize {
-    markers
-        .iter()
-        .filter(|m| m.is_editable() && m.name.trim().is_empty())
-        .filter(|m| {
-            m.guid
-                .as_deref()
-                .is_some_and(|guid| !state.is_describing(guid))
-        })
-        .count()
-}
-
-/// Over the list, under the in/out points: "Describe N unnamed" while some markers have no name
-/// (and are not on their way), and, while some wait for their turn, how many and "Stop all".
-/// Nothing when there is nothing to offer.
+/// Over the list, under the in/out points: while a run is on its way, how many markers are
+/// described and how many wait, with "Stop all" (so no row's ⊗ has to be pressed one by one);
+/// otherwise "Describe N unnamed" with the `unnamed` count it is handed. Nothing when there is
+/// nothing to offer.
 fn describe_all_bar<'a>(
-    markers: &[Marker],
     state: &MarkersState,
     spinner_frame: usize,
+    unnamed: usize,
 ) -> Option<Element<'a, Message>> {
-    let waiting = state.waiting_count();
-    let content: Element<'a, Message> = if waiting > 0 {
+    let (waiting, describing) = (state.waiting_count(), state.in_flight());
+    let content: Element<'a, Message> = if waiting > 0 || describing > 1 {
+        let progress = if waiting > 0 {
+            fl!("markers-ai-run", describing = describing, waiting = waiting)
+        } else {
+            fl!("markers-ai-run-last", describing = describing)
+        };
         row![
             spinner(spinner_frame, ICON_S, TEXT_SECONDARY),
-            text::caption(fl!("markers-ai-waiting-count", count = waiting)),
+            text::caption(progress),
             space::horizontal(),
             ui_button::ghost(fl!("markers-ai-stop-all")).on_press(Message::StopDescribingAll),
         ]
@@ -203,20 +200,19 @@ fn describe_all_bar<'a>(
         .align_y(Alignment::Center)
         .into()
     } else {
-        let count = unnamed_count(markers, state);
-        if count == 0 {
+        if unnamed == 0 {
             return None;
         }
         let button = ui_button::with_icon(
             ButtonKind::Secondary,
             Icon::Sparkles,
-            fl!("markers-ai-describe-unnamed", count = count),
+            fl!("markers-ai-describe-unnamed", count = unnamed),
             true,
         )
         .on_press(Message::DescribeUnnamed);
         tooltip::tip(
             button,
-            Tip::new(fl!("markers-ai-describe-unnamed-tip")),
+            Tip::new(fl!("markers-ai-describe-unnamed-hint")),
             Position::Bottom,
         )
     };

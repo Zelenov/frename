@@ -1,6 +1,7 @@
 //! State of the marker list that is not the markers themselves: the row being edited, the
 //! open color picker, and what `F2` did last.
 
+use frename_core::Marker;
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -80,6 +81,8 @@ pub struct MarkersState {
     /// The number the next request gets. Never reset, so the answer of a request stopped
     /// earlier never passes for a later one's.
     next_request: u64,
+    /// A request failed and said so: the others of the run that fail too stay quiet.
+    failed_said: bool,
     /// A request found no key and said so: the others that find it out too stay quiet.
     no_key_said: bool,
 }
@@ -224,6 +227,7 @@ impl MarkersState {
         }
         self.next_request += 1;
         self.no_key_said = false;
+        self.failed_said = false;
         let request = (self.next_request, Arc::new(AtomicBool::new(false)));
         self.describing.insert(guid.to_string(), request.clone());
         Some(request)
@@ -248,6 +252,12 @@ impl MarkersState {
     /// A request found no key: whether that was said already (since the last request was sent).
     pub fn no_key_said(&mut self) -> bool {
         std::mem::replace(&mut self.no_key_said, true)
+    }
+
+    /// A request failed: whether that was said already (since the last request was sent), so
+    /// several that fail in one run give one notice.
+    pub fn failed_said(&mut self) -> bool {
+        std::mem::replace(&mut self.failed_said, true)
     }
 
     /// Stop the request for `guid`, or take it out of the queue; its answer is not used.
@@ -307,9 +317,38 @@ impl MarkersState {
         }
     }
 
-    /// The marker whose turn it is, out of the queue (its request is started next).
-    pub fn next_waiting(&mut self) -> Option<String> {
-        self.waiting.pop_front()
+    /// Start the request of the first marker in the queue that `wanted` still says is to be
+    /// described (one named or removed meanwhile is dropped), unless `alive` requests are on
+    /// their way already: the number really alive, stopped ones that have not come back
+    /// included, since they still read the clip. Pops and starts together.
+    pub fn start_next_waiting(
+        &mut self,
+        alive: usize,
+        wanted: impl Fn(&str) -> bool,
+    ) -> Option<(String, u64, Arc<AtomicBool>)> {
+        if alive >= MAX_DESCRIBING_AT_ONCE {
+            return None;
+        }
+        while let Some(guid) = self.waiting.pop_front() {
+            if !wanted(&guid) {
+                continue;
+            }
+            if let Some((request, cancel)) = self.start_describing(&guid) {
+                return Some((guid, request, cancel));
+            }
+        }
+        None
+    }
+
+    /// The editable markers of `markers` without a name that are not on their way or waiting,
+    /// in the list's order: what "Describe N unnamed" sends and counts.
+    pub fn unnamed_guids(&self, markers: &[Marker]) -> Vec<String> {
+        markers
+            .iter()
+            .filter(|m| m.is_unnamed())
+            .filter_map(|m| m.guid.clone())
+            .filter(|guid| !self.is_describing(guid))
+            .collect()
     }
 
     /// Nothing waits any more (the requests on their way go on).
@@ -371,19 +410,56 @@ mod tests {
         state.queue_describing(["a", "d"].map(String::from));
         assert_eq!(state.waiting_count(), 4, "a is queued once");
         state.stop_describing("b");
-        assert_eq!(state.next_waiting().as_deref(), Some("a"));
-        let (_, cancel) = state.start_describing("a").unwrap();
+        let (first, _, cancel) = state.start_next_waiting(0, |_| true).unwrap();
+        assert_eq!(first, "a");
         assert!(state.is_describing("a") && !state.is_waiting("a"));
         assert_eq!(state.in_flight(), 1);
         state.stop_all_describing();
         assert!(cancel.load(Ordering::Relaxed));
-        assert!(!state.any_describing() && state.next_waiting().is_none());
+        assert!(!state.any_describing() && state.start_next_waiting(0, |_| true).is_none());
         state.queue_describing(["x".to_string()]);
         state.reset();
         assert!(
             !state.any_describing(),
             "leaving the clip empties the queue"
         );
+    }
+
+    #[test]
+    fn the_queue_starts_one_at_a_time_up_to_the_cap_and_skips_the_unwanted() {
+        let mut state = MarkersState::default();
+        state.queue_describing(["a", "b", "c", "d"].map(String::from));
+        let named = |guid: &str| guid != "a";
+        let (guid, ..) = state.start_next_waiting(0, named).unwrap();
+        assert_eq!(guid, "b", "a was named meanwhile: dropped");
+        assert!(!state.is_describing("a"));
+        assert!(
+            state
+                .start_next_waiting(MAX_DESCRIBING_AT_ONCE, |_| true)
+                .is_none(),
+            "no slot: alive requests count, not the ones in the map"
+        );
+        assert_eq!(state.waiting_count(), 2);
+        assert!(state
+            .start_next_waiting(MAX_DESCRIBING_AT_ONCE - 1, |_| true)
+            .is_some());
+    }
+
+    #[test]
+    fn unnamed_markers_are_the_editable_ones_without_a_name_not_on_their_way() {
+        let mut named = Marker::new(1_000);
+        named.name = "Lion".into();
+        let mut spaces = Marker::new(2_000);
+        spaces.name = "  ".into();
+        let mut read_only = Marker::new(3_000);
+        read_only.guid = None;
+        let busy = Marker::new(4_000);
+        let mut state = MarkersState::default();
+        state.start_describing(busy.guid.as_deref().unwrap());
+        let markers = [named, spaces.clone(), read_only, busy, Marker::new(5_000)];
+        let guids = state.unnamed_guids(&markers);
+        assert_eq!(guids.len(), 2);
+        assert_eq!(guids[0].as_str(), spaces.guid.as_deref().unwrap());
     }
 
     #[test]
