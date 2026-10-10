@@ -349,6 +349,8 @@ mod tests {
     #[test]
     fn rename_moves_subtitles_with_the_video_and_never_overwrites() {
         let dir = std::env::temp_dir().join(format!("frename-subs-{}", std::process::id()));
+        // A folder left by an earlier run that had this process id must not leak into this one.
+        let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("temp dir");
         let old_video = dir.join("clip.MP4");
         let new_video = dir.join("tag.clip.MP4");
@@ -380,6 +382,8 @@ mod tests {
     #[test]
     fn rename_moves_the_saved_transcript_with_the_video() {
         let dir = std::env::temp_dir().join(format!("frename-marker-{}", std::process::id()));
+        // A folder left by an earlier run that had this process id must not leak into this one.
+        let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("temp dir");
         let old_video = dir.join("clip.MP4");
         let new_video = dir.join("tag.clip.MP4");

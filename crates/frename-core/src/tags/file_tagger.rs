@@ -639,6 +639,8 @@ AI: A walk.
 
     fn clip_with_markers(name: &str, markers: &[Marker]) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("frename-{name}-{}", std::process::id()));
+        // A folder left by an earlier run that had this process id must not leak into this one.
+        let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("temp dir");
         let file = dir.join("clip.mov");
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
