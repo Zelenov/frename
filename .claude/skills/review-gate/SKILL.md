@@ -61,4 +61,6 @@ A finding without a concrete failure scenario or a concrete improvement is dropp
 5. After the PR merges, every finding with a failure scenario that was not fixed in it (minors
    included) is filed as a `bug` (`nightly` → "Bugs the agent finds") and fixed without approval.
 
-Record every round in the PR description: SHA, each reviewer's verdict, findings count, what was fixed.
+Record every round in the PR description: SHA, each reviewer's verdict, findings count, what was fixed,
+and every finding not fixed in full (severity, file:line, failure scenario), so it can be filed as a
+bug after the merge even by another session.
