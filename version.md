@@ -1,3 +1,8 @@
+# 0.123
+## Fixed
+- The time shown beside a paused frame is exact to the millisecond in clips of several hours (it could be a millisecond or two off past about two and a half hours).
+- The first frame step back in a clip no longer fails to change the picture after a frame step in the clip before.
+
 # 0.121
 ## Fixed
 - A clip you watched to the end and left again without playing it opens at its in point again, instead of two seconds before it with a "Resumed" note.
