@@ -579,6 +579,7 @@ rotate-flag-none = нет
 rotate-now = Поворот: { $flag }
 rotate-turned = Повёрнуто на { $turn } · теперь поворот: { $flag }
 rotate-failed = Не повёрнуто: { $reason }
+undo-name-taken = Не изменено: файл с именем { $name } уже есть
 undo-back-on-clip = Снова на этом ролике (переход отменён). Ещё раз Ctrl+Z — отмена его последнего изменения.
 redo-on-clip = Снова на этом ролике (переход повторён).
 rotate-reason-in-use = файл только для чтения или занят

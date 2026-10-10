@@ -1,3 +1,8 @@
+# 0.131
+## Fixed
+- Undo and redo of a rename no longer replace another clip that has taken the old name; the step is refused with a note and stays in the history.
+- Undo and redo of a rename move the clip's comment along with it, as they already did for subtitles.
+
 # 0.130
 ## Fixed
 - Dragging a clip out to Premiere is no longer refused with "Not dragged: can't save the file" (nor a false "Not saved" shown) after a tag with a dot, such as v1.2, was saved.

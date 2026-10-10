@@ -1414,4 +1414,176 @@ mod tests {
         run(&mut history, &mut tag_list, false);
         assert_eq!(tag_list.file_snapshot().segment(), new);
     }
+
+    // --- NavigateFileCommand renames on a real folder ---
+
+    /// A folder with `names` as files (content = the name), and a command that renamed
+    /// `before` to `after`. Returns the folder, the directory and the command.
+    fn rename_fixture(
+        label: &str,
+        before: &str,
+        after: &str,
+    ) -> (
+        PathBuf,
+        Directory<FakeAppStorage>,
+        NavigateFileCommand,
+        FileId,
+    ) {
+        let dir_path =
+            std::env::temp_dir().join(format!("frename-undo-{label}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir_path);
+        std::fs::create_dir_all(&dir_path).expect("temp dir");
+        let file = File::from_path(dir_path.join(after), SystemTime::UNIX_EPOCH);
+        let id = file.id();
+        let directory = Directory::with_files(&dir_path, vec![file], FakeAppStorage::new());
+        let snap = FileSnapshot::new(vec![], "x", "mp4", before);
+        let cmd = NavigateFileCommand {
+            file_id: id,
+            to_file_id: id,
+            path_before: dir_path.join(before),
+            path_after: dir_path.join(after),
+            snapshot_before: snap.clone(),
+            snapshot_after: snap,
+        };
+        (dir_path, directory, cmd, id)
+    }
+
+    fn write(path: &std::path::Path, text: &str) {
+        std::fs::write(path, text).expect("write");
+    }
+
+    #[test]
+    fn undo_of_a_rename_refuses_to_overwrite_another_clip() {
+        let (dir_path, mut directory, cmd, _) =
+            rename_fixture("undo-clobber", "foo.mp4", "foo.GOAT.mp4");
+        write(&dir_path.join("foo.GOAT.mp4"), "clip A");
+        // Clip B was renamed onto the name clip A left free.
+        write(&dir_path.join("foo.mp4"), "clip B");
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+        history.push(Box::new(cmd));
+
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+        let err = history.undo(&mut ctx).expect_err("must refuse");
+        assert!(matches!(err, crate::undo::UndoError::NameTaken(_)), "{err}");
+        assert_eq!(
+            std::fs::read_to_string(dir_path.join("foo.mp4")).unwrap(),
+            "clip B"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir_path.join("foo.GOAT.mp4")).unwrap(),
+            "clip A"
+        );
+        // The refused step is not lost: it can be tried again, and nothing moved to redo.
+        assert!(history.can_undo());
+        assert!(!history.can_redo());
+    }
+
+    #[test]
+    fn a_refused_undo_works_once_the_name_is_free() {
+        let (dir_path, mut directory, cmd, _) =
+            rename_fixture("undo-retry", "foo.mp4", "foo.GOAT.mp4");
+        write(&dir_path.join("foo.GOAT.mp4"), "clip A");
+        write(&dir_path.join("foo.mp4"), "clip B");
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+        history.push(Box::new(cmd));
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+        assert!(history.undo(&mut ctx).is_err());
+        std::fs::remove_file(dir_path.join("foo.mp4")).unwrap();
+        history.undo(&mut ctx).expect("name is free now");
+        assert_eq!(
+            std::fs::read_to_string(dir_path.join("foo.mp4")).unwrap(),
+            "clip A"
+        );
+        assert!(history.can_redo());
+    }
+
+    #[test]
+    fn redo_of_a_rename_refuses_to_overwrite_another_clip() {
+        let (dir_path, mut directory, cmd, _) =
+            rename_fixture("redo-clobber", "foo.mp4", "foo.GOAT.mp4");
+        write(&dir_path.join("foo.mp4"), "clip A");
+        // Something else took the name the redo would give clip A.
+        write(&dir_path.join("foo.GOAT.mp4"), "clip C");
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+        history.push(Box::new(cmd));
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+        // Put the command on the redo stack without touching the files: undo needs the
+        // renamed file's name free, so move clip C away for that step and back.
+        std::fs::rename(dir_path.join("foo.GOAT.mp4"), dir_path.join("c.tmp")).unwrap();
+        std::fs::rename(dir_path.join("foo.mp4"), dir_path.join("foo.GOAT.mp4")).unwrap();
+        history.undo(&mut ctx).expect("undo");
+        write(&dir_path.join("foo.GOAT.mp4"), "clip C");
+
+        let err = history.redo(&mut ctx).expect_err("must refuse");
+        assert!(matches!(err, crate::undo::UndoError::NameTaken(_)), "{err}");
+        assert_eq!(
+            std::fs::read_to_string(dir_path.join("foo.GOAT.mp4")).unwrap(),
+            "clip C"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir_path.join("foo.mp4")).unwrap(),
+            "clip A"
+        );
+        assert!(history.can_redo());
+    }
+
+    #[test]
+    fn undo_and_redo_of_a_rename_move_the_comment_along() {
+        let (dir_path, mut directory, cmd, _) =
+            rename_fixture("comment-moves", "foo.mp4", "foo.GOAT.mp4");
+        let (before, after) = (dir_path.join("foo.mp4"), dir_path.join("foo.GOAT.mp4"));
+        write(&after, "clip A");
+        crate::comment::save_comment(&after, "nice take");
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+        history.push(Box::new(cmd));
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+
+        history.undo(&mut ctx).expect("undo");
+        assert_eq!(crate::comment::load_comment(&before), "nice take");
+        assert!(!crate::comment::comment_path(&after).exists());
+
+        history.redo(&mut ctx).expect("redo");
+        assert_eq!(crate::comment::load_comment(&after), "nice take");
+        assert!(!crate::comment::comment_path(&before).exists());
+    }
+
+    #[test]
+    fn undo_refuses_when_the_comment_name_is_taken() {
+        let (dir_path, mut directory, cmd, _) =
+            rename_fixture("comment-taken", "foo.mp4", "foo.GOAT.mp4");
+        let (before, after) = (dir_path.join("foo.mp4"), dir_path.join("foo.GOAT.mp4"));
+        write(&after, "clip A");
+        crate::comment::save_comment(&after, "comment of A");
+        // No clip is called foo.mp4, but a comment is left under its name.
+        crate::comment::save_comment(&before, "stray comment");
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+        history.push(Box::new(cmd));
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+
+        let err = history.undo(&mut ctx).expect_err("must refuse");
+        assert!(matches!(err, crate::undo::UndoError::NameTaken(_)), "{err}");
+        assert!(after.exists(), "the clip stays where it was");
+        assert_eq!(crate::comment::load_comment(&before), "stray comment");
+        assert_eq!(crate::comment::load_comment(&after), "comment of A");
+    }
 }
