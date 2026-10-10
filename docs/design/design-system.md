@@ -1142,11 +1142,12 @@ left to right, with the widths §13.9 folds by:
   *The note (§10 Notices) on a wide pane (left) and a narrow one (right), made with
   `frename --demo` from `docs/screenshots/resume.toml` and `resume-narrow.toml`.* It is the
   `floating_notice` pill: the `popup` surface (`bg.overlay`, subtle border, shadow), `text.body`,
-  padding 4×8, 8 from the picture's left and bottom edges. **Hover:** the pill does not change, only the
-  pointer becomes a hand; there is no fill or underline, which is why the text names the key.
-  **Narrow:** the pill is at most 280 wide (the tooltip width) and its text wraps inside that,
-  growing upward from the bottom-left corner, so a longer translation (the Russian one) wraps onto a second line where it does not fit and
-  is never cut off.
+  padding 4×8, 8 from the picture's left and bottom edges. **Hover:** the pill does not change,
+  only the pointer becomes a hand; there is no fill or underline, which is why the text names
+  the key. **Narrow:** the pill is at most 280 wide (the tooltip width) and its text wraps inside
+  that, growing upward from the bottom-left corner, so a longer text (a translation) wraps onto
+  a second line where it does not fit and is never cut off. The screenshots show the English
+  text only.
 - **Narrow pane:** what gives way and when is in §13.9. The **More** button (`ellipsis`) sits just
   before fullscreen; its menu opens upward, lists each moved control with its icon, name and key,
   and marks a latched one with a `check`.

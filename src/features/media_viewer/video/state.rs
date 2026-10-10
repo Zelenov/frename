@@ -347,6 +347,9 @@ impl VideoPlayerState {
         if self.at_in_point == Some(self.position) {
             return;
         }
+        // Something else is kept from here on: coming back to the in point later is a moment
+        // like any other, not the one the clip opened at.
+        self.at_in_point = None;
         let position = match self.continued {
             Some(continued) if (continued.at..=continued.stopped).contains(&self.position) => {
                 continued.stopped
@@ -2277,7 +2280,8 @@ mod tests {
 
     /// Issue #161 end to end on a real clip: opened through `load_video` and its `VideoLoaded`,
     /// it lands two seconds before where playback stopped, with a note that says so; left again
-    /// without moving, where it stopped is kept; `Home` goes to the start, takes the note away, and a clip left there has nothing to continue.
+    /// without moving, where it stopped is kept; `Home` goes to the start, takes the note
+    /// away, and a clip left there has nothing to continue.
     #[cfg(any(target_os = "linux", windows))]
     #[test]
     fn a_clip_continues_where_playback_stopped_and_home_starts_it_over() {
@@ -2352,6 +2356,50 @@ mod tests {
             AppDatabase::new().get_playback_position(&clip),
             Some(Duration::from_secs(8)),
             "moved on: kept"
+        );
+    }
+
+    /// Issue #205: a clip closed at its in point (a save in place unloads it) and opened again
+    /// is still at the in point it opened at: leaving it keeps nothing. Once something else was
+    /// kept, a seek back to exactly the in point is a moment like any other.
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn the_in_point_a_clip_opened_at_survives_a_reopen_and_not_a_later_keep() {
+        let (video, duration) = real_clip();
+        let duration = Duration::from_secs(duration.as_secs());
+        let in_point = Duration::from_secs(6);
+        let clip = unique_clip("in-point-reopen");
+        AppDatabase::new().set_playback_position(&clip, duration);
+        let id = FileId::new();
+
+        let mut player = VideoPlayerState::default();
+        let _ = player.load_video(clip.clone(), clip.clone(), id, Some(in_point));
+        let generation = player.loads_started();
+        let _ = player.update(video_loaded(video, generation));
+        assert_eq!(player.position, in_point);
+
+        let _ = player.update(Message::Unload);
+        let _ = player.load_video(clip.clone(), clip.clone(), id, Some(in_point));
+        let (video, _) = real_clip();
+        let generation = player.loads_started();
+        let _ = player.update(video_loaded(video, generation));
+        assert_eq!(player.position, in_point);
+        player.remember_position();
+        assert_eq!(
+            AppDatabase::new().get_playback_position(&clip),
+            Some(duration),
+            "the reopen is not a new stop"
+        );
+
+        // Played on to 20 s and kept; back at exactly the in point, it is kept as well.
+        player.position = Duration::from_secs(20);
+        player.remember_position();
+        player.position = in_point;
+        player.remember_position();
+        assert_eq!(
+            AppDatabase::new().get_playback_position(&clip),
+            Some(in_point),
+            "a seek back to the in point is kept"
         );
     }
 
