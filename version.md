@@ -1,3 +1,7 @@
+# 0.135
+## Changed
+- Settings → Updates on the Mac download and the Linux AppImage now says where new versions come from ("download them from the releases page") with a link to it, and keeps the running version, instead of a disabled Check for updates button.
+
 # 0.134
 ## Fixed
 - After typing in the tag search and toggling a tag with Shift+Space, the keys (Ctrl+C, Delete, the arrows, Space) go to the app again instead of the search box.
