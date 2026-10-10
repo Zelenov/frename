@@ -475,6 +475,12 @@ impl VideoPlayerState {
         self.position = position;
     }
 
+    /// For tests without a real video: the clip is (or is no longer) loading.
+    #[cfg(test)]
+    pub fn pretend_loading(&mut self, loading: bool) {
+        self.loading = loading;
+    }
+
     /// For tests: the note that says where the clip continued is shown.
     #[cfg(test)]
     pub fn pretend_resume_note(&mut self) {

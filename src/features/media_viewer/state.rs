@@ -78,6 +78,17 @@ impl MediaViewerState {
         self.video.pretend_shown_at(position);
     }
 
+    /// For tests without a real video: a video is still loading (`true`), or has unloaded.
+    #[cfg(test)]
+    pub fn pretend_video_loading(&mut self, loading: bool) {
+        self.active = if loading {
+            ActiveMedia::Video
+        } else {
+            ActiveMedia::None
+        };
+        self.video.pretend_loading(loading);
+    }
+
     /// For tests: see [`VideoPlayerState::reopens_at`].
     #[cfg(test)]
     pub fn video_reopens_at(&self) -> Option<Duration> {

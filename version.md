@@ -1,3 +1,7 @@
+# 0.129
+## Fixed
+- Closing the Settings window while the main window is closing no longer stops frename from quitting on the first close, and closing Settings no longer stops a running batch.
+
 # 0.128
 ## Fixed
 - Pressing next or previous quickly while a clip loads no longer makes the switch wait on the newer clip's load.
