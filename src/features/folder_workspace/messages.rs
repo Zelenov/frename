@@ -87,6 +87,13 @@ pub enum Message {
         request: u64,
         outcome: crate::features::markers::MomentOutcome,
     },
+    /// A marker's request has read its frames and let go of the clip; its answer is still on
+    /// the way (see `markers::describe`).
+    MarkerRequestReleased {
+        guid: String,
+        /// The request's number (see `MarkersState::start_describing`).
+        request: u64,
+    },
     /// A second passed: write the open clip's unsaved edits into the recovery journal, if they
     /// changed (see `frename_core::recovery`).
     JournalTick,

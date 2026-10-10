@@ -87,9 +87,12 @@ pub struct FolderWorkspace {
     /// A batch job waits for a playing video to unload, since it may write into and rename
     /// that very file.
     batch_waits_for_unload: bool,
-    /// Marker "Describe with AI" requests whose answer has not come back yet, stopped ones too:
-    /// one may still be reading the clip's frames, which holds the file open.
+    /// Marker "Describe with AI" requests whose answer has not come back yet, stopped ones too.
     marker_requests: usize,
+    /// Of those, the ones (guid, request number) that have not yet let go of the clip: one may
+    /// still be reading its frames, which holds the file open. A request leaves this on
+    /// `Stage::Released` or when it ends, whichever comes first.
+    marker_readers: std::collections::HashSet<(String, u64)>,
     /// The file being renamed in place in the folder list, if any.
     inline_rename: Option<folder::InlineRename>,
     /// The file list's filter menu is open.
@@ -252,6 +255,7 @@ impl FolderWorkspace {
             batch,
             batch_waits_for_unload: false,
             marker_requests: 0,
+            marker_readers: std::collections::HashSet::new(),
             inline_rename: None,
             filter_menu_open: false,
             recent_folders,
@@ -390,6 +394,9 @@ impl FolderWorkspace {
                 request,
                 outcome,
             } => self.marker_described(file, guid, request, outcome),
+            Message::MarkerRequestReleased { guid, request } => {
+                self.marker_request_released(guid, request)
+            }
             Message::JournalWritten(id, outcome) => {
                 self.journal_written(id, outcome);
                 Task::none()
@@ -1616,7 +1623,7 @@ impl FolderWorkspace {
         let refused = drag_out::save_failed(&snapshot, &snapshot_after_save);
         let refused_notice = if refused {
             // The marker description's own reading of the clip may be what holds the file.
-            if self.marker_requests > 0 {
+            if self.marker_reading_clip() {
                 Self::notice(&fl!("folder-not-saved-marker-ai"))
             } else {
                 Self::notice(
@@ -5010,6 +5017,99 @@ mod tests {
         let _ = workspace.update(late);
         assert!(workspace.is_batch_running(), "started once it let go");
         assert_eq!(marker_texts(&workspace), [(String::new(), String::new())]);
+    }
+
+    /// Issue #207: a batch job waiting for marker requests starts as soon as each has let go of
+    /// the clip, without their answers; the answers coming later change nothing.
+    #[test]
+    fn a_batch_job_starts_once_the_marker_requests_released_the_clip() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let (mut workspace, guids) = unnamed_markers_workspace(&test_dir, 2);
+        let ids: Vec<FileId> = workspace
+            .directory()
+            .expect("dir")
+            .files_in_order()
+            .map(|f| f.id())
+            .collect();
+        let _ = workspace.update(Message::Batch(batch::Message::SetActive(true)));
+        let _ = workspace.update(Message::Batch(batch::Message::CheckAll(ids)));
+        for guid in &guids {
+            send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        }
+        let release = |workspace: &FolderWorkspace, guid: &str| Message::MarkerRequestReleased {
+            guid: guid.to_string(),
+            request: workspace.markers().request_of(guid).expect("on its way"),
+        };
+        let first = release(&workspace, &guids[0]);
+        let second = release(&workspace, &guids[1]);
+        let late = described(&workspace, &guids[0], "Lion", "A lion.");
+
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        assert!(workspace.batch.is_waiting_for_markers());
+        let _ = workspace.update(first.clone());
+        assert!(workspace.batch.is_waiting_for_markers(), "one still reads");
+        let _ = workspace.update(second);
+        assert!(workspace.is_batch_running(), "no answer needed");
+        assert_eq!(workspace.marker_requests, 2, "the answers are still due");
+
+        // Said again, then answered: nothing breaks, the counts end at zero.
+        let _ = workspace.update(first);
+        let _ = workspace.update(late);
+        assert_eq!(workspace.marker_requests, 1);
+        assert!(workspace.marker_readers.is_empty());
+        assert!(workspace.is_batch_running());
+    }
+
+    /// Issue #207: a save is refused as "the marker description was still reading the clip" only
+    /// until the request has released it.
+    #[test]
+    fn a_request_reads_the_clip_only_until_it_is_released() {
+        use crate::features::markers::{Message as M, MomentOutcome};
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = only_guid(&workspace);
+        assert!(!workspace.marker_reading_clip());
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        assert!(workspace.marker_reading_clip(), "before it let go");
+        let request = workspace.markers().request_of(&guid).expect("on its way");
+        let _ = workspace.update(Message::MarkerRequestReleased {
+            guid: guid.clone(),
+            request,
+        });
+        assert!(!workspace.marker_reading_clip(), "after Released");
+        assert_eq!(workspace.marker_requests, 1, "still waiting for the answer");
+        let _ = workspace.update(answer(&workspace, &guid, MomentOutcome::Cancelled));
+        assert_eq!(workspace.marker_requests, 0);
+        assert!(!workspace.marker_reading_clip());
+    }
+
+    /// Issue #207: a request that ends before it released the clip (a failure, a stop) lets go
+    /// of it by its answer, and a batch job waiting for it starts.
+    #[test]
+    fn a_request_that_never_released_lets_go_by_its_answer() {
+        use crate::features::markers::{Message as M, MomentOutcome};
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        let guid = only_guid(&workspace);
+        let ids: Vec<FileId> = workspace
+            .directory()
+            .expect("dir")
+            .files_in_order()
+            .map(|f| f.id())
+            .collect();
+        let _ = workspace.update(Message::Batch(batch::Message::SetActive(true)));
+        let _ = workspace.update(Message::Batch(batch::Message::CheckAll(ids)));
+        send_marker(&mut workspace, M::Describe(guid.clone()), 0);
+        let failed = answer(&workspace, &guid, MomentOutcome::Failed("boom".into()));
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        assert!(workspace.batch.is_waiting_for_markers());
+        let _ = workspace.update(failed);
+        assert!(workspace.is_batch_running());
+        assert_eq!(workspace.marker_requests, 0);
+        assert!(workspace.marker_readers.is_empty());
     }
 
     #[test]

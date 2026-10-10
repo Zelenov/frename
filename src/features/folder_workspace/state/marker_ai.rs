@@ -7,15 +7,17 @@
 //! batch job stops the requests still on their way.
 //!
 //! A request reads the clip's frames through a GStreamer pipeline of its own, which holds the
-//! file open, and clipscribe does not say when it is done reading: a batch job waits until every
-//! request has come back, stopped or not. Leaving the clip does not wait: a save that meets a
-//! request still reading the file fails like any save of a file in use (see
-//! `apply_file_updated`).
+//! file open, and clipscribe says when it is done reading (`Stage::Released`, before the HTTP
+//! request): a batch job waits until every request has let go of the clip or come back, stopped
+//! or not. Leaving the clip does not wait: a save that meets a request still reading the file
+//! fails like any save of a file in use (see `apply_file_updated`); once it has released the
+//! clip, it does not.
 
 use frename_core::{marker_text_with_moment, FileId, SetMarkerTextCommand};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+use iced::futures::SinkExt;
 use iced::Task;
 
 use super::FolderWorkspace;
@@ -63,24 +65,37 @@ impl FolderWorkspace {
         };
         let (id, path) = (file.id(), file.file_path().to_path_buf());
         self.marker_requests += 1;
+        self.marker_readers.insert((guid.clone(), request));
         let (model, language) = self.batch.actions().ai_model_and_language();
         let at_s = describe::moment_s(&marker);
-        Task::future(async move {
+        let stream = iced::stream::channel(4, async move |mut output| {
+            let mut released = output.clone();
+            let released_guid = guid.clone();
             let outcome = tokio::task::spawn_blocking(move || {
-                describe::describe_moment(&path, at_s, model, language, &cancel)
+                describe::describe_moment(&path, at_s, model, language, &cancel, || {
+                    // Awaited by nobody: the answer follows, and marks the clip released too.
+                    let _ = released.try_send(Message::MarkerRequestReleased {
+                        guid: released_guid.clone(),
+                        request,
+                    });
+                })
             })
             .await
             .unwrap_or_else(|e| {
                 log::error!("ai: describing a marker failed: {e}");
                 MomentOutcome::Failed(fl!("markers-ai-failed-unknown"))
             });
-            Message::MarkerDescribed {
-                file: id,
-                guid,
-                request,
-                outcome,
-            }
-        })
+            // Awaited, unlike the release: a full buffer must not lose the answer.
+            let _ = output
+                .send(Message::MarkerDescribed {
+                    file: id,
+                    guid,
+                    request,
+                    outcome,
+                })
+                .await;
+        });
+        Task::run(stream, |message| message)
     }
 
     /// "Describe N unnamed": queue every marker of the open clip that has no name and is not on
@@ -167,14 +182,32 @@ impl FolderWorkspace {
     /// (it may be reading the clip's frames); the job then waits for it.
     pub(super) fn stop_marker_requests(&mut self) -> bool {
         self.markers.stop_all_describing();
-        self.marker_requests > 0
+        !self.marker_readers.is_empty()
     }
 
-    /// A request came back, stopped or not: when it was the last, a batch job waiting for it
-    /// starts.
-    fn marker_request_done(&mut self) -> Task<Message> {
+    /// Whether a marker request may still be reading the clip's frames (it holds the file open
+    /// until `Stage::Released` or its end).
+    pub(super) fn marker_reading_clip(&self) -> bool {
+        !self.marker_readers.is_empty()
+    }
+
+    /// A request has let go of the clip (before its answer): when it was the last, a batch job
+    /// waiting for them starts. Said again by the answer, or after it, it changes nothing.
+    pub(super) fn marker_request_released(&mut self, guid: String, request: u64) -> Task<Message> {
+        self.marker_readers.remove(&(guid, request));
+        self.start_batch_if_markers_let_go()
+    }
+
+    /// A request came back, stopped or not: it holds the clip no more, if it still did.
+    fn marker_request_done(&mut self, guid: &str, request: u64) -> Task<Message> {
         self.marker_requests = self.marker_requests.saturating_sub(1);
-        if self.marker_requests > 0 || !self.batch.is_waiting_for_markers() {
+        self.marker_readers.remove(&(guid.to_string(), request));
+        self.start_batch_if_markers_let_go()
+    }
+
+    /// A batch job waiting for the marker requests to let go of the clip starts once none does.
+    fn start_batch_if_markers_let_go(&mut self) -> Task<Message> {
+        if !self.marker_readers.is_empty() || !self.batch.is_waiting_for_markers() {
             return Task::none();
         }
         // Leaving batch mode ends the wait, so the job is still wanted.
@@ -192,7 +225,7 @@ impl FolderWorkspace {
         request: u64,
         outcome: MomentOutcome,
     ) -> Task<Message> {
-        let done = self.marker_request_done();
+        let done = self.marker_request_done(&guid, request);
         if !self.markers.finish_describing(&guid, request)
             || self.file_workspace.file().map(|f| f.id()) != Some(file)
         {
