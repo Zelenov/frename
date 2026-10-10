@@ -502,7 +502,6 @@ mod tests {
         assert!(cancel.load(Ordering::Relaxed) && !state.any_describing());
     }
 
-    /// Issue #171: a click on a marker jumps there without scrolling the list.
     #[test]
     fn reported_row_heights_are_kept_by_index_and_survive_another_file() {
         let mut state = MarkersState::default();
@@ -516,6 +515,7 @@ mod tests {
         assert_eq!(state.row_heights()[0], 40.0);
     }
 
+    /// Issue #171: a click on a marker jumps there without scrolling the list.
     #[test]
     fn a_click_on_a_marker_does_not_scroll_the_list() {
         let mut state = MarkersState::default();
