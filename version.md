@@ -1,3 +1,7 @@
+# 0.144
+## Fixed
+- After saving a new tag, undoing and redoing it, the tag grid keeps the tags that are not in the folder's tags in their own group under their caption.
+
 # 0.142
 ## Fixed
 - At its narrowest the file list no longer cuts off the buttons under it: the least used ones (locate, recent folders, batch mode) move into a More menu, and Ctrl+R still opens the recent folders.
