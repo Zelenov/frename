@@ -197,6 +197,12 @@ pub struct VideoPlayerState {
     /// The clip played to its end and the playhead has not moved since (#193): every seek and
     /// step clears it, so play here starts over. See [`left_the_end`].
     at_end: bool,
+    /// Test seam: stands in for the player's end-of-stream flag, which only its widget sets,
+    /// and counts the times play left the end.
+    #[cfg(test)]
+    eos_override: Option<bool>,
+    #[cfg(test)]
+    ends_left: u32,
     /// The frame the last step event showed, as the sink reports it; see
     /// [`frame_step::stepped_onto`].
     stepped_onto: Option<ShownFrame>,
@@ -246,6 +252,10 @@ impl Default for VideoPlayerState {
             frame_step: None,
             reversed: false,
             at_end: false,
+            #[cfg(test)]
+            eos_override: None,
+            #[cfg(test)]
+            ends_left: 0,
             stepped_onto: None,
             clip: None,
             pending_resume: None,
@@ -1156,8 +1166,16 @@ impl VideoPlayerState {
         let Some(video) = self.current_video.as_mut() else {
             return false;
         };
-        if !left_the_end(video.eos(), self.at_end) {
+        #[cfg(test)]
+        let eos = self.eos_override.unwrap_or_else(|| video.eos());
+        #[cfg(not(test))]
+        let eos = video.eos();
+        if !left_the_end(eos, self.at_end) {
             return false;
+        }
+        #[cfg(test)]
+        {
+            self.ends_left += 1;
         }
         if let Err(e) = video.restart_stream() {
             log::error!("Failed to leave the end of the stream: {e}");
@@ -2375,6 +2393,45 @@ mod tests {
         )));
         assert!(left_the_end(true, player.at_end), "a range click");
         assert!(!player.paused, "the range plays");
+    }
+
+    /// Issue #193: with the player flagging the end (the seam stands in for its widget), `Space`
+    /// and a range click after a seek leave the end and play on from the playhead; at the very
+    /// end they do not.
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn play_after_the_end_leaves_it_only_when_the_playhead_moved() {
+        let ended = || {
+            let (video, _) = real_clip();
+            let mut player = VideoPlayerState {
+                current_video: Some(video),
+                paused: false,
+                eos_override: Some(true),
+                ..VideoPlayerState::default()
+            };
+            let _ = player.update(Message::EndOfStream);
+            player
+        };
+        // Space at the very end: nothing to leave, the player restarts the clip itself.
+        let mut player = ended();
+        let _ = player.update(Message::TogglePause);
+        assert_eq!(player.ends_left, 0);
+        assert!(!player.paused);
+        // Space after a seek: left once, playing on from the playhead.
+        let mut player = ended();
+        let _ = player.update(Message::Seek(2.0));
+        let _ = player.update(Message::TogglePause);
+        assert_eq!(player.ends_left, 1);
+        assert!(!player.paused);
+        assert!(!player.at_end);
+        assert_eq!(player.position, Duration::from_secs(2));
+        // A range click after the end: left once too.
+        let mut player = ended();
+        let _ = player.update(Message::Controls(video_controls::Message::PlayRange(
+            1.0, 2.0,
+        )));
+        assert_eq!(player.ends_left, 1);
+        assert!(!player.paused);
     }
 
     /// Issue #193: without the player flagging the end, play leaves a paused clip where it is.
