@@ -90,16 +90,34 @@ fn runs_from_appimage(exe: Option<&Path>, var: &impl Fn(&str) -> Option<OsString
         || std::fs::canonicalize(appdir).is_ok_and(|resolved| exe.starts_with(resolved))
 }
 
-/// The plugin registry of the GStreamer inside the AppImage, or `None` outside one. GStreamer's
-/// default, `~/.cache/gstreamer-1.0/registry.x86_64.bin`, is shared with the system's own
-/// GStreamer apps and is rebuilt on every start, because the mount path changes each time.
-/// frename keeps its own in `$XDG_CACHE_HOME/frename`, by default `~/.cache/frename`.
+/// The plugin registry of the GStreamer inside the AppImage, or `None` outside one or when its
+/// folder cannot be made (the registry is only a cache: GStreamer then uses its default).
+/// GStreamer's default, `~/.cache/gstreamer-1.0/registry.x86_64.bin`, is shared with the system's
+/// own GStreamer apps, which the AppImage's plugins would overwrite it for. frename keeps its own
+/// in `$XDG_CACHE_HOME/frename`, by default `~/.cache/frename`. (It is still rescanned on each
+/// start: the mount path, which the registry is keyed by, changes every time.) Without a home the
+/// folder is `<temp>/frename`, a predictable name in a shared folder: it is made private (0700)
+/// and a symlink there is refused, but a folder another user made first is not detected.
 pub fn appimage_gstreamer_registry() -> Option<PathBuf> {
-    gstreamer_registry_for(
+    let registry = gstreamer_registry_for(
         std::env::current_exe().ok().as_deref(),
         PACKAGE_DATA_DIR.get().map(PathBuf::as_path),
         |name| std::env::var_os(name),
-    )
+    )?;
+    ensure_registry_folder(&registry).then_some(registry)
+}
+
+/// Make the folder of `registry` (private on unix); false if that failed or it is a symlink.
+fn ensure_registry_folder(registry: &Path) -> bool {
+    let Some(folder) = registry.parent() else {
+        return false;
+    };
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+    builder.create(folder).is_ok()
+        && std::fs::symlink_metadata(folder).is_ok_and(|meta| meta.is_dir())
 }
 
 fn gstreamer_registry_for(
@@ -355,5 +373,27 @@ mod tests {
     #[test]
     fn the_temp_folder_when_the_executable_is_unknown() {
         assert_eq!(data_dir_for(None, None, env(vec![])), std::env::temp_dir());
+    }
+
+    #[test]
+    fn a_registry_folder_that_cannot_be_made_is_refused_not_fatal() {
+        let base =
+            std::env::temp_dir().join(format!("frename-registry-dir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).expect("base");
+        let file = base.join("a-file");
+        std::fs::write(&file, b"x").expect("file");
+        assert!(!ensure_registry_folder(
+            &file.join("frename/gst-registry.bin")
+        ));
+        assert!(ensure_registry_folder(
+            &base.join("new/frename/gst-registry.bin")
+        ));
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&base, base.join("link")).expect("symlink");
+            assert!(!ensure_registry_folder(&base.join("link/gst-registry.bin")));
+        }
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

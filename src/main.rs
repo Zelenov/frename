@@ -90,9 +90,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The AppImage's GStreamer keeps its plugin registry in frename's own cache folder.
     #[cfg(target_os = "linux")]
     if let Some(registry) = frename_core::appimage_gstreamer_registry() {
-        if let Some(folder) = registry.parent() {
-            std::fs::create_dir_all(folder)?;
-        }
         std::env::set_var("GST_REGISTRY_1_0", registry);
     }
     let log_file = File::create(frename_core::log_path())?;

@@ -1,6 +1,6 @@
 # 0.136
 ## Fixed
-- Linux: the AppImage starts faster, because it keeps its own video plugin list in `~/.cache/frename` instead of rebuilding a shared one on every start, which also made other GStreamer programs rescan.
+- Linux: the AppImage no longer overwrites the shared GStreamer plugin cache that other programs use; it keeps its own in `~/.cache/frename`.
 - Linux: the AppImage starts when the temporary folder is behind a symbolic link.
 - Linux: without a home folder, the AppImage keeps its files in `/tmp/frename` instead of the shared `/tmp`.
 
