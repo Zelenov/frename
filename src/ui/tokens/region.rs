@@ -97,6 +97,12 @@ pub const NAME_MIN_WIDTH: f32 = 80.0;
 /// The line over the list that says why it is locked.
 pub const LOCK_LINE_HEIGHT: f32 = CONTROL_HEIGHT;
 
+// Recent folders (#63, §13.4.3, §13.7).
+/// A recent folder's row: its name with when it was opened, and the folder it is in under it.
+pub const RECENT_ROW_HEIGHT: f32 = LINE_BODY + LINE_CAPTION + 2.0 * SPACE_XS;
+/// The list of recent folders, in the dropdown and on the empty screen.
+pub const RECENT_LIST_WIDTH: f32 = MENU_MAX_WIDTH;
+
 // Tags area (§13.5).
 pub const CHIP_HEIGHT: f32 = CONTROL_HEIGHT;
 pub const CHIP_MINI_HEIGHT: f32 = 20.0;

@@ -175,6 +175,11 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
     if scenario.more {
         steps.push(video(video::Message::ToggleMore));
     }
+    if scenario.recent_menu {
+        steps.push(folder_workspace::Message::Folder(
+            folder::Message::ToggleRecentFolders,
+        ));
+    }
     if let Some(name) = &scenario.describing {
         steps.push(folder_workspace::Message::ShowDescribing(name.clone()));
     }
@@ -359,7 +364,7 @@ pub fn prepare(args: &DemoArgs, work: &Path) -> Result<DemoRun, String> {
         .map_err(|e| format!("cannot read {}: {e}", scenario_path.display()))?;
     let scenario = DemoScenario::parse(&text).map_err(|e| e.to_string())?;
     let scenario_dir = scenario_path.parent().unwrap_or(Path::new("."));
-    let folder = work.join("folder");
+    let folder = work.join(scenario.folder_name.as_deref().unwrap_or("folder"));
     let file = frename_core::demo::stage(&scenario, scenario_dir, &folder)
         .map_err(|e| format!("cannot stage the demo folder: {e}"))?;
     let db = frename_core::AppDatabase::new();

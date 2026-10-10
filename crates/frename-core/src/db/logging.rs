@@ -3,6 +3,7 @@
 use std::path::Path;
 use std::time::Duration;
 
+use crate::recent_folders::RecentFolder;
 use crate::FolderAndFile;
 
 use super::traits::{AppStateStore, Initializable};
@@ -42,6 +43,24 @@ impl<S: AppStateStore> AppStateStore for LoggingAppStateStore<S> {
         );
         self.inner.set_last_folder_and_file(value);
         log::debug!("AppStateStore::set_last_folder_and_file() done");
+    }
+
+    fn get_recent_folders(&self) -> Vec<RecentFolder> {
+        self.inner.get_recent_folders()
+    }
+
+    fn record_recent_folder(&self, value: &FolderAndFile, opened_at_ms: i64) {
+        self.inner.record_recent_folder(value, opened_at_ms);
+    }
+
+    fn forget_recent_folder(&self, folder: &Path) {
+        log::debug!("AppStateStore::forget_recent_folder({})", folder.display());
+        self.inner.forget_recent_folder(folder);
+    }
+
+    fn clear_recent_folders(&self) {
+        log::debug!("AppStateStore::clear_recent_folders()");
+        self.inner.clear_recent_folders();
     }
 
     fn get_playback_position(&self, clip: &Path) -> Option<Duration> {

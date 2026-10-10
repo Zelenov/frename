@@ -486,6 +486,41 @@ folder-window-empty-title = Откройте папку с клипами
 folder-window-empty-line = Или перетащите папку в окно. Правый клик по кнопке открывает один файл.
 folder-window-open = Открыть папку…
 
+## Недавние папки (стрелка рядом с кнопкой «Открыть папку» и пустой экран)
+
+recent-folders-tip = Недавние папки
+recent-folders-title = Недавние папки
+recent-folders-none = Пока нет открытых папок
+recent-folders-not-found = Не найдена
+recent-folders-remove-tip = Убрать из списка
+recent-folders-clear = Очистить список
+recent-folders-remove = Убрать
+recent-folders-keep = Оставить
+recent-folders-missing-line = Не найдена. Убрать?
+recent-folders-just-now = Только что
+recent-folders-minutes = { $count } мин назад
+recent-folders-hours = { $count } ч назад
+recent-folders-days = { $count ->
+    [one] { $count } день назад
+    [few] { $count } дня назад
+   *[many] { $count } дней назад
+}
+recent-folders-weeks = { $count ->
+    [one] { $count } неделю назад
+    [few] { $count } недели назад
+   *[many] { $count } недель назад
+}
+recent-folders-months = { $count ->
+    [one] { $count } месяц назад
+    [few] { $count } месяца назад
+   *[many] { $count } месяцев назад
+}
+recent-folders-years = { $count ->
+    [one] { $count } год назад
+    [few] { $count } года назад
+   *[many] { $count } лет назад
+}
+
 ## File menu (right-click on a file, or F11 / Shift+F11 / Ctrl+F11)
 
 file-menu-show-in-explorer = Показать в проводнике

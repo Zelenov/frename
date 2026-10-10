@@ -432,6 +432,37 @@ folder-window-empty-title = Open a folder of clips
 folder-window-empty-line = Or drop a folder on the window. A right-click on the button opens one file.
 folder-window-open = Open a folder…
 
+## Recent folders (the arrow next to the open button, and the empty screen)
+
+recent-folders-tip = Recent folders
+recent-folders-title = Recent folders
+recent-folders-none = No folders opened yet
+recent-folders-not-found = Not found
+recent-folders-remove-tip = Remove from the list
+recent-folders-clear = Clear list
+recent-folders-remove = Remove
+recent-folders-keep = Keep
+recent-folders-missing-line = Not found. Remove it?
+recent-folders-just-now = Just now
+recent-folders-minutes = { $count } min ago
+recent-folders-hours = { $count } h ago
+recent-folders-days = { $count ->
+    [one] { $count } day ago
+   *[other] { $count } days ago
+}
+recent-folders-weeks = { $count ->
+    [one] { $count } week ago
+   *[other] { $count } weeks ago
+}
+recent-folders-months = { $count ->
+    [one] { $count } month ago
+   *[other] { $count } months ago
+}
+recent-folders-years = { $count ->
+    [one] { $count } year ago
+   *[other] { $count } years ago
+}
+
 ## File menu (right-click on a file, or F11 / Shift+F11 / Ctrl+F11)
 
 file-menu-show-in-explorer = Show in Explorer

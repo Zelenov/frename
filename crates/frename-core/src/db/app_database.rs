@@ -10,6 +10,7 @@ use std::time::Duration;
 use rusqlite::Connection;
 
 use crate::ai::{self, SummaryLanguage};
+use crate::recent_folders::{self, now_ms, RecentFolder};
 use crate::{CommentStorage, CueLength, FolderAndFile, InOutStorage, MarkerStorage};
 
 use super::migrations;
@@ -46,27 +47,50 @@ fn clip_key(clip: &Path) -> Option<(String, String)> {
     Some((folder, file_name))
 }
 
-/// A folder as playback positions are kept under it: without a trailing separator, and on
-/// Windows, where paths ignore case and take either slash, in lower case with backslashes, so
-/// one folder reached by two spellings (a dropped folder, the last session) is one folder.
-fn folder_key(folder: &Path) -> String {
-    let text = folder.to_string_lossy();
-    if cfg!(windows) {
-        text.replace('/', "\\")
-            .trim_end_matches('\\')
-            .to_lowercase()
-    } else {
-        text.trim_end_matches('/').to_string()
-    }
+/// The recent folders as stored, newest first.
+fn read_recent_folders(conn: &Connection) -> Result<Vec<RecentFolder>, rusqlite::Error> {
+    let rows: Vec<RecentFolder> = conn
+        .prepare(
+            "SELECT folder_path, opened_at_ms, last_file_path FROM recent_folders ORDER BY position",
+        )?
+        .query_map([], |row| {
+            let last_file: String = row.get(2)?;
+            Ok(RecentFolder {
+                folder: PathBuf::from(row.get::<_, String>(0)?),
+                opened_at_ms: row.get(1)?,
+                last_file: (!last_file.is_empty()).then(|| PathBuf::from(last_file)),
+            })
+        })?
+        .collect::<Result<_, _>>()?;
+    Ok(recent_folders::tidy(rows))
 }
 
-/// Now, in milliseconds since the Unix epoch.
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |since| {
-            i64::try_from(since.as_millis()).unwrap_or(i64::MAX)
-        })
+/// Replace the stored recent folders with `list`, in one transaction.
+fn write_recent_folders(conn: &Connection, list: &[RecentFolder]) -> Result<(), rusqlite::Error> {
+    let transaction = conn.unchecked_transaction()?;
+    transaction.execute("DELETE FROM recent_folders", [])?;
+    for (position, entry) in list.iter().enumerate() {
+        transaction.execute(
+            "INSERT INTO recent_folders (position, folder_path, opened_at_ms, last_file_path)
+             VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![
+                i64::try_from(position).unwrap_or(i64::MAX),
+                entry.folder.to_string_lossy(),
+                entry.opened_at_ms,
+                entry
+                    .last_file
+                    .as_deref()
+                    .map(|file| file.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+            ],
+        )?;
+    }
+    transaction.commit()
+}
+
+/// A folder as playback positions are kept under it (see [`recent_folders::folder_key`]).
+fn folder_key(folder: &Path) -> String {
+    recent_folders::folder_key(folder)
 }
 
 /// Move the position kept under `from` to `to`, replacing what `to` had.
@@ -252,6 +276,42 @@ impl AppStateStore for AppDatabase {
              ON CONFLICT(folder_path) DO UPDATE SET last_file_path = excluded.last_file_path, opened_at = datetime('now')",
             rusqlite::params![folder_str, file_str],
         );
+        drop(conn);
+        self.record_recent_folder(value, now_ms());
+    }
+
+    fn get_recent_folders(&self) -> Vec<RecentFolder> {
+        let Ok(conn) = self.conn() else {
+            return Vec::new();
+        };
+        let conn = lock_connection(&conn);
+        read_recent_folders(&conn).unwrap_or_default()
+    }
+
+    fn record_recent_folder(&self, value: &FolderAndFile, opened_at_ms: i64) {
+        let Ok(conn) = self.conn() else { return };
+        let conn = lock_connection(&conn);
+        let Ok(mut list) = read_recent_folders(&conn) else {
+            return;
+        };
+        recent_folders::record(&mut list, value, opened_at_ms);
+        let _ = write_recent_folders(&conn, &list);
+    }
+
+    fn forget_recent_folder(&self, folder: &Path) {
+        let Ok(conn) = self.conn() else { return };
+        let conn = lock_connection(&conn);
+        let Ok(mut list) = read_recent_folders(&conn) else {
+            return;
+        };
+        recent_folders::forget(&mut list, folder);
+        let _ = write_recent_folders(&conn, &list);
+    }
+
+    fn clear_recent_folders(&self) {
+        let Ok(conn) = self.conn() else { return };
+        let conn = lock_connection(&conn);
+        let _ = conn.execute("DELETE FROM recent_folders", []);
     }
 
     fn get_window_state(&self) -> Option<WindowGeometry> {
@@ -552,6 +612,82 @@ impl AppDatabase {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A fresh, migrated database in the temp folder, named for the test.
+    fn temp_database(name: &str) -> AppDatabase {
+        let path = std::env::temp_dir().join(format!("frename-{name}-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let db = AppDatabase::with_path(&path);
+        db.initialize().expect("migrate");
+        db
+    }
+
+    fn recent_names(db: &AppDatabase) -> Vec<String> {
+        db.get_recent_folders().iter().map(|e| e.name()).collect()
+    }
+
+    #[test]
+    fn opening_folders_lists_them_newest_first_with_their_last_file() {
+        let db = temp_database("recent-order");
+        assert!(db.get_recent_folders().is_empty());
+        db.set_last_folder_and_file(&FolderAndFile::new("/shoots/a", Some("/shoots/a/x.mp4")));
+        db.set_last_folder_and_file(&FolderAndFile::new("/shoots/b", None::<&str>));
+        // The folder is opened again, then a file is picked in it, as a session goes.
+        db.set_last_folder_and_file(&FolderAndFile::new("/shoots/a", None::<&str>));
+        assert_eq!(recent_names(&db), ["a", "b"]);
+        assert_eq!(
+            db.get_recent_folders()[0].last_file.as_deref(),
+            Some(Path::new("/shoots/a/x.mp4")),
+            "opening the folder keeps the file it had"
+        );
+        db.set_last_folder_and_file(&FolderAndFile::new("/shoots/a", Some("/shoots/a/y.mp4")));
+        assert_eq!(
+            db.get_recent_folders()[0].last_file.as_deref(),
+            Some(Path::new("/shoots/a/y.mp4"))
+        );
+    }
+
+    #[test]
+    fn the_recent_folders_keep_ten_and_survive_a_restart() {
+        let db = temp_database("recent-ten");
+        for n in 0..12 {
+            db.record_recent_folder(&FolderAndFile::new(format!("/s/{n}"), None::<&str>), n);
+        }
+        let reopened = AppDatabase::with_path(&db.path);
+        let names = recent_names(&reopened);
+        assert_eq!(names.len(), crate::recent_folders::MAX_RECENT_FOLDERS);
+        assert_eq!((names[0].as_str(), names[9].as_str()), ("11", "2"));
+        assert_eq!(reopened.get_recent_folders()[0].opened_at_ms, 11);
+    }
+
+    #[test]
+    fn one_folder_can_be_forgotten_and_the_list_cleared() {
+        let db = temp_database("recent-forget");
+        for name in ["a", "b", "c"] {
+            db.set_last_folder_and_file(&FolderAndFile::new(
+                format!("/shoots/{name}"),
+                None::<&str>,
+            ));
+        }
+        db.forget_recent_folder(Path::new("/shoots/b"));
+        assert_eq!(recent_names(&db), ["c", "a"]);
+        db.clear_recent_folders();
+        assert!(db.get_recent_folders().is_empty());
+        db.set_last_folder_and_file(&FolderAndFile::new("/shoots/d", None::<&str>));
+        assert_eq!(recent_names(&db), ["d"]);
+    }
+
+    #[test]
+    fn the_last_session_is_still_the_last_folder_opened() {
+        let db = temp_database("recent-session");
+        db.set_last_folder_and_file(&FolderAndFile::new("/shoots/a", Some("/shoots/a/x.mp4")));
+        db.forget_recent_folder(Path::new("/shoots/a"));
+        assert_eq!(
+            db.get_last_session().map(|s| s.folder),
+            Some(PathBuf::from("/shoots/a")),
+            "taking a folder off the list does not forget the session"
+        );
+    }
 
     #[test]
     fn a_closed_database_leaves_no_files_behind() {

@@ -1,3 +1,7 @@
+# 0.118
+## Added
+- Recent folders: the last ten you opened are under the arrow next to **Open a folder** (or `Ctrl+R`) and on the start screen; click one to reopen it with the clip you had open.
+
 # 0.117
 ## Added
 - Marker list: **Describe N unnamed** names and describes every marker without a name with AI in one click, three at a time; the others wait their turn, **Stop all** stops them, and a name you type meanwhile is kept.

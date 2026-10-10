@@ -54,7 +54,8 @@ comment.
 
 1. Open a folder with the **Open a folder** button under the file list, or drag a folder onto the
    window. The installed Windows version also adds "Open in frename" to the right-click menu of
-   folders in Explorer.
+   folders in Explorer. The arrow next to the button (or `Ctrl+R`) lists the last ten folders
+   you worked in, each with the clip you had open, and so does the empty start screen.
 2. The first clip starts playing.
 3. Tag what you see.
 4. Press `[` and `]` to mark the usable part, and `F2` at a moment you want to find again. Press
@@ -75,6 +76,7 @@ single clip.
 |---|---|
 | `PageDown` | Next file (renames the file you leave) |
 | `PageUp` | Previous file (renames the file you leave) |
+| `Ctrl+R` | Recent folders: `↑` `↓` walk the list, `Enter` opens the folder with its last clip, `Esc` closes it |
 | Double-click a file | Rename it by hand: `Enter` renames, `Esc` cancels |
 | `Ctrl+click` a file | Add it (and the open one) to a selection, or drop it if already selected |
 | `Shift+click` a file | Select every file between it and the last `Ctrl`-clicked one |

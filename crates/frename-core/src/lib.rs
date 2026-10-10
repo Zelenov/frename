@@ -14,6 +14,7 @@ mod metadata;
 pub mod old_settings;
 mod ordered;
 pub mod playback;
+pub mod recent_folders;
 pub mod recovery;
 mod search;
 mod subtitles;
