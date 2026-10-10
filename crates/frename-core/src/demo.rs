@@ -43,6 +43,9 @@ pub struct DemoScenario {
     /// into it.
     #[serde(default)]
     pub more: bool,
+    /// Show the time readout as it looks while a frame step is slow (#196).
+    #[serde(default)]
+    pub slow_step: bool,
     /// Show the open clip's marker with this name as being described with AI (its row's turning
     /// loader and stop button), without sending a request.
     #[serde(default)]
@@ -369,6 +372,13 @@ name = "pick.a.mp4"
         assert!(!scenario.more);
         assert_eq!(scenario.files[0].comment, None);
         assert!(scenario.files[0].markers.is_empty());
+    }
+
+    #[test]
+    fn a_scenario_can_show_a_slow_step() {
+        assert!(!DemoScenario::parse(MINIMAL).unwrap().slow_step);
+        let text = MINIMAL.replace("[[files]]", "slow_step = true\n[[files]]");
+        assert!(DemoScenario::parse(&text).unwrap().slow_step);
     }
 
     #[test]

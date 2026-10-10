@@ -282,14 +282,22 @@ pub fn rotate(cannot_rotate: Option<String>) -> [Command<Message>; 2] {
 
 /// `00:10 / 00:30`, fixed wide so it never moves. Paused, the playhead shows its milliseconds
 /// (`00:10.250 / 00:30`): the exact time of a frame stepped to.
-pub fn time_readout<'a>(state: &VideoControlsState, position: Duration) -> Element<'a, Message> {
+///
+/// `slow`: a frame step has waited long (#196); the readout dims to `text.disabled` while it does.
+pub fn time_readout<'a>(
+    state: &VideoControlsState,
+    position: Duration,
+    slow: bool,
+) -> Element<'a, Message> {
     let position = if state.is_playing() {
         clock(position.as_secs_f32())
     } else {
         precise_clock(position)
     };
     let readout = format!("{position} / {}", clock(state.duration_secs()));
-    container(text::mono(readout).wrapping(iced::widget::text::Wrapping::None))
+    let readout = text::mono(readout).wrapping(iced::widget::text::Wrapping::None);
+    let readout = readout.color(time_readout_color(slow));
+    container(readout)
         .width(TIME_READOUT_WIDTH)
         .align_right(TIME_READOUT_WIDTH)
         .into()
@@ -485,6 +493,12 @@ fn marker_label_button(label: MarkerLabel<'_>) -> Element<'_, Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_readout_dims_only_while_a_step_is_slow() {
+        assert_eq!(time_readout_color(false), TEXT_SECONDARY);
+        assert_eq!(time_readout_color(true), TEXT_DISABLED);
+    }
 
     #[test]
     fn scrolling_up_raises_volume_and_down_lowers_it_clamped() {

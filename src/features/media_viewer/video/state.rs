@@ -37,6 +37,9 @@ const FRAME_STEP_TICK: Duration = Duration::from_millis(15);
 /// last frame none comes. While the pipeline is still decoding toward the frame (a backward seek
 /// in a 4K clip with long groups of pictures takes seconds), it waits on.
 const FRAME_STEP_SETTLED_WAIT: Duration = Duration::from_millis(250);
+/// How long a frame step waits before the time readout dims to show it is still working: a step
+/// back in a long clip takes seconds, and presses meanwhile are dropped on purpose (#196).
+const FRAME_STEP_SLOW_AFTER: Duration = Duration::from_millis(300);
 /// The longest a frame step waits at all, should the pipeline never settle.
 const FRAME_STEP_GIVE_UP: Duration = Duration::from_secs(20);
 
@@ -191,6 +194,12 @@ pub struct VideoPlayerState {
     /// A frame step whose frame is not on screen yet. Further steps wait for it: a held key
     /// would otherwise step again from the frame still shown and stand still.
     frame_step: Option<PendingStep>,
+    /// How long the waiting frame step has waited, once that is slow (see `step_is_slow`): the
+    /// time readout dims and a spinner turns beside it. View-only; set by the step's tick,
+    /// cleared with the step.
+    slow_for: Option<Duration>,
+    /// Only `frename --demo` sets this (`ShowSlowStep`): the slow-step look with no step waiting.
+    demo_slow_step: bool,
     /// A step back left the pipeline running backward (see `seek_backward`); any forward seek
     /// clears it. Kept here rather than read from the frame on screen: while the backward seek
     /// is still on its way there is none, and playing then would play the clip backward.
@@ -255,6 +264,8 @@ impl Default for VideoPlayerState {
             more_open: false,
             loading_ticks: 0,
             frame_step: None,
+            slow_for: None,
+            demo_slow_step: false,
             reversed: false,
             at_end: false,
             #[cfg(test)]
@@ -496,7 +507,7 @@ impl VideoPlayerState {
         self.cue_scroll_y = 0.0;
         self.cue_restore = Default::default();
         self.play_until = None;
-        self.frame_step = None;
+        self.clear_step();
         self.stepped_onto = None;
         self.reversed = false;
         self.at_end = false;
@@ -678,7 +689,7 @@ impl VideoPlayerState {
             }
             Message::TogglePause => {
                 self.play_until = None;
-                self.frame_step = None;
+                self.clear_step();
                 // A step back left the pipeline running backward: turn it forward at the frame
                 // shown before playing.
                 if self.paused && self.leave_end() {
@@ -804,6 +815,10 @@ impl VideoPlayerState {
                 };
                 Task::none()
             }
+            Message::ShowSlowStep => {
+                self.demo_slow_step = true;
+                Task::none()
+            }
             Message::ShowMarkerList => {
                 self.overlay = Overlay::Markers;
                 Task::none()
@@ -899,7 +914,7 @@ impl VideoPlayerState {
                 self.pending_resume = None;
                 self.load_generation = self.load_generation.wrapping_add(1);
                 self.resume_at = None;
-                self.frame_step = None;
+                self.clear_step();
                 self.stepped_onto = None;
                 self.current_video = None;
                 self.current_path = None;
@@ -1074,9 +1089,43 @@ impl VideoPlayerState {
         ])
     }
 
+    /// While a frame step has waited long: the spinner's frame (the spinner clock, from how long
+    /// it has waited) and the signal to dim the time readout. `None` otherwise.
+    pub fn slow_step_spinner(&self) -> Option<usize> {
+        let waited = if self.demo_slow_step {
+            Duration::ZERO
+        } else {
+            self.slow_for?
+        };
+        Some((waited.as_millis() / SPINNER_TICK.as_millis()) as usize)
+    }
+
+    /// The step is over (or none was on its way).
+    fn clear_step(&mut self) {
+        self.frame_step = None;
+        self.slow_for = None;
+    }
+
+    /// Remember how long the waiting step has waited at `now`, once that is slow.
+    fn note_wait(&mut self, now: Instant) {
+        self.slow_for = self.frame_step.and_then(|pending| {
+            step_is_slow(pending.since, now).then(|| now.saturating_duration_since(pending.since))
+        });
+    }
+
     /// One frame back or forward. Pauses playback first; the playhead becomes the shown frame's
     /// time once it is on screen (see [`Self::frame_step_tick`]).
     fn step_frame(&mut self, step: video_controls::FrameStep) -> Task<Message> {
+        self.step_frame_since(step, None)
+    }
+
+    /// [`Self::step_frame`]; `since` is when the step began waiting, for the second half of a
+    /// step back, which goes on with the wait of the first.
+    fn step_frame_since(
+        &mut self,
+        step: video_controls::FrameStep,
+        since: Option<Instant>,
+    ) -> Task<Message> {
         let Some(video) = self.current_video.as_mut() else {
             return Task::none();
         };
@@ -1122,7 +1171,7 @@ impl VideoPlayerState {
             from: frame,
             step,
             by_step_event: target == StepTarget::NextBuffer,
-            since: Instant::now(),
+            since: since.unwrap_or_else(Instant::now),
         });
         Task::batch([paused, moved])
     }
@@ -1131,7 +1180,7 @@ impl VideoPlayerState {
     /// the playhead becomes its time.
     fn frame_step_tick(&mut self) -> Task<Message> {
         let (Some(pending), Some(video)) = (self.frame_step, self.current_video.as_ref()) else {
-            self.frame_step = None;
+            self.clear_step();
             return Task::none();
         };
         let shown = shown_frame(video).filter(|frame| *frame != pending.from);
@@ -1139,11 +1188,12 @@ impl VideoPlayerState {
             let waited = pending.since.elapsed();
             let decoding = video.pipeline().state(gst::ClockTime::ZERO).0
                 == Ok(gst::StateChangeSuccess::Async);
+            self.note_wait(Instant::now());
             if waited < FRAME_STEP_SETTLED_WAIT || (decoding && waited < FRAME_STEP_GIVE_UP) {
                 return Task::none();
             }
         }
-        self.frame_step = None;
+        self.clear_step();
         let Some(frame) = shown else {
             // Nothing new came: the step ran past the first or last frame. Show the frame it
             // started from again, played forward.
@@ -1156,7 +1206,12 @@ impl VideoPlayerState {
         let follow = self.follow_cue(false);
         if frame_step::only_found_the_start(pending.from, frame) {
             // The first half of a step back: now the frame before can be found.
-            return Task::batch([follow, self.step_frame(pending.step)]);
+            let slow = self.slow_for;
+            let second = self.step_frame_since(pending.step, Some(pending.since));
+            if self.frame_step.is_some() {
+                self.slow_for = slow;
+            }
+            return Task::batch([follow, second]);
         }
         follow
     }
@@ -1304,6 +1359,11 @@ impl VideoPlayerState {
             self.controls.subscription().map(Message::Controls),
         ])
     }
+}
+
+/// A step begun at `since` is slow at `now`.
+fn step_is_slow(since: Instant, now: Instant) -> bool {
+    now.saturating_duration_since(since) > FRAME_STEP_SLOW_AFTER
 }
 
 /// Whether an item of More is a frame step: the one item that leaves More open.
@@ -1762,6 +1822,113 @@ mod tests {
         assert!(player.more_open());
         let _ = player.update(Message::MorePicked(vec![item]));
         player.more_open()
+    }
+
+    #[test]
+    fn a_frame_step_is_slow_after_300_ms_of_waiting() {
+        let since = Instant::now();
+        let at = |ms| since + Duration::from_millis(ms);
+        assert!(!step_is_slow(since, since));
+        assert!(!step_is_slow(since, at(300)));
+        assert!(step_is_slow(since, at(301)));
+        // A clock that reads earlier than the start is not slow.
+        assert!(!step_is_slow(at(500), since));
+    }
+
+    fn waiting_step(since: Instant) -> PendingStep {
+        PendingStep {
+            from: ShownFrame {
+                start: Duration::ZERO,
+                duration: None,
+                start_exact: true,
+                reversed: false,
+            },
+            step: video_controls::FrameStep::Back,
+            by_step_event: false,
+            since,
+        }
+    }
+
+    #[test]
+    fn a_waiting_step_shows_a_turning_spinner_once_slow_and_only_then() {
+        let now = Instant::now();
+        let mut player = VideoPlayerState::default();
+        player.note_wait(now + Duration::from_secs(5));
+        assert_eq!(player.slow_step_spinner(), None, "no step, nothing slow");
+        player.frame_step = Some(waiting_step(now));
+        player.note_wait(now + Duration::from_millis(100));
+        assert_eq!(player.slow_step_spinner(), None);
+        player.note_wait(now + Duration::from_millis(400));
+        assert_eq!(player.slow_step_spinner(), Some(2));
+        player.note_wait(now + Duration::from_millis(1000));
+        assert_eq!(
+            player.slow_step_spinner(),
+            Some(6),
+            "it turns while waiting"
+        );
+        player.clear_step();
+        assert_eq!(
+            player.slow_step_spinner(),
+            None,
+            "the frame shows: back to normal"
+        );
+    }
+
+    /// The first step back after a clip is opened only finds the frame on screen, then steps
+    /// again: that second half goes on with the first one's wait, so the slow look does not
+    /// restart its 300 ms.
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn the_second_half_of_a_step_back_goes_on_with_the_first_ones_wait() {
+        use crate::features::video_controls::FrameStep;
+        let clip =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/folder/rotated-90.mp4");
+        let url = url::Url::from_file_path(&clip).expect("url");
+        gst::init().expect("gstreamer");
+        let video = open_video_with(&url, Some("fakesink"), None)
+            .map_err(|failure| failure.to_string())
+            .expect("open");
+        let mut player = VideoPlayerState {
+            current_video: Some(video),
+            paused: false,
+            ..VideoPlayerState::default()
+        };
+        // A seek shows a frame whose start may be clipped to the target: a step back from it
+        // has two halves.
+        player.paused = true;
+        player
+            .current_video
+            .as_mut()
+            .expect("video")
+            .set_paused(true);
+        assert!(player.seek_only(Duration::from_millis(1015), true));
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while shown_frame(player.current_video.as_ref().expect("video"))
+            .is_none_or(|frame| frame.start < Duration::from_millis(1000))
+        {
+            assert!(Instant::now() < deadline, "no frame on screen");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        std::thread::sleep(Duration::from_millis(300));
+        let _ = player.update(Message::Controls(video_controls::Message::StepFrame(
+            FrameStep::Back,
+        )));
+        let began = Instant::now() - Duration::from_secs(10);
+        let first = player.frame_step.as_mut().expect("on its way");
+        first.since = began;
+        let mut halves = 0;
+        let mut last = Some(began);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while player.frame_step.is_some() && Instant::now() < deadline {
+            std::thread::sleep(FRAME_STEP_TICK);
+            let _ = player.update(Message::FrameStepTick);
+            if let Some(pending) = player.frame_step {
+                assert_eq!(pending.since, began, "the wait is carried over");
+                halves += 1;
+                last = Some(pending.since);
+            }
+        }
+        assert!(halves > 0 && last == Some(began), "a step was waiting");
     }
 
     #[test]
