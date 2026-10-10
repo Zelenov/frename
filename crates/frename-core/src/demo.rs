@@ -87,6 +87,9 @@ pub struct DemoFile {
     /// Subtitles, saved as the `.ass` next to the copy (#218).
     #[serde(default)]
     pub subtitles_ass: Option<String>,
+    /// A Premiere Pro transcript (its JSON), saved as the `.premiere.json` next to the copy (#219).
+    #[serde(default)]
+    pub transcript: Option<String>,
     /// Clip markers written into the copy's XMP, one line each as a comment holds them:
     /// `0:06.120 — City lights`, `0:41-0:47 — Lion — roars twice`.
     #[serde(default)]
@@ -211,6 +214,9 @@ pub fn stage(
         }
         if let Some(subtitles) = &file.subtitles_ass {
             std::fs::write(target.with_extension("ass"), subtitles)?;
+        }
+        if let Some(transcript) = &file.transcript {
+            std::fs::write(target.with_extension("premiere.json"), transcript)?;
         }
         if !file.markers.is_empty() {
             // Each line was checked by `DemoScenario::check`.

@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use frename_core::ai::key::{self, ApiKey, KeyState};
-use frename_core::{existing_subtitle_path, subtitle_path, CueLength, File, FileId, FileTagger};
+use frename_core::{subtitle_path, CueLength, File, FileId, FileTagger};
 use iced::widget::column;
 use iced::Element;
 use sonisub::batch::{self as plan_batch, Action as Planned, Totals};
@@ -645,7 +645,7 @@ fn plan_with(files: &[PathBuf], replace: bool, formats: Formats, ffmpeg: bool) -
 /// Whether the video has a `.ass` / `.ssa` and no `.srt`: subtitles frename shows that sonisub's
 /// own "already there" check, which looks at `.srt` only, does not see.
 fn has_other_subtitles(video: &Path) -> bool {
-    !subtitle_path(video).exists() && existing_subtitle_path(video).is_some()
+    !subtitle_path(video).exists() && clipscribe::ass::existing_path(video).is_some()
 }
 
 /// Whether `ffmpeg` is on `PATH`, for the formats the built-in decoder cannot read.
@@ -1153,6 +1153,25 @@ mod tests {
         // Only a Premiere transcript asked for: the .ass says nothing about it.
         let plan = plan_with(&files, false, PREMIERE_ONLY, true);
         assert_eq!(plan.already_subtitled, 0);
+    }
+
+    #[test]
+    fn a_video_with_only_a_premiere_transcript_is_still_transcribed_for_its_srt() {
+        let folder = Folder::new("plan-premiere");
+        let video = folder.file("clip.mp4", "x");
+        folder.file("clip.premiere.json", "{}");
+        let plan = plan_with(
+            std::slice::from_ref(&video),
+            false,
+            Formats::default(),
+            true,
+        );
+        assert_eq!(
+            plan.already_subtitled, 0,
+            "the existing rule stays as it is"
+        );
+        assert!(!plan.excluded.contains_key(&video));
+        assert_eq!(plan.transcribe, 1);
     }
 
     const BOTH: Formats = Formats {

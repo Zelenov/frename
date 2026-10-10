@@ -1652,6 +1652,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sonisub",
  "tokio",
  "toml 1.1.6+spec-1.1.0",
  "uuid",
@@ -5575,9 +5576,9 @@ dependencies = [
 
 [[package]]
 name = "sonisub"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "206a6dc4ed151b46db740af07dfbc99e40069f8e56e11d16cbde8289ebd956da"
+checksum = "9d95e4a0c5b73c3744ace451d35ab5d03cc9b3904800ed21f5e40c8f5a8ec3e5"
 dependencies = [
  "anyhow",
  "flacenc",

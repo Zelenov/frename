@@ -944,6 +944,8 @@ impl FrenameApp {
     /// Tell the subtitle action the settings it uses: the languages and the cue length.
     fn subtitle_config(&self) -> Task<Message> {
         let settings = self.settings.settings();
+        // Also the layout a Premiere transcript is read with, when it is shown as subtitles.
+        frename_core::set_cue_length(settings.subtitle_cue_length);
         Task::done(subtitles_message(
             batch::generate_subtitles::Message::SetConfig(batch::generate_subtitles::Config {
                 languages: settings.subtitle_languages.clone(),

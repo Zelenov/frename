@@ -152,8 +152,13 @@ are shown over the picture, and CC opens the list beside them there too.
 
 A `.ass` or `.ssa` file (from Aegisub, Subtitle Edit, YouTube or ffmpeg) works the same way, as plain
 text: styles, positions and effects are not drawn, only the words and their line breaks. If a video
-has several, `.srt` is shown first, then `.ass`, then `.ssa`. The subtitles icon, the "has
+has several, `.srt` is shown first, then `.ass`, then `.ssa`, then a Premiere transcript. The subtitles icon, the "has
 subtitles" filter, renaming with the video and Describe with AI treat them like a `.srt`.
+
+A Premiere Pro transcript next to the video (`clip.premiere.json`, which **Generate subtitles** can
+write) is shown the same way. Its words are cut into lines by the setting of Settings → Subtitles
+(a short line or a whole sentence), and when it names speakers each line that follows a change of
+speaker starts with the name (`Anna: …`). A file that is not a Premiere transcript is ignored.
 
 No subtitles yet? Check the videos in batch mode and run **Generate subtitles** (see below); it
 writes `.srt`, and skips a video that already has a `.ass` or `.ssa` unless you tick **Replace
