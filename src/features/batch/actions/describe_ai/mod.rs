@@ -738,7 +738,7 @@ impl Request {
 
 /// Why a request about the clip at `path` failed, as the batch report and the marker notice
 /// say it: the AI's own reason (a rejected key, no credit left, the network…), or the clip's.
-/// `Cancelled` has no reason to show; it gets the AI's word for it.
+/// A cancelled request has no reason to show: its callers handle it before asking.
 pub fn failure_reason(error: &describe::Error, path: &Path) -> String {
     match error {
         describe::Error::Unreadable(e) => {
@@ -748,7 +748,7 @@ pub fn failure_reason(error: &describe::Error, path: &Path) -> String {
         describe::Error::TooLong(_) => fl!("batch-ai-fail-too-long"),
         describe::Error::Ai(e) => e.reason(),
         describe::Error::BadAnswer { reason, .. } => reason.clone(),
-        describe::Error::Cancelled => AiError::Cancelled.reason(),
+        describe::Error::Cancelled => String::new(),
     }
 }
 

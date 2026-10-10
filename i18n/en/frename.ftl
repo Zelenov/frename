@@ -580,7 +580,8 @@ markers-ai-failed = Not described: { $reason }
 markers-ai-failed-unknown = something went wrong
 markers-read-only-notice = That marker is read-only
 markers-ai-gone = The marker is gone: its description was not added
-markers-ai-stopping-for-batch = Stopping the marker descriptions first… This can take up to a couple of minutes.
+markers-ai-stopping-for-batch = Stopping the marker descriptions first… This is usually a few seconds.
+folder-not-saved-marker-ai = Not saved: the marker description was still reading the clip. Try again in a moment.
 
 ## File workspace
 

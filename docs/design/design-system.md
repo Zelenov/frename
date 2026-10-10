@@ -1224,8 +1224,9 @@ left to right, with the widths §13.9 folds by:
   another folder) stops the request: the row is back to ✨ at once, and its answer, if it still comes, is dropped. ✨ again
   starts a new request; a late answer of the stopped one never passes for it.
 - **Already describing:** the row has no ✨; `Ctrl+F2` on that marker sends nothing and no
-  notice, it only opens the marker list. `Ctrl+F2` always opens it (in fullscreen too), so the row
-  shows the progress and ⊗.
+  notice, it only opens the marker list. `Ctrl+F2` opens it when a request starts or is already running
+  (in fullscreen too), so the row shows the progress and ⊗; when nothing is sent (no key, a batch
+  job) it does not.
 - **Describe all unnamed** (#208): above the rows, under the in/out line, a secondary button
   `sparkles` "Describe N unnamed" (N is handed to the view; tooltip "Name and describe every
   marker that has no name with AI, a few at a time…") while some editable markers have no name
@@ -1247,13 +1248,14 @@ left to right, with the widths §13.9 folds by:
 - **Batch job:** Run stops the open clip's marker requests and waits until the last one is back
   (it may be reading the clip's frames; clipscribe does not say when reading ends, so the wait
   lasts until its answer, usually seconds). Meanwhile the batch panel's button bar shows the
-  turning `loader-circle` 12 and "Stopping the marker descriptions first… This can take up to a
-  couple of minutes." with a secondary **Cancel** in place of Run; the job then starts by itself.
+  turning `loader-circle` 12 and "Stopping the marker descriptions first… This is usually a few
+  seconds." with a secondary **Cancel** in place of Run; the job then starts by itself.
   Cancel, leaving batch mode, another action, other checked files or another folder give up on
   that run. No request starts while a job runs or waits.
 - **Leaving the clip** does not wait for its requests (they stop). A save that meets one still
   reading the file (on Windows a rename or a write into the video then fails) is a refused save
-  like any other of a file in use: notice "Not saved: …", the file keeps its name on disk, the
+  like any other of a file in use: notice "Not saved: …" (when a marker request is still running, it says so: "the marker
+  description was still reading the clip"), the file keeps its name on disk, the
   recovery journal keeps the edits, and markers that did not get written are kept, the file
   marked, and written at the next save.
 - **Answer while the row is open for renaming:** the typed name is committed first, as its own

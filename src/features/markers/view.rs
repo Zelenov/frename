@@ -45,11 +45,17 @@ const FIELD_INSET: Padding = Padding {
 /// How many lines `text` wraps to in a row of the list, as an estimate: good enough to scroll a
 /// row into view.
 fn wrapped_lines(text: &str) -> usize {
-    let per_line = (NAME_ROOM / NAME_CHAR_ADVANCE) as usize;
-    text.lines()
-        .map(|line| line.chars().count().div_ceil(per_line).max(1))
-        .sum::<usize>()
-        .max(1)
+    text.lines().map(line_rows).sum::<usize>().max(1)
+}
+
+/// Characters of a row's text that fit on one line.
+fn chars_per_line() -> usize {
+    (NAME_ROOM / NAME_CHAR_ADVANCE) as usize
+}
+
+/// How many lines one line of text (without a line break) wraps to.
+fn line_rows(line: &str) -> usize {
+    line.chars().count().div_ceil(chars_per_line()).max(1)
 }
 
 /// A comment shows at most this many lines in a row that is not open.
@@ -58,12 +64,12 @@ const COMMENT_LINES: usize = 3;
 /// `comment` cut to [`COMMENT_LINES`] lines of a row (estimated like [`wrapped_lines`]), ending
 /// in "…" when cut.
 fn clamped_comment(comment: &str) -> Cow<'_, str> {
-    let per_line = (NAME_ROOM / NAME_CHAR_ADVANCE) as usize;
+    let per_line = chars_per_line();
     let all = comment.lines().count();
     let mut left = COMMENT_LINES;
     let mut kept: Vec<String> = Vec::new();
     for line in comment.lines() {
-        let lines = line.chars().count().div_ceil(per_line).max(1);
+        let lines = line_rows(line);
         if lines > left {
             let cut: String = line.chars().take(left * per_line - 1).collect();
             kept.push(format!("{}…", cut.trim_end()));

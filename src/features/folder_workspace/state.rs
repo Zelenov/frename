@@ -827,7 +827,7 @@ impl FolderWorkspace {
     }
 
     fn scan_folder(&mut self, pair: FolderAndFile) -> Task<Message> {
-        self.batch.set_waiting_for_markers(false);
+        self.batch.update(batch::Message::StopWaiting);
         self.inline_rename = None;
         self.markers.reset();
         // File ids are renewed by the scan, so markers kept for them cannot be matched again.
@@ -1348,7 +1348,7 @@ impl FolderWorkspace {
         // one has let go of the clip (it may be reading its frames).
         if !files.is_empty() && !self.batch.is_running() && self.stop_marker_requests() {
             // The batch panel says so and offers Cancel.
-            self.batch.set_waiting_for_markers(true);
+            self.batch.update(batch::Message::WaitForMarkers);
             return Task::none();
         }
         self.share_folder_tags();
@@ -1568,9 +1568,14 @@ impl FolderWorkspace {
         // check the drag-out path already uses to detect this.
         let refused = drag_out::save_failed(&snapshot, &snapshot_after_save);
         let refused_notice = if refused {
-            Self::notice(
-                "Not saved: a file with that name already exists, or it is read-only or in use",
-            )
+            // The marker description's own reading of the clip may be what holds the file.
+            if self.marker_requests > 0 {
+                Self::notice(&fl!("folder-not-saved-marker-ai"))
+            } else {
+                Self::notice(
+                    "Not saved: a file with that name already exists, or it is read-only or in use",
+                )
+            }
         } else {
             Task::none()
         };
