@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use frename_core::recent_folders::now_ms;
-use frename_core::{AppDatabase, AppStateStore};
+use frename_core::AppStateStore;
 use iced::widget::scrollable::RelativeOffset;
 use iced::Task;
 
@@ -65,11 +65,11 @@ impl FolderWorkspace {
             ]),
             Effect::Open(pair) => Task::done(Message::ScanFolder(pair)),
             Effect::Forget(folder) => {
-                AppDatabase::new().forget_recent_folder(&folder);
+                self.recent_store.forget_recent_folder(&folder);
                 Task::none()
             }
             Effect::Clear => {
-                AppDatabase::new().clear_recent_folders();
+                self.recent_store.clear_recent_folders();
                 Task::none()
             }
         }
@@ -79,7 +79,7 @@ impl FolderWorkspace {
     /// folders exist: a disconnected network drive can take seconds to answer.
     pub(super) fn reload_recent_folders(&mut self) -> Task<Message> {
         self.recent_folders
-            .set_entries(AppDatabase::new().get_recent_folders(), now_ms());
+            .set_entries(self.recent_store.get_recent_folders(), now_ms());
         let folders = self.recent_folders.folders();
         if folders.is_empty() {
             return Task::none();

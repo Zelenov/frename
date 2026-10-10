@@ -96,6 +96,8 @@ pub struct FolderWorkspace {
     filter_menu_open: bool,
     /// The folders opened recently: the dropdown by the open button and the empty screen's list.
     recent_folders: RecentFoldersState,
+    /// Where the recent folders are read from and written to: the app database, or a test's own.
+    recent_store: AppDatabase,
     /// Bumped per folder, so a comment batch for a folder no longer open is dropped.
     comment_load_generation: u64,
     /// Frame of the loading spinner shown in rows whose comment is still loading.
@@ -196,9 +198,10 @@ impl FolderWorkspace {
             .unwrap_or((VIDEO_WIDTH, FILE_LIST_WIDTH));
         // A width saved by an older version or on a smaller screen is raised to the minimum.
         let (left_width, folder_width) = column_widths(left_width, folder_width);
+        let recent_store = AppDatabase::new();
         let mut recent_folders = RecentFoldersState::default();
         recent_folders.set_entries(
-            AppDatabase::new().get_recent_folders(),
+            recent_store.get_recent_folders(),
             frename_core::recent_folders::now_ms(),
         );
         let mut batch = BatchState::default();
@@ -221,6 +224,7 @@ impl FolderWorkspace {
             inline_rename: None,
             filter_menu_open: false,
             recent_folders,
+            recent_store,
             comment_load_generation: 0,
             spinner_frame: 0,
             pending_to_file_id: None,
@@ -2955,7 +2959,7 @@ mod tests {
     use std::time::SystemTime;
 
     use frename_core::{
-        AppDatabase, File, FileId, FileSnapshot, FolderTagStore, Initializable,
+        AppDatabase, AppStateStore, File, FileId, FileSnapshot, FolderTagStore, Initializable,
         LoggingAppStateStore,
     };
     use iced::keyboard::Modifiers;
@@ -6756,20 +6760,24 @@ mod tests {
         assert_eq!(workspace.markers.scroll_y(), 120.0);
     }
 
-    /// A workspace whose recent folders are `names` under `/shoots`, newest first.
+    /// A workspace whose recent folders are `names` under `/shoots`, newest first, kept in a
+    /// database of its own: tests running at the same time never share the list.
     fn workspace_with_recent_folders(names: &[&str]) -> FolderWorkspace {
+        let dir = unique_test_folder();
+        std::fs::create_dir_all(&dir).expect("create test folder");
+        let store = AppDatabase::with_path(dir.join("recent.db"));
+        store.initialize().expect("migrate");
+        for (age, name) in names.iter().enumerate().rev() {
+            store.record_recent_folder(
+                &frename_core::FolderAndFile::new(format!("/shoots/{name}"), None::<PathBuf>),
+                2_000 - age as i64,
+            );
+        }
         let mut workspace = FolderWorkspace::new();
-        workspace.recent_folders.set_entries(
-            names
-                .iter()
-                .map(|name| frename_core::recent_folders::RecentFolder {
-                    folder: PathBuf::from(format!("/shoots/{name}")),
-                    opened_at_ms: 0,
-                    last_file: None,
-                })
-                .collect(),
-            0,
-        );
+        workspace.recent_store = store;
+        workspace
+            .recent_folders
+            .set_entries(workspace.recent_store.get_recent_folders(), 0);
         workspace
     }
 
