@@ -1,3 +1,7 @@
+# 0.145
+## Fixed
+- The notices "Frame saved", "Marker deleted", "Not saved: …" and "Markers not saved: …" now show in Russian when the interface is Russian.
+
 # 0.142
 ## Fixed
 - At its narrowest the file list no longer cuts off the buttons under it: the least used ones (locate, recent folders, batch mode) move into a More menu, and Ctrl+R still opens the recent folders.

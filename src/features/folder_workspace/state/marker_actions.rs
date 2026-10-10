@@ -72,7 +72,7 @@ impl FolderWorkspace {
                 // Said once, not at every edit that fails the same way.
                 let first = self.unsaved_markers.insert(id, markers.to_vec()).is_none();
                 if first {
-                    Self::notice("Markers not saved: the comment file is read-only or in use")
+                    Self::notice(&fl!("markers-comment-not-saved-notice"))
                 } else {
                     Task::none()
                 }
@@ -383,7 +383,7 @@ impl FolderWorkspace {
         match near {
             Some(Some(guid)) => {
                 self.delete_marker(&guid);
-                Self::notice("Marker deleted")
+                Self::notice(&fl!("markers-deleted-notice"))
             }
             // Read-only: another tool wrote it without a GUID, so it could not be found again.
             Some(None) => Self::notice(&fl!("markers-read-only-notice")),
@@ -541,7 +541,7 @@ impl FolderWorkspace {
             Err(MarkersError::WriteFailed(reason)) => {
                 log::warn!("markers of {path:?} not saved, kept for the next save: {reason}");
                 self.unsaved_markers.insert(id, markers.to_vec());
-                Self::notice("Markers not saved: the file is read-only or in use")
+                Self::notice(&fl!("markers-not-saved-notice"))
             }
         }
     }
