@@ -1,3 +1,7 @@
+# 0.122
+## Changed
+- In a narrow player, the More menu stays open after you step a frame, so you can click through frames.
+
 # 0.120
 ## Changed
 - Starting a batch job while a marker is being described says the wait is usually a few seconds (it said up to a couple of minutes).
