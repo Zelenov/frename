@@ -1,0 +1,28 @@
+# Marker list (#230): with more than 10 unnamed markers "Describe N unnamed" asks first, naming
+# the count and the price. The state after the click (`confirming_describe_unnamed`). Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.night.city.MVI_0410.mp4"
+seek = 14.5
+window = [1280, 720]
+panels = [640, 320]
+marker_list = true
+confirming_describe_unnamed = true
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.MVI_0410.mp4"
+markers = [
+  "0:02 — Night falls over the ocean",
+  "0:03 —",
+  "0:04 —",
+  "0:05 —",
+  "0:06 —",
+  "0:07 —",
+  "0:08 —",
+  "0:09 —",
+  "0:10 —",
+  "0:11 —",
+  "0:12 —",
+  "0:13 —",
+  "0:14 —",
+]

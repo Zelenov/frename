@@ -41,6 +41,10 @@ pub enum Message {
     DescribeAtPlayhead,
     /// "Describe N unnamed": [`Message::Describe`] every marker without a name, a few at a time.
     DescribeUnnamed,
+    /// "Describe N unnamed" asked how much it costs (see `describe::CONFIRM_ABOVE`): go on.
+    ConfirmDescribeUnnamed,
+    /// ... or do not send anything.
+    CancelDescribeUnnamed,
     /// Stop every request, the ones waiting for their turn too.
     StopDescribingAll,
     /// Stop describing this marker.

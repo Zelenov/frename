@@ -54,6 +54,10 @@ pub struct DemoScenario {
     /// first few being described, the others waiting), without sending a request.
     #[serde(default)]
     pub describing_unnamed: bool,
+    /// Show "Describe N unnamed" asking whether to send, with the price (for more unnamed markers
+    /// than it sends without asking), without sending a request.
+    #[serde(default)]
+    pub confirming_describe_unnamed: bool,
     /// In batch mode, show the running "Describe with AI" job on its first file as a request
     /// that waits this many seconds (rate limit) before it is sent again, without sending one.
     #[serde(default)]
@@ -411,6 +415,21 @@ name = "pick.a.mp4"
         let text = MINIMAL.replace("[[files]]", "ai_retry_wait_s = 8\n[[files]]");
         assert_eq!(DemoScenario::parse(&text).unwrap().ai_retry_wait_s, Some(8));
         assert_eq!(DemoScenario::parse(MINIMAL).unwrap().ai_retry_wait_s, None);
+    }
+
+    #[test]
+    fn a_scenario_can_show_the_describe_all_question() {
+        let text = MINIMAL.replace("[[files]]", "confirming_describe_unnamed = true\n[[files]]");
+        assert!(
+            DemoScenario::parse(&text)
+                .unwrap()
+                .confirming_describe_unnamed
+        );
+        assert!(
+            !DemoScenario::parse(MINIMAL)
+                .unwrap()
+                .confirming_describe_unnamed
+        );
     }
 
     #[test]
