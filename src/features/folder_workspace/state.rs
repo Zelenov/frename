@@ -1298,6 +1298,8 @@ impl FolderWorkspace {
     /// Start the selected batch action on the checked files, in folder order. A playing video
     /// is unloaded first; see [`Self::run_batch`].
     fn start_batch(&mut self) -> Task<Message> {
+        // A list left open would swallow the keys with nothing to show for it.
+        let _ = self.recent_folders.update(recent_folders::Message::Close);
         let Some(dir) = self.directory.as_ref() else {
             return Task::none();
         };
@@ -1748,6 +1750,8 @@ impl FolderWorkspace {
     /// Switch fullscreen on or off (only when a video is shown). The view builds the lists anew
     /// then, at offset 0, so the offsets they had are carried to a task that puts them back.
     fn set_fullscreen(&mut self, on: bool) -> Task<Message> {
+        // Fullscreen shows no list to go with an open one.
+        let _ = self.recent_folders.update(recent_folders::Message::Close);
         if on && !self.media_viewer.is_previewable() {
             return Task::none();
         }
@@ -2862,12 +2866,12 @@ impl FolderWorkspace {
         &self.file_name_panel
     }
 
-    /// The file context menu.
     /// The folders opened recently.
     pub fn recent_folders(&self) -> &RecentFoldersState {
         &self.recent_folders
     }
 
+    /// The file context menu.
     pub fn file_menu(&self) -> &FileMenuState {
         &self.file_menu
     }
@@ -6833,6 +6837,34 @@ mod tests {
         let mut workspace = workspace_with_recent_folders(&["a"]);
         workspace.media_fullscreen = true;
         let _ = workspace.update(Message::RecentFolders(recent_folders::Message::Toggle));
+        assert!(!workspace.recent_folders.is_open());
+    }
+
+    #[test]
+    fn fullscreen_closes_the_open_recent_folders_list() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = workspace_with_recent_folders(&["a"]);
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        let _ = workspace.update(Message::RecentFolders(recent_folders::Message::Toggle));
+        assert!(workspace.recent_folders.is_open());
+        let _ = workspace.set_fullscreen(true);
+        assert!(!workspace.recent_folders.is_open());
+    }
+
+    #[test]
+    fn starting_a_batch_closes_the_open_recent_folders_list() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = workspace_with_recent_folders(&["a"]);
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        let _ = workspace.update(Message::RecentFolders(recent_folders::Message::Toggle));
+        assert!(workspace.recent_folders.is_open());
+        let _ = workspace.start_batch();
         assert!(!workspace.recent_folders.is_open());
     }
 }

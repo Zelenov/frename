@@ -1355,7 +1355,7 @@ search field has the cursor), and the same rows in a column beside the intro on 
 (§13.7), where it scrolls when the window is short.
 
 - **Row:** 44 high (`RECENT_ROW_HEIGHT`), the §13.4.2 look for hover and the highlight (`state.selected`
-  and its bar). Line 1: the folder's name in `body`, and on the right when it was last opened in
+  and its bar). Line 1: the folder's name in `body`, and on the right when it was last used (every clip opened in it refreshes that) in
   `caption` `text.secondary` ("5 min ago", "2 days ago"); line 2: the folder it is in, `caption`
   `text.secondary`, cut from the front with "…" so the end of the path stays. A 24-px `x` "Remove
   from the list" shows at the right of the row the pointer or the keys are on, and keeps its room

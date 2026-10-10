@@ -5,7 +5,6 @@
 //! [crate::widgets::file_name_display].
 
 use iced::keyboard::key::Named;
-use iced::widget::text_editor::Binding;
 use iced::widget::{column, container, responsive, stack, text_editor as text_editor_widget, Id};
 use iced::{Element, Length, Padding};
 
@@ -186,15 +185,7 @@ where
             // Only while the box has the keys: otherwise Enter would type a newline into the
             // comment from anywhere, and never reach the window's Enter (the recent folders
             // list takes it while it is open).
-            .key_binding(|kp| {
-                if matches!(kp.key, iced::keyboard::Key::Named(Named::Enter))
-                    && matches!(kp.status, iced::widget::text_editor::Status::Focused { .. })
-                {
-                    Some(Binding::Enter)
-                } else {
-                    Binding::from_key_press(kp)
-                }
-            });
+            .key_binding(comment_key_binding);
         scroll::vertical_with_id(COMMENT_SCROLLABLE_ID, comment_editor).into()
     });
     let (glyph, tip) = if expanded {
@@ -224,4 +215,48 @@ where
         Length::Fixed(file_workspace.comment_height())
     })
     .into()
+}
+
+/// The comment box's keys: Enter is captured only while the box has the keys (see the comment
+/// where it is used), everything else is iced's own.
+fn comment_key_binding<M>(
+    press: iced::widget::text_editor::KeyPress,
+) -> Option<iced::widget::text_editor::Binding<M>> {
+    use iced::widget::text_editor::{Binding, Status};
+    if matches!(press.key, iced::keyboard::Key::Named(Named::Enter))
+        && matches!(press.status, Status::Focused { .. })
+    {
+        Some(Binding::Enter)
+    } else {
+        Binding::from_key_press(press)
+    }
+}
+
+#[cfg(test)]
+mod key_tests {
+    use super::*;
+    use iced::widget::text_editor::{Binding, KeyPress, Status};
+
+    fn enter(status: Status) -> KeyPress {
+        let key = iced::keyboard::Key::Named(Named::Enter);
+        KeyPress {
+            key: key.clone(),
+            modified_key: key,
+            physical_key: iced::keyboard::key::Physical::Code(iced::keyboard::key::Code::Enter),
+            modifiers: iced::keyboard::Modifiers::empty(),
+            text: None,
+            status,
+        }
+    }
+
+    #[test]
+    fn enter_is_the_boxs_only_while_it_has_the_keys() {
+        let focused = Status::Focused { is_hovered: false };
+        assert!(matches!(
+            comment_key_binding::<()>(enter(focused)),
+            Some(Binding::Enter)
+        ));
+        assert!(comment_key_binding::<()>(enter(Status::Active)).is_none());
+        assert!(comment_key_binding::<()>(enter(Status::Hovered)).is_none());
+    }
 }

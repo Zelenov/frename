@@ -121,12 +121,14 @@ fn question_row<'a>(entry: &'a Entry, room: f32) -> Element<'a, Message> {
     ]
     .spacing(GAP)
     .align_y(Alignment::Center);
-    list::row_item(
+    // Opaque: a click on the row's blank part must not reach the empty screen's own click, which
+    // opens the folder picker.
+    opaque(list::row_item(
         container(content).center_y(Length::Fill),
         true,
         HOVER,
         Length::Fixed(RECENT_ROW_HEIGHT),
-    )
+    ))
 }
 
 /// The rows of the list, one under the other.
@@ -176,6 +178,8 @@ fn menu_height(count: usize) -> f32 {
 /// Where the dropdown's top-left corner is in a window of `area`: its bottom edge on the toolbar
 /// under the file list, whose column starts `left_width` + a splitter in; moved in when it would
 /// stick out of the window.
+// Coupled to the toolbar layout: BAR_HEIGHT + LINE is the toolbar under the file list, and the
+// column starts after the video pane and a splitter (see `folder_workspace::view`).
 fn menu_origin(area: Size, left_width: f32, count: usize) -> iced::Point {
     let height = menu_height(count);
     let x = (left_width + SPLITTER_HIT + SPACE_S).min(area.width - RECENT_LIST_WIDTH);
@@ -255,10 +259,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_dropdown_is_as_high_as_its_rows_the_hairline_and_clear_list() {
-        assert_eq!(
-            menu_height(3),
-            2.0 * SPACE_XS + 3.0 * RECENT_ROW_HEIGHT + LINE + 2.0 * SPACE_XS + MENU_ITEM_HEIGHT
+    fn a_full_list_fits_above_the_toolbar_in_the_smallest_window() {
+        let most = frename_core::recent_folders::MAX_RECENT_FOLDERS;
+        let at = menu_origin(
+            Size::new(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT),
+            VIDEO_WIDTH,
+            most,
+        );
+        assert!(
+            at.y > 0.0,
+            "ten rows and Clear list are not pushed off the top"
         );
     }
 
