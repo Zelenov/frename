@@ -1,3 +1,7 @@
+# 0.143
+## Added
+- Describe N unnamed shows what describing all the unnamed markers costs in its tooltip, and with more than 10 markers asks first, naming the count and the price.
+
 # 0.140
 ## Fixed
 - Shift+Space no longer toggles a tag while a file name is being typed in the file list.

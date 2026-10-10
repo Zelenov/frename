@@ -72,6 +72,8 @@ pub struct MarkersView<'a> {
     pub spinner_frame: usize,
     /// How many markers "Describe N unnamed" would send now.
     pub unnamed: usize,
+    /// What one marker request is expected to cost, in US dollars; `None` when not known.
+    pub marker_price_usd: Option<f64>,
 }
 
 /// Render the video player with its strip, timeline and controls below.
@@ -558,6 +560,7 @@ fn side_overlay<'a>(
             in_out,
             markers.spinner_frame,
             markers.unnamed,
+            markers.marker_price_usd,
         )
         .map(Message::Markers),
     };

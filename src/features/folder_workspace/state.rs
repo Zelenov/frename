@@ -381,6 +381,10 @@ impl FolderWorkspace {
                 }
                 Task::none()
             }
+            Message::ShowConfirmingDescribeUnnamed => {
+                self.markers.set_confirming_describe_all(true);
+                Task::none()
+            }
             Message::ShowDescribingUnnamed => {
                 let guids = self.unnamed_marker_guids();
                 self.markers.queue_describing(guids);
@@ -5409,6 +5413,37 @@ mod tests {
         assert!(!workspace.markers().any_describing());
         assert_eq!(workspace.marker_requests, 0);
         assert_eq!(task.units(), 2, "the notice and the settings");
+    }
+
+    #[test]
+    fn describe_unnamed_asks_first_above_ten_markers_and_sends_nothing_until_told() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let (mut workspace, _guids) = unnamed_markers_workspace(&test_dir, 11);
+        send_marker(&mut workspace, M::DescribeUnnamed, 0);
+        assert!(workspace.markers().is_confirming_describe_all());
+        assert!(!workspace.markers().any_describing(), "asked, not sent");
+        assert_eq!(workspace.marker_requests, 0);
+
+        send_marker(&mut workspace, M::CancelDescribeUnnamed, 0);
+        assert!(!workspace.markers().is_confirming_describe_all());
+        assert!(!workspace.markers().any_describing());
+
+        send_marker(&mut workspace, M::DescribeUnnamed, 0);
+        send_marker(&mut workspace, M::ConfirmDescribeUnnamed, 0);
+        assert!(!workspace.markers().is_confirming_describe_all());
+        assert!(workspace.markers().any_describing(), "sent once confirmed");
+        assert_eq!(workspace.marker_requests, 3);
+    }
+
+    #[test]
+    fn describe_unnamed_with_ten_markers_sends_at_once() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let (mut workspace, _guids) = unnamed_markers_workspace(&test_dir, 10);
+        send_marker(&mut workspace, M::DescribeUnnamed, 0);
+        assert!(!workspace.markers().is_confirming_describe_all());
+        assert_eq!(workspace.marker_requests, 3);
     }
 
     #[test]
