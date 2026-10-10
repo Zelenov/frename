@@ -1,6 +1,6 @@
 //! The marker list (design system §13.3.6): one row per marker, read-only like a subtitle cue,
 //! except the one row open for renaming. A row is as tall as its name's lines; the list is
-//! scrolled to a row by an estimate of the rows above it ([`row_offset`]), as the subtitle list is.
+//! scrolled to a row by the measured heights of the rows above it ([`row_offset`]).
 
 use std::borrow::Cow;
 
@@ -19,10 +19,11 @@ use crate::ui::style::{self, ButtonKind};
 use crate::ui::tokens::*;
 use crate::ui::tooltip::{self, Position, Tip};
 use crate::ui::{empty, list, scroll, text};
+use crate::widgets::bounds_reporter::BoundsReporter;
 
 pub const MARKER_LIST_SCROLLABLE_ID: &str = "marker_list";
 pub const MARKER_NAME_INPUT_ID: &str = "marker_name_input";
-/// (Scroll estimate only.) Room for a name's text in a row of the list at its widest: the list less its inset, the
+/// (Comment clamp only.) Room for a name's text in a row of the list at its widest: the list less its inset, the
 /// row's inset and the scroll gutter.
 const NAME_ROOM: f32 = SIDE_LIST_MAX_WIDTH - SPACE_S - SPACE_S - SPACE_S - SCROLL_GUTTER;
 /// A generous average advance of a character of the name.
@@ -42,12 +43,6 @@ const FIELD_INSET: Padding = Padding {
     right: SPACE_S,
 };
 
-/// How many lines `text` wraps to in a row of the list, as an estimate: good enough to scroll a
-/// row into view.
-fn wrapped_lines(text: &str) -> usize {
-    text.lines().map(line_rows).sum::<usize>().max(1)
-}
-
 /// Characters of a row's text that fit on one line.
 fn chars_per_line() -> usize {
     (NAME_ROOM / NAME_CHAR_ADVANCE) as usize
@@ -61,7 +56,7 @@ fn line_rows(line: &str) -> usize {
 /// A comment shows at most this many lines in a row that is not open.
 const COMMENT_LINES: usize = 3;
 
-/// `comment` cut to [`COMMENT_LINES`] lines of a row (estimated like [`wrapped_lines`]), ending
+/// `comment` cut to [`COMMENT_LINES`] lines of a row (by an estimate of the characters per line), ending
 /// in "…" when cut.
 fn clamped_comment(comment: &str) -> Cow<'_, str> {
     let per_line = chars_per_line();
@@ -86,25 +81,12 @@ fn clamped_comment(comment: &str) -> Cow<'_, str> {
     Cow::Borrowed(comment)
 }
 
-/// Estimated height of `marker`'s row, for scrolling to a row only: the row itself is as tall as
-/// its content. Its comment, if any, adds its lines under the name (at most
-/// [`COMMENT_LINES`]).
-fn row_height(marker: &Marker) -> f32 {
-    let comment = if marker.comment.trim().is_empty() {
-        0.0
-    } else {
-        let lines = wrapped_lines(&clamped_comment(marker.comment.trim()));
-        SPACE_XXS + lines as f32 * LINE_BODY
-    };
-    MARKER_ROW_HEIGHT + (wrapped_lines(&marker.name) - 1) as f32 * LINE_BODY + comment
-}
-
-/// Distance from the top of the list to the top of row `index`, from the rows above it.
-pub fn row_offset(markers: &[Marker], index: usize) -> f32 {
-    markers
-        .iter()
-        .take(index)
-        .map(|m| row_height(m) + SPACE_XXS)
+/// Distance from the top of the list to the top of row `index`, from the heights the rows
+/// reported (see [`MarkersState::row_heights`]). A row that has not reported yet counts as one
+/// line, the least it can be.
+pub fn row_offset(heights: &[f32], index: usize) -> f32 {
+    (0..index)
+        .map(|i| heights.get(i).copied().unwrap_or(MARKER_ROW_HEIGHT) + SPACE_XXS)
         .sum()
 }
 
@@ -112,20 +94,20 @@ pub fn row_offset(markers: &[Marker], index: usize) -> f32 {
 /// tall: `offset`, unless the lit marker (the last one the playhead passed) is out of view, then
 /// the offset the follow uses for it. `None` when the list is right as it is.
 pub fn offset_showing_lit(
-    markers: &[Marker],
+    heights: &[f32],
     passed: Option<usize>,
     offset: f32,
     viewport: f32,
 ) -> Option<f32> {
     let index = passed?;
-    let top = row_offset(markers, index);
-    let bottom = row_offset(markers, index + 1) - SPACE_XXS;
+    let top = row_offset(heights, index);
+    let bottom = row_offset(heights, index + 1) - SPACE_XXS;
     let wanted = crate::ui::scroll::keep_row_in_view(
         offset,
         viewport,
         top,
         bottom,
-        row_offset(markers, index.saturating_sub(1)),
+        row_offset(heights, index.saturating_sub(1)),
     );
     (wanted != offset).then_some(wanted)
 }
@@ -277,10 +259,15 @@ fn marker_list<'a>(
         return empty_list();
     }
     let lit = lit_index(markers, position_ms);
-    let rows = markers
-        .iter()
-        .enumerate()
-        .map(|(index, marker)| marker_row(marker, state, lit == Some(index), spinner_frame));
+    // Each row reports its height, which is what the list is scrolled to a row by.
+    let rows = markers.iter().enumerate().map(|(index, marker)| {
+        let row = marker_row(marker, state, lit == Some(index), spinner_frame);
+        stack![
+            row,
+            BoundsReporter::new(move |bounds| Message::RowHeight(index, bounds.height)).passive()
+        ]
+        .into()
+    });
     scroll::vertical_with_id(
         MARKER_LIST_SCROLLABLE_ID,
         Column::with_children(rows)
@@ -572,9 +559,8 @@ fn marker_row<'a>(
         .push(working)
         .spacing(SPACE_XXS)
         .padding(ROW_INSET);
-    // The row is as tall as its content, not as the estimate of [`row_height`]: a name that wraps
-    // to more lines than estimated (a narrow list, a long name) must not be cut off, and the list
-    // sizes its scroll range from what is rendered.
+    // The row is as tall as its content: a name that wraps (a narrow list, a long name) must not
+    // be cut off, and the list sizes its scroll range from what is rendered.
     let item = list::row_item(body, lit || open.is_some(), OVERLAY_HOVER, Length::Shrink);
 
     // The actions sit at the right end of the first line, over the row.
@@ -679,15 +665,9 @@ mod tests {
         let long = "x".repeat(per_line * 5);
         let cut = clamped_comment(&long);
         assert!(cut.ends_with('…'), "{cut}");
-        assert_eq!(wrapped_lines(&cut), COMMENT_LINES);
+        assert_eq!(cut.lines().map(line_rows).sum::<usize>(), COMMENT_LINES);
         let many = "one\ntwo\nthree\nfour";
         assert_eq!(clamped_comment(many), "one\ntwo\nthree…");
-        let mut marker = Marker::new(0);
-        marker.comment = long;
-        assert_eq!(
-            row_height(&marker),
-            MARKER_ROW_HEIGHT + SPACE_XXS + COMMENT_LINES as f32 * LINE_BODY
-        );
     }
 
     #[test]
@@ -699,33 +679,46 @@ mod tests {
     }
 
     #[test]
-    fn a_long_name_makes_its_row_taller_and_moves_the_rows_below() {
-        let short = Marker::new(1_000);
-        let mut long = Marker::new(2_000);
-        long.name = "x".repeat(200);
-        assert_eq!(row_height(&short), MARKER_ROW_HEIGHT);
-        assert!(row_height(&long) > MARKER_ROW_HEIGHT + LINE_BODY);
-        let markers = [long.clone(), short];
-        assert_eq!(row_offset(&markers, 1), row_height(&long) + SPACE_XXS);
+    fn a_row_starts_below_the_measured_heights_of_the_rows_above_it() {
+        let heights = [
+            MARKER_ROW_HEIGHT,
+            180.0,
+            MARKER_ROW_HEIGHT + 2.0 * LINE_BODY,
+        ];
+        assert_eq!(row_offset(&heights, 0), 0.0);
+        assert_eq!(row_offset(&heights, 1), MARKER_ROW_HEIGHT + SPACE_XXS);
+        assert_eq!(
+            row_offset(&heights, 3),
+            MARKER_ROW_HEIGHT + 180.0 + MARKER_ROW_HEIGHT + 2.0 * LINE_BODY + 3.0 * SPACE_XXS
+        );
+    }
+
+    #[test]
+    fn a_row_not_measured_yet_counts_as_one_line() {
+        assert_eq!(row_offset(&[], 2), 2.0 * (MARKER_ROW_HEIGHT + SPACE_XXS));
+        assert_eq!(
+            row_offset(&[300.0], 2),
+            300.0 + MARKER_ROW_HEIGHT + 2.0 * SPACE_XXS
+        );
     }
 
     #[test]
     fn a_restored_list_keeps_its_offset_unless_the_lit_marker_is_out_of_view() {
-        let markers: Vec<Marker> = (0..30).map(|i| Marker::new(i * 1_000)).collect();
-        let row = row_offset(&markers, 1);
+        let heights = vec![MARKER_ROW_HEIGHT; 30];
+        let row = row_offset(&heights, 1);
         let lit = Some(20);
-        let top = row_offset(&markers, 20);
+        let top = row_offset(&heights, 20);
         // Shown: kept.
         assert_eq!(
-            offset_showing_lit(&markers, lit, top - row, 3.0 * row),
+            offset_showing_lit(&heights, lit, top - row, 3.0 * row),
             None
         );
         // Below the fold (the viewport got shorter): the follow's offset, one row of context.
         assert_eq!(
-            offset_showing_lit(&markers, lit, 0.0, 3.0 * row),
-            Some(row_offset(&markers, 19))
+            offset_showing_lit(&heights, lit, 0.0, 3.0 * row),
+            Some(row_offset(&heights, 19))
         );
         // No marker passed yet: nothing to show.
-        assert_eq!(offset_showing_lit(&markers, None, 0.0, 3.0 * row), None);
+        assert_eq!(offset_showing_lit(&heights, None, 0.0, 3.0 * row), None);
     }
 }
