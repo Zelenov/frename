@@ -1,3 +1,7 @@
+# 0.116
+## Fixed
+- Tag grid: the "+" on a tag that is not in the folder's tags is as easy to read as its name (it was dark grey on the dark chip).
+
 # 0.115
 ## Added
 - A video with a `clip.premiere.json` (the Premiere Pro transcript Generate subtitles writes) and no other subtitles shows its words like a `.srt`: under the picture, in the CC list and in fullscreen, with the subtitles icon and the "has subtitles" filter, renamed with its video, and read by Describe with AI. Lines follow Settings → Subtitles (short line or whole sentence) and start with the speaker's name when the speaker changes.

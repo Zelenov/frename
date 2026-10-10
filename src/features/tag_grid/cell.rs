@@ -64,7 +64,7 @@ fn cursor_ring(cursor: bool) -> container::Style {
 fn chip<'a>(tag: &'a Tag, color: Color, cursor: bool, width: f32) -> Element<'a, Message> {
     let id = tag.id();
     let stored = tag.is_stored();
-    let label_color = if stored { TAG_TEXT } else { TEXT_SECONDARY };
+    let label_color = label_ink(stored);
     let name = fit_label(tag.tag(), width);
     let cut = name.len() != tag.tag().len();
     let label = if tag.is_checked() {
@@ -106,9 +106,30 @@ fn chip<'a>(tag: &'a Tag, color: Color, cursor: bool, width: f32) -> Element<'a,
     list::hoverable(body, hover, RADIUS_S)
 }
 
-/// A 14-px mark on the chip that does `message`, with its tooltip.
-fn mark<'a>(glyph: Icon, message: Message, tip: Tip) -> Element<'a, Message> {
-    let target = mouse_area(icon(glyph, ICON_MARK, TAG_ICON))
+/// The color of a chip's label: black on a saved tag's colored chip, the secondary text color on
+/// the dark outline chip of a tag that is only in this file's name.
+fn label_ink(stored: bool) -> Color {
+    if stored {
+        TAG_TEXT
+    } else {
+        TEXT_SECONDARY
+    }
+}
+
+/// The color of a chip's marks (star, plus, trash): the dark-on-light `TAG_ICON` on a saved tag's
+/// colored chip, and the chip's own label color on the dark outline chip, where `TAG_ICON` would
+/// be almost invisible.
+fn mark_ink(stored: bool) -> Color {
+    if stored {
+        TAG_ICON
+    } else {
+        label_ink(false)
+    }
+}
+
+/// A 14-px mark on the chip that does `message`, with its tooltip, in `ink`.
+fn mark<'a>(glyph: Icon, ink: Color, message: Message, tip: Tip) -> Element<'a, Message> {
+    let target = mouse_area(icon(glyph, ICON_MARK, ink))
         .on_press(message)
         .interaction(mouse::Interaction::Pointer);
     tooltip::tip(target, tip, Position::Top)
@@ -129,7 +150,12 @@ fn star<'a>(tag: &'a Tag) -> Element<'a, Message> {
     } else {
         (Icon::Star, fl!("tag-grid-star"))
     };
-    mark(glyph, Message::ToggleStar(tag.id()), Tip::new(tip))
+    mark(
+        glyph,
+        mark_ink(true),
+        Message::ToggleStar(tag.id()),
+        Tip::new(tip),
+    )
 }
 
 /// The action: adding an unsaved tag to the folder's tags, or deleting the cursor's tag.
@@ -138,11 +164,13 @@ fn action<'a>(tag: &'a Tag, cursor: bool) -> Element<'a, Message> {
     match (tag.is_stored(), cursor) {
         (false, _) => mark(
             Icon::Plus,
+            mark_ink(false),
             Message::SaveTag(id),
             Tip::new(fl!("tag-grid-save")).keys(&["Enter"]),
         ),
         (true, true) => mark(
             Icon::Trash,
+            mark_ink(true),
             Message::DeleteTag(id),
             Tip::new(fl!("tag-grid-delete", tag = tag.tag())).keys(&["Delete"]),
         ),
@@ -171,4 +199,18 @@ pub fn create<'a>(name: &str) -> Element<'a, Message> {
         .padding(GRID_CELL_INSET)
         .width(Length::Shrink)
         .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn marks_take_the_ink_that_suits_their_chip() {
+        // A saved tag's chip is a light color: the marks stay the dark `TAG_ICON`.
+        assert_eq!(mark_ink(true), TAG_ICON);
+        // An unsaved tag's chip is dark: its plus has the contrast of its label, not black on dark.
+        assert_eq!(mark_ink(false), label_ink(false));
+        assert_ne!(mark_ink(false), TAG_ICON);
+    }
 }
