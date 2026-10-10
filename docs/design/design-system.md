@@ -1372,8 +1372,7 @@ The list is sorted by date modified, oldest first (unchanged); there is no sort 
 `chevron-left` "Previous file `PgUp`", `chevron-right` "Next file `PgDn`", `locate-fixed` "Show the
 open file in the list" — then 12 px — `folder-open` "Open a folder" (`Ctrl`+`O` is proposed for #62; today it has no key) with the
 recent-folders `chevron-down` "Recent folders `Ctrl` `R`" (§13.4.5), latched while its list is open — and at the right end, until #64 moves them to the app bar, `settings` "Settings" with the
-update dot and the batch toggle `list-checks` "Batch actions" (latched in batch mode). At the
-minimum width the gaps become 4 px and the least used buttons go into **More** (§13.9).
+update dot and the batch toggle `list-checks` "Batch actions" (latched in batch mode). At narrow widths the gaps become 4 px and the least used buttons go into **More** (§13.9).
 Disabled buttons are truly disabled (today ◀ ▶ ⊙ look disabled but still take clicks).
 
 #### 13.4.4 Drag and drop
@@ -1906,8 +1905,22 @@ Never hidden: play/pause, back/forward 10 s, `[` `]`, fullscreen, the timeline.
 |---|---|---|
 | ≥ 320 | all parts (§13.4.2) | full |
 | 260–319 | chips that do not fit become `+N`; in/out timecodes hide (they are in the name's tooltip) | full |
-| 200–259 | the first chip only if the name still gets 80 px, otherwise only `+N`; the marker count stays | the Filter button keeps its icon and badge; the toolbar's gaps become 4 px and `locate-fixed` and the batch toggle go into **More** |
+| 200–259 | the first chip only if the name still gets 80 px, otherwise only `+N`; the marker count stays | the Filter button keeps its icon and badge; the toolbar folds as below |
 | > 720 | the column stops growing; the splitter stops | – |
+
+The toolbar (§13.4.3, `folder_controls/fold.rs`, whose test pins these numbers) is padding 16 +
+files 96 (◀ ▶ locate) + open 64 (📂 ▾) + settings and batch 64 + three gaps of 12 (the free space
+counts as one more item of the row) = **276** with everything shown. It never wraps and never
+shrinks a button; each step below takes away what the previous width no longer fits, and every
+button is then in the bar or in **More** (`ellipsis`, at the right end, which opens a menu over the
+toolbar with each folded button's icon, name and keys):
+
+| List width | Toolbar | Needs |
+|---|---|---|
+| ≥ 276 | all seven buttons, gaps 12 | 276 |
+| 252–275 | gaps become 4 | 276 − 3 × 8 = 252 |
+| 220–251 | also `locate-fixed` and the batch toggle move into **More** | 252 − 64 + 32 = 220 |
+| 188–219 (list minimum 200) | also the recent folders `chevron-down` moves into **More** (`Ctrl` `R` still opens the list); ◀ ▶ 📂 and Settings stay | 220 − 32 = 188 |
 
 ![File list sizes](design-system/sizes-file-list.png)
 
