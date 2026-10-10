@@ -2,7 +2,7 @@
 //! button bar, notices and help.
 
 use iced::widget::text::IntoFragment;
-use iced::widget::{button, column, container, mouse_area, row, space, Column};
+use iced::widget::{button, column, container, row, space, Column};
 use iced::{Alignment, Color, Element, Length, Padding};
 
 use super::icons::{icon, Icon};
@@ -10,6 +10,7 @@ use super::style::{self, ButtonKind};
 use super::text;
 use super::tokens::*;
 use super::tooltip::{self, Position};
+use crate::widgets::gap_slot::GapSlot;
 
 /// Where the first line of a control sits below the top of a 28-px control: labels and choice
 /// groups move down by it so their text lines up with a field's text.
@@ -164,21 +165,11 @@ pub const NAV_GAP: f32 = SPACE_XXS;
 
 /// An item of a navigation list with the gap ([`NAV_GAP`]) below it that keeps the items apart.
 /// The gap belongs to the item (a column's `spacing` belongs to neither neighbour): over it the
-/// pointer stays a hand and a click sends the item's `on_press`, so moving down the list never
-/// drops to an arrow. Without `on_press` (a disabled item) the gap is nothing. The item's
-/// highlight stays on the item itself, as the visual gap always did.
-pub fn nav_slot<'a, M: Clone + 'a>(
-    item: impl Into<Element<'a, M>>,
-    on_press: Option<M>,
-) -> Element<'a, M> {
-    let slot = column![item.into(), space().height(NAV_GAP)];
-    match on_press {
-        Some(message) => mouse_area(slot)
-            .on_press(message)
-            .interaction(iced::mouse::Interaction::Pointer)
-            .into(),
-        None => slot.into(),
-    }
+/// item is highlighted, the pointer is a hand and a click presses the item, so moving down the
+/// list never passes a frame where no item is under the pointer. A tooltip put around the slot
+/// stays shown across the gap too.
+pub fn nav_slot<'a, M: 'a>(item: impl Into<Element<'a, M>>) -> Element<'a, M> {
+    GapSlot::new(item, NAV_GAP).into()
 }
 
 /// [`nav_item`] with `trailing` at its right end (a badge), and without `on_press` disabled.
@@ -230,8 +221,8 @@ pub fn nav_item_with<'a, M: Clone + 'a>(
             right: SPACE_M,
         })
         .style(style::button(ButtonKind::Nav(selected)))
-        .on_press_maybe(on_press.clone());
-    nav_slot(item, on_press)
+        .on_press_maybe(on_press);
+    nav_slot(item)
 }
 
 /// The dot that says "an update is ready".

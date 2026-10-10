@@ -11,7 +11,7 @@ use crate::ui::badge::{badge, BadgeKind};
 use crate::ui::icon_button::IconButton;
 use crate::ui::icons::{spinner, Icon};
 use crate::ui::tokens::*;
-use crate::ui::tooltip::{Position, Tip};
+use crate::ui::tooltip::{self, Position, Tip};
 use crate::ui::{button, form, layout, scroll, style, text};
 
 use super::actions::Group;
@@ -168,14 +168,11 @@ fn icon_list(state: &BatchState) -> Element<'_, Message> {
             Some((service, _)) => Tip::new(action.label()).detail(service),
             None => Tip::new(action.label()),
         };
-        let message = select(state, action);
-        list = list.push(layout::nav_slot(
-            IconButton::new(action.icon())
-                .latched(action == state.action())
-                .tip(tip, Position::Right)
-                .on_press_maybe(message.clone()),
-            message,
-        ));
+        // The tip is on the slot, not the button: it stays across the gap to the next icon.
+        let button = IconButton::new(action.icon())
+            .latched(action == state.action())
+            .on_press_maybe(select(state, action));
+        list = list.push(tooltip::tip(layout::nav_slot(button), tip, Position::Right));
     }
     container(list)
         .width(ACTION_LIST_ICONS_WIDTH)
