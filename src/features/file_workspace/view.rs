@@ -59,12 +59,13 @@ pub fn view<'a, S>(
     file_name_panel_state: &'a file_name_panel::FileNamePanelState,
     is_synced: bool,
     sync_locked: bool,
-    tag_list: &'a frename_core::TagList<S>,
     tag_palette: TagPalette,
+    save_status: Option<file_name_panel::SaveStatus>,
 ) -> Element<'a, Message>
 where
     S: frename_core::StoredTagStore + Clone,
 {
+    let tag_list = file_workspace.tag_list();
     let search = tag_search(file_workspace, tag_list);
     let grid = tag_grid::view::view(
         tag_panel_state,
@@ -102,8 +103,9 @@ where
     let order = tag_list
         .has_tags()
         .then(|| sync_panel::view::view(is_synced, sync_locked).map(Message::SyncPanel));
-    let card = file_name_panel::view::view(file_name_panel_state, tag_list, tag_palette)
-        .map(Message::FileNamePanel);
+    let card =
+        file_name_panel::view::view(file_name_panel_state, tag_list, tag_palette, save_status)
+            .map(Message::FileNamePanel);
     // Dragging the handle up makes the comment box taller.
     let handle = HeightHandle::new(|grow| Message::CommentLayout(CommentLayout::Grow(grow)));
 

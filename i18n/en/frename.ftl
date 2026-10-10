@@ -632,6 +632,8 @@ file-name-panel-add-all-suggested-tags = Add all
 file-name-panel-add-all-suggested-tags-tip = Add every tag the AI suggests
 file-name-panel-tag-ideas = Ideas: { $ideas }
 file-name-panel-tag-ideas-tip = Tags the AI noticed that this folder does not have. They are not added.
+file-name-panel-saved = All changes saved
+file-name-panel-saved-to-recovery = Saved to recovery, applied when you leave the clip
 
 ## Updates (Settings)
 

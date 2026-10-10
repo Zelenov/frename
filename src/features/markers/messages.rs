@@ -47,4 +47,6 @@ pub enum Message {
     StopDescribing(String),
     /// The list scrolled: its offset from the top and its viewport's height.
     Scrolled(f32, f32),
+    /// A row (by index) was laid out this tall.
+    RowHeight(usize, f32),
 }

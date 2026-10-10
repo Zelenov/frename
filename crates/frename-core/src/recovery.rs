@@ -46,6 +46,16 @@ impl StoredMarker {
         }
     }
 
+    /// Whether `marker` is the one stored.
+    fn is(&self, marker: &Marker) -> bool {
+        self.guid == marker.guid
+            && self.start_ms == marker.start_ms
+            && self.duration_ms == marker.duration_ms
+            && self.name == marker.name
+            && self.comment == marker.comment
+            && self.color == marker.color.value()
+    }
+
     fn marker(&self) -> Marker {
         Marker {
             guid: self.guid.clone(),
@@ -81,7 +91,11 @@ impl Entry {
     /// clip cannot be read (it is gone).
     pub fn new(path: &Path, snapshot: &FileSnapshot) -> Option<Self> {
         let (size, modified_ms) = fingerprint(path)?;
-        Some(Self {
+        Some(Self::from_parts(path, snapshot, size, modified_ms))
+    }
+
+    fn from_parts(path: &Path, snapshot: &FileSnapshot, size: u64, modified_ms: u64) -> Self {
+        Self {
             version: VERSION,
             path: path.to_path_buf(),
             size,
@@ -95,7 +109,28 @@ impl Entry {
             markers: snapshot
                 .markers()
                 .map(|markers| markers.iter().map(StoredMarker::new).collect()),
-        })
+        }
+    }
+
+    /// Whether `snapshot` holds the edits the entry holds. Unlike [`Entry::new`] it does not
+    /// look at the file, so the clip's path, size and time are not compared (the entry's `path`
+    /// is public for that): the interface asks on every frame. It builds no entry, so it
+    /// copies nothing.
+    pub fn same_state_as(&self, snapshot: &FileSnapshot) -> bool {
+        self.tags == snapshot.tags()
+            && self.name == snapshot.name_without_extension()
+            && self.extension == snapshot.extension()
+            && self.comment == snapshot.comment()
+            && self.segment_start == snapshot.segment_start()
+            && self.segment_end == snapshot.segment_end()
+            && match (&self.markers, snapshot.markers()) {
+                (None, None) => true,
+                (Some(stored), Some(markers)) => {
+                    stored.len() == markers.len()
+                        && stored.iter().zip(markers).all(|(s, m)| s.is(m))
+                }
+                _ => false,
+            }
     }
 
     /// The state the entry holds, as a snapshot of the clip it was made on.
@@ -541,6 +576,34 @@ mod tests {
         marker.color = MarkerColor::Red;
         snapshot.set_markers(Some(vec![marker]));
         Entry::new(path, &snapshot).expect("entry")
+    }
+
+    #[test]
+    fn an_entry_compares_with_a_snapshot_without_touching_the_file() {
+        let dir = temp_dir("same-state-as");
+        let path = clip(&dir);
+        let mut snapshot = FileSnapshot::parse("clip.mp4");
+        snapshot.set_tags(["pick", "wide"]);
+        snapshot.set_comment("A note".to_string());
+        let mut marker = Marker::new(5_000);
+        marker.name = "Lion".to_string();
+        snapshot.set_markers(Some(vec![marker]));
+        let entry = Entry::new(&path, &snapshot).expect("entry");
+        // The clip is gone: a comparison that looked at it would fail.
+        std::fs::remove_file(&path).expect("remove");
+        assert!(entry.same_state_as(&snapshot));
+
+        let mut other = snapshot.clone();
+        other.set_tags(["pick"]);
+        assert!(!entry.same_state_as(&other), "tags");
+        let mut other = snapshot.clone();
+        other.set_markers(None);
+        assert!(!entry.same_state_as(&other), "markers");
+        let mut other = snapshot.clone();
+        let mut renamed = other.markers().expect("markers").to_vec();
+        renamed[0].name = "Tiger".to_string();
+        other.set_markers(Some(renamed));
+        assert!(!entry.same_state_as(&other), "a marker's name");
     }
 
     #[test]

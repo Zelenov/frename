@@ -6053,6 +6053,144 @@ mod tests {
     }
 
     #[test]
+    fn the_save_status_follows_the_edits_and_the_journal() {
+        use crate::features::file_name_panel::SaveStatus;
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = journal_workspace(&test_dir);
+        assert_eq!(
+            workspace.save_status(),
+            Some(SaveStatus::Saved),
+            "just opened"
+        );
+
+        // An edit the journal does not hold yet: nothing is claimed.
+        pick_tag(&mut workspace);
+        assert_eq!(workspace.save_status(), None, "before the tick");
+        tick(&mut workspace);
+        assert_eq!(workspace.save_status(), Some(SaveStatus::InRecovery));
+
+        // Undone to what the file holds, with the old entry still on disk for a tick.
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(workspace.save_status(), Some(SaveStatus::Saved), "undone");
+
+        // Another kind of edit gets the same treatment.
+        use iced::widget::text_editor::{Action, Edit};
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('g'))));
+        assert_eq!(workspace.save_status(), None, "before the tick");
+        tick(&mut workspace);
+        assert_eq!(workspace.save_status(), Some(SaveStatus::InRecovery));
+    }
+
+    /// The journal holds the edits: a clip with one pick, ticked once.
+    fn in_recovery(test_dir: &TestDirectory) -> FolderWorkspace {
+        use crate::features::file_name_panel::SaveStatus;
+        let mut workspace = journal_workspace(test_dir);
+        pick_tag(&mut workspace);
+        tick(&mut workspace);
+        assert_eq!(workspace.save_status(), Some(SaveStatus::InRecovery));
+        workspace
+    }
+
+    fn other_file(workspace: &FolderWorkspace) -> FileId {
+        let dir = workspace.directory().expect("dir");
+        let open = workspace.file_workspace().file().expect("open").id();
+        dir.files_in_order()
+            .map(|f| f.id())
+            .find(|id| *id != open)
+            .expect("second file")
+    }
+
+    #[test]
+    fn a_clip_whose_save_is_still_pending_is_not_called_saved() {
+        use crate::features::file_name_panel::SaveStatus;
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = journal_workspace(&test_dir);
+        // Reopened with edits that are not on disk yet: unsaved though it equals the baseline.
+        workspace.journal_force = true;
+        assert_eq!(workspace.save_status(), None, "not journaled yet");
+        tick(&mut workspace);
+        assert_eq!(workspace.save_status(), Some(SaveStatus::InRecovery));
+    }
+
+    #[test]
+    fn markers_that_are_not_in_the_file_are_not_called_saved() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = journal_workspace(&test_dir);
+        let id = workspace.file_workspace().file().expect("open").id();
+        workspace.unsaved_markers.insert(id, Vec::new());
+        assert_eq!(workspace.save_status(), None);
+    }
+
+    #[test]
+    fn an_entry_of_another_clip_does_not_make_this_one_safe() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = in_recovery(&test_dir);
+        let other = other_file(&workspace);
+        let (_, entry) = workspace.journal_written.take().expect("written");
+        workspace.journal_written = Some((other, entry));
+        assert_eq!(workspace.save_status(), None);
+    }
+
+    #[test]
+    fn a_failed_journal_write_is_not_called_saved_to_recovery() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = journal_workspace(&test_dir);
+        pick_tag(&mut workspace);
+        let (id, entry) = workspace.journal_next_write().expect("a write");
+        workspace.journal_written(id, Some((entry, Err("disk full".to_string()))));
+        assert_eq!(workspace.save_status(), None);
+    }
+
+    #[test]
+    fn edits_whose_write_is_still_running_are_not_called_saved_to_recovery() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = journal_workspace(&test_dir);
+        pick_tag(&mut workspace);
+        // The write starts and has not come back.
+        let _ = workspace.journal_next_write().expect("a write");
+        assert_eq!(workspace.save_status(), None);
+    }
+
+    #[test]
+    fn a_clip_other_than_the_baseline_says_nothing() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = in_recovery(&test_dir);
+        let other = other_file(&workspace);
+        let (_, baseline) = workspace.journal_baseline.take().expect("baseline");
+        workspace.journal_baseline = Some((other, baseline));
+        assert_eq!(workspace.save_status(), None);
+    }
+
+    #[test]
+    fn a_running_job_says_nothing() {
+        use crate::features::file_name_panel::SaveStatus;
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = journal_workspace(&test_dir);
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        assert_eq!(workspace.save_status(), Some(SaveStatus::Saved));
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        assert!(workspace.is_batch_running());
+        assert!(workspace.file_workspace().file().is_some());
+        assert_eq!(workspace.save_status(), None);
+    }
+
+    #[test]
+    fn a_clip_renamed_since_its_write_has_no_entry_under_its_name() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = in_recovery(&test_dir);
+        let id = workspace.file_workspace().file().expect("open").id();
+        let snapshot = workspace.file_workspace().tag_list().file_snapshot();
+        let new_path = test_dir.file_path("renamed.mp4");
+        let dir = workspace.directory.as_mut().expect("dir");
+        assert!(dir.rename_file(id, &new_path, &snapshot));
+        assert_eq!(
+            workspace.save_status(),
+            None,
+            "the entry is under the old path"
+        );
+    }
+
+    #[test]
     fn undoing_everything_takes_the_entry_out_again() {
         let test_dir = TestDirectory::new(1);
         let mut workspace = journal_workspace(&test_dir);
