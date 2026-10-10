@@ -14,7 +14,9 @@ use std::path::PathBuf;
 use iced::window::raw_window_handle::HasWindowHandle;
 
 pub use messages::Message;
-pub use state::{files_to_drag, readiness, save_failed, DragCheck, DragOutState, Readiness, Save};
+pub use state::{
+    absolute_path, files_to_drag, readiness, save_failed, DragCheck, DragOutState, Readiness, Save,
+};
 
 /// Whether this platform can drag files out of the window. Elsewhere a press on a row stays a
 /// click, with no save or other work done for a drag that cannot start. Tests drive the

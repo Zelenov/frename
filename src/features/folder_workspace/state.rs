@@ -6492,6 +6492,76 @@ mod tests {
         );
     }
 
+    /// The press on another row saves the open file, and that save counts as pending from the
+    /// press, so a drag asked for before it ran waits instead of using stale metadata.
+    #[test]
+    fn the_press_on_another_row_records_its_own_save_as_pending() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = workspace_with_unsaved_tag(&test_dir);
+        let (a, b) = (file_id_at(&workspace, 0), file_id_at(&workspace, 1));
+        // Batch mode with both checked: the file the press leaves is dragged too.
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        let _ = workspace.update(Message::Batch(batch::Message::CheckAll(vec![a])));
+        let _ = workspace.update(Message::Batch(batch::Message::Toggle(b)));
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        assert_eq!(
+            workspace.drag_out.save_of(a),
+            Some(crate::features::drag_out::Save::Pending)
+        );
+        assert_eq!(workspace.drag_out.save_of(b), None);
+        // A fast drag before the save ran waits.
+        drag_move(&mut workspace, 0.0);
+        drag_move(&mut workspace, 10.0);
+        assert!(workspace.drag_out.is_pressed() && !workspace.drag_out.is_dragging());
+    }
+
+    /// Saving a tag with a dot through the workspace (in-memory backend, which returns the
+    /// snapshot as stored) is not a failed save for the drag.
+    #[test]
+    fn a_dotted_tag_saved_through_the_workspace_does_not_fail_the_drag() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = workspace_with_unsaved_tag(&test_dir);
+        let id = file_id_at(&workspace, 0);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        let snapshot = FileSnapshot::new(vec!["v1.2".to_string()], "file_0", ".mp4", "file_0.mp4");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        assert_eq!(
+            workspace.drag_out.save_of(id),
+            Some(crate::features::drag_out::Save::Worked)
+        );
+    }
+
+    /// A press on the open row saves nothing, so nothing is pending and the drag does not wait.
+    #[test]
+    fn pressing_the_open_row_leaves_no_save_pending_and_the_drag_starts() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let open = file_id_at(&workspace, 0);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        assert_eq!(workspace.drag_out.save_of(open), None);
+        drag_move(&mut workspace, 0.0);
+        drag_move(&mut workspace, 10.0);
+        assert!(workspace.drag_out.is_dragging(), "not waiting for a save");
+    }
+
+    /// The paths a drag carries are absolute even when the folder was opened by a relative path.
+    #[test]
+    fn the_dragged_paths_are_absolute() {
+        let store = LoggingAppStateStore::new(fresh_app_db());
+        let relative = PathBuf::from("rel-folder").join("clip.mp4");
+        let file = File::from_path(relative, SystemTime::UNIX_EPOCH);
+        let id = file.id();
+        let directory = Directory::with_files(Path::new("rel-folder"), vec![file], store);
+        let paths = FolderWorkspace::drag_paths(&directory, &[id]);
+        assert_eq!(paths.len(), 1);
+        assert!(paths.iter().all(|p| p.is_absolute()), "{paths:?}");
+    }
+
     /// A double-click opens the rename editor: the held button then selects its text, it does
     /// not drag the file.
     #[test]
