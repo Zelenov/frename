@@ -1,3 +1,7 @@
+# 0.118
+## Fixed
+- After a clip played to its end, stepping back a frame (or jumping, or clicking the progress bar) and pressing Play goes on from there instead of starting over from 0:00. Play at the very end still starts over.
+
 # 0.117
 ## Added
 - Marker list: **Describe N unnamed** names and describes every marker without a name with AI in one click, three at a time; the others wait their turn, **Stop all** stops them, and a name you type meanwhile is kept.

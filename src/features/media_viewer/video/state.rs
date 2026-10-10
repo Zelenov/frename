@@ -194,6 +194,9 @@ pub struct VideoPlayerState {
     /// clears it. Kept here rather than read from the frame on screen: while the backward seek
     /// is still on its way there is none, and playing then would play the clip backward.
     reversed: bool,
+    /// Where the clip ended the last time it played to its end (#193). Playing on from any
+    /// other position means a seek or a step moved the playhead since; see [`Self::leave_end`].
+    ended_at: Option<Duration>,
     /// The frame the last step event showed, as the sink reports it; see
     /// [`frame_step::stepped_onto`].
     stepped_onto: Option<ShownFrame>,
@@ -242,6 +245,7 @@ impl Default for VideoPlayerState {
             loading_ticks: 0,
             frame_step: None,
             reversed: false,
+            ended_at: None,
             stepped_onto: None,
             clip: None,
             pending_resume: None,
@@ -473,6 +477,7 @@ impl VideoPlayerState {
         self.play_until = None;
         self.frame_step = None;
         self.reversed = false;
+        self.ended_at = None;
         self.remembered_at = None;
         self.paused = paused;
         self.load_generation = self.load_generation.wrapping_add(1);
@@ -642,6 +647,7 @@ impl VideoPlayerState {
                 if let Some(video) = self.current_video.as_ref() {
                     self.position = query_position(video).unwrap_or_else(|| video.duration());
                 }
+                self.ended_at = Some(self.position);
                 // Played to the end: opened again, it starts over.
                 self.remember_position();
                 Task::done(Message::Controls(video_controls::Message::SetPlaying(
@@ -653,7 +659,9 @@ impl VideoPlayerState {
                 self.frame_step = None;
                 // A step back left the pipeline running backward: turn it forward at the frame
                 // shown before playing.
-                if self.paused && self.reversed {
+                if self.paused && self.leave_end() {
+                    // Moved since the clip ended: it plays on from here, not from the start.
+                } else if self.paused && self.reversed {
                     self.seek_only(self.position, true);
                 } else if let Some(position) = self.current_video.as_ref().and_then(query_position)
                 {
@@ -1031,6 +1039,7 @@ impl VideoPlayerState {
             return seek;
         }
         self.paused = false;
+        self.leave_end();
         if let Some(video) = &mut self.current_video {
             video.set_paused(false);
         }
@@ -1131,6 +1140,24 @@ impl VideoPlayerState {
         }
         self.followed_cue.unpin();
         self.follow_cue(false)
+    }
+
+    /// Before playing: a clip that played to its end and was moved since (a seek, a step back)
+    /// plays on from where the playhead is (#193). The player keeps its end-of-stream flag
+    /// through seeks and would restart the stream at 0:00; only `restart_stream` clears it, so
+    /// call that, then seek back to the playhead. True when it did. A clip still at its end
+    /// is left alone: play there starts over, as it always did.
+    fn leave_end(&mut self) -> bool {
+        let Some(video) = self.current_video.as_mut() else {
+            return false;
+        };
+        if !video.eos() || self.ended_at == Some(self.position) {
+            return false;
+        }
+        if let Err(e) = video.restart_stream() {
+            log::error!("Failed to leave the end of the stream: {e}");
+        }
+        self.seek_only(self.position, true)
     }
 
     /// [`Self::seek_to`] without following the cue; false when it did not seek.
@@ -2273,5 +2300,49 @@ mod tests {
         let _ = player.reload_video();
         assert_eq!(player.continued, Some(continued));
         assert_eq!(player.resume_at, Some(secs(8)));
+    }
+
+    /// Issue #193: a clip that played to its end remembers where, so a play after a seek or a
+    /// step is told from a play at the very end. The player's own end-of-stream flag is set by
+    /// its widget, which a test has no window for: what a real run does with it is checked in
+    /// the app (play to the end, `Alt+Left`, `Space`).
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn a_clip_remembers_where_it_ended_until_it_is_loaded_again() {
+        let (video, _) = real_clip();
+        let mut player = VideoPlayerState {
+            current_video: Some(video),
+            paused: false,
+            ..VideoPlayerState::default()
+        };
+        let _ = player.update(Message::EndOfStream);
+        assert!(player.paused);
+        assert_eq!(player.ended_at, Some(player.position));
+        let _ = player.update(Message::Seek(2.0));
+        assert_ne!(
+            Some(player.position),
+            player.ended_at,
+            "a seek moved the playhead"
+        );
+    }
+
+    /// Issue #193: only a clip the player flags as ended is touched on play; a clip that is
+    /// paused anywhere else plays on from there, from the same position, whatever `ended_at` says.
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn play_leaves_a_clip_that_has_not_ended_alone() {
+        let (video, _) = real_clip();
+        let mut player = VideoPlayerState {
+            current_video: Some(video),
+            paused: true,
+            ended_at: Some(Duration::from_secs(1)),
+            ..VideoPlayerState::default()
+        };
+        let _ = player.update(Message::Seek(3.0));
+        assert!(!player.leave_end(), "the player never reported the end");
+        assert_eq!(player.position, Duration::from_secs(3));
+        let _ = player.update(Message::TogglePause);
+        assert!(!player.paused);
+        assert!(player.position >= Duration::from_secs(3));
     }
 }
