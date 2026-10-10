@@ -1,4 +1,4 @@
-# 0.127
+# 0.126
 ## Fixed
 - The marker list scrolls a far marker fully into view in a long list of long names, also in a narrow panel, instead of leaving it partly out of view.
 
