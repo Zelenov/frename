@@ -1,3 +1,7 @@
+# 0.139
+## Fixed
+- A clip opened again before its pending save has run keeps the markers it was left with (deleted ones stay deleted), and saving it no longer takes their lines out of the comment.
+
 # 0.138
 ## Fixed
 - Starting a batch job while a marker is being described no longer waits for Claude's answer: it starts as soon as the description has finished reading the clip. Saving or renaming a clip is refused as "still reading the clip" only until then.
