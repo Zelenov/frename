@@ -1,6 +1,10 @@
-# 0.126
+# 0.127
 ## Added
 - A line under the file name says "All changes saved", or that your changes wait in recovery until you leave the clip.
+
+# 0.125
+## Added
+- A frame step that takes long (a step back in a heavy 4K clip can take seconds) shows a turning spinner and dims the time beside the controls until the frame shows, so you can tell it is working and need not press again.
 
 # 0.124
 ## Added

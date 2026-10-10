@@ -193,6 +193,8 @@ impl FolderWorkspace {
         let unsaved = self.journal_force
             || !baseline.same_state_as(&snapshot)
             || self.unsaved_markers.contains_key(&id);
+        // Size and modification time are not compared (that needs the disk): a clip changed on
+        // disk keeps "in recovery" for at most a tick.
         let in_journal = self
             .journal_written
             .as_ref()

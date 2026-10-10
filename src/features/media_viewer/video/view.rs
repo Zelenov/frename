@@ -15,7 +15,7 @@ use crate::features::media_viewer::placeholder;
 use crate::features::video_controls::view::{self as controls, Command};
 use crate::features::video_controls::{self, BarMarker, Fold};
 use crate::ui::icon_button::IconButton;
-use crate::ui::icons::Icon;
+use crate::ui::icons::{spinner, Icon};
 use crate::ui::menu::{self, MenuItem};
 use crate::ui::palette::marker_color;
 use crate::ui::segmented::{segmented, Segment};
@@ -323,9 +323,28 @@ fn controls_bar<'a>(
         ),
         None => space().into(),
     };
-    groups.push(container(notice).width(Length::Fill).clip(true).into());
+    // A step that waits long turns a spinner at the slot's right edge, beside the dimmed readout;
+    // the readout's own slot keeps its width (#196).
+    let slot: Element<'a, Message> = match state.slow_step_spinner() {
+        Some(frame) => row![
+            container(notice).width(Length::Fill).clip(true),
+            spinner(frame, ICON_M, TEXT_SECONDARY)
+        ]
+        .align_y(Alignment::Center)
+        .spacing(SPACE_S)
+        .into(),
+        None => container(notice).width(Length::Fill).clip(true).into(),
+    };
+    groups.push(container(slot).width(Length::Fill).into());
     if fold.time {
-        groups.push(controls::time_readout(controls_state, position).map(Message::Controls));
+        groups.push(
+            controls::time_readout(
+                controls_state,
+                position,
+                state.slow_step_spinner().is_some(),
+            )
+            .map(Message::Controls),
+        );
     }
     groups.push(if fold.volume_slider {
         controls::volume(controls_state).map(Message::Controls)

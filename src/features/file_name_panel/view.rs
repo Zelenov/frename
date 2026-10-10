@@ -128,11 +128,16 @@ fn save_status_line<'a>(status: Option<SaveStatus>) -> Element<'a, Message> {
             fl!("file-name-panel-saved-to-recovery"),
         ),
     };
-    row![icon(glyph, ICON_S, color), text::caption(label)]
-        .spacing(SPACE_XS)
-        .align_y(Alignment::Center)
-        .height(height)
-        .into()
+    // A minimum, not a fixed height: a text that wraps in a narrow card grows the card. The
+    // empty strut gives the row its minimum.
+    row![
+        iced::widget::Space::new().width(0).height(height),
+        row![icon(glyph, ICON_S, color), text::caption(label)]
+            .spacing(SPACE_XS)
+            .align_y(Alignment::Center),
+    ]
+    .align_y(Alignment::Center)
+    .into()
 }
 
 /// The tags the AI suggests for the clip, most likely first (F6 adds that one), "Add all" when

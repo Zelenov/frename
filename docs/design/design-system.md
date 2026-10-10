@@ -1107,7 +1107,7 @@ left to right, with the widths §13.9 folds by:
 | In/out (64) | text `[` "Set the in point `[`" · text `]` "Set the out point `]`" (text, as #44 says) |
 | Mark (64) | `camera` "Save this frame `F12`" · `map-pin` "Add a marker `F2` (hold for a range)"; disabled with the reason "This file cannot hold markers" |
 | Free space (flexible) | empty; notices (§13.2) show here when it is at least 120 wide, cut with "…" and the full text in the tooltip |
-| Time (152, #59) | `00:10 / 00:30` in `mono` `text.secondary`; paused, the playhead shows milliseconds, `00:10.250 / 00:30` (the exact time of a stepped frame, #162); a fixed width (21 characters, the longest it shows for a clip under 10 h: `9:59:59.500 / 9:59:59`; one of 10 h or more overflows it) so it never moves |
+| Time (152, #59) | `00:10 / 00:30` in `mono` `text.secondary` (a frame step that has waited over 300 ms, #196, dims it to `text.disabled` and turns the spinner of §8.15, 16 px `text.secondary`, at the right edge of the free space just before the readout; the readout's 152 px slot does not move; in the narrow band where the free space is under 24 px the spinner has no room, and where the readout is folded away the step goes through More without a sign of work; both go when the frame shows. Presses meanwhile are dropped on purpose); paused, the playhead shows milliseconds, `00:10.250 / 00:30` (the exact time of a stepped frame, #162); a fixed width (21 characters, the longest it shows for a clip under 10 h: `9:59:59.500 / 9:59:59`; one of 10 h or more overflows it) so it never moves |
 | Volume (96) | `volume-2` icon 16 in `text.secondary` (not a button), 8 px, a 72 px slider (§8.8); folded: a 32 px icon button `volume-2` that opens the slider in a popover |
 | Views (96) | `captions` "Subtitle list" (only with subtitles) · `map-pin` "Marker list" with "`Shift`+`F1` / `Shift`+`F3` jump between markers" on its second line · **More** `ellipsis` (only when something is folded) · `maximize-2`/`minimize-2` "Full screen `F5`" |
 
@@ -1577,7 +1577,11 @@ Both buttons, and the lock, are undoable (#139); a press that changes nothing pu
   edit, and there is no "saving" state of a second (the editor did not ask to see the journal's
   rhythm). The line keeps its height when it says nothing (one `caption` line), so the card and
   the trash in it, a drag target, do not move with an edit or when the journal catches up. A
-  text that wraps (a long translation in a narrow card) is the one case that changes the height.
+  text that wraps (a long translation in a narrow card) is the one case that changes the height:
+  the line is a minimum height, so the wrapped text grows the card instead of being cut off or
+  overlapping what is below. At the tags area's minimum width (320) the "in recovery" text wraps
+  to two lines in English and in Russian, so the card is one line taller then than with "All
+  changes saved"; at the default width both fit on one line.
   There is no line while no clip is open and in batch mode (the card is not there). The state comes from `FolderWorkspace::save_status`, a comparison of
   the open clip's edits with the journal's baseline and last write that touches no disk, so the
   view can ask on every frame; the mapping from the two facts to the line is
