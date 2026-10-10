@@ -807,6 +807,13 @@ impl FrenameApp {
                 batch::ActionMessage::OpenSettings,
             ))) => Task::done(Message::OpenSettings(Some(settings::Page::Saving))),
             Message::CloseRequested(id) => {
+                // `CloseRequested` fires for the Settings window's own OS close button too (the
+                // subscription isn't scoped to one window). Settings has nothing to save and no
+                // video to unload: it closes at once, and must never take the place of the main
+                // window in `pending_close` (issue #105) or stop a running batch.
+                if id != self.main_window {
+                    return window::close(id);
+                }
                 crate::crash_guard::mark_closing();
                 // A batch job may be writing a file: stop it after that file, then close.
                 if self.folder_workspace.is_batch_running() {
@@ -816,18 +823,11 @@ impl FrenameApp {
                     )));
                 }
                 // Save the open file's tags, comment and in/out before closing: otherwise they
-                // are lost silently (issue #21). Only for the main window: `CloseRequested`
-                // also fires for the Settings window's own OS close button (the subscription
-                // isn't scoped to one window), and that must not tell folder_workspace the app
-                // itself is closing — it would wrongly drop a queued folder scan or skip
-                // reopening the video once the (unrelated) unload this triggers finishes.
-                let save = if id == self.main_window {
-                    self.folder_workspace
-                        .flush_open_file()
-                        .map(Message::FolderWorkspace)
-                } else {
-                    Task::none()
-                };
+                // are lost silently (issue #21).
+                let save = self
+                    .folder_workspace
+                    .flush_open_file()
+                    .map(Message::FolderWorkspace);
                 if !self.folder_workspace.needs_media_unload() {
                     return Task::batch([save, window::close(id)]);
                 }
@@ -1165,6 +1165,67 @@ mod tests {
     #[test]
     fn test_app_creation() {
         let _app = FrenameApp::new(window::Id::unique(), None);
+    }
+
+    /// An app whose main window's video is still loading, so closing must wait for the unload.
+    fn app_with_loading_video() -> (FrenameApp, window::Id, window::Id) {
+        let main = window::Id::unique();
+        let settings = window::Id::unique();
+        let mut app = FrenameApp::new(main, None);
+        app.settings_window = Some(settings);
+        app.folder_workspace
+            .media_viewer_mut()
+            .pretend_video_loading(true);
+        assert!(app.folder_workspace.needs_media_unload());
+        (app, main, settings)
+    }
+
+    fn unload(app: &mut FrenameApp) {
+        app.folder_workspace
+            .media_viewer_mut()
+            .pretend_video_loading(false);
+        let _ = app.update(Message::FolderWorkspace(
+            folder_workspace::Message::MediaViewer(media_viewer::Message::Unloaded),
+        ));
+    }
+
+    /// Issue #105: the Settings window's close used to overwrite the id the main window's close
+    /// was waiting on, so the one `Unloaded` closed only Settings and the app did not quit.
+    #[test]
+    fn closing_the_main_window_then_settings_before_the_unload_still_quits() {
+        let (mut app, main, settings) = app_with_loading_video();
+        let _ = app.update(Message::CloseRequested(main));
+        let _ = app.update(Message::CloseRequested(settings));
+        assert_eq!(app.pending_close, Some(main));
+        unload(&mut app);
+        assert_eq!(app.pending_close, None, "the main window was closed");
+    }
+
+    #[test]
+    fn closing_settings_then_the_main_window_before_the_unload_still_quits() {
+        let (mut app, main, settings) = app_with_loading_video();
+        let _ = app.update(Message::CloseRequested(settings));
+        assert_eq!(
+            app.pending_close, None,
+            "Settings never waits for an unload"
+        );
+        let _ = app.update(Message::CloseRequested(main));
+        assert_eq!(app.pending_close, Some(main));
+        unload(&mut app);
+        assert_eq!(app.pending_close, None, "the main window was closed");
+    }
+
+    #[test]
+    fn a_second_close_of_the_main_window_keeps_waiting_for_the_unload() {
+        let (mut app, main, _) = app_with_loading_video();
+        let _ = app.update(Message::CloseRequested(main));
+        let _ = app.update(Message::CloseRequested(main));
+        assert_eq!(app.pending_close, Some(main));
+        unload(&mut app);
+        assert_eq!(app.pending_close, None);
+        // Once unloaded, a close needs no waiting at all.
+        let _ = app.update(Message::CloseRequested(main));
+        assert_eq!(app.pending_close, None);
     }
 
     fn ctrl_key(

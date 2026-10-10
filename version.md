@@ -3,6 +3,16 @@
 - Undo and redo of a rename no longer replace another clip that has taken the old name; the step is refused with a note and stays in the history.
 - Undo and redo of a rename move the clip's comment along with it, as they already did for subtitles.
 
+# 0.130
+## Fixed
+- Dragging a clip out to Premiere is no longer refused with "Not dragged: can't save the file" (nor a false "Not saved" shown) after a tag with a dot, such as v1.2, was saved.
+- Dragging works when frename was opened with a relative path (`frename .`, `frename clip.mp4`).
+- A very fast drag no longer starts before the press's own save of the open file ran, so Premiere does not get stale metadata.
+
+# 0.129
+## Fixed
+- Closing the Settings window while the main window is closing no longer stops frename from quitting on the first close, and closing Settings no longer stops a running batch.
+
 # 0.128
 ## Fixed
 - Pressing next or previous quickly while a clip loads no longer makes the switch wait on the newer clip's load.
