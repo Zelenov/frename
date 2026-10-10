@@ -60,10 +60,18 @@ impl FolderWorkspace {
     }
 
     /// Say why an undo or redo step did not happen, when the user can do something about it:
-    /// a turn of a file that is read-only or open in another app.
+    /// a turn of a file that is read-only or open in another app, or a rename that would replace
+    /// another file.
     pub(super) fn undo_failed_notice(error: &UndoError) -> Task<Message> {
         match error {
             UndoError::Rotation(_, error) => Self::notice(&not_rotated(error)),
+            UndoError::NameTaken(path) => {
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                Self::notice(&fl!("undo-name-taken", name = name))
+            }
             _ => Task::none(),
         }
     }

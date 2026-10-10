@@ -1,8 +1,9 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::super::traits::Undoable;
 use super::super::{UndoContext, UndoError};
 use crate::db::{AppStateStore, StoredTagStore};
+use crate::tags::target_name_taken;
 use crate::{FileId, FileSnapshot};
 
 /// Records a file navigation (next / previous / indexed) together with its deferred save.
@@ -20,6 +21,19 @@ pub struct NavigateFileCommand {
     pub snapshot_after: FileSnapshot,
 }
 
+/// Rename `from` to `to` with the comment, subtitle and transcript files that travel with it.
+/// Refuses, changing nothing, when `to` or one of its sidecars exists: the same guard as the
+/// save that made the rename, so Ctrl+Z / Ctrl+Y never replace another clip.
+fn rename_with_sidecars(from: &Path, to: &Path) -> Result<(), UndoError> {
+    if target_name_taken(from, to) {
+        return Err(UndoError::NameTaken(to.to_path_buf()));
+    }
+    std::fs::rename(from, to)?;
+    crate::subtitles::rename_subtitle_file(from, to);
+    crate::comment::rename_comment_file(from, to);
+    Ok(())
+}
+
 impl<SD, ST> Undoable<SD, ST> for NavigateFileCommand
 where
     SD: AppStateStore + Clone,
@@ -30,8 +44,7 @@ where
             if !self.path_after.exists() {
                 return Err(UndoError::FileNotFound(self.path_after.clone()));
             }
-            std::fs::rename(&self.path_after, &self.path_before)?;
-            crate::subtitles::rename_subtitle_file(&self.path_after, &self.path_before);
+            rename_with_sidecars(&self.path_after, &self.path_before)?;
         }
         ctx.directory
             .rename_file(self.file_id, &self.path_before, &self.snapshot_before);
@@ -46,8 +59,7 @@ where
             if !self.path_before.exists() {
                 return Err(UndoError::FileNotFound(self.path_before.clone()));
             }
-            std::fs::rename(&self.path_before, &self.path_after)?;
-            crate::subtitles::rename_subtitle_file(&self.path_before, &self.path_after);
+            rename_with_sidecars(&self.path_before, &self.path_after)?;
         }
         ctx.directory
             .rename_file(self.file_id, &self.path_after, &self.snapshot_after);
