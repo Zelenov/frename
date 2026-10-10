@@ -2,6 +2,11 @@
 ## Changed
 - In a narrow player, the More menu stays open after you step a frame, so you can click through frames.
 
+# 0.121
+## Fixed
+- A clip you watched to the end and left again without playing it opens at its in point again, instead of two seconds before it with a "Resumed" note.
+- `Home` in the search bar starts a clip over while the "Resumed" note shows, also when a file name is being edited on another row.
+
 # 0.120
 ## Changed
 - Starting a batch job while a marker is being described says the wait is usually a few seconds (it said up to a couple of minutes).
@@ -66,7 +71,7 @@
 
 # 0.107
 ## Added
-- A clip you open again continues where you stopped watching it, two seconds earlier, also after a restart. A note says so; `Home` or a click on the note starts it over. A clip watched to the end starts over, at its in point if it has one.
+- A clip you open again continues where you stopped watching it, two seconds earlier, also after a restart. A note says so; a click on the note starts it over, and `Home` always goes to the start of a clip. A clip watched to the end starts over, at its in point if it has one.
 
 # 0.106
 ## Added

@@ -60,7 +60,7 @@ comment.
 3. Tag what you see.
 4. Press `[` and `]` to mark the usable part, and `F2` at a moment you want to find again. Press
    `F2` again right away to name the marker, then `Enter`.
-5. Type a comment for the clip, press `Esc` to leave the comment box, and press `PageDown` to go
+5. Type a comment for the clip, press `Esc` to leave the comment box, and press `PgDn` to go
    to the next clip. frename renames the clip you left and saves its markers.
 6. On Windows, drag finished clips from the list into Premiere Pro. frename saves each clip
    first, so it arrives with its new name and everything you marked. Nothing is moved.
@@ -74,8 +74,8 @@ single clip.
 ### Files
 | Key | Action |
 |---|---|
-| `PageDown` | Next file (renames the file you leave) |
-| `PageUp` | Previous file (renames the file you leave) |
+| `PgDn` | Next file (renames the file you leave) |
+| `PgUp` | Previous file (renames the file you leave) |
 | `Ctrl+R` | Recent folders: `↑` `↓` walk the list, `Enter` opens the folder with its last clip, `Esc` closes it |
 | Double-click a file | Rename it by hand: `Enter` renames, `Esc` cancels |
 | `Ctrl+click` a file | Add it (and the open one) to a selection, or drop it if already selected |
