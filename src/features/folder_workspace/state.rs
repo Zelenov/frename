@@ -1329,8 +1329,10 @@ impl FolderWorkspace {
             // Its subtitles marker, the "with subtitles" filter and its count, after a job
             // that may have written a `.srt`.
             let has_subtitles = dir.file_by_id(id).map(|f| {
-                frename_core::subtitle_path(&frename_core::FileTagger::disk_path(f.file_path()))
-                    .is_file()
+                frename_core::existing_subtitle_path(&frename_core::FileTagger::disk_path(
+                    f.file_path(),
+                ))
+                .is_some()
             });
             if let Some(has_subtitles) = has_subtitles {
                 dir.set_has_subtitles(id, has_subtitles);

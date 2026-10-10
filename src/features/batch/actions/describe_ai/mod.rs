@@ -454,9 +454,9 @@ fn probe(path: &Path) -> Probe {
     let path = &FileTagger::disk_path(path);
     Probe {
         duration_s: describe::frames::clip_duration_s(path),
-        subtitle_bytes: std::fs::metadata(frename_core::subtitle_path(path))
-            .map(|m| m.len() as usize)
-            .unwrap_or(0),
+        subtitle_bytes: frename_core::existing_subtitle_path(path)
+            .and_then(|subtitles| std::fs::metadata(subtitles).ok())
+            .map_or(0, |m| m.len() as usize),
     }
 }
 
@@ -641,7 +641,7 @@ impl Request {
     ) -> Option<Self> {
         let api_key = key::read_key(key::ApiKey::Anthropic)?;
         let on_disk = FileTagger::disk_path(path);
-        let subtitles = describe::srt::load_for(&on_disk).unwrap_or_else(|e| {
+        let subtitles = frename_core::subtitle_cues(&on_disk).unwrap_or_else(|e| {
             log::warn!("ai: subtitles of {} not read: {e}", path.display());
             Vec::new()
         });

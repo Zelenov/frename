@@ -150,7 +150,14 @@ A `.srt` with the same name as the video (`clip.srt` for `clip.mp4`) is shown un
 The CC button opens a list of every line; click a line to jump to it. In fullscreen the subtitles
 are shown over the picture, and CC opens the list beside them there too.
 
-No subtitles yet? Check the videos in batch mode and run **Generate subtitles** (see below).
+A `.ass` or `.ssa` file (from Aegisub, Subtitle Edit, YouTube or ffmpeg) works the same way, as plain
+text: styles, positions and effects are not drawn, only the words and their line breaks. If a video
+has several, `.srt` is shown first, then `.ass`, then `.ssa`. The subtitles icon, the "has
+subtitles" filter, renaming with the video and Describe with AI treat them like a `.srt`.
+
+No subtitles yet? Check the videos in batch mode and run **Generate subtitles** (see below); it
+writes `.srt`, and skips a video that already has a `.ass` or `.ssa` unless you tick **Replace
+existing subtitles**.
 
 ## Batch mode
 

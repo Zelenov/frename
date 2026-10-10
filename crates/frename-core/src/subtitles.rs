@@ -1,9 +1,11 @@
-//! Read-only SubRip (`.srt`) subtitles, for the player's subtitle list.
+//! Read-only SubRip (`.srt`) and Advanced SubStation Alpha (`.ass` / `.ssa`) subtitles, for the
+//! player's subtitle list.
 //!
 //! A video's subtitles live next to it under the same stem: `/dir/clip.mp4` →
 //! `/dir/clip.srt`. This follows how transcription tools write them, unlike the
-//! `{filename}.comment.txt` sidecars frename creates itself. Parsing and the file name are
-//! clipscribe's (`clipscribe::srt`), which describes clips from the same files.
+//! `{filename}.comment.txt` sidecars frename creates itself. Parsing and the file names are
+//! clipscribe's (`clipscribe::srt`, `clipscribe::ass`), which describes clips from the same files.
+//! When a video has several, `.srt` wins, then `.ass`, then `.ssa`; frename writes only `.srt`.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -26,6 +28,13 @@ impl Subtitles {
     pub fn parse(source: &str) -> Self {
         Self {
             cues: clipscribe::srt::parse(source),
+        }
+    }
+
+    /// Parse ASS/SSA text (plain text of the `Dialogue:` lines, see `clipscribe::ass`).
+    pub fn parse_ass(source: &str) -> Self {
+        Self {
+            cues: clipscribe::ass::parse(source),
         }
     }
 
@@ -93,10 +102,55 @@ pub fn transcript_path(video_path: &Path) -> PathBuf {
     video_path.with_extension("soniox.json")
 }
 
+/// The names a video's subtitles may have, in the order they win: `clip.srt`, `clip.ass`,
+/// `clip.ssa`.
+pub fn subtitle_candidates(video_path: &Path) -> Vec<PathBuf> {
+    std::iter::once(subtitle_path(video_path))
+        .chain(
+            clipscribe::ass::EXTENSIONS
+                .iter()
+                .map(|extension| video_path.with_extension(extension)),
+        )
+        .collect()
+}
+
+/// The subtitle file next to `video_path` that is shown: `.srt` if there is one, else `.ass`,
+/// else `.ssa`.
+pub fn existing_subtitle_path(video_path: &Path) -> Option<PathBuf> {
+    subtitle_candidates(video_path)
+        .into_iter()
+        .find(|path| path.is_file())
+}
+
+/// Whether `path` (a subtitle file found by [`existing_subtitle_path`]) is ASS/SSA.
+fn is_ass(path: &Path) -> bool {
+    path.extension().is_some_and(|extension| {
+        clipscribe::ass::EXTENSIONS
+            .iter()
+            .any(|ass| extension.eq_ignore_ascii_case(ass))
+    })
+}
+
+/// The cues of the subtitles next to `video_path` (`.srt` before `.ass` before `.ssa`); empty when
+/// there are none. A file that exists but cannot be read is an error.
+pub fn subtitle_cues(video_path: &Path) -> std::io::Result<Vec<SubtitleCue>> {
+    match existing_subtitle_path(video_path) {
+        None => Ok(Vec::new()),
+        Some(path) => {
+            let source = String::from_utf8_lossy(&std::fs::read(&path)?).into_owned();
+            Ok(if is_ass(&path) {
+                clipscribe::ass::parse(&source)
+            } else {
+                clipscribe::srt::parse(&source)
+            })
+        }
+    }
+}
+
 /// Load the subtitles next to `video_path`. `None` when there is no file, it cannot be
 /// read, or it holds no valid cue.
 pub fn load_subtitles(video_path: &Path) -> Option<Subtitles> {
-    let path = subtitle_path(video_path);
+    let path = existing_subtitle_path(video_path)?;
     let bytes = match std::fs::read(&path) {
         Ok(bytes) => bytes,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
@@ -105,7 +159,12 @@ pub fn load_subtitles(video_path: &Path) -> Option<Subtitles> {
             return None;
         }
     };
-    let subtitles = Subtitles::parse(&String::from_utf8_lossy(&bytes));
+    let source = String::from_utf8_lossy(&bytes);
+    let subtitles = if is_ass(&path) {
+        Subtitles::parse_ass(&source)
+    } else {
+        Subtitles::parse(&source)
+    };
     if subtitles.is_empty() {
         log::warn!("subtitles: no valid cues in {}", path.display());
         return None;
@@ -121,10 +180,12 @@ pub fn load_subtitles(video_path: &Path) -> Option<Subtitles> {
 /// Move the subtitle file and the saved transcript along when their video is renamed, so they
 /// keep matching. Does nothing for a file that is not there; never overwrites an existing one.
 pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
-    rename_companion(
-        &subtitle_path(old_video_path),
-        &subtitle_path(new_video_path),
-    );
+    for (old, new) in subtitle_candidates(old_video_path)
+        .iter()
+        .zip(subtitle_candidates(new_video_path).iter())
+    {
+        rename_companion(old, new);
+    }
     rename_companion(
         &transcript_path(old_video_path),
         &transcript_path(new_video_path),
@@ -275,5 +336,82 @@ mod tests {
             subtitle_path(Path::new(r"C:\shoots\Villa.Story.DJI_0234_D.MP4")),
             PathBuf::from(r"C:\shoots\Villa.Story.DJI_0234_D.srt")
         );
+    }
+
+    /// A fresh temp folder for one test.
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("frename-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        dir
+    }
+
+    const ASS: &str = "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n\
+        Dialogue: 0,0:00:01.00,0:00:02.50,Default,,0,0,0,,{\\an8}Hello\\Nthere\n";
+
+    #[test]
+    fn a_video_with_only_an_ass_shows_its_text() {
+        let dir = temp_dir("ass-only");
+        let video = dir.join("clip.mp4");
+        assert!(load_subtitles(&video).is_none());
+        std::fs::write(dir.join("clip.ass"), ASS).expect("write ass");
+
+        let subs = load_subtitles(&video).expect("the .ass is read");
+        assert_eq!(subs.cues().len(), 1);
+        assert_eq!(subs.cues()[0].text, "Hello\nthere");
+        assert_eq!(
+            (subs.cues()[0].start, subs.cues()[0].end),
+            (ms(1_000), ms(2_500))
+        );
+        assert_eq!(subtitle_cues(&video).expect("read").len(), 1);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn srt_beats_ass_and_ass_beats_ssa() {
+        let dir = temp_dir("order");
+        let video = dir.join("clip.mp4");
+        std::fs::write(dir.join("clip.ssa"), ASS.replace("Hello", "From ssa")).expect("ssa");
+        assert_eq!(existing_subtitle_path(&video), Some(dir.join("clip.ssa")));
+        std::fs::write(dir.join("clip.ass"), ASS.replace("Hello", "From ass")).expect("ass");
+        assert_eq!(existing_subtitle_path(&video), Some(dir.join("clip.ass")));
+        std::fs::write(subtitle_path(&video), SAMPLE).expect("srt");
+        assert_eq!(existing_subtitle_path(&video), Some(subtitle_path(&video)));
+
+        let cues = subtitle_cues(&video).expect("read");
+        assert_eq!(cues, Subtitles::parse(SAMPLE).cues(), "the .srt is shown");
+        let _ = std::fs::remove_file(subtitle_path(&video));
+        assert!(load_subtitles(&video).expect("ass").cues()[0]
+            .text
+            .starts_with("From ass"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rename_moves_an_ass_and_an_ssa_with_the_video() {
+        let dir = temp_dir("rename-ass");
+        let old_video = dir.join("clip.MP4");
+        let new_video = dir.join("tag.clip.MP4");
+        std::fs::write(dir.join("clip.ass"), "a").expect("ass");
+        std::fs::write(dir.join("clip.ssa"), "s").expect("ssa");
+
+        rename_subtitle_file(&old_video, &new_video);
+        assert!(!dir.join("clip.ass").exists() && !dir.join("clip.ssa").exists());
+        assert_eq!(
+            std::fs::read_to_string(dir.join("tag.clip.ass"))
+                .ok()
+                .as_deref(),
+            Some("a")
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join("tag.clip.ssa"))
+                .ok()
+                .as_deref(),
+            Some("s")
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
