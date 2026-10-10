@@ -99,12 +99,7 @@ mod tests {
     use super::*;
 
     fn temp_folder(name: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("frename-comment-{name}-{}", std::process::id()));
-        // A folder left by an earlier run that had this process id must not leak into this one.
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        dir
+        crate::test_support::fresh_dir(&format!("comment-{name}"))
     }
 
     #[test]

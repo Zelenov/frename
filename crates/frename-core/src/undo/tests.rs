@@ -1215,8 +1215,7 @@ mod tests {
         use crate::{FileTagger, Rotation};
 
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/wide.mov");
-        let dir = std::env::temp_dir().join(format!("frename-undo-rotate-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir("undo-rotate");
         let path = dir.join("clip.mov");
         std::fs::copy(fixture, &path).expect("copy");
 
@@ -1462,10 +1461,7 @@ mod tests {
         NavigateFileCommand,
         FileId,
     ) {
-        let dir_path =
-            std::env::temp_dir().join(format!("frename-undo-{label}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir_path);
-        std::fs::create_dir_all(&dir_path).expect("temp dir");
+        let dir_path = crate::test_support::fresh_dir(&format!("undo-{label}"));
         let file = File::from_path(dir_path.join(after), SystemTime::UNIX_EPOCH);
         let id = file.id();
         let directory = Directory::with_files(&dir_path, vec![file], FakeAppStorage::new());

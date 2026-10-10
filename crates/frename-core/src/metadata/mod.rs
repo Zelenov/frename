@@ -568,11 +568,7 @@ mod tests {
     /// A fresh copy of a tiny 0.2 s QuickTime clip with no XMP, in its own temp folder.
     fn copy_of_clip(name: &str) -> PathBuf {
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
-        let dir =
-            std::env::temp_dir().join(format!("frename-metadata-{name}-{}", std::process::id()));
-        // A folder left by an earlier run that had this process id must not leak into this one.
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir(&format!("metadata-{name}"));
         let file = dir.join("clip.mov");
         std::fs::copy(fixture, &file).expect("copy fixture");
         file
@@ -955,14 +951,10 @@ mod tests {
             let source = Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("tests/fixtures")
                 .join(fixture);
-            let dir = std::env::temp_dir().join(format!(
-                "frename-metadata-rotation-{}-{}",
-                fixture.replace('.', "-"),
-                std::process::id()
+            let dir = crate::test_support::fresh_dir(&format!(
+                "metadata-rotation-{}",
+                fixture.replace('.', "-")
             ));
-            // A folder left by an earlier run that had this process id must not leak into this one.
-            let _ = std::fs::remove_dir_all(&dir);
-            std::fs::create_dir_all(&dir).expect("temp dir");
             let file = dir.join(fixture);
             std::fs::copy(source, &file).expect("copy fixture");
 
@@ -1033,10 +1025,7 @@ mod tests {
     }
 
     fn temp_clip_path(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("frename-meta-{name}-{}", std::process::id()));
-        // A folder left by an earlier run that had this process id must not leak into this one.
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir(&format!("meta-{name}"));
         dir.join("clip.mp4")
     }
 

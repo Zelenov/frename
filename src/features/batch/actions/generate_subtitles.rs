@@ -1033,10 +1033,7 @@ mod tests {
 
     impl Folder {
         fn new(name: &str) -> Self {
-            let dir = std::env::temp_dir()
-                .join(format!("frename-subtitles-{name}-{}", std::process::id()));
-            let _ = std::fs::remove_dir_all(&dir);
-            std::fs::create_dir_all(&dir).expect("temp dir");
+            let dir = frename_core::test_support::fresh_dir(&format!("subtitles-{name}"));
             Self(dir)
         }
 
