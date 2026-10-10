@@ -32,7 +32,6 @@ pub const TEXT: Color = Color::from_rgb8(0xE6, 0xE8, 0xEB);
 pub const TEXT_SECONDARY: Color = Color::from_rgb8(0xA3, 0xAA, 0xB5);
 pub const TEXT_PLACEHOLDER: Color = Color::from_rgb8(0x8F, 0x97, 0xA3);
 pub const TEXT_DISABLED: Color = Color::from_rgb8(0x5C, 0x63, 0x6E);
-/// Text on `ACCENT` and `DANGER` fills.
 /// The time readout of the controls bar: dimmed while a frame step is slow (#196), which a spinner
 /// beside it says is work, not "unavailable".
 pub const fn time_readout_color(slow: bool) -> Color {
@@ -42,6 +41,7 @@ pub const fn time_readout_color(slow: bool) -> Color {
         TEXT_SECONDARY
     }
 }
+/// Text on `ACCENT` and `DANGER` fills.
 pub const TEXT_ON_FILL: Color = Color::from_rgb8(0xFF, 0xFF, 0xFF);
 /// The edge of a key cap on a filled button (§13.6.7).
 pub const KEY_CAP_ON_FILL: Color = Color::from_rgba(1.0, 1.0, 1.0, 0.6);
