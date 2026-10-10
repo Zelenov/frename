@@ -1,4 +1,4 @@
-# 0.127
+# 0.128
 ## Fixed
 - Pressing next or previous twice in quick succession while a clip is still loading no longer makes the second clip reload by itself.
 
