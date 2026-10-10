@@ -2,7 +2,7 @@
 //! side list over it, the subtitle strip, the timeline and the controls bar, which gives up
 //! whole groups into **More** on a narrow pane.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use frename_core::{Marker, Subtitles};
 use iced::widget::{column, container, mouse_area, row, space, stack, Column, Row};
@@ -325,7 +325,14 @@ fn controls_bar<'a>(
     };
     groups.push(container(notice).width(Length::Fill).clip(true).into());
     if fold.time {
-        groups.push(controls::time_readout(controls_state, position).map(Message::Controls));
+        groups.push(
+            controls::time_readout(
+                controls_state,
+                position,
+                state.frame_step_is_slow(Instant::now()),
+            )
+            .map(Message::Controls),
+        );
     }
     groups.push(if fold.volume_slider {
         controls::volume(controls_state).map(Message::Controls)

@@ -282,14 +282,26 @@ pub fn rotate(cannot_rotate: Option<String>) -> [Command<Message>; 2] {
 
 /// `00:10 / 00:30`, fixed wide so it never moves. Paused, the playhead shows its milliseconds
 /// (`00:10.250 / 00:30`): the exact time of a frame stepped to.
-pub fn time_readout<'a>(state: &VideoControlsState, position: Duration) -> Element<'a, Message> {
+///
+/// `slow`: a frame step has waited long (#196); the readout dims to `text.disabled` while it does.
+pub fn time_readout<'a>(
+    state: &VideoControlsState,
+    position: Duration,
+    slow: bool,
+) -> Element<'a, Message> {
     let position = if state.is_playing() {
         clock(position.as_secs_f32())
     } else {
         precise_clock(position)
     };
     let readout = format!("{position} / {}", clock(state.duration_secs()));
-    container(text::mono(readout).wrapping(iced::widget::text::Wrapping::None))
+    let readout = text::mono(readout).wrapping(iced::widget::text::Wrapping::None);
+    let readout = if slow {
+        readout.color(TEXT_DISABLED)
+    } else {
+        readout
+    };
+    container(readout)
         .width(TIME_READOUT_WIDTH)
         .align_right(TIME_READOUT_WIDTH)
         .into()

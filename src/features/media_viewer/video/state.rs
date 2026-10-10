@@ -37,6 +37,9 @@ const FRAME_STEP_TICK: Duration = Duration::from_millis(15);
 /// last frame none comes. While the pipeline is still decoding toward the frame (a backward seek
 /// in a 4K clip with long groups of pictures takes seconds), it waits on.
 const FRAME_STEP_SETTLED_WAIT: Duration = Duration::from_millis(250);
+/// How long a frame step waits before the time readout dims to show it is still working: a step
+/// back in a long clip takes seconds, and presses meanwhile are dropped on purpose (#196).
+const FRAME_STEP_SLOW_AFTER: Duration = Duration::from_millis(300);
 /// The longest a frame step waits at all, should the pipeline never settle.
 const FRAME_STEP_GIVE_UP: Duration = Duration::from_secs(20);
 
@@ -191,6 +194,8 @@ pub struct VideoPlayerState {
     /// A frame step whose frame is not on screen yet. Further steps wait for it: a held key
     /// would otherwise step again from the frame still shown and stand still.
     frame_step: Option<PendingStep>,
+    /// Demo mode only: show the slow-step look without a step waiting.
+    demo_slow_step: bool,
     /// A step back left the pipeline running backward (see `seek_backward`); any forward seek
     /// clears it. Kept here rather than read from the frame on screen: while the backward seek
     /// is still on its way there is none, and playing then would play the clip backward.
@@ -255,6 +260,7 @@ impl Default for VideoPlayerState {
             more_open: false,
             loading_ticks: 0,
             frame_step: None,
+            demo_slow_step: false,
             reversed: false,
             at_end: false,
             #[cfg(test)]
@@ -804,6 +810,10 @@ impl VideoPlayerState {
                 };
                 Task::none()
             }
+            Message::ShowSlowStep => {
+                self.demo_slow_step = true;
+                Task::none()
+            }
             Message::ShowMarkerList => {
                 self.overlay = Overlay::Markers;
                 Task::none()
@@ -1074,6 +1084,14 @@ impl VideoPlayerState {
         ])
     }
 
+    /// A frame step has waited so long at `now` that the time readout shows it is working.
+    pub fn frame_step_is_slow(&self, now: Instant) -> bool {
+        self.demo_slow_step
+            || self
+                .frame_step
+                .is_some_and(|pending| step_is_slow(pending.since, now))
+    }
+
     /// One frame back or forward. Pauses playback first; the playhead becomes the shown frame's
     /// time once it is on screen (see [`Self::frame_step_tick`]).
     fn step_frame(&mut self, step: video_controls::FrameStep) -> Task<Message> {
@@ -1307,6 +1325,11 @@ impl VideoPlayerState {
 }
 
 /// Whether an item of More is a frame step: the one item that leaves More open.
+/// A step begun at `since` is slow at `now`.
+fn step_is_slow(since: Instant, now: Instant) -> bool {
+    now.saturating_duration_since(since) > FRAME_STEP_SLOW_AFTER
+}
+
 fn is_frame_step(messages: &[Message]) -> bool {
     matches!(
         messages,
@@ -1762,6 +1785,40 @@ mod tests {
         assert!(player.more_open());
         let _ = player.update(Message::MorePicked(vec![item]));
         player.more_open()
+    }
+
+    #[test]
+    fn a_frame_step_is_slow_after_300_ms_of_waiting() {
+        let since = Instant::now();
+        let at = |ms| since + Duration::from_millis(ms);
+        assert!(!step_is_slow(since, since));
+        assert!(!step_is_slow(since, at(300)));
+        assert!(step_is_slow(since, at(301)));
+        // A clock that reads earlier than the start is not slow.
+        assert!(!step_is_slow(at(500), since));
+    }
+
+    #[test]
+    fn only_a_waiting_step_can_be_slow() {
+        use crate::features::video_controls::FrameStep;
+        let now = Instant::now();
+        let mut player = VideoPlayerState::default();
+        assert!(!player.frame_step_is_slow(now + Duration::from_secs(5)));
+        player.frame_step = Some(PendingStep {
+            from: ShownFrame {
+                start: Duration::ZERO,
+                duration: None,
+                start_exact: true,
+                reversed: false,
+            },
+            step: FrameStep::Back,
+            by_step_event: false,
+            since: now,
+        });
+        assert!(!player.frame_step_is_slow(now + Duration::from_millis(100)));
+        assert!(player.frame_step_is_slow(now + Duration::from_secs(1)));
+        player.frame_step = None;
+        assert!(!player.frame_step_is_slow(now + Duration::from_secs(1)));
     }
 
     #[test]

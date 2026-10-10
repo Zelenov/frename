@@ -1,3 +1,7 @@
+# 0.125
+## Added
+- A frame step that takes long (a step back in a heavy 4K clip can take seconds) dims the time beside the controls until the frame shows, so you can tell it is working and need not press again.
+
 # 0.123
 ## Fixed
 - The time shown beside a paused frame is exact to the millisecond in clips of several hours (it could be a millisecond or two off past about two and a half hours).
