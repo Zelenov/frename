@@ -165,10 +165,72 @@ pub fn view<'a>(
     spinner_frame: usize,
 ) -> Element<'a, Message> {
     let list = marker_list(markers, state, position_ms, spinner_frame);
-    match in_out {
-        Some(span) => column![in_out_line(span), list].into(),
-        None => list,
-    }
+    let describe_all = markers.and_then(|markers| describe_all_bar(markers, state, spinner_frame));
+    let in_out = in_out.map(in_out_line);
+    column![].push(in_out).push(describe_all).push(list).into()
+}
+
+/// The markers "Describe N unnamed" would send: editable, without a name, not on their way.
+pub fn unnamed_count(markers: &[Marker], state: &MarkersState) -> usize {
+    markers
+        .iter()
+        .filter(|m| m.is_editable() && m.name.trim().is_empty())
+        .filter(|m| {
+            m.guid
+                .as_deref()
+                .is_some_and(|guid| !state.is_describing(guid))
+        })
+        .count()
+}
+
+/// Over the list, under the in/out points: "Describe N unnamed" while some markers have no name
+/// (and are not on their way), and, while some wait for their turn, how many and "Stop all".
+/// Nothing when there is nothing to offer.
+fn describe_all_bar<'a>(
+    markers: &[Marker],
+    state: &MarkersState,
+    spinner_frame: usize,
+) -> Option<Element<'a, Message>> {
+    let waiting = state.waiting_count();
+    let content: Element<'a, Message> = if waiting > 0 {
+        row![
+            spinner(spinner_frame, ICON_S, TEXT_SECONDARY),
+            text::caption(fl!("markers-ai-waiting-count", count = waiting)),
+            space::horizontal(),
+            ui_button::ghost(fl!("markers-ai-stop-all")).on_press(Message::StopDescribingAll),
+        ]
+        .spacing(SPACE_S)
+        .align_y(Alignment::Center)
+        .into()
+    } else {
+        let count = unnamed_count(markers, state);
+        if count == 0 {
+            return None;
+        }
+        let button = ui_button::with_icon(
+            ButtonKind::Secondary,
+            Icon::Sparkles,
+            fl!("markers-ai-describe-unnamed", count = count),
+            true,
+        )
+        .on_press(Message::DescribeUnnamed);
+        tooltip::tip(
+            button,
+            Tip::new(fl!("markers-ai-describe-unnamed-tip")),
+            Position::Bottom,
+        )
+    };
+    Some(
+        container(content)
+            .padding(Padding {
+                left: SPACE_S,
+                right: SCROLL_GUTTER,
+                top: SPACE_XS,
+                bottom: SPACE_XS,
+            })
+            .width(Length::Fill)
+            .into(),
+    )
 }
 
 /// The in/out points, above the markers: not a marker (it has no name to change and is set
@@ -489,7 +551,11 @@ fn marker_row<'a>(
         .map(|guid| {
             row![
                 spinner(spinner_frame, ICON_S, TEXT_SECONDARY),
-                text::caption(fl!("markers-ai-describing")),
+                text::caption(if state.is_waiting(guid) {
+                    fl!("markers-ai-waiting")
+                } else {
+                    fl!("markers-ai-describing")
+                }),
                 row_action(
                     Icon::CircleX,
                     Tip::new(fl!("markers-ai-stop")),

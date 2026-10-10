@@ -1213,6 +1213,19 @@ left to right, with the widths §13.9 folds by:
 - **Already describing:** the row has no ✨; `Ctrl+F2` on that marker sends nothing and no
   notice, it only opens the marker list. `Ctrl+F2` always opens it (in fullscreen too), so the row
   shows the progress and ⊗.
+- **Describe all unnamed** (#208): above the rows (under the in/out line), `Describe N unnamed`
+  (`sparkles` 20 and the count; a secondary button, tooltip "Name and describe every marker that
+  has no name with AI, a few at a time…") while some editable markers have no name and are not on
+  their way; nothing when there are none. A click queues them in the list's order and sends
+  three at a time (`MAX_DESCRIBING_AT_ONCE`, as a rate-limit and load guard; a ✨ click is not
+  limited): the rows of the others show the turning loader, "Waiting for its turn…" and ⊗, and
+  the button gives way to a line, the turning loader and "N waiting" (plural) with a ghost
+  **Stop all** at the right (it stops the requests on their way too, their answers are dropped).
+  Each answer is applied as for ✨, one undo step per marker. A marker named meanwhile is not
+  sent when its turn comes, and an answer never replaces a name. A failure, or a missing key
+  found out, ends the run: the ones waiting stay unnamed and the notice is said once. Without a
+  key (known) nothing is queued: the same notice and Settings as ✨. Leaving the clip or a batch
+  job empties the queue like the requests.
 - **Batch job:** Run stops the open clip's marker requests and waits until the last one is back
   (it may be reading the clip's frames; clipscribe does not say when reading ends, so the wait
   lasts until its answer, usually seconds). Meanwhile the batch panel's button bar shows the

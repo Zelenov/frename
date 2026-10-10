@@ -23,11 +23,13 @@ frename is free and open source (MIT license).
 - **Mark the moments that matter.** Press `F2` to drop a marker and name it, hold `F2` to mark a
   range, and press `[` and `]` to set the usable part of the clip. Premiere Pro shows the markers on
   the clip, with their names, lengths and colors, and turns the in and out points into a subclip.
+  Describe with AI can suggest the in and out points too: an AI pill next to them sets them in one
+  click, rounded to whole seconds.
 - **Write a comment for each clip.** By default the comment is saved inside the video, where
   Premiere Pro shows it in the Description column and finds it by search.
 - **Let AI describe your footage.** Describe with AI writes a short summary of each clip and marks
   what happens when, even in clips with no speech. It can also suggest an in and out point and
-  name a single marker. You use your own Anthropic API key, and Haiku costs about $10 per 1,000
+  name a single marker or all the unnamed ones at once. You use your own Anthropic API key, and Haiku costs about $10 per 1,000
   one-minute clips.
 - **Get subtitles from speech.** Generate subtitles sends the audio to Soniox, a paid
   speech-to-text service, and saves an `.srt` file, a Premiere Pro transcript, or both next to

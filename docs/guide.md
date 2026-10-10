@@ -99,6 +99,12 @@ The progress bar shows what you have noted about a clip:
   names an unnamed marker and adds what happens at that moment to its comment, shown under its
   name, keeping your own name and comment. ⊗ stops it; it uses the Describe with AI settings and
   costs under a cent per marker with Haiku, a few cents with Opus.
+- **Describe all unnamed markers:** **Describe N unnamed** at the top of the marker list does that
+  for every marker without a name in one click. Three go out at a time and the rest show
+  "Waiting for its turn…"; each answer is its own undo step. ⊗ on a row takes that marker out,
+  **Stop all** stops them all, and a name you type while a marker waits is kept (it is not sent).
+  If one request fails, or no key is saved, the rest are not sent. It costs what the same number
+  of single markers would.
 - **Frames:** `Alt+←` / `Alt+→` (or the buttons next to play) step one frame back or forward and pause
   there; paused, the time shows milliseconds (`00:10.250`), and `F2` marks that exact frame.
   `F12` or 📷 saves the current frame as a JPEG next to the video
@@ -227,8 +233,8 @@ are lines of the description.
 
 When a clip has a lead-in or lead-out around the part worth keeping, the description ends with
 the In and Out the AI suggests (`Suggested In/Out: 00:00:03.200 – 00:00:11.800`). With the clip
-open, it shows as an **AI** pill next to the IN and OUT points; click it to set In and Out to it
-(one undo step). frename never sets them by itself.
+open, it shows as an **AI** pill with an arrow next to the IN and OUT points; click it to set In and
+Out to it, rounded to whole seconds like `[` and `]` (one undo step). frename never sets them by itself.
 
 The same request also says which of the folder's tags fit the clip, and how sure it is. With the
 clip open they show under its name: click one (or press `F6` for the first) to add it, or **Add

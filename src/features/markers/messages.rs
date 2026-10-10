@@ -39,6 +39,10 @@ pub enum Message {
     Describe(String),
     /// `Ctrl+F2`: [`Message::Describe`] the marker the playhead is on.
     DescribeAtPlayhead,
+    /// "Describe N unnamed": [`Message::Describe`] every marker without a name, a few at a time.
+    DescribeUnnamed,
+    /// Stop every request, the ones waiting for their turn too.
+    StopDescribingAll,
     /// Stop describing this marker.
     StopDescribing(String),
     /// The list scrolled: its offset from the top and its viewport's height.

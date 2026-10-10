@@ -1,7 +1,7 @@
 //! State of the marker list that is not the markers themselves: the row being edited, the
 //! open color picker, and what `F2` did last.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -16,6 +16,10 @@ pub const RANGE_HOLD: Duration = Duration::from_millis(400);
 
 /// A range shorter than this is a point: dragging a range's ends together makes it one.
 pub const MIN_RANGE_MS: u64 = 100;
+
+/// "Describe all unnamed" keeps at most this many requests on their way at once (the others wait
+/// their turn): each reads the clip's frames and is paid for, and the API has rate limits.
+pub const MAX_DESCRIBING_AT_ONCE: usize = 3;
 
 /// The marker `F2` added and is still held down.
 #[derive(Debug)]
@@ -70,6 +74,9 @@ pub struct MarkersState {
     /// Markers being described with AI: each one's request (its number, which its answer
     /// carries) and the flag that stops it.
     describing: HashMap<String, (u64, Arc<AtomicBool>)>,
+    /// Markers "Describe all unnamed" has not sent yet, in the list's order: they show as waiting,
+    /// and each goes out when a request comes back (see [`MAX_DESCRIBING_AT_ONCE`]).
+    waiting: VecDeque<String>,
     /// The number the next request gets. Never reset, so the answer of a request stopped
     /// earlier never passes for a later one's.
     next_request: u64,
@@ -212,7 +219,7 @@ impl MarkersState {
     /// Mark `guid` as being described: the new request's number and the flag that stops it, or
     /// `None` when one is on its way already.
     pub fn start_describing(&mut self, guid: &str) -> Option<(u64, Arc<AtomicBool>)> {
-        if self.describing.contains_key(guid) {
+        if self.is_describing(guid) {
             return None;
         }
         self.next_request += 1;
@@ -243,8 +250,9 @@ impl MarkersState {
         std::mem::replace(&mut self.no_key_said, true)
     }
 
-    /// Stop the request for `guid`; its answer is not used.
+    /// Stop the request for `guid`, or take it out of the queue; its answer is not used.
     pub fn stop_describing(&mut self, guid: &str) {
+        self.waiting.retain(|waiting| waiting != guid);
         if let Some((_, cancel)) = self.describing.remove(guid) {
             cancel.store(true, Ordering::Relaxed);
         }
@@ -252,6 +260,7 @@ impl MarkersState {
 
     /// Stop every request (a batch job closes the clip).
     pub fn stop_all_describing(&mut self) {
+        self.waiting.clear();
         for (_, cancel) in self.describing.values() {
             cancel.store(true, Ordering::Relaxed);
         }
@@ -264,13 +273,48 @@ impl MarkersState {
         self.describing.get(guid).map(|(id, _)| *id)
     }
 
+    /// Whether `guid` is being described or waits for its turn.
     pub fn is_describing(&self, guid: &str) -> bool {
-        self.describing.contains_key(guid)
+        self.describing.contains_key(guid) || self.is_waiting(guid)
     }
 
-    /// Whether any marker is being described (the spinner turns).
+    /// Whether `guid` waits for its turn: asked for, not sent yet.
+    pub fn is_waiting(&self, guid: &str) -> bool {
+        self.waiting.iter().any(|waiting| waiting == guid)
+    }
+
+    /// Whether any marker is being described or waits (the spinner turns).
     pub fn any_describing(&self) -> bool {
-        !self.describing.is_empty()
+        !self.describing.is_empty() || !self.waiting.is_empty()
+    }
+
+    /// How many markers wait for their turn.
+    pub fn waiting_count(&self) -> usize {
+        self.waiting.len()
+    }
+
+    /// How many requests are on their way.
+    pub fn in_flight(&self) -> usize {
+        self.describing.len()
+    }
+
+    /// Put `guids` in the queue, leaving out the ones already described or waiting.
+    pub fn queue_describing(&mut self, guids: impl IntoIterator<Item = String>) {
+        for guid in guids {
+            if !self.is_describing(&guid) {
+                self.waiting.push_back(guid);
+            }
+        }
+    }
+
+    /// The marker whose turn it is, out of the queue (its request is started next).
+    pub fn next_waiting(&mut self) -> Option<String> {
+        self.waiting.pop_front()
+    }
+
+    /// Nothing waits any more (the requests on their way go on).
+    pub fn clear_waiting(&mut self) {
+        self.waiting.clear();
     }
 
     /// Start over for another file. Its requests stop: their answers would not find the markers.
@@ -312,6 +356,34 @@ mod tests {
         );
         assert!(state.is_describing("a"));
         assert!(state.finish_describing("a", again));
+    }
+
+    #[test]
+    fn markers_wait_in_order_and_a_stop_takes_one_out_of_the_queue() {
+        let mut state = MarkersState::default();
+        state.queue_describing(["a", "b", "c"].map(String::from));
+        assert!(state.is_waiting("b") && state.is_describing("b"));
+        assert_eq!((state.waiting_count(), state.in_flight()), (3, 0));
+        assert!(
+            state.start_describing("b").is_none(),
+            "waiting counts as on its way"
+        );
+        state.queue_describing(["a", "d"].map(String::from));
+        assert_eq!(state.waiting_count(), 4, "a is queued once");
+        state.stop_describing("b");
+        assert_eq!(state.next_waiting().as_deref(), Some("a"));
+        let (_, cancel) = state.start_describing("a").unwrap();
+        assert!(state.is_describing("a") && !state.is_waiting("a"));
+        assert_eq!(state.in_flight(), 1);
+        state.stop_all_describing();
+        assert!(cancel.load(Ordering::Relaxed));
+        assert!(!state.any_describing() && state.next_waiting().is_none());
+        state.queue_describing(["x".to_string()]);
+        state.reset();
+        assert!(
+            !state.any_describing(),
+            "leaving the clip empties the queue"
+        );
     }
 
     #[test]

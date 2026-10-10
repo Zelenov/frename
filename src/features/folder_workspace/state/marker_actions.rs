@@ -202,8 +202,13 @@ impl FolderWorkspace {
             }
             M::Describe(guid) => self.describe_marker(&guid),
             M::DescribeAtPlayhead => self.describe_marker_at(position_ms),
+            M::DescribeUnnamed => self.describe_unnamed_markers(),
             M::StopDescribing(guid) => {
                 self.markers.stop_describing(&guid);
+                self.send_waiting_markers()
+            }
+            M::StopDescribingAll => {
+                self.markers.stop_all_describing();
                 Task::none()
             }
             M::Scrolled(y, viewport) => {
