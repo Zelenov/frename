@@ -100,6 +100,8 @@ pub struct FolderWorkspace {
     inline_rename: Option<folder::InlineRename>,
     /// The file list's filter menu is open.
     filter_menu_open: bool,
+    /// The toolbar's More menu is open.
+    toolbar_more_open: bool,
     /// The folders opened recently: the dropdown by the open button and the empty screen's list.
     recent_folders: RecentFoldersState,
     /// The app database every read and write of the workspace goes to: the recent folders, the
@@ -262,6 +264,7 @@ impl FolderWorkspace {
             marker_readers: std::collections::HashSet::new(),
             inline_rename: None,
             filter_menu_open: false,
+            toolbar_more_open: false,
             recent_folders,
             app_db,
             comment_load_generation: 0,
@@ -451,6 +454,7 @@ impl FolderWorkspace {
             Message::FileNamePanel(msg) => self.handle_file_name_panel(msg),
             Message::SyncPanel(msg) => self.handle_sync_panel(msg),
             Message::LeftSplitterDragged(x) => {
+                self.toolbar_more_open = false;
                 self.left_width = x;
                 let folder_start = self.left_width + SPLITTER_HIT;
                 let folder_end = folder_start + self.folder_width;
@@ -462,6 +466,7 @@ impl FolderWorkspace {
                 Task::none()
             }
             Message::RightSplitterDragged(x) => {
+                self.toolbar_more_open = false;
                 let new_folder_width = x - self.left_width - SPLITTER_HIT;
                 self.folder_width =
                     new_folder_width.clamp(FILE_LIST_MIN_WIDTH, FILE_LIST_MAX_WIDTH);
@@ -630,6 +635,10 @@ impl FolderWorkspace {
                 Self::notice("Frame saved")
             }
             Message::EscapePressed => {
+                if self.toolbar_more_open {
+                    self.toolbar_more_open = false;
+                    return Task::none();
+                }
                 if self.file_menu.is_open() {
                     return self.handle_file_menu(file_menu::Message::Close);
                 }
@@ -1766,10 +1775,22 @@ impl FolderWorkspace {
                 self.folder_viewport_height = Some(viewport_height);
                 Task::none()
             }
-            folder::Message::ScrollToSelected => Task::done(Message::ScrollFolderListToSelected),
+            folder::Message::ScrollToSelected => {
+                self.toolbar_more_open = false;
+                Task::done(Message::ScrollFolderListToSelected)
+            }
+            folder::Message::ToggleToolbarMore => {
+                self.toolbar_more_open = !self.toolbar_more_open;
+                Task::none()
+            }
+            folder::Message::CloseToolbarMore => {
+                self.toolbar_more_open = false;
+                Task::none()
+            }
             folder::Message::OpenFolder => Task::done(Message::OpenFolderPicker),
             folder::Message::OpenFile => Task::done(Message::OpenFilePicker),
             folder::Message::ToggleRecentFolders => {
+                self.toolbar_more_open = false;
                 self.handle_recent_folders(recent_folders::Message::Toggle)
             }
             folder::Message::SetUntaggedOnly(untagged_only) => {
@@ -2912,6 +2933,11 @@ impl FolderWorkspace {
     /// Whether the file list's filter menu is open.
     pub fn filter_menu_open(&self) -> bool {
         self.filter_menu_open
+    }
+
+    /// Whether the toolbar's More menu is open.
+    pub fn toolbar_more_open(&self) -> bool {
+        self.toolbar_more_open
     }
 
     pub fn inline_rename(&self) -> Option<&folder::InlineRename> {

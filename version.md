@@ -1,3 +1,7 @@
+# 0.142
+## Fixed
+- At its narrowest the file list no longer cuts off the buttons under it: the least used ones (locate, recent folders, batch mode) move into a More menu, and Ctrl+R still opens the recent folders.
+
 # 0.140
 ## Fixed
 - Shift+Space no longer toggles a tag while a file name is being typed in the file list.

@@ -178,6 +178,11 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
     if scenario.slow_step {
         steps.push(video(video::Message::ShowSlowStep));
     }
+    if scenario.toolbar_more {
+        steps.push(folder_workspace::Message::Folder(
+            folder::Message::ToggleToolbarMore,
+        ));
+    }
     if scenario.recent_menu {
         steps.push(folder_workspace::Message::Folder(
             folder::Message::ToggleRecentFolders,
