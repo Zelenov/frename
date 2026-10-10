@@ -17,6 +17,8 @@ pub enum Message {
     OpenFolder,
     /// Open a native file picker dialog (right-click on 📂): its folder opens with it selected.
     OpenFile,
+    /// Open or close the list of recent folders (the ▾ next to 📂).
+    ToggleRecentFolders,
     /// Show only files without tags (true) or every file (false).
     SetUntaggedOnly(bool),
     /// Show only files with a subtitle file (true) or every file (false).

@@ -7,8 +7,8 @@ use iced::widget::text_editor;
 
 use super::Directory;
 use crate::features::{
-    batch, drag_out, file_menu, file_name_panel, folder, media_viewer, sync_panel, tag_panel,
-    video_controls,
+    batch, drag_out, file_menu, file_name_panel, folder, media_viewer, recent_folders, sync_panel,
+    tag_panel, video_controls,
 };
 
 /// Key that triggered global focus (we emulate it into the search bar; Iced cannot replay the event).
@@ -142,6 +142,8 @@ pub enum Message {
     OpenFolderPicker,
     /// Open a native file picker dialog so the user can choose a file to open.
     OpenFilePicker,
+    /// The recent folders list: the dropdown by the open button, and the empty screen's.
+    RecentFolders(recent_folders::Message),
     /// Batch mode messages (batch panel, and folder list checks translated by the workspace).
     Batch(batch::Message),
     /// Enter batch mode with every listed file checked and the action set up for `operation`

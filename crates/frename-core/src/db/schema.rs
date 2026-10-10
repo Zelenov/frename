@@ -198,3 +198,24 @@ ALTER TABLE app_settings ADD COLUMN ai_moments TEXT NOT NULL DEFAULT 'important'
 pub const M21_AI_TAG_SUGGESTIONS: &str = "
 ALTER TABLE app_settings ADD COLUMN ai_tag_suggestions INTEGER NOT NULL DEFAULT 1;
 ";
+
+/// Migration 22: the folders opened recently (#63), newest first by `position` (0 is the newest),
+/// with when each was opened (Unix milliseconds) and the file that was open in it. Seeded with the
+/// ten most recent rows of `folder_history`, so the list does not start empty after an update.
+/// `last_file_path` is empty for none.
+pub const M22_RECENT_FOLDERS: &str = "
+CREATE TABLE IF NOT EXISTS recent_folders (
+    position INTEGER PRIMARY KEY,
+    folder_path TEXT NOT NULL,
+    opened_at_ms INTEGER NOT NULL,
+    last_file_path TEXT NOT NULL DEFAULT ''
+);
+INSERT INTO recent_folders (position, folder_path, opened_at_ms, last_file_path)
+SELECT ROW_NUMBER() OVER (ORDER BY opened_at DESC, id DESC) - 1,
+       folder_path,
+       COALESCE(CAST(strftime('%s', opened_at) AS INTEGER), 0) * 1000,
+       last_file_path
+FROM folder_history
+ORDER BY opened_at DESC, id DESC
+LIMIT 10;
+";

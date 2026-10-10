@@ -22,6 +22,8 @@ pub struct ToolbarProps {
     pub batch_mode: bool,
     /// A job runs: the batch toggle waits for it.
     pub batch_running: bool,
+    /// The recent folders list is open: its button is latched.
+    pub recent_open: bool,
     /// A newer frename version, when the update check found one: the dot on Settings.
     pub update_available: Option<String>,
 }
@@ -61,6 +63,14 @@ pub fn view(props: ToolbarProps) -> Element<'static, folder::Message> {
             .on_press(M::OpenFolder),
     )
     .on_right_press(M::OpenFile);
+    // The recent folders, right after the open button (they are one group).
+    let recent = IconButton::new(Icon::ChevronDown)
+        .latched(props.recent_open)
+        .tip(
+            Tip::new(fl!("recent-folders-tip")).keys(&["Ctrl", "R"]),
+            Position::Top,
+        )
+        .on_press_maybe((!props.batch_running).then_some(M::ToggleRecentFolders));
 
     let settings_tip = match &props.update_available {
         Some(version) => fl!(
@@ -93,7 +103,8 @@ pub fn view(props: ToolbarProps) -> Element<'static, folder::Message> {
         Element::from(locate)
     ];
     let app = row![Element::from(settings), Element::from(batch)];
-    let bar = row![files, open, space::horizontal(), app]
+    let opening = row![open, Element::from(recent)];
+    let bar = row![files, opening, space::horizontal(), app]
         .spacing(SPACE_M)
         .align_y(Alignment::Center);
     // A line on top: the rows above it scroll.

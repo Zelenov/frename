@@ -59,7 +59,10 @@ Trait is `Send + Sync` — safe to hold in `FileWorkspace<S>` and clone.
 | Method | What it does |
 |---|---|
 | `get_last_session()` | Returns `Option<FolderAndFile>` (last opened folder + file) |
-| `set_last_folder_and_file(&FolderAndFile)` | Persist or update session |
+| `set_last_folder_and_file(&FolderAndFile)` | Persist or update session; also records the folder as opened now in the recent folders |
+| `get_recent_folders()` | The folders opened recently (#63): newest first, each once, at most `MAX_RECENT_FOLDERS` (10) |
+| `record_recent_folder(&FolderAndFile, opened_at_ms)` | Move a folder to the top (the list logic is `recent_folders::record`); a session without a file keeps the file the folder had |
+| `forget_recent_folder(&Path)`, `clear_recent_folders()` | Remove one entry, or all |
 
 ### `Initializable` (`db/traits.rs`)
 `fn initialize(&self) -> Result<(), rusqlite::Error>` — run migrations once at startup.
@@ -170,11 +173,12 @@ Built by `TagList::file_snapshot()`. Contains:
 
 ## Database schema
 
-Three tables (defined in `db/migrations.rs`):
+Tables (defined in `db/schema.rs`, run by `db/migrations.rs`):
 
 | Table | Columns | Key |
 |---|---|---|
-| `folder_history` | `opened_at`, `folder_path`, `last_file_path` | `folder_path` unique |
+| `folder_history` | `opened_at`, `folder_path`, `last_file_path` | `folder_path` unique; the last session is its newest row |
+| `recent_folders` | `position`, `folder_path`, `opened_at_ms`, `last_file_path` | `position` (0 = newest); rewritten whole from `recent_folders::record` |
 | `stored_tags` | `id` (UUID text), `name`, `sort_order` | `id` unique |
 | `tag_color_mapping` | `tag_name`, `color_index` | `tag_name` unique |
 

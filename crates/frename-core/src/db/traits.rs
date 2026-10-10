@@ -6,6 +6,7 @@ use std::time::Duration;
 use uuid::Uuid;
 
 use crate::ai::{MomentsMode, SummaryLanguage};
+use crate::recent_folders::RecentFolder;
 use crate::{
     CommentStorage, CueLength, FolderAndFile, InOutStorage, MarkerStorage, StoredTag,
     TagColorMapping,
@@ -161,8 +162,27 @@ pub trait AppStateStore: Send + Sync {
     /// Returns the last opened folder and file in it, if any.
     fn get_last_session(&self) -> Option<FolderAndFile>;
 
-    /// Sets the last opened folder and file in it (inserts or updates).
+    /// Sets the last opened folder and file in it (inserts or updates). It also records the
+    /// folder as opened now in the recent folders ([`Self::record_recent_folder`]), so every way of
+    /// opening a folder lands in that list.
     fn set_last_folder_and_file(&self, value: &FolderAndFile);
+
+    /// The folders opened recently, newest first, each once, at most
+    /// [`crate::recent_folders::MAX_RECENT_FOLDERS`] (#63).
+    fn get_recent_folders(&self) -> Vec<RecentFolder> {
+        Vec::new()
+    }
+
+    /// Records that `value`'s folder was opened at `opened_at_ms` (Unix milliseconds): it moves to
+    /// the top of the recent folders, and with a file in `value` remembers that file (see
+    /// [`crate::recent_folders::record`]).
+    fn record_recent_folder(&self, _value: &FolderAndFile, _opened_at_ms: i64) {}
+
+    /// Takes one folder off the recent folders.
+    fn forget_recent_folder(&self, _folder: &Path) {}
+
+    /// Empties the recent folders.
+    fn clear_recent_folders(&self) {}
 
     /// Returns the saved window geometry, if any.
     fn get_window_state(&self) -> Option<WindowGeometry> {
