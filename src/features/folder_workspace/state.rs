@@ -2316,18 +2316,21 @@ impl FolderWorkspace {
                 }
             }
             tag_panel::Message::SaveTag(id) => {
-                if let Err(e) = self.file_workspace.save_tag(id) {
-                    log::error!("Failed to save tag to store: {}", e);
-                } else {
-                    let color_index = self
-                        .file_workspace
-                        .tag_list()
-                        .get_tag(id)
-                        .map_or(0, |t| t.color_index());
-                    self.history.push(Box::new(SaveTagCommand {
-                        tag_id: id,
-                        color_index,
-                    }));
+                match self.file_workspace.save_tag(id) {
+                    Err(e) => log::error!("Failed to save tag to store: {}", e),
+                    // Already saved: nothing changed, so there is nothing to undo.
+                    Ok(false) => {}
+                    Ok(true) => {
+                        let color_index = self
+                            .file_workspace
+                            .tag_list()
+                            .get_tag(id)
+                            .map_or(0, |t| t.color_index());
+                        self.history.push(Box::new(SaveTagCommand {
+                            tag_id: id,
+                            color_index,
+                        }));
+                    }
                 }
                 Task::none()
             }
@@ -5650,6 +5653,52 @@ mod tests {
         assert_eq!(marker_names(&workspace).len(), 1);
         let _ = workspace.update(Message::Redo);
         assert!(marker_names(&workspace).is_empty());
+    }
+
+    /// Issue #97: Enter on a saved tag changes nothing, so it is no undo step and Ctrl+Z after
+    /// it does not unsave the tag.
+    #[test]
+    fn enter_on_a_saved_tag_is_not_an_undo_step() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let tag_id = {
+            let tag_list = workspace.file_workspace().tag_list();
+            tag_list
+                .filtered_display_tag_ids()
+                .iter()
+                .find(|id| tag_list.get_tag(**id).is_some_and(|t| t.tag() == "pick"))
+                .copied()
+                .expect("pick is a built-in tag")
+        };
+        let stored = |w: &FolderWorkspace| {
+            w.file_workspace()
+                .tag_list()
+                .get_tag(tag_id)
+                .map(|t| t.is_stored())
+        };
+        // Saving a tag that is not saved yet is a step, and undoes and redoes.
+        if stored(&workspace) == Some(true) {
+            workspace
+                .file_workspace
+                .tag_list_mut()
+                .unsave_tag(tag_id)
+                .unwrap();
+        }
+        workspace.history = super::WorkspaceHistory::new(super::HISTORY_DEPTH);
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::SaveTag(tag_id)));
+        assert_eq!(stored(&workspace), Some(true));
+        assert!(workspace.history.can_undo(), "a real save is a step");
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(stored(&workspace), Some(false));
+        let _ = workspace.update(Message::Redo);
+        assert_eq!(stored(&workspace), Some(true));
+
+        // Enter on the saved tag: nothing is pushed, Ctrl+Z leaves it saved.
+        workspace.history = super::WorkspaceHistory::new(super::HISTORY_DEPTH);
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::SaveTag(tag_id)));
+        assert!(!workspace.history.can_undo(), "no step was pushed");
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(stored(&workspace), Some(true), "still saved");
     }
 
     /// In batch mode the tags are hidden, so their undo stays off.
