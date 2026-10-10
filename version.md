@@ -1,3 +1,7 @@
+# 0.128
+## Fixed
+- Pressing next or previous quickly while a clip loads no longer makes the switch wait on the newer clip's load.
+
 # 0.127
 ## Added
 - A line under the file name says "All changes saved", or that your changes wait in recovery until you leave the clip.
