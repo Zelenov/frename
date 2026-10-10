@@ -293,10 +293,7 @@ mod tests {
     /// A fresh copy of the tiny QuickTime fixture named `name`, in its own temp folder.
     fn clip_named(test: &str, name: &str) -> PathBuf {
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
-        let dir =
-            std::env::temp_dir().join(format!("frename-tagger-{test}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir(&format!("tagger-{test}"));
         let file = dir.join(name);
         std::fs::copy(fixture, &file).expect("copy fixture");
         file

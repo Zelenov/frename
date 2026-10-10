@@ -691,9 +691,7 @@ mod tests {
 
     #[test]
     fn a_closed_database_leaves_no_files_behind() {
-        let folder = std::env::temp_dir().join(format!("frename-db-close-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&folder);
-        std::fs::create_dir_all(&folder).expect("create folder");
+        let folder = crate::test_support::fresh_dir("db-close");
         let db = AppDatabase::with_path(folder.join("app.db"));
         db.initialize().expect("migrate");
         db.set_playback_position(Path::new("C:/clips/a.mp4"), Duration::from_secs(40));

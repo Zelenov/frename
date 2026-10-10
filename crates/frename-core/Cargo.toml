@@ -5,6 +5,10 @@ edition = "2021"
 description = "Core logic for frename file renaming utility"
 license = "MIT"
 
+[features]
+# `test_support`: helpers for tests; the root crate turns it on in its dev-dependencies only.
+test-support = []
+
 [dependencies]
 log = "0.4"
 rusqlite = { version = "0.40", features = ["bundled"] }

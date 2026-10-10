@@ -2359,8 +2359,16 @@ mod tests {
     fn unique_clip(name: &str) -> PathBuf {
         use frename_core::Initializable;
         let _ = AppDatabase::new().initialize();
+        // The positions live in the app database, which outlives test runs (and Windows reuses
+        // process ids), so the key carries a nonce no earlier run can have used.
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |since| since.as_nanos());
         std::env::temp_dir()
-            .join(format!("frename-resume-{}-{name}", std::process::id()))
+            .join(format!(
+                "frename-resume-{}-{nonce}-{name}",
+                std::process::id()
+            ))
             .join("clip.mp4")
     }
 
@@ -2713,10 +2721,11 @@ mod tests {
             at: secs(8),
             stopped: secs(10),
         };
+        let path = unique_clip("turn");
         let mut player = VideoPlayerState {
             current_video: Some(video),
-            current_path: Some(unique_clip("turn")),
-            clip: clip_at(&unique_clip("turn")),
+            clip: clip_at(&path),
+            current_path: Some(path),
             position: secs(8),
             continued: Some(continued),
             ..VideoPlayerState::default()

@@ -19,6 +19,8 @@ pub mod recovery;
 mod search;
 mod subtitles;
 mod tags;
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
 pub(crate) mod transliteration;
 pub mod undo;
 
