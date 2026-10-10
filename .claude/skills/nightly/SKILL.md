@@ -135,9 +135,10 @@ linked PR (step 1 handles those), excluding `in-progress` issues whose heartbeat
 excluding issues that need another issue's work which is not on `main` yet (e.g. its PR is in
 `owner-review`).
 
-Before ordering, relabel any open agent `idea` (body starts with `🤖 agent:`, no `rejected` or
-`hold`) that describes a defect: remove `idea`, add `bug` and a priority ("Bugs the agent finds").
-An issue without a priority gets one now, so nothing waits at the end of the queue unnoticed.
+Before ordering, triage the agent's own open `idea` issues exactly as `bug-hunt` step 0.2 says
+(relabel a defect to `bug` with a priority and the comment). Every open `bug` without a priority
+gets one from `bug-hunt` → "Labels"; an issue the owner wrote without a priority is left as it is
+(it sorts as unlabelled).
 
 Order: `in-progress` with a stale heartbeat (resume it), then `regression`, then `P1` < `P2` < `P3`
 < unlabelled; ties by issue number.
@@ -162,8 +163,9 @@ Label `idea`. It becomes work only when the owner labels it `approved`. Then run
 
 Proposals found while working (a feature, a behaviour change, a refactor with no failure behind
 it) are filed the same way, labelled `idea`. Anything with a concrete failure scenario is a defect,
-not a proposal: a bug the work uncovered, a leak or flaky test, and a review finding that was not
-fixed in its PR. These are filed as in "Bugs the agent finds" and fixed without approval
+not a proposal: a bug the work uncovered, a leak or flaky test, and a code-review finding with a
+failure scenario that was not fixed in a PR that then merged to `main` (filed right after the
+merge; findings on a PR still waiting in `owner-review` stay in that PR). These are filed as in "Bugs the agent finds" and fixed without approval
 (`regression` only if the owner confirms).
 
 ## 2a. Bug hunt (every session)
@@ -184,16 +186,18 @@ A defect is filed by the agent as an issue labelled `bug` and `P1`/`P2`/`P3`, bo
   in `bug-hunt` → "What counts as a bug".
 
 Never file a defect as `idea`, and never wait for `approved` on one. An agent `idea` that turns out
-to describe a defect is relabelled `bug` with a priority the moment it is noticed (step 2 checks).
-Priority: `P1` for lost or wrong data, a crash, or a leak that grows; `P2` for a visible bug, a
-flaky test or a leak in the tests; `P3` for the rest. Its scope is to make the app do what
+to describe a defect is relabelled `bug` the moment it is noticed (step 2 checks). Priorities are
+the list in `bug-hunt` → "Labels". The hunt's caps (skip at 8 open agent bugs, at most 5 filed per
+hunt) limit only the hunt: bugs found while working and relabelled ideas are never held back, but
+they count toward the 8. Its scope is to make the app do what
 was already intended, nothing more:
 - the fix PR follows steps 4–7 like any request (review gate, CI, version bump with a
   `## Fixed` note, release);
 - it has a test that fails before the fix, or before/after screenshots for a UI bug;
-- a fix that would change intended behaviour, add a feature, or pick between two designs the
-  owner might weigh differently is not a bug fix: relabel the issue `idea` (remove `bug`) and say
-  why in a comment;
+- a defect stays `bug` whatever its fix needs. When there are several ways to fix it, the agent
+  picks the smallest one that restores the intended (or leak-free) behaviour and writes the choice
+  in the PR, as design decisions are made in step 3. Only work that goes beyond the fix (a new
+  feature or behaviour on top) is filed as a separate `idea`; the bug stays open and gets fixed;
 - a fix that needs a guarded file is labelled `needs-owner`, as before.
 
 ## 3. Design notes (issues labelled `needs-design`)

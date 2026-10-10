@@ -28,7 +28,11 @@ leak is possible, fix it at once"):
 - tests that share state or can pass or fail depending on order, timing, the machine or a reused
   process id; a CI job that fails at random;
 - a race, a wrong window or state id, an error that is swallowed, a panic path in production code;
-- a review finding with a concrete failure scenario that was not fixed in its PR.
+- a code-review finding with a failure scenario that was not fixed in a PR that merged to `main`
+  (design-mode review notes the agent chose not to take are not findings).
+
+For leaks and races, a code path that a second reviewer confirms is enough proof; no failing run
+is needed.
 
 Rule of thumb: if you can describe a concrete way it goes wrong, it is a bug. `idea` is only for
 something new or different that the app was not meant to do: a feature, a behaviour change, a
@@ -83,12 +87,13 @@ everything under Xvfb (`CLAUDE.md` → "Looking at the UI"); also install `xdoto
 
 Run read-only subagents in parallel (`Explore` or `general-purpose`), one per area, each given the
 skill it audits against and told to report only rule violations with `file:line`, the rule, and a
-concrete user-visible failure:
+concrete failure (user-visible, or in the code or tests, per "What counts as a bug"):
 
 | Area | Rules from | Look for |
 |---|---|---|
 | Views and widgets | `ui-dev`, `ui-core` | each "must"/"never" rule broken somewhere; hard-coded strings or colours; scroll ids reused wrongly |
 | Undo | `undo-dev` | an edit that is not undoable, undo that leaves files or sidecars behind (#31, #110) |
+| Leaks and flaky tests | `core-dev`, this skill | tests with fixed temp paths, ports or process ids and no cleanup at the start or end; files, folders, handles, threads or processes the app or a test leaves behind; tests that depend on order or timing; jobs on `main` that failed and then passed on a rerun (Actions run history) |
 | Keyboard | `app-guide`, `ui-dev` | a shortcut that fires while typing, or stops working after typing (#32); two bindings for one key; focus lost after an action |
 | Files and metadata | `core-dev` | non-atomic writes, a write while Windows locks the file, errors swallowed, a sidecar not moved with its clip |
 | Async and windows | `app-guide` | a task result applied to the wrong clip or window after navigation (#105, #112) |
@@ -131,8 +136,10 @@ Screenshots go on the `pr-screenshots` branch under `bugs/<YYYY-MM-DD>/<name>.pn
 "Screenshots in the PR" for how), embedded by their raw URL.
 
 Labels: `bug` and one priority:
-- `P1` — crash, lost or wrong data on disk, the editor cannot go on;
-- `P2` — wrong behaviour or broken layout in a main flow;
+- `P1` — crash, lost or wrong data on disk, the editor cannot go on, or a leak that grows while
+  the app runs;
+- `P2` — wrong behaviour or broken layout in a main flow, a flaky test or random CI failure, a
+  leak in the tests or one that does not grow;
 - `P3` — cosmetic, or only in a rare state.
 
 Never `regression` (only the owner sets it). The nightly pipeline picks these up by priority like

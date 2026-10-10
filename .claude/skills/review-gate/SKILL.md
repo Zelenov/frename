@@ -58,5 +58,7 @@ A finding without a concrete failure scenario or a concrete improvement is dropp
    it anchors on its old findings). Give them the full current diff.
 4. Repeat until all three approve in the same round. Four rounds without that → the change is
    finished as far as possible and left unmerged for the owner (`nightly` → "Owner review").
+5. After the PR merges, every finding with a failure scenario that was not fixed in it (minors
+   included) is filed as a `bug` (`nightly` → "Bugs the agent finds") and fixed without approval.
 
 Record every round in the PR description: SHA, each reviewer's verdict, findings count, what was fixed.
