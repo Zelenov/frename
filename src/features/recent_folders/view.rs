@@ -108,9 +108,8 @@ fn entry_row<'a>(
 /// is removed until they say so, because the drive may come back.
 fn question_row<'a>(entry: &'a Entry, room: f32) -> Element<'a, Message> {
     let folder = &entry.folder;
-    let title = fl!("recent-folders-missing-title", name = folder.name());
     let words = column![
-        text::body(text::fit(&title, room * 0.55, BODY_CHAR_WIDTH).into_owned()),
+        text::body(text::fit(&folder.name(), room * 0.5, BODY_CHAR_WIDTH).into_owned()),
         text::caption(fl!("recent-folders-missing-line")),
     ]
     .width(Length::Fill);
@@ -236,6 +235,11 @@ pub fn on_empty_screen(state: &RecentFoldersState) -> Element<'_, Message> {
         column(rows(state, RECENT_LIST_WIDTH - SCROLL_GUTTER)),
     )
     .height(Length::Shrink);
+    // The header is level with the rows' text.
+    let header = container(header).padding(Padding {
+        left: SPACE_S,
+        ..Padding::ZERO
+    });
     column![
         header,
         list,

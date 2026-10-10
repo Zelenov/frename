@@ -1,3 +1,7 @@
+# 0.117
+## Added
+- The last ten folders you opened are listed under the arrow next to **Open a folder** (or press `Ctrl+R`) and on the start screen. Click one to open it with the clip that was open there; a folder that is gone shows "Not found" and is only removed when you say so.
+
 # 0.115
 ## Added
 - A video with a `clip.premiere.json` (the Premiere Pro transcript Generate subtitles writes) and no other subtitles shows its words like a `.srt`: under the picture, in the CC list and in fullscreen, with the subtitles icon and the "has subtitles" filter, renamed with its video, and read by Describe with AI. Lines follow Settings → Subtitles (short line or whole sentence) and start with the speaker's name when the speaker changes.

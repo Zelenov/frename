@@ -470,7 +470,7 @@ full look is §13.3.4. #59 moves their colors to tokens; no stock slider is used
 - States: hover `state.hover`; **selected** `state.selected` (plus SemiBold or an `accent.text`
   icon where several things could look selected); **unavailable** (a recent folder that is not
   found): dimmed, not disabled: text in `text.disabled` with a "not found" note, still clickable, and
-  a click offers the fix inline ("Remove from the list? [Remove] [Keep]", #63).
+  a click offers the fix inline ("Not found. Remove it? [Remove] [Keep]", §13.4.5).
 - The whole row is the target (BIR: «Одна строка — это один объект»). Row actions (✕ remove)
   appear on hover and on the selected row, in a 24-px icon button at the right end (DI "Hover
   Tools": they must not shift the layout).
@@ -1336,7 +1336,7 @@ The list is sorted by date modified, oldest first (unchanged); there is no sort 
 32 px under the list, `bg.panel` with a 1 px `border.subtle` line on top; icon buttons:
 `chevron-left` "Previous file `PgUp`", `chevron-right` "Next file `PgDn`", `locate-fixed` "Show the
 open file in the list" — then 12 px — `folder-open` "Open a folder" (`Ctrl`+`O` is proposed for #62; today it has no key) with the
-recent-folders ▾ of #63 — and at the right end, until #64 moves them to the app bar, `settings` "Settings" with the
+recent-folders `chevron-down` "Recent folders `Ctrl` `R`" (§13.4.5), latched while its list is open — and at the right end, until #64 moves them to the app bar, `settings` "Settings" with the
 update dot and the batch toggle `list-checks` "Batch actions" (latched in batch mode). At the
 minimum width the gaps become 4 px and the least used buttons go into **More** (§13.9).
 Disabled buttons are truly disabled (today ◀ ▶ ⊙ look disabled but still take clicks).
@@ -1346,6 +1346,31 @@ While a folder or file is dragged over the window, the whole window shows a drop
 window dimmed with `bg.window` at 80 %, a 2 px dashed `accent.text` edge inset 8 px and, in the middle, `folder-open` 48 with "Drop to open"
 (`title`). A drop of something that is neither a folder nor a video shows an error notice. Today
 there is no feedback while dragging (**behaviour**, #59).
+
+#### 13.4.5 Recent folders
+The last 10 folders opened (#63), newest first, each once; opening a folder moves it to the top.
+It is a menu (§8.14) 360 wide over the window, its bottom edge on the toolbar's line and its left
+edge 8 px in from the file list's, opened by the `chevron-down` button or `Ctrl`+`R` (also while a
+search field has the cursor), and the same rows in a column beside the intro on the empty screen
+(§13.7), where it scrolls when the window is short.
+
+- **Row:** 44 high (`RECENT_ROW_HEIGHT`), the §13.4.2 look for hover and the highlight (`state.selected`
+  and its bar). Line 1: the folder's name in `body`, and on the right when it was last opened in
+  `caption` `text.secondary` ("5 min ago", "2 days ago"); line 2: the folder it is in, `caption`
+  `text.secondary`, cut from the front with "…" so the end of the path stays. A 24-px `x` "Remove
+  from the list" shows at the right of the row the pointer or the keys are on, and keeps its room
+  when hidden.
+- **Click or `Enter`:** opens the folder with the file that was open in it last time. The open
+  file's pending edits are saved first, as with every folder change.
+- **Missing folder:** its name and path are `text.disabled` and the time is replaced by "Not found".
+  A click (or `Enter`) does not open it: the row turns into the question "Not found. Remove it?"
+  with *Remove* (`Enter` does it too) and *Keep* (`Esc`). Nothing is removed without that
+  answer, because the drive may come back.
+- **Bottom:** a hairline and the item `trash` "Clear list". With no folders the menu says "No folders
+  opened yet".
+- **Keys:** `Ctrl`+`R` opens and closes; `↑` `↓` move the highlight and wrap, `Enter` chooses, `Esc`
+  closes (first it ends a question). While the list is open the other keys of the main window are
+  ignored, so nothing changes behind it.
 
 ### 13.5 Tags area
 

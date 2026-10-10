@@ -183,8 +183,13 @@ where
             .style(style::bare_text_editor)
             // Explicitly capture Enter so the event is not treated as Ignored by Iced,
             // which prevents Windows from playing the system beep for unhandled WM_CHAR(0x0D).
+            // Only while the box has the keys: otherwise Enter would type a newline into the
+            // comment from anywhere, and never reach the window's Enter (the recent folders
+            // list takes it while it is open).
             .key_binding(|kp| {
-                if matches!(kp.key, iced::keyboard::Key::Named(Named::Enter)) {
+                if matches!(kp.key, iced::keyboard::Key::Named(Named::Enter))
+                    && matches!(kp.status, iced::widget::text_editor::Status::Focused { .. })
+                {
                     Some(Binding::Enter)
                 } else {
                     Binding::from_key_press(kp)

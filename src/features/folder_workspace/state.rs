@@ -834,6 +834,9 @@ impl FolderWorkspace {
         target_file: Option<PathBuf>,
     ) -> Task<Message> {
         self.loading = false;
+        // A list left open (on the empty screen, where nothing shows it) must not pop up over
+        // the folder that just opened.
+        let _ = self.recent_folders.update(recent_folders::Message::Close);
         // The list filters are user settings, not properties of the folder: carry them over.
         if let Some(previous) = self.directory.as_ref() {
             directory.set_untagged_only(previous.untagged_only());
@@ -2953,9 +2956,8 @@ mod tests {
     };
     use iced::keyboard::Modifiers;
 
-    use crate::features::{batch, folder, tag_panel};
-
     use super::{Directory, FolderWorkspace, ItemResult, ItemStatus, Message};
+    use crate::features::{batch, folder, recent_folders, tag_panel};
 
     #[test]
     fn saved_column_widths_are_kept_within_their_limits() {
@@ -6748,5 +6750,89 @@ mod tests {
             ),
         ));
         assert_eq!(workspace.markers.scroll_y(), 120.0);
+    }
+
+    /// A workspace whose recent folders are `names` under `/shoots`, newest first.
+    fn workspace_with_recent_folders(names: &[&str]) -> FolderWorkspace {
+        let mut workspace = FolderWorkspace::new();
+        workspace.recent_folders.set_entries(
+            names
+                .iter()
+                .map(|name| frename_core::recent_folders::RecentFolder {
+                    folder: PathBuf::from(format!("/shoots/{name}")),
+                    opened_at_ms: 0,
+                    last_file: None,
+                })
+                .collect(),
+            0,
+        );
+        workspace
+    }
+
+    #[test]
+    fn the_recent_folders_list_takes_the_arrows_enter_and_escape_only_while_open() {
+        let mut workspace = workspace_with_recent_folders(&["a", "b"]);
+        let down = Message::TagPanel(tag_panel::Message::SelectDown);
+        assert!(workspace.recent_folders_key(&down).is_none(), "closed");
+
+        let _ = workspace.update(Message::RecentFolders(recent_folders::Message::Toggle));
+        assert!(workspace.recent_folders.is_open());
+        assert!(matches!(
+            workspace.recent_folders_key(&down),
+            Some(Some(recent_folders::Message::Move(1)))
+        ));
+        assert!(matches!(
+            workspace.recent_folders_key(&Message::TagPanel(tag_panel::Message::SelectUp)),
+            Some(Some(recent_folders::Message::Move(-1)))
+        ));
+        assert!(matches!(
+            workspace.recent_folders_key(&Message::SaveSelectedTag),
+            Some(Some(recent_folders::Message::ChooseHighlighted))
+        ));
+        assert!(matches!(
+            workspace.recent_folders_key(&Message::EscapePressed),
+            Some(Some(recent_folders::Message::Escape))
+        ));
+        // The keys it has no use for do nothing behind it.
+        assert!(matches!(
+            workspace.recent_folders_key(&Message::TagPanel(tag_panel::Message::SelectLeft)),
+            Some(None)
+        ));
+        assert!(matches!(
+            workspace.recent_folders_key(&Message::Folder(folder::Message::NextFile)),
+            Some(None)
+        ));
+        assert!(workspace.recent_folders_key(&Message::Noop).is_none());
+    }
+
+    #[test]
+    fn walking_the_list_and_escape_work_through_the_workspace() {
+        let mut workspace = workspace_with_recent_folders(&["a", "b"]);
+        let _ = workspace.update(Message::RecentFolders(recent_folders::Message::Toggle));
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::SelectDown));
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::SelectDown));
+        assert_eq!(workspace.recent_folders.highlight(), Some(1));
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(!workspace.recent_folders.is_open());
+    }
+
+    #[test]
+    fn a_folder_that_opens_closes_a_list_left_open() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = workspace_with_recent_folders(&["a"]);
+        let _ = workspace.update(Message::RecentFolders(recent_folders::Message::Toggle));
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        assert!(!workspace.recent_folders.is_open());
+    }
+
+    #[test]
+    fn the_list_cannot_be_opened_in_fullscreen() {
+        let mut workspace = workspace_with_recent_folders(&["a"]);
+        workspace.media_fullscreen = true;
+        let _ = workspace.update(Message::RecentFolders(recent_folders::Message::Toggle));
+        assert!(!workspace.recent_folders.is_open());
     }
 }

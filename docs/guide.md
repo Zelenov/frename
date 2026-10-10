@@ -11,6 +11,17 @@ Windows 11 it is under "Show more options". To start at one clip, right-click th
 folder** button to pick the file, or drag the file onto the window. Its whole folder opens with
 that clip selected.
 
+**Recent folders.** The arrow next to the **Open a folder** button, or `Ctrl+R`, lists the last ten
+folders you opened, newest first. Each shows the folder's name, the folder it is in, and when you
+last opened it. Click one (or walk the list with `↑` `↓` and press `Enter`) to open it with the
+clip that was open there last time; `Esc` closes the list. The `Ctrl+R` list works from anywhere,
+even while a search box has the cursor. The empty start screen shows the same list. Every way of
+opening a folder adds it: the button, dragging it onto the window, Explorer, the command line, and
+the folder reopened at start. A folder that is gone, or on a drive that is not connected, is
+greyed out and says "Not found". Click it and frename asks whether to remove it: it never does
+that on its own, because the drive may come back. Point at a row and click the ✕ to remove one
+folder, or choose **Clear list** to remove them all.
+
 The next time you start frename, it reopens the last folder and clip. Opening any other folder
 again, even after a restart, returns to the clip you last viewed in it. A clip you open again
 continues two seconds before where you stopped watching, with a note that says so. Press `Home`
@@ -27,8 +38,8 @@ While a text box (tag search, file search, comment) has the cursor, it takes the
 arrows, `Delete`, `Space`, `Home` (except in a search field while the "Resumed at" note shows),
 `Enter`, `Ctrl+C`, and in the comment box also `PageUp` / `PageDown`.
 Press `Esc` first to give the keys back to the app. `[` and `]` set in and out points, except while
-you type in a marker's name. The F-keys always work, and so do `Ctrl+Alt+←` / `→` except in the
-comment box and a marker's name.
+you type in a marker's name. The F-keys always work, and so does `Ctrl+R`; so do `Ctrl+Alt+←` / `→`
+except in the comment box and a marker's name.
 
 ## Recovery after a crash
 
