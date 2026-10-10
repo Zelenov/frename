@@ -1,3 +1,7 @@
+# 0.124
+## Added
+- "Describe with AI" says when it is waiting to send a request again, for example "retrying in 8 s (rate limit)", instead of "waiting for Claude" through the whole wait.
+
 # 0.122
 ## Changed
 - In a narrow player, the More menu stays open after you step a frame, so you can click through frames.

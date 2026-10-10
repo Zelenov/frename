@@ -14,8 +14,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
 use clipscribe::{
-    self as describe, AiError, AiUsage, FrameSampling, Model, MomentsMode, Stage, SummaryLanguage,
-    MAX_DURATION_S,
+    self as describe, AiError, AiUsage, FrameSampling, Model, MomentsMode, RetryReason, Stage,
+    SummaryLanguage, MAX_DURATION_S,
 };
 use frename_core::ai::block;
 use frename_core::ai::key::{self, KeyState};
@@ -546,6 +546,23 @@ pub fn probe_all(clips: Vec<(FileId, PathBuf)>) -> Vec<(FileId, Probe)> {
     })
 }
 
+/// What an item says while its request waits `after` before it is sent again: the whole seconds
+/// of the wait, rounded up, once (it is not counted down).
+fn retry_label(after: std::time::Duration, reason: RetryReason) -> String {
+    let seconds = (after.as_secs() + u64::from(after.subsec_nanos() > 0)).max(1) as i64;
+    match reason {
+        RetryReason::RateLimit => fl!("batch-ai-progress-retry-rate-limit", seconds = seconds),
+        _ => fl!("batch-ai-progress-retry-temporary", seconds = seconds),
+    }
+}
+
+/// Demo: `progress` as it is while the request waits `seconds` for a rate limit.
+pub fn show_retry(progress: &ItemProgress, seconds: u64) {
+    let after = std::time::Duration::from_secs(seconds);
+    progress.set(0.45, fl!("batch-ai-progress-waiting"));
+    progress.note(retry_label(after, RetryReason::RateLimit), after * 3600);
+}
+
 /// Describe the video at `path` and write the description into its comment, and its moments
 /// into the video as markers while markers are kept there (Settings), where Premiere Pro shows
 /// them on the clip; with markers kept in comments, into the comment too.
@@ -597,7 +614,10 @@ pub fn run(options: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgr
             std::time::Duration::from_secs_f64(SECONDS_PER_REQUEST),
             fl!("batch-ai-progress-waiting"),
         ),
-        // A wait before the request is sent again keeps the "waiting" text it has.
+        // The wait is said for as long as it lasts; the bar keeps creeping, and the "waiting"
+        // text comes back when the request is sent again.
+        Stage::Retrying { after, reason } => progress.note(retry_label(after, reason), after),
+        // A stage this version does not know keeps the text it has.
         _ => {}
     };
     let vocabulary = vocabulary(&options.tags);
@@ -773,6 +793,25 @@ mod tests {
     }
 
     const BLOCK: &str = "AI: x";
+
+    #[test]
+    fn a_retry_wait_is_told_in_whole_seconds_with_its_reason() {
+        use std::time::Duration;
+        let text = |ms, reason| retry_label(Duration::from_millis(ms), reason);
+        let strip = |s: String| s.replace(['\u{2068}', '\u{2069}'], "");
+        assert_eq!(
+            strip(text(8000, RetryReason::RateLimit)),
+            "retrying in 8 s (rate limit)"
+        );
+        assert_eq!(
+            strip(text(2100, RetryReason::Temporary)),
+            "retrying in 3 s (temporary failure)"
+        );
+        assert_eq!(
+            strip(text(0, RetryReason::RateLimit)),
+            "retrying in 1 s (rate limit)"
+        );
+    }
 
     #[test]
     fn the_plan_sends_only_readable_short_undescribed_videos() {
