@@ -24,6 +24,8 @@ struct ItemStep {
     /// A step of unknown length: when it began, the fraction it heads for and how long it
     /// usually takes.
     creep: Option<(Instant, f32, Duration)>,
+    /// A label shown instead of `label` until the instant, then `label` again.
+    note: Option<(String, Instant)>,
 }
 
 impl ItemProgress {
@@ -34,6 +36,7 @@ impl ItemProgress {
                 fraction,
                 label: label.into(),
                 creep: None,
+                note: None,
             };
         }
     }
@@ -46,7 +49,16 @@ impl ItemProgress {
                 fraction,
                 label: label.into(),
                 creep: Some((Instant::now(), to, usual)),
+                note: None,
             };
+        }
+    }
+
+    /// Say `label` for `hold`, without moving the bar; after that the label from `set` or
+    /// `creep` shows again. For a wait of known length inside a step.
+    pub fn note(&self, label: impl Into<String>, hold: Duration) {
+        if let Ok(mut step) = self.0.lock() {
+            step.note = Some((label.into(), Instant::now() + hold));
         }
     }
 
@@ -62,7 +74,11 @@ impl ItemProgress {
             }
             None => step.fraction,
         };
-        (fraction.clamp(0.0, 1.0), step.label.clone())
+        let label = match &step.note {
+            Some((note, until)) if Instant::now() < *until => note.clone(),
+            _ => step.label.clone(),
+        };
+        (fraction.clamp(0.0, 1.0), label)
     }
 }
 
@@ -967,6 +983,22 @@ mod tests {
         let (fraction, label) = item.now();
         assert!(fraction > 0.5 && fraction < 0.9, "{fraction}");
         assert_eq!(label, "waiting for Claude");
+    }
+
+    #[test]
+    fn a_note_replaces_the_label_for_its_time_only() {
+        let item = ItemProgress::default();
+        item.set(0.4, "waiting for Claude");
+        item.note("retrying in 8 s (rate limit)", Duration::from_secs(60));
+        assert_eq!(
+            item.now(),
+            (0.4, "retrying in 8 s (rate limit)".to_string())
+        );
+        item.note("retrying", Duration::ZERO);
+        assert_eq!(item.now().1, "waiting for Claude", "the wait is over");
+        item.note("retrying", Duration::from_secs(60));
+        item.set(0.5, "saving");
+        assert_eq!(item.now().1, "saving", "a new step drops the note");
     }
 
     #[test]

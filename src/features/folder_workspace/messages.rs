@@ -74,6 +74,9 @@ pub enum Message {
     /// Demo mode only (a screenshot scenario's `describing`): show the open clip's marker of
     /// this name as being described, without sending a request.
     ShowDescribing(String),
+    /// Demo (a scenario's `ai_retry_wait_s`): the batch job on the checked files, its first file
+    /// waiting this many seconds before its request is sent again; nothing is sent.
+    ShowBatchRetry(u64),
     /// Demo: the unnamed markers as "Describe N unnamed" leaves them, without a request.
     ShowDescribingUnnamed,
     /// A marker's "Describe with AI" request came back (see `markers::describe`).

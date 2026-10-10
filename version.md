@@ -1,3 +1,7 @@
+# 0.124
+## Added
+- "Describe with AI" says when it is waiting to send a request again, for example "retrying in 8 s (rate limit)", instead of "waiting for Claude" through the whole wait.
+
 # 0.123
 ## Fixed
 - The time shown beside a paused frame is exact to the millisecond in clips of several hours (it could be a millisecond or two off past about two and a half hours).
