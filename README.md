@@ -41,7 +41,7 @@ frename is free and open source (MIT license).
   lines into markers.
 - **Never lose your work.** `Ctrl+Z` undoes almost everything, and frename keeps a recovery file
   of the open clip a second after each change, so a crash or a power cut does not cost you your
-  tags, comments or markers.
+  tags, comments or markers. A line under the file name tells you when your changes are safe.
 
 ![The frename window, with labels for each part](docs/frename-screenshot.jpg)
 

@@ -9,6 +9,7 @@ use frename_core::FileId;
 use iced::Task;
 
 use super::FolderWorkspace;
+use crate::features::file_name_panel::{save_status, SaveStatus};
 use crate::features::folder_workspace::Message;
 use crate::features::media_viewer::{self, video};
 
@@ -172,6 +173,27 @@ impl FolderWorkspace {
                 None => self.journal_force = true,
             }
         }
+    }
+
+    /// What the line at the foot of the file name card says about the open clip: whether its
+    /// edits are in its file, or only in the recovery journal. Asked on every frame, so it
+    /// compares without touching the disk.
+    pub fn save_status(&self) -> Option<SaveStatus> {
+        let file = self.file_workspace.file()?;
+        let id = file.id();
+        let (baseline_id, baseline) = self.journal_baseline.as_ref()?;
+        if *baseline_id != id || self.batch.is_running() {
+            return None;
+        }
+        let snapshot = self.file_workspace.tag_list().file_snapshot();
+        let unsaved = self.journal_force
+            || !baseline.same_state_as(&snapshot)
+            || self.unsaved_markers.contains_key(&id);
+        let in_journal = self
+            .journal_written
+            .as_ref()
+            .is_some_and(|(written_id, entry)| *written_id == id && entry.same_state_as(&snapshot));
+        save_status(unsaved, in_journal)
     }
 
     /// A message from the start (edits restored after a crash) to show once a clip is open.

@@ -81,7 +81,11 @@ impl Entry {
     /// clip cannot be read (it is gone).
     pub fn new(path: &Path, snapshot: &FileSnapshot) -> Option<Self> {
         let (size, modified_ms) = fingerprint(path)?;
-        Some(Self {
+        Some(Self::from_parts(path, snapshot, size, modified_ms))
+    }
+
+    fn from_parts(path: &Path, snapshot: &FileSnapshot, size: u64, modified_ms: u64) -> Self {
+        Self {
             version: VERSION,
             path: path.to_path_buf(),
             size,
@@ -95,7 +99,18 @@ impl Entry {
             markers: snapshot
                 .markers()
                 .map(|markers| markers.iter().map(StoredMarker::new).collect()),
-        })
+        }
+    }
+
+    /// Whether `snapshot` holds the same edits as the entry. Unlike [`Entry::new`] it does not
+    /// look at the file, so the interface can ask it on every frame.
+    pub fn same_state_as(&self, snapshot: &FileSnapshot) -> bool {
+        self.same_state(&Self::from_parts(
+            &self.path,
+            snapshot,
+            self.size,
+            self.modified_ms,
+        ))
     }
 
     /// The state the entry holds, as a snapshot of the clip it was made on.
@@ -541,6 +556,21 @@ mod tests {
         marker.color = MarkerColor::Red;
         snapshot.set_markers(Some(vec![marker]));
         Entry::new(path, &snapshot).expect("entry")
+    }
+
+    #[test]
+    fn an_entry_compares_with_a_snapshot_without_touching_the_file() {
+        let dir = temp_dir("same-state-as");
+        let path = clip(&dir);
+        let mut snapshot = FileSnapshot::parse("clip.mp4");
+        snapshot.set_tags(["pick", "wide"]);
+        snapshot.set_comment("A note".to_string());
+        let entry = Entry::new(&path, &snapshot).expect("entry");
+        // The clip is gone: a comparison that looked at it would fail.
+        std::fs::remove_file(&path).expect("remove");
+        assert!(entry.same_state_as(&snapshot));
+        snapshot.set_tags(["pick"]);
+        assert!(!entry.same_state_as(&snapshot));
     }
 
     #[test]

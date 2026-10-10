@@ -1,0 +1,12 @@
+# PR screenshots for #155: the file name card says "All changes saved" when the open clip matches
+# its file. Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.night.city.MVI_0410.mp4"
+seek = 2.0
+window = [1440, 720]
+panels = [640, 360]
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.MVI_0410.mp4"
+comment = "Tram 28 at the top of the hill"

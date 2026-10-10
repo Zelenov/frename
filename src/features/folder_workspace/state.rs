@@ -6053,6 +6053,35 @@ mod tests {
     }
 
     #[test]
+    fn the_save_status_follows_the_edits_and_the_journal() {
+        use crate::features::file_name_panel::SaveStatus;
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = journal_workspace(&test_dir);
+        assert_eq!(
+            workspace.save_status(),
+            Some(SaveStatus::Saved),
+            "just opened"
+        );
+
+        // An edit the journal does not hold yet: nothing is claimed.
+        pick_tag(&mut workspace);
+        assert_eq!(workspace.save_status(), None, "before the tick");
+        tick(&mut workspace);
+        assert_eq!(workspace.save_status(), Some(SaveStatus::InRecovery));
+
+        // Undone to what the file holds, with the old entry still on disk for a tick.
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(workspace.save_status(), Some(SaveStatus::Saved), "undone");
+
+        // Another kind of edit gets the same treatment.
+        use iced::widget::text_editor::{Action, Edit};
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('g'))));
+        assert_eq!(workspace.save_status(), None, "before the tick");
+        tick(&mut workspace);
+        assert_eq!(workspace.save_status(), Some(SaveStatus::InRecovery));
+    }
+
+    #[test]
     fn undoing_everything_takes_the_entry_out_again() {
         let test_dir = TestDirectory::new(1);
         let mut workspace = journal_workspace(&test_dir);

@@ -1,3 +1,7 @@
+# 0.126
+## Added
+- A small line under the file name says "All changes saved" when the clip you are working on matches its file, and "Saved to recovery, applied when you leave the clip" while your edits wait only in the recovery copy, so you can see your work is safe.
+
 # 0.124
 ## Added
 - "Describe with AI" says when it is waiting to send a request again, for example "retrying in 8 s (rate limit)", instead of "waiting for Claude" through the whole wait.

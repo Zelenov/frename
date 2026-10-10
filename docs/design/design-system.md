@@ -1558,6 +1558,29 @@ Both buttons, and the lock, are undoable (#139); a press that changes nothing pu
   └───────────────────────────────────────────────────────────────────────┘
   ```
 - **No tags on the clip:** "No tags on this clip" in `secondary` where the chips go.
+- **Save status line** (#155), the card's last line, always shown while a clip is open: whether
+  the clip's edits are in its file or wait in the recovery journal (#140). It is the one place
+  that is about the open clip's own work (its name, tags, In/Out and the comment below it), it
+  costs one `caption` line and never asks for anything, so it is not a notice (§8.12: notices are
+  for something that just happened, the controls bar's slot is for confirmations that vanish) and
+  not a badge (nothing here is a fact to notice). It is an inline status in the compact size: an
+  icon 12 and a `caption` in `text.secondary`, 4 apart, the text wraps inside the card's width.
+  No tooltip, no click.
+
+  | State | When | Icon | Text |
+  |---|---|---|---|
+  | Saved | the clip's edits equal the file (just opened, saved, or undone back to it) | `circle-check` in `success` | "All changes saved" |
+  | In recovery | edits differ from the file and the journal holds exactly these edits | `circle-dashed` in `text.secondary` (not final yet) | "Saved to recovery, applied when you leave the clip" |
+  | none | edits differ from the file and the journal does not hold them yet (up to a second after an edit) or its write failed | – | the line is left out |
+
+  The line says nothing rather than something untrue: "All changes saved" is never shown over an
+  edit, and the line does not flicker through a "saving" state of a second (the editor did not
+  ask to see the journal's rhythm). It is also left out while no clip is open and in batch mode
+  (the card is not there). The state comes from `FolderWorkspace::save_status`, a comparison of
+  the open clip's edits with the journal's baseline and last write that touches no disk, so the
+  view can ask on every frame; the mapping from the two facts to the line is
+  `file_name_panel::save_status`. Screenshots: `docs/screenshots/save-status-saved.toml` and
+  `save-status-recovery.toml`.
 
 #### 13.5.7 Comment
 - A multi-line field (§8.6) with the placeholder "Comment", `maximize-2` "Give the comment the whole

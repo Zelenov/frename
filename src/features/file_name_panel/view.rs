@@ -17,7 +17,9 @@ use crate::ui::tooltip::{self, Tip};
 use super::chips_panel;
 use super::file_name_line;
 use super::trash_zone;
-use super::{pending_tag_suggestions, suggested_in_out, tag_ideas, FileNamePanelState, Message};
+use super::{
+    pending_tag_suggestions, suggested_in_out, tag_ideas, FileNamePanelState, Message, SaveStatus,
+};
 
 /// Renders the file name card (design system §13.5.6):
 /// - first line: the checked tags as chips in the file's order | the trash
@@ -29,6 +31,7 @@ pub fn view<'a, S>(
     state: &'a FileNamePanelState,
     tag_list: &'a TagList<S>,
     tag_palette: TagPalette,
+    save_status: Option<SaveStatus>,
 ) -> Element<'a, Message>
 where
     S: StoredTagStore + Clone,
@@ -91,6 +94,7 @@ where
     let inner = container(
         column![top_row, bottom_row]
             .push(suggested_tags_row(tag_list))
+            .push(save_status.map(save_status_line))
             .spacing(SPACE_S)
             .width(Length::Fill),
     )
@@ -101,6 +105,23 @@ where
     // A right-click on the file's name (its chips or the name line) opens the file menu.
     mouse_area(container(inner).width(Length::Fill))
         .on_right_press(Message::OpenFileMenu)
+        .into()
+}
+
+/// The card's last line: whether the clip's edits are in its file or wait in the recovery
+/// journal (§13.5.6). An icon and a `caption`, quiet: the editor looks for it only to be sure.
+fn save_status_line<'a>(status: SaveStatus) -> Element<'a, Message> {
+    let (glyph, color, label) = match status {
+        SaveStatus::Saved => (Icon::CircleCheck, SUCCESS, fl!("file-name-panel-saved")),
+        SaveStatus::InRecovery => (
+            Icon::CircleDashed,
+            TEXT_SECONDARY,
+            fl!("file-name-panel-saved-to-recovery"),
+        ),
+    };
+    row![icon(glyph, ICON_S, color), text::caption(label)]
+        .spacing(SPACE_XS)
+        .align_y(Alignment::Center)
         .into()
 }
 

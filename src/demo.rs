@@ -186,6 +186,17 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
     if scenario.describing_unnamed {
         steps.push(folder_workspace::Message::ShowDescribingUnnamed);
     }
+    // Demo only: an edit made as typing does it, which the recovery journal picks up on its next
+    // tick (the shot is taken after `SETTLE`).
+    for c in scenario
+        .type_in_comment
+        .iter()
+        .flat_map(|text| text.chars())
+    {
+        steps.push(folder_workspace::Message::CommentAction(
+            iced::widget::text_editor::Action::Edit(iced::widget::text_editor::Edit::Insert(c)),
+        ));
+    }
     if scenario.rotate != 0 {
         steps.push(folder_workspace::Message::RotateVideo(scenario.rotate));
     }

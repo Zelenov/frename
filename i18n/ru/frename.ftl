@@ -693,6 +693,8 @@ file-name-panel-add-all-suggested-tags = Добавить все
 file-name-panel-add-all-suggested-tags-tip = Добавить все теги, которые предлагает AI
 file-name-panel-tag-ideas = Идеи: { $ideas }
 file-name-panel-tag-ideas-tip = Теги, которые AI заметил, но которых нет у этой папки. Они не добавляются.
+file-name-panel-saved = Все изменения сохранены
+file-name-panel-saved-to-recovery = Сохранено для восстановления, применится, когда вы покинете клип
 
 ## Updates (Settings)
 
