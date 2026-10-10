@@ -7139,6 +7139,67 @@ mod tests {
         assert!(comment.0, "a widget without an id keeps the keys");
     }
 
+    /// The operation, run through the real widgets of a small tree like the tag panel's (a text
+    /// input in a container in a column, another input beside it): the walk must reach both.
+    #[test]
+    fn unfocus_only_reaches_the_search_input_in_a_real_widget_tree() {
+        use super::{unfocus_only, SEARCH_BAR_INPUT_ID};
+        use iced::advanced::layout::Node;
+        use iced::advanced::widget::{operation::Focusable, Operation, Tree};
+        use iced::advanced::Layout;
+        use iced::widget::{column, container, text_input, Id};
+        use iced::{Element, Rectangle, Size, Theme};
+
+        struct Probe(Vec<(Option<Id>, bool)>, bool);
+        impl Operation<()> for Probe {
+            fn focusable(&mut self, id: Option<&Id>, _: Rectangle, state: &mut dyn Focusable) {
+                if self.1 {
+                    state.focus();
+                }
+                self.0.push((id.cloned(), state.is_focused()));
+            }
+            fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn Operation<()>)) {
+                operate(self);
+            }
+        }
+
+        let search = Id::from(SEARCH_BAR_INPUT_ID);
+        let rename = Id::new("rename");
+        let mut element: Element<'_, (), Theme, ()> = container(column![
+            container(text_input("", "").id(search.clone())),
+            text_input("", "").id(rename.clone()),
+        ])
+        .into();
+        let mut tree = Tree::new(&element);
+        let leaf = || Node::new(Size::new(10.0, 10.0));
+        let node = Node::with_children(
+            Size::new(10.0, 20.0),
+            vec![Node::with_children(
+                Size::new(10.0, 20.0),
+                vec![
+                    Node::with_children(Size::new(10.0, 10.0), vec![leaf()]),
+                    leaf(),
+                ],
+            )],
+        );
+        let layout = Layout::new(&node);
+        let mut run = |op: &mut dyn Operation<()>| {
+            element.as_widget_mut().operate(&mut tree, layout, &(), op);
+        };
+
+        let mut both = Probe(Vec::new(), true);
+        run(&mut both);
+        assert_eq!(both.0.len(), 2, "both inputs are reached and focused");
+        run(&mut unfocus_only(search.clone()));
+        let mut after = Probe(Vec::new(), false);
+        run(&mut after);
+        assert_eq!(
+            after.0,
+            [(Some(search), false), (Some(rename), true)],
+            "the search input let go, the other kept the keys"
+        );
+    }
+
     #[test]
     fn toggling_the_selected_tag_releases_the_search_bar() {
         use crate::features::tag_panel;
