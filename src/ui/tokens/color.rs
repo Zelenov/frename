@@ -84,8 +84,14 @@ pub const fn faded(color: Color, alpha: f32) -> Color {
     }
 }
 
-/// `layer` laid over `base`: hover and pressed states on any surface.
+/// `layer` laid over `base`: hover and pressed states on any surface. Over a transparent `base`
+/// (a button with no fill) the result is `layer` itself, so the state shows its own color over
+/// whatever surface is behind; mixing it with the (black) colour channels of `TRANSPARENT` would
+/// give a near-black 6 % veil instead of the white one (#264).
 pub fn over(base: Color, layer: Color) -> Color {
+    if base.a == 0.0 {
+        return layer;
+    }
     let a = layer.a;
     Color {
         r: base.r * (1.0 - a) + layer.r * a,
@@ -144,5 +150,11 @@ pub(super) mod tests {
         let hovered = over(BG_RAISED, HOVER);
         assert!(hovered.r > BG_RAISED.r && hovered.a == 1.0);
         assert_eq!(faded(ACCENT, 0.5).a, 0.5);
+    }
+
+    #[test]
+    fn a_state_layer_over_a_transparent_base_is_the_layer_itself() {
+        assert_eq!(over(Color::TRANSPARENT, HOVER), HOVER);
+        assert_eq!(over(Color::TRANSPARENT, PRESSED), PRESSED);
     }
 }
