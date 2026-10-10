@@ -9,7 +9,7 @@
 //! own small PR that adds one `.ftl` file and one entry here, reviewed on its own. CJK languages
 //! wait for a bundled font that covers them (issue #57).
 
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use i18n_embed::fluent::{fluent_language_loader, FluentLanguageLoader};
 use i18n_embed::unic_langid::LanguageIdentifier;
@@ -27,17 +27,65 @@ pub const LANGUAGES: [&str; 2] = ["en", "ru"];
 /// The source language, used when nothing else matches.
 const FALLBACK: &str = "en";
 
-/// The loader every [`fl!`](crate::fl) reads.
-pub fn loader() -> &'static FluentLanguageLoader {
-    static LOADER: OnceLock<FluentLanguageLoader> = OnceLock::new();
-    LOADER.get_or_init(|| {
-        let loader: FluentLanguageLoader = fluent_language_loader!();
-        if let Err(e) = loader.load_fallback_language(&Localizations) {
-            log::error!("cannot load the English UI text: {e}");
+/// Every language, loaded once with isolation off, and the one being shown.
+///
+/// Switching never builds bundles: it only selects among the loaded ones into a new small
+/// loader and swaps that in. A freshly built bundle isolates arguments (Fluent's default) until
+/// `set_use_isolating(false)` reaches it, so building bundles while other threads read text
+/// (as tests do, and the UI does after a language switch) would show isolation marks.
+struct Languages {
+    all: FluentLanguageLoader,
+    current: RwLock<Arc<FluentLanguageLoader>>,
+}
+
+impl Languages {
+    fn new() -> Self {
+        let all: FluentLanguageLoader = fluent_language_loader!();
+        let ids: Vec<LanguageIdentifier> =
+            LANGUAGES.iter().filter_map(|l| l.parse().ok()).collect();
+        if let Err(e) = all.load_languages(&Localizations, &ids) {
+            log::error!("cannot load the UI text: {e}");
         }
-        loader.set_use_isolating(false);
-        loader
-    })
+        // Before anything else can see the bundles: they are not published anywhere yet.
+        all.set_use_isolating(false);
+        let current = Arc::new(Self::select(&all, FALLBACK));
+        Self {
+            all,
+            current: RwLock::new(current),
+        }
+    }
+
+    fn select(all: &FluentLanguageLoader, language: &str) -> FluentLanguageLoader {
+        let id: LanguageIdentifier = language
+            .parse()
+            .unwrap_or_else(|_| FALLBACK.parse().expect("the fallback is a valid code"));
+        all.select_languages(&[id])
+    }
+
+    fn show(&self, language: &str) {
+        let next = Arc::new(Self::select(&self.all, language));
+        match self.current.write() {
+            Ok(mut current) => *current = next,
+            Err(poisoned) => *poisoned.into_inner() = next,
+        }
+    }
+
+    fn shown(&self) -> Arc<FluentLanguageLoader> {
+        match self.current.read() {
+            Ok(current) => current.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
+    }
+}
+
+fn languages() -> &'static Languages {
+    static LANGUAGES_LOADED: OnceLock<Languages> = OnceLock::new();
+    LANGUAGES_LOADED.get_or_init(Languages::new)
+}
+
+/// The loader every [`fl!`](crate::fl) reads: the language being shown.
+pub fn loader() -> Arc<FluentLanguageLoader> {
+    languages().shown()
 }
 
 /// The language `System` stands for: the OS language as read at start-up or when `System` was
@@ -49,39 +97,40 @@ static SYSTEM_LANGUAGE: Mutex<&str> = Mutex::new(FALLBACK);
 #[macro_export]
 macro_rules! fl {
     ($message_id:literal) => {{
-        i18n_embed_fl::fl!($crate::i18n::loader(), $message_id)
+        {
+            let loader = $crate::i18n::loader();
+            i18n_embed_fl::fl!(loader, $message_id)
+        }
     }};
     ($message_id:literal, $($args:expr),* $(,)?) => {{
-        i18n_embed_fl::fl!($crate::i18n::loader(), $message_id, $($args),*)
+        {
+            let loader = $crate::i18n::loader();
+            i18n_embed_fl::fl!(loader, $message_id, $($args),*)
+        }
     }};
 }
 
 /// Show the UI in the language the `stored` setting asks for (empty: the OS language). Reads
 /// the OS languages, so call it at start-up and when the setting changes, not per frame.
 pub fn apply(stored: &str) {
-    let os: Vec<String> = DesktopLanguageRequester::requested_languages()
-        .iter()
-        .map(|id| id.to_string())
-        .collect();
+    let os = os_languages();
     let system = resolve("", &os);
     if let Ok(mut current) = SYSTEM_LANGUAGE.lock() {
         *current = system;
     }
-    let language = resolve(stored, &os);
-    match language.parse::<LanguageIdentifier>() {
-        // Already shown: loading again would only swap in equal bundles, and until the
-        // isolation is turned off below, text read meanwhile (on other threads, as tests do)
-        // would get isolation marks around its arguments.
-        Ok(id) if loader().current_languages() == [id.clone()] => {}
-        Ok(id) => {
-            if let Err(e) = loader().load_languages(&Localizations, &[id]) {
-                log::error!("cannot load the UI language {language}: {e}");
-            }
-        }
-        Err(e) => log::error!("bad UI language code {language}: {e}"),
+    languages().show(resolve(stored, &os));
+}
+
+/// The OS's preferred languages. Tests see none: they read English, and a machine whose
+/// language is Russian must not switch the global loader under their assertions.
+fn os_languages() -> Vec<String> {
+    if cfg!(test) {
+        return Vec::new();
     }
-    // A load builds new bundles, which isolate arguments again.
-    loader().set_use_isolating(false);
+    DesktopLanguageRequester::requested_languages()
+        .iter()
+        .map(|id| id.to_string())
+        .collect()
 }
 
 /// The language `System` currently stands for.
@@ -377,6 +426,47 @@ mod tests {
         let used = used_ids();
         let unused: Vec<_> = english.difference(&used).collect();
         assert!(unused.is_empty(), "unused messages: {unused:?}");
+    }
+
+    /// Switching the language while other threads read text must never show isolation marks.
+    /// Uses its own `Languages`, so the global language other tests read stays English.
+    #[test]
+    fn switching_the_language_never_shows_isolation_marks() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let languages = Languages::new();
+        let done = AtomicBool::new(false);
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                for i in 0..2000 {
+                    languages.show(if i % 2 == 0 { "ru" } else { "en" });
+                }
+                done.store(true, Ordering::SeqCst);
+            });
+            while !done.load(Ordering::SeqCst) {
+                let loader = languages.shown();
+                let text = i18n_embed_fl::fl!(loader, "batch-run-rename", count = 5);
+                assert!(!text.contains('\u{2068}'), "isolation marks in {text:?}");
+            }
+        });
+    }
+
+    #[test]
+    fn showing_a_language_reads_its_text() {
+        let languages = Languages::new();
+        assert!(languages
+            .shown()
+            .get("batch-run-rename")
+            .starts_with("Rename"));
+        languages.show("ru");
+        assert!(languages
+            .shown()
+            .get("batch-run-rename")
+            .starts_with("Переименовать"));
+        languages.show("en");
+        assert!(languages
+            .shown()
+            .get("batch-run-rename")
+            .starts_with("Rename"));
     }
 
     #[test]
