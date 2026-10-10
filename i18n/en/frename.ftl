@@ -571,6 +571,18 @@ markers-ai-describe = Describe with AI: name the marker and add what happens
 markers-ai-stop = Stop describing
 markers-ai-describe-unnamed = Describe { $count } unnamed
 markers-ai-describe-unnamed-hint = Name and describe every marker that has no name with AI, a few at a time. One request each; a name you type meanwhile is kept.
+markers-ai-price-about = about { $dollars }
+markers-ai-describe-unnamed-cost = One request each: { $each } a marker, { $total } for all.
+markers-ai-confirm = { $count ->
+    [one] Describe { $count } marker? One request: { $total }.
+   *[other] Describe { $count } markers? One request each: { $total } in all.
+}
+markers-ai-confirm-unpriced = { $count ->
+    [one] Describe { $count } marker? One paid request.
+   *[other] Describe { $count } markers? One paid request each.
+}
+markers-ai-confirm-yes = Describe
+markers-ai-confirm-no = Cancel
 markers-ai-waiting = Waiting for its turn…
 markers-ai-run = Describing { $describing } · { $waiting } waiting
 markers-ai-run-last = Describing { $describing }
