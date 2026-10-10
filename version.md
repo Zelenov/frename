@@ -6,6 +6,10 @@
 - A save refused because a marker description was still reading the clip says so, instead of only "read-only or in use".
 - Describe with AI on a marker no longer skips a description just because the comment happens to end in the same last letters.
 
+# 0.119
+## Fixed
+- After a clip played to its end, stepping back a frame (or jumping, or clicking the progress bar) and pressing Play goes on from there instead of starting over from 0:00. Play at the very end still starts over.
+
 # 0.118
 ## Added
 - Recent folders: the last ten you opened are under the arrow next to **Open a folder** (or `Ctrl+R`) and on the start screen; click one to reopen it with the clip you had open.
