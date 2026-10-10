@@ -1,6 +1,21 @@
-# 0.110
+# 0.113
 ## Added
 - Describe with AI also suggests which of the folder's tags fit each clip. They show under the clip's name with how sure the AI is; click one, or press `F6` for the first, or Add all (`Shift+F6`). Nothing is added until you do. Turn it off in Settings → Describe with AI.
+
+# 0.112
+## Fixed
+- Fullscreen: the buttons show their tooltips again, above the picture (they had been switched off there).
+
+# 0.111
+## Added
+- frename is available as a Microsoft Store package (Windows). It updates through the Store, and on its first start it copies the settings of an installed frename.
+
+## Changed
+- Settings → Describe with AI lists only Claude models. The GPT models it offered would have been sent your Anthropic key; a saved GPT choice becomes Claude Haiku 4.5.
+
+# 0.110
+## Added
+- Settings → Describe with AI → Moments: segments only for what stands out (as before) or covering the whole clip. Only "Only what stands out" suggests an In and Out (the **AI** pill).
 
 # 0.109
 ## Fixed

@@ -1996,7 +1996,7 @@ only replaces the OS title bar with A's bar.
 |---|---|
 | **Interface** (`languages`) | Language · Tag colors (*Monochrome*) · Video (*Play videos automatically when opened*) |
 | **Saving** (`folder`) | File names (*Space after each tag*) · Comments · Markers and ranges · In/out points |
-| **Describe with AI** (`sparkles`; Russian list label «Описание от AI», heading «Описать с помощью AI») | Anthropic API key · Model · Description language · Tag suggestions |
+| **Describe with AI** (`sparkles`; Russian list label «Описание от AI», heading «Описать с помощью AI») | Anthropic API key · Model · Description language · Moments · Tag suggestions |
 | **Subtitles** (`captions`) | Soniox API key · Cue length · Languages (cue length first: the language list is long and hid it) |
 | **Updates** (`refresh-cw`) | Version (version, status, *Check for updates*, *Update and restart*, *Check for updates when frename starts*) · Settings from an older frename (installed only) |
 
@@ -2049,10 +2049,15 @@ No "General" (BIR). The version is on *Updates* ("About" would hold only it).
   - *Keyring unavailable:* warning notice with today's text and hint.
   - A failed save or removal: error line under the row.
 - **Model** (AI): dropdown 300 wide with the prices; help "Haiku is the cheapest; Sonnet and Opus
-  notice more." **Description language:** dropdown 300. **Tag suggestions:** checkbox "Also
+  notice more." **Description language:** dropdown 300. **Moments:** radios *Only what stands
+  out* — "Also suggests where to set In and Out (the AI pill next to IN and OUT)"; *Cover the
+  whole clip* — "A moment for every part, quiet ones too; no In and Out suggestion". Default: only
+  what stands out (clipscribe's `MomentsMode::Important`, the only mode with a suggested In/Out,
+  §13.5.6); the choice is used by the next run, a running job keeps its own. **Tag suggestions:** checkbox "Also
   suggest tags from the folder's tags" (on by default) with the hint "In the same request, the AI
   says which of the folder's tags fit each clip. A suggested tag is added only when you click it."
-  The page's ⓘ (on the key row): "Used by Describe with AI in batch mode."
+  The page's ⓘ (on the
+  key row): "Used by Describe with AI in batch mode and on markers (✨, Ctrl+F2)."
 - **Languages** (Subtitles): checkboxes of a fixed width that wrap into as many columns as fit (three
   at the default size, two at the minimum); a status line under them while loading, locked or
   failed; help "The languages spoken in the footage, as hints." **Cue length:** radios *Short* —

@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use rusqlite::Connection;
 
-use crate::ai::SummaryLanguage;
+use crate::ai::{self, SummaryLanguage};
 use crate::{CommentStorage, CueLength, FolderAndFile, InOutStorage, MarkerStorage};
 
 use super::migrations;
@@ -181,6 +181,18 @@ impl AppDatabase {
         Self { path: path.into() }
     }
 
+    /// Closes this database's cached connection, so SQLite folds its write-ahead log back in
+    /// and the files can be deleted. A later call opens it again.
+    pub fn close(&self) {
+        let Some(cache) = CONNECTIONS.get() else {
+            return;
+        };
+        cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(&self.path);
+    }
+
     /// Returns the shared connection for this database's path, opening it on first use.
     pub(super) fn conn(&self) -> Result<Arc<Mutex<Connection>>, rusqlite::Error> {
         let cache = CONNECTIONS.get_or_init(|| Mutex::new(HashMap::new()));
@@ -294,7 +306,7 @@ impl AppStateStore for AppDatabase {
         conn.query_row(
             "SELECT autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled,
                     space_after_tags, summary_language, ai_model, subtitle_languages, subtitle_cue_length,
-                    marker_storage, ui_language, ai_tag_suggestions
+                    marker_storage, ui_language, ai_moments, ai_tag_suggestions
              FROM app_settings WHERE id = 1",
             [],
             |row| Ok(AppSettings {
@@ -316,7 +328,8 @@ impl AppStateStore for AppDatabase {
                 subtitle_cue_length: CueLength::from_name(&row.get::<_, String>(10)?),
                 marker_storage: MarkerStorage::from_name(&row.get::<_, String>(11)?),
                 ui_language: row.get::<_, String>(12)?,
-                ai_tag_suggestions: row.get::<_, i64>(13)? != 0,
+                ai_moments: ai::moments_from_name(&row.get::<_, String>(13)?),
+                ai_tag_suggestions: row.get::<_, i64>(14)? != 0,
             }),
         ).ok()
     }
@@ -326,8 +339,8 @@ impl AppStateStore for AppDatabase {
             let conn = lock_connection(&conn);
             let _ = conn.execute(
                 "INSERT INTO app_settings (id, autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled, space_after_tags, summary_language, ai_model,
-                                           subtitle_languages, subtitle_cue_length, marker_storage, ui_language, ai_tag_suggestions)
-                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                                           subtitle_languages, subtitle_cue_length, marker_storage, ui_language, ai_moments, ai_tag_suggestions)
+                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
                  ON CONFLICT(id) DO UPDATE SET
                      autoplay_video = excluded.autoplay_video,
                      monochrome_tags = excluded.monochrome_tags,
@@ -342,6 +355,7 @@ impl AppStateStore for AppDatabase {
                      subtitle_cue_length = excluded.subtitle_cue_length,
                      marker_storage = excluded.marker_storage,
                      ui_language = excluded.ui_language,
+                     ai_moments = excluded.ai_moments,
                      ai_tag_suggestions = excluded.ai_tag_suggestions",
                 rusqlite::params![
                     settings.autoplay_video,
@@ -357,6 +371,7 @@ impl AppStateStore for AppDatabase {
                     settings.subtitle_cue_length.as_str(),
                     settings.marker_storage.as_str(),
                     settings.ui_language,
+                    ai::moments_as_str(settings.ai_moments),
                     settings.ai_tag_suggestions,
                 ],
             );
@@ -539,6 +554,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_closed_database_leaves_no_files_behind() {
+        let folder = std::env::temp_dir().join(format!("frename-db-close-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("create folder");
+        let db = AppDatabase::with_path(folder.join("app.db"));
+        db.initialize().expect("migrate");
+        db.set_playback_position(Path::new("C:/clips/a.mp4"), Duration::from_secs(40));
+
+        db.close();
+
+        std::fs::remove_dir_all(&folder).expect("nothing holds the files open");
+        assert!(!folder.exists());
+    }
+
+    #[test]
     fn the_update_check_state_round_trips() {
         let path =
             std::env::temp_dir().join(format!("frename-update-check-{}.db", std::process::id()));
@@ -590,6 +620,20 @@ mod tests {
         let mut settings = AppSettings::default();
         assert_eq!(settings.ui_language, "", "System by default");
         settings.ui_language = "ru".to_string();
+        db.set_app_settings(settings.clone());
+        assert_eq!(db.get_app_settings(), Some(settings));
+    }
+
+    #[test]
+    fn app_settings_round_trip_with_the_ai_moments() {
+        let db = database("ai-moments");
+        let mut settings = AppSettings::default();
+        assert_eq!(
+            settings.ai_moments,
+            ai::MomentsMode::Important,
+            "only what stands out by default"
+        );
+        settings.ai_moments = ai::MomentsMode::Full;
         db.set_app_settings(settings.clone());
         assert_eq!(db.get_app_settings(), Some(settings));
     }

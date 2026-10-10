@@ -54,6 +54,8 @@ pub enum Message {
     SetLanguage(SummaryLanguage),
     /// The model descriptions are written with, from the settings.
     SetModel(Model),
+    /// Which moments descriptions get, from the settings.
+    SetMoments(MomentsMode),
     /// Whether to suggest tags from the folder's tags too, from the settings.
     SetTagSuggestions(bool),
 }
@@ -65,6 +67,8 @@ pub struct Run {
     pub redo: bool,
     /// The model's id (see [`Model::from_id`]).
     pub model: &'static str,
+    /// Only what stands out (which alone suggests an In/Out), or the whole clip.
+    pub moments: MomentsMode,
     /// The folder's tags to suggest from; none when tag suggestions are off.
     pub tags: Vec<String>,
 }
@@ -80,6 +84,7 @@ pub struct Options {
     redo: bool,
     language: SummaryLanguage,
     model: Model,
+    moments: MomentsMode,
     /// What is known about each checked video, kept while the folder is open.
     probes: HashMap<FileId, Probe>,
     /// Videos whose length is being read.
@@ -107,6 +112,7 @@ impl Options {
             Message::KeyState(state) => self.key = Some(state),
             Message::SetLanguage(language) => self.language = language,
             Message::SetModel(model) => self.model = model,
+            Message::SetMoments(moments) => self.moments = moments,
             Message::SetTagSuggestions(on) => self.suggest_tags = on,
         }
     }
@@ -130,6 +136,7 @@ impl Options {
             language: self.language,
             redo: self.redo,
             model: self.model.id,
+            moments: self.moments,
             tags: self.tags_to_suggest().to_vec(),
         })
     }
@@ -558,7 +565,8 @@ pub fn run(options: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgr
         return ItemResult::new(ItemStatus::Skipped, None);
     }
     // Removed in the settings while the job runs: every later video would fail the same way.
-    let Some(request) = Request::for_clip(path, options.model(), options.language) else {
+    let Some(request) = Request::for_clip(path, options.model(), options.language, options.moments)
+    else {
         return ItemResult {
             stop_job: Some(fl!("batch-ai-stop-no-key")),
             ..ItemResult::failed(fl!("batch-ai-fail-no-key"))
@@ -702,9 +710,14 @@ pub struct Request {
 }
 
 impl Request {
-    /// The request for the clip at `path` with `model` and `language`; `None` when no
-    /// Anthropic key is saved. Reads the key and the subtitles: blocking.
-    pub fn for_clip(path: &Path, model: Model, language: SummaryLanguage) -> Option<Self> {
+    /// The request for the clip at `path` with `model`, `language` and `moments`; `None` when
+    /// no Anthropic key is saved. Reads the key and the subtitles: blocking.
+    pub fn for_clip(
+        path: &Path,
+        model: Model,
+        language: SummaryLanguage,
+        moments: MomentsMode,
+    ) -> Option<Self> {
         let api_key = key::read_key(key::ApiKey::Anthropic)?;
         let on_disk = FileTagger::disk_path(path);
         let subtitles = describe::srt::load_for(&on_disk).unwrap_or_else(|e| {
@@ -719,7 +732,7 @@ impl Request {
                 model,
                 language,
                 frame_sampling: FrameSampling::KeyFrames,
-                moments: MomentsMode::Important,
+                moments,
             },
         })
     }
@@ -935,6 +948,7 @@ mod tests {
                 language: SummaryLanguage::English,
                 redo: false,
                 model: Model::default().id,
+                moments: MomentsMode::default(),
                 tags: Vec::new(),
             },
             Path::new("C:/clips/photo.jpg"),
@@ -942,5 +956,17 @@ mod tests {
             &ItemProgress::default(),
         );
         assert_eq!(result.status, ItemStatus::Skipped);
+    }
+
+    #[test]
+    fn the_moments_set_in_the_settings_go_into_the_run() {
+        let mut options = Options::default();
+        let moments = |options: &Options| match options.operation() {
+            super::super::Operation::DescribeAi(run) => run.moments,
+            other => panic!("not a Describe with AI run: {other:?}"),
+        };
+        assert_eq!(moments(&options), MomentsMode::Important, "the default");
+        options.update(Message::SetMoments(MomentsMode::Full));
+        assert_eq!(moments(&options), MomentsMode::Full);
     }
 }

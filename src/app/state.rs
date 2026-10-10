@@ -549,8 +549,11 @@ impl FrenameApp {
                     ),
                 ));
                 let model = Task::done(describe_ai_message(batch::describe_ai::Message::SetModel(
-                    clipscribe::Model::from_id(&self.settings.settings().ai_model),
+                    frename_core::ai::model_from_id(&self.settings.settings().ai_model),
                 )));
+                let moments = Task::done(describe_ai_message(
+                    batch::describe_ai::Message::SetMoments(self.settings.settings().ai_moments),
+                ));
                 let tag_suggestions = Task::done(describe_ai_message(
                     batch::describe_ai::Message::SetTagSuggestions(
                         self.settings.settings().ai_tag_suggestions,
@@ -563,6 +566,7 @@ impl FrenameApp {
                 let load = Task::batch([
                     language,
                     model,
+                    moments,
                     tag_suggestions,
                     self.subtitle_config(),
                     Task::done(Message::FolderWorkspace(open)),
@@ -666,6 +670,9 @@ impl FrenameApp {
                     ),
                     settings::Message::SetAiModel(model) => Task::done(describe_ai_message(
                         batch::describe_ai::Message::SetModel(model),
+                    )),
+                    settings::Message::SetAiMoments(moments) => Task::done(describe_ai_message(
+                        batch::describe_ai::Message::SetMoments(moments),
                     )),
                     settings::Message::SetAiTagSuggestions(on) => Task::done(describe_ai_message(
                         batch::describe_ai::Message::SetTagSuggestions(on),

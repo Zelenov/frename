@@ -60,9 +60,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // An installed or portable package keeps the database and the log in its root: the folder
     // with the exe is replaced by every update. Set while the process is single-threaded.
+    // The Store build is not a Velopack package and keeps them in %LocalAppData%\frename-store.
     let package = package::Package::locate();
-    if let Some(package) = &package {
-        frename_core::set_app_data_dir(package.data_dir());
+    if let Some(dir) = package
+        .as_ref()
+        .map(package::Package::data_dir)
+        .or_else(package::store_data_dir)
+    {
+        frename_core::set_app_data_dir(dir);
     }
     package::set_current(package.clone());
     let self_test = self_test_paths(&args);
@@ -112,12 +117,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match &package {
             Some(p) if p.portable => "portable",
             Some(_) => "installed",
+            None if package::STORE_BUILD => "Microsoft Store",
             None => "not packaged",
         },
         data_dir.display()
     );
     if bundled_gstreamer {
         log::info!("using the GStreamer bundled with frename");
+    }
+    if package::STORE_BUILD {
+        // "Open log" opens it there; CI checks this is where Windows really keeps it.
+        log::info!(
+            "log for other apps: {}",
+            package::log_path_for_other_apps().display()
+        );
     }
 
     // A folder or file given on the command line ("Open with", a drop onto the exe) opens
@@ -133,9 +146,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         pair
     });
 
+    // The Store build's first start takes the installed version's settings and folder history.
+    // Also under --self-test, so CI proves it inside the package; a demo has a folder of its own.
+    if let (Some(store), Some(installed)) =
+        (package::store_data_dir(), package::installed_data_dir())
+    {
+        if data_dir == store {
+            match frename_core::old_settings::import_once_from(&data_dir, &installed) {
+                Ok(true) => log::info!("settings imported from {}", installed.display()),
+                Ok(false) => {}
+                Err(e) => log::warn!("settings not imported from {}: {e}", installed.display()),
+            }
+        }
+    }
+
     // Settings of an older zip version: a scheduled import, or the first-start offer. Only a
-    // package has its data away from the exe, and a self-test or demo never asks anything.
-    if package.is_some() && self_test.is_none() && demo.is_none() {
+    // package or the Store build has its data away from the exe, and a self-test or demo never
+    // asks anything.
+    if package::keeps_data_away_from_exe(package.as_ref()) && self_test.is_none() && demo.is_none()
+    {
         old_settings_prompt::run(&data_dir);
     }
 
