@@ -54,6 +54,10 @@ pub struct DemoScenario {
     /// first few being described, the others waiting), without sending a request.
     #[serde(default)]
     pub describing_unnamed: bool,
+    /// In batch mode, show the running "Describe with AI" job on its first file as a request
+    /// that waits this many seconds (rate limit) before it is sent again, without sending one.
+    #[serde(default)]
+    pub ai_retry_wait_s: Option<u64>,
     /// Turn the open clip by this many quarter turns clockwise (negative: counter-clockwise),
     /// as `Ctrl+Alt+→` / `←` do, after the seek. The shot is then taken while the note is still
     /// shown over the picture.
@@ -393,6 +397,13 @@ name = "pick.a.mp4"
         let scenario = DemoScenario::parse(&text).unwrap();
         assert_eq!(scenario.describing.as_deref(), Some("Lion"));
         assert_eq!(DemoScenario::parse(MINIMAL).unwrap().describing, None);
+    }
+
+    #[test]
+    fn a_scenario_can_show_a_batch_request_waiting_to_retry() {
+        let text = MINIMAL.replace("[[files]]", "ai_retry_wait_s = 8\n[[files]]");
+        assert_eq!(DemoScenario::parse(&text).unwrap().ai_retry_wait_s, Some(8));
+        assert_eq!(DemoScenario::parse(MINIMAL).unwrap().ai_retry_wait_s, None);
     }
 
     #[test]
