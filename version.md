@@ -1,3 +1,11 @@
+# 0.120
+## Changed
+- Starting a batch job while a marker is being described says the wait is usually a few seconds (it said up to a couple of minutes).
+
+## Fixed
+- A save refused because a marker description was still reading the clip says so, instead of only "read-only or in use".
+- Describe with AI on a marker no longer skips a description just because the comment happens to end in the same last letters.
+
 # 0.119
 ## Fixed
 - After a clip played to its end, stepping back a frame (or jumping, or clicking the progress bar) and pressing Play goes on from there instead of starting over from 0:00. Play at the very end still starts over.

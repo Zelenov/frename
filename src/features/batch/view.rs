@@ -3,7 +3,7 @@
 //! the job's page ([`super::job_view`]) takes the page's place; the header and the list stay.
 
 use frename_core::{File, FileId};
-use iced::widget::{column, container, responsive, row, text::IntoFragment, Column};
+use iced::widget::{column, container, responsive, row, Column};
 use iced::{Alignment, Element, Length, Padding};
 
 use crate::features::folder_workspace::Directory;
@@ -230,15 +230,16 @@ pub(super) fn page_body<'a>(content: impl Into<Element<'a, Message>>) -> Element
     .into()
 }
 
-/// The page, then the button bar, as every page of the panel has them.
+/// The page, then the button bar, as every page of the panel has them. `lead` is on the bar's
+/// left: a hint, or a hint with an icon before it.
 pub(super) fn with_button_bar<'a>(
     body: Element<'a, Message>,
-    hint: impl IntoFragment<'a>,
+    lead: Element<'a, Message>,
     buttons: impl IntoIterator<Item = Element<'a, Message>>,
 ) -> Element<'a, Message> {
     column![
         container(body).height(Length::Fill),
-        layout::button_bar(hint, buttons)
+        layout::button_bar_with(lead, buttons)
     ]
     .width(Length::Fill)
     .into()
@@ -287,19 +288,18 @@ fn action_page<'a>(
         ]
         .spacing(SPACE_XS)
         .align_y(Alignment::Center);
-        return column![
-            container(page_body(panel.page.map(Message::Action))).height(Length::Fill),
-            layout::button_bar_with(waiting.into(), [cancel]),
-        ]
-        .width(Length::Fill)
-        .into();
+        return with_button_bar(
+            page_body(panel.page.map(Message::Action)),
+            waiting.into(),
+            [cancel],
+        );
     }
     let run = button::primary(panel.run)
         .on_press_maybe(can_run.then_some(Message::Run))
         .into();
     with_button_bar(
         page_body(panel.page.map(Message::Action)),
-        reason.unwrap_or_default(),
+        text::secondary(reason.unwrap_or_default()).into(),
         check_all.into_iter().chain([run]),
     )
 }
