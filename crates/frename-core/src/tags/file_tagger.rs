@@ -404,8 +404,7 @@ mod tests {
     /// Tags follow the folder's order; a file already in order is left alone.
     #[test]
     fn tags_are_sorted_in_the_folder_order() {
-        let folder = std::env::temp_dir().join(format!("frename-sort-test-{}", std::process::id()));
-        std::fs::create_dir_all(&folder).expect("temp dir");
+        let folder = crate::test_support::fresh_dir("sort-test");
         let mut store = FolderTagStore::for_folder(&folder);
         // Orders after the built-in tags', Zeta first.
         store
@@ -466,9 +465,7 @@ mod tests {
     /// Both directions of "Markers ⇄ comment", run twice: the second run changes nothing.
     #[test]
     fn comment_lines_and_markers_convert_both_ways_and_reruns_change_nothing() {
-        let dir =
-            std::env::temp_dir().join(format!("frename-markers-batch-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir("markers-batch");
         let file = dir.join("clip.mov");
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
         std::fs::copy(fixture, &file).expect("copy fixture");
@@ -521,8 +518,7 @@ mod tests {
     /// them.
     #[test]
     fn ai_segments_become_white_ranged_markers_in_the_xmp() {
-        let dir = std::env::temp_dir().join(format!("frename-markers-ai-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir("markers-ai");
         let file = dir.join("clip.mov");
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
         std::fs::copy(fixture, &file).expect("copy fixture");
@@ -572,8 +568,7 @@ AI: A walk.
     /// A second AI run replaces the markers of the first, and leaves the editor's alone.
     #[test]
     fn ai_markers_written_again_replace_the_previous_run() {
-        let dir = std::env::temp_dir().join(format!("frename-ai-markers-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir("ai-markers");
         let file = dir.join("clip.mov");
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
         std::fs::copy(fixture, &file).expect("copy fixture");
@@ -652,10 +647,7 @@ AI: A walk.
     }
 
     fn clip_with_markers(name: &str, markers: &[Marker]) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("frename-{name}-{}", std::process::id()));
-        // A folder left by an earlier run that had this process id must not leak into this one.
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir(name);
         let file = dir.join("clip.mov");
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
         std::fs::copy(fixture, &file).expect("copy fixture");

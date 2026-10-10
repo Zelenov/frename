@@ -192,13 +192,7 @@ mod tests {
 
     /// A fresh, empty folder of its own in the temp dir.
     fn temp_folder(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "frename-old-settings-{name}-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        dir
+        crate::test_support::fresh_dir(&format!("old-settings-{name}"))
     }
 
     /// An old frename in `folder`: its exe and a WAL database holding `value`, with the change

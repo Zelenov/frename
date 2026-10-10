@@ -73,6 +73,8 @@ indicatif = "0.18"
 store = []
 
 [dev-dependencies]
+# Test helpers of the core (`frename_core::test_support`), not in release builds.
+frename-core = { path = "crates/frename-core", features = ["test-support"] }
 # Parse the .ftl files in the translation tests
 fluent-syntax = "0.12"
 fluent-bundle = "0.16"

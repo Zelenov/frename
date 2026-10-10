@@ -120,9 +120,7 @@ mod tests {
     /// the dragged paths.
     #[test]
     fn the_data_object_carries_the_paths_as_an_hdrop() {
-        let dir = std::env::temp_dir().join(format!("frename-drag-out-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = frename_core::test_support::fresh_dir("drag-out");
         let paths: Vec<PathBuf> = ["Goat.Food.clip01.mp4", "clip 02 — ёж.mov"]
             .iter()
             .map(|name| dir.join(name))

@@ -384,10 +384,7 @@ mod tests {
 
     #[test]
     fn a_registry_folder_that_cannot_be_made_is_refused_not_fatal() {
-        let base =
-            std::env::temp_dir().join(format!("frename-registry-dir-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).expect("base");
+        let base = crate::test_support::fresh_dir("registry-dir");
         let file = base.join("a-file");
         std::fs::write(&file, b"x").expect("file");
         assert!(!ensure_registry_folder(

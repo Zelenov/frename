@@ -348,10 +348,7 @@ mod tests {
 
     #[test]
     fn rename_moves_subtitles_with_the_video_and_never_overwrites() {
-        let dir = std::env::temp_dir().join(format!("frename-subs-{}", std::process::id()));
-        // A folder left by an earlier run that had this process id must not leak into this one.
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir("subs");
         let old_video = dir.join("clip.MP4");
         let new_video = dir.join("tag.clip.MP4");
         std::fs::write(subtitle_path(&old_video), "old").expect("write srt");
@@ -381,10 +378,7 @@ mod tests {
 
     #[test]
     fn rename_moves_the_saved_transcript_with_the_video() {
-        let dir = std::env::temp_dir().join(format!("frename-marker-{}", std::process::id()));
-        // A folder left by an earlier run that had this process id must not leak into this one.
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir("marker");
         let old_video = dir.join("clip.MP4");
         let new_video = dir.join("tag.clip.MP4");
         std::fs::write(transcript_path(&old_video), "{}").expect("write marker");
@@ -410,10 +404,7 @@ mod tests {
 
     /// A fresh temp folder for one test.
     fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("frename-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        dir
+        crate::test_support::fresh_dir(name)
     }
 
     const ASS: &str = "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n\
