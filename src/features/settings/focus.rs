@@ -228,7 +228,7 @@ pub fn controls(state: &SettingsState, batch_running: bool) -> Vec<Control> {
                     .into_iter()
                     .map(Control::Updates),
             );
-            if state.updates().installed() {
+            if state.updates().shows_import() {
                 controls.push(Control::ImportOldSettings);
             }
         }

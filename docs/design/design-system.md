@@ -696,6 +696,10 @@ where to go to do something (§1 principle 9): if a click can get there, the but
 Words in `accent.text`, no box, underlined on hover; a 12-px `external-link` icon after the words
 when it opens a web page or another program.
 
+**Focused (Settings, §11).** The §8.1 ring goes around the words and the icon; Space and Enter
+press it, as a click does (the *Open the releases page* link on the Updates page of a build that
+is updated by hand is a Tab stop).
+
 **The system.** One question decides: *is this the way forward, or a side trip?*
 
 | | Button (§8.1) | Link |
@@ -925,7 +929,11 @@ registry and every surface follow:
   - **A control disabled while focused** (*Update and restart* when a batch starts) keeps the ring
     until Tab moves it; Space and Enter on it do nothing, as a click would not. Tab skips it.
   - **A control that goes away otherwise** (a page change, an option hidden by another choice):
-    the ring is not drawn, and the next Tab starts from the first control, Shift+Tab from the last.
+    the ring is not drawn. A control that was in the order of the last Tab press (Settings keeps
+    that order) is continued from its place: Tab goes to the next control still shown,
+    Shift+Tab to the previous one. After a page change, a click, or when the focus was not
+    set by Tab (a press moved it, a text field took it), the next Tab starts from the first
+    control, Shift+Tab from the last.
   - **A click** takes the ring away; a click into a text field puts the focus on that field, so
     Tab goes on from it.
   - The button bar's *Close* never scrolls the page: it is outside it.
@@ -2205,9 +2213,9 @@ only replaces the OS title bar with A's bar.
 |---|---|
 | **Interface** (`languages`) | Language · Tag colors (*Monochrome*) · Video (*Play videos automatically when opened*) |
 | **Saving** (`folder`) | File names (*Space after each tag*) · Comments · Markers and ranges · In/out points |
-| **Describe with AI** (`sparkles`; Russian list label «Описание от AI», heading «Описать с помощью AI») | Anthropic API key · Model · Description language · Moments · Tag suggestions |
+| **Describe with AI** (`sparkles`; Russian list label «Описание от AI», heading «Описать с помощью AI») | Anthropic API key · Model · Description language · Moments · Tag suggestions (Tab order: the key row, Model, Description language, each of the two Moments options, Tag suggestions) |
 | **Subtitles** (`captions`) | Soniox API key · Cue length · Languages (cue length first: the language list is long and hid it) |
-| **Updates** (`refresh-cw`) | Version (version, status, *Check for updates*, *Update and restart*, *Check for updates when frename starts*) · Settings from an older frename (installed only) |
+| **Updates** (`refresh-cw`) | Version (version, status, *Check for updates*, *Update and restart*, *Check for updates when frename starts*) · Settings from an older frename (installed only) (Tab order: *Check for updates*, *Update and restart* when shown, *Check for updates when frename starts*, *Import…*, Close; on a build updated by hand: the releases link, then Close; in the Store build: *Import…*, then Close) |
 
 Why these groups: *Saving* holds the four settings that decide what frename writes into files
 and names, which is what an editor thinks about together; *Interface* holds what changes only how

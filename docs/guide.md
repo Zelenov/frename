@@ -272,7 +272,7 @@ Subtitles. Formats such as mkv, m2ts and avi need [ffmpeg](https://ffmpeg.org) o
 
 ## Settings
 
-The **Settings** button (under the file list) opens Settings. Changes apply right away; **Close** or `Esc` closes it. It has five
+The **Settings** button (under the file list) opens Settings. Changes apply right away; **Close** or `Esc` closes it. From the keyboard, `Tab` and `Shift+Tab` move a blue ring through the options and buttons of the page, `Space` checks or picks the option with the ring, presses the button with the ring, or moves a list to its next choice (it does not open the list), `Enter` presses the button with the ring, and `Ctrl+Tab` goes to the next page. It has five
 pages:
 
 - **Interface:** the UI language (follows your system by default, or pick English or Russian;

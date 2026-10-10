@@ -472,7 +472,7 @@ fn updates_page(state: &SettingsState, batch_running: bool) -> Element<'_, Messa
     )];
     // Only a package or the Store build keeps its settings away from the exe; elsewhere they are
     // next to it.
-    if state.updates().installed() || state.updates().is_store_build() {
+    if state.updates().shows_import() {
         rows.push(layout::setting_row(
             fl!("settings-old-title"),
             old_settings_import(

@@ -313,6 +313,12 @@ impl UpdatesState {
         self.from_store
     }
 
+    /// Whether the Updates page shows **Import settings from an older frename**: only a package
+    /// or the Store build keeps its settings away from the exe.
+    pub fn shows_import(&self) -> bool {
+        self.installed || self.is_store_build()
+    }
+
     /// What the Updates section shows for this build.
     pub fn section(&self) -> Section {
         Build::detect(self.from_store, self.installed, self.download_build).section()
@@ -469,6 +475,23 @@ mod tests {
                 newest_version: String::new(),
             },
         )
+    }
+
+    #[test]
+    fn the_store_build_has_no_update_controls_but_shows_the_import() {
+        let store = UpdatesState::new(
+            false,
+            true,
+            "0.67.0".to_string(),
+            UpdateCheckState {
+                check_on_start: true,
+                last_check: 0,
+                newest_version: String::new(),
+            },
+        );
+        assert!(store.controls(false).is_empty());
+        assert!(store.shows_import());
+        assert!(installed(0).shows_import());
     }
 
     #[test]
