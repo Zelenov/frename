@@ -343,6 +343,7 @@ destructive (BIR: "separate dangerous buttons with extra distance").
 | 🗑 | `trash` (Lucide merged `trash-2` into it) | | 🔒 🔓 ↑ ↓ | `lock` `lock-open` `arrow-up` `arrow-down` |
 | ⏳ ◐◓◑◒ | `loader-circle` (turning) | | 🎬 📄 📭 | `clapperboard` `file` `folder-x` |
 | ✕ (load failed, 80 px) | `circle-x` 48 | | ⌨ (#62) | `keyboard` |
+| → (apply, the AI In/Out pill) | `arrow-right` | | | |
 
 ## 8. Components
 
@@ -571,13 +572,13 @@ what is inside ("Comments", "Markers and ranges"); never "General", "Advanced", 
   badges of the file name panel use it.
 - **Suggested timecode:** a timecode range someone else proposes, to take or leave: `sparkles` 12
   in `accent.text`, who proposes it ("AI") in `caption` `accent.text`, the range in `mono`
-  `text.primary`, and a `check` 12 in `accent.text`, on the accent tint (`accent.text` 16 %),
+  `text.primary`, and an `arrow-right` 12 (apply, not a done mark) in `accent.text`, on the accent tint (`accent.text` 16 %),
   radius 4, padding 0×6. The whole pill is the target (pointer cursor) and applies it; its tooltip
   says what that does. It stays as long as the proposal differs from what is set.
 
   ```
   ┌──────────────────┐ ┌───────────────────┐ ┌──────────────────────────┐
-  │ IN 00:01       x │ │ OUT 00:20       x │ │ ✦ AI 00:03 – 00:12     ✓ │
+  │ IN 00:01       x │ │ OUT 00:20       x │ │ ✦ AI 00:03 – 00:12     → │
   └──────────────────┘ └───────────────────┘ └──────────────────────────┘
   ```
 - **Suggested tag:** a tag someone else proposes for the clip, to take or leave: `plus` 12 in
@@ -1470,7 +1471,7 @@ Both buttons, and the lock, are undoable (#139); a press that changes nothing pu
 - **Second line:** the IN and OUT timecodes (§8.16: `mono` in a `bg.overlay` pill with "IN"/"OUT" in
   `caption` `text.secondary` inside, and `x` to clear), then the In/Out the AI suggests when the
   clip's AI description has one and it differs from the IN and OUT (§8.16 suggested timecode,
-  "AI", tooltip "Set In and Out to what the AI suggests"), then the file name part without tags in
+  "AI", tooltip "Set In and Out to what the AI suggests (rounded to whole seconds)"), then the file name part without tags in
   `mono`.
 - **Third line, the tags the AI suggests** (#175), only while the clip's AI description suggests
   one of the folder's own tags that the clip does not have yet, or has tag ideas:

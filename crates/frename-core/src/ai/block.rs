@@ -281,6 +281,13 @@ pub fn suggested_in_out(comment: &str) -> Option<Segment> {
     })
 }
 
+/// The suggestion of [`suggested_in_out`] while it differs from the In and Out already set
+/// (`current`): once applied, or set the same by hand, there is nothing left to offer. `None`
+/// when there is no suggestion either.
+pub fn pending_in_out(comment: &str, current: Segment) -> Option<Segment> {
+    suggested_in_out(comment).filter(|suggested| *suggested != current)
+}
+
 /// The description's segments as markers hold them: whole milliseconds, one-line names.
 pub fn segment_lines(description: &Description) -> Vec<crate::MarkerLine> {
     let ms = |seconds: f64| (seconds.max(0.0) * 1000.0).round() as u64;
@@ -488,6 +495,43 @@ mod tests {
                 end: Some(12.0),
             })
         );
+    }
+
+    #[test]
+    fn a_suggestion_is_offered_only_while_it_differs_from_the_points_set() {
+        let comment = format!("Mine\n\n{}", format_block(&with_main(3.2, 11.8)));
+        let whole = |start, end| crate::Segment {
+            start: Some(start),
+            end: Some(end),
+        };
+        assert_eq!(
+            pending_in_out(&comment, crate::Segment::default()),
+            Some(whole(3.0, 12.0)),
+            "nothing set"
+        );
+        assert_eq!(
+            pending_in_out(&comment, whole(1.0, 12.0)),
+            Some(whole(3.0, 12.0)),
+            "one point differs"
+        );
+        assert_eq!(
+            pending_in_out(
+                &comment,
+                crate::Segment {
+                    start: Some(3.0),
+                    end: None
+                }
+            ),
+            Some(whole(3.0, 12.0)),
+            "an out not set yet"
+        );
+        assert_eq!(
+            pending_in_out(&comment, whole(3.0, 12.0)),
+            None,
+            "set the same: nothing left to offer"
+        );
+        assert_eq!(pending_in_out("No block here", whole(3.0, 12.0)), None);
+        assert_eq!(pending_in_out("", crate::Segment::default()), None);
     }
 
     #[test]

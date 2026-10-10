@@ -104,7 +104,7 @@ pub fn timecode<'a, M: Clone + 'a>(
 }
 
 /// A suggested timecode range: `mono` on the accent tint, with who suggests it (`name`, "AI")
-/// before it and a `check` after it. The whole pill applies it on a click, with what that does
+/// before it and an `arrow-right` (apply) after it. The whole pill applies it on a click, with what that does
 /// as its tooltip.
 pub fn suggested_timecode<'a, M: Clone + 'a>(
     name: String,
@@ -117,7 +117,7 @@ pub fn suggested_timecode<'a, M: Clone + 'a>(
             icon(Icon::Sparkles, ICON_S, ACCENT_TEXT),
             text::caption(name).color(ACCENT_TEXT),
             text::mono(time).color(TEXT),
-            icon(Icon::Check, ICON_S, ACCENT_TEXT),
+            icon(Icon::ArrowRight, ICON_S, ACCENT_TEXT),
         ]
         .spacing(SPACE_XS)
         .align_y(Alignment::Center),
