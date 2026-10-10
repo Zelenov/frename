@@ -1,3 +1,7 @@
+# 0.146
+## Fixed
+- With markers saved in the comment and comments saved inside the video, a clip that cannot be saved (read-only, open in another app, or its new name is taken) keeps its markers: it gets the red ✕, shows them when reopened, and frename saves them when you next leave it.
+
 # 0.145
 ## Fixed
 - The notices "Frame saved", "Marker deleted", "Not saved: …" and "Markers not saved: …" now show in Russian when the interface is Russian.

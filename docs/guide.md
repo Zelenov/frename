@@ -99,9 +99,10 @@ The progress bar shows what you have noted about a clip:
   marker. Settings → Saving → Markers and ranges can keep them in the comment instead, one line each
   (`0:41–0:47 — Lion`): in frename they still work as markers. With comments in text files
   (`.comment.txt`), the lines are written as you edit (a file that cannot be written gets the red ✕
-  and frename tries again at your next change); with comments inside the video, when you leave the
-  clip. A clip whose markers are still inside the video shows them; changing one moves them all into
-  the comment.
+  and frename tries again at your next change). With comments inside the video, they are written
+  when you leave the clip (the recovery file holds them until then); a clip that cannot be written
+  gets the red ✕ and keeps its markers until the next save. A clip whose markers are still inside
+  the video shows them; changing one moves them all into the comment.
 - **Ranges:** hold `F2` (or the pin button) while the clip plays to mark a stretch (`0:41–0:47 — Lion`); a
   band just above the bar shows it, and overlapping bands stack. Drag the handles at the ends of the current
   range to change it (`Shift` snaps), drag them together or `Alt`+click the band to make it a
