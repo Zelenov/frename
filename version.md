@@ -1,3 +1,7 @@
+# 0.127
+## Fixed
+- Pressing next or previous twice in quick succession while a clip is still loading no longer makes the second clip reload by itself.
+
 # 0.125
 ## Added
 - A frame step that takes long (a step back in a heavy 4K clip can take seconds) shows a turning spinner and dims the time beside the controls until the frame shows, so you can tell it is working and need not press again.
