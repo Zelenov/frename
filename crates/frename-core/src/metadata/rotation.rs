@@ -437,6 +437,8 @@ mod tests {
             fixture.replace('.', "-"),
             std::process::id()
         ));
+        // A folder left by an earlier run that had this process id must not leak into this one.
+        let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("temp dir");
         let file = dir.join(fixture);
         std::fs::copy(source, &file).expect("copy fixture");
