@@ -208,7 +208,7 @@ impl FolderWorkspace {
             M::DescribeUnnamed => self.describe_unnamed_markers(false),
             M::ConfirmDescribeUnnamed => self.describe_unnamed_markers(true),
             M::CancelDescribeUnnamed => {
-                self.markers.set_confirming_describe_all(false);
+                self.markers.set_describe_all_asked(None);
                 Task::none()
             }
             M::StopDescribing(guid) => {

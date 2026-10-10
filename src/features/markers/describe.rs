@@ -42,7 +42,9 @@ pub fn needs_confirmation(count: usize) -> bool {
 /// The tokens one marker request is expected to use with `model`: clipscribe's estimate for a
 /// clip (its instructions and a typical answer, plus the frames of a clip of this length), with
 /// the frames replaced by the [`MOMENT_FRAMES`] a moment request sends. Nearby subtitles are
-/// not counted: they add a few lines at most.
+/// not counted: they add a few lines at most. The answer is clipscribe's typical answer for a
+/// whole clip (thinking included), longer than a name and a sentence or two: the price runs
+/// high, an upper-ish estimate.
 pub fn moment_usage(model: Model) -> clipscribe::AiUsage {
     let base = describe::estimate_usage(model, 0.0, 0);
     let (w, h) = describe::frame_size(1920, 1080);
@@ -175,6 +177,19 @@ mod tests {
             let price = moment_price_usd(model).expect("every model is priced");
             assert!(price > 0.0 && price < 1.0, "{}: {price}", model.id);
         }
+    }
+
+    #[test]
+    fn a_haiku_marker_request_costs_about_four_tenths_of_a_cent() {
+        let haiku = Model::from_id("claude-haiku-4-5");
+        let usage = moment_usage(haiku);
+        // 3 frames of 19 x 11 tokens, and 600 tokens of instructions; a typical 600-token answer.
+        assert_eq!(
+            (usage.input_tokens, usage.output_tokens),
+            (3 * 209 + 600, 600)
+        );
+        let price = moment_price_usd(haiku).expect("priced");
+        assert!((price - 0.004227).abs() < 1e-9, "{price}");
     }
 
     #[test]

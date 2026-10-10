@@ -196,7 +196,8 @@ fn describe_all_bar<'a>(
         if unnamed == 0 {
             return None;
         }
-        if state.is_confirming_describe_all() && describe::needs_confirmation(unnamed) {
+        // A question about another count is out of date: the button asks again.
+        if state.describe_all_asked() == Some(unnamed) {
             return Some(confirm_bar(unnamed, price_usd));
         }
         let button = ui_button::with_icon(
@@ -653,6 +654,23 @@ fn marker_row<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_price_is_about_a_figure_or_under_a_cent() {
+        assert_eq!(price_text(0.0042), "under $0.01");
+        assert_eq!(price_text(0.0499), "about $0.05");
+        assert_eq!(price_text(0.35), "about $0.35");
+        let tip = describe_unnamed_tip(12, Some(0.0042));
+        assert!(
+            tip.ends_with("One request each: under $0.01 a marker, about $0.05 for all."),
+            "{tip}"
+        );
+        assert_eq!(
+            describe_unnamed_tip(12, None),
+            fl!("markers-ai-describe-unnamed-hint"),
+            "no price, no figure"
+        );
+    }
 
     #[test]
     fn the_lit_row_is_the_marker_the_playhead_is_on() {

@@ -104,7 +104,8 @@ impl FolderWorkspace {
     /// key is set. More than `describe::CONFIRM_ABOVE` markers are not sent by the button
     /// alone: it shows the price and asks first, and the answer comes as `confirmed`.
     pub(super) fn describe_unnamed_markers(&mut self, confirmed: bool) -> Task<Message> {
-        self.markers.set_confirming_describe_all(false);
+        let asked = self.markers.describe_all_asked();
+        self.markers.set_describe_all_asked(None);
         if self.batch.is_running() || self.batch.is_waiting_for_markers() {
             return Task::none();
         }
@@ -115,12 +116,24 @@ impl FolderWorkspace {
         if self.batch.actions().ai_key_missing() {
             return Self::no_key();
         }
-        if !confirmed && markers::describe::needs_confirmation(guids.len()) {
-            self.markers.set_confirming_describe_all(true);
+        // More markers than the price shown was for: ask again with the new count.
+        let more_than_asked = confirmed && asked.is_some_and(|asked| guids.len() > asked);
+        if (!confirmed || more_than_asked) && markers::describe::needs_confirmation(guids.len()) {
+            self.markers.set_describe_all_asked(Some(guids.len()));
             return Task::none();
         }
         self.markers.queue_describing(guids);
         self.send_waiting_markers()
+    }
+
+    /// Forget a question about sending that no longer applies: with this few markers the button
+    /// sends at once, so a count that grows again must ask afresh.
+    pub(super) fn drop_stale_describe_all_question(&mut self) {
+        if self.markers.describe_all_asked().is_some()
+            && !markers::describe::needs_confirmation(self.unnamed_marker_guids().len())
+        {
+            self.markers.set_describe_all_asked(None);
+        }
     }
 
     /// What one marker request is expected to cost with the model set for Describe with AI, in

@@ -299,6 +299,7 @@ impl FolderWorkspace {
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        self.drop_stale_describe_all_question();
         // The open recent folders list has the arrows, Enter and Esc, also in batch mode.
         if let Some(key) = self.recent_folders_key(&message) {
             return key.map_or_else(Task::none, |key| self.handle_recent_folders(key));
@@ -382,7 +383,8 @@ impl FolderWorkspace {
                 Task::none()
             }
             Message::ShowConfirmingDescribeUnnamed => {
-                self.markers.set_confirming_describe_all(true);
+                let asked = self.unnamed_marker_guids().len();
+                self.markers.set_describe_all_asked(Some(asked));
                 Task::none()
             }
             Message::ShowDescribingUnnamed => {
@@ -636,6 +638,10 @@ impl FolderWorkspace {
             Message::EscapePressed => {
                 if self.file_menu.is_open() {
                     return self.handle_file_menu(file_menu::Message::Close);
+                }
+                if self.markers.describe_all_asked().is_some() {
+                    self.markers.set_describe_all_asked(None);
+                    return Task::none();
                 }
                 if self.markers.is_editing() {
                     self.close_marker_row();
@@ -5421,19 +5427,64 @@ mod tests {
         let test_dir = TestDirectory::new(1);
         let (mut workspace, _guids) = unnamed_markers_workspace(&test_dir, 11);
         send_marker(&mut workspace, M::DescribeUnnamed, 0);
-        assert!(workspace.markers().is_confirming_describe_all());
+        assert_eq!(workspace.markers().describe_all_asked(), Some(11));
         assert!(!workspace.markers().any_describing(), "asked, not sent");
         assert_eq!(workspace.marker_requests, 0);
 
         send_marker(&mut workspace, M::CancelDescribeUnnamed, 0);
-        assert!(!workspace.markers().is_confirming_describe_all());
+        assert_eq!(workspace.markers().describe_all_asked(), None);
         assert!(!workspace.markers().any_describing());
 
         send_marker(&mut workspace, M::DescribeUnnamed, 0);
         send_marker(&mut workspace, M::ConfirmDescribeUnnamed, 0);
-        assert!(!workspace.markers().is_confirming_describe_all());
+        assert_eq!(workspace.markers().describe_all_asked(), None);
         assert!(workspace.markers().any_describing(), "sent once confirmed");
         assert_eq!(workspace.marker_requests, 3);
+    }
+
+    #[test]
+    fn describe_unnamed_asks_again_when_markers_were_added_while_it_asked() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let (mut workspace, _guids) = unnamed_markers_workspace(&test_dir, 11);
+        send_marker(&mut workspace, M::DescribeUnnamed, 0);
+        assert_eq!(workspace.markers().describe_all_asked(), Some(11));
+        workspace
+            .file_workspace
+            .tag_list_mut()
+            .add_marker(frename_core::Marker::new(500));
+        send_marker(&mut workspace, M::ConfirmDescribeUnnamed, 0);
+        assert_eq!(workspace.marker_requests, 0, "the price shown was for 11");
+        assert_eq!(workspace.markers().describe_all_asked(), Some(12));
+        send_marker(&mut workspace, M::ConfirmDescribeUnnamed, 0);
+        assert_eq!(workspace.marker_requests, 3);
+    }
+
+    #[test]
+    fn a_question_about_few_markers_is_forgotten_so_a_growing_count_asks_afresh() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let (mut workspace, guids) = unnamed_markers_workspace(&test_dir, 11);
+        send_marker(&mut workspace, M::DescribeUnnamed, 0);
+        for guid in &guids[..2] {
+            workspace
+                .file_workspace
+                .tag_list_mut()
+                .update_marker(guid, |m| m.name = "Named".to_string());
+        }
+        let _ = workspace.update(Message::SpinnerTick);
+        assert_eq!(workspace.markers().describe_all_asked(), None);
+    }
+
+    #[test]
+    fn escape_cancels_the_describe_all_question() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let (mut workspace, _guids) = unnamed_markers_workspace(&test_dir, 11);
+        send_marker(&mut workspace, M::DescribeUnnamed, 0);
+        let _ = workspace.update(Message::EscapePressed);
+        assert_eq!(workspace.markers().describe_all_asked(), None);
+        assert_eq!(workspace.marker_requests, 0);
     }
 
     #[test]
@@ -5442,7 +5493,7 @@ mod tests {
         let test_dir = TestDirectory::new(1);
         let (mut workspace, _guids) = unnamed_markers_workspace(&test_dir, 10);
         send_marker(&mut workspace, M::DescribeUnnamed, 0);
-        assert!(!workspace.markers().is_confirming_describe_all());
+        assert_eq!(workspace.markers().describe_all_asked(), None);
         assert_eq!(workspace.marker_requests, 3);
     }
 

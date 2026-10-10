@@ -634,12 +634,12 @@ markers-ai-describe-unnamed-hint = Дать имя и описание с пом
 markers-ai-price-about = около { $dollars }
 markers-ai-describe-unnamed-cost = Один запрос на маркер: { $each } за маркер, { $total } за все.
 markers-ai-confirm = { $count ->
-    [one] Описать { $count } маркер? Один запрос: { $total }.
+    [one] Описать { $count } маркер? По запросу на каждый: { $total } всего.
     [few] Описать { $count } маркера? По запросу на каждый: { $total } всего.
    *[many] Описать { $count } маркеров? По запросу на каждый: { $total } всего.
 }
 markers-ai-confirm-unpriced = { $count ->
-    [one] Описать { $count } маркер? Один платный запрос.
+    [one] Описать { $count } маркер? По платному запросу на каждый.
     [few] Описать { $count } маркера? По платному запросу на каждый.
    *[many] Описать { $count } маркеров? По платному запросу на каждый.
 }

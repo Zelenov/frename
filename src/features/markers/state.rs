@@ -87,8 +87,8 @@ pub struct MarkersState {
     next_request: u64,
     /// A request failed and said so: the others of the run that fail too stay quiet.
     failed_said: bool,
-    /// "Describe N unnamed" is asking whether to send, with the price shown.
-    confirming_describe_all: bool,
+    /// "Describe N unnamed" is asking whether to send `N` markers, with the price shown.
+    confirming_describe_all: Option<usize>,
     /// A request found no key and said so: the others that find it out too stay quiet.
     no_key_said: bool,
 }
@@ -377,12 +377,13 @@ impl MarkersState {
             .collect()
     }
 
-    pub fn is_confirming_describe_all(&self) -> bool {
+    /// The number of markers "Describe N unnamed" is asking about, while it asks.
+    pub fn describe_all_asked(&self) -> Option<usize> {
         self.confirming_describe_all
     }
 
-    pub fn set_confirming_describe_all(&mut self, confirming: bool) {
-        self.confirming_describe_all = confirming;
+    pub fn set_describe_all_asked(&mut self, asked: Option<usize>) {
+        self.confirming_describe_all = asked;
     }
 
     /// Nothing waits any more (the requests on their way go on).
