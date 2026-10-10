@@ -11,8 +11,9 @@ description: >
 # Bug hunt
 
 The goal is bugs the editor would hit, found and proven by the agent. A finding that is not
-reproduced (a screenshot that shows it, a failing test, or a step list a second reviewer confirmed
-in the code) is not filed. A preference ("this would look better as …") is not a bug: file it as
+reproduced (a screenshot that shows it, a failing test, a step list a second reviewer confirmed
+in the code, or a CI job that failed and then passed on the same commit for a reason other than
+infrastructure) is not filed. A preference ("this would look better as …") is not a bug: file it as
 an `idea` or drop it.
 
 What counts as a bug: the app does something other than what the README, a design doc in
@@ -96,7 +97,7 @@ concrete failure (user-visible, or in the code or tests, per "What counts as a b
 |---|---|---|
 | Views and widgets | `ui-dev`, `ui-core` | each "must"/"never" rule broken somewhere; hard-coded strings or colours; scroll ids reused wrongly |
 | Undo | `undo-dev` | an edit that is not undoable, undo that leaves files or sidecars behind (#31, #110) |
-| Leaks and flaky tests | `core-dev`, this skill | tests with fixed temp paths, ports or process ids and no cleanup at the start or end; files, folders, handles, threads or processes the app or a test leaves behind; tests that depend on order or timing; jobs on any branch that failed and then passed on a rerun of the same commit (Actions run history) |
+| Leaks and flaky tests | `core-dev`, this skill | tests with fixed temp paths, ports or process ids and no cleanup at the start or end; files, folders, handles, threads or processes the app or a test leaves behind; tests that depend on order or timing; jobs on any branch that failed and then passed on a rerun of the same commit, and failed CI runs on `main` whose PR head had passed (Actions run history; the squash commit has the same tree, so that counts as the same commit) |
 | Keyboard | `app-guide`, `ui-dev` | a shortcut that fires while typing, or stops working after typing (#32); two bindings for one key; focus lost after an action |
 | Files and metadata | `core-dev` | non-atomic writes, a write while Windows locks the file, errors swallowed, a sidecar not moved with its clip |
 | Async and windows | `app-guide` | a task result applied to the wrong clip or window after navigation (#105, #112) |
@@ -119,7 +120,8 @@ test; one that fails on `main` is a finding, and its test goes into the fix PR.
 For each candidate, a fresh subagent that did not find it tries to prove it wrong from the code and
 the evidence (the same rule as the review gate: never reuse the finder). Only `CONFIRMED`
 candidates are filed. A screenshot that shows the bug, or a test that fails on `main`, counts as
-proof by itself.
+proof by itself, and so is a CI job that failed and then passed on the same commit (or a
+failed run on `main` whose PR head passed), when the failure is not infrastructure.
 
 ## 6. File
 

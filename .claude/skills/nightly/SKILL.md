@@ -170,7 +170,9 @@ Proposals found while working (a feature, a behaviour change, a refactor with no
 it) are filed the same way, labelled `idea`. Anything with a concrete failure scenario is a defect,
 not a proposal: a bug the work uncovered, a leak or flaky test, and a code-review finding with a
 failure scenario that was not fixed in a PR that then merged to `main` (filed right after the
-merge; findings on a PR still waiting in `owner-review` stay in that PR). These are filed as in "Bugs the agent finds" and fixed without approval
+merge). A finding about code already on `main`, whose failure does not need the PR, is filed at
+once, whatever happens to the PR; when an agent PR is closed without merging, its unfixed findings
+that reproduce on `main` are filed the same way. These are filed as in "Bugs the agent finds" and fixed without approval
 (`regression` only if the owner confirms).
 
 ## 2a. Bug hunt (every session)
@@ -189,6 +191,9 @@ A defect is filed by the agent as an issue labelled `bug` and `P1`/`P2`/`P3`, bo
 - defects inside the code, even when no editor sees them yet: leaks in the app or the tests, tests
   that depend on order, timing or a reused process id, random CI failures, races. The full list is
   in `bug-hunt` → "What counts as a bug".
+
+Before filing, search open and closed `bug` issues for the same defect (the same review of PR #N,
+job or test) and reuse it, so a session that dies halfway through does not file twice.
 
 Evidence, by source: a bug-hunt finding as in `bug-hunt` (reproduced, or a code path a second
 reviewer confirmed); a flaky CI job, its failing log; a review finding or a bug found while working,
@@ -302,7 +307,8 @@ cargo build --release --locked
    until the same job passed on the same commit. A failure in code the PR does not touch, or one
    the logs do not explain, is rerun once on the same commit before any fix is pushed. A job that
    failed and then passed on the same commit is a defect: file it at once as a
-   `bug` P2 ("Bugs the agent finds") with the failing log, then go on. Any code change after the
+   `bug` (P2 unless a higher band in `bug-hunt` → "Labels" applies; "Bugs the agent finds") with
+   the failing log, then go on. Any code change after the
    approved SHA needs a new review round (step 7 checks this).
 4. Count review rounds and CI fix rounds since the PR opened, or since the last
    `Retry after owner` line in the PR body. After 4 review rounds or 3 CI fix rounds without
@@ -370,7 +376,8 @@ less than 90 minutes ago) and check the run until it completes, working on other
 **Release failed:**
 1. Re-run the failed jobs of the same run once (`actions_run_trigger`, rerun failed jobs; a new
    `workflow_dispatch` run skips the build when the release object already exists). If the rerun
-   passes, the failure was random: file it as in step 6.3 (`bug` P2 with the failing log), unless
+   passes, the failure was random: file it as in step 6.3 (`bug`, P2 unless a higher band applies,
+   with the failing log), unless
    the job died before any build or test step ran (runner lost, checkout or download error), which
    is infrastructure and ends here.
 2. If it fails again, open an issue labelled `release-failed`, body `🤖 agent:` plus the failing job
