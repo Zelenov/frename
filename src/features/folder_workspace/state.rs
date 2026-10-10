@@ -1077,6 +1077,19 @@ impl FolderWorkspace {
         file
     }
 
+    /// The markers of the newest edit of `id` waiting for its save, if it carries any. None
+    /// carried is not taken for an edit: nothing is lost by reading the clip again, and the clip
+    /// may have been changed outside since.
+    fn pending_markers(&self, id: FileId) -> Option<Vec<Marker>> {
+        self.pending_file_updates
+            .iter()
+            .rev()
+            .find(|(pending, _)| *pending == id)
+            .and_then(|(_, edited)| edited.markers())
+            .filter(|markers| !markers.is_empty())
+            .map(<[Marker]>::to_vec)
+    }
+
     fn apply_file_opened(&mut self, file: frename_core::File) -> Task<Message> {
         // The typing in the comment box belongs to the file it was typed in.
         self.end_comment_session();
@@ -1112,7 +1125,17 @@ impl FolderWorkspace {
         } else {
             self.with_pending_edits(&file)
         };
+        let pending_markers = if same_file {
+            None
+        } else {
+            self.pending_markers(file.id())
+        };
         self.file_workspace.set_file(Some(opened));
+        // The pending snapshot's comment has its marker lines taken out, so the markers it
+        // carries are the ones to show, not those read from the comment (or the video).
+        if let Some(markers) = pending_markers {
+            self.file_workspace.take_markers(markers);
+        }
         if !same_file {
             self.markers_loaded(file.id());
             self.journal_reset_baseline();
@@ -6068,6 +6091,48 @@ mod tests {
             text,
             "saving again changes nothing"
         );
+    }
+
+    /// Issue #152: a clip left with markers, its save waiting for the video to unload, and opened
+    /// again inside that window shows the markers of the pending edits (not none), and the
+    /// save of the reopened clip does not take the marker lines out of the comment.
+    #[test]
+    fn a_clip_reopened_before_its_deferred_save_shows_its_pending_markers() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(2);
+        let _storage = comment_file_storage(frename_core::MarkerStorage::Comment);
+        let mut workspace = marker_workspace(&test_dir, 2);
+        let first = file_id_at(&workspace, 0);
+        send_marker(&mut workspace, M::Add, 1_000);
+        send_marker(&mut workspace, M::AddRange(5_000, 8_000), 0);
+        assert_eq!(marker_names(&workspace).len(), 2);
+
+        // Leave it: the save waits for the video to unload. Then come back before it does.
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        assert!(workspace.has_pending_rename(), "the save is waiting");
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        flush_file_opened(&mut workspace);
+        assert_eq!(
+            workspace.file_workspace().file().map(|f| f.id()),
+            Some(first)
+        );
+        assert_eq!(
+            marker_names(&workspace).len(),
+            2,
+            "the pending edits' markers are shown"
+        );
+
+        // The video unloads: the saves run, and the reopened clip saved again keeps its lines.
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        assert_eq!(id, first);
+        assert_eq!(snapshot.markers().map(|m| m.len()), Some(2));
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        let text = comment_file_text(&test_dir);
+        assert!(text.contains("0:01") && text.contains("0:05"), "{text}");
     }
 
     /// Issue #143 (d): a comment file that cannot be written keeps the markers and marks the
