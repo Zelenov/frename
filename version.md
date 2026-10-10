@@ -2,6 +2,10 @@
 ## Fixed
 - After typing in the tag search and toggling a tag with Shift+Space, the keys (Ctrl+C, Delete, the arrows, Space) go to the app again instead of the search box.
 
+# 0.133
+## Fixed
+- A clip's screenshots (`*.snap.*.jpg`) now follow it when it is renamed, and undo and redo of the rename move them back; a screenshot already under the target name stops the undo instead of being replaced.
+
 # 0.132
 ## Fixed
 - Pressing Enter on a tag that is already saved no longer counts as a step, so Ctrl+Z after it no longer removes the tag from the folder.
