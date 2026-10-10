@@ -624,7 +624,9 @@ mod tests {
                     "{name}: {} is not in tests/self-test-clips.txt",
                     file.from
                 );
-                if name == "mono.toml" {
+                // These stage tags the folder does not have, on purpose: the mono scenario for
+                // tags it does not know, the other for an unsaved tag's "+" (#216).
+                if name == "mono.toml" || name == "unsaved-tag-plus.toml" {
                     continue;
                 }
                 for tag in frename_core::FileSnapshot::parse(&file.name).tags() {
