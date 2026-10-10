@@ -135,6 +135,10 @@ linked PR (step 1 handles those), excluding `in-progress` issues whose heartbeat
 excluding issues that need another issue's work which is not on `main` yet (e.g. its PR is in
 `owner-review`).
 
+Before ordering, relabel any open agent `idea` (body starts with `🤖 agent:`, no `rejected` or
+`hold`) that describes a defect: remove `idea`, add `bug` and a priority ("Bugs the agent finds").
+An issue without a priority gets one now, so nothing waits at the end of the queue unnoticed.
+
 Order: `in-progress` with a stale heartbeat (resume it), then `regression`, then `P1` < `P2` < `P3`
 < unlabelled; ties by issue number.
 
@@ -156,9 +160,11 @@ editing in Premiere Pro). Body starts with `🤖 agent:` and says what, why it s
 rough size, and risk. Check open, closed and `rejected` issues first so nothing is proposed twice.
 Label `idea`. It becomes work only when the owner labels it `approved`. Then run the bug hunt (2a) if this session has not yet, and work what it files; otherwise stop.
 
-Follow-up cleanups and proposals found while working are filed the same way, labelled `idea`.
-Bugs found while working are filed as in "Bugs the agent finds" (`regression` only if the owner
-confirms).
+Proposals found while working (a feature, a behaviour change, a refactor with no failure behind
+it) are filed the same way, labelled `idea`. Anything with a concrete failure scenario is a defect,
+not a proposal: a bug the work uncovered, a leak or flaky test, and a review finding that was not
+fixed in its PR. These are filed as in "Bugs the agent finds" and fixed without approval
+(`regression` only if the owner confirms).
 
 ## 2a. Bug hunt (every session)
 
@@ -169,10 +175,18 @@ step 2 by priority, in this session or the next.
 
 ### Bugs the agent finds
 
-A defect (the app does something other than what the README, a design doc, an owner-written
-issue or a project skill's rules say; a crash, lost data, cut-off or overlapping UI, a dead
-control) is filed by the agent as an issue labelled `bug` and `P1`/`P2`/`P3`, body as in the
-`bug-hunt` skill, and is fixed without waiting for the owner. Its scope is to make the app do what
+A defect is filed by the agent as an issue labelled `bug` and `P1`/`P2`/`P3`, body as in the
+`bug-hunt` skill, and is fixed without waiting for the owner. That covers:
+- the app doing something other than what the README, a design doc, an owner-written issue or a
+  project skill's rules say: a crash, lost data, cut-off or overlapping UI, a dead control;
+- defects inside the code, even when no editor sees them yet: leaks in the app or the tests, tests
+  that depend on order, timing or a reused process id, random CI failures, races. The full list is
+  in `bug-hunt` → "What counts as a bug".
+
+Never file a defect as `idea`, and never wait for `approved` on one. An agent `idea` that turns out
+to describe a defect is relabelled `bug` with a priority the moment it is noticed (step 2 checks).
+Priority: `P1` for lost or wrong data, a crash, or a leak that grows; `P2` for a visible bug, a
+flaky test or a leak in the tests; `P3` for the rest. Its scope is to make the app do what
 was already intended, nothing more:
 - the fix PR follows steps 4–7 like any request (review gate, CI, version bump with a
   `## Fixed` note, release);

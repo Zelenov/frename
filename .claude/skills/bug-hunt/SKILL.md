@@ -21,6 +21,19 @@ What counts as a bug: the app does something other than what the README, a desig
 data on disk, text cut off or overlapping, a control that does nothing, a key that does the wrong
 thing, an untranslated string, a state the user cannot get out of.
 
+Defects inside the code count too, even when no editor sees them today (owner, 2026-10-10: "if a
+leak is possible, fix it at once"):
+- a leak: temp files or folders, file handles, memory, threads, processes, a database or lock left
+  behind, in the app or in the tests;
+- tests that share state or can pass or fail depending on order, timing, the machine or a reused
+  process id; a CI job that fails at random;
+- a race, a wrong window or state id, an error that is swallowed, a panic path in production code;
+- a review finding with a concrete failure scenario that was not fixed in its PR.
+
+Rule of thumb: if you can describe a concrete way it goes wrong, it is a bug. `idea` is only for
+something new or different that the app was not meant to do: a feature, a behaviour change, a
+choice between designs, or a refactor with no failure behind it.
+
 ## 0. Before hunting
 
 1. List open and closed issues labelled `bug`, `regression` and `idea` (including `rejected`, and
