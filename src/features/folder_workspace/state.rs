@@ -1664,8 +1664,6 @@ impl FolderWorkspace {
         };
         let path_before = current_path.clone();
         let (new_path, snapshot_after_save) = snapshot.save_and_reparse(&current_path);
-        // A drag out of the window waiting for this save learns whether it worked.
-        self.drag_out_saved(id, &snapshot, &snapshot_after_save);
         // The save did not do what the tags/comment wanted: most likely a file with that name
         // already exists (issue #84), or the video is read-only or open elsewhere. The same
         // check the drag-out path already uses to detect this.
@@ -1714,6 +1712,9 @@ impl FolderWorkspace {
                 }
             }
         }
+        // A drag out of the window waiting for this save learns whether it worked; markers the
+        // file kept unsaved just above count as a failed save.
+        self.drag_out_saved(id, &snapshot, &snapshot_after_save);
         // Applied and read back from the file: the journal's copy of these edits is no longer
         // needed. A refused save, markers that did not get written, or a comment or in/out
         // point that is not on disk keep it.
@@ -7441,6 +7442,31 @@ mod tests {
         let id = file_id_at(&workspace, 0);
         let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
         workspace.unsaved_markers.insert(id, Vec::new());
+        drag_move(&mut workspace, 0.0);
+        drag_move(&mut workspace, 10.0);
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        drag_move(&mut workspace, 11.0);
+        assert!(
+            !workspace.drag_out.is_pressed() && !workspace.drag_out.is_dragging(),
+            "refused: idle again"
+        );
+    }
+
+    /// A drag waiting for a save that left markers kept in the video's comment unsaved is refused
+    /// like one whose save failed.
+    #[test]
+    fn a_drag_is_refused_when_markers_in_the_videos_comment_were_not_written() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(2);
+        let _storage = video_comment_storage();
+        let mut workspace = marker_workspace(&test_dir, 2);
+        pick_tag(&mut workspace);
+        let (_, wanted) = workspace.file_workspace().get_snapshot().expect("open");
+        std::fs::write(test_dir.file_path(&wanted.file_name()), "taken").expect("blocker");
+        send_marker(&mut workspace, M::Add, 65_000);
         drag_move(&mut workspace, 0.0);
         drag_move(&mut workspace, 10.0);
         flush_file_opened(&mut workspace);
