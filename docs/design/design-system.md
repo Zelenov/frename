@@ -773,8 +773,8 @@ In order of preference (AF "Do, don't ask"; BIR «Привычка»; PUI "frict
 - **Once:** a message appears in one place. The batch result's title and its failed row do not
   both say "no credit left" (#58's complaint).
 - **Action button** when there is a fix, named by the fix (§8.21): *Add credit* (opens the
-  billing page), *Top up on Soniox* (the Soniox console), *Set the key…* / *Check the key…* (the
-  right Settings page, scrolled to the key row, the field focused).
+  billing page of the service that ran out: Anthropic or the Soniox console), *Set the key…* /
+  *Check the key…* (the right Settings page, scrolled to the key row, the field focused).
 
 ### 10.4 Empty states
 
@@ -1727,7 +1727,7 @@ The job's page stays until Close:
    - stopped by the user: `circle-minus` info notice "Stopped after 7 of 12 files" (the files not
      reached are not listed: they did not fail; "Run again" covers them);
    - stopped by an error: error notice "Stopped: the Anthropic account has no credit left" with the
-     fix (*Add credit* for Anthropic billing, *Top up on Soniox* for an empty Soniox balance or
+     fix (*Add credit* for an empty Anthropic or Soniox balance or
      budget, *Check the key…* for a rejected key) — the reason is not repeated below;
    - finished with some failures: warning notice "Done with problems: 3 of 12 files not done".
 2. **Figures:** three figures in a row — changed, unchanged, not done — and a fourth, "not reached"
