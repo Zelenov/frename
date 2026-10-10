@@ -259,17 +259,21 @@ mod tests {
             "b.mp4".into(),
             "b.ssa".into(),
             "c.mp4".into(),
+            "e.mp4".into(),
+            "e.premiere.json".into(),
         ]);
         let has = |name: &str| {
             File::from_path_with_folder_info(name, SystemTime::UNIX_EPOCH, &folder_info)
                 .has_subtitles()
         };
-        assert!(has("a.mp4") && has("b.mp4") && !has("c.mp4"));
+        assert!(has("a.mp4") && has("b.mp4") && !has("c.mp4") && has("e.mp4"));
 
         let dir = std::env::temp_dir().join(format!("frename-file-ass-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("temp dir");
         std::fs::write(dir.join("d.ass"), "x").expect("write ass");
+        std::fs::write(dir.join("f.premiere.json"), "{}").expect("write transcript");
         assert!(File::from_path(dir.join("d.mp4"), SystemTime::UNIX_EPOCH).has_subtitles());
+        assert!(File::from_path(dir.join("f.mp4"), SystemTime::UNIX_EPOCH).has_subtitles());
         assert!(!File::from_path(dir.join("e.mp4"), SystemTime::UNIX_EPOCH).has_subtitles());
         let _ = std::fs::remove_dir_all(&dir);
     }

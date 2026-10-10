@@ -1,0 +1,212 @@
+# A Premiere Pro transcript as subtitles (#219): a clip with only `clip.premiere.json` next to it
+# shows its words under the picture and in the CC list, with the speakers' names, and the file
+# list marks it as subtitled. Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.night.MVI_0610.mp4"
+seek = 3.5
+window = [1440, 720]
+panels = [790, 300]
+subtitle_list = true
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.MVI_0610.mp4"
+transcript = '''
+{
+ "language": "en-us",
+ "segments": [
+  {
+   "duration": 5.3999999999999995,
+   "language": "en-us",
+   "speaker": "5fe6e7e2-e8df-46f4-a1fc-5d0acd477b66",
+   "start": 0.0,
+   "words": [
+    {
+     "confidence": 0.95,
+     "duration": 0.3,
+     "eos": false,
+     "start": 0.0,
+     "tags": [],
+     "text": "Evening",
+     "type": "word"
+    },
+    {
+     "confidence": 0.95,
+     "duration": 0.3,
+     "eos": false,
+     "start": 0.5,
+     "tags": [],
+     "text": "at",
+     "type": "word"
+    },
+    {
+     "confidence": 0.95,
+     "duration": 0.3,
+     "eos": false,
+     "start": 0.8,
+     "tags": [],
+     "text": "the",
+     "type": "word"
+    },
+    {
+     "confidence": 0.95,
+     "duration": 0.3,
+     "eos": false,
+     "start": 1.1,
+     "tags": [],
+     "text": "harbour,",
+     "type": "word"
+    },
+    {
+     "confidence": 0.95,
+     "duration": 0.3,
+     "eos": false,
+     "start": 1.8,
+     "tags": [],
+     "text": "and",
+     "type": "word"
+    },
+    {
+     "confidence": 0.95,
+     "duration": 0.3,
+     "eos": false,
+     "start": 2.1,
+     "tags": [],
+     "text": "the",
+     "type": "word"
+    },
+    {
+     "confidence": 0.95,
+     "duration": 0.3,
+     "eos": false,
+     "start": 2.4,
+     "tags": [],
+     "text": "boats",
+     "type": "word"
+    },
+    {
+     "confidence": 0.95,
+     "duration": 0.3,
+     "eos": false,
+     "start": 2.9,
+     "tags": [],
+     "text": "are",
+     "type": "word"
+    },
+    {
+     "confidence": 0.95,
+     "duration": 0.3,
+     "eos": false,
+     "start": 3.2,
+     "tags": [],
+     "text": "coming",
+     "type": "word"
+    },
+    {
+     "confidence": 0.95,
+     "duration": 0.3,
+     "eos": false,
+     "start": 3.7,
+     "tags": [],
+     "text": "in",
+     "type": "word"
+    },
+    {
+     "confidence": 0.95,
+     "duration": 0.3,
+     "eos": false,
+     "start": 4.0,
+     "tags": [],
+     "text": "before",
+     "type": "word"
+    },
+    {
+     "confidence": 0.95,
+     "duration": 0.3,
+     "eos": false,
+     "start": 4.4,
+     "tags": [],
+     "text": "the",
+     "type": "word"
+    },
+    {
+     "confidence": 0.95,
+     "duration": 0.3,
+     "eos": false,
+     "start": 4.7,
+     "tags": [],
+     "text": "light",
+     "type": "word"
+    },
+    {
+     "confidence": 0.95,
+     "duration": 0.3,
+     "eos": true,
+     "start": 5.1,
+     "tags": [],
+     "text": "goes.",
+     "type": "word"
+    }
+   ]
+  },
+  {
+   "duration": 1.200000000000001,
+   "language": "en-us",
+   "speaker": "1a2b3c4d-1111-4222-8333-444455556666",
+   "start": 7.0,
+   "words": [
+    {
+     "confidence": 0.95,
+     "duration": 0.3,
+     "eos": false,
+     "start": 7.0,
+     "tags": [],
+     "text": "Look",
+     "type": "word"
+    },
+    {
+     "confidence": 0.95,
+     "duration": 0.3,
+     "eos": false,
+     "start": 7.4,
+     "tags": [],
+     "text": "at",
+     "type": "word"
+    },
+    {
+     "confidence": 0.95,
+     "duration": 0.3,
+     "eos": false,
+     "start": 7.6,
+     "tags": [],
+     "text": "the",
+     "type": "word"
+    },
+    {
+     "confidence": 0.95,
+     "duration": 0.3,
+     "eos": true,
+     "start": 7.9,
+     "tags": [],
+     "text": "gulls!",
+     "type": "word"
+    }
+   ]
+  }
+ ],
+ "speakers": [
+  {
+   "id": "5fe6e7e2-e8df-46f4-a1fc-5d0acd477b66",
+   "name": "Anna"
+  },
+  {
+   "id": "1a2b3c4d-1111-4222-8333-444455556666",
+   "name": "Boris"
+  }
+ ]
+}
+'''
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "review.drone.MVI_0611.mp4"

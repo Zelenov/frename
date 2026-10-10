@@ -521,9 +521,7 @@ fn probe(path: &Path) -> Probe {
     let path = &FileTagger::disk_path(path);
     Probe {
         duration_s: describe::frames::clip_duration_s(path),
-        subtitle_bytes: frename_core::existing_subtitle_path(path)
-            .and_then(|subtitles| std::fs::metadata(subtitles).ok())
-            .map_or(0, |m| m.len() as usize),
+        subtitle_bytes: frename_core::subtitle_bytes(path),
     }
 }
 

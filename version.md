@@ -1,3 +1,7 @@
+# 0.115
+## Added
+- A video with a `clip.premiere.json` (the Premiere Pro transcript Generate subtitles writes) and no other subtitles shows its words like a `.srt`: under the picture, in the CC list and in fullscreen, with the subtitles icon and the "has subtitles" filter, renamed with its video, and read by Describe with AI. Lines follow Settings → Subtitles (short line or whole sentence) and start with the speaker's name when the speaker changes.
+
 # 0.114
 ## Added
 - A video with a `.ass` or `.ssa` subtitle file next to it shows its text like a `.srt`: under the picture, in the CC list and in fullscreen, with the subtitles icon and the "has subtitles" filter, renamed with its video, and read by Describe with AI. Styles and effects are not drawn. If a video has several, `.srt` wins, then `.ass`. Generate subtitles skips a video that has only a `.ass`, unless you tick Replace.

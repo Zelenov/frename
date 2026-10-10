@@ -19,4 +19,6 @@ toml = "1"
 # AI descriptions (issue #17): the models, languages and descriptions (without GStreamer), and
 # the API key in the OS credential store.
 clipscribe = { git = "https://github.com/Zelenov/clipscribe", rev = "05c3322b7468641bbfe44102d9e2265841e926ea", default-features = false }
+# Reading a Premiere Pro transcript back as subtitles (`.premiere.json`, #219); same version as the root crate.
+sonisub = { version = "0.4", default-features = false }
 keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service", "crypto-rust", "vendored"] }
