@@ -1,4 +1,4 @@
-# 0.118
+# 0.117
 ## Added
 - Marker list: **Describe N unnamed** names and describes every marker without a name with AI in one click, three at a time; the others wait their turn, **Stop all** stops them, and a name you type meanwhile is kept.
 
