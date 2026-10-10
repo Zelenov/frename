@@ -2721,10 +2721,11 @@ mod tests {
             at: secs(8),
             stopped: secs(10),
         };
+        let path = unique_clip("turn");
         let mut player = VideoPlayerState {
             current_video: Some(video),
-            current_path: Some(unique_clip("turn")),
-            clip: clip_at(&unique_clip("turn")),
+            clip: clip_at(&path),
+            current_path: Some(path),
             position: secs(8),
             continued: Some(continued),
             ..VideoPlayerState::default()
