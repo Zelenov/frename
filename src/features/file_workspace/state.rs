@@ -111,6 +111,13 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         }
     }
 
+    /// Show `markers` for the open clip instead of the ones read from its comment or video: the
+    /// clip was opened from edits not saved yet, which hold the markers they were left with.
+    /// What the video holds stays noted: the save of those edits has still to take it out.
+    pub fn take_markers(&mut self, markers: Vec<frename_core::Marker>) {
+        self.tag_list.set_markers(Some(markers));
+    }
+
     /// The markers the open clip's video holds that are shown because the comment has none, as
     /// they were read; see [`Self::set_file`].
     pub fn markers_from_video(&self) -> Option<&[frename_core::Marker]> {
