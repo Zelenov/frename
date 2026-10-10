@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use frename_core::ai::key::{self, ApiKey, KeyState};
-use frename_core::{existing_subtitle_path, subtitle_path, CueLength, File, FileId, FileTagger};
+use frename_core::{subtitle_path, CueLength, File, FileId, FileTagger};
 use iced::widget::column;
 use iced::Element;
 use sonisub::batch::{self as plan_batch, Action as Planned, Totals};
