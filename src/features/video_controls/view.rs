@@ -2,6 +2,8 @@
 //! [`Command`]: the same one is drawn as an icon button in the bar or as an item of **More**
 //! when the pane is too narrow for it (see [`super::Fold`]).
 
+use std::time::Duration;
+
 use iced::widget::{button as iced_button, container, mouse_area, row, stack, Row};
 use iced::{mouse, Alignment, Element, Length, Padding};
 
@@ -280,11 +282,11 @@ pub fn rotate(cannot_rotate: Option<String>) -> [Command<Message>; 2] {
 
 /// `00:10 / 00:30`, fixed wide so it never moves. Paused, the playhead shows its milliseconds
 /// (`00:10.250 / 00:30`): the exact time of a frame stepped to.
-pub fn time_readout<'a>(state: &VideoControlsState, position_secs: f32) -> Element<'a, Message> {
+pub fn time_readout<'a>(state: &VideoControlsState, position: Duration) -> Element<'a, Message> {
     let position = if state.is_playing() {
-        clock(position_secs)
+        clock(position.as_secs_f32())
     } else {
-        precise_clock(position_secs)
+        precise_clock(position)
     };
     let readout = format!("{position} / {}", clock(state.duration_secs()));
     container(text::mono(readout).wrapping(iced::widget::text::Wrapping::None))
@@ -305,8 +307,8 @@ pub fn clock(secs: f32) -> String {
 }
 
 /// [`clock`] with milliseconds: `00:10.250`.
-pub fn precise_clock(secs: f32) -> String {
-    let millis = (f64::from(secs.max(0.0)) * 1000.0).round() as u64;
+pub fn precise_clock(position: Duration) -> String {
+    let millis = position.as_millis();
     format!("{}.{:03}", clock((millis / 1000) as f32), millis % 1000)
 }
 
@@ -546,17 +548,30 @@ mod tests {
 
     #[test]
     fn the_precise_clock_shows_milliseconds_of_a_frame() {
-        assert_eq!(precise_clock(10.25), "00:10.250");
-        // A frame's playhead (whole milliseconds) survives the trip through f32.
-        assert_eq!(precise_clock(7.517), "00:07.517");
-        assert_eq!(precise_clock(3_725.999_5), "1:02:06.000");
-        assert_eq!(precise_clock(-1.0), "00:00.000");
+        assert_eq!(precise_clock(Duration::from_millis(10_250)), "00:10.250");
+        // Whole milliseconds are shown as they are, however long the clip (an f32 of seconds
+        // is 1-2 ms off past ~2.3 h).
+        assert_eq!(
+            precise_clock(Duration::from_millis(35_999_999)),
+            "9:59:59.999"
+        );
+        assert_eq!(precise_clock(Duration::from_millis(7_517)), "00:07.517");
+        assert_eq!(
+            precise_clock(Duration::from_millis(3_725_999)),
+            "1:02:05.999"
+        );
+        assert_eq!(precise_clock(Duration::ZERO), "00:00.000");
     }
 
-    /// The longest readout, a clip of hours paused, fits the readout's fixed width.
+    /// The longest readout, a clip of under 10 hours paused, fits the readout's fixed width
+    /// (a clip of 10 h or more overflows it, `10:00:00.000 / 10:00:00`; §13.3.5).
     #[test]
-    fn the_longest_readout_fits_its_width() {
-        let longest = format!("{} / {}", precise_clock(35_999.5), clock(35_999.0));
+    fn the_longest_readout_under_10_h_fits_its_width() {
+        let longest = format!(
+            "{} / {}",
+            precise_clock(Duration::from_millis(35_999_500)),
+            clock(35_999.0)
+        );
         assert_eq!(longest, "9:59:59.500 / 9:59:59");
         let width = longest.chars().count() as f32 * MONO_CHAR_WIDTH;
         assert!(

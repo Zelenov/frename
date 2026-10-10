@@ -1229,11 +1229,17 @@ mod tests {
         modifiers: keyboard::Modifiers,
         status: event::Status,
     ) -> Option<folder_workspace::Message> {
+        use keyboard::key::Code;
+        let code = match named {
+            keyboard::key::Named::ArrowRight => Code::ArrowRight,
+            keyboard::key::Named::Home => Code::Home,
+            _ => Code::ArrowLeft,
+        };
         let key = keyboard::Key::Named(named);
         let event = iced::Event::Keyboard(keyboard::Event::KeyPressed {
             key: key.clone(),
             modified_key: key,
-            physical_key: keyboard::key::Physical::Code(keyboard::key::Code::ArrowLeft),
+            physical_key: keyboard::key::Physical::Code(code),
             location: keyboard::Location::Standard,
             modifiers,
             text: None,

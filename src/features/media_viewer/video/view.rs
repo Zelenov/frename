@@ -2,6 +2,8 @@
 //! side list over it, the subtitle strip, the timeline and the controls bar, which gives up
 //! whole groups into **More** on a narrow pane.
 
+use std::time::Duration;
+
 use frename_core::{Marker, Subtitles};
 use iced::widget::{column, container, mouse_area, row, space, stack, Column, Row};
 use iced::{Alignment, Element, Length, Padding};
@@ -169,7 +171,7 @@ pub fn view<'a>(
             )
             .style(bars_style),
         )
-        .push(controls_bar(state, markers, fold, is_fullscreen, position_secs).style(bars_style))
+        .push(controls_bar(state, markers, fold, is_fullscreen, position).style(bars_style))
         .width(Length::Fill)
         .height(Length::Fill)
         .into()
@@ -288,7 +290,7 @@ fn controls_bar<'a>(
     markers: MarkersView<'a>,
     fold: Fold,
     is_fullscreen: bool,
-    position_secs: f32,
+    position: Duration,
 ) -> container::Container<'a, Message> {
     let controls_state = state.controls();
     let [back, play, forward] = controls::transport(controls_state);
@@ -323,7 +325,7 @@ fn controls_bar<'a>(
     };
     groups.push(container(notice).width(Length::Fill).clip(true).into());
     if fold.time {
-        groups.push(controls::time_readout(controls_state, position_secs).map(Message::Controls));
+        groups.push(controls::time_readout(controls_state, position).map(Message::Controls));
     }
     groups.push(if fold.volume_slider {
         controls::volume(controls_state).map(Message::Controls)

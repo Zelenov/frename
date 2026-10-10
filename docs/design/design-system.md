@@ -773,8 +773,8 @@ In order of preference (AF "Do, don't ask"; BIR «Привычка»; PUI "frict
 - **Once:** a message appears in one place. The batch result's title and its failed row do not
   both say "no credit left" (#58's complaint).
 - **Action button** when there is a fix, named by the fix (§8.21): *Add credit* (opens the
-  billing page), *Top up on Soniox* (the Soniox console), *Set the key…* / *Check the key…* (the
-  right Settings page, scrolled to the key row, the field focused).
+  billing page of the service that ran out: Anthropic or the Soniox console), *Set the key…* /
+  *Check the key…* (the right Settings page, scrolled to the key row, the field focused).
 
 ### 10.4 Empty states
 
@@ -1107,7 +1107,7 @@ left to right, with the widths §13.9 folds by:
 | In/out (64) | text `[` "Set the in point `[`" · text `]` "Set the out point `]`" (text, as #44 says) |
 | Mark (64) | `camera` "Save this frame `F12`" · `map-pin` "Add a marker `F2` (hold for a range)"; disabled with the reason "This file cannot hold markers" |
 | Free space (flexible) | empty; notices (§13.2) show here when it is at least 120 wide, cut with "…" and the full text in the tooltip |
-| Time (152, #59) | `00:10 / 00:30` in `mono` `text.secondary`; paused, the playhead shows milliseconds, `00:10.250 / 00:30` (the exact time of a stepped frame, #162); a fixed width (21 characters, the longest it shows: `1:02:05.250 / 1:30:00`) so it never moves |
+| Time (152, #59) | `00:10 / 00:30` in `mono` `text.secondary`; paused, the playhead shows milliseconds, `00:10.250 / 00:30` (the exact time of a stepped frame, #162); a fixed width (21 characters, the longest it shows for a clip under 10 h: `9:59:59.500 / 9:59:59`; one of 10 h or more overflows it) so it never moves |
 | Volume (96) | `volume-2` icon 16 in `text.secondary` (not a button), 8 px, a 72 px slider (§8.8); folded: a 32 px icon button `volume-2` that opens the slider in a popover |
 | Views (96) | `captions` "Subtitle list" (only with subtitles) · `map-pin` "Marker list" with "`Shift`+`F1` / `Shift`+`F3` jump between markers" on its second line · **More** `ellipsis` (only when something is folded) · `maximize-2`/`minimize-2` "Full screen `F5`" |
 
@@ -1727,7 +1727,7 @@ The job's page stays until Close:
    - stopped by the user: `circle-minus` info notice "Stopped after 7 of 12 files" (the files not
      reached are not listed: they did not fail; "Run again" covers them);
    - stopped by an error: error notice "Stopped: the Anthropic account has no credit left" with the
-     fix (*Add credit* for Anthropic billing, *Top up on Soniox* for an empty Soniox balance or
+     fix (*Add credit* for an empty Anthropic or Soniox balance or
      budget, *Check the key…* for a rejected key) — the reason is not repeated below;
    - finished with some failures: warning notice "Done with problems: 3 of 12 files not done".
 2. **Figures:** three figures in a row — changed, unchanged, not done — and a fourth, "not reached"
