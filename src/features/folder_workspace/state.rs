@@ -185,6 +185,32 @@ fn column_widths(video: f32, file_list: f32) -> (f32, f32) {
     )
 }
 
+/// Takes the keys from the one focusable widget with this id and leaves every other one as it
+/// is (iced's own `unfocus` takes them from all, the rename field and comment box included).
+fn unfocus_only(target: iced::widget::Id) -> impl iced::advanced::widget::Operation<()> {
+    use iced::advanced::widget::operation::{Focusable, Operation};
+    struct UnfocusOnly {
+        target: iced::widget::Id,
+    }
+    impl Operation<()> for UnfocusOnly {
+        fn focusable(
+            &mut self,
+            id: Option<&iced::widget::Id>,
+            _bounds: iced::Rectangle,
+            state: &mut dyn Focusable,
+        ) {
+            if id == Some(&self.target) {
+                state.unfocus();
+            }
+        }
+
+        fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn Operation<()>)) {
+            operate(self);
+        }
+    }
+    UnfocusOnly { target }
+}
+
 impl FolderWorkspace {
     pub fn new() -> Self {
         Self::with_app_db(AppDatabase::new())
@@ -2226,7 +2252,14 @@ impl FolderWorkspace {
                         self.tag_panel.set_selected(Some(id));
                     }
                 }
-                Task::none()
+                // The tag search kept the keys after typing: Ctrl+C, Delete, the arrows and
+                // Space would go to its text. Let go of them (typing a letter takes them back).
+                // Only the search bar: the rename field, the comment box and the marker fields
+                // are typed in on purpose.
+                iced::advanced::widget::operate(unfocus_only(iced::widget::Id::from(
+                    SEARCH_BAR_INPUT_ID,
+                )))
+                .map(|()| Message::Noop)
             }
             tag_panel::Message::DeleteTag(id) => {
                 // Find the deleted tag's position in the filtered list before removal.
@@ -7122,6 +7155,106 @@ mod tests {
         send_marker(&mut workspace, type_name("name"), 1_000);
         let _ = workspace.update(Message::Undo);
         assert_eq!(marker_names(&workspace), [(1_000, String::new())]);
+    }
+
+    struct Stub(bool);
+    impl iced::advanced::widget::operation::Focusable for Stub {
+        fn is_focused(&self) -> bool {
+            self.0
+        }
+        fn focus(&mut self) {
+            self.0 = true;
+        }
+        fn unfocus(&mut self) {
+            self.0 = false;
+        }
+    }
+
+    /// Issue #32: after Shift+Space toggled a tag the search bar kept the keys, so Ctrl+C went
+    /// to its text. Only the search bar lets go: the rename field and the comment box keep them.
+    #[test]
+    fn unfocus_only_takes_the_keys_from_the_search_bar() {
+        use super::{unfocus_only, SEARCH_BAR_INPUT_ID};
+        use iced::advanced::widget::Operation;
+        let search = iced::widget::Id::from(SEARCH_BAR_INPUT_ID);
+        let mut op = unfocus_only(search.clone());
+        let bounds = iced::Rectangle::default();
+        let (mut bar, mut rename, mut comment) = (Stub(true), Stub(true), Stub(true));
+        op.focusable(Some(&search), bounds, &mut bar);
+        op.focusable(Some(&iced::widget::Id::new("rename")), bounds, &mut rename);
+        op.focusable(None, bounds, &mut comment);
+        assert!(!bar.0, "the search bar lets go");
+        assert!(rename.0, "the inline rename field keeps the keys");
+        assert!(comment.0, "a widget without an id keeps the keys");
+    }
+
+    /// The operation, run through the real widgets of a small tree like the tag panel's (a text
+    /// input in a container in a column, another input beside it): the walk must reach both.
+    #[test]
+    fn unfocus_only_reaches_the_search_input_in_a_real_widget_tree() {
+        use super::{unfocus_only, SEARCH_BAR_INPUT_ID};
+        use iced::advanced::layout::Node;
+        use iced::advanced::widget::{operation::Focusable, Operation, Tree};
+        use iced::advanced::Layout;
+        use iced::widget::{column, container, text_input, Id};
+        use iced::{Element, Rectangle, Size, Theme};
+
+        struct Probe(Vec<(Option<Id>, bool)>, bool);
+        impl Operation<()> for Probe {
+            fn focusable(&mut self, id: Option<&Id>, _: Rectangle, state: &mut dyn Focusable) {
+                if self.1 {
+                    state.focus();
+                }
+                self.0.push((id.cloned(), state.is_focused()));
+            }
+            fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn Operation<()>)) {
+                operate(self);
+            }
+        }
+
+        let search = Id::from(SEARCH_BAR_INPUT_ID);
+        let rename = Id::new("rename");
+        let mut element: Element<'_, (), Theme, ()> = container(column![
+            container(text_input("", "").id(search.clone())),
+            text_input("", "").id(rename.clone()),
+        ])
+        .into();
+        let mut tree = Tree::new(&element);
+        let leaf = || Node::new(Size::new(10.0, 10.0));
+        let node = Node::with_children(
+            Size::new(10.0, 20.0),
+            vec![Node::with_children(
+                Size::new(10.0, 20.0),
+                vec![
+                    Node::with_children(Size::new(10.0, 10.0), vec![leaf()]),
+                    leaf(),
+                ],
+            )],
+        );
+        let layout = Layout::new(&node);
+        let mut run = |op: &mut dyn Operation<()>| {
+            element.as_widget_mut().operate(&mut tree, layout, &(), op);
+        };
+
+        let mut both = Probe(Vec::new(), true);
+        run(&mut both);
+        assert_eq!(both.0.len(), 2, "both inputs are reached and focused");
+        run(&mut unfocus_only(search.clone()));
+        let mut after = Probe(Vec::new(), false);
+        run(&mut after);
+        assert_eq!(
+            after.0,
+            [(Some(search), false), (Some(rename), true)],
+            "the search input let go, the other kept the keys"
+        );
+    }
+
+    #[test]
+    fn toggling_the_selected_tag_releases_the_search_bar() {
+        use crate::features::tag_panel;
+        let (_test_dir, mut workspace) = open_folder(1);
+        let task = workspace.update(Message::TagPanel(tag_panel::Message::ToggleSelectedTag));
+        assert_eq!(task.units(), 1, "the release is issued");
     }
 
     #[test]
