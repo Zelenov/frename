@@ -1,6 +1,6 @@
 # 0.139
 ## Fixed
-- A clip opened again before its pending save has run keeps the markers it was left with, and saving it no longer takes their lines out of the comment.
+- A clip opened again before its pending save has run keeps the markers it was left with (deleted ones stay deleted), and saving it no longer takes their lines out of the comment.
 
 # 0.138
 ## Fixed

@@ -75,6 +75,9 @@ pub struct FolderWorkspace {
     /// since only one video is ever loaded — pushed, never overwritten, so an earlier entry is
     /// never silently dropped. Applied in order once `Unloaded` fires.
     pending_file_updates: Vec<(FileId, FileSnapshot)>,
+    /// The path of the open clip being read again from disk on purpose (opening it again): its
+    /// next opening does not take the markers of the edits it was left with.
+    reread_path: Option<PathBuf>,
     /// A folder scan waiting for a playing video to unload first, since the open file's pending
     /// edits (in `pending_file_updates`) may rename it.
     pending_scan: Option<FolderAndFile>,
@@ -250,6 +253,7 @@ impl FolderWorkspace {
             tag_panel: TagPanelState::default(),
             file_name_panel: FileNamePanelState::default(),
             pending_file_updates: Vec::new(),
+            reread_path: None,
             pending_scan: None,
             closing: false,
             batch,
@@ -844,6 +848,7 @@ impl FolderWorkspace {
             // same unload) must not be dropped by this one.
             let pending = self.file_workspace.get_snapshot();
             self.file_workspace.set_file(None);
+            self.reread_path = Some(path.clone());
             let pair = FolderAndFile::new(path.parent().unwrap_or(&path), Some(path.clone()));
             return self.save_then_scan(pending, pair);
         };
@@ -1077,16 +1082,13 @@ impl FolderWorkspace {
         file
     }
 
-    /// The markers of the newest edit of `id` waiting for its save, if it carries any. None
-    /// carried is not taken for an edit: nothing is lost by reading the clip again, and the clip
-    /// may have been changed outside since.
+    /// The markers of the newest edit of `id` waiting for its save, if it carries any.
     fn pending_markers(&self, id: FileId) -> Option<Vec<Marker>> {
         self.pending_file_updates
             .iter()
             .rev()
             .find(|(pending, _)| *pending == id)
             .and_then(|(_, edited)| edited.markers())
-            .filter(|markers| !markers.is_empty())
             .map(<[Marker]>::to_vec)
     }
 
@@ -1125,7 +1127,11 @@ impl FolderWorkspace {
         } else {
             self.with_pending_edits(&file)
         };
-        let pending_markers = if same_file {
+        let reread = self
+            .reread_path
+            .take()
+            .is_some_and(|path| path == file.file_path());
+        let pending_markers = if same_file || reread {
             None
         } else {
             self.pending_markers(file.id())
@@ -6133,6 +6139,171 @@ mod tests {
         let _ = workspace.update(Message::FileUpdated { id, snapshot });
         let text = comment_file_text(&test_dir);
         assert!(text.contains("0:01") && text.contains("0:05"), "{text}");
+    }
+
+    /// A workspace on the clips of `test_dir` where the first clip's video holds `count` markers
+    /// (written with the in-video storage), then opened under `storage`.
+    fn workspace_with_video_markers(
+        test_dir: &TestDirectory,
+        files: usize,
+        count: u64,
+        storage: frename_core::MarkerStorage,
+    ) -> (FolderWorkspace, impl Sized) {
+        use crate::features::markers::Message as M;
+        let in_video = comment_file_storage(frename_core::MarkerStorage::InVideo);
+        let mut workspace = marker_workspace(test_dir, files);
+        for i in 0..count {
+            if i == 0 {
+                send_marker(&mut workspace, M::Add, 1_000);
+            } else {
+                send_marker(&mut workspace, M::AddRange(5_000 * i, 5_000 * i + 3_000), 0);
+            }
+        }
+        if count > 0 {
+            let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+            let _ = workspace.update(Message::FileUpdated { id, snapshot });
+            assert_eq!(
+                frename_core::FileTagger::load_markers(&test_dir.target_file()).map(|m| m.len()),
+                Some(count as usize)
+            );
+        }
+        drop(in_video);
+        let guard = comment_file_storage(storage);
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        (workspace, guard)
+    }
+
+    /// Leave the open clip for the second one and come back, all before the video unloads.
+    fn leave_and_reopen_before_unload(workspace: &mut FolderWorkspace) {
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(workspace);
+        assert!(workspace.has_pending_rename(), "the save is waiting");
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        flush_file_opened(workspace);
+    }
+
+    fn unload(workspace: &mut FolderWorkspace) {
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+    }
+
+    /// Issue #152 (review): markers deleted, the clip left and opened again before the save ran
+    /// stay deleted, in the reopened clip and in the file once the save has run.
+    #[test]
+    fn deleted_markers_stay_deleted_when_the_clip_is_reopened_before_its_save() {
+        use crate::features::markers::Message as M;
+        for storage in [
+            frename_core::MarkerStorage::InVideo,
+            frename_core::MarkerStorage::Comment,
+        ] {
+            let test_dir = TestDirectory::new(2);
+            let (mut workspace, _guard) = workspace_with_video_markers(&test_dir, 2, 1, storage);
+            assert_eq!(marker_names(&workspace).len(), 1, "{storage:?}");
+            let guid = first_marker_guid(&workspace);
+            send_marker(&mut workspace, M::Delete(guid), 0);
+            assert!(marker_names(&workspace).is_empty());
+
+            leave_and_reopen_before_unload(&mut workspace);
+            assert!(
+                marker_names(&workspace).is_empty(),
+                "{storage:?}: the deleted marker came back"
+            );
+            unload(&mut workspace);
+            assert!(
+                frename_core::FileTagger::load_markers(&test_dir.target_file())
+                    .unwrap_or_default()
+                    .is_empty(),
+                "{storage:?}: the file still holds the marker"
+            );
+            let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+            let _ = workspace.update(Message::FileUpdated { id, snapshot });
+            assert!(
+                frename_core::FileTagger::load_markers(&test_dir.target_file())
+                    .unwrap_or_default()
+                    .is_empty(),
+                "{storage:?}: saved again, the marker is back"
+            );
+            assert!(marker_names(&workspace).is_empty());
+        }
+    }
+
+    /// Issue #152 (review): of several edits of one clip waiting for the unload, the newest one's
+    /// markers are shown and saved.
+    #[test]
+    fn the_newest_of_several_pending_edits_gives_the_markers() {
+        use crate::features::markers::Message as M;
+        for storage in [
+            frename_core::MarkerStorage::InVideo,
+            frename_core::MarkerStorage::Comment,
+        ] {
+            let test_dir = TestDirectory::new(2);
+            let (mut workspace, _guard) = workspace_with_video_markers(&test_dir, 2, 0, storage);
+            send_marker(&mut workspace, M::Add, 1_000);
+            leave_and_reopen_before_unload(&mut workspace);
+            assert_eq!(marker_names(&workspace).len(), 1, "{storage:?}");
+            let guid = first_marker_guid(&workspace);
+            send_marker(&mut workspace, M::Delete(guid), 0);
+            send_marker(&mut workspace, M::Add, 7_000);
+            leave_and_reopen_before_unload(&mut workspace);
+            assert_eq!(
+                marker_names(&workspace),
+                [(7_000, String::new())],
+                "{storage:?}"
+            );
+            unload(&mut workspace);
+            let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+            let _ = workspace.update(Message::FileUpdated { id, snapshot });
+            let saved = match storage {
+                frename_core::MarkerStorage::InVideo => {
+                    frename_core::FileTagger::load_markers(&test_dir.target_file())
+                        .unwrap_or_default()
+                        .iter()
+                        .map(|m| m.start_ms)
+                        .collect::<Vec<_>>()
+                }
+                frename_core::MarkerStorage::Comment => {
+                    let text = comment_file_text(&test_dir);
+                    assert!(text.contains("0:07") && !text.contains("0:01"), "{text}");
+                    vec![7_000]
+                }
+            };
+            assert_eq!(saved, [7_000], "{storage:?}");
+        }
+    }
+
+    /// Issue #152 (review): markers shown from the video (comment storage), edited, the clip left
+    /// and opened again before the save: the save still takes them out of the video.
+    #[test]
+    fn video_markers_edited_then_reopened_before_the_save_leave_the_video() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(2);
+        let (mut workspace, _guard) =
+            workspace_with_video_markers(&test_dir, 2, 2, frename_core::MarkerStorage::Comment);
+        assert_eq!(marker_names(&workspace).len(), 2);
+        let guid = first_marker_guid(&workspace);
+        send_marker(&mut workspace, M::Delete(guid), 0);
+        leave_and_reopen_before_unload(&mut workspace);
+        assert_eq!(marker_names(&workspace).len(), 1);
+        unload(&mut workspace);
+        assert!(
+            frename_core::FileTagger::load_markers(&test_dir.target_file())
+                .unwrap_or_default()
+                .is_empty(),
+            "the video no longer holds markers"
+        );
+        // Deleting the rest in the comment must not bring the video's back.
+        let guid = first_marker_guid(&workspace);
+        send_marker(&mut workspace, M::Delete(guid), 0);
+        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        assert!(marker_names(&workspace).is_empty());
+        assert!(!comment_file_text(&test_dir).contains("0:"));
     }
 
     /// Issue #143 (d): a comment file that cannot be written keeps the markers and marks the
