@@ -34,7 +34,8 @@ pub struct ToolbarProps {
     pub more_open: bool,
 }
 
-const PADDING: Padding = Padding {
+/// The toolbar's side padding; `fold` counts it in the bar's width.
+pub(super) const PADDING: Padding = Padding {
     top: 0.0,
     bottom: 0.0,
     left: SPACE_S,

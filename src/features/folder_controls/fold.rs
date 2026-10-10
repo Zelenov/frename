@@ -2,6 +2,7 @@
 //! list"): it never wraps and never shrinks a button; the gaps tighten first, then whole buttons,
 //! least used first, go into **More**.
 
+use super::view::PADDING;
 use crate::ui::tokens::*;
 
 /// What the toolbar shows at one file list width.
@@ -56,7 +57,7 @@ impl Fold {
         let opening = buttons(1 + usize::from(self.recent));
         let app = buttons(1 + usize::from(self.batch) + usize::from(self.has_more()));
         // The free space between the groups is one more item of the row: one more gap.
-        2.0 * SPACE_S + files + opening + app + 3.0 * gap
+        PADDING.left + PADDING.right + files + opening + app + 3.0 * gap
     }
 
     /// The most the toolbar can show in a file list `width` wide; the last step when nothing fits.

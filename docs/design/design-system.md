@@ -1372,8 +1372,7 @@ The list is sorted by date modified, oldest first (unchanged); there is no sort 
 `chevron-left` "Previous file `PgUp`", `chevron-right` "Next file `PgDn`", `locate-fixed` "Show the
 open file in the list" — then 12 px — `folder-open` "Open a folder" (`Ctrl`+`O` is proposed for #62; today it has no key) with the
 recent-folders `chevron-down` "Recent folders `Ctrl` `R`" (§13.4.5), latched while its list is open — and at the right end, until #64 moves them to the app bar, `settings` "Settings" with the
-update dot and the batch toggle `list-checks` "Batch actions" (latched in batch mode). At the
-At narrow widths the gaps become 4 px and the least used buttons go into **More** (§13.9).
+update dot and the batch toggle `list-checks` "Batch actions" (latched in batch mode). At narrow widths the gaps become 4 px and the least used buttons go into **More** (§13.9).
 Disabled buttons are truly disabled (today ◀ ▶ ⊙ look disabled but still take clicks).
 
 #### 13.4.4 Drag and drop

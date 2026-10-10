@@ -1895,6 +1895,7 @@ impl FolderWorkspace {
     fn set_fullscreen(&mut self, on: bool) -> Task<Message> {
         // Fullscreen shows no list to go with an open one.
         let _ = self.recent_folders.update(recent_folders::Message::Close);
+        self.toolbar_more_open = false;
         if on && !self.media_viewer.is_previewable() {
             return Task::none();
         }
@@ -3254,6 +3255,36 @@ mod tests {
     /// or writes the developer's `frename.db`.
     fn test_workspace() -> FolderWorkspace {
         FolderWorkspace::with_app_db(fresh_app_db())
+    }
+
+    #[test]
+    fn the_toolbar_more_menu_closes_on_every_way_out() {
+        let mut ws = test_workspace();
+        let open = |ws: &mut FolderWorkspace| {
+            let _ = ws.update(Message::Folder(folder::Message::ToggleToolbarMore));
+            assert!(ws.toolbar_more_open());
+        };
+        open(&mut ws);
+        let _ = ws.update(Message::Folder(folder::Message::ToggleToolbarMore));
+        assert!(!ws.toolbar_more_open(), "the button toggles");
+        open(&mut ws);
+        let _ = ws.update(Message::Folder(folder::Message::CloseToolbarMore));
+        assert!(!ws.toolbar_more_open(), "a click beside it");
+        open(&mut ws);
+        let _ = ws.update(Message::EscapePressed);
+        assert!(!ws.toolbar_more_open(), "Esc");
+        open(&mut ws);
+        let _ = ws.update(Message::LeftSplitterDragged(500.0));
+        assert!(!ws.toolbar_more_open(), "the left splitter");
+        open(&mut ws);
+        let _ = ws.update(Message::RightSplitterDragged(900.0));
+        assert!(!ws.toolbar_more_open(), "the right splitter");
+        open(&mut ws);
+        let _ = ws.update(Message::Folder(folder::Message::ToggleRecentFolders));
+        assert!(!ws.toolbar_more_open(), "the recent list");
+        open(&mut ws);
+        let _ = ws.set_fullscreen(true);
+        assert!(!ws.toolbar_more_open(), "fullscreen");
     }
 
     /// A migrated app database in a folder of its own (swept like the test folders).
