@@ -172,9 +172,9 @@ If the folder was somewhere else, use **Settings → Updates → Import from an 
 folder…**. After that you can delete the old folder, and uninstall GStreamer if you installed it
 only for frename.
 
-**Linux (64-bit, Ubuntu 24.04, Linux Mint 22, Fedora 40, Debian 13 or newer):** download the
-`.AppImage` from the [latest release](https://github.com/Zelenov/frename/releases/latest), make it
-executable with `chmod +x frename-*.AppImage`, and run it. Video playback is built in, so you
+**Linux (64-bit Intel/AMD, Ubuntu 24.04, Linux Mint 22, Fedora 40, Debian 13 or newer):** download
+the `.AppImage` from the [latest release](https://github.com/Zelenov/frename/releases/latest), make
+it executable with `chmod +x frename-*.AppImage`, and run it. Video playback is built in, so you
 don't need to install anything else. If it says FUSE is missing, run it with
 `--appimage-extract-and-run`. frename keeps its settings in `~/.local/share/frename`.
 

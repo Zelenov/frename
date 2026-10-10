@@ -1,10 +1,12 @@
 //! The Version row of the settings window's Updates page.
 
+use iced::widget::row;
 use iced::Element;
 
-use super::state::Status;
+use super::state::{Section, Status};
 use super::{Message, UpdatesState};
 use crate::ui::layout;
+use crate::ui::tokens::SPACE_S;
 use crate::ui::tooltip::{self, Position};
 use crate::ui::{button, form, text};
 
@@ -19,10 +21,23 @@ pub fn view(state: &UpdatesState, batch_running: bool) -> Element<'_, Message> {
         ))
         .into()
     };
-    // The Store build has no updater of its own: nothing to check or to switch on.
-    if state.is_store_build() {
-        return layout::aligned([version(), text::secondary(fl!("updates-from-store")).into()])
-            .into();
+    match state.section() {
+        // The Store build has no updater of its own: nothing to check or to switch on.
+        Section::Store => {
+            return layout::aligned([version(), text::secondary(fl!("updates-from-store")).into()])
+                .into();
+        }
+        // The Mac download and the Linux AppImage: new versions are downloaded by hand.
+        Section::ReleasesPage => {
+            let line = row![
+                text::secondary(fl!("updates-from-releases")),
+                button::link(fl!("updates-open-releases")).on_press(Message::OpenReleases),
+            ]
+            .spacing(SPACE_S)
+            .wrap();
+            return layout::aligned([version(), line.into()]).into();
+        }
+        Section::Updater => {}
     }
 
     let status = state.status();
