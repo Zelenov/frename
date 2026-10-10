@@ -930,7 +930,8 @@ impl VideoPlayerState {
                 Task::none()
             }
             Message::MorePicked(messages) => {
-                self.more_open = false;
+                // A frame step keeps More open, to click through frames; any other item closes it.
+                self.more_open = self.more_open && is_frame_step(&messages);
                 messages
                     .into_iter()
                     .map(Task::done)
@@ -1301,6 +1302,14 @@ impl VideoPlayerState {
             self.controls.subscription().map(Message::Controls),
         ])
     }
+}
+
+/// Whether an item of More is a frame step: the one item that leaves More open.
+fn is_frame_step(messages: &[Message]) -> bool {
+    matches!(
+        messages,
+        [Message::Controls(video_controls::Message::StepFrame(_))]
+    )
 }
 
 /// Seconds on the bar as whole milliseconds.
@@ -1744,6 +1753,29 @@ fn nv12_to_rgb(yuv: &[u8], width: u32, height: u32, stride: u32) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn more_after(item: Message) -> bool {
+        let mut player = VideoPlayerState::default();
+        let _ = player.update(Message::ToggleMore);
+        assert!(player.more_open());
+        let _ = player.update(Message::MorePicked(vec![item]));
+        player.more_open()
+    }
+
+    #[test]
+    fn more_stays_open_after_a_frame_step_and_closes_after_any_other_item() {
+        use crate::features::video_controls::FrameStep;
+        let step = |s| Message::Controls(video_controls::Message::StepFrame(s));
+        assert!(more_after(step(FrameStep::Back)));
+        assert!(more_after(step(FrameStep::Forward)));
+        assert!(!more_after(Message::Controls(
+            video_controls::Message::SeekBack10
+        )));
+        assert!(!more_after(Message::Controls(
+            video_controls::Message::TakeScreenshot
+        )));
+        assert!(!more_after(Message::ToggleCueList));
+    }
 
     #[test]
     fn a_range_stops_at_its_end_only_after_playing_inside_it() {
