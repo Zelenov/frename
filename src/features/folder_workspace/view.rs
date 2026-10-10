@@ -8,7 +8,9 @@ use iced::{Alignment, Element, Length};
 
 use crate::features::folder::view::ListProps;
 use crate::features::folder_controls::view::ToolbarProps;
-use crate::features::{batch, file_menu, file_workspace, folder, folder_controls, media_viewer};
+use crate::features::{
+    batch, file_menu, file_workspace, folder, folder_controls, media_viewer, recent_folders,
+};
 use crate::ui::icons::{icon, spinner, Icon};
 use crate::ui::palette::TagPalette;
 use crate::ui::tokens::*;
@@ -35,7 +37,11 @@ pub fn view(
     };
 
     if state.directory().is_none() && !state.media_fullscreen() {
-        return empty_window(state.is_loading(), state.spinner_frame());
+        return empty_window(
+            state.is_loading(),
+            state.spinner_frame(),
+            state.recent_folders(),
+        );
     }
 
     // When fullscreen overlay is active, render blank space here — otherwise the video
@@ -79,6 +85,7 @@ pub fn view(
             has_selected,
             batch_mode: state.batch().is_active(),
             batch_running: state.batch().is_running(),
+            recent_open: state.recent_folders().is_open(),
             update_available,
         }),
     ]
@@ -155,11 +162,14 @@ pub fn view(
 
     // The file menu over everything, once a file is right-clicked (nothing otherwise).
     let file_menu = file_menu::view::view(state.file_menu()).map(Message::FileMenu);
+    // The recent folders over the toolbar's open button, while their list is open.
+    let recent = recent_folders::view::dropdown(state.recent_folders(), state.left_width())
+        .map(Message::RecentFolders);
 
     // The right button's position is taken here, over the whole window: a row inside the
     // scrolled file list does not know where it is on screen.
     RightPressReporter::new(
-        stack![normal_layout, overlay, file_menu]
+        stack![normal_layout, overlay, file_menu, recent]
             .width(Length::Fill)
             .height(Length::Fill),
         |position| Message::FileMenu(file_menu::Message::RightPressed(position)),
@@ -169,7 +179,12 @@ pub fn view(
 
 /// The whole window when no folder is open (§13.7): what to do first and the button that does
 /// it, or the folder opening. A click anywhere picks a folder too; a right-click picks one file.
-fn empty_window<'a>(loading: bool, spinner_frame: usize) -> Element<'a, Message> {
+/// With folders opened before, their list stands beside it, so the first click can be one of them.
+fn empty_window<'a>(
+    loading: bool,
+    spinner_frame: usize,
+    recent: &'a recent_folders::RecentFoldersState,
+) -> Element<'a, Message> {
     if loading {
         return container(
             column![
@@ -191,8 +206,24 @@ fn empty_window<'a>(loading: bool, spinner_frame: usize) -> Element<'a, Message>
     ]
     .spacing(SPACE_M)
     .max_width(EMPTY_SCREEN_MAX_WIDTH);
-    mouse_area(container(block).center(Length::Fill).style(style::panel))
-        .on_press(Message::OpenFolderPicker)
-        .on_right_press(Message::OpenFilePicker)
+    let content: Element<'a, Message> = if recent.is_empty() {
+        block.into()
+    } else {
+        row![
+            block,
+            recent_folders::view::on_empty_screen(recent).map(Message::RecentFolders)
+        ]
+        .spacing(SPACE_XL)
+        .align_y(Alignment::Center)
         .into()
+    };
+    mouse_area(
+        container(content)
+            .center(Length::Fill)
+            .padding(PAGE_PADDING_Y)
+            .style(style::panel),
+    )
+    .on_press(Message::OpenFolderPicker)
+    .on_right_press(Message::OpenFilePicker)
+    .into()
 }

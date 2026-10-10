@@ -267,6 +267,26 @@ fn main_window_event(
             };
             Some(Message::FolderWorkspace(turn))
         }
+        // Ctrl+R opens the list of recent folders (R for Recent), also after typing in a search
+        // field (like the F-keys): the field has no use for it. A held key opens it once.
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key,
+            physical_key,
+            modifiers,
+            repeat,
+            ..
+        }) if modifiers.command()
+            && !modifiers.shift()
+            && !modifiers.alt()
+            && latin_key(&key, physical_key) == Some('r') =>
+        {
+            if repeat {
+                return Some(Message::Noop);
+            }
+            Some(Message::FolderWorkspace(folder_workspace::Message::Folder(
+                folder::Message::ToggleRecentFolders,
+            )))
+        }
         // Alt+← / → step one frame in the open video, also after typing in a search field (like
         // the F-keys), but not while writing a comment; a held key keeps stepping.
         iced::Event::Keyboard(keyboard::Event::KeyPressed {

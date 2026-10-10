@@ -65,7 +65,7 @@ fn key_of(folder: &Path, windows: bool) -> String {
 }
 
 /// Now, in milliseconds since the Unix epoch.
-pub(crate) fn now_ms() -> i64 {
+pub fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |since| {
