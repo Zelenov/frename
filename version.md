@@ -1,3 +1,7 @@
+# 0.132
+## Fixed
+- Pressing Enter on a tag that is already saved no longer counts as a step, so Ctrl+Z after it no longer removes the tag from the folder.
+
 # 0.131
 ## Fixed
 - Undo and redo of a rename no longer replace another clip that has taken the old name; the step is refused with a note and stays in the history.

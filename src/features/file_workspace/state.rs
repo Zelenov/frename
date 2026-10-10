@@ -232,9 +232,13 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         self.tag_list.remove_stored_tag_by_id(id)
     }
 
-    /// Save a snapshot-only tag to the store (add to DB). Delegates to TagList.
-    pub fn save_tag(&mut self, id: TagId) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.tag_list.save_tag(id)
+    /// Save a snapshot-only tag to the store (add to DB). Delegates to TagList. `Ok(false)`: it
+    /// was stored already and nothing changed.
+    pub fn save_tag(
+        &mut self,
+        id: TagId,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        self.tag_list.save_tag_once(id)
     }
 
     /// Returns true if any tag in the list has the given name (case-insensitive exact match). Used to

@@ -464,6 +464,30 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         Ok(())
     }
 
+    /// Save a tag to the store only if it is not stored yet (Enter / the save button).
+    /// Returns `true` when it was saved now, `false` when it was already stored (nothing is
+    /// written), so a caller records an undo step only for a real save.
+    pub fn save_tag_once(
+        &mut self,
+        id: TagId,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        let stored = self
+            .tags_by_id
+            .get(&id)
+            .ok_or_else(|| {
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "tag not found",
+                )) as Box<dyn std::error::Error + Send + Sync>
+            })?
+            .is_stored();
+        if stored {
+            return Ok(false);
+        }
+        self.save_tag(id)?;
+        Ok(true)
+    }
+
     /// Reorders tags (file name panel): place `moved_id` at `index` in the checked (selected) list. Index is in the checked-only view; order is changed only in [selected_tag_ids].
     /// When `sync_locked` is true, the new order is immediately persisted to display/DB as well.
     pub fn reorder_tag_to_index(&mut self, moved_id: TagId, index: usize) {
