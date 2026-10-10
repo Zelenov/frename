@@ -18,5 +18,5 @@ xmp_toolkit = "1.12"
 toml = "1"
 # AI descriptions (issue #17): the models, languages and descriptions (without GStreamer), and
 # the API key in the OS credential store.
-clipscribe = { git = "https://github.com/Zelenov/clipscribe", rev = "0b9e8189db62b52069210a305e2a580a94ae3354", default-features = false }
+clipscribe = { git = "https://github.com/Zelenov/clipscribe", rev = "05c3322b7468641bbfe44102d9e2265841e926ea", default-features = false }
 keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service", "crypto-rust", "vendored"] }

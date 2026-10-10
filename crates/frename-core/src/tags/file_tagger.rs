@@ -341,10 +341,10 @@ pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
     [
         new_path.to_path_buf(),
         crate::comment::comment_path(new_path),
-        crate::subtitles::subtitle_path(new_path),
         crate::subtitles::transcript_path(new_path),
     ]
     .iter()
+    .chain(crate::subtitles::subtitle_candidates(new_path).iter())
     .any(|p| p.exists())
 }
 

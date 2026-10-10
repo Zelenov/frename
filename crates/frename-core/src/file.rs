@@ -1,7 +1,7 @@
 //! File structure: path/metadata and tag-based rename state.
 //! File holds a FileSnapshot (tags + name + extension). From File's perspective we only update tags in it.
 
-use crate::subtitles::subtitle_path;
+use crate::subtitles::{existing_subtitle_path, subtitle_candidates};
 use crate::{FileKind, FileSnapshot, FileTagger, FolderInfo};
 use std::path::Path;
 use std::time::SystemTime;
@@ -72,7 +72,7 @@ impl File {
         let folder_info = FolderInfo::default();
         let file_snapshot = FileTagger::parse(&file_path, &folder_info);
         // No folder listing here, so ask the disk; this path opens one file, not a folder.
-        let has_subtitles = subtitle_path(&file_path).is_file();
+        let has_subtitles = existing_subtitle_path(&file_path).is_some();
         Self::new_from_parts(file_path, modified_at, file_snapshot, has_subtitles)
     }
 
@@ -96,10 +96,11 @@ impl File {
     ) -> Self {
         let file_path = path.as_ref().to_path_buf().into_boxed_path();
         let file_snapshot = FileTagger::parse(&file_path, folder_info);
-        let has_subtitles = subtitle_path(&file_path)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .is_some_and(|name| folder_info.contains(name));
+        let has_subtitles = subtitle_candidates(&file_path).iter().any(|path| {
+            path.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|name| folder_info.contains(name))
+        });
         Self::new_from_parts(file_path, modified_at, file_snapshot, has_subtitles)
     }
 
@@ -248,5 +249,28 @@ mod tests {
         let f1 = File::from_path("/some/path/file.mp4", SystemTime::UNIX_EPOCH);
         let f2 = File::from_path("/some/path/file.mp4", SystemTime::UNIX_EPOCH);
         assert_ne!(f1.id(), f2.id());
+    }
+
+    #[test]
+    fn an_ass_or_ssa_counts_as_subtitles_in_a_scan_and_on_the_disk() {
+        let folder_info = FolderInfo::new(vec![
+            "a.mp4".into(),
+            "a.ass".into(),
+            "b.mp4".into(),
+            "b.ssa".into(),
+            "c.mp4".into(),
+        ]);
+        let has = |name: &str| {
+            File::from_path_with_folder_info(name, SystemTime::UNIX_EPOCH, &folder_info)
+                .has_subtitles()
+        };
+        assert!(has("a.mp4") && has("b.mp4") && !has("c.mp4"));
+
+        let dir = std::env::temp_dir().join(format!("frename-file-ass-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        std::fs::write(dir.join("d.ass"), "x").expect("write ass");
+        assert!(File::from_path(dir.join("d.mp4"), SystemTime::UNIX_EPOCH).has_subtitles());
+        assert!(!File::from_path(dir.join("e.mp4"), SystemTime::UNIX_EPOCH).has_subtitles());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

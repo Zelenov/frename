@@ -759,8 +759,8 @@ dependencies = [
 
 [[package]]
 name = "clipscribe"
-version = "0.9.0"
-source = "git+https://github.com/Zelenov/clipscribe?rev=0b9e8189db62b52069210a305e2a580a94ae3354#0b9e8189db62b52069210a305e2a580a94ae3354"
+version = "0.10.0"
+source = "git+https://github.com/Zelenov/clipscribe?rev=05c3322b7468641bbfe44102d9e2265841e926ea#05c3322b7468641bbfe44102d9e2265841e926ea"
 dependencies = [
  "base64 0.22.1",
  "gstreamer",
