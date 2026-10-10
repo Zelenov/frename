@@ -29,12 +29,11 @@ pub fn suggested_in_out<S>(tag_list: &TagList<S>) -> Option<Segment>
 where
     S: StoredTagStore + Clone,
 {
-    let suggested = frename_core::ai::block::suggested_in_out(tag_list.comment())?;
     let current = Segment {
         start: tag_list.segment_start_secs(),
         end: tag_list.segment_end_secs(),
     };
-    (suggested != current).then_some(suggested)
+    frename_core::ai::block::pending_in_out(tag_list.comment(), current)
 }
 
 /// The folder's tags the open clip's AI description suggests that the clip does not have yet,

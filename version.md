@@ -1,3 +1,10 @@
+# 0.117
+## Added
+- Marker list: **Describe N unnamed** names and describes every marker without a name with AI in one click, three at a time; the others wait their turn, **Stop all** stops them, and a name you type meanwhile is kept.
+
+## Changed
+- The AI In/Out pill ends in an arrow instead of a check (it applies the suggestion, it is not "done"), and its tooltip says the range is rounded to whole seconds.
+
 # 0.116
 ## Fixed
 - Tag grid: the "+" on a tag that is not in the folder's tags is as easy to read as its name (it was dark grey on the dark chip).

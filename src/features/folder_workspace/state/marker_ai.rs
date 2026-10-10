@@ -1,5 +1,7 @@
 //! "Describe with AI" on a marker of the open clip: a row's ✨ or `Ctrl+F2` sends one request per
-//! marker in the background (`markers::describe`), several at once if asked. Its answer names an
+//! marker in the background (`markers::describe`), several at once if asked; "Describe N
+//! unnamed" over the list asks for every marker without a name and sends them a few at a time
+//! (`MAX_DESCRIBING_AT_ONCE`), the others waiting their turn in a queue. Its answer names an
 //! unnamed marker and adds the description to its comment, as one undo step, and is saved and
 //! journaled like an edit made by hand. Leaving the clip, deleting the marker or starting a
 //! batch job stops the requests still on their way.
@@ -11,6 +13,9 @@
 //! `apply_file_updated`).
 
 use frename_core::{marker_text_with_moment, FileId, SetMarkerTextCommand};
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+
 use iced::Task;
 
 use super::FolderWorkspace;
@@ -26,29 +31,40 @@ impl FolderWorkspace {
         if self.batch.is_running() || self.batch.is_waiting_for_markers() {
             return Task::none();
         }
-        let Some(file) = self.file_workspace.file() else {
-            return Task::none();
-        };
-        let (id, path) = (file.id(), file.file_path().to_path_buf());
-        let Some(marker) = self
+        let editable = self
             .file_workspace
             .tag_list()
             .marker(guid)
-            .filter(|m| m.is_editable())
-            .cloned()
-        else {
+            .is_some_and(|m| m.is_editable());
+        if !editable || self.file_workspace.file().is_none() {
             return Task::none();
-        };
+        }
         if self.batch.actions().ai_key_missing() {
             return Self::no_key();
         }
         let Some((request, cancel)) = self.markers.start_describing(guid) else {
             return Task::none();
         };
+        self.send_request(guid.to_string(), request, cancel)
+    }
+
+    /// Send the request just started for the marker `guid` (see `MarkersState::start_describing`)
+    /// on a worker thread. `marker_requests` counts it until its answer is back, stopped or not.
+    fn send_request(
+        &mut self,
+        guid: String,
+        request: u64,
+        cancel: Arc<AtomicBool>,
+    ) -> Task<Message> {
+        let marker = self.file_workspace.tag_list().marker(&guid).cloned();
+        let (Some(file), Some(marker)) = (self.file_workspace.file(), marker) else {
+            self.markers.finish_describing(&guid, request);
+            return Task::none();
+        };
+        let (id, path) = (file.id(), file.file_path().to_path_buf());
         self.marker_requests += 1;
         let (model, language) = self.batch.actions().ai_model_and_language();
         let at_s = describe::moment_s(&marker);
-        let guid = guid.to_string();
         Task::future(async move {
             let outcome = tokio::task::spawn_blocking(move || {
                 describe::describe_moment(&path, at_s, model, language, &cancel)
@@ -65,6 +81,66 @@ impl FolderWorkspace {
                 outcome,
             }
         })
+    }
+
+    /// "Describe N unnamed": queue every marker of the open clip that has no name and is not on
+    /// its way, and send the first few. A name typed meanwhile is kept: that marker is left
+    /// out when its turn comes. With no key saved, nothing is queued: Settings opens where the
+    /// key is set.
+    pub(super) fn describe_unnamed_markers(&mut self) -> Task<Message> {
+        if self.batch.is_running() || self.batch.is_waiting_for_markers() {
+            return Task::none();
+        }
+        let guids = self.unnamed_marker_guids();
+        if guids.is_empty() {
+            return Task::none();
+        }
+        if self.batch.actions().ai_key_missing() {
+            return Self::no_key();
+        }
+        self.markers.queue_describing(guids);
+        self.send_waiting_markers()
+    }
+
+    /// The markers "Describe N unnamed" would send now (see `MarkersState::unnamed_guids`).
+    pub fn unnamed_marker_guids(&self) -> Vec<String> {
+        self.markers
+            .unnamed_guids(self.file_workspace.markers().unwrap_or_default())
+    }
+
+    /// Send the markers waiting for their turn while fewer than `MAX_DESCRIBING_AT_ONCE`
+    /// requests are really alive (`marker_requests`: a stopped request counts until its answer
+    /// is back, as it still reads the clip). Called when the run starts and whenever an answer
+    /// comes back, which is when a slot frees. One that got a name (or went) while it waited
+    /// is skipped.
+    pub(super) fn send_waiting_markers(&mut self) -> Task<Message> {
+        if self.markers.waiting_count() == 0 {
+            return Task::none();
+        }
+        // A batch job is about to close the clip, or has.
+        if self.batch.is_running() || self.batch.is_waiting_for_markers() {
+            self.markers.clear_waiting();
+            return Task::none();
+        }
+        // The key was removed meanwhile: the rest would find out the same.
+        if self.batch.actions().ai_key_missing() {
+            self.markers.clear_waiting();
+            return Self::no_key();
+        }
+        let mut tasks = Vec::new();
+        loop {
+            let tag_list = self.file_workspace.tag_list();
+            let next = self
+                .markers
+                .start_next_waiting(self.marker_requests, |guid| {
+                    tag_list.marker(guid).is_some_and(|m| m.is_unnamed())
+                });
+            let Some((guid, request, cancel)) = next else {
+                break;
+            };
+            tasks.push(self.send_request(guid, request, cancel));
+        }
+        Task::batch(tasks)
     }
 
     /// `Ctrl+F2`: describe the marker the playhead is on (the one the list lights up and the
@@ -123,7 +199,13 @@ impl FolderWorkspace {
         if !self.markers.finish_describing(&guid, request)
             || self.file_workspace.file().map(|f| f.id()) != Some(file)
         {
-            return done;
+            // A slot is free, or the clip was left and nothing is queued any more.
+            return Task::batch([done, self.send_waiting_markers()]);
+        }
+        // A request that came back without a description (no key, an error) means the ones
+        // still waiting would not get one either: they stay unnamed, and the notice is said once.
+        if matches!(outcome, MomentOutcome::NoKey | MomentOutcome::Failed(_)) {
+            self.markers.clear_waiting();
         }
         let answered = match outcome {
             MomentOutcome::Described { name, description } => {
@@ -144,11 +226,16 @@ impl FolderWorkspace {
                 }
             }
             MomentOutcome::Cancelled => Task::none(),
+            // Said once, even when several requests of a run fail.
             MomentOutcome::Failed(reason) => {
-                Self::notice(&fl!("markers-ai-failed", reason = reason))
+                if self.markers.failed_said() {
+                    Task::none()
+                } else {
+                    Self::notice(&fl!("markers-ai-failed", reason = reason))
+                }
             }
         };
-        Task::batch([done, answered])
+        Task::batch([done, answered, self.send_waiting_markers()])
     }
 
     /// Put an answer into the marker `guid`: one undo step, saved like an edit by hand.

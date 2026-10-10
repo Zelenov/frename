@@ -300,6 +300,17 @@ impl FolderWorkspace {
                 }
                 Task::none()
             }
+            Message::ShowDescribingUnnamed => {
+                let guids = self.unnamed_marker_guids();
+                self.markers.queue_describing(guids);
+                // As `send_waiting_markers` starts them, but nothing is sent.
+                while self
+                    .markers
+                    .start_next_waiting(self.markers.in_flight(), |_| true)
+                    .is_some()
+                {}
+                Task::none()
+            }
             Message::MarkerDescribed {
                 file,
                 guid,
@@ -4906,6 +4917,230 @@ mod tests {
         )));
         send_marker(&mut workspace, M::Describe(guid.clone()), 0);
         assert!(!workspace.markers().any_describing(), "nothing is sent");
+    }
+
+    /// Issue #208: a clip with `count` unnamed markers (and a named one at 40 s), their GUIDs in
+    /// the list's order.
+    fn unnamed_markers_workspace(
+        test_dir: &TestDirectory,
+        count: u64,
+    ) -> (FolderWorkspace, Vec<String>) {
+        let mut workspace = marker_workspace(test_dir, 1);
+        for i in 0..count {
+            let marker = frename_core::Marker::new(1_000 + i * 5_000);
+            workspace.file_workspace.tag_list_mut().add_marker(marker);
+        }
+        let mut named = frename_core::Marker::new(40_000);
+        named.name = "Mine".to_string();
+        workspace.file_workspace.tag_list_mut().add_marker(named);
+        let guids = workspace
+            .file_workspace()
+            .markers()
+            .unwrap_or_default()
+            .iter()
+            .filter(|m| m.name.is_empty())
+            .map(|m| m.guid.clone().expect("editable"))
+            .collect::<Vec<_>>();
+        assert_eq!(guids.len() as u64, count, "and one named");
+        (workspace, guids)
+    }
+
+    #[test]
+    fn describe_unnamed_sends_a_few_at_a_time_and_each_answer_is_its_own_undo_step() {
+        use crate::features::markers::state_for_tests::MAX_DESCRIBING_AT_ONCE;
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let (mut workspace, guids) = unnamed_markers_workspace(&test_dir, 5);
+        assert_eq!(
+            workspace.unnamed_marker_guids().len(),
+            5,
+            "the named marker is not counted"
+        );
+
+        send_marker(&mut workspace, M::DescribeUnnamed, 0);
+        assert_eq!(workspace.markers().in_flight(), MAX_DESCRIBING_AT_ONCE);
+        assert_eq!(workspace.markers().waiting_count(), 2);
+        assert_eq!(workspace.marker_requests, 3);
+        for guid in &guids[..3] {
+            assert!(
+                workspace.markers().request_of(guid).is_some(),
+                "in list order"
+            );
+        }
+        assert!(workspace.markers().is_waiting(&guids[3]));
+        assert_eq!(
+            workspace.unnamed_marker_guids().len(),
+            0,
+            "all on their way or waiting: nothing to offer twice"
+        );
+        send_marker(&mut workspace, M::DescribeUnnamed, 0);
+        assert_eq!(
+            workspace.marker_requests, 3,
+            "asking again sends nothing more"
+        );
+
+        let _ = workspace.update(described(&workspace, &guids[0], "One", "First."));
+        assert_eq!(workspace.markers().in_flight(), 3, "the next one went out");
+        assert_eq!(workspace.markers().waiting_count(), 1);
+        assert!(workspace.markers().request_of(&guids[3]).is_some());
+        for (i, guid) in guids.iter().enumerate().skip(1) {
+            let _ = workspace.update(described(&workspace, guid, &format!("N{i}"), "Text."));
+        }
+        assert!(!workspace.markers().any_describing());
+        assert_eq!(workspace.marker_requests, 0);
+        let names: Vec<_> = marker_names(&workspace)
+            .into_iter()
+            .map(|(_, n)| n)
+            .collect();
+        assert_eq!(names, ["One", "N1", "N2", "N3", "N4", "Mine"]);
+
+        // One undo step per marker: the last answer goes first, the others stay.
+        let _ = workspace.update(Message::Undo);
+        let names: Vec<_> = marker_names(&workspace)
+            .into_iter()
+            .map(|(_, n)| n)
+            .collect();
+        assert_eq!(names, ["One", "N1", "N2", "N3", "", "Mine"]);
+    }
+
+    #[test]
+    fn describe_unnamed_keeps_a_name_typed_while_the_marker_waits() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let (mut workspace, guids) = unnamed_markers_workspace(&test_dir, 5);
+        send_marker(&mut workspace, M::DescribeUnnamed, 0);
+        // The fourth waits; the editor names it, and the fifth is in flight already (a slot
+        // frees up), a name typed on one that is in flight is kept by the answer.
+        workspace
+            .file_workspace
+            .tag_list_mut()
+            .update_marker(&guids[3], |m| m.name = "Typed".to_string());
+        let _ = workspace.update(described(&workspace, &guids[0], "One", "First."));
+        assert!(
+            !workspace.markers().is_describing(&guids[3]),
+            "named meanwhile: not sent"
+        );
+        assert!(workspace.markers().request_of(&guids[4]).is_some());
+        workspace
+            .file_workspace
+            .tag_list_mut()
+            .update_marker(&guids[1], |m| m.name = "Mine too".to_string());
+        let _ = workspace.update(described(&workspace, &guids[1], "Other", "Second."));
+        let texts = marker_texts(&workspace);
+        assert_eq!(texts[1], ("Mine too".to_string(), "Second.".to_string()));
+        assert_eq!(texts[3].0, "Typed");
+        assert_eq!(texts[3].1, "", "nothing was sent for it");
+    }
+
+    #[test]
+    fn describe_unnamed_stops_one_waiting_all_or_the_rest_after_a_failure() {
+        use crate::features::markers::{Message as M, MomentOutcome};
+        let test_dir = TestDirectory::new(1);
+        let (mut workspace, guids) = unnamed_markers_workspace(&test_dir, 6);
+
+        // One waiting marker is stopped: its row is back to unnamed and it never goes out.
+        send_marker(&mut workspace, M::DescribeUnnamed, 0);
+        assert_eq!(workspace.markers().waiting_count(), 3);
+        send_marker(&mut workspace, M::StopDescribing(guids[3].clone()), 0);
+        assert!(!workspace.markers().is_describing(&guids[3]));
+        assert_eq!(workspace.markers().waiting_count(), 2);
+
+        // A failure ends the run: the rest stays unnamed, the ones on their way go on.
+        let failed = MomentOutcome::Failed("Network error".to_string());
+        let _ = workspace.update(answer(&workspace, &guids[0], failed));
+        assert_eq!(workspace.markers().waiting_count(), 0);
+        assert_eq!(workspace.markers().in_flight(), 2);
+        assert_eq!(workspace.marker_requests, 2);
+
+        // Stop all: the requests on their way too; their answers are dropped.
+        let late = described(&workspace, &guids[1], "Lion", "A lion.");
+        send_marker(&mut workspace, M::StopDescribingAll, 0);
+        assert!(!workspace.markers().any_describing());
+        let _ = workspace.update(late);
+        assert!(marker_names(&workspace).iter().all(|(_, n)| n != "Lion"));
+    }
+
+    #[test]
+    fn describe_unnamed_gives_one_failed_notice_per_run() {
+        use crate::features::markers::{Message as M, MomentOutcome};
+        let test_dir = TestDirectory::new(1);
+        let (mut workspace, guids) = unnamed_markers_workspace(&test_dir, 3);
+        send_marker(&mut workspace, M::DescribeUnnamed, 0);
+        let failed = || MomentOutcome::Failed("Network error".to_string());
+        let first = workspace.update(answer(&workspace, &guids[0], failed()));
+        let second = workspace.update(answer(&workspace, &guids[1], failed()));
+        let third = workspace.update(answer(&workspace, &guids[2], failed()));
+        assert!(first.units() > second.units(), "the first says it");
+        assert_eq!(second.units(), third.units(), "the others stay quiet");
+        // A new request is a new run: it says its failure again.
+        send_marker(&mut workspace, M::Describe(guids[0].clone()), 0);
+        let again = workspace.update(answer(&workspace, &guids[0], failed()));
+        assert_eq!(again.units(), first.units());
+    }
+
+    #[test]
+    fn a_stopped_request_keeps_its_slot_until_its_answer_is_back() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let (mut workspace, guids) = unnamed_markers_workspace(&test_dir, 5);
+        send_marker(&mut workspace, M::DescribeUnnamed, 0);
+        let stopped = described(&workspace, &guids[0], "One", "First.");
+        send_marker(&mut workspace, M::StopDescribing(guids[0].clone()), 0);
+        assert_eq!(workspace.marker_requests, 3, "it still reads the clip");
+        assert_eq!(workspace.markers().in_flight(), 2);
+        assert_eq!(workspace.markers().waiting_count(), 2);
+        // Another answer frees a real slot only once: no fourth request alive.
+        let _ = workspace.update(described(&workspace, &guids[1], "Two", "Second."));
+        assert_eq!(workspace.marker_requests, 3, "one back, one sent");
+        assert_eq!(workspace.markers().waiting_count(), 1);
+        // The stopped one comes back: its answer is dropped and the slot is used.
+        let _ = workspace.update(stopped);
+        assert_eq!(workspace.marker_requests, 3);
+        assert_eq!(workspace.markers().waiting_count(), 0);
+        assert!(marker_names(&workspace).iter().all(|(_, n)| n != "One"));
+    }
+
+    #[test]
+    fn describe_unnamed_with_no_key_sends_nothing_and_a_missing_key_found_out_ends_the_run() {
+        use crate::features::markers::{Message as M, MomentOutcome};
+        let test_dir = TestDirectory::new(1);
+        let (mut workspace, guids) = unnamed_markers_workspace(&test_dir, 5);
+
+        // Found out by the first answer: the queue is dropped, the notice said once.
+        send_marker(&mut workspace, M::DescribeUnnamed, 0);
+        let _ = workspace.update(answer(&workspace, &guids[0], MomentOutcome::NoKey));
+        assert_eq!(workspace.markers().waiting_count(), 0);
+        assert_eq!(workspace.markers().in_flight(), 2);
+        let _ = workspace.update(answer(&workspace, &guids[1], MomentOutcome::NoKey));
+        assert!(workspace.markers.no_key_said(), "said already");
+        let _ = workspace.update(Message::Batch(batch::Message::Action(
+            batch::ActionMessage::DescribeAi(batch::describe_ai::Message::KeyState(
+                frename_core::ai::key::KeyState::Missing,
+            )),
+        )));
+        let _ = workspace.update(answer(&workspace, &guids[2], MomentOutcome::NoKey));
+        assert!(!workspace.markers().any_describing());
+
+        // Known to be missing: nothing is queued or sent, Settings opens.
+        let task = workspace.handle_marker(M::DescribeUnnamed, 0);
+        assert!(!workspace.markers().any_describing());
+        assert_eq!(workspace.marker_requests, 0);
+        assert_eq!(task.units(), 2, "the notice and the settings");
+    }
+
+    #[test]
+    fn describe_unnamed_leaves_the_queue_with_the_clip() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(2);
+        let (mut workspace, _guids) = unnamed_markers_workspace(&test_dir, 5);
+        send_marker(&mut workspace, M::DescribeUnnamed, 0);
+        assert!(workspace.markers().waiting_count() > 0);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        assert!(
+            !workspace.markers().any_describing(),
+            "nothing waits for another clip"
+        );
     }
 
     #[test]
