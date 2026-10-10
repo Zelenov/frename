@@ -12,6 +12,9 @@ use super::Release;
 /// Where releases are published. Drafts (branch builds) and prereleases are not offered.
 const REPOSITORY: &str = "https://github.com/Zelenov/frename";
 
+/// The page to download new versions from, for the builds that cannot update themselves.
+pub const RELEASES_PAGE: &str = "https://github.com/Zelenov/frename/releases/latest";
+
 fn manager() -> Result<UpdateManager, velopack::Error> {
     UpdateManager::new(GithubSource::new(REPOSITORY, None, false), None, None)
 }
