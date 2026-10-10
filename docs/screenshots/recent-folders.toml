@@ -1,0 +1,51 @@
+# The recent folders list (#63) open over the file list's toolbar: the folders opened before, the
+# last one gone (a disconnected drive). Not a README image; for looking at the feature
+# (`frename --demo`).
+source = "../../tests/folder"
+open = "pick.wide.night.city.MVI_0410.mp4"
+folder_name = "2026-09 Lisbon"
+recent_menu = true
+window = [1440, 800]
+panels = [560, 340]
+
+[[recent]]
+folder = "Shoots/2026-08 Porto"
+minutes_ago = 95
+
+[[recent]]
+folder = "Shoots/2026-07 Madeira"
+minutes_ago = 1500
+
+[[recent]]
+folder = "Shoots/Clients/Acme Product Launch/Day 2"
+minutes_ago = 6000
+
+[[recent]]
+folder = "Wedding Anna and Oleg"
+minutes_ago = 20000
+
+[[recent]]
+folder = "Drive E/2026-06 Alps"
+missing = true
+minutes_ago = 60000
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.landscape.golden-hour.MVI_0401.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "skip.handheld.MVI_0402.mov"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.drone.landscape.MVI_0404.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "review.people.close.MVI_0405.mov"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.MVI_0410.mp4"
+comment = "City lights over Europe, keep this one"
