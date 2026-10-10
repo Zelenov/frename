@@ -594,9 +594,9 @@ markers-ai-describe-unnamed = { $count ->
 }
 markers-ai-describe-unnamed-hint = Дать имя и описание с помощью AI каждому маркеру без имени, по несколько за раз. Один запрос на маркер; имя, которое вы впишете за это время, сохранится.
 markers-ai-waiting = Ждёт очереди…
-markers-ai-run = Описывается: { $describing } · ждут: { $waiting }
-markers-ai-run-last = Описывается: { $describing }
-markers-ai-stop-all = Остановить все
+markers-ai-run = Идёт: { $describing } · ждут: { $waiting }
+markers-ai-run-last = Идёт: { $describing }
+markers-ai-stop-all = Остановить
 markers-ai-describing = Описываю…
 markers-ai-done = Маркер описан
 markers-ai-nothing-new = У маркера уже есть это описание
