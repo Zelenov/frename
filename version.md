@@ -2,6 +2,10 @@
 ## Fixed
 - Starting a batch job while a marker is being described no longer waits for Claude's answer: it starts as soon as the description has finished reading the clip. Saving or renaming a clip is refused as "still reading the clip" only until then.
 
+# 0.137
+## Fixed
+- In the batch window's action list and in Settings' navigation, the highlight under the pointer no longer disappears in the 2 px between two items, and in the folded action list a tooltip stays shown while the pointer moves from one icon to the next.
+
 # 0.136
 ## Fixed
 - Linux: the AppImage no longer overwrites the shared GStreamer plugin cache that other programs use; it keeps its own in `~/.cache/frename`.
