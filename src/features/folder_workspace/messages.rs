@@ -151,6 +151,9 @@ pub enum Message {
     /// The second step of [`Message::GoToStartWhileTyping`]: the file name being edited does not
     /// have the key, so only the comment box can still keep it.
     GoToStartUnlessWriting,
+    /// The second step of `Shift+Space` with a rename open: the file name being edited does not
+    /// have the key, so the tag under the tag cursor is toggled (#260).
+    ToggleSelectedTagUnlessRenaming,
     /// Open a native folder picker dialog so the user can choose a folder to open.
     OpenFolderPicker,
     /// Open a native file picker dialog so the user can choose a file to open.

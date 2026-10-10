@@ -1,3 +1,7 @@
+# 0.140
+## Fixed
+- Shift+Space no longer toggles a tag while a file name is being typed in the file list.
+
 # 0.139
 ## Fixed
 - A clip opened again before its pending save has run keeps the markers it was left with (deleted ones stay deleted), and saving it no longer takes their lines out of the comment.

@@ -554,6 +554,7 @@ impl FolderWorkspace {
                 })
             }
             Message::GoToStartUnlessWriting => self.unless_writing(Message::GoToStart),
+            Message::ToggleSelectedTagUnlessRenaming => self.toggle_selected_tag(),
             Message::ToggleMediaFullscreen => self.set_fullscreen(!self.media_fullscreen),
             Message::RestoreListScrolls { markers_y, cues_y } => {
                 // Only a list on screen reports back; armed otherwise it would fire much later.
@@ -2175,6 +2176,48 @@ impl FolderWorkspace {
         ])
     }
 
+    /// `Shift+Space`: toggles the tag under the tag cursor, then lets the search bar go.
+    fn toggle_selected_tag(&mut self) -> Task<Message> {
+        // If search bar had focus, it may have inserted a space; strip it so Space doesn't add to the filter.
+        let filter = self.file_workspace.tag_list().filter_query();
+        if filter.ends_with(' ') {
+            let trimmed = filter.trim_end();
+            self.file_workspace.set_tag_filter(trimmed.to_string());
+        }
+        // Decide which tag to toggle:
+        // - If selected tag is visible → toggle it (keep selection).
+        // - Otherwise → toggle the first visible tag and move selection to it.
+        let filtered = self
+            .file_workspace
+            .tag_list()
+            .filtered_display_tag_ids()
+            .to_vec();
+        let selected_id = self.tag_panel.selected_tag_id();
+        let selected_visible = selected_id.filter(|id| filtered.contains(id));
+        let id_to_toggle = selected_visible.or_else(|| filtered.first().copied());
+        if let Some(id) = id_to_toggle {
+            let was_checked = self
+                .file_workspace
+                .tag_list()
+                .get_tag(id)
+                .is_some_and(|t| t.is_checked());
+            self.file_workspace.toggle_tag_by_id(id);
+            self.history.push(Box::new(ToggleTagCommand {
+                tag_id: id,
+                was_checked,
+            }));
+            if selected_visible.is_none() {
+                self.tag_panel.set_selected(Some(id));
+            }
+        }
+        // The tag search kept the keys after typing: Ctrl+C, Delete, the arrows and
+        // Space would go to its text. Let go of them (typing a letter takes them back).
+        // Only the search bar: the rename field, the comment box and the marker fields
+        // are typed in on purpose.
+        iced::advanced::widget::operate(unfocus_only(iced::widget::Id::from(SEARCH_BAR_INPUT_ID)))
+            .map(|()| Message::Noop)
+    }
+
     fn handle_tag_panel(&mut self, msg: tag_panel::Message) -> Task<Message> {
         // Capture drag state before update() clears it on DragEnded.
         let drag_on_end = if let tag_panel::Message::DragEnded = &msg {
@@ -2256,46 +2299,22 @@ impl FolderWorkspace {
                 Task::done(Message::ScrollTagListToSelection)
             }
             tag_panel::Message::ToggleSelectedTag => {
-                // If search bar had focus, it may have inserted a space; strip it so Space doesn't add to the filter.
-                let filter = self.file_workspace.tag_list().filter_query();
-                if filter.ends_with(' ') {
-                    let trimmed = filter.trim_end();
-                    self.file_workspace.set_tag_filter(trimmed.to_string());
+                // A file name being typed keeps the keys: Shift+Space at a space of "USA Today"
+                // must not toggle a tag. A rename open on another row does not hold the key,
+                // so the focus of its field decides (as for `GoToStartWhileTyping`).
+                if self.inline_rename.is_none() {
+                    return self.toggle_selected_tag();
                 }
-                // Decide which tag to toggle:
-                // - If selected tag is visible → toggle it (keep selection).
-                // - Otherwise → toggle the first visible tag and move selection to it.
-                let filtered = self
-                    .file_workspace
-                    .tag_list()
-                    .filtered_display_tag_ids()
-                    .to_vec();
-                let selected_id = self.tag_panel.selected_tag_id();
-                let selected_visible = selected_id.filter(|id| filtered.contains(id));
-                let id_to_toggle = selected_visible.or_else(|| filtered.first().copied());
-                if let Some(id) = id_to_toggle {
-                    let was_checked = self
-                        .file_workspace
-                        .tag_list()
-                        .get_tag(id)
-                        .is_some_and(|t| t.is_checked());
-                    self.file_workspace.toggle_tag_by_id(id);
-                    self.history.push(Box::new(ToggleTagCommand {
-                        tag_id: id,
-                        was_checked,
-                    }));
-                    if selected_visible.is_none() {
-                        self.tag_panel.set_selected(Some(id));
+                iced::widget::operation::is_focused(iced::widget::Id::from(
+                    folder::FOLDER_RENAME_INPUT_ID,
+                ))
+                .map(|renaming| {
+                    if renaming {
+                        Message::Noop
+                    } else {
+                        Message::ToggleSelectedTagUnlessRenaming
                     }
-                }
-                // The tag search kept the keys after typing: Ctrl+C, Delete, the arrows and
-                // Space would go to its text. Let go of them (typing a letter takes them back).
-                // Only the search bar: the rename field, the comment box and the marker fields
-                // are typed in on purpose.
-                iced::advanced::widget::operate(unfocus_only(iced::widget::Id::from(
-                    SEARCH_BAR_INPUT_ID,
-                )))
-                .map(|()| Message::Noop)
+                })
             }
             tag_panel::Message::DeleteTag(id) => {
                 // Find the deleted tag's position in the filtered list before removal.
@@ -7593,6 +7612,61 @@ mod tests {
         let (_test_dir, mut workspace) = open_folder(1);
         let task = workspace.update(Message::TagPanel(tag_panel::Message::ToggleSelectedTag));
         assert_eq!(task.units(), 1, "the release is issued");
+    }
+
+    /// Issue #260: Shift+Space toggles the tag under the tag cursor, but not while a file name
+    /// is being typed: with a rename open the focus of its field is asked first.
+    #[test]
+    fn shift_space_toggles_a_tag_unless_the_rename_field_has_the_keys() {
+        use crate::features::tag_panel;
+        let (_test_dir, mut workspace) = open_folder(1);
+        let first = workspace
+            .file_workspace()
+            .tag_list()
+            .filtered_display_tag_ids()[0];
+        let checked = |w: &FolderWorkspace| {
+            w.file_workspace()
+                .tag_list()
+                .get_tag(first)
+                .is_some_and(|t| t.is_checked())
+        };
+        let before = checked(&workspace);
+
+        let _ = workspace.update(Message::Folder(folder::Message::StartRename(0)));
+        assert!(workspace.inline_rename.is_some());
+        let task = workspace.update(Message::TagPanel(tag_panel::Message::ToggleSelectedTag));
+        assert_eq!(task.units(), 1, "the focus of the rename field is asked");
+        assert_eq!(checked(&workspace), before, "nothing is toggled yet");
+
+        // The field did not have the key (focus is elsewhere): the tag is toggled.
+        let _ = workspace.update(Message::ToggleSelectedTagUnlessRenaming);
+        assert_eq!(checked(&workspace), !before);
+    }
+
+    #[test]
+    fn shift_space_toggles_a_tag_with_no_rename_open() {
+        use crate::features::tag_panel;
+        let (_test_dir, mut workspace) = open_folder(1);
+        let first = workspace
+            .file_workspace()
+            .tag_list()
+            .filtered_display_tag_ids()[0];
+        let before = workspace
+            .file_workspace()
+            .tag_list()
+            .get_tag(first)
+            .is_some_and(|t| t.is_checked());
+        assert!(workspace.inline_rename.is_none());
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleSelectedTag));
+        let after = workspace
+            .file_workspace()
+            .tag_list()
+            .get_tag(first)
+            .is_some_and(|t| t.is_checked());
+        assert_eq!(
+            after, !before,
+            "toggled at once, with the search bar's release"
+        );
     }
 
     #[test]
