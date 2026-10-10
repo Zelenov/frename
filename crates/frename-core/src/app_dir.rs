@@ -63,7 +63,10 @@ fn data_dir_for(
         // The XDG spec says to ignore a relative XDG_DATA_HOME.
         return absolute("XDG_DATA_HOME")
             .or_else(|| absolute("HOME").map(|home| home.join(".local/share")))
-            .map_or_else(std::env::temp_dir, |base| base.join("frename"));
+            .map_or_else(
+                || std::env::temp_dir().join("frename"),
+                |base| base.join("frename"),
+            );
     }
     exe.and_then(Path::parent)
         .map(Path::to_path_buf)
@@ -77,7 +80,65 @@ fn runs_from_appimage(exe: Option<&Path>, var: &impl Fn(&str) -> Option<OsString
     let (Some(exe), Some(_), Some(appdir)) = (exe, var("APPIMAGE"), var("APPDIR")) else {
         return false;
     };
-    !appdir.is_empty() && exe.starts_with(Path::new(&appdir))
+    if appdir.is_empty() {
+        return false;
+    }
+    let appdir = Path::new(&appdir);
+    // `APPDIR` is the mount under `TMPDIR`, which may be behind a symlink, while the running
+    // executable's path is resolved; compare with the resolved folder too.
+    exe.starts_with(appdir)
+        || std::fs::canonicalize(appdir).is_ok_and(|resolved| exe.starts_with(resolved))
+}
+
+/// The plugin registry of the GStreamer inside the AppImage, or `None` outside one or when its
+/// folder cannot be made (the registry is only a cache: GStreamer then uses its default).
+/// GStreamer's default, `~/.cache/gstreamer-1.0/registry.x86_64.bin`, is shared with the system's
+/// own GStreamer apps, which the AppImage's plugins would overwrite it for. frename keeps its own
+/// in `$XDG_CACHE_HOME/frename`, by default `~/.cache/frename`. (It is still rescanned on each
+/// start: the mount path, which the registry is keyed by, changes every time.) Without a home the
+/// folder is `<temp>/frename`, a predictable name in a shared folder: it is made private (0700)
+/// and a symlink there is refused, but a folder another user made first is not detected.
+pub fn appimage_gstreamer_registry() -> Option<PathBuf> {
+    let registry = gstreamer_registry_for(
+        std::env::current_exe().ok().as_deref(),
+        PACKAGE_DATA_DIR.get().map(PathBuf::as_path),
+        |name| std::env::var_os(name),
+    )?;
+    ensure_registry_folder(&registry).then_some(registry)
+}
+
+/// Make the folder of `registry` (private on unix); false if that failed or it is a symlink.
+fn ensure_registry_folder(registry: &Path) -> bool {
+    let Some(folder) = registry.parent() else {
+        return false;
+    };
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+    builder.create(folder).is_ok()
+        && std::fs::symlink_metadata(folder).is_ok_and(|meta| meta.is_dir())
+}
+
+fn gstreamer_registry_for(
+    exe: Option<&Path>,
+    package: Option<&Path>,
+    var: impl Fn(&str) -> Option<OsString>,
+) -> Option<PathBuf> {
+    if package.is_some() || !runs_from_appimage(exe, &var) {
+        return None;
+    }
+    let absolute = |name: &str| {
+        var(name)
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute())
+    };
+    // The XDG spec says to ignore a relative XDG_CACHE_HOME.
+    let folder = absolute("XDG_CACHE_HOME")
+        .or_else(|| absolute("HOME").map(|home| home.join(".cache")))
+        .unwrap_or_else(std::env::temp_dir)
+        .join("frename");
+    Some(folder.join("gst-registry.bin"))
 }
 
 /// Whether this process runs from a mounted AppImage (the Linux download).
@@ -168,11 +229,82 @@ mod tests {
     }
 
     #[test]
-    fn an_appimage_without_a_home_uses_the_temp_folder_not_the_read_only_mount() {
+    fn an_appimage_without_a_home_uses_its_own_temp_subfolder_not_shared_temp() {
         assert_eq!(
             data_dir_for(Some(&mounted_exe()), None, env(vec![appimage(), appdir()])),
-            std::env::temp_dir()
+            std::env::temp_dir().join("frename")
         );
+    }
+
+    #[test]
+    fn the_appimage_keeps_its_gstreamer_registry_in_its_own_cache_folder() {
+        let registry = |pairs| gstreamer_registry_for(Some(&mounted_exe()), None, env(pairs));
+        assert_eq!(
+            registry(vec![
+                appimage(),
+                appdir(),
+                ("XDG_CACHE_HOME", abs("/cache")),
+                home()
+            ]),
+            Some(PathBuf::from(abs("/cache")).join("frename/gst-registry.bin"))
+        );
+        for xdg in ["", "relative/cache"] {
+            assert_eq!(
+                registry(vec![
+                    appimage(),
+                    appdir(),
+                    ("XDG_CACHE_HOME", xdg.to_string()),
+                    home()
+                ]),
+                Some(PathBuf::from(abs("/home/ed")).join(".cache/frename/gst-registry.bin")),
+                "XDG_CACHE_HOME={xdg:?}"
+            );
+        }
+        assert_eq!(
+            registry(vec![appimage(), appdir()]),
+            Some(std::env::temp_dir().join("frename/gst-registry.bin"))
+        );
+    }
+
+    #[test]
+    fn no_gstreamer_registry_outside_an_appimage() {
+        let vars = vec![appimage(), appdir(), home()];
+        assert_eq!(
+            gstreamer_registry_for(Some(&exe()), None, env(vars.clone())),
+            None
+        );
+        assert_eq!(
+            gstreamer_registry_for(Some(&mounted_exe()), None, env(vec![home()])),
+            None
+        );
+        assert_eq!(
+            gstreamer_registry_for(Some(&mounted_exe()), Some(Path::new("/pkg")), env(vars)),
+            None
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_appdir_behind_a_symlink_still_finds_its_executable() {
+        let base = std::env::temp_dir().join(format!("frename-appdir-link-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let real = base.join("real/.mount_frenam1");
+        std::fs::create_dir_all(real.join("usr/bin")).expect("mount");
+        std::os::unix::fs::symlink(base.join("real"), base.join("link")).expect("symlink");
+        let appdir = base.join("link/.mount_frenam1");
+        let exe = std::fs::canonicalize(&real)
+            .expect("resolved")
+            .join("usr/bin/frename");
+        let vars = vec![
+            appimage(),
+            ("APPDIR", appdir.to_string_lossy().into_owned()),
+            home(),
+        ];
+        assert_eq!(
+            data_dir_for(Some(&exe), None, env(vars)),
+            PathBuf::from(abs("/home/ed")).join(".local/share/frename")
+        );
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
@@ -248,5 +380,27 @@ mod tests {
     #[test]
     fn the_temp_folder_when_the_executable_is_unknown() {
         assert_eq!(data_dir_for(None, None, env(vec![])), std::env::temp_dir());
+    }
+
+    #[test]
+    fn a_registry_folder_that_cannot_be_made_is_refused_not_fatal() {
+        let base =
+            std::env::temp_dir().join(format!("frename-registry-dir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).expect("base");
+        let file = base.join("a-file");
+        std::fs::write(&file, b"x").expect("file");
+        assert!(!ensure_registry_folder(
+            &file.join("frename/gst-registry.bin")
+        ));
+        assert!(ensure_registry_folder(
+            &base.join("new/frename/gst-registry.bin")
+        ));
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&base, base.join("link")).expect("symlink");
+            assert!(!ensure_registry_folder(&base.join("link/gst-registry.bin")));
+        }
+        let _ = std::fs::remove_dir_all(&base);
     }
 }
