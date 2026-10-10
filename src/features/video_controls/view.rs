@@ -296,21 +296,11 @@ pub fn time_readout<'a>(
     };
     let readout = format!("{position} / {}", clock(state.duration_secs()));
     let readout = text::mono(readout).wrapping(iced::widget::text::Wrapping::None);
-    let readout = readout.color(readout_color(slow));
+    let readout = readout.color(time_readout_color(slow));
     container(readout)
         .width(TIME_READOUT_WIDTH)
         .align_right(TIME_READOUT_WIDTH)
         .into()
-}
-
-/// The readout's color: dimmed while a frame step is slow (#196), which a spinner beside it
-/// says is work, not "unavailable".
-fn readout_color(slow: bool) -> iced::Color {
-    if slow {
-        TEXT_DISABLED
-    } else {
-        TEXT_SECONDARY
-    }
 }
 
 /// `mm:ss`, or `h:mm:ss` from an hour on.
@@ -506,8 +496,8 @@ mod tests {
 
     #[test]
     fn the_readout_dims_only_while_a_step_is_slow() {
-        assert_eq!(readout_color(false), TEXT_SECONDARY);
-        assert_eq!(readout_color(true), TEXT_DISABLED);
+        assert_eq!(time_readout_color(false), TEXT_SECONDARY);
+        assert_eq!(time_readout_color(true), TEXT_DISABLED);
     }
 
     #[test]
