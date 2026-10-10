@@ -160,12 +160,53 @@ impl DemoRun {
 fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace::Message> {
     let video =
         |message| folder_workspace::Message::MediaViewer(media_viewer::Message::Video(message));
-    let mut steps = vec![video(video::Message::Seek(scenario.seek))];
+    // A clip opened where playback stopped is already there (#161): a seek would move it on.
+    let mut steps = if scenario.resume.is_some() {
+        Vec::new()
+    } else {
+        vec![video(video::Message::Seek(scenario.seek))]
+    };
     if scenario.subtitle_list {
         steps.push(video(video::Message::ToggleCueList));
     }
     if scenario.marker_list {
         steps.push(video(video::Message::ShowMarkerList));
+    }
+    if scenario.more {
+        steps.push(video(video::Message::ToggleMore));
+    }
+    if scenario.slow_step {
+        steps.push(video(video::Message::ShowSlowStep));
+    }
+    if scenario.toolbar_more {
+        steps.push(folder_workspace::Message::Folder(
+            folder::Message::ToggleToolbarMore,
+        ));
+    }
+    if scenario.recent_menu {
+        steps.push(folder_workspace::Message::Folder(
+            folder::Message::ToggleRecentFolders,
+        ));
+    }
+    if let Some(name) = &scenario.describing {
+        steps.push(folder_workspace::Message::ShowDescribing(name.clone()));
+    }
+    if scenario.confirming_describe_unnamed {
+        steps.push(folder_workspace::Message::ShowConfirmingDescribeUnnamed);
+    }
+    if scenario.describing_unnamed {
+        steps.push(folder_workspace::Message::ShowDescribingUnnamed);
+    }
+    // Demo only: an edit made as typing does it, which the recovery journal picks up on its next
+    // tick (the shot is taken after `SETTLE`).
+    for c in scenario
+        .type_in_comment
+        .iter()
+        .flat_map(|text| text.chars())
+    {
+        steps.push(folder_workspace::Message::CommentAction(
+            iced::widget::text_editor::Action::Edit(iced::widget::text_editor::Edit::Insert(c)),
+        ));
     }
     if scenario.rotate != 0 {
         steps.push(folder_workspace::Message::RotateVideo(scenario.rotate));
@@ -228,6 +269,9 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
                 batch::Message::SelectAction(action),
             ));
         }
+    }
+    if let Some(seconds) = scenario.ai_retry_wait_s.filter(|_| batch) {
+        steps.push(folder_workspace::Message::ShowBatchRetry(seconds));
     }
     steps
 }
@@ -345,19 +389,10 @@ pub fn prepare(args: &DemoArgs, work: &Path) -> Result<DemoRun, String> {
         .map_err(|e| format!("cannot read {}: {e}", scenario_path.display()))?;
     let scenario = DemoScenario::parse(&text).map_err(|e| e.to_string())?;
     let scenario_dir = scenario_path.parent().unwrap_or(Path::new("."));
-    let folder = work.join("folder");
+    let folder = work.join(scenario.folder_name.as_deref().unwrap_or("folder"));
     let file = frename_core::demo::stage(&scenario, scenario_dir, &folder)
         .map_err(|e| format!("cannot stage the demo folder: {e}"))?;
     let db = frename_core::AppDatabase::new();
-    for credit in &scenario.credit {
-        let service = match credit.service.as_str() {
-            "anthropic" => ApiKey::Anthropic,
-            "soniox" => ApiKey::Soniox,
-            other => return Err(format!("no service is named {other:?}")),
-        };
-        db.set_ai_top_up(service, credit.top_up, None);
-        db.record_ai_spend(service, credit.spent);
-    }
     frename_core::demo::seed(&db, &scenario, &folder, &file, args.mono, &args.lang);
     Ok(DemoRun::new(
         scenario,
@@ -622,7 +657,9 @@ mod tests {
                     "{name}: {} is not in tests/self-test-clips.txt",
                     file.from
                 );
-                if name == "mono.toml" {
+                // These stage tags the folder does not have, on purpose: the mono scenario for
+                // tags it does not know, the other for an unsaved tag's "+" (#216).
+                if name == "mono.toml" || name == "unsaved-tag-plus.toml" {
                     continue;
                 }
                 for tag in frename_core::FileSnapshot::parse(&file.name).tags() {

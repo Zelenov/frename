@@ -142,7 +142,7 @@ fn running<'a>(
     };
     with_button_bar(
         page_body(body),
-        fl!("batch-locked-until-end"),
+        text::secondary(fl!("batch-locked-until-end")).into(),
         [cancel.into()],
     )
 }
@@ -183,7 +183,11 @@ fn result<'a>(
     let close = button::primary(fl!("batch-close"))
         .on_press(Message::CloseReport)
         .into();
-    with_button_bar(page_body(body), "", again.into_iter().chain([close]))
+    with_button_bar(
+        page_body(body),
+        text::secondary("").into(),
+        again.into_iter().chain([close]),
+    )
 }
 
 /// The one notice that says how the job ended, with the fix when there is one.

@@ -15,7 +15,7 @@ members = [".", "crates/frename-core"]
 frename-core = { path = "crates/frename-core" }
 # Describing clips with Claude: frames and subtitles in, a summary and key moments out.
 # Pinned to a commit of Zelenov/clipscribe; the library with frames, without its command line.
-clipscribe = { git = "https://github.com/Zelenov/clipscribe", rev = "0b9e8189db62b52069210a305e2a580a94ae3354", default-features = false, features = ["frames"] }
+clipscribe = { git = "https://github.com/Zelenov/clipscribe", rev = "6013f49458ae8524f86ff76838e69dd90241024a", default-features = false, features = ["frames"] }
 
 # GUI framework - Iced for cross-platform GUI
 iced = { version = "0.14", features = ["tokio", "image", "svg"] }
@@ -62,12 +62,19 @@ ureq = { version = "3", default-features = false }
 dirs = "6"
 
 # Subtitles from speech (Soniox), as a library: no command line parts.
-sonisub = { version = "0.3", default-features = false }
+sonisub = { version = "0.4", default-features = false }
 # sonisub's errors, and its progress bars: frename hands it a hidden one (same version as sonisub).
 anyhow = "1"
 indicatif = "0.18"
 
+[features]
+# The Microsoft Store build (packaging/windows/build-msix.ps1): the Store installs and updates
+# frename, so Velopack's hooks and self-update are off and data lives in %LocalAppData%\frename-store.
+store = []
+
 [dev-dependencies]
+# Test helpers of the core (`frename_core::test_support`), not in release builds.
+frename-core = { path = "crates/frename-core", features = ["test-support"] }
 # Parse the .ftl files in the translation tests
 fluent-syntax = "0.12"
 fluent-bundle = "0.16"

@@ -2,7 +2,7 @@
 //! clips), loading, and a clip that cannot be played. Loading and the failure say what is going
 //! on in words.
 
-use iced::widget::{column, container};
+use iced::widget::{column, container, mouse_area};
 use iced::{Alignment, Element, Length};
 
 use crate::ui::empty;
@@ -59,23 +59,29 @@ fn panel<'a, M: 'a>(content: Element<'a, M>) -> Element<'a, M> {
 }
 
 /// A short note ("Frame saved") floating over the bottom left of the picture, when the controls
-/// bar has no room for it (§13.3.5).
-pub fn floating_notice<'a, M: 'a>(notice: &'a str) -> Element<'a, M> {
-    container(
-        container(text::body(notice))
-            .max_width(TOOLTIP_MAX_WIDTH)
-            .padding(iced::Padding {
-                top: SPACE_XS,
-                bottom: SPACE_XS,
-                left: SPACE_S,
-                right: SPACE_S,
-            })
-            .style(style::popup),
-    )
-    .padding(SPACE_S)
-    .width(Length::Fill)
-    .height(Length::Fill)
-    .align_left(Length::Fill)
-    .align_bottom(Length::Fill)
-    .into()
+/// bar has no room for it (§13.3.5). With `on_press`, a click on the note sends it.
+pub fn floating_notice<'a, M: Clone + 'a>(notice: &'a str, on_press: Option<M>) -> Element<'a, M> {
+    let note = container(text::body(notice))
+        .max_width(TOOLTIP_MAX_WIDTH)
+        .padding(iced::Padding {
+            top: SPACE_XS,
+            bottom: SPACE_XS,
+            left: SPACE_S,
+            right: SPACE_S,
+        })
+        .style(style::popup);
+    let note: Element<'a, M> = match on_press {
+        Some(message) => mouse_area(note)
+            .on_press(message)
+            .interaction(iced::mouse::Interaction::Pointer)
+            .into(),
+        None => note.into(),
+    };
+    container(note)
+        .padding(SPACE_S)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .align_left(Length::Fill)
+        .align_bottom(Length::Fill)
+        .into()
 }

@@ -1,3 +1,4 @@
+pub mod check_tags;
 pub mod create_tag;
 pub mod delete_tag;
 pub mod marker;
@@ -13,11 +14,12 @@ pub mod star_tag;
 pub mod sync_order;
 pub mod toggle_tag;
 
+pub use check_tags::CheckTagsCommand;
 pub use create_tag::CreateTagCommand;
 pub use delete_tag::DeleteTagCommand;
 pub use marker::{
     AddMarkerCommand, DeleteMarkerCommand, SetMarkerColorCommand, SetMarkerNameCommand,
-    SetMarkerSpanCommand,
+    SetMarkerSpanCommand, SetMarkerTextCommand,
 };
 pub use navigate_file::NavigateFileCommand;
 pub use paste_tags::PasteTagsCommand;
@@ -26,7 +28,7 @@ pub use reorder_tag::ReorderTagCommand;
 pub use rotate_video::RotateVideoCommand;
 pub use save_tag_cmd::SaveTagCommand;
 pub use set_comment::SetCommentCommand;
-pub use set_segment::{SetSegmentEndCommand, SetSegmentStartCommand};
+pub use set_segment::{SetSegmentCommand, SetSegmentEndCommand, SetSegmentStartCommand};
 pub use star_tag::StarTagCommand;
 pub use sync_order::SyncTagOrderCommand;
 pub use toggle_tag::ToggleTagCommand;

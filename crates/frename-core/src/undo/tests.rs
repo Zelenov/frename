@@ -10,10 +10,11 @@ mod tests {
 
     use crate::db::fake_app_storage::FakeAppStorage;
     use crate::undo::{
-        AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,
-        NavigateFileCommand, PasteTagsCommand, RenameFileCommand, ReorderTagCommand,
-        SaveTagCommand, SetCommentCommand, SetMarkerColorCommand, SetMarkerNameCommand,
-        SetMarkerSpanCommand, StarTagCommand, SyncTagOrderCommand, ToggleTagCommand, UndoContext,
+        AddMarkerCommand, CheckTagsCommand, CreateTagCommand, DeleteMarkerCommand,
+        DeleteTagCommand, History, NavigateFileCommand, PasteTagsCommand, RenameFileCommand,
+        ReorderTagCommand, SaveTagCommand, SetCommentCommand, SetMarkerColorCommand,
+        SetMarkerNameCommand, SetMarkerSpanCommand, SetMarkerTextCommand, SetSegmentCommand,
+        StarTagCommand, SyncTagOrderCommand, ToggleTagCommand, UndoContext,
     };
     use crate::{Directory, File, FileId, FileSnapshot, Marker, MarkerColor, StoredTag, TagList};
     use uuid::Uuid;
@@ -500,6 +501,63 @@ mod tests {
         assert_eq!(directory.selected_index(), Some(1));
     }
 
+    // --- CheckTagsCommand ---
+
+    #[test]
+    fn checking_several_tags_is_one_step() {
+        let store = make_store_with_tags(&["Action", "Beach", "Night"]);
+        let snapshot = snapshot_with_tags(&["Action"]);
+        let mut tag_list = TagList::new(store, snapshot);
+        let mut dir = empty_directory();
+        let beach = tag_list.tag_id_by_name("beach").unwrap();
+        let night = tag_list.tag_id_by_name("Night").unwrap();
+        tag_list.toggle_by_id(beach);
+        tag_list.toggle_by_id(night);
+        let mut history = History::new(50);
+        history.push(Box::new(CheckTagsCommand {
+            tag_ids: vec![beach, night],
+        }));
+        let checked = |list: &TagList<FakeAppStorage>| {
+            ["Action", "Beach", "Night"].map(|name| {
+                list.get_tag(list.tag_id_by_name(name).unwrap())
+                    .unwrap()
+                    .is_checked()
+            })
+        };
+        {
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
+            history.undo(&mut ctx).unwrap();
+        }
+        assert_eq!(
+            checked(&tag_list),
+            [true, false, false],
+            "one undo, both off"
+        );
+        {
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
+            history.redo(&mut ctx).unwrap();
+        }
+        assert_eq!(checked(&tag_list), [true, true, true]);
+    }
+
+    #[test]
+    fn the_folders_own_tags_are_the_saved_ones() {
+        let store = make_store_with_tags(&["Action", "Beach"]);
+        let snapshot = snapshot_with_tags(&["Action", "only-in-the-name"]);
+        let tag_list = TagList::new(store, snapshot);
+        let mut names = tag_list.saved_tag_names();
+        names.sort();
+        assert_eq!(names, ["Action", "Beach"]);
+        assert!(tag_list.tag_id_by_name("ONLY-IN-THE-NAME").is_some());
+        assert!(tag_list.tag_id_by_name("missing").is_none());
+    }
+
     // --- ToggleTagCommand ---
 
     #[test]
@@ -834,6 +892,82 @@ mod tests {
         assert!(tag_list.get_tag(id).unwrap().is_stored());
     }
 
+    /// Issue #273: after save, undo and redo of a new tag the unsaved tags still lead the
+    /// filtered order (the tag grid puts them in their own group).
+    #[test]
+    fn unsaved_tags_lead_the_grid_after_undo_and_redo_of_a_save() {
+        let store = make_store_with_tags(&["pick", "wide"]);
+        let mut tag_list = TagList::new(store, snapshot_with_tags(&["wide", "Zork"]));
+        let mut dir = empty_directory();
+        let id = tag_list.create_new_tag("Mew").unwrap();
+        tag_list.save_tag(id).unwrap();
+        let color_index = tag_list.get_tag(id).unwrap().color_index();
+        let mut history = History::new(50);
+        history.push(Box::new(SaveTagCommand {
+            tag_id: id,
+            color_index,
+        }));
+
+        let unsaved_count = |tl: &TagList<FakeAppStorage>| {
+            tl.filtered_display_tag_ids()
+                .iter()
+                .take_while(|&&t| !tl.get_tag(t).unwrap().is_stored())
+                .count()
+        };
+        let unsaved_total = |tl: &TagList<FakeAppStorage>| {
+            tl.filtered_display_tag_ids()
+                .iter()
+                .filter(|&&t| !tl.get_tag(t).unwrap().is_stored())
+                .count()
+        };
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).unwrap();
+        assert_eq!(unsaved_count(ctx.tag_list), 2, "Mew and Zork");
+        history.redo(&mut ctx).unwrap();
+        assert_eq!(unsaved_total(ctx.tag_list), 1);
+        assert_eq!(
+            unsaved_count(ctx.tag_list),
+            1,
+            "Zork leads, before the stored tags"
+        );
+    }
+
+    /// Issue #97: saving a tag that is stored already changes nothing, so no step is recorded
+    /// and undo leaves the tag stored.
+    #[test]
+    fn saving_a_stored_tag_again_is_not_a_step() {
+        let store = FakeAppStorage::new();
+        let mut tag_list = TagList::new(store, FileSnapshot::default());
+        let mut dir = empty_directory();
+        let id = tag_list.create_new_tag("NewTag").unwrap();
+        let mut history = History::new(50);
+
+        // A real save is a step.
+        assert!(tag_list.save_tag_once(id).unwrap());
+        let color_index = tag_list.get_tag(id).unwrap().color_index();
+        history.push(Box::new(SaveTagCommand {
+            tag_id: id,
+            color_index,
+        }));
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).unwrap();
+        assert!(!ctx.tag_list.get_tag(id).unwrap().is_stored());
+        history.redo(&mut ctx).unwrap();
+        assert!(ctx.tag_list.get_tag(id).unwrap().is_stored());
+
+        // Saving it again reports "already saved": the caller pushes nothing.
+        history = History::new(50);
+        assert!(!ctx.tag_list.save_tag_once(id).unwrap());
+        assert!(!history.can_undo());
+        assert!(ctx.tag_list.get_tag(id).unwrap().is_stored());
+    }
+
     // --- StarTagCommand ---
 
     #[test]
@@ -1124,8 +1258,7 @@ mod tests {
         use crate::{FileTagger, Rotation};
 
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/wide.mov");
-        let dir = std::env::temp_dir().join(format!("frename-undo-rotate-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir("undo-rotate");
         let path = dir.join("clip.mov");
         std::fs::copy(fixture, &path).expect("copy");
 
@@ -1242,6 +1375,33 @@ mod tests {
     }
 
     #[test]
+    fn marker_text_command_undoes_and_redoes_the_name_and_comment_together() {
+        let mut tag_list = marker_list();
+        let mut marker = Marker::new(0);
+        marker.comment = "mine".to_string();
+        let guid = marker.guid.clone().unwrap();
+        tag_list.add_marker(marker);
+        let new = ("Lion".to_string(), "mine\nA lion walks past.".to_string());
+        tag_list.update_marker(&guid, |m| (m.name, m.comment) = new.clone());
+        let mut history = History::new(50);
+        history.push(Box::new(SetMarkerTextCommand {
+            guid: guid.clone(),
+            old: (String::new(), "mine".to_string()),
+            new: new.clone(),
+        }));
+
+        run(&mut history, &mut tag_list, true);
+        let undone = tag_list.marker(&guid).unwrap();
+        assert_eq!(
+            (undone.name.as_str(), undone.comment.as_str()),
+            ("", "mine")
+        );
+        run(&mut history, &mut tag_list, false);
+        let redone = tag_list.marker(&guid).unwrap();
+        assert_eq!((redone.name.clone(), redone.comment.clone()), new);
+    }
+
+    #[test]
     fn sync_command_restores_the_orders_and_the_lock() {
         let store = make_store_with_tags(&["Action", "Comedy", "Summer"]);
         let mut tag_list = TagList::new(store, snapshot_with_tags(&["Action", "Comedy", "Summer"]));
@@ -1301,5 +1461,287 @@ mod tests {
         tag_list.restore_order_state(state).unwrap();
         assert_eq!(tag_list.file_snapshot().tags(), ["Action", "Comedy", "Zed"]);
         assert_eq!(tag_list.filtered_display_tag_ids().len(), 3);
+    }
+
+    #[test]
+    fn setting_both_in_out_points_is_one_undo_step() {
+        let mut tag_list = marker_list();
+        let mut history = History::new(50);
+        tag_list.set_segment_start_secs(Some(1.0));
+        let old = tag_list.file_snapshot().segment();
+        let new = crate::Segment {
+            start: Some(3.0),
+            end: Some(12.0),
+        };
+        tag_list.set_segment_start_secs(new.start);
+        tag_list.set_segment_end_secs(new.end);
+        history.push(Box::new(SetSegmentCommand { old, new }));
+
+        run(&mut history, &mut tag_list, true);
+        assert_eq!(
+            tag_list.file_snapshot().segment(),
+            crate::Segment {
+                start: Some(1.0),
+                end: None,
+            },
+            "one undo brings back both points as they were"
+        );
+        run(&mut history, &mut tag_list, false);
+        assert_eq!(tag_list.file_snapshot().segment(), new);
+    }
+
+    // --- NavigateFileCommand renames on a real folder ---
+
+    /// A folder with `names` as files (content = the name), and a command that renamed
+    /// `before` to `after`. Returns the folder, the directory and the command.
+    fn rename_fixture(
+        label: &str,
+        before: &str,
+        after: &str,
+    ) -> (
+        PathBuf,
+        Directory<FakeAppStorage>,
+        NavigateFileCommand,
+        FileId,
+    ) {
+        let dir_path = crate::test_support::fresh_dir(&format!("undo-{label}"));
+        let file = File::from_path(dir_path.join(after), SystemTime::UNIX_EPOCH);
+        let id = file.id();
+        let directory = Directory::with_files(&dir_path, vec![file], FakeAppStorage::new());
+        let snap = FileSnapshot::new(vec![], "x", "mp4", before);
+        let cmd = NavigateFileCommand {
+            file_id: id,
+            to_file_id: id,
+            path_before: dir_path.join(before),
+            path_after: dir_path.join(after),
+            snapshot_before: snap.clone(),
+            snapshot_after: snap,
+        };
+        (dir_path, directory, cmd, id)
+    }
+
+    fn write(path: &std::path::Path, text: &str) {
+        std::fs::write(path, text).expect("write");
+    }
+
+    #[test]
+    fn undo_of_a_rename_refuses_to_overwrite_another_clip() {
+        let (dir_path, mut directory, cmd, _) =
+            rename_fixture("undo-clobber", "foo.mp4", "foo.GOAT.mp4");
+        write(&dir_path.join("foo.GOAT.mp4"), "clip A");
+        // Clip B was renamed onto the name clip A left free.
+        write(&dir_path.join("foo.mp4"), "clip B");
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+        history.push(Box::new(cmd));
+
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+        let err = history.undo(&mut ctx).expect_err("must refuse");
+        assert!(matches!(err, crate::undo::UndoError::NameTaken(_)), "{err}");
+        assert_eq!(
+            std::fs::read_to_string(dir_path.join("foo.mp4")).unwrap(),
+            "clip B"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir_path.join("foo.GOAT.mp4")).unwrap(),
+            "clip A"
+        );
+        // The refused step is not lost: it can be tried again, and nothing moved to redo.
+        assert!(history.can_undo());
+        assert!(!history.can_redo());
+    }
+
+    #[test]
+    fn a_refused_undo_works_once_the_name_is_free() {
+        let (dir_path, mut directory, cmd, _) =
+            rename_fixture("undo-retry", "foo.mp4", "foo.GOAT.mp4");
+        write(&dir_path.join("foo.GOAT.mp4"), "clip A");
+        write(&dir_path.join("foo.mp4"), "clip B");
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+        history.push(Box::new(cmd));
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+        assert!(history.undo(&mut ctx).is_err());
+        std::fs::remove_file(dir_path.join("foo.mp4")).unwrap();
+        history.undo(&mut ctx).expect("name is free now");
+        assert_eq!(
+            std::fs::read_to_string(dir_path.join("foo.mp4")).unwrap(),
+            "clip A"
+        );
+        assert!(history.can_redo());
+    }
+
+    #[test]
+    fn redo_of_a_rename_refuses_to_overwrite_another_clip() {
+        let (dir_path, mut directory, cmd, _) =
+            rename_fixture("redo-clobber", "foo.mp4", "foo.GOAT.mp4");
+        write(&dir_path.join("foo.mp4"), "clip A");
+        // Something else took the name the redo would give clip A.
+        write(&dir_path.join("foo.GOAT.mp4"), "clip C");
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+        history.push(Box::new(cmd));
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+        // Put the command on the redo stack without touching the files: undo needs the
+        // renamed file's name free, so move clip C away for that step and back.
+        std::fs::rename(dir_path.join("foo.GOAT.mp4"), dir_path.join("c.tmp")).unwrap();
+        std::fs::rename(dir_path.join("foo.mp4"), dir_path.join("foo.GOAT.mp4")).unwrap();
+        history.undo(&mut ctx).expect("undo");
+        write(&dir_path.join("foo.GOAT.mp4"), "clip C");
+
+        let err = history.redo(&mut ctx).expect_err("must refuse");
+        assert!(matches!(err, crate::undo::UndoError::NameTaken(_)), "{err}");
+        assert_eq!(
+            std::fs::read_to_string(dir_path.join("foo.GOAT.mp4")).unwrap(),
+            "clip C"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir_path.join("foo.mp4")).unwrap(),
+            "clip A"
+        );
+        assert!(history.can_redo());
+    }
+
+    #[test]
+    fn undo_and_redo_of_a_rename_move_the_comment_along() {
+        let (dir_path, mut directory, cmd, _) =
+            rename_fixture("comment-moves", "foo.mp4", "foo.GOAT.mp4");
+        let (before, after) = (dir_path.join("foo.mp4"), dir_path.join("foo.GOAT.mp4"));
+        write(&after, "clip A");
+        crate::comment::save_comment(&after, "nice take");
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+        history.push(Box::new(cmd));
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+
+        history.undo(&mut ctx).expect("undo");
+        assert_eq!(crate::comment::load_comment(&before), "nice take");
+        assert!(!crate::comment::comment_path(&after).exists());
+
+        history.redo(&mut ctx).expect("redo");
+        assert_eq!(crate::comment::load_comment(&after), "nice take");
+        assert!(!crate::comment::comment_path(&before).exists());
+    }
+
+    #[test]
+    fn undo_refuses_when_the_comment_name_is_taken() {
+        let (dir_path, mut directory, cmd, _) =
+            rename_fixture("comment-taken", "foo.mp4", "foo.GOAT.mp4");
+        let (before, after) = (dir_path.join("foo.mp4"), dir_path.join("foo.GOAT.mp4"));
+        write(&after, "clip A");
+        crate::comment::save_comment(&after, "comment of A");
+        // No clip is called foo.mp4, but a comment is left under its name.
+        crate::comment::save_comment(&before, "stray comment");
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+        history.push(Box::new(cmd));
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+
+        let err = history.undo(&mut ctx).expect_err("must refuse");
+        assert!(matches!(err, crate::undo::UndoError::NameTaken(_)), "{err}");
+        assert!(after.exists(), "the clip stays where it was");
+        assert_eq!(crate::comment::load_comment(&before), "stray comment");
+        assert_eq!(crate::comment::load_comment(&after), "comment of A");
+    }
+
+    #[test]
+    fn undo_and_redo_of_a_rename_move_every_sidecar_the_save_moves() {
+        let (dir_path, mut directory, cmd, _) =
+            rename_fixture("all-sidecars", "foo.mp4", "foo.GOAT.mp4");
+        let (before, after) = (dir_path.join("foo.mp4"), dir_path.join("foo.GOAT.mp4"));
+        write(&after, "clip A");
+        crate::comment::save_comment(&after, "nice take");
+        let sidecars = |video: &std::path::Path| {
+            let mut all = crate::subtitles::subtitle_candidates(video);
+            all.push(crate::subtitles::transcript_path(video));
+            all
+        };
+        for p in sidecars(&after) {
+            write(&p, "sidecar");
+        }
+        let snap = |clip: &str| dir_path.join(format!("{clip}.snap.00-00-10-936.jpg"));
+        write(&snap("foo.GOAT.mp4"), "jpg");
+        // Another clip whose name starts with this one keeps its screenshot.
+        let other = snap("foo.GOAT.mp4.bak");
+        write(&other, "other");
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+        history.push(Box::new(cmd));
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+
+        history.undo(&mut ctx).expect("undo");
+        assert!(before.exists() && !after.exists());
+        assert!(crate::comment::comment_path(&before).exists());
+        for (old, new) in sidecars(&after).iter().zip(sidecars(&before).iter()) {
+            assert!(new.exists() && !old.exists(), "{old:?} -> {new:?}");
+        }
+        assert!(snap("foo.mp4").exists() && !snap("foo.GOAT.mp4").exists());
+        assert!(other.exists());
+
+        history.redo(&mut ctx).expect("redo");
+        assert!(after.exists() && !before.exists());
+        assert!(crate::comment::comment_path(&after).exists());
+        for (old, new) in sidecars(&before).iter().zip(sidecars(&after).iter()) {
+            assert!(new.exists() && !old.exists(), "{old:?} -> {new:?}");
+        }
+        assert!(snap("foo.GOAT.mp4").exists() && !snap("foo.mp4").exists());
+        assert!(other.exists());
+    }
+
+    #[test]
+    fn undo_refuses_when_a_screenshot_name_is_taken() {
+        let (dir_path, mut directory, cmd, _) =
+            rename_fixture("snap-taken", "foo.mp4", "foo.GOAT.mp4");
+        let after = dir_path.join("foo.GOAT.mp4");
+        write(&after, "clip A");
+        let snap = |clip: &str| dir_path.join(format!("{clip}.snap.00-00-01-000.jpg"));
+        write(&snap("foo.GOAT.mp4"), "A");
+        write(&snap("foo.mp4"), "stray");
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+        history.push(Box::new(cmd));
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+        let err = history.undo(&mut ctx).expect_err("must refuse");
+        assert!(matches!(err, crate::undo::UndoError::NameTaken(_)), "{err}");
+        assert!(after.exists());
+        assert_eq!(std::fs::read(snap("foo.mp4")).unwrap(), b"stray");
+        assert_eq!(std::fs::read(snap("foo.GOAT.mp4")).unwrap(), b"A");
+    }
+
+    #[test]
+    fn a_rename_of_a_clip_without_screenshots_moves_nothing_else() {
+        let (dir_path, mut directory, cmd, _) =
+            rename_fixture("no-snaps", "foo.mp4", "foo.GOAT.mp4");
+        write(&dir_path.join("foo.GOAT.mp4"), "clip A");
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+        history.push(Box::new(cmd));
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).expect("undo");
+        assert!(dir_path.join("foo.mp4").exists());
     }
 }

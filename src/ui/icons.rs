@@ -52,6 +52,7 @@ macro_rules! icons {
 
 icons! {
     ArrowDown => "arrow-down.svg",
+    ArrowRight => "arrow-right.svg",
     ArrowUp => "arrow-up.svg",
     Camera => "camera.svg",
     Captions => "captions.svg",
@@ -107,6 +108,8 @@ icons! {
     Sparkles => "sparkles.svg",
     Star => "star.svg",
     StarFilled => "star-filled.svg",
+    StepBack => "step-back.svg",
+    StepForward => "step-forward.svg",
     Tag => "tag.svg",
     TextCursorInput => "text-cursor-input.svg",
     Trash => "trash.svg",

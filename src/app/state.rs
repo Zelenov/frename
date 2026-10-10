@@ -10,8 +10,8 @@
 use iced::{event, keyboard, window, Element, Subscription, Task};
 
 use crate::features::{
-    batch, drag_drop, drag_out, file_menu, folder, folder_workspace, media_viewer,
-    media_viewer::video as media_viewer_video, settings, tag_panel, updates,
+    batch, drag_drop, drag_out, file_menu, file_name_panel, folder, folder_workspace, media_viewer,
+    media_viewer::video as media_viewer_video, settings, tag_panel, updates, video_controls,
 };
 use crate::ui::palette::TagPalette;
 use frename_core::ai::key::{self as api_key, ApiKey};
@@ -180,6 +180,26 @@ fn main_window_event(
                 media_viewer_video::Message::TogglePause,
             )),
         )),
+        // F6 adds the most likely tag the AI suggests, Shift+F6 every one: always, like the other
+        // F-keys. A held key adds once, not one suggestion after another.
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(keyboard::key::Named::F6),
+            modifiers,
+            repeat,
+            ..
+        }) => {
+            if repeat {
+                return Some(Message::Noop);
+            }
+            let add = if modifiers.shift() {
+                file_name_panel::Message::AddAllSuggestedTags
+            } else {
+                file_name_panel::Message::AddFirstSuggestedTag
+            };
+            Some(Message::FolderWorkspace(
+                folder_workspace::Message::FileNamePanel(add),
+            ))
+        }
         // F5 toggles fullscreen for the media viewer.
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
             key: keyboard::Key::Named(keyboard::key::Named::F5),
@@ -247,6 +267,67 @@ fn main_window_event(
             };
             Some(Message::FolderWorkspace(turn))
         }
+        // Ctrl+R opens the list of recent folders (R for Recent), also after typing in a search
+        // field (like the F-keys): the field has no use for it. A held key opens it once.
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key,
+            physical_key,
+            modifiers,
+            repeat,
+            ..
+        }) if modifiers.command()
+            && !modifiers.shift()
+            && !modifiers.alt()
+            && latin_key(&key, physical_key) == Some('r') =>
+        {
+            if repeat {
+                return Some(Message::Noop);
+            }
+            Some(Message::FolderWorkspace(folder_workspace::Message::Folder(
+                folder::Message::ToggleRecentFolders,
+            )))
+        }
+        // Alt+← / → step one frame in the open video, also after typing in a search field (like
+        // the F-keys), but not while writing a comment; a held key keeps stepping.
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(arrow),
+            modifiers,
+            ..
+        }) if modifiers.alt()
+            && !modifiers.command()
+            && matches!(
+                arrow,
+                keyboard::key::Named::ArrowLeft | keyboard::key::Named::ArrowRight
+            ) =>
+        {
+            let step = if arrow == keyboard::key::Named::ArrowLeft {
+                video_controls::FrameStep::Back
+            } else {
+                video_controls::FrameStep::Forward
+            };
+            // A text field took the key: the workspace checks it is not the comment box, where
+            // the keys belong to the text.
+            let step = if matches!(status, event::Status::Ignored) {
+                folder_workspace::Message::StepFrame(step)
+            } else {
+                folder_workspace::Message::StepFrameWhileTyping(step)
+            };
+            Some(Message::FolderWorkspace(step))
+        }
+        // Home goes to the start of the clip. A text field that took it keeps it, except a
+        // search field while the note says Home starts the clip over: typing a tag is how the
+        // editor works, and the note's promise must hold then (#161).
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(keyboard::key::Named::Home),
+            modifiers,
+            ..
+        }) if modifiers.is_empty() => Some(Message::FolderWorkspace(
+            if matches!(status, event::Status::Ignored) {
+                folder_workspace::Message::GoToStart
+            } else {
+                folder_workspace::Message::GoToStartWhileTyping
+            },
+        )),
         // Escape: handled by FolderWorkspace (exits fullscreen or clears search filter).
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
             key: keyboard::Key::Named(keyboard::key::Named::Escape),
@@ -488,8 +569,16 @@ impl FrenameApp {
                     ),
                 ));
                 let model = Task::done(describe_ai_message(batch::describe_ai::Message::SetModel(
-                    clipscribe::Model::from_id(&self.settings.settings().ai_model),
+                    frename_core::ai::model_from_id(&self.settings.settings().ai_model),
                 )));
+                let moments = Task::done(describe_ai_message(
+                    batch::describe_ai::Message::SetMoments(self.settings.settings().ai_moments),
+                ));
+                let tag_suggestions = Task::done(describe_ai_message(
+                    batch::describe_ai::Message::SetTagSuggestions(
+                        self.settings.settings().ai_tag_suggestions,
+                    ),
+                ));
                 let open = match self.initial_path.take().or(self.restored_clip.take()) {
                     Some(pair) => folder_workspace::Message::ScanFolder(pair),
                     None => folder_workspace::Message::LoadLastSession,
@@ -497,6 +586,8 @@ impl FrenameApp {
                 let load = Task::batch([
                     language,
                     model,
+                    moments,
+                    tag_suggestions,
                     self.subtitle_config(),
                     Task::done(Message::FolderWorkspace(open)),
                 ]);
@@ -600,6 +691,12 @@ impl FrenameApp {
                     settings::Message::SetAiModel(model) => Task::done(describe_ai_message(
                         batch::describe_ai::Message::SetModel(model),
                     )),
+                    settings::Message::SetAiMoments(moments) => Task::done(describe_ai_message(
+                        batch::describe_ai::Message::SetMoments(moments),
+                    )),
+                    settings::Message::SetAiTagSuggestions(on) => Task::done(describe_ai_message(
+                        batch::describe_ai::Message::SetTagSuggestions(on),
+                    )),
                     settings::Message::Key(which, settings::KeyMessage::Save) => {
                         match self.settings.typed_key(which) {
                             Some(key) => {
@@ -668,13 +765,6 @@ impl FrenameApp {
                     settings::Message::Key(..) => Task::none(),
                     settings::Message::SetSubtitleLanguage(..)
                     | settings::Message::SetSubtitleCueLength(_) => self.subtitle_config(),
-                    // A recorded top-up changes what the batch panels say is left.
-                    settings::Message::TopUp(_, settings::TopUpMessage::Record) => {
-                        Task::done(Message::FolderWorkspace(folder_workspace::Message::Batch(
-                            batch::Message::Action(batch::ActionMessage::RefreshCredit),
-                        )))
-                    }
-                    settings::Message::TopUp(..) => Task::none(),
                     settings::Message::SetMonochromeTags(_)
                     | settings::Message::ShowPage(_)
                     | settings::Message::NextPage
@@ -717,6 +807,13 @@ impl FrenameApp {
                 batch::ActionMessage::OpenSettings,
             ))) => Task::done(Message::OpenSettings(Some(settings::Page::Saving))),
             Message::CloseRequested(id) => {
+                // `CloseRequested` fires for the Settings window's own OS close button too (the
+                // subscription isn't scoped to one window). Settings has nothing to save and no
+                // video to unload: it closes at once, and must never take the place of the main
+                // window in `pending_close` (issue #105) or stop a running batch.
+                if id != self.main_window {
+                    return window::close(id);
+                }
                 crate::crash_guard::mark_closing();
                 // A batch job may be writing a file: stop it after that file, then close.
                 if self.folder_workspace.is_batch_running() {
@@ -726,18 +823,11 @@ impl FrenameApp {
                     )));
                 }
                 // Save the open file's tags, comment and in/out before closing: otherwise they
-                // are lost silently (issue #21). Only for the main window: `CloseRequested`
-                // also fires for the Settings window's own OS close button (the subscription
-                // isn't scoped to one window), and that must not tell folder_workspace the app
-                // itself is closing — it would wrongly drop a queued folder scan or skip
-                // reopening the video once the (unrelated) unload this triggers finishes.
-                let save = if id == self.main_window {
-                    self.folder_workspace
-                        .flush_open_file()
-                        .map(Message::FolderWorkspace)
-                } else {
-                    Task::none()
-                };
+                // are lost silently (issue #21).
+                let save = self
+                    .folder_workspace
+                    .flush_open_file()
+                    .map(Message::FolderWorkspace);
                 if !self.folder_workspace.needs_media_unload() {
                     return Task::batch([save, window::close(id)]);
                 }
@@ -874,6 +964,8 @@ impl FrenameApp {
     /// Tell the subtitle action the settings it uses: the languages and the cue length.
     fn subtitle_config(&self) -> Task<Message> {
         let settings = self.settings.settings();
+        // Also the layout a Premiere transcript is read with, when it is shown as subtitles.
+        frename_core::set_cue_length(settings.subtitle_cue_length);
         Task::done(subtitles_message(
             batch::generate_subtitles::Message::SetConfig(batch::generate_subtitles::Config {
                 languages: settings.subtitle_languages.clone(),
@@ -904,7 +996,6 @@ impl FrenameApp {
     /// shows the page it showed last, or Updates when an update is ready (the dot on the
     /// settings button leads there).
     fn open_settings_on(&mut self, page: Option<settings::Page>) -> Task<Message> {
-        self.settings.refresh_spend();
         let update_ready = self.settings.updates().available_version().is_some();
         let page = settings::Page::to_open(page, update_ready);
         let show = page.map_or_else(Task::none, |page| {
@@ -1076,6 +1167,67 @@ mod tests {
         let _app = FrenameApp::new(window::Id::unique(), None);
     }
 
+    /// An app whose main window's video is still loading, so closing must wait for the unload.
+    fn app_with_loading_video() -> (FrenameApp, window::Id, window::Id) {
+        let main = window::Id::unique();
+        let settings = window::Id::unique();
+        let mut app = FrenameApp::new(main, None);
+        app.settings_window = Some(settings);
+        app.folder_workspace
+            .media_viewer_mut()
+            .pretend_video_loading(true);
+        assert!(app.folder_workspace.needs_media_unload());
+        (app, main, settings)
+    }
+
+    fn unload(app: &mut FrenameApp) {
+        app.folder_workspace
+            .media_viewer_mut()
+            .pretend_video_loading(false);
+        let _ = app.update(Message::FolderWorkspace(
+            folder_workspace::Message::MediaViewer(media_viewer::Message::Unloaded),
+        ));
+    }
+
+    /// Issue #105: the Settings window's close used to overwrite the id the main window's close
+    /// was waiting on, so the one `Unloaded` closed only Settings and the app did not quit.
+    #[test]
+    fn closing_the_main_window_then_settings_before_the_unload_still_quits() {
+        let (mut app, main, settings) = app_with_loading_video();
+        let _ = app.update(Message::CloseRequested(main));
+        let _ = app.update(Message::CloseRequested(settings));
+        assert_eq!(app.pending_close, Some(main));
+        unload(&mut app);
+        assert_eq!(app.pending_close, None, "the main window was closed");
+    }
+
+    #[test]
+    fn closing_settings_then_the_main_window_before_the_unload_still_quits() {
+        let (mut app, main, settings) = app_with_loading_video();
+        let _ = app.update(Message::CloseRequested(settings));
+        assert_eq!(
+            app.pending_close, None,
+            "Settings never waits for an unload"
+        );
+        let _ = app.update(Message::CloseRequested(main));
+        assert_eq!(app.pending_close, Some(main));
+        unload(&mut app);
+        assert_eq!(app.pending_close, None, "the main window was closed");
+    }
+
+    #[test]
+    fn a_second_close_of_the_main_window_keeps_waiting_for_the_unload() {
+        let (mut app, main, _) = app_with_loading_video();
+        let _ = app.update(Message::CloseRequested(main));
+        let _ = app.update(Message::CloseRequested(main));
+        assert_eq!(app.pending_close, Some(main));
+        unload(&mut app);
+        assert_eq!(app.pending_close, None);
+        // Once unloaded, a close needs no waiting at all.
+        let _ = app.update(Message::CloseRequested(main));
+        assert_eq!(app.pending_close, None);
+    }
+
     fn ctrl_key(
         key: &str,
         code: keyboard::key::Code,
@@ -1130,6 +1282,126 @@ mod tests {
         assert!(matches!(
             shortcut("z", Code::KeyZ, false),
             Some(folder_workspace::Message::Undo)
+        ));
+    }
+
+    fn arrow(
+        named: keyboard::key::Named,
+        modifiers: keyboard::Modifiers,
+        status: event::Status,
+    ) -> Option<folder_workspace::Message> {
+        use keyboard::key::Code;
+        let code = match named {
+            keyboard::key::Named::ArrowRight => Code::ArrowRight,
+            keyboard::key::Named::Home => Code::Home,
+            _ => Code::ArrowLeft,
+        };
+        let key = keyboard::Key::Named(named);
+        let event = iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: key.clone(),
+            modified_key: key,
+            physical_key: keyboard::key::Physical::Code(code),
+            location: keyboard::Location::Standard,
+            modifiers,
+            text: None,
+            repeat: true,
+        });
+        match main_window_event(event, status, window::Id::unique()) {
+            Some(Message::FolderWorkspace(m)) => Some(m),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn alt_arrows_step_frames_and_ctrl_alt_arrows_still_rotate() {
+        use folder_workspace::Message as W;
+        use keyboard::key::Named;
+        use video_controls::FrameStep;
+        let alt = keyboard::Modifiers::ALT;
+        let idle = event::Status::Ignored;
+        assert!(matches!(
+            arrow(Named::ArrowLeft, alt, idle),
+            Some(W::StepFrame(FrameStep::Back))
+        ));
+        // Held: auto-repeat keeps stepping.
+        assert!(matches!(
+            arrow(Named::ArrowRight, alt, idle),
+            Some(W::StepFrame(FrameStep::Forward))
+        ));
+        // A text field had the keys: the workspace decides (not in the comment box).
+        assert!(matches!(
+            arrow(Named::ArrowRight, alt, event::Status::Captured),
+            Some(W::StepFrameWhileTyping(FrameStep::Forward))
+        ));
+        let ctrl_alt = keyboard::Modifiers::CTRL | keyboard::Modifiers::ALT;
+        assert!(!matches!(
+            arrow(Named::ArrowLeft, ctrl_alt, idle),
+            Some(W::StepFrame(_))
+        ));
+        assert!(matches!(
+            arrow(Named::ArrowLeft, keyboard::Modifiers::empty(), idle),
+            Some(W::TagPanel(_))
+        ));
+    }
+
+    #[test]
+    fn f6_adds_the_first_suggested_tag_and_shift_f6_all_of_them_once_per_press() {
+        use file_name_panel::Message as P;
+        use folder_workspace::Message as W;
+        let f6 = |modifiers: keyboard::Modifiers, repeat: bool, status: event::Status| {
+            let key = keyboard::Key::Named(keyboard::key::Named::F6);
+            let event = iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                key: key.clone(),
+                modified_key: key,
+                physical_key: keyboard::key::Physical::Code(keyboard::key::Code::F6),
+                location: keyboard::Location::Standard,
+                modifiers,
+                text: None,
+                repeat,
+            });
+            main_window_event(event, status, window::Id::unique())
+        };
+        let none = keyboard::Modifiers::empty();
+        assert!(matches!(
+            f6(none, false, event::Status::Ignored),
+            Some(Message::FolderWorkspace(W::FileNamePanel(
+                P::AddFirstSuggestedTag
+            )))
+        ));
+        // Like the other F-keys, also while a search field has the focus.
+        assert!(matches!(
+            f6(keyboard::Modifiers::SHIFT, false, event::Status::Captured),
+            Some(Message::FolderWorkspace(W::FileNamePanel(
+                P::AddAllSuggestedTags
+            )))
+        ));
+        assert!(
+            matches!(f6(none, true, event::Status::Ignored), Some(Message::Noop)),
+            "a held key adds once"
+        );
+    }
+
+    #[test]
+    fn home_goes_to_the_start_and_a_text_field_s_home_asks_the_workspace() {
+        use folder_workspace::Message as W;
+        use keyboard::key::Named;
+        let none = keyboard::Modifiers::empty();
+        assert!(matches!(
+            arrow(Named::Home, none, event::Status::Ignored),
+            Some(W::GoToStart)
+        ));
+        assert!(matches!(
+            arrow(Named::Home, none, event::Status::Captured),
+            Some(W::GoToStartWhileTyping)
+        ));
+        // Shift+Home selects text in a field; it is not this key.
+        assert!(!matches!(
+            arrow(
+                Named::Home,
+                keyboard::Modifiers::SHIFT,
+                event::Status::Captured
+            ),
+            Some(W::GoToStartWhileTyping)
         ));
     }
 

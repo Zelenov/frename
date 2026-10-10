@@ -3,15 +3,15 @@
 //! the job's page ([`super::job_view`]) takes the page's place; the header and the list stay.
 
 use frename_core::{File, FileId};
-use iced::widget::{column, container, responsive, row, text::IntoFragment, Column};
+use iced::widget::{column, container, responsive, row, Column};
 use iced::{Alignment, Element, Length, Padding};
 
 use crate::features::folder_workspace::Directory;
 use crate::ui::badge::{badge, BadgeKind};
 use crate::ui::icon_button::IconButton;
-use crate::ui::icons::Icon;
+use crate::ui::icons::{spinner, Icon};
 use crate::ui::tokens::*;
-use crate::ui::tooltip::{Position, Tip};
+use crate::ui::tooltip::{self, Position, Tip};
 use crate::ui::{button, form, layout, scroll, style, text};
 
 use super::actions::Group;
@@ -49,12 +49,16 @@ impl ListForm {
 }
 
 /// Render the batch panel. `directory` names the files of the job and lists the files the
-/// panel can check.
-pub fn view<'a>(state: &'a BatchState, directory: Option<&'a Directory>) -> Element<'a, Message> {
+/// panel can check; `spinner_frame` turns the loader of a run waiting to start.
+pub fn view<'a>(
+    state: &'a BatchState,
+    directory: Option<&'a Directory>,
+    spinner_frame: usize,
+) -> Element<'a, Message> {
     let body = responsive(move |size| {
         let page = match state.progress() {
             Some(progress) => job_view::view(state, progress, directory),
-            None => action_page(state, directory),
+            None => action_page(state, directory, spinner_frame),
         };
         match ListForm::for_width(size.width) {
             ListForm::Full => row![action_list(state), layout::vertical_line(), page].into(),
@@ -74,11 +78,11 @@ fn header(state: &BatchState) -> Element<'_, Message> {
     let back = IconButton::new(Icon::X)
         .small()
         .tip(
-            Tip::new(if state.is_running() {
-                fl!("batch-back-while-running")
+            if state.is_running() {
+                Tip::new(fl!("batch-back-while-running"))
             } else {
-                fl!("folder-controls-batch-back")
-            }),
+                Tip::new(fl!("folder-controls-batch-back")).keys(&["Esc"])
+            },
             Position::Left,
         )
         .on_press_maybe((!state.is_running()).then_some(Message::SetActive(false)));
@@ -164,14 +168,11 @@ fn icon_list(state: &BatchState) -> Element<'_, Message> {
             Some((service, _)) => Tip::new(action.label()).detail(service),
             None => Tip::new(action.label()),
         };
-        let message = select(state, action);
-        list = list.push(layout::nav_slot(
-            IconButton::new(action.icon())
-                .latched(action == state.action())
-                .tip(tip, Position::Right)
-                .on_press_maybe(message.clone()),
-            message,
-        ));
+        // The tip is on the slot, not the button: it stays across the gap to the next icon.
+        let button = IconButton::new(action.icon())
+            .latched(action == state.action())
+            .on_press_maybe(select(state, action));
+        list = list.push(tooltip::tip(layout::nav_slot(button), tip, Position::Right));
     }
     container(list)
         .width(ACTION_LIST_ICONS_WIDTH)
@@ -226,15 +227,16 @@ pub(super) fn page_body<'a>(content: impl Into<Element<'a, Message>>) -> Element
     .into()
 }
 
-/// The page, then the button bar, as every page of the panel has them.
+/// The page, then the button bar, as every page of the panel has them. `lead` is on the bar's
+/// left: a hint, or a hint with an icon before it.
 pub(super) fn with_button_bar<'a>(
     body: Element<'a, Message>,
-    hint: impl IntoFragment<'a>,
+    lead: Element<'a, Message>,
     buttons: impl IntoIterator<Item = Element<'a, Message>>,
 ) -> Element<'a, Message> {
     column![
         container(body).height(Length::Fill),
-        layout::button_bar(hint, buttons)
+        layout::button_bar_with(lead, buttons)
     ]
     .width(Length::Fill)
     .into()
@@ -245,6 +247,7 @@ pub(super) fn with_button_bar<'a>(
 fn action_page<'a>(
     state: &'a BatchState,
     directory: Option<&'a Directory>,
+    spinner_frame: usize,
 ) -> Element<'a, Message> {
     let checked: Vec<&File> = directory.map_or_else(Vec::new, |dir| {
         dir.all_files()
@@ -270,12 +273,30 @@ fn action_page<'a>(
             .on_press(Message::CheckAll(listed))
             .into()
     });
+    // Run was pressed while the open clip's marker descriptions still hold it: the job starts
+    // once they let go, or Cancel gives up on it.
+    if state.is_waiting_for_markers() {
+        let cancel = button::secondary(fl!("batch-cancel"))
+            .on_press(Message::Cancel)
+            .into();
+        let waiting = row![
+            spinner(spinner_frame, ICON_S, TEXT_SECONDARY),
+            text::secondary(fl!("markers-ai-stopping-for-batch")),
+        ]
+        .spacing(SPACE_XS)
+        .align_y(Alignment::Center);
+        return with_button_bar(
+            page_body(panel.page.map(Message::Action)),
+            waiting.into(),
+            [cancel],
+        );
+    }
     let run = button::primary(panel.run)
         .on_press_maybe(can_run.then_some(Message::Run))
         .into();
     with_button_bar(
         page_body(panel.page.map(Message::Action)),
-        reason.unwrap_or_default(),
+        text::secondary(reason.unwrap_or_default()).into(),
         check_all.into_iter().chain([run]),
     )
 }

@@ -3,6 +3,8 @@
 
 use iced::Color;
 
+use super::color::TEXT_SECONDARY;
+
 // Video.
 /// Behind the picture: black bars read as part of the video, gray ones as a gap.
 pub const VIDEO_BG: Color = Color::BLACK;
@@ -26,6 +28,27 @@ pub const IDLE_BAND_ALPHA: f32 = 0.6;
 pub const TAG_TEXT: Color = Color::BLACK;
 /// Icons on a chip: star, action, grip.
 pub const TAG_ICON: Color = Color::from_rgba(0.0, 0.0, 0.0, 0.7);
+/// The color of a chip's label: black on a saved tag's colored chip, the secondary text color on
+/// the dark outline chip of a tag that is only in a file's name.
+pub fn chip_label_ink(stored: bool) -> Color {
+    if stored {
+        TAG_TEXT
+    } else {
+        TEXT_SECONDARY
+    }
+}
+
+/// The color of a chip's marks (star, plus, trash): the dark-on-light `TAG_ICON` on a saved tag's
+/// colored chip, and the chip's own label color on the dark outline chip, where `TAG_ICON` would
+/// be almost invisible.
+pub fn chip_mark_ink(stored: bool) -> Color {
+    if stored {
+        TAG_ICON
+    } else {
+        chip_label_ink(false)
+    }
+}
+
 /// Hover on a chip: `HOVER` does not show on light chips.
 pub const CHIP_HOVER: Color = Color::from_rgba(1.0, 1.0, 1.0, 0.22);
 /// The checkbox on a chip: unchecked box and edge, checked box, tick.
@@ -72,6 +95,7 @@ pub const MARKER_MAGENTA: Color = Color::from_rgb(0.92, 0.28, 0.78);
 #[cfg(test)]
 mod tests {
     use super::super::color::tests::contrast;
+    use super::super::color::{BG_PANEL, BG_RAISED, SELECTED};
     use super::*;
 
     #[test]
@@ -80,5 +104,34 @@ mod tests {
             assert!(contrast(TAG_TEXT, color) >= 7.0, "{color:?}");
         }
         assert!(contrast(TAG_TEXT, TAG_MONO_KNOWN) >= 4.5);
+    }
+
+    /// `ink` laid over the opaque `background`.
+    fn over(ink: Color, background: Color) -> Color {
+        let mix = |i: f32, b: f32| i * ink.a + b * (1.0 - ink.a);
+        Color::from_rgb(
+            mix(ink.r, background.r),
+            mix(ink.g, background.g),
+            mix(ink.b, background.b),
+        )
+    }
+
+    #[test]
+    fn chip_marks_are_visible_on_their_chip() {
+        // Icons need 3 : 1. A saved tag's marks sit on its light color...
+        for color in TAG_PALETTE {
+            let ink = over(chip_mark_ink(true), color);
+            assert!(contrast(ink, color) >= 3.0, "{color:?}");
+        }
+        // ...an unsaved tag's on the dark panel (or raised row) behind its outline: the
+        // `TAG_ICON` that suits light chips is nearly invisible there (#216).
+        for surface in [BG_PANEL, BG_RAISED, SELECTED] {
+            let ink = over(chip_mark_ink(false), surface);
+            assert!(contrast(ink, surface) >= 4.5, "{surface:?}");
+            assert!(
+                contrast(over(TAG_ICON, surface), surface) < 3.0,
+                "TAG_ICON would not do on {surface:?}"
+            );
+        }
     }
 }

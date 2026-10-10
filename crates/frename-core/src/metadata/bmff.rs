@@ -180,9 +180,8 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    fn temp_file(name: &str, bytes: &[u8]) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("frename-bmff-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+    /// A file in the test's folder `dir` (from `fresh_dir`, once per test).
+    fn temp_file(dir: &Path, name: &str, bytes: &[u8]) -> PathBuf {
         let path = dir.join(name);
         std::fs::write(&path, bytes).expect("write");
         path
@@ -190,15 +189,17 @@ mod tests {
 
     #[test]
     fn a_movie_of_zeros_is_damaged() {
-        assert!(is_damaged(&temp_file("zeros.mp4", &[0; 4096])));
-        assert!(is_damaged(&temp_file("empty.mov", &[])));
+        let dir = crate::test_support::fresh_dir("bmff-damaged");
+        assert!(is_damaged(&temp_file(&dir, "zeros.mp4", &[0; 4096])));
+        assert!(is_damaged(&temp_file(&dir, "empty.mov", &[])));
     }
 
     #[test]
     fn a_real_movie_or_another_format_is_not_damaged() {
         let clip = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
         assert!(!is_damaged(&clip));
-        assert!(!is_damaged(&temp_file("zeros.txt", &[0; 4096])));
+        let dir = crate::test_support::fresh_dir("bmff-fine");
+        assert!(!is_damaged(&temp_file(&dir, "zeros.txt", &[0; 4096])));
         assert!(!is_damaged(Path::new("C:/no/such/file.mp4")));
     }
 }

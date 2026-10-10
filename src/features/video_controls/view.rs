@@ -2,11 +2,13 @@
 //! [`Command`]: the same one is drawn as an icon button in the bar or as an item of **More**
 //! when the pane is too narrow for it (see [`super::Fold`]).
 
+use std::time::Duration;
+
 use iced::widget::{button as iced_button, container, mouse_area, row, stack, Row};
 use iced::{mouse, Alignment, Element, Length, Padding};
 
 use super::progress_bar::{BarMarker, ProgressBar};
-use super::{Message, VideoControlsState};
+use super::{FrameStep, Message, VideoControlsState};
 use crate::ui::icon_button::IconButton;
 use crate::ui::icons::{icon, Icon};
 use crate::ui::menu::MenuItem;
@@ -39,8 +41,6 @@ pub struct Command<M> {
     pub hold: Option<(M, M)>,
     /// Drawn pressed, with the recording dot: something holds it down.
     pub held: bool,
-    /// No tooltip on its button (fullscreen).
-    quiet: bool,
 }
 
 impl<M: Clone> Command<M> {
@@ -54,7 +54,6 @@ impl<M: Clone> Command<M> {
             on_press,
             hold: None,
             held: false,
-            quiet: false,
         }
     }
 
@@ -64,12 +63,6 @@ impl<M: Clone> Command<M> {
 
     pub fn latched(mut self, latched: bool) -> Self {
         self.latched = latched;
-        self
-    }
-
-    /// No tooltip on its button (fullscreen).
-    pub fn quiet(mut self, quiet: bool) -> Self {
-        self.quiet = quiet;
         self
     }
 
@@ -89,7 +82,6 @@ impl<M: Clone> Command<M> {
             on_press: self.on_press.map(&f),
             hold: self.hold.map(|(down, up)| (f(down), f(up))),
             held: self.held,
-            quiet: self.quiet,
         }
     }
 
@@ -109,7 +101,6 @@ impl<M: Clone> Command<M> {
         let base = base
             .latched(self.latched)
             .held(self.held)
-            .quiet(self.quiet)
             .tip(tip, Position::Top);
         let pressable: Element<'a, M> = match (self.hold, self.on_press.is_some()) {
             (Some((down, up)), true) => base.on_hold(down, up).into(),
@@ -181,6 +172,24 @@ pub fn transport(state: &VideoControlsState) -> [Command<Message>; 3] {
             fl!("video-controls-forward"),
             &["F3"],
             Some(Message::SeekForward10),
+        ),
+    ]
+}
+
+/// One frame back and one frame forward: around the play button, or in More.
+pub fn frame_step() -> [Command<Message>; 2] {
+    [
+        Command::icon(
+            Icon::StepBack,
+            fl!("video-controls-frame-back"),
+            &["Alt", "←"],
+            Some(Message::StepFrame(FrameStep::Back)),
+        ),
+        Command::icon(
+            Icon::StepForward,
+            fl!("video-controls-frame-forward"),
+            &["Alt", "→"],
+            Some(Message::StepFrame(FrameStep::Forward)),
         ),
     ]
 }
@@ -271,14 +280,24 @@ pub fn rotate(cannot_rotate: Option<String>) -> [Command<Message>; 2] {
     ]
 }
 
-/// `00:10 / 00:30`, fixed wide so it never moves.
-pub fn time_readout<'a>(state: &VideoControlsState, position_secs: f32) -> Element<'a, Message> {
-    let readout = format!(
-        "{} / {}",
-        clock(position_secs),
-        clock(state.duration_secs())
-    );
-    container(text::mono(readout).wrapping(iced::widget::text::Wrapping::None))
+/// `00:10 / 00:30`, fixed wide so it never moves. Paused, the playhead shows its milliseconds
+/// (`00:10.250 / 00:30`): the exact time of a frame stepped to.
+///
+/// `slow`: a frame step has waited long (#196); the readout dims to `text.disabled` while it does.
+pub fn time_readout<'a>(
+    state: &VideoControlsState,
+    position: Duration,
+    slow: bool,
+) -> Element<'a, Message> {
+    let position = if state.is_playing() {
+        clock(position.as_secs_f32())
+    } else {
+        precise_clock(position)
+    };
+    let readout = format!("{position} / {}", clock(state.duration_secs()));
+    let readout = text::mono(readout).wrapping(iced::widget::text::Wrapping::None);
+    let readout = readout.color(time_readout_color(slow));
+    container(readout)
         .width(TIME_READOUT_WIDTH)
         .align_right(TIME_READOUT_WIDTH)
         .into()
@@ -293,6 +312,12 @@ pub fn clock(secs: f32) -> String {
     } else {
         format!("{minutes:02}:{seconds:02}")
     }
+}
+
+/// [`clock`] with milliseconds: `00:10.250`.
+pub fn precise_clock(position: Duration) -> String {
+    let millis = position.as_millis();
+    format!("{}.{:03}", clock((millis / 1000) as f32), millis % 1000)
 }
 
 /// The volume slider alone: in the bar after its icon, or in More.
@@ -443,17 +468,20 @@ fn marker_label_button(label: MarkerLabel<'_>) -> Element<'_, Message> {
                 status,
                 iced_button::Status::Hovered | iced_button::Status::Pressed
             );
+            // A pill tinted with the marker's color, without a shadow: it must not read as a
+            // tooltip (a `bg.overlay` box with a subtle edge) when one opens next to it.
+            let fill = over(BG_RAISED, faded(color, MARKER_LABEL_TINT));
             iced_button::Style {
                 background: Some(iced::Background::Color(if hovered {
-                    over(BG_OVERLAY, HOVER)
+                    over(fill, HOVER)
                 } else {
-                    BG_OVERLAY
+                    fill
                 })),
                 text_color: TEXT,
                 border: iced::Border {
                     color,
                     width: LABEL_EDGE,
-                    radius: RADIUS_M.into(),
+                    radius: RADIUS_FULL.into(),
                 },
                 ..style::button(ButtonKind::Ghost)(theme, status)
             }
@@ -465,6 +493,12 @@ fn marker_label_button(label: MarkerLabel<'_>) -> Element<'_, Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_readout_dims_only_while_a_step_is_slow() {
+        assert_eq!(time_readout_color(false), TEXT_SECONDARY);
+        assert_eq!(time_readout_color(true), TEXT_DISABLED);
+    }
 
     #[test]
     fn scrolling_up_raises_volume_and_down_lowers_it_clamped() {
@@ -527,22 +561,45 @@ mod tests {
     }
 
     #[test]
+    fn the_precise_clock_shows_milliseconds_of_a_frame() {
+        assert_eq!(precise_clock(Duration::from_millis(10_250)), "00:10.250");
+        // Whole milliseconds are shown as they are, however long the clip (an f32 of seconds
+        // is 1-2 ms off past ~2.3 h).
+        assert_eq!(
+            precise_clock(Duration::from_millis(35_999_999)),
+            "9:59:59.999"
+        );
+        assert_eq!(precise_clock(Duration::from_millis(7_517)), "00:07.517");
+        assert_eq!(
+            precise_clock(Duration::from_millis(3_725_999)),
+            "1:02:05.999"
+        );
+        assert_eq!(precise_clock(Duration::ZERO), "00:00.000");
+    }
+
+    /// The longest readout, a clip of under 10 hours paused, fits the readout's fixed width
+    /// (a clip of 10 h or more overflows it, `10:00:00.000 / 10:00:00`; §13.3.5).
+    #[test]
+    fn the_longest_readout_under_10_h_fits_its_width() {
+        let longest = format!(
+            "{} / {}",
+            precise_clock(Duration::from_millis(35_999_500)),
+            clock(35_999.0)
+        );
+        assert_eq!(longest, "9:59:59.500 / 9:59:59");
+        let width = longest.chars().count() as f32 * MONO_CHAR_WIDTH;
+        assert!(
+            width <= TIME_READOUT_WIDTH,
+            "{width} > {TIME_READOUT_WIDTH}"
+        );
+    }
+
+    #[test]
     fn a_held_button_sends_its_press_and_release_from_more() {
         let [_, marker] = mark(true, false);
         let item = marker.menu_item(|messages| Message::SetVolume(messages.len() as f32));
         assert!(matches!(item.on_press, Some(Message::SetVolume(n)) if n == 2.0));
         let [_, marker] = mark(false, false);
         assert!(marker.menu_item(|_| Message::SeekBack10).on_press.is_none());
-    }
-}
-
-#[cfg(test)]
-mod quiet_tests {
-    use super::*;
-
-    #[test]
-    fn a_command_stays_quiet_when_mapped() {
-        let command = Command::icon(Icon::Play, "Play".to_string(), &[], Some(1u8)).quiet(true);
-        assert!(command.map(u32::from).quiet);
     }
 }

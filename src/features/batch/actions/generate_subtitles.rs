@@ -13,7 +13,6 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use frename_core::ai::key::{self, ApiKey, KeyState};
-use frename_core::ai::ledger::SpendSummary;
 use frename_core::{subtitle_path, CueLength, File, FileId, FileTagger};
 use iced::widget::column;
 use iced::Element;
@@ -353,7 +352,7 @@ impl Options {
     }
 
     /// The page for `checked` and its run button.
-    pub fn panel(&self, checked: &[&File], credit: SpendSummary) -> Panel<'_> {
+    pub fn panel(&self, checked: &[&File]) -> Panel<'_> {
         let plan = self.plan_for(checked);
         let (run, ready) = match plan {
             None => (fl!("batch-subtitles-transcribe"), false),
@@ -380,14 +379,14 @@ impl Options {
             (plan.is_none() && !checked.is_empty()).then(|| fl!("batch-reason-estimate"))
         };
         Panel {
-            page: self.view(plan, credit),
+            page: self.view(plan),
             run,
             ready,
             reason,
         }
     }
 
-    fn view(&self, plan: Option<&Plan>, credit: SpendSummary) -> Element<'_, ActionMessage> {
+    fn view(&self, plan: Option<&Plan>) -> Element<'_, ActionMessage> {
         let languages = if self.config.languages.is_empty() {
             fl!("batch-subtitles-languages-auto")
         } else {
@@ -446,7 +445,6 @@ impl Options {
                 let mut lines = plan_lines(plan, price).into_iter();
                 column![]
                     .push(lines.next().map(text::strong))
-                    .push(super::credit_left_row(credit).map(|row| page::plan([row])))
                     .push(page::notes(lines))
                     .spacing(SPACE_XXS)
                     .into()
@@ -463,26 +461,7 @@ impl Options {
             settings
                 .into_iter()
                 .chain([estimate, notes])
-                .chain(self.credit_notice(plan, credit))
                 .chain(self.key_notice()),
-        )
-    }
-
-    /// The warning before a run that costs more than what is probably left.
-    fn credit_notice(
-        &self,
-        plan: Option<&Plan>,
-        credit: SpendSummary,
-    ) -> Option<Element<'_, ActionMessage>> {
-        let plan = plan.filter(|p| p.transcribe > 0 && p.audio_s > 0.0)?;
-        let price = match self.key {
-            Some(KeyState::Saved) => self.price()?,
-            _ => Price::Typical,
-        };
-        super::credit_low_notice(
-            ApiKey::Soniox,
-            credit,
-            price.usd_per_hour() * plan.audio_s / 3600.0,
         )
     }
 
@@ -617,6 +596,14 @@ fn plan_with(files: &[PathBuf], replace: bool, formats: Formats, ffmpeg: bool) -
                 .insert(file.clone(), fl!("batch-subtitles-shared-name-reason"));
             continue;
         }
+        // Subtitles in another format (`.ass`, `.ssa`) are subtitles the editor already has: the
+        // `.srt` is not written over them unless Replace is on, so nobody pays for them twice.
+        if !replace && formats.srt && has_other_subtitles(file) {
+            plan.already_subtitled += 1;
+            plan.excluded
+                .insert(file.clone(), fl!("batch-subtitles-reason-already"));
+            continue;
+        }
         names.extend(taken);
         items.push(plan_batch::Item {
             input: file.clone(),
@@ -648,11 +635,17 @@ fn plan_with(files: &[PathBuf], replace: bool, formats: Formats, ffmpeg: bool) -
     plan.transcribe = totals.transcribe;
     plan.audio_s = totals.audio_s;
     plan.unknown_length = totals.unknown_length;
-    plan.already_subtitled = totals.skip;
+    plan.already_subtitled += totals.skip;
     plan.rebuilt_free = totals.cached + totals.from_transcript;
     plan.no_speech_before = totals.cached_silent;
     plan.no_audio = totals.no_audio;
     plan
+}
+
+/// Whether the video has a `.ass` / `.ssa` and no `.srt`: subtitles frename shows that sonisub's
+/// own "already there" check, which looks at `.srt` only, does not see.
+fn has_other_subtitles(video: &Path) -> bool {
+    !subtitle_path(video).exists() && clipscribe::ass::existing_path(video).is_some()
 }
 
 /// Whether `ffmpeg` is on `PATH`, for the formats the built-in decoder cannot read.
@@ -877,10 +870,7 @@ pub fn run(job: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress)
         job.uploaded_ms
             .fetch_add((seconds * 1000.0) as u64, Ordering::Relaxed);
     }
-    let mut item = item_result(&path, result, token.is_cancelled());
-    // What was sent, at the price the estimate used, for the spend ledger.
-    item.spend = uploaded_s.map(|seconds| (ApiKey::Soniox, job.usd_per_hour * seconds / 3600.0));
-    item
+    item_result(&path, result, token.is_cancelled())
 }
 
 /// One file through sonisub. A saved transcript next to it needs no key.
@@ -1043,10 +1033,7 @@ mod tests {
 
     impl Folder {
         fn new(name: &str) -> Self {
-            let dir = std::env::temp_dir()
-                .join(format!("frename-subtitles-{name}-{}", std::process::id()));
-            let _ = std::fs::remove_dir_all(&dir);
-            std::fs::create_dir_all(&dir).expect("temp dir");
+            let dir = frename_core::test_support::fresh_dir(&format!("subtitles-{name}"));
             Self(dir)
         }
 
@@ -1141,6 +1128,47 @@ mod tests {
         assert_eq!(plan.already_subtitled + plan.rebuilt_free, 0);
         assert_eq!(plan.transcribe, 4);
         assert_eq!(plan.shared_name, 1);
+    }
+
+    #[test]
+    fn a_video_with_only_an_ass_counts_as_already_subtitled_until_replace() {
+        let folder = Folder::new("plan-ass");
+        let video = folder.file("clip.mp4", "x");
+        folder.file("clip.ass", "[Events]\n");
+        let files = vec![video.clone()];
+
+        let plan = plan_with(&files, false, Formats::default(), true);
+        assert_eq!((plan.already_subtitled, plan.transcribe), (1, 0));
+        assert_eq!(
+            plan.excluded.get(&video),
+            Some(&fl!("batch-subtitles-reason-already"))
+        );
+
+        let plan = plan_with(&files, true, Formats::default(), true);
+        assert_eq!((plan.already_subtitled, plan.transcribe), (0, 1));
+
+        // Only a Premiere transcript asked for: the .ass says nothing about it.
+        let plan = plan_with(&files, false, PREMIERE_ONLY, true);
+        assert_eq!(plan.already_subtitled, 0);
+    }
+
+    #[test]
+    fn a_video_with_only_a_premiere_transcript_is_still_transcribed_for_its_srt() {
+        let folder = Folder::new("plan-premiere");
+        let video = folder.file("clip.mp4", "x");
+        folder.file("clip.premiere.json", "{}");
+        let plan = plan_with(
+            std::slice::from_ref(&video),
+            false,
+            Formats::default(),
+            true,
+        );
+        assert_eq!(
+            plan.already_subtitled, 0,
+            "the existing rule stays as it is"
+        );
+        assert!(!plan.excluded.contains_key(&video));
+        assert_eq!(plan.transcribe, 1);
     }
 
     const BOTH: Formats = Formats {
@@ -1277,7 +1305,7 @@ mod tests {
             }),
         });
         assert!(options.operation().is_none());
-        let super::Panel { ready, reason, .. } = options.panel(&[&a], SpendSummary::default());
+        let super::Panel { ready, reason, .. } = options.panel(&[&a]);
         assert!(!ready);
         assert_eq!(reason, Some(fl!("batch-reason-subtitles-no-format")));
 
@@ -1449,9 +1477,10 @@ mod tests {
         let folder = Folder::new("free");
         let video = folder.video("clip.mp4");
         folder.file("clip.soniox.json", TRANSCRIPT);
-        let result = run_now(&job(HashMap::new(), false), &video);
+        let job = job(HashMap::new(), false);
+        let result = run_now(&job, &video);
         assert_eq!(result.status, ItemStatus::Done, "{:?}", result.reason);
-        assert_eq!(result.spend, None, "nothing was sent to Soniox");
+        assert_eq!(job.report(), None, "nothing was sent to Soniox");
     }
 
     #[test]
@@ -1623,7 +1652,7 @@ mod tests {
         options.update(Message::PriceReady(Price::Learned(0.1)));
         assert!(options.operation().is_some());
         // Only the label and readiness: the page borrows the options.
-        let super::Panel { run, ready, .. } = options.panel(&[&a], SpendSummary::default());
+        let super::Panel { run, ready, .. } = options.panel(&[&a]);
         assert_eq!(
             (run, ready),
             (

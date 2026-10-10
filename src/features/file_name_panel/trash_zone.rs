@@ -2,9 +2,7 @@
 //! taken off the clip. While a chip is dragged over it, it turns red and the dragged chip and
 //! "Untag" show above it (drawn on top of everything, not in the layout).
 
-use std::time::Duration;
-
-use iced::widget::{column, container, space, stack, tooltip};
+use iced::widget::{column, container, stack};
 use iced::{Alignment, Element, Length};
 
 use frename_core::{StoredTagStore, TagList};
@@ -12,7 +10,7 @@ use frename_core::{StoredTagStore, TagList};
 use crate::ui::icons::{icon, Icon};
 use crate::ui::palette::TagPalette;
 use crate::ui::tokens::*;
-use crate::ui::z::{layered, Z};
+use crate::ui::tooltip;
 use crate::ui::{style, text};
 use crate::widgets::bounds_reporter::BoundsReporter;
 use crate::widgets::tag_chip;
@@ -56,21 +54,11 @@ where
             .align_x(Alignment::Center)
         });
 
-    let tooltip_body: Element<'a, Message> = match tooltip_content {
-        Some(chip) => chip.into(),
-        None => space().into(),
-    };
-
-    let trash_zone = container(
-        // What follows the drag is over every tooltip.
-        layered(
-            tooltip(trash_square, tooltip_body, tooltip::Position::Top)
-                .gap(SPACE_XS)
-                .delay(Duration::ZERO)
-                .snap_within_viewport(true),
-            Z::DragPreview,
-        ),
-    )
+    let trash_zone = container(tooltip::drag_preview(
+        trash_square,
+        tooltip_content.map(Element::from),
+        tooltip::Position::Top,
+    ))
     .width(Length::Fixed(TRASH_SIDE));
 
     trash_zone.into()

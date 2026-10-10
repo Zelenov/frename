@@ -1,8 +1,10 @@
 //! Tooltips (`docs/design/design-system.md` §8.13): the command's name, then the keys that do it
 //! as key caps. Every icon-only control has one; none holds an error.
 
+use std::time::Duration;
+
 use iced::widget::text::IntoFragment;
-use iced::widget::{column, container, row, tooltip};
+use iced::widget::{column, container, row, space, tooltip};
 use iced::{Alignment, Element, Padding};
 
 pub use iced::widget::tooltip::Position;
@@ -118,30 +120,26 @@ pub fn tip_text<'a, M: 'a>(
     )
 }
 
-/// `tip`, or `content` as it is when `quiet` (fullscreen: nothing pops up over the picture).
-pub fn tip_unless<'a, M: 'a>(
-    quiet: bool,
+/// `content` with `preview` beside it at once, over every tooltip: what follows a drag (a chip
+/// dropped on the trash, §13.5.6). In the tooltip's box; nothing shows while `preview` is `None`,
+/// and `content` keeps its state either way: it stays at the same place in the widget tree.
+pub fn drag_preview<'a, M: 'a>(
     content: impl Into<Element<'a, M>>,
-    tip_: impl Into<Tip>,
+    preview: Option<Element<'a, M>>,
     position: Position,
 ) -> Element<'a, M> {
-    if quiet {
-        content.into()
-    } else {
-        tip(content, tip_, position)
-    }
-}
-
-/// `tip_text`, or `content` as it is when `quiet`.
-pub fn tip_text_unless<'a, M: 'a>(
-    quiet: bool,
-    content: impl Into<Element<'a, M>>,
-    label: impl IntoFragment<'a>,
-    position: Position,
-) -> Element<'a, M> {
-    if quiet {
-        content.into()
-    } else {
-        tip_text(content, label, position)
-    }
+    let body: Element<'a, M> = match preview {
+        Some(preview) => container(preview)
+            .padding(PADDING)
+            .style(style::popup)
+            .into(),
+        None => space().into(),
+    };
+    layered(
+        tooltip(content, body, position)
+            .gap(SPACE_TIGHT)
+            .delay(Duration::ZERO)
+            .snap_within_viewport(true),
+        Z::DragPreview,
+    )
 }

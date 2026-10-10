@@ -2,6 +2,8 @@
 //! side list over it, the subtitle strip, the timeline and the controls bar, which gives up
 //! whole groups into **More** on a narrow pane.
 
+use std::time::Duration;
+
 use frename_core::{Marker, Subtitles};
 use iced::widget::{column, container, mouse_area, row, space, stack, Column, Row};
 use iced::{Alignment, Element, Length, Padding};
@@ -13,7 +15,7 @@ use crate::features::media_viewer::placeholder;
 use crate::features::video_controls::view::{self as controls, Command};
 use crate::features::video_controls::{self, BarMarker, Fold};
 use crate::ui::icon_button::IconButton;
-use crate::ui::icons::Icon;
+use crate::ui::icons::{spinner, Icon};
 use crate::ui::menu::{self, MenuItem};
 use crate::ui::palette::marker_color;
 use crate::ui::segmented::{segmented, Segment};
@@ -66,6 +68,12 @@ pub struct MarkersView<'a> {
     /// Width of the video pane, which starts at the window's left edge. Windowed only:
     /// fullscreen, the player is the whole window.
     pub pane_width: f32,
+    /// Frame of the app's spinner, for the markers being described.
+    pub spinner_frame: usize,
+    /// How many markers "Describe N unnamed" would send now.
+    pub unnamed: usize,
+    /// What one marker request is expected to cost, in US dollars; `None` when not known.
+    pub marker_price_usd: Option<f64>,
 }
 
 /// Render the video player with its strip, timeline and controls below.
@@ -126,8 +134,17 @@ pub fn view<'a>(
     ) {
         layers.push(side);
     }
-    if let Some(notice) = state.notice().filter(|_| !fold.notice_in_bar) {
-        layers.push(placeholder::floating_notice(notice));
+    // The note that says where the clip continued is always over the picture, and starts the
+    // clip over when clicked (#161).
+    let starts_over = state.notice_starts_over();
+    if let Some(notice) = state
+        .notice()
+        .filter(|_| starts_over || !fold.notice_in_bar)
+    {
+        layers.push(placeholder::floating_notice(
+            notice,
+            starts_over.then_some(Message::GoToStart),
+        ));
     }
     if state.more_open() && fold.has_more() {
         layers.push(more_popover(state, markers, fold));
@@ -156,7 +173,7 @@ pub fn view<'a>(
             )
             .style(bars_style),
         )
-        .push(controls_bar(state, markers, fold, is_fullscreen, position_secs).style(bars_style))
+        .push(controls_bar(state, markers, fold, is_fullscreen, position).style(bars_style))
         .width(Length::Fill)
         .height(Length::Fill)
         .into()
@@ -264,13 +281,8 @@ fn cannot_rotate(state: &VideoPlayerState) -> Option<String> {
 
 fn controls_of<'a>(
     commands: impl IntoIterator<Item = Command<video_controls::Message>>,
-    quiet: bool,
 ) -> Row<'a, Message> {
-    controls::group(
-        commands
-            .into_iter()
-            .map(|c| c.map(Message::Controls).quiet(quiet)),
-    )
+    controls::group(commands.into_iter().map(|c| c.map(Message::Controls)))
 }
 
 /// The controls bar (§13.3.5): transport · in/out · mark · rotate · the notice slot · time ·
@@ -280,22 +292,32 @@ fn controls_bar<'a>(
     markers: MarkersView<'a>,
     fold: Fold,
     is_fullscreen: bool,
-    position_secs: f32,
+    position: Duration,
 ) -> container::Container<'a, Message> {
     let controls_state = state.controls();
+    let [back, play, forward] = controls::transport(controls_state);
+    let transport = if fold.frame_step {
+        let [frame_back, frame_forward] = controls::frame_step();
+        vec![back, frame_back, play, frame_forward, forward]
+    } else {
+        vec![back, play, forward]
+    };
     let mut groups: Vec<Element<'a, Message>> = vec![
-        controls_of(controls::transport(controls_state), is_fullscreen).into(),
-        controls_of(controls::in_out(), is_fullscreen).into(),
+        controls_of(transport).into(),
+        controls_of(controls::in_out()).into(),
     ];
     if fold.mark {
-        groups.push(controls_of(mark_commands(markers), is_fullscreen).into());
+        groups.push(controls_of(mark_commands(markers)).into());
     }
     if fold.rotate {
-        groups.push(controls_of(controls::rotate(cannot_rotate(state)), is_fullscreen).into());
+        groups.push(controls_of(controls::rotate(cannot_rotate(state))).into());
     }
     // The free space holds the notice when it is wide enough (otherwise it floats over the
     // picture).
-    let notice: Element<'a, Message> = match state.notice().filter(|_| fold.notice_in_bar) {
+    let notice: Element<'a, Message> = match state
+        .notice()
+        .filter(|_| fold.notice_in_bar && !state.notice_starts_over())
+    {
         Some(notice) => tooltip::tip_text(
             text::secondary(notice).wrapping(iced::widget::text::Wrapping::None),
             notice,
@@ -303,9 +325,28 @@ fn controls_bar<'a>(
         ),
         None => space().into(),
     };
-    groups.push(container(notice).width(Length::Fill).clip(true).into());
+    // A step that waits long turns a spinner at the slot's right edge, beside the dimmed readout;
+    // the readout's own slot keeps its width (#196).
+    let slot: Element<'a, Message> = match state.slow_step_spinner() {
+        Some(frame) => row![
+            container(notice).width(Length::Fill).clip(true),
+            spinner(frame, ICON_M, TEXT_SECONDARY)
+        ]
+        .align_y(Alignment::Center)
+        .spacing(SPACE_S)
+        .into(),
+        None => container(notice).width(Length::Fill).clip(true).into(),
+    };
+    groups.push(container(slot).width(Length::Fill).into());
     if fold.time {
-        groups.push(controls::time_readout(controls_state, position_secs).map(Message::Controls));
+        groups.push(
+            controls::time_readout(
+                controls_state,
+                position,
+                state.slow_step_spinner().is_some(),
+            )
+            .map(Message::Controls),
+        );
     }
     groups.push(if fold.volume_slider {
         controls::volume(controls_state).map(Message::Controls)
@@ -316,7 +357,6 @@ fn controls_bar<'a>(
             mouse_area(
                 IconButton::new(Icon::Volume)
                     .latched(state.more_open())
-                    .quiet(is_fullscreen)
                     .tip(Tip::new(fl!("video-controls-volume-scroll")), Position::Top)
                     .on_press(Message::ToggleMore),
             )
@@ -333,24 +373,19 @@ fn controls_bar<'a>(
         views.extend(
             list_commands(state, markers)
                 .into_iter()
-                .map(|c| c.quiet(is_fullscreen).button()),
+                .map(|c| c.button()),
         );
     }
     if fold.has_more() {
         views.push(
             IconButton::new(Icon::Ellipsis)
                 .latched(state.more_open())
-                .quiet(is_fullscreen)
                 .tip(Tip::new(fl!("video-controls-more")), Position::Top)
                 .on_press(Message::ToggleMore)
                 .into(),
         );
     }
-    views.push(
-        fullscreen_command(is_fullscreen)
-            .quiet(is_fullscreen)
-            .button(),
-    );
+    views.push(fullscreen_command(is_fullscreen).button());
     groups.push(Row::with_children(views).align_y(Alignment::Center).into());
 
     container(
@@ -399,6 +434,13 @@ fn more_popover<'a>(
 ) -> Element<'a, Message> {
     let picked = Message::MorePicked;
     let mut items: Vec<MenuItem<Message>> = Vec::new();
+    if !fold.frame_step {
+        items.extend(
+            controls::frame_step()
+                .into_iter()
+                .map(|c| c.map(Message::Controls).menu_item(picked)),
+        );
+    }
     if !fold.mark {
         items.extend(
             mark_commands(markers)
@@ -516,17 +558,15 @@ fn side_overlay<'a>(
             markers.state,
             state.position_ms(),
             in_out,
-            is_fullscreen,
+            markers.spinner_frame,
+            markers.unnamed,
+            markers.marker_price_usd,
         )
         .map(Message::Markers),
     };
     let (width, covers) = side_list_width(pane_width);
     let panel = container(
-        column![
-            side_list_header(state, markers, shown, covers, is_fullscreen),
-            list
-        ]
-        .height(Length::Fill),
+        column![side_list_header(state, markers, shown, covers), list].height(Length::Fill),
     )
     .width(if covers {
         Length::Fill
@@ -580,7 +620,6 @@ fn side_list_header<'a>(
     markers: MarkersView<'a>,
     shown: Overlay,
     close: bool,
-    is_fullscreen: bool,
 ) -> Element<'a, Message> {
     let subtitles = state.subtitles();
     let count = |n: usize| (n > 0).then_some(n);
@@ -612,7 +651,6 @@ fn side_list_header<'a>(
         IconButton::new(Icon::X)
             .small()
             .overlay()
-            .quiet(is_fullscreen)
             .tip(
                 Tip::new(fl!("media-viewer-video-close-list")),
                 Position::Left,

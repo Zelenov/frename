@@ -7,7 +7,8 @@ use iced::widget::text_editor;
 
 use super::Directory;
 use crate::features::{
-    batch, drag_out, file_menu, file_name_panel, folder, media_viewer, sync_panel, tag_panel,
+    batch, drag_out, file_menu, file_name_panel, folder, media_viewer, recent_folders, sync_panel,
+    tag_panel, video_controls,
 };
 
 /// Key that triggered global focus (we emulate it into the search bar; Iced cannot replay the event).
@@ -70,6 +71,31 @@ pub enum Message {
     CopyTags,
     /// Paste previously copied tags onto the current file (replace semantics).
     PasteTags,
+    /// Demo mode only (a screenshot scenario's `describing`): show the open clip's marker of
+    /// this name as being described, without sending a request.
+    ShowDescribing(String),
+    /// Demo (a scenario's `ai_retry_wait_s`): the batch job on the checked files, its first file
+    /// waiting this many seconds before its request is sent again; nothing is sent.
+    ShowBatchRetry(u64),
+    /// Demo: the unnamed markers as "Describe N unnamed" leaves them, without a request.
+    ShowDescribingUnnamed,
+    /// Demo: "Describe N unnamed" asking whether to send, without a request.
+    ShowConfirmingDescribeUnnamed,
+    /// A marker's "Describe with AI" request came back (see `markers::describe`).
+    MarkerDescribed {
+        file: FileId,
+        guid: String,
+        /// The request's number (see `MarkersState::start_describing`).
+        request: u64,
+        outcome: crate::features::markers::MomentOutcome,
+    },
+    /// A marker's request has read its frames and let go of the clip; its answer is still on
+    /// the way (see `markers::describe`).
+    MarkerRequestReleased {
+        guid: String,
+        /// The request's number (see `MarkersState::start_describing`).
+        request: u64,
+    },
     /// A second passed: write the open clip's unsaved edits into the recovery journal, if they
     /// changed (see `frename_core::recovery`).
     JournalTick,
@@ -113,10 +139,29 @@ pub enum Message {
     /// `Ctrl+Alt+←/→` while a text field had the keys: [`Message::RotateVideo`], unless the
     /// field is the comment box.
     RotateVideoWhileTyping(i32),
+    /// `Alt+←/→`: one frame back or forward in the open video.
+    StepFrame(video_controls::FrameStep),
+    /// `Alt+←/→` while a text field had the keys: [`Message::StepFrame`], unless the field is
+    /// the comment box.
+    StepFrameWhileTyping(video_controls::FrameStep),
+    /// `Home`: to the start of the open video, when a video is shown (#161).
+    GoToStart,
+    /// `Home` while a text field had the keys: to the start of the clip while the note that it
+    /// continued is shown (it says Home starts it over), unless the field is the comment box or
+    /// a name being edited; otherwise the field keeps the key (#161).
+    GoToStartWhileTyping,
+    /// The second step of [`Message::GoToStartWhileTyping`]: the file name being edited does not
+    /// have the key, so only the comment box can still keep it.
+    GoToStartUnlessWriting,
+    /// The second step of `Shift+Space` with a rename open: the file name being edited does not
+    /// have the key, so the tag under the tag cursor is toggled (#260).
+    ToggleSelectedTagUnlessRenaming,
     /// Open a native folder picker dialog so the user can choose a folder to open.
     OpenFolderPicker,
     /// Open a native file picker dialog so the user can choose a file to open.
     OpenFilePicker,
+    /// The recent folders list: the dropdown by the open button, and the empty screen's.
+    RecentFolders(recent_folders::Message),
     /// Batch mode messages (batch panel, and folder list checks translated by the workspace).
     Batch(batch::Message),
     /// Enter batch mode with every listed file checked and the action set up for `operation`

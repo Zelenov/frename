@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use clipscribe::Model;
 use frename_core::ai::key::{ApiKey, KeyState};
-use frename_core::ai::SummaryLanguage;
+use frename_core::ai::{MomentsMode, SummaryLanguage};
 use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage};
 
 use super::Page;
@@ -56,6 +56,10 @@ pub enum Message {
     SetSummaryLanguage(SummaryLanguage),
     /// The model AI descriptions are written with.
     SetAiModel(Model),
+    /// Which moments AI descriptions get.
+    SetAiMoments(MomentsMode),
+    /// Whether "Describe with AI" also suggests tags from the folder's tags.
+    SetAiTagSuggestions(bool),
     /// Check or uncheck a language spoken in the footage (a code such as "en"), for subtitles.
     SetSubtitleLanguage(String, bool),
     /// The languages Soniox recognises, (code, name), or why they could not be listed. Asked
@@ -66,19 +70,6 @@ pub enum Message {
     /// An API key section; never saved with the settings (the keys live in the credential
     /// store).
     Key(ApiKey, KeyMessage),
-    /// The spending section of a service: typing a top-up, recording it (issue #121).
-    TopUp(ApiKey, TopUpMessage),
-}
-
-/// The top-up form of a service's spending section.
-#[derive(Debug, Clone)]
-pub enum TopUpMessage {
-    /// Typing the amount added, in dollars.
-    Amount(String),
-    /// Typing the day it was added (`YYYY-MM-DD`); empty means today.
-    Date(String),
-    /// Record it: what is left is estimated from here. Then the app tells the batch panels.
-    Record,
 }
 
 /// The API key section's messages.

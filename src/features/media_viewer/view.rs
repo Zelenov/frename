@@ -44,7 +44,7 @@ fn with_notice<'a>(
     let Some(notice) = state.notice() else {
         return base;
     };
-    stack![base, placeholder::floating_notice(notice)]
+    stack![base, placeholder::floating_notice(notice, None)]
         .width(Length::Fill)
         .height(Length::Fill)
         .into()

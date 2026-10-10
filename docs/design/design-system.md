@@ -183,6 +183,8 @@ Why these values:
   text) for tags not in the list; #53 implements it.
 - **Marker colors** (`theme::marker_color`): the nine Premiere Pro marker colors stay as they are:
   they must match Premiere, not the theme.
+  `marker.label.tint` 25 %: how much of its marker's color tints the marker label's fill over
+  `bg.raised` (§13.3.4; `MARKER_LABEL_TINT`).
 - **Video overlays** (subtitle caption, side list over the picture): black 62 % and a near-black
   72 % panel, so text reads over any picture. They are tokens (`overlay.caption`,
   `overlay.list`), used only over video.
@@ -329,6 +331,7 @@ destructive (BIR: "separate dangerous buttons with extra distance").
 | Today | Lucide | | Today | Lucide |
 |---|---|---|---|---|
 | ◀ ▶ (file) | `chevron-left` `chevron-right` | | ⏪ ⏩ | `rewind` `fast-forward` |
+| ⏮ ⏭ (frame steps, #162) | `step-back` `step-forward` | | | |
 | ⊙ | `locate-fixed` | | ▶ ⏸ | `play` `pause` |
 | 📂 | `folder-open` | | 📷 | `camera` |
 | ⚙ | `settings` | | 📍 | `map-pin` |
@@ -340,6 +343,7 @@ destructive (BIR: "separate dangerous buttons with extra distance").
 | 🗑 | `trash` (Lucide merged `trash-2` into it) | | 🔒 🔓 ↑ ↓ | `lock` `lock-open` `arrow-up` `arrow-down` |
 | ⏳ ◐◓◑◒ | `loader-circle` (turning) | | 🎬 📄 📭 | `clapperboard` `file` `folder-x` |
 | ✕ (load failed, 80 px) | `circle-x` 48 | | ⌨ (#62) | `keyboard` |
+| → (apply, the AI In/Out pill) | `arrow-right` | | | |
 
 ## 8. Components
 
@@ -467,7 +471,7 @@ full look is §13.3.4. #59 moves their colors to tokens; no stock slider is used
 - States: hover `state.hover`; **selected** `state.selected` (plus SemiBold or an `accent.text`
   icon where several things could look selected); **unavailable** (a recent folder that is not
   found): dimmed, not disabled: text in `text.disabled` with a "not found" note, still clickable, and
-  a click offers the fix inline ("Remove from the list? [Remove] [Keep]", #63).
+  a click offers the fix inline ("Not found. Remove it? [Remove] [Keep]", §13.4.5).
 - The whole row is the target (BIR: «Одна строка — это один объект»). Row actions (✕ remove)
   appear on hover and on the selected row, in a 24-px icon button at the right end (DI "Hover
   Tools": they must not shift the layout).
@@ -521,14 +525,17 @@ what is inside ("Comments", "Markers and ranges"); never "General", "Advanced", 
   key in the tooltip, so half a second.
 - **Placement:** away from the edge the control sits on: *below* for the app bar and top rows,
   *above* for the bottom bars (folder controls, video controls), *left* for controls at the right
-  edge of a panel. 6 px gap. Never over the thing it explains, and never under the pointer's path
-  to its neighbours (BIR «Движение и клик — один жест»).
+  edge of a panel; a file row's full name *right*, beside the list, and the marks inside the row
+  *left*, so the two never cover each other. 6 px gap. Never over the thing it explains, and never
+  under the pointer's path to its neighbours (BIR «Движение и клик — один жест»).
 - **Content:** the command's name in sentence case, then its keys as key caps: `Open a folder`
   `Ctrl` `O`. Only the keys that work in that place. The key shown comes from the shortcut
   registry of #62 once it exists.
 - Required on every icon-only control; optional on text buttons (only to say why one is
   disabled).
 - Never used for errors (BIR: errors go next to the field).
+- A drag preview (the chip over the trash) is drawn in the tooltip's box, at once, over every
+  tooltip (`ui::tooltip::drag_preview`, `Z::DragPreview`).
 
 ### 8.14 Menu and context menu
 
@@ -563,6 +570,33 @@ what is inside ("Comments", "Markers and ranges"); never "General", "Advanced", 
   `bg.raised`. One cap per key, no "+" between them.
 - **Timecode:** `mono` on `bg.raised`, radius 4, padding 0×6, optional 12-px `x` to clear. IN/OUT
   badges of the file name panel use it.
+- **Suggested timecode:** a timecode range someone else proposes, to take or leave: `sparkles` 12
+  in `accent.text`, who proposes it ("AI") in `caption` `accent.text`, the range in `mono`
+  `text.primary`, and an `arrow-right` 12 (apply, not a done mark) in `accent.text`, on the accent
+  tint (`accent.text` 16 %), radius 4, padding 0×6. The whole pill is the target (pointer cursor)
+  and applies it; its tooltip says what that does. It stays as long as the proposal differs from what is set.
+
+  ```
+  ┌──────────────────┐ ┌───────────────────┐ ┌──────────────────────────┐
+  │ IN 00:01       x │ │ OUT 00:20       x │ │ ✦ AI 00:03 – 00:12     → │
+  └──────────────────┘ └───────────────────┘ └──────────────────────────┘
+  ```
+- **Suggested tag:** a tag someone else proposes for the clip, to take or leave: `plus` 12 in
+  `accent.text`, the tag's name in `caption` SemiBold `text.primary` (never wraps), and how sure
+  the proposal is ("90%") in `caption` `text.secondary` (left out when the proposal has no
+  number), on the accent tint, radius 4, padding 0×6. The whole pill is the target (pointer
+  cursor) and adds the tag; its tooltip says so, with the sureness ("Add the tag "night" (90%
+  sure)") and, on the first one, the key that adds it. No hover change, like the suggested
+  timecode. It goes once the clip has the tag.
+- **Apply all:** after several proposals, `check` 12 and a short verb ("Add all") in `caption`
+  SemiBold `accent.text`, no surface of its own, padding 0×6; the target (pointer cursor) takes
+  every proposal at once, its tooltip says so with its key.
+
+  ```
+  ✦ AI tags  ┌─────────────┐ ┌─────────────┐  ✓ Add all   Ideas: kayak race, crowd
+             │ + night 90% │ │ + beach 70% │
+             └─────────────┘ └─────────────┘
+  ```
 
 ### 8.17 Modal dialog
 
@@ -739,8 +773,8 @@ In order of preference (AF "Do, don't ask"; BIR «Привычка»; PUI "frict
 - **Once:** a message appears in one place. The batch result's title and its failed row do not
   both say "no credit left" (#58's complaint).
 - **Action button** when there is a fix, named by the fix (§8.21): *Add credit* (opens the
-  billing page), *Top up on Soniox* (the Soniox console), *Set the key…* / *Check the key…* (the
-  right Settings page, scrolled to the key row, the field focused).
+  billing page of the service that ran out: Anthropic or the Soniox console), *Set the key…* /
+  *Check the key…* (the right Settings page, scrolled to the key row, the field focused).
 
 ### 10.4 Empty states
 
@@ -916,7 +950,9 @@ Working on the folder while a job runs (at least previewing files) is #29, not t
 
 **Notices** (short feedback such as "Frame saved") appear as inline status (§8.12) in their own
 slot of the video pane's controls bar (§13.3.5), never as popups: confirmations for 2 s, errors
-until the next action. All their texts are translated (today five are English-only).
+until the next action. All their texts are translated (today five are English-only). The one
+exception to the slot and the 2 s is the resume note (§13.3.5): a pill over the picture for 6 s,
+clickable.
 
 **Esc** does one thing per press: the first of these that applies.
 
@@ -1007,9 +1043,11 @@ part over the segment, because the yellow over the blue would hide where the pla
 | Shift (snap) | a 1 px `text.primary` guide at the snap target while Shift is held during a drag | nothing |
 
 **Marker label** (the head of the active marker):
-- A chip-like button: `bg.overlay`, 1.5 px edge in the marker's color, radius 6, padding 2×8, text
-  `tooltip` 12/16 in `text.primary`, then a 12 px `pencil` in `text.secondary`; an unnamed marker
-  shows "Add a name" in `text.secondary`.
+- A chip-like button: a pill (full radius) filled with `bg.raised` tinted by 25 % of the marker's
+  color, 1.5 px edge in the marker's color, no shadow, padding 2×8, text `tooltip` 12/16 in
+  `text.primary`, then a 12 px `pencil` in `text.secondary`; an unnamed marker shows "Add a name"
+  in `text.secondary`. Not the tooltip's box (`bg.overlay`, `border.subtle`, radius 6, shadow), so
+  when a tooltip opens next to it the two never read as two tooltips.
 - Centered over a pin or the middle of a range; kept 4 px inside the pane; the name is cut with "…"
   to fit the pane (windowed; §13.9) and never in fullscreen.
 - Hover: `state.hover`; click: opens the marker's row for renaming. A read-only marker's label has
@@ -1035,7 +1073,7 @@ click on a pin seeks there.
 playhead, counting from 500 ms before its start to 2 s after it (or its end, if later); among
 several, one already started wins over one coming up, then the latest start.
 
-**Marker keys** (they work even while a field has focus; they are ignored with Ctrl or Alt held;
+**Marker keys** (they work even while a field has focus; they are ignored with Ctrl or Alt held, except `Ctrl`+`F2`;
 F2's auto-repeat is ignored; what an open marker row blocks is listed under the table):
 
 | Key | What it does |
@@ -1047,6 +1085,7 @@ F2's auto-repeat is ignored; what an open marker row blocks is listed under the 
 | `F2` on a read-only marker | notice "That marker is read-only" and the marker list opens |
 | `F2` on a file that cannot hold markers | the marker list opens to say so |
 | `Shift`+`F2` | delete the nearest editable marker within 0.5 s; notice "Marker deleted" or "No marker here" |
+| `Ctrl`+`F2` | describe the marker the playhead is on (the lit row) with AI and open the marker list; auto-repeat ignored; notice "No marker here" or "That marker is read-only"; on a marker already being described it opens the marker list, nothing else |
 | `Shift`+`F1` / `Shift`+`F3` | jump to the previous / next marker start; "previous" skips a marker passed less than 750 ms ago |
 | the `map-pin` button | a click is `F2`; holding it draws a range like holding `F2` |
 
@@ -1064,16 +1103,17 @@ left to right, with the widths §13.9 folds by:
 
 | Group (width) | Buttons (icon, tooltip with keys) |
 |---|---|
-| Transport (96) | `rewind` "Back 10 s `F1`" · `play`/`pause` "Play `Space`" / "Pause `Space`" · `fast-forward` "Forward 10 s `F3`" |
+| Transport (160; 96 with the frame steps in More) | `rewind` "Back 10 s `F1`" · `step-back` "One frame back `Alt`+`←`" · `play`/`pause` "Play `Space`" / "Pause `Space`" · `step-forward` "One frame forward `Alt`+`→`" · `fast-forward` "Forward 10 s `F3`" |
 | In/out (64) | text `[` "Set the in point `[`" · text `]` "Set the out point `]`" (text, as #44 says) |
 | Mark (64) | `camera` "Save this frame `F12`" · `map-pin` "Add a marker `F2` (hold for a range)"; disabled with the reason "This file cannot hold markers" |
 | Free space (flexible) | empty; notices (§13.2) show here when it is at least 120 wide, cut with "…" and the full text in the tooltip |
-| Time (104, #59) | `00:10 / 00:30` in `mono` `text.secondary`; a fixed width so it never moves |
+| Time (152, #59) | `00:10 / 00:30` in `mono` `text.secondary` (a frame step that has waited over 300 ms, #196, dims it to `text.disabled` and turns the spinner of §8.15, 16 px `text.secondary`, at the right edge of the free space just before the readout; the readout's 152 px slot does not move; in the narrow band where the free space is under 24 px the spinner has no room, and where the readout is folded away the step goes through More without a sign of work; both go when the frame shows. Presses meanwhile are dropped on purpose); paused, the playhead shows milliseconds, `00:10.250 / 00:30` (the exact time of a stepped frame, #162); a fixed width (21 characters, the longest it shows for a clip under 10 h: `9:59:59.500 / 9:59:59`; one of 10 h or more overflows it) so it never moves |
 | Volume (96) | `volume-2` icon 16 in `text.secondary` (not a button), 8 px, a 72 px slider (§8.8); folded: a 32 px icon button `volume-2` that opens the slider in a popover |
 | Views (96) | `captions` "Subtitle list" (only with subtitles) · `map-pin` "Marker list" with "`Shift`+`F1` / `Shift`+`F3` jump between markers" on its second line · **More** `ellipsis` (only when something is folded) · `maximize-2`/`minimize-2` "Full screen `F5`" |
 
-- **Rotate** `rotate-ccw` / `rotate-cw` (added after this spec) live in **More**, so More is always
-  shown; they are used rarely and have their keys (`Ctrl`+`Alt`+`←` / `→`).
+- **Rotate** (64) `rotate-ccw` / `rotate-cw` (added after this spec) sit after Mark when the pane
+  has room and are the first to move into **More**; they are used rarely and have their keys
+  (`Ctrl`+`Alt`+`←` / `→`).
 - **Latched** (list shown, fullscreen): `state.selected` fill and the icon in `accent.text`
   (§8.1), not only a blue glyph.
 - **Held** (`map-pin` while F2 or the button is held to draw a range): `state.pressed` fill and a
@@ -1084,8 +1124,30 @@ left to right, with the widths §13.9 folds by:
 - **Notice** (§13.2): an inline status in the free space, `text.secondary`, with an icon of its
   kind: `camera` "Frame saved", `trash` "Marker deleted", `circle-alert` in `error` "Markers not
   saved: the file is read-only or in use". It never pushes a button. When the free space is under
-  120 (the pane is under about 716 with every group shown), the notice shows instead as a pill over
+  120 (the pane is under about 916 with every group shown), the notice shows instead as a pill over
   the bottom-left of the picture (`bg.overlay`, radius 6, padding 4×8), with the same lifetime.
+  One notice is the app's own, not a confirmation: "Resumed at 12:34 · Home: start over" when a
+  clip opens where playback stopped last time (#161). It is always the pill over the picture,
+  whatever the free space (fullscreen too), and stays 6 s, long enough to act on; a click on it
+  (hand pointer) starts the clip over like `Home` does. The click is a shortcut: the key is in
+  the text. It belongs to its clip: opening another clip or closing this one takes it away (other
+  notices outlive that, #84). A newer notice within the 6 s replaces it like any other, and the
+  pill no longer starts anything; `Home` still goes to the start. While the note shows, `Home`
+  works from the tag and file searches too (the editor has usually just typed a tag), but not in
+  the comment box or a name being typed. `Home` does nothing while no video is shown, and a
+  file that is not a video opening lets the clip go after keeping where it was.
+
+  ![The resume note over a wide and a narrow video pane](design-system/resume-note.png)
+
+  *The note (§10 Notices) on a wide pane (left) and a narrow one (right), made with
+  `frename --demo` from `docs/screenshots/resume.toml` and `resume-narrow.toml`.* It is the
+  `floating_notice` pill: the `popup` surface (`bg.overlay`, subtle border, shadow), `text.body`,
+  padding 4×8, 8 from the picture's left and bottom edges. **Hover:** the pill does not change,
+  only the pointer becomes a hand; there is no fill or underline, which is why the text names
+  the key. **Narrow:** the pill is at most 280 wide (the tooltip width) and its text wraps inside
+  that, growing upward from the bottom-left corner, so a longer text (a translation) wraps onto
+  a second line where it does not fit and is never cut off. The screenshots show the English
+  text only.
 - **Narrow pane:** what gives way and when is in §13.9. The **More** button (`ellipsis`) sits just
   before fullscreen; its menu opens upward, lists each moved control with its icon, name and key,
   and marks a latched one with a `check`.
@@ -1118,22 +1180,94 @@ left to right, with the widths §13.9 folds by:
 **Marker rows**
 
 ```
- ● 0:06.120                                    ✕     ← dot · time · delete
-   City lights                                       ← name (body; "—" in text.secondary when empty)
+ ● 0:06.120                                  ✨ ✕     ← dot · time · describe with AI · delete
+   City lights                                        ← name (body; "—" in text.secondary when empty)
+   Lights come on along the river at dusk.            ← comment (secondary), when it has one
  ─────────────────────────────────────────────
- ● 0:14–0:18                                   ✓ ✕   ← open row: ✓ Done (Enter)
-   [Africa stays dark_______________]                ← name field (text field style)
+ ● 0:09                                          ✕    ← request on its way: no ✨
+   —
+   ◌ Describing… ⊗                                    ← loader, caption and ⊗ Stop, under the name
  ─────────────────────────────────────────────
- ● ● ● ● ● ● ● ●  |  ○ AI                      ✕     ← color picker replaces the first line
+ ● 0:14–0:18                                 ✓ ✨ ✕   ← open row: ✓ Done (Enter)
+   [Africa stays dark_______________]                 ← name field (text field style)
+ ─────────────────────────────────────────────
+ ● ● ● ● ● ● ● ●  |  ○ AI                       ✕     ← color picker replaces the first line
 ```
 
 - A click on the row (outside the dot and the time) opens it for renaming (the open row below); a click on
   the time jumps there.
 - First line: the **color dot** (14 px, a button; ring `text.secondary` on hover, `text.primary`
   when its picker is open), the **time** (`mono`, a ghost button that jumps there), a flexible
-  space, then row actions: `check` "Done `Enter`" (open row only) and `x` "Delete the marker" as
-  24 px icon buttons, shown on hover, on the lit row and on the open row (§8.9 "hover tools").
-- Second line: the name, `body`, wrapping.
+  space, then row actions: `check` "Done `Enter`" (open row only), `sparkles` "Describe with AI:
+  name the marker and add what happens" (with `Ctrl` `F2` on the lit row, which that key
+  describes) and `x` "Delete the marker" as 24 px icon buttons, shown on hover, on the lit row and
+  on the open row (§8.9 "hover tools").
+- Second line: the name, `body`, wrapping. Under it the marker's **comment**, when it has one
+  (an AI description, or Premiere's comment), `secondary`, wrapping, read-only.
+- **Describing** (#174): while a marker's request is on its way, a line under its name and
+  comment shows, whatever the pointer does, the turning `loader-circle` 12, "Describing…" in
+  `caption` `text.secondary` and `circle-x` "Stop describing" as a 24 px icon button (there, not
+  among the row's actions, so it never sits next to ✕ Delete); the row's `sparkles` is hidden. Several rows can
+  be describing at once. The answer names an unnamed marker (a name the editor gave stays) and adds
+  the description to the comment on a line of its own (an empty comment becomes it; a comment
+  that already has it is left alone, compared as one line, since a comment line joins its
+  lines): one undo step. Notices: "Marker described", "Not described: {reason}", "The marker
+  already has this description", "The marker is gone: its description was not added" (an undo
+  removed it meanwhile). The reasons are the batch action's own strings, shared
+  (`describe_ai::failure_reason`): "Video could not be read", "The clip is too long for AI (over
+  30 min)", the AI's reason (key rejected, no credit left, network error, no answer in time…).
+- **No key:** when the settings already said no key is saved, ✨ / `Ctrl+F2` send nothing:
+  notice "No Anthropic API key: set one in Settings" and Settings opens on Describe with AI. When
+  that was not known yet, the request finds it out and says so the same way, once even when
+  several requests find it out; the settings read the key again (they are its only reader) and
+  pass it on, so later clicks send nothing.
+- **Stopped:** ⊗ on the "Describing…" line (or deleting the marker, leaving the clip, opening
+  another folder) stops the request: the row is back to ✨ at once, and its answer, if it still comes, is dropped. ✨ again
+  starts a new request; a late answer of the stopped one never passes for it.
+- **Already describing:** the row has no ✨; `Ctrl+F2` on that marker sends nothing and no
+  notice, it only opens the marker list. `Ctrl+F2` opens it when a request starts or is already running
+  (in fullscreen too), so the row shows the progress and ⊗; when nothing is sent (no key, a batch
+  job) it does not.
+- **Describe all unnamed** (#208): above the rows, under the in/out line, a secondary button
+  `sparkles` "Describe N unnamed" (N is handed to the view; tooltip "Name and describe every
+  marker that has no name with AI, a few at a time…") while some editable markers have no name
+  and are not on their way; nothing when there are none.
+  - The tooltip adds the price: "One request each: under $0.01 a marker, about $0.05 for all." (with Haiku and 12 markers)
+    (clipscribe's estimate for a moment request with the chosen model: three frames, the
+    instructions and a typical answer; nothing is added when the model has no price). With more
+    than 10 markers (`CONFIRM_ABOVE`) a click does not send: the button gives way to a `caption`
+    "Describe 40 markers? One request each: about $0.40 in all." with a primary **Describe** and a
+    ghost **Cancel**; with ten or fewer a click sends at once.
+  - A click queues them in the list's order and sends three at a time
+    (`MAX_DESCRIBING_AT_ONCE`, a rate-limit and load guard; a ✨ click is not limited). A free
+    slot is counted from the requests really alive, a stopped one included until its answer is
+    back (it still reads the clip), so a stop never lets a fourth start.
+  - The rows of the others show the loader, "Waiting for its turn…" and ⊗. While some wait, or
+    two or more are on their way, the button gives way to a line: the turning loader, "Describing
+    N · M waiting" in `caption` and a ghost **Stop all** at the right (it stops requests on their
+    way too; their answers are dropped).
+  - Each answer is applied as for ✨, one undo step per marker. A marker named meanwhile is not
+    sent when its turn comes, and an answer never replaces a name.
+  - A failure, or a missing key found out, ends the run: the waiting ones stay unnamed, and the
+    notice is said once even when several in-flight requests fail. With the key known to be
+    missing nothing is queued: the notice and Settings of ✨. Leaving the clip or a batch job
+    empties the queue like the requests.
+- **Batch job:** Run stops the open clip's marker requests and waits until the last one is back
+  (it may be reading the clip's frames; clipscribe does not say when reading ends, so the wait
+  lasts until its answer, usually seconds). Meanwhile the batch panel's button bar shows the
+  turning `loader-circle` 12 and "Stopping the marker descriptions first… This is usually a few
+  seconds." with a secondary **Cancel** in place of Run; the job then starts by itself.
+  Cancel, leaving batch mode, another action, other checked files or another folder give up on
+  that run. No request starts while a job runs or waits.
+- **Leaving the clip** does not wait for its requests (they stop). A save that meets one still
+  reading the file (on Windows a rename or a write into the video then fails) is a refused save
+  like any other of a file in use: notice "Not saved: …" (when a marker request is still running, it says so: "the marker
+  description was still reading the clip"), the file keeps its name on disk, the
+  recovery journal keeps the edits, and markers that did not get written are kept, the file
+  marked, and written at the next save.
+- **Answer while the row is open for renaming:** the typed name is committed first, as its own
+  undo step; then the answer's step (a name typed there stays, being the editor's).
+- **Comment in the list:** at most 3 lines, then "…"; all of it while the row is open.
 - **Open row** (renaming): the name becomes a multi-line text field (§8.6) with the placeholder
   "Name"; Enter or Esc closes it.
 - **Color picker** (after a click on the dot): the first line becomes the 8 Premiere colors (Green,
@@ -1158,6 +1292,10 @@ left to right, with the widths §13.9 folds by:
 - Set with `[` / `]` (in rounds down to a whole second, out up); blocked in batch mode. Shown on the timeline (§13.3.4),
   in the file name card (§13.5.6) and in the file list row (§13.4.2).
 - Cleared with the `x` of their badge in the file name card, or undone.
+- Or taken from the AI: Describe with AI may suggest them (the clip's lead-in and lead-out cut
+  off, stored as the last line of the AI block, `Suggested In/Out: 00:00:03.200 –
+  00:00:11.800`). The file name card offers the suggestion (§13.5.6); a click sets both points as
+  `[` and `]` would (in rounded down, out up) in one undo step. Nothing is set without the click.
 
 #### 13.3.8 Fullscreen
 
@@ -1239,9 +1377,8 @@ The list is sorted by date modified, oldest first (unchanged); there is no sort 
 32 px under the list, `bg.panel` with a 1 px `border.subtle` line on top; icon buttons:
 `chevron-left` "Previous file `PgUp`", `chevron-right` "Next file `PgDn`", `locate-fixed` "Show the
 open file in the list" — then 12 px — `folder-open` "Open a folder" (`Ctrl`+`O` is proposed for #62; today it has no key) with the
-recent-folders ▾ of #63 — and at the right end, until #64 moves them to the app bar, `settings` "Settings" with the
-update dot and the batch toggle `list-checks` "Batch actions" (latched in batch mode). At the
-minimum width the gaps become 4 px and the least used buttons go into **More** (§13.9).
+recent-folders `chevron-down` "Recent folders `Ctrl` `R`" (§13.4.5), latched while its list is open — and at the right end, until #64 moves them to the app bar, `settings` "Settings" with the
+update dot and the batch toggle `list-checks` "Batch actions" (latched in batch mode). At narrow widths the gaps become 4 px and the least used buttons go into **More** (§13.9).
 Disabled buttons are truly disabled (today ◀ ▶ ⊙ look disabled but still take clicks).
 
 #### 13.4.4 Drag and drop
@@ -1249,6 +1386,31 @@ While a folder or file is dragged over the window, the whole window shows a drop
 window dimmed with `bg.window` at 80 %, a 2 px dashed `accent.text` edge inset 8 px and, in the middle, `folder-open` 48 with "Drop to open"
 (`title`). A drop of something that is neither a folder nor a video shows an error notice. Today
 there is no feedback while dragging (**behaviour**, #59).
+
+#### 13.4.5 Recent folders
+The last 10 folders opened (#63), newest first, each once; opening a folder moves it to the top.
+It is a menu (§8.14) 360 wide over the window, its bottom edge on the toolbar's line and its left
+edge 8 px in from the file list's, opened by the `chevron-down` button or `Ctrl`+`R` (also while a
+search field has the cursor), and the same rows in a column beside the intro on the empty screen
+(§13.7), where it scrolls when the window is short.
+
+- **Row:** 44 high (`RECENT_ROW_HEIGHT`), the §13.4.2 look for hover and the highlight (`state.selected`
+  and its bar). Line 1: the folder's name in `body`, and on the right when it was last used (every clip opened in it refreshes that) in
+  `caption` `text.secondary` ("5 min ago", "2 days ago"); line 2: the folder it is in, `caption`
+  `text.secondary`, cut from the front with "…" so the end of the path stays. A 24-px `x` "Remove
+  from the list" shows at the right of the row the pointer or the keys are on, and keeps its room
+  when hidden.
+- **Click or `Enter`:** opens the folder with the file that was open in it last time. The open
+  file's pending edits are saved first, as with every folder change.
+- **Missing folder:** its name and path are `text.disabled` and the time is replaced by "Not found".
+  A click (or `Enter`) does not open it: the row turns into the question "Not found. Remove it?"
+  with *Remove* (`Enter` does it too) and *Keep* (`Esc`). Nothing is removed without that
+  answer, because the drive may come back.
+- **Bottom:** a hairline and the item `trash` "Clear list". With no folders the menu says "No folders
+  opened yet".
+- **Keys:** `Ctrl`+`R` opens and closes; `↑` `↓` move the highlight and wrap, `Enter` chooses, `Esc`
+  closes (first it ends a question). While the list is open the other keys of the main window are
+  ignored, so nothing changes behind it.
 
 ### 13.5 Tags area
 
@@ -1314,8 +1476,9 @@ handle, comment. Columns are separated by the gaps of §5.
 
 | Key | What it does (tags area; all blocked in batch mode) |
 |---|---|
-| arrows | move the cursor (wrapping); proposed for #62: `Alt`+`←`/`→` moves the cursor tag in the folder order |
+| arrows | move the cursor (wrapping); `Alt`+`←`/`→` step the video one frame (#162), so #62's key for moving the cursor tag in the folder order is still to be chosen |
 | `Shift`+`Space` | check or uncheck the cursor tag (or the first match of the search) |
+| `F6` / `Shift`+`F6` | add the tag the AI suggests most / every suggested tag (§13.5.6); like the other F-keys, also while a search field has the focus; a held key adds once |
 | `Enter` | add an unsaved tag to the folder's tags; on a text that is no tag, create it |
 | `Delete` | delete the cursor tag from the folder (undoable) |
 | `Backspace` | anywhere in the window: removes the last letter of the tag search and focuses it (like typing) |
@@ -1370,9 +1533,65 @@ Both buttons, and the lock, are undoable (#139); a press that changes nothing pu
   `border.control` edge; while a chip is dragged over it: `DANGER_TINT` fill, `error` edge and icon,
   and "Untag" in `caption` SemiBold `error` under it (on the card's second line). A drop there untags the clip (undoable, like the middle click).
 - **Second line:** the IN and OUT timecodes (§8.16: `mono` in a `bg.overlay` pill with "IN"/"OUT" in
-  `caption` `text.secondary` inside, and `x` to clear), then the file name part without tags in
-  `mono`.
+  `caption` `text.secondary` inside, and `x` to clear), then the In/Out the AI suggests when the
+  clip's AI description has one and it differs from the IN and OUT (§8.16 suggested timecode,
+  "AI", tooltip "Set In and Out to what the AI suggests (rounded to whole seconds)"), then the
+  file name part without tags in `mono`.
+- **Third line, the tags the AI suggests** (#175), only while the clip's AI description suggests
+  one of the folder's own tags that the clip does not have yet, or has tag ideas:
+  - `sparkles` 12 and "AI tags" in `caption` `accent.text`; then one suggested tag pill (§8.16) per
+    tag, most likely first; then *Add all* (§8.16 apply all) when there are two or more; then the
+    ideas, "Ideas: kayak race, crowd" in `secondary`, with the tooltip "Tags the AI noticed that
+    this folder does not have. They are not added." Ideas are text only: they are never added to
+    the folder's tags.
+  - The line wraps when it does not fit the card (spacing 6 both ways).
+  - A click on a pill adds that tag to the clip, as checking it in the tag grid would (one undo
+    step); `F6` adds the first pill's tag. *Add all* (`Shift`+`F6`) adds every one as one undo
+    step. An added tag leaves the line (it is now a chip on the first line); undo brings it back.
+  - Only the folder's saved tags are offered: a suggested tag the folder no longer has is left
+    out, and an idea the folder has as a tag since is not shown as an idea.
+  - One suggestion: no *Add all*. Only ideas: "AI tags" and the ideas. Nothing left to offer: no
+    line at all.
+  - Like the other file name card edits, off in batch mode, and ignored while the clip's name is
+    being typed in its row (§13.4.2).
+
+  ```
+  ┌───────────────────────────────────────────────────────────────────────┐
+  │ [Pick] [Wide]                                                   [🗑] │
+  │ IN 00:01 x   ✦ AI 00:03 – 00:12 ✓   MVI_0410.mp4                     │
+  │ ✦ AI tags [+ night 90%] [+ beach 70%] ✓ Add all  Ideas: kayak race   │
+  └───────────────────────────────────────────────────────────────────────┘
+  ```
 - **No tags on the clip:** "No tags on this clip" in `secondary` where the chips go.
+- **Save status line** (#155), the card's last line, always shown while a clip is open: whether
+  the clip's edits are in its file or wait in the recovery journal (#140). It is the one place
+  that is about the open clip's own work (its name, tags, In/Out and the comment below it), it
+  costs one `caption` line and never asks for anything, so it is not a notice (§8.12: notices are
+  for something that just happened, the controls bar's slot is for confirmations that vanish) and
+  not a badge (nothing here is a fact to notice). It is an inline status in the compact size: an
+  icon 12 and a `caption` in `text.secondary`, 4 apart, the text wraps inside the card's width.
+  No tooltip, no click.
+
+  | State | When | Icon | Text |
+  |---|---|---|---|
+  | Saved | the clip's edits equal the file (just opened, saved, or undone back to it) | `circle-check` in `success` | "All changes saved" |
+  | In recovery | edits differ from the file and the journal holds exactly these edits | `circle-dashed` in `text.secondary` (not final yet) | "Saved to recovery, applied when you leave the clip" |
+  | none | edits differ from the file and the journal does not hold them yet (up to a second after an edit) or its write failed | – | an empty line of the same height |
+
+  The line says nothing rather than something untrue: "All changes saved" is never shown over an
+  edit, and there is no "saving" state of a second (the editor did not ask to see the journal's
+  rhythm). The line keeps its height when it says nothing (one `caption` line), so the card and
+  the trash in it, a drag target, do not move with an edit or when the journal catches up. A
+  text that wraps (a long translation in a narrow card) is the one case that changes the height:
+  the line is a minimum height, so the wrapped text grows the card instead of being cut off or
+  overlapping what is below. At the tags area's minimum width (320) the "in recovery" text wraps
+  to two lines in English and in Russian, so the card is one line taller then than with "All
+  changes saved"; at the default width both fit on one line.
+  There is no line while no clip is open and in batch mode (the card is not there). The state comes from `FolderWorkspace::save_status`, a comparison of
+  the open clip's edits with the journal's baseline and last write that touches no disk, so the
+  view can ask on every frame; the mapping from the two facts to the line is
+  `file_name_panel::save_status`. Screenshots: `docs/screenshots/save-status-saved.toml` and
+  `save-status-recovery.toml`.
 
 #### 13.5.7 Comment
 - A multi-line field (§8.6) with the placeholder "Comment", `maximize-2` "Give the comment the whole
@@ -1491,7 +1710,7 @@ Every page has the same parts, in this order:
 | Fix tags by priority | renames files | none; a line "Order: as in the tag list" with the link *Show the tag list* (leaves batch mode) | Reorder tags in 12 names | nothing checked |
 | Apply tag spacing | renames files | row "Spacing" with the current choice and the link *Change* | Rename 12 files | nothing checked |
 | Reset cache and reload | changes only frename's records | none | Reload 12 files | nothing checked |
-| Describe with AI | writes into comments (and markers) | rows: Model (the model and *Change*), Language (*Change*), checkbox "Describe again the videos that have a description"; plan rows and "Without subtitles: 4" (they are described from the picture only); skipped line in `secondary` ("Skipped: 3 already described, 1 over 30 min") | Describe 12 videos · about $0.35 | estimating: a spinner line "Reading clip lengths… 40 of 120" over the plan rows drawn as empty skeletons, Run "Describe videos", reason "Waiting for the estimate"; no key (error notice "No Anthropic API key yet" + *Set the key…*); key rejected (+ *Check the key…*); nothing to send |
+| Describe with AI | writes into comments (and markers) | rows: Model (the model and *Change*), Language (*Change*), Tag suggestions (*Change*: "From the folder's 24 tags", "On, but this folder has no tags yet" or "Off"; the estimate counts the tags sent and the suggestions that come back), checkbox "Describe again the videos that have a description"; plan rows and "Without subtitles: 4" (they are described from the picture only); skipped line in `secondary` ("Skipped: 3 already described, 1 over 30 min") | Describe 12 videos · about $0.35 | estimating: a spinner line "Reading clip lengths… 40 of 120" over the plan rows drawn as empty skeletons, Run "Describe videos", reason "Waiting for the estimate"; no key (error notice "No Anthropic API key yet" + *Set the key…*); key rejected (+ *Check the key…*); nothing to send |
 | Generate subtitles | writes `.srt` files | rows: Languages (from Settings, as a line, *Change*), Cue length, checkbox "Replace existing subtitles"; plan rows: videos, length, cost with its source ("from your account" / "typical price"; "cost unknown" when neither is known), time; `secondary` lines: what is skipped and why, "The audio is sent to Soniox", "Uploads are deleted from Soniox afterwards (the log lists any that could not be)", and that the clips get the "subtitled" tag when Settings says so | Transcribe 12 videos · about $0.07 (or "Build 3 subtitles, free") | key missing or rejected (notice + *Set the key…* / *Check the key…*); nothing to transcribe |
 
 Today seven actions share one generic "Run on N files". What explains a disabled Run today: the red
@@ -1542,7 +1761,7 @@ The job's page stays until Close:
    - stopped by the user: `circle-minus` info notice "Stopped after 7 of 12 files" (the files not
      reached are not listed: they did not fail; "Run again" covers them);
    - stopped by an error: error notice "Stopped: the Anthropic account has no credit left" with the
-     fix (*Add credit* for Anthropic billing, *Top up on Soniox* for an empty Soniox balance or
+     fix (*Add credit* for an empty Anthropic or Soniox balance or
      budget, *Check the key…* for a rejected key) — the reason is not repeated below;
    - finished with some failures: warning notice "Done with problems: 3 of 12 files not done".
 2. **Figures:** three figures in a row — changed, unchanged, not done — and a fourth, "not reached"
@@ -1608,6 +1827,7 @@ Colors that belong to the content, not to the chrome, and are tokens too (§3.3)
 | `overlay.list` | black 72 % | side list over the picture |
 | `overlay.caption` | black 62 % | fullscreen caption pill |
 | `marker.*` | the 9 Premiere colors of `theme::marker_color` | pins, bands, dots, label edges |
+| `marker.label.tint` | 25 % of the marker color over `bg.raised` | marker label fill |
 | `tag.palette.*` | the 16 colors of `tag_colors.rs` | chips |
 | `tag.text` | black | chip labels and icons (70 % for icons) |
 | `tag.star` | black 70 % (on the chip) | star; the gold star of today reads poorly on yellow chips |
@@ -1654,17 +1874,21 @@ minimum.
 
 **Video pane** (min 320, no max)
 
-The controls bar folds by the widths of §13.3.5: padding 16 + Transport 96 + In/out 64 + Mark 64
-+ Time 104 + Volume 96 + Views 96 + five gaps of 12 = **596** with everything shown. Each step
-below takes away what the previous width no longer fits:
+The controls bar folds by the widths of §13.3.5 (`video_controls/fold.rs`, whose test pins these
+numbers): padding 16 + Transport 160 + In/out 64 + Mark 64 + Rotate 64 + Time 152 + Volume 96 +
+Views 96 + seven gaps of 12 (the free space counts as one more item of the row) = **796** with
+everything shown and a clip with subtitles. Each step below takes away what the previous width no
+longer fits:
 
 | Pane width | Controls bar | Needs |
 |---|---|---|
-| ≥ 596 | all groups (§13.3.5) | 596 |
-| 480–595 | the time readout hides (the timeline's hover tooltip still shows times) | 596 − 104 − 12 = 480 |
-| 416–479 | also the volume slider folds into its icon button | 480 − 64 = 416 |
-| 372–415 | also the Mark group (`camera`, `map-pin`) moves into **More** (More appears just before fullscreen) | 416 − 64 − 12 + 32 = 372 |
-| 320–371 | also the subtitle and marker list buttons move into **More**; transport, in/out, the volume icon, More and fullscreen stay | 372 − 64 = 308 |
+| ≥ 796 | all groups (§13.3.5) | 796 |
+| 752–795 | ↺ ↻ move into **More** (More appears just before fullscreen) | 796 − 64 − 12 + 32 = 752 |
+| 688–751 | also the frame steps (`step-back`, `step-forward`) move into **More**, before the readout hides: stepping, the readout shows the frame's time | 752 − 64 = 688 |
+| 524–687 | also the time readout hides (the timeline's hover tooltip still shows times) | 688 − 152 − 12 = 524 |
+| 460–523 | also the volume slider folds into its icon button | 524 − 64 = 460 |
+| 384–459 | also the Mark group (`camera`, `map-pin`) moves into **More** | 460 − 64 − 12 = 384 |
+| 320–383 | also the subtitle and marker list buttons move into **More**; transport, in/out, the volume icon, More and fullscreen stay | 384 − 64 = 320 |
 
 Without subtitles (no subtitle list button) each threshold is 32 lower. Notices use the free space
 when it is at least 120, otherwise the pill over the picture (§13.3.5).
@@ -1687,8 +1911,22 @@ Never hidden: play/pause, back/forward 10 s, `[` `]`, fullscreen, the timeline.
 |---|---|---|
 | ≥ 320 | all parts (§13.4.2) | full |
 | 260–319 | chips that do not fit become `+N`; in/out timecodes hide (they are in the name's tooltip) | full |
-| 200–259 | the first chip only if the name still gets 80 px, otherwise only `+N`; the marker count stays | the Filter button keeps its icon and badge; the toolbar's gaps become 4 px and `locate-fixed` and the batch toggle go into **More** |
+| 200–259 | the first chip only if the name still gets 80 px, otherwise only `+N`; the marker count stays | the Filter button keeps its icon and badge; the toolbar folds as below |
 | > 720 | the column stops growing; the splitter stops | – |
+
+The toolbar (§13.4.3, `folder_controls/fold.rs`, whose test pins these numbers) is padding 16 +
+files 96 (◀ ▶ locate) + open 64 (📂 ▾) + settings and batch 64 + three gaps of 12 (the free space
+counts as one more item of the row) = **276** with everything shown. It never wraps and never
+shrinks a button; each step below takes away what the previous width no longer fits, and every
+button is then in the bar or in **More** (`ellipsis`, at the right end, which opens a menu over the
+toolbar with each folded button's icon, name and keys):
+
+| List width | Toolbar | Needs |
+|---|---|---|
+| ≥ 276 | all seven buttons, gaps 12 | 276 |
+| 252–275 | gaps become 4 | 276 − 3 × 8 = 252 |
+| 220–251 | also `locate-fixed` and the batch toggle move into **More** | 252 − 64 + 32 = 220 |
+| 188–219 (list minimum 200) | also the recent folders `chevron-down` moves into **More** (`Ctrl` `R` still opens the list); ◀ ▶ 📂 and Settings stay | 220 − 32 = 188 |
 
 ![File list sizes](design-system/sizes-file-list.png)
 
@@ -1738,10 +1976,11 @@ fails. The keys are today's (#62 owns the list).
 | Open a folder | 📂, drop a folder, recent folders (#63), a path on the command line; the last session reopens at start | OS picker; the file list | the list fills; the app bar shows the folder (#64) | empty folder: empty state in the list; cannot read it: error notice, the old folder stays; missing recent folder: dimmed row with a remove offer |
 | Walk the clips | PageUp / PageDown, click | file list, video pane | row selected and scrolled into view; video loads | load failed: `circle-x` 48 and the reason in the video pane |
 | Tag a clip | type part of a name, arrows, Shift+Space | tag search, tag grid | checkbox ticks; the chip appears in the file name panel and the list row | no match: the search offers to create the tag (Enter) |
+| Take a tag the AI suggests | click a suggested tag, F6, Add all / Shift+F6 | file name card (§13.5.6) | the chip appears; the pill leaves the AI tags line | – |
 | Rename | double-click a row, Enter / Esc | inline field in the row | the row shows the new name | error line under the field (why + what to do); the field keeps the text |
 | Comment | click the comment box, type | comment editor | saved on leave; comment line in the list row; "Commented" tag checked if Settings says so | – |
 | Mark in / out | `[` `]` | video controls, file name panel | IN/OUT timecodes appear; segment on the bar | – |
-| Markers | F2 (F2 F2 to name, hold for a range), Shift+F1/F3, Shift+F2 (§13.3.4) | timeline, marker list | pin appears with its label | not saved: `circle-alert` at the row's right end and an error notice |
+| Markers | F2 (F2 F2 to name, hold for a range), Shift+F1/F3, Shift+F2, Ctrl+F2 to describe with AI (§13.3.4, §13.3.6) | timeline, marker list | pin appears with its label | not saved: `circle-alert` at the row's right end and an error notice |
 | Run a batch action | batch mode, pick an action, primary button | batch panel | progress with n of total, time left, Cancel | stopped or failed: one notice with the reason and a fix button; files not done listed once |
 | Change a setting | ⚙, Ctrl+Tab between pages | Settings window | applies at once | key save failed: error line under the key row |
 | Update | the dot on ⚙ | Settings → Updates | status line; *Update and restart* | check failed: error line with the reason |
@@ -1866,7 +2105,7 @@ only replaces the OS title bar with A's bar.
 |---|---|
 | **Interface** (`languages`) | Language · Tag colors (*Monochrome*) · Video (*Play videos automatically when opened*) |
 | **Saving** (`folder`) | File names (*Space after each tag*) · Comments · Markers and ranges · In/out points |
-| **Describe with AI** (`sparkles`; Russian list label «Описание от AI», heading «Описать с помощью AI») | Anthropic API key · Model · Description language |
+| **Describe with AI** (`sparkles`; Russian list label «Описание от AI», heading «Описать с помощью AI») | Anthropic API key · Model · Description language · Moments · Tag suggestions |
 | **Subtitles** (`captions`) | Soniox API key · Cue length · Languages (cue length first: the language list is long and hid it) |
 | **Updates** (`refresh-cw`) | Version (version, status, *Check for updates*, *Update and restart*, *Check for updates when frename starts*) · Settings from an older frename (installed only) |
 
@@ -1919,8 +2158,15 @@ No "General" (BIR). The version is on *Updates* ("About" would hold only it).
   - *Keyring unavailable:* warning notice with today's text and hint.
   - A failed save or removal: error line under the row.
 - **Model** (AI): dropdown 300 wide with the prices; help "Haiku is the cheapest; Sonnet and Opus
-  notice more." **Description language:** dropdown 300. The page's ⓘ (on the key row): "Used by
-  Describe with AI in batch mode."
+  notice more." **Description language:** dropdown 300. **Moments:** radios *Only what stands
+  out* — "Also suggests where to set In and Out (the AI pill next to IN and OUT)"; *Cover the
+  whole clip* — "A moment for every part, quiet ones too; no In and Out suggestion". Default: only
+  what stands out (clipscribe's `MomentsMode::Important`, the only mode with a suggested In/Out,
+  §13.5.6); the choice is used by the next run, a running job keeps its own. **Tag suggestions:** checkbox "Also
+  suggest tags from the folder's tags" (on by default) with the hint "In the same request, the AI
+  says which of the folder's tags fit each clip. A suggested tag is added only when you click it."
+  The page's ⓘ (on the
+  key row): "Used by Describe with AI in batch mode and on markers (✨, Ctrl+F2)."
 - **Languages** (Subtitles): checkboxes of a fixed width that wrap into as many columns as fit (three
   at the default size, two at the minimum); a status line under them while loading, locked or
   failed; help "The languages spoken in the footage, as hints." **Cue length:** radios *Short* —

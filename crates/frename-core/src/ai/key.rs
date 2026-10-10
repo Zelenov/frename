@@ -21,6 +21,15 @@ impl ApiKey {
             Self::Soniox => "soniox-api-key",
         }
     }
+
+    /// The page where credit is added for this service: the button of the error that says
+    /// the account has no credit left.
+    pub fn billing_url(self) -> &'static str {
+        match self {
+            Self::Anthropic => "https://console.anthropic.com/settings/billing",
+            Self::Soniox => "https://console.soniox.com/org/billing/overview",
+        }
+    }
 }
 
 /// Whether a key is saved, or that the store cannot be used on this system.
@@ -110,6 +119,9 @@ mod tests {
     #[test]
     fn the_key_round_trips_or_the_store_says_it_is_unavailable() {
         let user = format!("{}-test-{}", ApiKey::Soniox.user(), std::process::id());
+        // An entry an earlier run with this process id left (it failed between save and delete)
+        // must not leak into this one.
+        let _ = delete_key_of(&user);
         match key_state_of(&user) {
             KeyState::Unavailable => {
                 if cfg!(windows) {

@@ -149,8 +149,7 @@ mod tests {
     use super::*;
 
     fn clip_with_duplicates(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("frename-{name}-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = frename_core::test_support::fresh_dir(name);
         let file = dir.join("clip.mov");
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("crates/frename-core/tests/fixtures/tiny.mov");

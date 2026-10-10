@@ -36,6 +36,9 @@ pub enum Message {
     TogglePause,
     /// Seek to position in seconds
     Seek(f32),
+    /// Back to the very start of the clip (`Home`, or a click on the note that says where it
+    /// continued).
+    GoToStart,
     /// Controls message
     Controls(video_controls::Message),
     /// Unload current video (e.g. before switching file). Emits VideoUnloaded when done.
@@ -62,6 +65,8 @@ pub enum Message {
     ToggleMarkerList,
     /// Show the marker list (e.g. when `F2 F2` opens a row).
     ShowMarkerList,
+    /// Demo mode: show the time readout as it looks while a frame step is slow.
+    ShowSlowStep,
     /// A tab of the side list was picked.
     ShowOverlay(Overlay),
     /// Seek exactly to this time (ms), e.g. a marker.
@@ -96,4 +101,7 @@ pub enum Message {
     MorePicked(Vec<Message>),
     /// A step of the loading spinner (internal, only while a video loads).
     LoadingTick,
+    /// Look whether the frame a step asked for is on screen yet (internal, only while one is
+    /// on its way).
+    FrameStepTick,
 }

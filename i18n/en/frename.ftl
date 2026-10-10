@@ -70,10 +70,17 @@ settings-ai-key-label = Anthropic API key
 settings-ai-key-placeholder = sk-ant-…
 settings-ai-key-get = Get a key at console.anthropic.com → API keys.
 settings-ai-key-remove-confirm = Remove the saved Anthropic key?
-settings-ai-used-by = Used by Describe with AI in batch mode.
+settings-ai-used-by = Used by Describe with AI in batch mode and on markers (✨, Ctrl+F2).
 settings-ai-model-label = Model
 settings-ai-language-label = Description language
 settings-ai-hint = Haiku is the cheapest; Sonnet and Opus notice more.
+settings-ai-moments-label = Moments
+settings-ai-moments-important = Only what stands out
+settings-ai-moments-full = Cover the whole clip
+settings-ai-moments-important-hint = Also suggests where to set In and Out (the AI pill next to IN and OUT)
+settings-ai-moments-full-hint = A moment for every part, quiet ones too; no In and Out suggestion
+settings-ai-tag-suggestions = Also suggest tags from the folder's tags
+settings-ai-tag-suggestions-hint = In the same request, the AI says which of the folder's tags fit each clip. A suggested tag is added only when you click it.
 settings-subtitles = Subtitles
 settings-subtitles-key-label = Soniox API key
 settings-subtitles-key-placeholder = Paste the key
@@ -196,6 +203,7 @@ batch-change-subtitles = Writes subtitle files next to the videos
 batch-change-records = Changes only frename's own records
 batch-option-direction = Direction
 batch-option-language = Language
+batch-option-tag-suggestions = Tag suggestions
 batch-option-described = Described videos
 batch-option-subtitled = Subtitled videos
 batch-option-subtitles-write = Files to write
@@ -205,9 +213,6 @@ batch-option-turn = Turn
 batch-plan-videos = Videos
 batch-plan-length = Length
 batch-plan-cost = Cost
-batch-plan-credit-left = Credit left
-batch-credit-left-value = { $amount } (estimate)
-batch-credit-low = This run is estimated at { $cost }, more than the estimated credit left: { $left }.
 batch-plan-time = Time
 batch-reason-estimate = Waiting for the estimate
 batch-reason-subtitles-no-format = Check at least one file to write
@@ -283,6 +288,12 @@ batch-action-describe-ai-no-subtitles = Without subtitles (only the picture is d
 batch-action-describe-ai-redo = Redo videos that already have an AI description
 batch-action-describe-ai-hint-panel = Describes what happens in each checked video, and when: a summary and time-ranged segments go into the AI description of its comment; your own text is kept. Frames and subtitles are sent to Anthropic.
 batch-ai-change = Change
+batch-ai-tag-suggestions-off = Off
+batch-ai-tag-suggestions-no-tags = On, but this folder has no tags yet
+batch-ai-tag-suggestions-on = { $tags ->
+    [one] From the folder's { $tags } tag
+   *[other] From the folder's { $tags } tags
+}
 batch-ai-key-missing = Set an Anthropic API key in Settings
 batch-ai-key-unavailable = The system keyring could not be opened: it may be locked, or there is none (such as GNOME Keyring or KWallet).
 ## AI description language names: the Settings picker and { $language } above.
@@ -311,9 +322,12 @@ batch-ai-skipped = Skipped: { $parts }.
 batch-ai-progress-frame = frame { $done } of { $total }
 batch-ai-progress-waiting = waiting for Claude
 batch-ai-progress-saving = saving
+batch-ai-progress-retry-rate-limit = retrying in { $seconds } s (rate limit)
+batch-ai-progress-retry-temporary = retrying in { $seconds } s (temporary failure)
 batch-ai-stop-no-key = Stopped: no Anthropic API key. Set one in Settings.
 batch-ai-fail-no-key = No API key
 batch-ai-fail-unreadable = Video could not be read
+batch-ai-fail-too-long = The clip is too long for AI (over 30 min)
 batch-ai-fail-not-saved = The description could not be saved
 batch-ai-stop-offline = Stopped: no connection to Anthropic. Run it again to describe the rest.
 
@@ -384,9 +398,10 @@ batch-subtitles-usd-about = about ${ $amount }
 
 ## File list
 folder-has-subtitles = Has subtitles
+folder-closed-by-job = Closed while a batch action changes it
 folder-filter-tip = Show only…
 
-folder-search-placeholder = Find a file, or a word in a comment
+folder-search-placeholder = Find a file or a comment
 folder-search-comments-loading = Searching comments… { $n } left
 folder-search-clear = Clear
 folder-all = All
@@ -419,6 +434,37 @@ folder-window-empty-title = Open a folder of clips
 folder-window-empty-line = Or drop a folder on the window. A right-click on the button opens one file.
 folder-window-open = Open a folder…
 
+## Recent folders (the arrow next to the open button, and the empty screen)
+
+recent-folders-tip = Recent folders
+recent-folders-title = Recent folders
+recent-folders-none = No folders opened yet
+recent-folders-not-found = Not found
+recent-folders-remove-tip = Remove from the list
+recent-folders-clear = Clear list
+recent-folders-remove = Remove
+recent-folders-keep = Keep
+recent-folders-missing-line = Not found. Remove it?
+recent-folders-just-now = Just now
+recent-folders-minutes = { $count } min ago
+recent-folders-hours = { $count } h ago
+recent-folders-days = { $count ->
+    [one] { $count } day ago
+   *[other] { $count } days ago
+}
+recent-folders-weeks = { $count ->
+    [one] { $count } week ago
+   *[other] { $count } weeks ago
+}
+recent-folders-months = { $count ->
+    [one] { $count } month ago
+   *[other] { $count } months ago
+}
+recent-folders-years = { $count ->
+    [one] { $count } year ago
+   *[other] { $count } years ago
+}
+
 ## File menu (right-click on a file, or F11 / Shift+F11 / Ctrl+F11)
 
 file-menu-show-in-explorer = Show in Explorer
@@ -442,6 +488,7 @@ folder-controls-batch-back = Back to the open file
 folder-controls-update-available = Update available: { $version }
 folder-controls-previous = Previous file
 folder-controls-next = Next file
+folder-controls-more = More
 folder-controls-open-file = Right-click: open one file
 
 ## Video
@@ -450,6 +497,8 @@ video-controls-back = Back 10 s
 video-controls-play = Play
 video-controls-pause = Pause
 video-controls-forward = Forward 10 s
+video-controls-frame-back = One frame back
+video-controls-frame-forward = One frame forward
 video-controls-set-in = Set the in point
 video-controls-set-out = Set the out point
 video-controls-screenshot = Save this frame
@@ -473,6 +522,7 @@ rotate-flag-none = none
 rotate-now = Rotation: { $flag }
 rotate-turned = Turned { $turn } · rotation now { $flag }
 rotate-failed = Not rotated: { $reason }
+undo-name-taken = Not changed: another file is already named { $name }
 undo-back-on-clip = Back on this clip (undid the move). Ctrl+Z again undoes its last change.
 redo-on-clip = On this clip again (redid the move).
 rotate-reason-in-use = the file is read-only or in use
@@ -492,6 +542,8 @@ media-viewer-video-markers-hint = Shift+F1 / Shift+F3 jump between markers; Shif
 media-viewer-video-tab-markers = Markers
 media-viewer-video-fullscreen = Full screen
 media-viewer-video-close-list = Close the list
+# Shown over the picture when a clip opens where playback stopped last time; Home or a click goes to the start.
+media-viewer-video-resumed = Resumed at { $time } · Home: start over
 
 ## Markers list
 markers-in-out = In/out points
@@ -515,6 +567,37 @@ markers-color-magenta = Magenta
 markers-color-other = Another color
 markers-read-only = read-only
 markers-name-placeholder = Name
+markers-ai-describe = Describe with AI: name the marker and add what happens
+markers-ai-stop = Stop describing
+markers-ai-describe-unnamed = Describe { $count } unnamed
+markers-ai-describe-unnamed-hint = Name and describe every marker that has no name with AI, a few at a time. One request each; a name you type meanwhile is kept.
+markers-ai-price-about = about { $dollars }
+markers-ai-describe-unnamed-cost = One request each: { $each } a marker, { $total } for all.
+markers-ai-confirm = { $count ->
+    [one] Describe { $count } marker? One request: { $total }.
+   *[other] Describe { $count } markers? One request each: { $total } in all.
+}
+markers-ai-confirm-unpriced = { $count ->
+    [one] Describe { $count } marker? One paid request.
+   *[other] Describe { $count } markers? One paid request each.
+}
+markers-ai-confirm-yes = Describe
+markers-ai-confirm-no = Cancel
+markers-ai-waiting = Waiting for its turn…
+markers-ai-run = Describing { $describing } · { $waiting } waiting
+markers-ai-run-last = Describing { $describing }
+markers-ai-stop-all = Stop all
+markers-ai-describing = Describing…
+markers-ai-done = Marker described
+markers-ai-nothing-new = The marker already has this description
+markers-no-marker-notice = No marker here
+markers-ai-no-key = No Anthropic API key: set one in Settings
+markers-ai-failed = Not described: { $reason }
+markers-ai-failed-unknown = something went wrong
+markers-read-only-notice = That marker is read-only
+markers-ai-gone = The marker is gone: its description was not added
+markers-ai-stopping-for-batch = Stopping the marker descriptions first… This is usually a few seconds.
+folder-not-saved-marker-ai = Not saved: the marker description was still reading the clip. Try again in a moment.
 
 ## File workspace
 
@@ -552,11 +635,27 @@ sync-panel-sort-like-folder = Sort like the folder
 
 file-name-panel-no-tags = No tags on this clip
 file-name-panel-untag = Untag
+file-name-panel-clear-in = Clear the in point
+file-name-panel-clear-out = Clear the out point
+file-name-panel-suggested-in-out = AI
+file-name-panel-apply-suggested-in-out = Set In and Out to what the AI suggests (rounded to whole seconds)
+file-name-panel-suggested-tags = AI tags
+file-name-panel-add-suggested-tag = Add the tag "{ $tag }" ({ $percent }% sure)
+file-name-panel-add-suggested-tag-unsure = Add the tag "{ $tag }"
+file-name-panel-add-all-suggested-tags = Add all
+file-name-panel-add-all-suggested-tags-tip = Add every tag the AI suggests
+file-name-panel-tag-ideas = Ideas: { $ideas }
+file-name-panel-tag-ideas-tip = Tags the AI noticed that this folder does not have. They are not added.
+file-name-panel-saved = All changes saved
+file-name-panel-saved-to-recovery = Saved to recovery, applied when you leave the clip
 
 ## Updates (Settings)
 
 updates-check = Check for updates
 updates-not-installed = Updates work in the installed version
+updates-from-store = Updates come from the Microsoft Store
+updates-from-releases = New versions: download them from the releases page
+updates-open-releases = Open the releases page
 updates-checking = Checking…
 updates-downloading-named = Downloading { $version }… { $percent }%
 updates-downloading = Downloading… { $percent }%
@@ -569,16 +668,6 @@ updates-update-and-restart = Update and restart
 updates-wait-for-batch = Wait for the batch to finish
 updates-current-version = frename { $version }
 updates-check-on-start = Check for updates when frename starts
-settings-spend-label = Spending
-settings-spend-line = Today { $today } · this month { $month }
-settings-spend-since = Since the top-up of { $top_up }: { $spent }
-settings-spend-left = Credit left: { $amount } (an estimate)
-settings-spend-none = Record a top-up to see about how much is left.
-settings-spend-note = Counts what frename spent; the provider's own page may show more. Type the day as YYYY-MM-DD.
-settings-topup-amount-placeholder = Added, $
-settings-topup-date-placeholder = Day, empty: today
-settings-topup-record = Record top-up
-settings-topup-refused = Type the amount as a number and the day as YYYY-MM-DD.
 
 recovery-restored = frename closed unexpectedly. Restored your unsaved work on { $clip } ({ $what }).
 recovery-kept = frename closed unexpectedly. Your unsaved work on { $clip } ({ $what }) was not applied: { $why }. A readable copy to retype from is in { $folder }.
@@ -597,3 +686,8 @@ recovery-markers = { $count ->
 recovery-comment = comment
 recovery-in-out = in/out points
 recovery-edits = edits
+folder-frame-saved = Frame saved
+folder-not-saved = Not saved: a file with that name already exists, or it is read-only or in use
+markers-deleted-notice = Marker deleted
+markers-not-saved-notice = Markers not saved: the file is read-only or in use
+markers-comment-not-saved-notice = Markers not saved: the comment file is read-only or in use

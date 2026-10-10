@@ -432,12 +432,10 @@ mod tests {
         let source = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures")
             .join(fixture);
-        let dir = std::env::temp_dir().join(format!(
-            "frename-rotation-{test}-{}-{}",
-            fixture.replace('.', "-"),
-            std::process::id()
+        let dir = crate::test_support::fresh_dir(&format!(
+            "rotation-{test}-{}",
+            fixture.replace('.', "-")
         ));
-        std::fs::create_dir_all(&dir).expect("temp dir");
         let file = dir.join(fixture);
         std::fs::copy(source, &file).expect("copy fixture");
         file

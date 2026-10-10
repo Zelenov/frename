@@ -22,7 +22,9 @@ use crate::features::media_viewer::{self, video};
 const PREVIOUS_SLACK_MS: u64 = 750;
 
 /// Said when markers could not be written into the video, or into a comment inside it.
-pub(super) const MARKERS_NOT_SAVED: &str = "Markers not saved: the file is read-only or in use";
+pub(super) fn markers_not_saved() -> String {
+    fl!("markers-not-saved-notice")
+}
 
 impl FolderWorkspace {
     /// Apply a marker key or marker list message; `position_ms` is the playhead. Markers kept in
@@ -75,7 +77,7 @@ impl FolderWorkspace {
                 self.keep_unsaved_markers(
                     id,
                     markers.to_vec(),
-                    "Markers not saved: the comment file is read-only or in use",
+                    &fl!("markers-comment-not-saved-notice"),
                 )
             }
         }
@@ -143,7 +145,10 @@ impl FolderWorkspace {
         if self.file_workspace.file().is_none() {
             return Task::none();
         }
-        if !matches!(msg, M::Add | M::KeyDown | M::KeyUp | M::Scrolled(..)) {
+        if !matches!(
+            msg,
+            M::Add | M::KeyDown | M::KeyUp | M::Scrolled(..) | M::RowHeight(..)
+        ) {
             self.markers.forget_added();
         }
         match msg {
@@ -217,6 +222,27 @@ impl FolderWorkspace {
                 self.delete_marker(&guid);
                 Task::none()
             }
+            M::Describe(guid) => self.describe_marker(&guid),
+            M::DescribeAtPlayhead => self.describe_marker_at(position_ms),
+            M::DescribeUnnamed => self.describe_unnamed_markers(false),
+            M::ConfirmDescribeUnnamed => self.describe_unnamed_markers(true),
+            M::CancelDescribeUnnamed => {
+                self.markers.set_describe_all_asked(None);
+                Task::none()
+            }
+            M::StopDescribing(guid) => {
+                // The slot of a stopped request frees when its answer is back, not before.
+                self.markers.stop_describing(&guid);
+                Task::none()
+            }
+            M::StopDescribingAll => {
+                self.markers.stop_all_describing();
+                Task::none()
+            }
+            M::RowHeight(index, height) => {
+                self.markers.set_row_height(index, height);
+                Task::none()
+            }
             M::Scrolled(y, viewport) => {
                 self.markers.set_viewport(viewport);
                 // The list was just put back (fullscreen): keep the lit marker in view.
@@ -230,7 +256,12 @@ impl FolderWorkspace {
                     return Task::none();
                 };
                 let passed = markers::view::passed_index(markers, position_ms);
-                match markers::view::offset_showing_lit(markers, passed, y, viewport) {
+                match markers::view::offset_showing_lit(
+                    self.markers.row_heights(),
+                    passed,
+                    y,
+                    viewport,
+                ) {
                     Some(wanted) => scroll_marker_list_to(wanted),
                     None => Task::none(),
                 }
@@ -264,7 +295,7 @@ impl FolderWorkspace {
             Some(Some(guid)) => self.open_marker_row(guid),
             Some(None) => Task::batch([
                 self.show_marker_list(),
-                Self::notice("That marker is read-only"),
+                Self::notice(&fl!("markers-read-only-notice")),
             ]),
             None => self.add_marker(position_ms, true, held),
         }
@@ -376,11 +407,11 @@ impl FolderWorkspace {
         match near {
             Some(Some(guid)) => {
                 self.delete_marker(&guid);
-                Self::notice("Marker deleted")
+                Self::notice(&fl!("markers-deleted-notice"))
             }
             // Read-only: another tool wrote it without a GUID, so it could not be found again.
-            Some(None) => Self::notice("That marker is read-only"),
-            None => Self::notice("No marker here"),
+            Some(None) => Self::notice(&fl!("markers-read-only-notice")),
+            None => Self::notice(&fl!("markers-no-marker-notice")),
         }
     }
 
@@ -388,6 +419,7 @@ impl FolderWorkspace {
         if self.markers.edit().is_some_and(|e| e.guid == guid) {
             self.close_marker_row();
         }
+        self.markers.stop_describing(guid);
         if let Some(marker) = self.file_workspace.tag_list_mut().remove_marker(guid) {
             self.history.push(Box::new(DeleteMarkerCommand { marker }));
         }
@@ -413,7 +445,7 @@ impl FolderWorkspace {
 
     /// Show the marker list, in this update: a focus or scroll task started with it must find
     /// the list already there, which a `Task::done` would only show after them.
-    fn show_marker_list(&mut self) -> Task<Message> {
+    pub(super) fn show_marker_list(&mut self) -> Task<Message> {
         self.media_viewer
             .update(media_viewer::Message::Video(video::Message::ShowMarkerList))
             .map(Message::MediaViewer)
@@ -437,14 +469,16 @@ impl FolderWorkspace {
         let name = iced::widget::Id::new(markers::view::MARKER_NAME_INPUT_ID);
         // A click on a row in view does not scroll the list (§13.2); a row out of view (opened by
         // key) is brought in with a row of context above it.
-        let fallback = markers::view::row_offset(markers, index.saturating_sub(1));
+        let fallback =
+            markers::view::row_offset(self.markers.row_heights(), index.saturating_sub(1));
         let (offset, viewport) = (self.markers.scroll_y(), self.markers.viewport());
         let wanted = if viewport > 0.0 {
             crate::ui::scroll::keep_row_in_view(
                 offset,
                 viewport,
-                markers::view::row_offset(markers, index),
-                markers::view::row_offset(markers, index + 1) - crate::ui::tokens::SPACE_XXS,
+                markers::view::row_offset(self.markers.row_heights(), index),
+                markers::view::row_offset(self.markers.row_heights(), index + 1)
+                    - crate::ui::tokens::SPACE_XXS,
                 fallback,
             )
         } else {
@@ -480,7 +514,7 @@ impl FolderWorkspace {
             return Task::none();
         }
         scroll_marker_list_to(markers::view::row_offset(
-            markers,
+            self.markers.row_heights(),
             passed.unwrap_or(0).saturating_sub(1),
         ))
     }
@@ -531,7 +565,7 @@ impl FolderWorkspace {
             Err(MarkersError::WriteFailed(reason)) => {
                 log::warn!("markers of {path:?} not saved, kept for the next save: {reason}");
                 self.unsaved_markers.insert(id, markers.to_vec());
-                Self::notice(MARKERS_NOT_SAVED)
+                Self::notice(&markers_not_saved())
             }
         }
     }

@@ -67,7 +67,7 @@ impl VideoControlsState {
             Message::SeekReleased => {
                 self.seeking = false;
             }
-            Message::SeekBack10 | Message::SeekForward10 => {
+            Message::SeekBack10 | Message::SeekForward10 | Message::StepFrame(_) => {
                 // No local state change; video player performs the seek
             }
             Message::SetSegmentStart | Message::SetSegmentEnd => {
@@ -86,6 +86,7 @@ impl VideoControlsState {
             | Message::AddRange(..)
             | Message::PlayRange(..)
             | Message::DeleteMarker
+            | Message::DescribeMarker
             | Message::PreviousMarker
             | Message::NextMarker
             | Message::EditMarker(_) => {
@@ -124,8 +125,8 @@ impl VideoControlsState {
 
     /// Keyboard shortcuts for video controls: F1 = 10s back, F3 = 10s forward, F12 = save the
     /// frame, F2 = add a marker (held, a range); with Shift, F1 / F3 = previous / next marker,
-    /// F2 = delete the marker under the playhead. They work while a text field has focus, like
-    /// the F-keys did.
+    /// F2 = delete the marker under the playhead; Ctrl+F2 = describe that marker with AI. They
+    /// work while a text field has focus, like the F-keys did.
     pub fn subscription(&self) -> Subscription<Message> {
         event::listen_with(|event, _status, _id| match event {
             iced::Event::Keyboard(keyboard::Event::KeyPressed {
@@ -153,6 +154,10 @@ fn shortcut(key: &keyboard::Key, modifiers: keyboard::Modifiers, repeat: bool) -
     let keyboard::Key::Named(named) = key else {
         return None;
     };
+    // `Ctrl+F2` sends a request: a held key sends one.
+    if *named == Named::F2 && modifiers.command() && !modifiers.shift() && !modifiers.alt() {
+        return (!repeat).then_some(Message::DescribeMarker);
+    }
     if modifiers.command() || modifiers.alt() {
         return None;
     }
@@ -201,7 +206,21 @@ mod tests {
             Some(Message::TakeScreenshot)
         ));
         assert!(key(Named::F12, shift).is_none());
-        assert!(key(Named::F2, keyboard::Modifiers::CTRL).is_none());
+        assert!(matches!(
+            key(Named::F2, keyboard::Modifiers::CTRL),
+            Some(Message::DescribeMarker)
+        ));
+        assert!(key(Named::F2, keyboard::Modifiers::CTRL | shift).is_none());
+        assert!(key(Named::F1, keyboard::Modifiers::CTRL).is_none());
+        assert!(
+            shortcut(
+                &keyboard::Key::Named(Named::F2),
+                keyboard::Modifiers::CTRL,
+                true
+            )
+            .is_none(),
+            "a held Ctrl+F2 sends one request"
+        );
     }
 
     #[test]

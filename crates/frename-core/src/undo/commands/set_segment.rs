@@ -43,3 +43,26 @@ where
         Ok(())
     }
 }
+
+/// Records setting both in/out points at once, as one step: applying the AI's suggestion.
+pub struct SetSegmentCommand {
+    pub old: crate::Segment,
+    pub new: crate::Segment,
+}
+
+impl<SD, ST> Undoable<SD, ST> for SetSegmentCommand
+where
+    SD: AppStateStore + Clone,
+    ST: StoredTagStore + Clone,
+{
+    fn undo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
+        ctx.tag_list.set_segment_start_secs(self.old.start);
+        ctx.tag_list.set_segment_end_secs(self.old.end);
+        Ok(())
+    }
+    fn redo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
+        ctx.tag_list.set_segment_start_secs(self.new.start);
+        ctx.tag_list.set_segment_end_secs(self.new.end);
+        Ok(())
+    }
+}

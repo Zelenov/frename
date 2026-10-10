@@ -1,6 +1,201 @@
-# 0.104
+# 0.146
 ## Fixed
 - With markers saved in the comment and comments saved inside the video, a clip that cannot be saved (read-only, open in another app, or its new name is taken) keeps its markers: it gets the red ✕, shows them when reopened, and frename saves them when you next leave it.
+
+# 0.145
+## Fixed
+- The notices "Frame saved", "Marker deleted", "Not saved: …" and "Markers not saved: …" now show in Russian when the interface is Russian.
+
+# 0.144
+## Fixed
+- After saving a new tag, undoing and redoing it, the tag grid keeps the tags that are not in the folder's tags in their own group under their caption.
+
+# 0.143
+## Added
+- Describe N unnamed shows what describing all the unnamed markers costs in its tooltip, and with more than 10 markers asks first, naming the count and the price.
+
+# 0.142
+## Fixed
+- At its narrowest the file list no longer cuts off the buttons under it: the least used ones (locate, recent folders, batch mode) move into a More menu, and Ctrl+R still opens the recent folders.
+
+# 0.141
+## Fixed
+- The highlight under the pointer on navigation items (Settings pages, the batch action list) and on ghost and icon buttons now shows: it was a near-black veil that could not be seen.
+
+# 0.140
+## Fixed
+- Shift+Space no longer toggles a tag while a file name is being typed in the file list.
+
+# 0.139
+## Fixed
+- A clip opened again before its pending save has run keeps the markers it was left with (deleted ones stay deleted), and saving it no longer takes their lines out of the comment.
+
+# 0.138
+## Fixed
+- Starting a batch job while a marker is being described no longer waits for Claude's answer: it starts as soon as the description has finished reading the clip. Saving or renaming a clip is refused as "still reading the clip" only until then.
+
+# 0.137
+## Fixed
+- In the batch window's action list and in Settings' navigation, the highlight under the pointer no longer disappears in the 2 px between two items, and in the folded action list a tooltip stays shown while the pointer moves from one icon to the next.
+
+# 0.136
+## Fixed
+- Linux: the AppImage no longer overwrites the shared GStreamer plugin cache that other programs use; it keeps its own in `~/.cache/frename`.
+- Linux: the AppImage starts when the temporary folder is behind a symbolic link.
+- Linux: without a home folder, the AppImage keeps its files in `/tmp/frename` instead of the shared `/tmp`.
+
+# 0.135
+## Changed
+- Settings → Updates on the Mac download and the Linux AppImage now says where new versions come from ("download them from the releases page") with a link to it, and keeps the running version, instead of a disabled Check for updates button.
+
+# 0.134
+## Fixed
+- After typing in the tag search and toggling a tag with Shift+Space, the keys (Ctrl+C, Delete, the arrows, Space) go to the app again instead of the search box.
+
+# 0.133
+## Fixed
+- A clip's screenshots (`*.snap.*.jpg`) now follow it when it is renamed, and undo and redo of the rename move them back; a screenshot already under the target name stops the undo instead of being replaced.
+
+# 0.132
+## Fixed
+- Pressing Enter on a tag that is already saved no longer counts as a step, so Ctrl+Z after it no longer removes the tag from the folder.
+
+# 0.131
+## Fixed
+- Undo and redo of a rename no longer replace another clip that has taken the old name; the step is refused with a note and stays in the history.
+- Undo and redo of a rename move the clip's comment along with it, as they already did for subtitles.
+
+# 0.130
+## Fixed
+- Dragging a clip out to Premiere is no longer refused with "Not dragged: can't save the file" (nor a false "Not saved" shown) after a tag with a dot, such as v1.2, was saved.
+- Dragging works when frename was opened with a relative path (`frename .`, `frename clip.mp4`).
+- A very fast drag no longer starts before the press's own save of the open file ran, so Premiere does not get stale metadata.
+
+# 0.129
+## Fixed
+- Closing the Settings window while the main window is closing no longer stops frename from quitting on the first close, and closing Settings no longer stops a running batch.
+
+# 0.128
+## Fixed
+- Pressing next or previous quickly while a clip loads no longer makes the switch wait on the newer clip's load.
+
+# 0.127
+## Added
+- A line under the file name says "All changes saved", or that your changes wait in recovery until you leave the clip.
+
+# 0.126
+## Fixed
+- The marker list scrolls a far marker fully into view in a long list of long names, also in a narrow panel, instead of leaving it partly out of view.
+
+# 0.125
+## Added
+- A frame step that takes long (a step back in a heavy 4K clip can take seconds) shows a turning spinner and dims the time beside the controls until the frame shows, so you can tell it is working and need not press again.
+
+# 0.124
+## Added
+- "Describe with AI" says when it is waiting to send a request again, for example "retrying in 8 s (rate limit)", instead of "waiting for Claude" through the whole wait.
+
+# 0.123
+## Fixed
+- The time shown beside a paused frame is exact to the millisecond in clips of several hours (it could be a millisecond or two off past about two and a half hours).
+- The first frame step back in a clip no longer fails to change the picture after a frame step in the clip before.
+
+# 0.122
+## Changed
+- In a narrow player, the More menu stays open after you step a frame, so you can click through frames.
+
+# 0.121
+## Fixed
+- A clip you watched to the end and left again without playing it opens at its in point again, instead of two seconds before it with a "Resumed" note.
+- `Home` in the search bar starts a clip over while the "Resumed" note shows, also when a file name is being edited on another row.
+
+# 0.120
+## Changed
+- Starting a batch job while a marker is being described says the wait is usually a few seconds (it said up to a couple of minutes).
+
+## Fixed
+- A save refused because a marker description was still reading the clip says so, instead of only "read-only or in use".
+- Describe with AI on a marker no longer skips a description just because the comment happens to end in the same last letters.
+
+# 0.119
+## Fixed
+- After a clip played to its end, stepping back a frame (or jumping, or clicking the progress bar) and pressing Play goes on from there instead of starting over from 0:00. Play at the very end still starts over.
+
+# 0.118
+## Added
+- Recent folders: the last ten you opened are under the arrow next to **Open a folder** (or `Ctrl+R`) and on the start screen; click one to reopen it with the clip you had open.
+
+# 0.117
+## Added
+- Marker list: **Describe N unnamed** names and describes every marker without a name with AI in one click, three at a time; the others wait their turn, **Stop all** stops them, and a name you type meanwhile is kept.
+
+## Changed
+- The AI In/Out pill ends in an arrow instead of a check (it applies the suggestion, it is not "done"), and its tooltip says the range is rounded to whole seconds.
+
+# 0.116
+## Fixed
+- Tag grid: the "+" on a tag that is not in the folder's tags is as easy to read as its name (it was dark grey on the dark chip).
+
+# 0.115
+## Added
+- A video with a `clip.premiere.json` (the Premiere Pro transcript Generate subtitles writes) and no other subtitles shows its words like a `.srt`: under the picture, in the CC list and in fullscreen, with the subtitles icon and the "has subtitles" filter, renamed with its video, and read by Describe with AI. Lines follow Settings → Subtitles (short line or whole sentence) and start with the speaker's name when the speaker changes.
+
+# 0.114
+## Added
+- A video with a `.ass` or `.ssa` subtitle file next to it shows its text like a `.srt`: under the picture, in the CC list and in fullscreen, with the subtitles icon and the "has subtitles" filter, renamed with its video, and read by Describe with AI. Styles and effects are not drawn. If a video has several, `.srt` wins, then `.ass`. Generate subtitles skips a video that has only a `.ass`, unless you tick Replace.
+
+# 0.113
+## Added
+- Describe with AI also suggests which of the folder's tags fit each clip. They show under the clip's name with how sure the AI is; click one, or press `F6` for the first, or Add all (`Shift+F6`). Nothing is added until you do. Turn it off in Settings → Describe with AI.
+
+# 0.112
+## Fixed
+- Fullscreen: the buttons show their tooltips again, above the picture (they had been switched off there).
+
+# 0.111
+## Added
+- frename is available as a Microsoft Store package (Windows). It updates through the Store, and on its first start it copies the settings of an installed frename.
+
+## Changed
+- Settings → Describe with AI lists only Claude models. The GPT models it offered would have been sent your Anthropic key; a saved GPT choice becomes Claude Haiku 4.5.
+
+# 0.110
+## Added
+- Settings → Describe with AI → Moments: segments only for what stands out (as before) or covering the whole clip. Only "Only what stands out" suggests an In and Out (the **AI** pill).
+
+# 0.109
+## Fixed
+- The file search hint is shorter, "Find a file or a comment", so it is no longer cut off in the file list.
+
+# 0.108
+## Added
+- Describe a marker with AI: ✨ on a marker's row, or `Ctrl+F2` on the marker under the playhead, names an unnamed marker and adds what happens at that moment to its comment, which the marker list now shows under the name. A name you gave stays. One undo takes it back.
+
+# 0.107
+## Added
+- A clip you open again continues where you stopped watching it, two seconds earlier, also after a restart. A note says so; a click on the note starts it over, and `Home` always goes to the start of a clip. A clip watched to the end starts over, at its in point if it has one.
+
+# 0.106
+## Added
+- Describe with AI suggests an In and Out for clips with a lead-in or lead-out around the part worth keeping. With the clip open, the suggestion shows as an **AI** pill next to the IN and OUT points; click it to use it. frename never sets them by itself.
+
+# 0.105
+## Added
+- Step through a clip frame by frame: `Alt+←` / `Alt+→`, or the new buttons next to play, show the previous or next frame and pause there. Hold the key to keep stepping. While paused, the time next to the timeline shows milliseconds (`00:10.250`). It goes by the real frames, so phone clips with a variable frame rate step correctly too.
+
+# 0.104
+## Changed
+- A file's full name in the file list opens beside the list instead of over the next row, so it no longer covers the file you move to.
+- The marker's name over the timeline is now a pill tinted with the marker's color, so it no longer looks like a tooltip when one opens next to it.
+- Tooltips show `PgUp` / `PgDn` for the previous and next file, and `Esc` for leaving batch mode.
+- The chip you drag over the trash shows in a box like a tooltip's.
+
+## Fixed
+- The ✕ on the IN and OUT timecodes and the lock on a file closed by a batch action now have tooltips.
+
+# 0.103
+## Removed
+- The spending tracker: Settings no longer shows what frename spent or the top-up form, and the batch page no longer shows the estimated credit left. The cost estimate before a run, the cost in the report, and **Add credit** when a service runs out stay.
 
 # 0.102
 ## Fixed

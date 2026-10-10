@@ -32,6 +32,15 @@ pub const TEXT: Color = Color::from_rgb8(0xE6, 0xE8, 0xEB);
 pub const TEXT_SECONDARY: Color = Color::from_rgb8(0xA3, 0xAA, 0xB5);
 pub const TEXT_PLACEHOLDER: Color = Color::from_rgb8(0x8F, 0x97, 0xA3);
 pub const TEXT_DISABLED: Color = Color::from_rgb8(0x5C, 0x63, 0x6E);
+/// The time readout of the controls bar: dimmed while a frame step is slow (#196), which a spinner
+/// beside it says is work, not "unavailable".
+pub const fn time_readout_color(slow: bool) -> Color {
+    if slow {
+        TEXT_DISABLED
+    } else {
+        TEXT_SECONDARY
+    }
+}
 /// Text on `ACCENT` and `DANGER` fills.
 pub const TEXT_ON_FILL: Color = Color::from_rgb8(0xFF, 0xFF, 0xFF);
 /// The edge of a key cap on a filled button (§13.6.7).
@@ -61,6 +70,9 @@ pub const DANGER_TINT: Color = Color::from_rgba(1.0, 0.478, 0.478, 0.10);
 /// The one shadow: under popups (menus, tooltips, dialogs) and dragged chips only.
 pub const SHADOW: Color = Color::from_rgba(0.0, 0.0, 0.0, 0.5);
 
+/// How much of its marker's color tints the marker label's fill (§13.3.4).
+pub const MARKER_LABEL_TINT: f32 = 0.25;
+
 /// A disabled filled button keeps its colors at this opacity.
 pub const DISABLED_ALPHA: f32 = 0.4;
 
@@ -72,8 +84,14 @@ pub const fn faded(color: Color, alpha: f32) -> Color {
     }
 }
 
-/// `layer` laid over `base`: hover and pressed states on any surface.
+/// `layer` laid over `base`: hover and pressed states on any surface. Over a transparent `base`
+/// (a button with no fill) the result is `layer` itself, so the state shows its own color over
+/// whatever surface is behind; mixing it with the (black) colour channels of `TRANSPARENT` would
+/// give a near-black 6 % veil instead of the white one (#264).
 pub fn over(base: Color, layer: Color) -> Color {
+    if base.a == 0.0 {
+        return layer;
+    }
     let a = layer.a;
     Color {
         r: base.r * (1.0 - a) + layer.r * a,
@@ -132,5 +150,11 @@ pub(super) mod tests {
         let hovered = over(BG_RAISED, HOVER);
         assert!(hovered.r > BG_RAISED.r && hovered.a == 1.0);
         assert_eq!(faded(ACCENT, 0.5).a, 0.5);
+    }
+
+    #[test]
+    fn a_state_layer_over_a_transparent_base_is_the_layer_itself() {
+        assert_eq!(over(Color::TRANSPARENT, HOVER), HOVER);
+        assert_eq!(over(Color::TRANSPARENT, PRESSED), PRESSED);
     }
 }

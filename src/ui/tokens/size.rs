@@ -57,6 +57,8 @@ pub const TOOLTIP_MAX_WIDTH: f32 = 280.0;
 /// A menu's width (menus are 200–360 wide): room for an icon, a name and its keys; a longer
 /// name wraps.
 pub const MENU_WIDTH: f32 = 260.0;
+/// The width of a menu whose longest name must stay on one line (the toolbar's More).
+pub const MENU_WIDTH_WIDE: f32 = 320.0;
 /// The widest a menu gets; longer items are cut.
 pub const MENU_MAX_WIDTH: f32 = 360.0;
 /// The shadow under popups.

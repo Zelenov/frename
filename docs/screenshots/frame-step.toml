@@ -1,0 +1,20 @@
+# Frame steps (#162): the controls bar of a wide video pane, everything in the bar, paused at a
+# moment that shows the readout's milliseconds. Not a README image; for looking at the feature
+# (`frename --demo`).
+source = "../../tests/folder"
+open = "pick.wide.MVI_1601.mp4"
+seek = 10.25
+window = [1440, 720]
+panels = [790, 300]
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_1601.mp4"
+subtitles = """1
+00:00:09,000 --> 00:00:12,000
+Stepping frame by frame
+"""
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "review.people.MVI_1602.mov"

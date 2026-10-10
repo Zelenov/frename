@@ -30,6 +30,12 @@ pub enum Message {
     Invert(Vec<FileId>),
     /// Run the selected action on the checked files. Started by the workspace, which owns them.
     Run,
+    /// Run was pressed while the open clip's marker requests still hold it: wait for them.
+    /// Started by the workspace.
+    WaitForMarkers,
+    /// The wait for the marker requests is over (they let go, or the folder was left). Sent by
+    /// the workspace; Cancel and the like end it too.
+    StopWaiting,
     /// Stop the running job after the file in progress.
     Cancel,
     /// Dismiss the report of a finished job, with the outcomes shown in the list.

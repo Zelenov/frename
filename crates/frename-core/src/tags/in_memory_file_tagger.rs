@@ -129,9 +129,7 @@ mod tests {
     #[test]
     fn rotations_stay_in_memory() {
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/wide.mp4");
-        let dir =
-            std::env::temp_dir().join(format!("frename-memory-rotation-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir("memory-rotation");
         let original = dir.join("clip.mp4");
         std::fs::copy(fixture, &original).expect("copy");
         let bytes = std::fs::read(&original).expect("read");
