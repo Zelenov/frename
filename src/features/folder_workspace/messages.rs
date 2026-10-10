@@ -79,6 +79,8 @@ pub enum Message {
     ShowBatchRetry(u64),
     /// Demo: the unnamed markers as "Describe N unnamed" leaves them, without a request.
     ShowDescribingUnnamed,
+    /// Demo: "Describe N unnamed" asking whether to send, without a request.
+    ShowConfirmingDescribeUnnamed,
     /// A marker's "Describe with AI" request came back (see `markers::describe`).
     MarkerDescribed {
         file: FileId,

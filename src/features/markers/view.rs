@@ -10,7 +10,8 @@ use iced::widget::{
 };
 use iced::{Alignment, Background, Border, Element, Length, Padding};
 
-use super::{MarkersState, Message};
+use super::{describe, MarkersState, Message};
+use crate::features::batch::describe_ai;
 use crate::ui::button::{self as ui_button};
 use crate::ui::icon_button::IconButton;
 use crate::ui::icons::{icon, spinner, Icon};
@@ -152,9 +153,11 @@ pub fn view<'a>(
     in_out: Option<(u64, u64)>,
     spinner_frame: usize,
     unnamed: usize,
+    price_usd: Option<f64>,
 ) -> Element<'a, Message> {
     let list = marker_list(markers, state, position_ms, spinner_frame);
-    let describe_all = markers.and_then(|_| describe_all_bar(state, spinner_frame, unnamed));
+    let describe_all =
+        markers.and_then(|_| describe_all_bar(state, spinner_frame, unnamed, price_usd));
     column![]
         .push(in_out.map(in_out_line))
         .push(describe_all)
@@ -165,11 +168,13 @@ pub fn view<'a>(
 /// Over the list, under the in/out points: while a run is on its way, how many markers are
 /// described and how many wait, with "Stop all" (so no row's ⊗ has to be pressed one by one);
 /// otherwise "Describe N unnamed" with the `unnamed` count it is handed. Nothing when there is
-/// nothing to offer.
+/// nothing to offer. `price_usd` is what one request is expected to cost: the button's tooltip
+/// says what all would, and above `describe::CONFIRM_ABOVE` markers a pressed button asks first.
 fn describe_all_bar<'a>(
     state: &MarkersState,
     spinner_frame: usize,
     unnamed: usize,
+    price_usd: Option<f64>,
 ) -> Option<Element<'a, Message>> {
     let (waiting, describing) = (state.waiting_count(), state.in_flight());
     let content: Element<'a, Message> = if waiting > 0 || describing > 1 {
@@ -191,6 +196,10 @@ fn describe_all_bar<'a>(
         if unnamed == 0 {
             return None;
         }
+        // A question about another count is out of date: the button asks again.
+        if state.describe_all_asked() == Some(unnamed) {
+            return Some(confirm_bar(unnamed, price_usd));
+        }
         let button = ui_button::with_icon(
             ButtonKind::Secondary,
             Icon::Sparkles,
@@ -200,7 +209,7 @@ fn describe_all_bar<'a>(
         .on_press(Message::DescribeUnnamed);
         tooltip::tip(
             button,
-            Tip::new(fl!("markers-ai-describe-unnamed-hint")),
+            Tip::new(describe_unnamed_tip(unnamed, price_usd)),
             Position::Bottom,
         )
     };
@@ -215,6 +224,58 @@ fn describe_all_bar<'a>(
             .width(Length::Fill)
             .into(),
     )
+}
+
+/// "about $0.35" or "under $0.01": the price as the batch panel words it.
+fn price_text(usd: f64) -> String {
+    if usd < 0.01 {
+        describe_ai::dollars(usd)
+    } else {
+        fl!(
+            "markers-ai-price-about",
+            dollars = describe_ai::dollars(usd)
+        )
+    }
+}
+
+/// The button's tooltip: what it does, and with a known price what it costs.
+fn describe_unnamed_tip(unnamed: usize, price_usd: Option<f64>) -> String {
+    let hint = fl!("markers-ai-describe-unnamed-hint");
+    match price_usd {
+        Some(each) => format!(
+            "{hint} {}",
+            fl!(
+                "markers-ai-describe-unnamed-cost",
+                each = price_text(each),
+                total = price_text(describe::run_price_usd(unnamed, each))
+            )
+        ),
+        None => hint,
+    }
+}
+
+/// Instead of the button, for more markers than `describe::CONFIRM_ABOVE`: the count and the
+/// price, to send or to leave.
+fn confirm_bar<'a>(unnamed: usize, price_usd: Option<f64>) -> Element<'a, Message> {
+    let question = match price_usd {
+        Some(each) => fl!(
+            "markers-ai-confirm",
+            count = unnamed,
+            total = price_text(describe::run_price_usd(unnamed, each))
+        ),
+        None => fl!("markers-ai-confirm-unpriced", count = unnamed),
+    };
+    column![
+        text::caption(question),
+        row![
+            ui_button::primary(fl!("markers-ai-confirm-yes"))
+                .on_press(Message::ConfirmDescribeUnnamed),
+            ui_button::ghost(fl!("markers-ai-confirm-no")).on_press(Message::CancelDescribeUnnamed),
+        ]
+        .spacing(SPACE_S),
+    ]
+    .spacing(SPACE_XS)
+    .into()
 }
 
 /// The in/out points, above the markers: not a marker (it has no name to change and is set
@@ -593,6 +654,23 @@ fn marker_row<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_price_is_about_a_figure_or_under_a_cent() {
+        assert_eq!(price_text(0.0042), "under $0.01");
+        assert_eq!(price_text(0.0499), "about $0.05");
+        assert_eq!(price_text(0.35), "about $0.35");
+        let tip = describe_unnamed_tip(12, Some(0.0042));
+        assert!(
+            tip.ends_with("One request each: under $0.01 a marker, about $0.05 for all."),
+            "{tip}"
+        );
+        assert_eq!(
+            describe_unnamed_tip(12, None),
+            fl!("markers-ai-describe-unnamed-hint"),
+            "no price, no figure"
+        );
+    }
 
     #[test]
     fn the_lit_row_is_the_marker_the_playhead_is_on() {

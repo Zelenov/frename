@@ -205,7 +205,12 @@ impl FolderWorkspace {
             }
             M::Describe(guid) => self.describe_marker(&guid),
             M::DescribeAtPlayhead => self.describe_marker_at(position_ms),
-            M::DescribeUnnamed => self.describe_unnamed_markers(),
+            M::DescribeUnnamed => self.describe_unnamed_markers(false),
+            M::ConfirmDescribeUnnamed => self.describe_unnamed_markers(true),
+            M::CancelDescribeUnnamed => {
+                self.markers.set_describe_all_asked(None);
+                Task::none()
+            }
             M::StopDescribing(guid) => {
                 // The slot of a stopped request frees when its answer is back, not before.
                 self.markers.stop_describing(&guid);

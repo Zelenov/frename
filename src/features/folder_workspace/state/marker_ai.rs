@@ -101,8 +101,11 @@ impl FolderWorkspace {
     /// "Describe N unnamed": queue every marker of the open clip that has no name and is not on
     /// its way, and send the first few. A name typed meanwhile is kept: that marker is left
     /// out when its turn comes. With no key saved, nothing is queued: Settings opens where the
-    /// key is set.
-    pub(super) fn describe_unnamed_markers(&mut self) -> Task<Message> {
+    /// key is set. More than `describe::CONFIRM_ABOVE` markers are not sent by the button
+    /// alone: it shows the price and asks first, and the answer comes as `confirmed`.
+    pub(super) fn describe_unnamed_markers(&mut self, confirmed: bool) -> Task<Message> {
+        let asked = self.markers.describe_all_asked();
+        self.markers.set_describe_all_asked(None);
         if self.batch.is_running() || self.batch.is_waiting_for_markers() {
             return Task::none();
         }
@@ -113,8 +116,30 @@ impl FolderWorkspace {
         if self.batch.actions().ai_key_missing() {
             return Self::no_key();
         }
+        // More markers than the price shown was for: ask again with the new count.
+        let more_than_asked = confirmed && asked.is_some_and(|asked| guids.len() > asked);
+        if (!confirmed || more_than_asked) && markers::describe::needs_confirmation(guids.len()) {
+            self.markers.set_describe_all_asked(Some(guids.len()));
+            return Task::none();
+        }
         self.markers.queue_describing(guids);
         self.send_waiting_markers()
+    }
+
+    /// Forget a question about sending that no longer applies: with this few markers the button
+    /// sends at once, so a count that grows again must ask afresh.
+    pub(super) fn drop_stale_describe_all_question(&mut self) {
+        if self.markers.describe_all_asked().is_some()
+            && !markers::describe::needs_confirmation(self.unnamed_marker_guids().len())
+        {
+            self.markers.set_describe_all_asked(None);
+        }
+    }
+
+    /// What one marker request is expected to cost with the model set for Describe with AI, in
+    /// US dollars; `None` when that model has no price.
+    pub fn marker_price_usd(&self) -> Option<f64> {
+        markers::describe::moment_price_usd(self.batch.actions().ai_model_and_language().0)
     }
 
     /// The markers "Describe N unnamed" would send now (see `MarkersState::unnamed_guids`).

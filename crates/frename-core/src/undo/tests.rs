@@ -892,6 +892,49 @@ mod tests {
         assert!(tag_list.get_tag(id).unwrap().is_stored());
     }
 
+    /// Issue #273: after save, undo and redo of a new tag the unsaved tags still lead the
+    /// filtered order (the tag grid puts them in their own group).
+    #[test]
+    fn unsaved_tags_lead_the_grid_after_undo_and_redo_of_a_save() {
+        let store = make_store_with_tags(&["pick", "wide"]);
+        let mut tag_list = TagList::new(store, snapshot_with_tags(&["wide", "Zork"]));
+        let mut dir = empty_directory();
+        let id = tag_list.create_new_tag("Mew").unwrap();
+        tag_list.save_tag(id).unwrap();
+        let color_index = tag_list.get_tag(id).unwrap().color_index();
+        let mut history = History::new(50);
+        history.push(Box::new(SaveTagCommand {
+            tag_id: id,
+            color_index,
+        }));
+
+        let unsaved_count = |tl: &TagList<FakeAppStorage>| {
+            tl.filtered_display_tag_ids()
+                .iter()
+                .take_while(|&&t| !tl.get_tag(t).unwrap().is_stored())
+                .count()
+        };
+        let unsaved_total = |tl: &TagList<FakeAppStorage>| {
+            tl.filtered_display_tag_ids()
+                .iter()
+                .filter(|&&t| !tl.get_tag(t).unwrap().is_stored())
+                .count()
+        };
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).unwrap();
+        assert_eq!(unsaved_count(ctx.tag_list), 2, "Mew and Zork");
+        history.redo(&mut ctx).unwrap();
+        assert_eq!(unsaved_total(ctx.tag_list), 1);
+        assert_eq!(
+            unsaved_count(ctx.tag_list),
+            1,
+            "Zork leads, before the stored tags"
+        );
+    }
+
     /// Issue #97: saving a tag that is stored already changes nothing, so no step is recorded
     /// and undo leaves the tag stored.
     #[test]

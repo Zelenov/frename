@@ -1232,6 +1232,12 @@ left to right, with the widths §13.9 folds by:
   `sparkles` "Describe N unnamed" (N is handed to the view; tooltip "Name and describe every
   marker that has no name with AI, a few at a time…") while some editable markers have no name
   and are not on their way; nothing when there are none.
+  - The tooltip adds the price: "One request each: under $0.01 a marker, about $0.05 for all." (with Haiku and 12 markers)
+    (clipscribe's estimate for a moment request with the chosen model: three frames, the
+    instructions and a typical answer; nothing is added when the model has no price). With more
+    than 10 markers (`CONFIRM_ABOVE`) a click does not send: the button gives way to a `caption`
+    "Describe 40 markers? One request each: about $0.40 in all." with a primary **Describe** and a
+    ghost **Cancel**; with ten or fewer a click sends at once.
   - A click queues them in the list's order and sends three at a time
     (`MAX_DESCRIBING_AT_ONCE`, a rate-limit and load guard; a ✨ click is not limited). A free
     slot is counted from the requests really alive, a stopped one included until its answer is

@@ -632,6 +632,20 @@ markers-ai-describe-unnamed = { $count ->
    *[many] Описать { $count } безымянных
 }
 markers-ai-describe-unnamed-hint = Дать имя и описание с помощью AI каждому маркеру без имени, по несколько за раз. Один запрос на маркер; имя, которое вы впишете за это время, сохранится.
+markers-ai-price-about = около { $dollars }
+markers-ai-describe-unnamed-cost = Один запрос на маркер: { $each } за маркер, { $total } за все.
+markers-ai-confirm = { $count ->
+    [one] Описать { $count } маркер? По запросу на каждый: { $total } всего.
+    [few] Описать { $count } маркера? По запросу на каждый: { $total } всего.
+   *[many] Описать { $count } маркеров? По запросу на каждый: { $total } всего.
+}
+markers-ai-confirm-unpriced = { $count ->
+    [one] Описать { $count } маркер? По платному запросу на каждый.
+    [few] Описать { $count } маркера? По платному запросу на каждый.
+   *[many] Описать { $count } маркеров? По платному запросу на каждый.
+}
+markers-ai-confirm-yes = Описать
+markers-ai-confirm-no = Отмена
 markers-ai-waiting = Ждёт очереди…
 markers-ai-run = Идёт: { $describing } · ждут: { $waiting }
 markers-ai-run-last = Идёт: { $describing }
