@@ -56,8 +56,8 @@ pub use tags::{
     TagColorMapping, TagId, TagList, TagOrderState, DEFAULT_TAGS,
 };
 pub use undo::{
-    AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,
-    NavigateFileCommand, PasteTagsCommand, RenameFileCommand, ReorderTagCommand,
+    AddMarkerCommand, CheckTagsCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand,
+    History, NavigateFileCommand, PasteTagsCommand, RenameFileCommand, ReorderTagCommand,
     RotateVideoCommand, SaveTagCommand, SetCommentCommand, SetMarkerColorCommand,
     SetMarkerNameCommand, SetMarkerSpanCommand, SetMarkerTextCommand, SetSegmentCommand,
     SetSegmentEndCommand, SetSegmentStartCommand, StarTagCommand, SyncTagOrderCommand,

@@ -109,6 +109,8 @@ settings-ai-moments-important = Только то, что выделяется
 settings-ai-moments-full = На весь клип
 settings-ai-moments-important-hint = Ещё AI предлагает точки входа и выхода (метка AI рядом с IN и OUT)
 settings-ai-moments-full-hint = Момент на каждую часть клипа, даже спокойную; без предложенных точек входа и выхода
+settings-ai-tag-suggestions = Ещё и предлагать теги из тегов папки
+settings-ai-tag-suggestions-hint = В том же запросе AI говорит, какие теги папки подходят к клипу. Предложенный тег добавляется, только когда вы на него нажмёте.
 settings-subtitles = Субтитры
 settings-subtitles-key-label = Ключ API Soniox
 settings-subtitles-key-placeholder = Вставьте ключ
@@ -245,6 +247,7 @@ batch-change-subtitles = Пишет файлы субтитров рядом с 
 batch-change-records = Меняет только записи самого frename
 batch-option-direction = Направление
 batch-option-language = Язык
+batch-option-tag-suggestions = Предложения тегов
 batch-option-described = Уже описанные
 batch-option-subtitled = С субтитрами
 batch-option-subtitles-write = Какие файлы записать
@@ -331,6 +334,13 @@ batch-action-describe-ai-no-subtitles = Без субтитров (описан�
 batch-action-describe-ai-redo = Переописать видео, у которых уже есть описание от AI
 batch-action-describe-ai-hint-panel = Описывает происходящее в каждом отмеченном видео с привязкой ко времени: краткое содержание и отрезки по времени добавляются в описание от AI в его комментарии; ваш собственный текст сохраняется. Кадры и субтитры отправляются в Anthropic.
 batch-ai-change = Изменить
+batch-ai-tag-suggestions-off = Выключены
+batch-ai-tag-suggestions-no-tags = Включены, но у этой папки пока нет тегов
+batch-ai-tag-suggestions-on = { $tags ->
+    [one] Из { $tags } тега папки
+    [few] Из { $tags } тегов папки
+   *[many] Из { $tags } тегов папки
+}
 batch-ai-key-missing = Укажите ключ API Anthropic в настройках
 batch-ai-key-unavailable = Не удалось открыть системное хранилище паролей: оно может быть заблокировано или отсутствовать (например, GNOME Keyring или KWallet).
 ## AI description language names: the Settings picker and { $language } above.
@@ -628,6 +638,13 @@ file-name-panel-clear-in = Убрать точку входа
 file-name-panel-clear-out = Убрать точку выхода
 file-name-panel-suggested-in-out = AI
 file-name-panel-apply-suggested-in-out = Поставить вход и выход, которые предлагает AI
+file-name-panel-suggested-tags = Теги AI
+file-name-panel-add-suggested-tag = Добавить тег «{ $tag }» (уверенность { $percent }%)
+file-name-panel-add-suggested-tag-unsure = Добавить тег «{ $tag }»
+file-name-panel-add-all-suggested-tags = Добавить все
+file-name-panel-add-all-suggested-tags-tip = Добавить все теги, которые предлагает AI
+file-name-panel-tag-ideas = Идеи: { $ideas }
+file-name-panel-tag-ideas-tip = Теги, которые AI заметил, но которых нет у этой папки. Они не добавляются.
 
 ## Updates (Settings)
 

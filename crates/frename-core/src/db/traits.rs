@@ -71,6 +71,9 @@ pub struct AppSettings {
     /// Which moments AI descriptions get: only what stands out (the default, which alone
     /// suggests an In/Out) or the whole clip.
     pub ai_moments: MomentsMode,
+    /// Whether "Describe with AI" also suggests tags from the folder's own tags, in the same
+    /// request. Defaults to true.
+    pub ai_tag_suggestions: bool,
     /// Languages spoken in the footage, as hints for generating subtitles (codes such as
     /// "en"). Empty: detect automatically. Defaults to
     /// [`crate::DEFAULT_SUBTITLE_LANGUAGES`].
@@ -96,6 +99,7 @@ impl Default for AppSettings {
             summary_language: SummaryLanguage::default(),
             ai_model: clipscribe::MODELS[0].id.to_string(),
             ai_moments: MomentsMode::default(),
+            ai_tag_suggestions: true,
             subtitle_languages: crate::DEFAULT_SUBTITLE_LANGUAGES
                 .iter()
                 .map(|code| code.to_string())

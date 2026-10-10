@@ -1,6 +1,10 @@
-# 0.113
+# 0.114
 ## Added
 - A video with a `.ass` or `.ssa` subtitle file next to it shows its text like a `.srt`: under the picture, in the CC list and in fullscreen, with the subtitles icon and the "has subtitles" filter, renamed with its video, and read by Describe with AI. Styles and effects are not drawn. If a video has several, `.srt` wins, then `.ass`. Generate subtitles skips a video that has only a `.ass`, unless you tick Replace.
+
+# 0.113
+## Added
+- Describe with AI also suggests which of the folder's tags fit each clip. They show under the clip's name with how sure the AI is; click one, or press `F6` for the first, or Add all (`Shift+F6`). Nothing is added until you do. Turn it off in Settings → Describe with AI.
 
 # 0.112
 ## Fixed

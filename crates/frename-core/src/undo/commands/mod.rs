@@ -1,3 +1,4 @@
+pub mod check_tags;
 pub mod create_tag;
 pub mod delete_tag;
 pub mod marker;
@@ -13,6 +14,7 @@ pub mod star_tag;
 pub mod sync_order;
 pub mod toggle_tag;
 
+pub use check_tags::CheckTagsCommand;
 pub use create_tag::CreateTagCommand;
 pub use delete_tag::DeleteTagCommand;
 pub use marker::{

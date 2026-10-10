@@ -79,6 +79,8 @@ settings-ai-moments-important = Only what stands out
 settings-ai-moments-full = Cover the whole clip
 settings-ai-moments-important-hint = Also suggests where to set In and Out (the AI pill next to IN and OUT)
 settings-ai-moments-full-hint = A moment for every part, quiet ones too; no In and Out suggestion
+settings-ai-tag-suggestions = Also suggest tags from the folder's tags
+settings-ai-tag-suggestions-hint = In the same request, the AI says which of the folder's tags fit each clip. A suggested tag is added only when you click it.
 settings-subtitles = Subtitles
 settings-subtitles-key-label = Soniox API key
 settings-subtitles-key-placeholder = Paste the key
@@ -201,6 +203,7 @@ batch-change-subtitles = Writes subtitle files next to the videos
 batch-change-records = Changes only frename's own records
 batch-option-direction = Direction
 batch-option-language = Language
+batch-option-tag-suggestions = Tag suggestions
 batch-option-described = Described videos
 batch-option-subtitled = Subtitled videos
 batch-option-subtitles-write = Files to write
@@ -285,6 +288,12 @@ batch-action-describe-ai-no-subtitles = Without subtitles (only the picture is d
 batch-action-describe-ai-redo = Redo videos that already have an AI description
 batch-action-describe-ai-hint-panel = Describes what happens in each checked video, and when: a summary and time-ranged segments go into the AI description of its comment; your own text is kept. Frames and subtitles are sent to Anthropic.
 batch-ai-change = Change
+batch-ai-tag-suggestions-off = Off
+batch-ai-tag-suggestions-no-tags = On, but this folder has no tags yet
+batch-ai-tag-suggestions-on = { $tags ->
+    [one] From the folder's { $tags } tag
+   *[other] From the folder's { $tags } tags
+}
 batch-ai-key-missing = Set an Anthropic API key in Settings
 batch-ai-key-unavailable = The system keyring could not be opened: it may be locked, or there is none (such as GNOME Keyring or KWallet).
 ## AI description language names: the Settings picker and { $language } above.
@@ -576,6 +585,13 @@ file-name-panel-clear-in = Clear the in point
 file-name-panel-clear-out = Clear the out point
 file-name-panel-suggested-in-out = AI
 file-name-panel-apply-suggested-in-out = Set In and Out to what the AI suggests
+file-name-panel-suggested-tags = AI tags
+file-name-panel-add-suggested-tag = Add the tag "{ $tag }" ({ $percent }% sure)
+file-name-panel-add-suggested-tag-unsure = Add the tag "{ $tag }"
+file-name-panel-add-all-suggested-tags = Add all
+file-name-panel-add-all-suggested-tags-tip = Add every tag the AI suggests
+file-name-panel-tag-ideas = Ideas: { $ideas }
+file-name-panel-tag-ideas-tip = Tags the AI noticed that this folder does not have. They are not added.
 
 ## Updates (Settings)
 

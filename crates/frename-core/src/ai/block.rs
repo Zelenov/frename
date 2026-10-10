@@ -21,10 +21,15 @@
 //! editor applies it. The line starts with a word, so it is never a marker line or an in/out
 //! line, and as the block's last line it stays last when markers kept in the comment are
 //! written back under the summary.
+//!
+//! When the run also suggested tags from the folder's tags, two more lines follow it:
+//! `Suggested tags: night (90%) · beach (70%)`, the folder's tags the AI thinks fit with how sure
+//! it is, and `Tag ideas: sunset · crowd`, tags it noticed that the folder does not have. They
+//! are suggestions only too: the editor adds a tag with a click, and the file name changes then.
 
 use std::ops::Range;
 
-use clipscribe::{format_time, Description, MainRange};
+use clipscribe::{format_time, Description, MainRange, TagSuggestions};
 
 use crate::Segment;
 
@@ -32,6 +37,13 @@ use crate::Segment;
 const START: &str = "AI: ";
 /// What the suggested in/out line has before the in/out line it would be (`In/Out: …`).
 const SUGGESTED: &str = "Suggested ";
+/// What starts the line of the folder's tags the AI suggests.
+const SUGGESTED_TAGS: &str = "Suggested tags: ";
+/// What starts the line of tags the AI noticed that the folder does not have.
+const TAG_IDEAS: &str = "Tag ideas: ";
+/// Between two tags of those lines: a tag name never holds it (names come from file names,
+/// where a dot ends a tag).
+const TAG_SEPARATOR: &str = " · ";
 
 /// Byte range of the comment's AI block, from the start of its last `AI: ` line to the end
 /// of the comment (trailing white space left out), or to the end of an old block's end line.
@@ -163,6 +175,95 @@ fn push_suggestion(block: &mut String, main: Option<MainRange>) {
     block.push('\n');
     block.push_str(SUGGESTED);
     block.push_str(&crate::metadata::format_in_out_line(segment).unwrap_or_default());
+}
+
+/// Add the lines of the tags the AI suggests and of its tag ideas, if it has any, after the rest
+/// of `block`: the suggested tags most likely first, each with how sure the AI is.
+pub fn push_tag_lines(block: &mut String, suggestions: &TagSuggestions) {
+    let mut tags: Vec<_> = suggestions
+        .tags
+        .iter()
+        .filter(|tag| fits_a_tag_line(&tag.name))
+        .collect();
+    tags.sort_by(|a, b| b.confidence.total_cmp(&a.confidence));
+    if !tags.is_empty() {
+        let tags: Vec<String> = tags
+            .iter()
+            .map(|tag| format!("{} ({}%)", tag.name.trim(), percent(tag.confidence)))
+            .collect();
+        block.push('\n');
+        block.push_str(SUGGESTED_TAGS);
+        block.push_str(&tags.join(TAG_SEPARATOR));
+    }
+    let ideas: Vec<String> = suggestions
+        .new_tag_ideas
+        .iter()
+        .map(|idea| one_line(idea))
+        .filter(|idea| fits_a_tag_line(idea))
+        .collect();
+    if !ideas.is_empty() {
+        block.push('\n');
+        block.push_str(TAG_IDEAS);
+        block.push_str(&ideas.join(TAG_SEPARATOR));
+    }
+}
+
+/// Whether `name` can stand in a tag line and be read back the same.
+fn fits_a_tag_line(name: &str) -> bool {
+    let name = name.trim();
+    !name.is_empty() && !name.contains(TAG_SEPARATOR.trim()) && !name.contains('\n')
+}
+
+/// `confidence` (0 to 1) as a whole percent, 0 to 100.
+fn percent(confidence: f64) -> u8 {
+    (confidence.clamp(0.0, 1.0) * 100.0).round() as u8
+}
+
+/// A tag the comment's AI block suggests, and how sure the AI is of it, in percent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SuggestedTag {
+    pub name: String,
+    pub percent: u8,
+}
+
+/// The folder's tags the comment's AI block suggests, most likely first; none when the block
+/// suggests none, or the comment has no block.
+pub fn suggested_tags(comment: &str) -> Vec<SuggestedTag> {
+    tag_line(comment, SUGGESTED_TAGS)
+        .map(
+            |tag| match tag.strip_suffix("%)").and_then(|t| t.rsplit_once(" (")) {
+                Some((name, percent)) if percent.parse::<u8>().is_ok() => SuggestedTag {
+                    name: name.trim().to_string(),
+                    percent: percent.parse().unwrap_or_default(),
+                },
+                // Edited by hand to a bare name: still a suggestion, of unknown sureness.
+                _ => SuggestedTag {
+                    name: tag.to_string(),
+                    percent: 0,
+                },
+            },
+        )
+        .filter(|tag| !tag.name.is_empty())
+        .collect()
+}
+
+/// The tags the comment's AI block noticed that the folder does not have.
+pub fn tag_ideas(comment: &str) -> Vec<String> {
+    tag_line(comment, TAG_IDEAS).map(str::to_string).collect()
+}
+
+/// The tags of the AI block's line that starts with `start`.
+fn tag_line<'a>(comment: &'a str, start: &str) -> impl Iterator<Item = &'a str> {
+    ai_block(comment)
+        .and_then(|block| {
+            block
+                .lines()
+                .find_map(|line| line.trim().strip_prefix(start))
+        })
+        .into_iter()
+        .flat_map(|line| line.split(TAG_SEPARATOR.trim()))
+        .map(str::trim)
+        .filter(|tag| !tag.is_empty())
 }
 
 /// The In and Out the comment's AI block suggests, as `[` and `]` would set them: the in
@@ -411,6 +512,108 @@ mod tests {
             "the segment is a marker, the suggestion is not"
         );
         assert!(text.ends_with(SUGGESTION));
+        assert_eq!(crate::markers_into_comment(&text, &markers), comment);
+    }
+
+    fn suggestions() -> TagSuggestions {
+        TagSuggestions {
+            tags: vec![
+                clipscribe::TagSuggestion {
+                    name: "beach".to_string(),
+                    confidence: 0.704,
+                    ranges: vec![],
+                },
+                clipscribe::TagSuggestion {
+                    name: "night".to_string(),
+                    confidence: 0.9,
+                    ranges: vec![],
+                },
+            ],
+            new_tag_ideas: vec!["sunset".to_string(), "big\ncrowd".to_string()],
+        }
+    }
+
+    const TAG_LINES: &str =
+        "Suggested tags: night (90%) · beach (70%)\nTag ideas: sunset · big crowd";
+
+    #[test]
+    fn suggested_tags_follow_the_rest_of_the_block_most_likely_first() {
+        let mut block = format_block(&with_main(3.2, 11.8));
+        push_tag_lines(&mut block, &suggestions());
+        assert_eq!(block, format!("{BLOCK}\n{SUGGESTION}\n{TAG_LINES}"));
+        let mut none = format_block(&description());
+        push_tag_lines(&mut none, &TagSuggestions::default());
+        assert_eq!(none, BLOCK, "no lines when there is nothing to suggest");
+    }
+
+    #[test]
+    fn suggested_tags_and_ideas_are_read_back() {
+        let comment = format!("Mine\n\n{BLOCK}\n{TAG_LINES}\n");
+        assert_eq!(
+            suggested_tags(&comment),
+            [
+                SuggestedTag {
+                    name: "night".to_string(),
+                    percent: 90
+                },
+                SuggestedTag {
+                    name: "beach".to_string(),
+                    percent: 70
+                },
+            ]
+        );
+        assert_eq!(tag_ideas(&comment), ["sunset", "big crowd"]);
+        assert_eq!(
+            suggested_tags(&format!("{TAG_LINES}\n\nAI: Summary")),
+            [],
+            "only the AI block suggests"
+        );
+        assert_eq!(
+            suggested_tags(&format!("{BLOCK}\r\nSuggested tags: night\r\n")),
+            [SuggestedTag {
+                name: "night".to_string(),
+                percent: 0
+            }],
+            "a name edited to stand alone is still a suggestion"
+        );
+    }
+
+    #[test]
+    fn a_tag_name_that_cannot_be_read_back_is_left_out() {
+        let mut block = String::from("AI: S");
+        push_tag_lines(
+            &mut block,
+            &TagSuggestions {
+                tags: vec![clipscribe::TagSuggestion {
+                    name: "a · b".to_string(),
+                    confidence: 1.0,
+                    ranges: vec![],
+                }],
+                new_tag_ideas: vec![" ".to_string()],
+            },
+        );
+        assert_eq!(block, "AI: S");
+    }
+
+    #[test]
+    fn the_tag_lines_are_no_markers_and_no_in_out_point() {
+        for line in TAG_LINES.lines() {
+            assert_eq!(crate::parse_marker_line(line), None);
+            assert_eq!(crate::markers::parse_ai_line(line), None);
+        }
+        let comment = format!("Mine\n\n{BLOCK}\n{SUGGESTION}\n{TAG_LINES}");
+        let (kept, segment) = crate::metadata::split_in_out_line(&comment);
+        assert_eq!(
+            (kept.as_str(), segment),
+            (comment.as_str(), crate::Segment::default())
+        );
+        let (text, markers) = crate::markers_from_comment(&comment);
+        assert_eq!(
+            markers.len(),
+            1,
+            "the segment is a marker, the tag lines are not"
+        );
+        assert!(text.ends_with(TAG_LINES));
         assert_eq!(crate::markers_into_comment(&text, &markers), comment);
     }
 

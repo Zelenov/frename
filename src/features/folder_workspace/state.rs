@@ -10,11 +10,12 @@ use std::path::PathBuf;
 
 use frename_core::undo::History;
 use frename_core::{
-    AppDatabase, AppStateStore, BatchRun, CreateTagCommand, DeleteTagCommand, File, FileId,
-    FileSnapshot, FolderAndFile, FolderTagStore, LoggingAppStateStore, Marker, NavigateFileCommand,
-    PasteTagsCommand, RenameFileCommand, ReorderTagCommand, SaveAndReparse, SaveTagCommand,
-    Segment, SetCommentCommand, SetSegmentCommand, SetSegmentEndCommand, SetSegmentStartCommand,
-    StarTagCommand, SyncTagOrderCommand, ToggleTagCommand, UndoContext, UndoError,
+    AppDatabase, AppStateStore, BatchRun, CheckTagsCommand, CreateTagCommand, DeleteTagCommand,
+    File, FileId, FileSnapshot, FolderAndFile, FolderTagStore, LoggingAppStateStore, Marker,
+    NavigateFileCommand, PasteTagsCommand, RenameFileCommand, ReorderTagCommand, SaveAndReparse,
+    SaveTagCommand, Segment, SetCommentCommand, SetSegmentCommand, SetSegmentEndCommand,
+    SetSegmentStartCommand, StarTagCommand, SyncTagOrderCommand, ToggleTagCommand, UndoContext,
+    UndoError,
 };
 use rfd;
 
@@ -626,6 +627,42 @@ impl FolderWorkspace {
         self.file_workspace.set_segment_start_secs(new.start);
         self.file_workspace.set_segment_end_secs(new.end);
         self.history.push(Box::new(SetSegmentCommand { old, new }));
+        Task::none()
+    }
+
+    /// Add the tags the open clip's AI description suggests, by name, as adding them by hand
+    /// would: one undo step, whether one tag or all. Only the folder's tags the clip does not
+    /// have yet; like `[` and `]`, nothing happens while the clip's name is being edited.
+    fn add_suggested_tags(&mut self, names: &[String]) -> Task<Message> {
+        if self.inline_rename.is_some() {
+            return Task::none();
+        }
+        let tag_list = self.file_workspace.tag_list();
+        let mut ids: Vec<frename_core::TagId> = Vec::new();
+        for id in names
+            .iter()
+            .filter_map(|name| tag_list.tag_id_by_name(name))
+        {
+            let addable = tag_list
+                .get_tag(id)
+                .is_some_and(|tag| tag.is_stored() && !tag.is_checked());
+            if addable && !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+        for id in &ids {
+            self.file_workspace.toggle_tag_by_id(*id);
+        }
+        match ids.as_slice() {
+            [] => {}
+            [id] => self.history.push(Box::new(ToggleTagCommand {
+                tag_id: *id,
+                was_checked: false,
+            })),
+            _ => self
+                .history
+                .push(Box::new(CheckTagsCommand { tag_ids: ids })),
+        }
         Task::none()
     }
 
@@ -1257,6 +1294,7 @@ impl FolderWorkspace {
             self.batch.set_waiting_for_markers(true);
             return Task::none();
         }
+        self.share_folder_tags();
         if !self.batch.start(files) {
             return Task::none();
         }
@@ -1271,6 +1309,13 @@ impl FolderWorkspace {
             return Task::done(Message::MediaViewer(media_viewer::Message::Unload));
         }
         self.run_batch()
+    }
+
+    /// Tell "Describe with AI" the folder's own tags, so its panel and its next run suggest from
+    /// the tags the folder has now.
+    fn share_folder_tags(&mut self) {
+        let tags = self.file_workspace.tag_list().saved_tag_names();
+        self.batch.set_folder_tags(tags);
     }
 
     /// Save the edits waiting for the disk (the open file may be one of the job's), close the
@@ -1948,6 +1993,7 @@ impl FolderWorkspace {
         for msg in msgs {
             self.batch.update(msg);
         }
+        self.share_folder_tags();
         Task::batch([self.describe_ai_reads(), self.subtitle_reads()])
     }
 
@@ -2254,6 +2300,20 @@ impl FolderWorkspace {
         }
         if let file_name_panel::Message::ApplySuggestedInOut = msg {
             return self.apply_suggested_in_out();
+        }
+        let suggested = file_name_panel::pending_tag_suggestions(self.file_workspace.tag_list());
+        let add = match &msg {
+            file_name_panel::Message::AddSuggestedTag(name) => Some(vec![name.clone()]),
+            file_name_panel::Message::AddFirstSuggestedTag => {
+                Some(suggested.iter().take(1).map(|t| t.name.clone()).collect())
+            }
+            file_name_panel::Message::AddAllSuggestedTags => {
+                Some(suggested.iter().map(|t| t.name.clone()).collect())
+            }
+            _ => None,
+        };
+        if let Some(names) = add {
+            return self.add_suggested_tags(&names);
         }
         let (dragged_id, drop_index) = if let file_name_panel::Message::DragEnded = &msg {
             (
@@ -3410,6 +3470,93 @@ mod tests {
 
     /// Issue #173: the In/Out the AI suggests is set only when the editor applies it, as one
     /// undo step, and is no longer offered once the points match it.
+    #[test]
+    fn the_ai_suggested_tags_are_added_only_on_request_and_undone_in_one_step() {
+        use crate::features::file_name_panel::{self as panel, Message as P};
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = FolderWorkspace::new();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let list = workspace.file_workspace.tag_list_mut();
+        for name in ["night", "beach"] {
+            // A saved tag of the folder, not on this clip.
+            list.set_checked_by_name(name, true);
+            list.set_checked_by_name(name, false);
+        }
+        list.set_comment(
+            "Mine\n\nAI: A walk.\nSuggested tags: night (90%) · beach (70%) · gone (50%)\n\
+             Tag ideas: kayak race · beach"
+                .to_string(),
+        );
+        let checked = |w: &FolderWorkspace, name: &str| {
+            let list = w.file_workspace().tag_list();
+            list.tag_id_by_name(name)
+                .and_then(|id| list.get_tag(id))
+                .is_some_and(|tag| tag.is_checked())
+        };
+        let offered = |w: &FolderWorkspace| {
+            panel::pending_tag_suggestions(w.file_workspace().tag_list())
+                .into_iter()
+                .map(|tag| tag.name)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            offered(&workspace),
+            ["night", "beach"],
+            "only the folder's tags, most likely first"
+        );
+        assert_eq!(
+            panel::tag_ideas(workspace.file_workspace().tag_list()),
+            ["kayak race"],
+            "an idea the folder has as a tag is no idea any more"
+        );
+        assert!(!checked(&workspace, "night"), "nothing is added by itself");
+
+        let _ = workspace.update(Message::FileNamePanel(P::AddFirstSuggestedTag));
+        assert!(checked(&workspace, "night") && !checked(&workspace, "beach"));
+        assert_eq!(
+            offered(&workspace),
+            ["beach"],
+            "an added tag is not offered"
+        );
+        let _ = workspace.update(Message::Undo);
+        assert!(!checked(&workspace, "night"));
+
+        let _ = workspace.update(Message::FileNamePanel(P::AddAllSuggestedTags));
+        assert!(checked(&workspace, "night") && checked(&workspace, "beach"));
+        assert!(offered(&workspace).is_empty());
+        let _ = workspace.update(Message::Undo);
+        assert!(
+            !checked(&workspace, "night") && !checked(&workspace, "beach"),
+            "one undo takes both back"
+        );
+        let _ = workspace.update(Message::Redo);
+        assert!(checked(&workspace, "night") && checked(&workspace, "beach"));
+        let _ = workspace.update(Message::Undo);
+
+        let _ = workspace.update(Message::FileNamePanel(P::AddSuggestedTag(
+            "gone".to_string(),
+        )));
+        assert!(
+            workspace
+                .file_workspace()
+                .tag_list()
+                .tag_id_by_name("gone")
+                .is_none(),
+            "a tag the folder does not have is never made"
+        );
+
+        let _ = workspace.update(Message::Batch(batch::Message::SetActive(true)));
+        let _ = workspace.update(Message::FileNamePanel(P::AddAllSuggestedTags));
+        assert!(
+            !checked(&workspace, "night"),
+            "batch mode does not edit the open file"
+        );
+    }
+
     #[test]
     fn the_ai_suggested_in_out_is_applied_as_one_undo_step() {
         let test_dir = TestDirectory::new(1);

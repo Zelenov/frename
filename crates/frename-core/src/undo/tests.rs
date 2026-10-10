@@ -10,11 +10,11 @@ mod tests {
 
     use crate::db::fake_app_storage::FakeAppStorage;
     use crate::undo::{
-        AddMarkerCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand, History,
-        NavigateFileCommand, PasteTagsCommand, RenameFileCommand, ReorderTagCommand,
-        SaveTagCommand, SetCommentCommand, SetMarkerColorCommand, SetMarkerNameCommand,
-        SetMarkerSpanCommand, SetMarkerTextCommand, SetSegmentCommand, StarTagCommand,
-        SyncTagOrderCommand, ToggleTagCommand, UndoContext,
+        AddMarkerCommand, CheckTagsCommand, CreateTagCommand, DeleteMarkerCommand,
+        DeleteTagCommand, History, NavigateFileCommand, PasteTagsCommand, RenameFileCommand,
+        ReorderTagCommand, SaveTagCommand, SetCommentCommand, SetMarkerColorCommand,
+        SetMarkerNameCommand, SetMarkerSpanCommand, SetMarkerTextCommand, SetSegmentCommand,
+        StarTagCommand, SyncTagOrderCommand, ToggleTagCommand, UndoContext,
     };
     use crate::{Directory, File, FileId, FileSnapshot, Marker, MarkerColor, StoredTag, TagList};
     use uuid::Uuid;
@@ -499,6 +499,63 @@ mod tests {
             history.redo(&mut ctx).unwrap();
         }
         assert_eq!(directory.selected_index(), Some(1));
+    }
+
+    // --- CheckTagsCommand ---
+
+    #[test]
+    fn checking_several_tags_is_one_step() {
+        let store = make_store_with_tags(&["Action", "Beach", "Night"]);
+        let snapshot = snapshot_with_tags(&["Action"]);
+        let mut tag_list = TagList::new(store, snapshot);
+        let mut dir = empty_directory();
+        let beach = tag_list.tag_id_by_name("beach").unwrap();
+        let night = tag_list.tag_id_by_name("Night").unwrap();
+        tag_list.toggle_by_id(beach);
+        tag_list.toggle_by_id(night);
+        let mut history = History::new(50);
+        history.push(Box::new(CheckTagsCommand {
+            tag_ids: vec![beach, night],
+        }));
+        let checked = |list: &TagList<FakeAppStorage>| {
+            ["Action", "Beach", "Night"].map(|name| {
+                list.get_tag(list.tag_id_by_name(name).unwrap())
+                    .unwrap()
+                    .is_checked()
+            })
+        };
+        {
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
+            history.undo(&mut ctx).unwrap();
+        }
+        assert_eq!(
+            checked(&tag_list),
+            [true, false, false],
+            "one undo, both off"
+        );
+        {
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: &mut tag_list,
+            };
+            history.redo(&mut ctx).unwrap();
+        }
+        assert_eq!(checked(&tag_list), [true, true, true]);
+    }
+
+    #[test]
+    fn the_folders_own_tags_are_the_saved_ones() {
+        let store = make_store_with_tags(&["Action", "Beach"]);
+        let snapshot = snapshot_with_tags(&["Action", "only-in-the-name"]);
+        let tag_list = TagList::new(store, snapshot);
+        let mut names = tag_list.saved_tag_names();
+        names.sort();
+        assert_eq!(names, ["Action", "Beach"]);
+        assert!(tag_list.tag_id_by_name("ONLY-IN-THE-NAME").is_some());
+        assert!(tag_list.tag_id_by_name("missing").is_none());
     }
 
     // --- ToggleTagCommand ---
