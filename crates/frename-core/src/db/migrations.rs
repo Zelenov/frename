@@ -95,6 +95,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 21,
         sql: schema::M21_AI_TAG_SUGGESTIONS,
     },
+    Migration {
+        version: 22,
+        sql: schema::M22_RECENT_FOLDERS,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
@@ -169,6 +173,7 @@ mod tests {
             "video_settings",
             "app_settings",
             "playback_position",
+            "recent_folders",
         ] {
             assert!(table_exists(&conn, table), "{table} must survive");
         }
@@ -179,7 +184,7 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 21);
+        assert_eq!(current_version(&conn).expect("version"), 22);
     }
 
     #[test]
@@ -242,6 +247,70 @@ mod tests {
             )
             .expect("ai_moments column");
         assert_eq!(moments, "important");
+    }
+
+    /// A database at version 21 whose `folder_history` holds `count` folders, `/f/0` the oldest.
+    fn database_with_folder_history(count: usize) -> Connection {
+        let conn = database_at_version_1();
+        for m in MIGRATIONS.iter().filter(|m| (2..=21).contains(&m.version)) {
+            conn.execute_batch(m.sql).expect("migration");
+        }
+        conn.execute("UPDATE schema_version SET version = 21", [])
+            .expect("set version");
+        for n in 0..count {
+            conn.execute(
+                "INSERT INTO folder_history (opened_at, folder_path, last_file_path)
+                 VALUES (?1, ?2, ?3)",
+                rusqlite::params![
+                    format!("2026-09-{:02} 10:00:00", n + 1),
+                    format!("/f/{n}"),
+                    if n == 0 {
+                        String::new()
+                    } else {
+                        format!("/f/{n}/a.mp4")
+                    },
+                ],
+            )
+            .expect("history row");
+        }
+        conn
+    }
+
+    #[test]
+    fn the_recent_folders_start_from_the_ten_latest_of_the_folder_history() {
+        let conn = database_with_folder_history(12);
+        run(&conn).expect("migrate");
+        let rows: Vec<(i64, String, i64, String)> = conn
+            .prepare(
+                "SELECT position, folder_path, opened_at_ms, last_file_path
+                 FROM recent_folders ORDER BY position",
+            )
+            .expect("prepare")
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })
+            .expect("query")
+            .collect::<Result<_, _>>()
+            .expect("rows");
+        assert_eq!(rows.len(), 10);
+        assert_eq!(
+            (rows[0].0, rows[0].1.as_str(), rows[0].3.as_str()),
+            (0, "/f/11", "/f/11/a.mp4"),
+            "the newest first"
+        );
+        assert_eq!(rows[9].1, "/f/2");
+        // 2026-09-12 10:00:00 UTC.
+        assert_eq!(rows[0].2, 1_789_207_200_000);
+    }
+
+    #[test]
+    fn a_database_without_history_gets_an_empty_recent_list() {
+        let conn = Connection::open_in_memory().expect("open");
+        run(&conn).expect("migrate");
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM recent_folders", [], |row| row.get(0))
+            .expect("count");
+        assert_eq!(count, 0);
     }
 
     /// A database at `version` with a settings row whose in/out storage is `in_out`.
