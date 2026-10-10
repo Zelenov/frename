@@ -59,7 +59,8 @@ A finding without a concrete failure scenario or a concrete improvement is dropp
 4. Repeat until all three approve in the same round. Four rounds without that → the change is
    finished as far as possible and left unmerged for the owner (`nightly` → "Owner review").
 5. After the PR merges, every finding with a failure scenario that was not fixed in it (minors
-   included) is filed as a `bug` (`nightly` → "Bugs the agent finds") and fixed without approval.
+   included) is filed as a `bug` after a fresh subagent confirms it on `main` (refuted ones are
+   noted in the PR), as `nightly` → step 7 "After merging any PR" says, and fixed without approval.
 
 Record every round in the PR description: SHA, each reviewer's verdict, findings count, what was fixed,
 and every finding not fixed in full (severity, file:line, failure scenario), so it can be filed as a

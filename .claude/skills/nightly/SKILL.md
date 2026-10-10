@@ -113,6 +113,10 @@ failure: go on with other work and check it again later), the last release faile
   it while it has `needs-owner` or `hold`;
 - none exists → start step 7 "Release failed" from item 1.
 
+Then merged PRs labelled `agent` (the 30 most recently merged) whose body records unfixed review
+findings and has no `🤖 agent: findings filed:` line: file them now (step 7, "After merging any
+PR").
+
 Then open PRs labelled `agent`, oldest first. Skip a PR if it or its linked issue has `needs-owner`,
 `owner-review`, `hold`, `awaiting-owner`, `blocked` or `rejected`, or the linked issue is closed. A PR
 whose `owner-review` label the owner removed (from the PR or from its issue), or that has an owner
@@ -185,6 +189,10 @@ A defect is filed by the agent as an issue labelled `bug` and `P1`/`P2`/`P3`, bo
 - defects inside the code, even when no editor sees them yet: leaks in the app or the tests, tests
   that depend on order, timing or a reused process id, random CI failures, races. The full list is
   in `bug-hunt` → "What counts as a bug".
+
+Evidence, by source: a bug-hunt finding as in `bug-hunt` (reproduced, or a code path a second
+reviewer confirmed); a flaky CI job, its failing log; a review finding or a bug found while working,
+a fresh subagent's confirmation on `main`.
 
 Never file a defect as `idea`, and never wait for `approved` on one. An agent `idea` that turns out
 to describe a defect is relabelled `bug` the moment it is noticed (step 2 checks). Priorities are
@@ -291,7 +299,9 @@ cargo build --release --locked
 2. When all reviewers of a round approve, mark the PR ready for review. While CI runs, go on with
    the next issue ("Parallel work") and come back when it finishes.
 3. CI red → diagnose from the job logs, fix, re-run the local gate, push. A failure is never "flaky"
-   until the same job passed on the same commit, and a flaky job is a defect: file it at once as a
+   until the same job passed on the same commit. A failure in code the PR does not touch, or one
+   the logs do not explain, is rerun once on the same commit before any fix is pushed. A job that
+   failed and then passed on the same commit is a defect: file it at once as a
    `bug` P2 ("Bugs the agent finds") with the failing log, then go on. Any code change after the
    approved SHA needs a new review round (step 7 checks this).
 4. Count review rounds and CI fix rounds since the PR opened, or since the last
@@ -359,8 +369,10 @@ less than 90 minutes ago) and check the run until it completes, working on other
 
 **Release failed:**
 1. Re-run the failed jobs of the same run once (`actions_run_trigger`, rerun failed jobs; a new
-   `workflow_dispatch` run skips the build when the release object already exists). A runner hiccup
-   ends here.
+   `workflow_dispatch` run skips the build when the release object already exists). If the rerun
+   passes, the failure was random: file it as in step 6.3 (`bug` P2 with the failing log), unless
+   the job died before any build or test step ran (runner lost, checkout or download error), which
+   is infrastructure and ends here.
 2. If it fails again, open an issue labelled `release-failed`, body `🤖 agent:` plus the failing job
    and a log excerpt. It is the target for the lock, `Refs`, and `needs-owner`; it is a request by
    itself (no approval needed) but only for fixing that release.
@@ -375,10 +387,11 @@ less than 90 minutes ago) and check the run until it completes, working on other
 6. While a `release-failed` issue is open, merge nothing that changes `version.md`; other work can
    continue up to that point.
 
-After merging any PR (an owner-merged `owner-review` one included, found in step 1 by PRs merged
-since the last session): file each unfixed review finding recorded in its body that has a failure
-scenario and no linked bug yet, after a fresh subagent confirms it on `main` (`bug-hunt` step 5),
-as a `bug` ("Bugs the agent finds"); note refuted ones in the PR. Then, for an implementation PR,
+After merging any PR (an owner-merged `owner-review` one included; step 1 finds those): file each
+unfixed review finding recorded in its body that has a failure scenario, after a fresh subagent
+confirms it on `main` (`bug-hunt` step 5), as a `bug` ("Bugs the agent finds"). Then add one line
+to the PR body, `🤖 agent: findings filed: #a, #b (refuted: …)` or `🤖 agent: findings filed: none`;
+that line is what tells a later session the filing is done. Then, for an implementation PR,
 comment on the issue what shipped (with the main
 screenshot), which version, how to try it, what the owner has to check by hand (e.g. Premiere Pro behaviour), and remove
 `in-progress`.

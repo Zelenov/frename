@@ -48,9 +48,11 @@ choice between designs, or a refactor with no failure behind it.
    `hold`): one that describes a defect by the definition above becomes a bug: remove `idea`, add
    `bug` and a priority (below), and comment `🤖 agent: this is a defect, not a proposal; it will be
    fixed without waiting for approval.` Proposals stay `idea`.
-3. Limits: skip the hunt when 8 or more agent-filed `bug` issues are open (fix those first). File
-   at most 5 new bugs per hunt, most severe first; keep the rest of the candidates in the hunt
-   notes of the last one filed so the next hunt starts from them.
+3. Limits: skip the hunt when 8 or more agent-filed `bug` issues the agent can work on are open
+   (not `needs-owner`, `hold`, `blocked` or `rejected`; fix those first). File at most 5 new bugs
+   per hunt, most severe first; keep the rest of the candidates in the hunt notes of the last one
+   filed. The next hunt reads the hunt notes of the newest bug issue that has them, open or
+   closed, and files those candidates first, after checking them again on `main`.
 
 ## 1. UI sweep (always first)
 
@@ -124,7 +126,7 @@ proof by itself.
 One issue per bug, English, body:
 
 ```
-🤖 agent: found by the bug hunt on <YYYY-MM-DD>.
+🤖 agent: found by <the bug hunt | work on #N | CI run <link> | review of PR #N> on <YYYY-MM-DD>.
 
 **What happens:** …
 **Expected:** … (and where that is stated: README, design doc, skill rule, issue #)
