@@ -7,7 +7,7 @@
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 
-use clipscribe::{self as describe, Model, SummaryLanguage, MOMENT_WINDOW_S};
+use clipscribe::{self as describe, Model, Stage, SummaryLanguage, MOMENT_WINDOW_S};
 use frename_core::Marker;
 
 use crate::features::batch::describe_ai;
@@ -33,13 +33,16 @@ pub fn moment_s(marker: &Marker) -> f64 {
     (marker.start_ms + marker.duration_ms / 2) as f64 / 1000.0
 }
 
-/// Name and describe the moment at `at_s` of the clip at `path`. Blocking.
+/// Name and describe the moment at `at_s` of the clip at `path`. Blocking. `on_released` is
+/// called once the frames are read and the clip is let go of, before the request is sent (never,
+/// when the request ends before that).
 pub fn describe_moment(
     path: &Path,
     at_s: f64,
     model: Model,
     language: SummaryLanguage,
     cancel: &AtomicBool,
+    mut on_released: impl FnMut(),
 ) -> MomentOutcome {
     // One moment: clipscribe's `describe_moment` does not use the moments mode.
     let Some(request) =
@@ -47,13 +50,19 @@ pub fn describe_moment(
     else {
         return MomentOutcome::NoKey;
     };
-    match describe::describe_moment(
+    match describe::describe_moment_notifying(
         &request.on_disk,
         at_s,
         MOMENT_WINDOW_S,
         &request.subtitles,
         &request.options,
         cancel,
+        |stage| {
+            // A stage this version does not know is not the clip being let go of.
+            if matches!(stage, Stage::Released) {
+                on_released();
+            }
+        },
     ) {
         Ok(described) => {
             log::info!(

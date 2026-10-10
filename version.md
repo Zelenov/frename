@@ -1,3 +1,7 @@
+# 0.138
+## Fixed
+- Starting a batch job while a marker is being described no longer waits for Claude's answer: it starts as soon as the description has finished reading the clip. Saving or renaming a clip is refused as "still reading the clip" only until then.
+
 # 0.136
 ## Fixed
 - Linux: the AppImage no longer overwrites the shared GStreamer plugin cache that other programs use; it keeps its own in `~/.cache/frename`.
