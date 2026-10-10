@@ -1586,4 +1586,46 @@ mod tests {
         assert_eq!(crate::comment::load_comment(&before), "stray comment");
         assert_eq!(crate::comment::load_comment(&after), "comment of A");
     }
+
+    #[test]
+    fn undo_and_redo_of_a_rename_move_every_sidecar_the_save_moves() {
+        let (dir_path, mut directory, cmd, _) =
+            rename_fixture("all-sidecars", "foo.mp4", "foo.GOAT.mp4");
+        let (before, after) = (dir_path.join("foo.mp4"), dir_path.join("foo.GOAT.mp4"));
+        write(&after, "clip A");
+        crate::comment::save_comment(&after, "nice take");
+        let sidecars = |video: &std::path::Path| {
+            let mut all = crate::subtitles::subtitle_candidates(video);
+            all.push(crate::subtitles::transcript_path(video));
+            all
+        };
+        for p in sidecars(&after) {
+            write(&p, "sidecar");
+        }
+        // A screenshot is not moved by the save that renamed the clip, so not by its undo.
+        let snap = dir_path.join("foo.GOAT.mp4.snap.00-00-10-936.jpg");
+        write(&snap, "jpg");
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+        history.push(Box::new(cmd));
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+
+        history.undo(&mut ctx).expect("undo");
+        assert!(before.exists() && !after.exists());
+        assert!(crate::comment::comment_path(&before).exists());
+        for (old, new) in sidecars(&after).iter().zip(sidecars(&before).iter()) {
+            assert!(new.exists() && !old.exists(), "{old:?} -> {new:?}");
+        }
+        assert!(snap.exists());
+
+        history.redo(&mut ctx).expect("redo");
+        assert!(after.exists() && !before.exists());
+        assert!(crate::comment::comment_path(&after).exists());
+        for (old, new) in sidecars(&before).iter().zip(sidecars(&after).iter()) {
+            assert!(new.exists() && !old.exists(), "{old:?} -> {new:?}");
+        }
+    }
 }

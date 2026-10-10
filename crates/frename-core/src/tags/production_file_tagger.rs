@@ -128,8 +128,7 @@ impl ProductionFileTagger {
                 );
                 return path.to_path_buf();
             }
-            crate::comment::rename_comment_file(path, &new_path);
-            crate::subtitles::rename_subtitle_file(path, &new_path);
+            super::file_tagger::rename_sidecars(path, &new_path);
             log::info!("Renamed on disk: {:?} → {:?}", path, new_path);
         }
         // A pending snapshot does not know an XMP comment, so it has no text file to write.

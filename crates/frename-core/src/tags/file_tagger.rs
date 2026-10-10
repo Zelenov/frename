@@ -348,6 +348,15 @@ pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
     .any(|p| p.exists())
 }
 
+/// Move the sidecars that travel with a renamed clip (comment, subtitles, transcript) from the
+/// names of `old_path` to those of `new_path`. The one list for the save that renames a clip and
+/// for its undo and redo, so they cannot drift apart; it matches the set `target_name_taken`
+/// guards. Screenshots (`*.snap.*.jpg`) are not among them: nothing links them to a clip's name.
+pub(crate) fn rename_sidecars(old_path: &Path, new_path: &Path) {
+    crate::comment::rename_comment_file(old_path, new_path);
+    crate::subtitles::rename_subtitle_file(old_path, new_path);
+}
+
 /// Extension trait: save this snapshot then re-parse from the new path.
 /// Returns `(new_path, new_snapshot)`.
 pub trait SaveAndReparse {

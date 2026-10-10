@@ -29,8 +29,7 @@ fn rename_with_sidecars(from: &Path, to: &Path) -> Result<(), UndoError> {
         return Err(UndoError::NameTaken(to.to_path_buf()));
     }
     std::fs::rename(from, to)?;
-    crate::subtitles::rename_subtitle_file(from, to);
-    crate::comment::rename_comment_file(from, to);
+    crate::tags::rename_sidecars(from, to);
     Ok(())
 }
 
