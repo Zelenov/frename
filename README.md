@@ -96,6 +96,7 @@ single clip.
 | `Ctrl+Z` | Undo |
 | `Ctrl+Y` or `Ctrl+Shift+Z` | Redo |
 | Middle-click a chip in the file name | Untag the file |
+| `F6` / `Shift+F6` | Add the tag Describe with AI suggests most, or every one it suggests |
 
 ### Video
 | Key | Action |

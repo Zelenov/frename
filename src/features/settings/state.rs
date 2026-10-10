@@ -348,6 +348,7 @@ impl SettingsState {
             Message::SetSummaryLanguage(language) => self.settings.summary_language = language,
             Message::SetAiModel(model) => self.settings.ai_model = model.id.to_string(),
             Message::SetAiMoments(moments) => self.settings.ai_moments = moments,
+            Message::SetAiTagSuggestions(on) => self.settings.ai_tag_suggestions = on,
             Message::SetSubtitleLanguage(code, on) => {
                 let languages = &mut self.settings.subtitle_languages;
                 languages.retain(|l| *l != code);

@@ -91,6 +91,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 20,
         sql: schema::M20_AI_MOMENTS,
     },
+    Migration {
+        version: 21,
+        sql: schema::M21_AI_TAG_SUGGESTIONS,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
@@ -175,7 +179,7 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 20);
+        assert_eq!(current_version(&conn).expect("version"), 21);
     }
 
     #[test]

@@ -909,6 +909,25 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         !self.display_tag_ids.is_empty()
     }
 
+    /// The folder's own tags (the saved ones), in the tag panel's order, whatever the filter:
+    /// what "Describe with AI" may suggest from.
+    pub fn saved_tag_names(&self) -> Vec<String> {
+        self.display_tag_ids
+            .iter()
+            .filter_map(|(id, _, _)| self.tags_by_id.get(id))
+            .filter(|t| t.is_stored())
+            .map(|t| t.tag().to_string())
+            .collect()
+    }
+
+    /// The id of the tag named `name` (case-insensitive), saved or not.
+    pub fn tag_id_by_name(&self, name: &str) -> Option<TagId> {
+        self.tags_by_id
+            .values()
+            .find(|t| t.tag().eq_ignore_ascii_case(name))
+            .map(|t| t.id())
+    }
+
     /// Cached result of whether the checked-tag order matches in both collections.
     /// Updated automatically on every mutation; use this in the view instead of recomputing.
     /// All tag names in raw display order (no section sorting, no filter). Test/diagnostic use.

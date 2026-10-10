@@ -243,7 +243,7 @@ impl Operation {
             Self::FixTags => fix_tags::run(path),
             Self::RespaceTags => tag_spacing::run(path),
             Self::ReloadFiles => reload_files::run(path),
-            Self::DescribeAi(options) => describe_ai::run(*options, path, cancel, progress),
+            Self::DescribeAi(options) => describe_ai::run(options, path, cancel, progress),
             Self::GenerateSubtitles(run) => generate_subtitles::run(run, path, cancel, progress),
         }
     }
@@ -343,6 +343,11 @@ pub struct Actions {
 }
 
 impl Actions {
+    /// The open folder's own tags, which "Describe with AI" may suggest from.
+    pub fn set_folder_tags(&mut self, tags: Vec<String>) {
+        self.describe_ai.set_folder_tags(tags);
+    }
+
     pub fn update(&mut self, message: ActionMessage) {
         match message {
             ActionMessage::MoveComments(message) => self.move_comments.update(message),

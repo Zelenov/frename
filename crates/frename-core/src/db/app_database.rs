@@ -306,7 +306,7 @@ impl AppStateStore for AppDatabase {
         conn.query_row(
             "SELECT autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled,
                     space_after_tags, summary_language, ai_model, subtitle_languages, subtitle_cue_length,
-                    marker_storage, ui_language, ai_moments
+                    marker_storage, ui_language, ai_moments, ai_tag_suggestions
              FROM app_settings WHERE id = 1",
             [],
             |row| Ok(AppSettings {
@@ -329,6 +329,7 @@ impl AppStateStore for AppDatabase {
                 marker_storage: MarkerStorage::from_name(&row.get::<_, String>(11)?),
                 ui_language: row.get::<_, String>(12)?,
                 ai_moments: ai::moments_from_name(&row.get::<_, String>(13)?),
+                ai_tag_suggestions: row.get::<_, i64>(14)? != 0,
             }),
         ).ok()
     }
@@ -338,8 +339,8 @@ impl AppStateStore for AppDatabase {
             let conn = lock_connection(&conn);
             let _ = conn.execute(
                 "INSERT INTO app_settings (id, autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled, space_after_tags, summary_language, ai_model,
-                                           subtitle_languages, subtitle_cue_length, marker_storage, ui_language, ai_moments)
-                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                                           subtitle_languages, subtitle_cue_length, marker_storage, ui_language, ai_moments, ai_tag_suggestions)
+                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
                  ON CONFLICT(id) DO UPDATE SET
                      autoplay_video = excluded.autoplay_video,
                      monochrome_tags = excluded.monochrome_tags,
@@ -354,7 +355,8 @@ impl AppStateStore for AppDatabase {
                      subtitle_cue_length = excluded.subtitle_cue_length,
                      marker_storage = excluded.marker_storage,
                      ui_language = excluded.ui_language,
-                     ai_moments = excluded.ai_moments",
+                     ai_moments = excluded.ai_moments,
+                     ai_tag_suggestions = excluded.ai_tag_suggestions",
                 rusqlite::params![
                     settings.autoplay_video,
                     settings.monochrome_tags,
@@ -370,6 +372,7 @@ impl AppStateStore for AppDatabase {
                     settings.marker_storage.as_str(),
                     settings.ui_language,
                     ai::moments_as_str(settings.ai_moments),
+                    settings.ai_tag_suggestions,
                 ],
             );
         }
@@ -631,6 +634,16 @@ mod tests {
             "only what stands out by default"
         );
         settings.ai_moments = ai::MomentsMode::Full;
+        db.set_app_settings(settings.clone());
+        assert_eq!(db.get_app_settings(), Some(settings));
+    }
+
+    #[test]
+    fn tag_suggestions_are_on_by_default_and_can_be_turned_off() {
+        let db = database("ai-tag-suggestions");
+        let mut settings = AppSettings::default();
+        assert!(settings.ai_tag_suggestions);
+        settings.ai_tag_suggestions = false;
         db.set_app_settings(settings.clone());
         assert_eq!(db.get_app_settings(), Some(settings));
     }
