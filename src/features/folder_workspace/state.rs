@@ -3197,7 +3197,10 @@ mod tests {
         static SWEPT: std::sync::Once = std::sync::Once::new();
         SWEPT.call_once(sweep_old_test_folders);
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        std::env::temp_dir().join(format!("frename-test-{}-{n}", std::process::id()))
+        let folder = std::env::temp_dir().join(format!("frename-test-{}-{n}", std::process::id()));
+        // A folder an earlier run with this process id left under this name must not leak in.
+        let _ = std::fs::remove_dir_all(&folder);
+        folder
     }
 
     /// Removes `frename-test-*` leftovers of earlier test runs. Only ones untouched for an hour:
@@ -4608,8 +4611,7 @@ mod tests {
 
     #[test]
     fn new_file_names_follow_windows_rules() {
-        let folder = std::env::temp_dir().join(format!("frename-rename-{}", std::process::id()));
-        std::fs::create_dir_all(&folder).expect("temp dir");
+        let folder = frename_core::test_support::fresh_dir("rename");
         std::fs::write(folder.join("taken.mp4"), b"").expect("write");
 
         assert_eq!(

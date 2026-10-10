@@ -268,8 +268,7 @@ mod tests {
         };
         assert!(has("a.mp4") && has("b.mp4") && !has("c.mp4") && has("e.mp4"));
 
-        let dir = std::env::temp_dir().join(format!("frename-file-ass-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = crate::test_support::fresh_dir("file-ass");
         std::fs::write(dir.join("d.ass"), "x").expect("write ass");
         std::fs::write(dir.join("f.premiere.json"), "{}").expect("write transcript");
         assert!(File::from_path(dir.join("d.mp4"), SystemTime::UNIX_EPOCH).has_subtitles());

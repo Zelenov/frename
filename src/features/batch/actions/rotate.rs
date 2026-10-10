@@ -132,11 +132,7 @@ mod tests {
     fn copy_of_clip(test: &str) -> std::path::PathBuf {
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("crates/frename-core/tests/fixtures/wide.mp4");
-        let dir = std::env::temp_dir().join(format!(
-            "frename-batch-rotate-{test}-{}",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dir = frename_core::test_support::fresh_dir(&format!("batch-rotate-{test}"));
         let file = dir.join("clip.mp4");
         std::fs::copy(fixture, &file).expect("copy");
         file
