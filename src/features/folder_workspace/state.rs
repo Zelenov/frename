@@ -185,6 +185,32 @@ fn column_widths(video: f32, file_list: f32) -> (f32, f32) {
     )
 }
 
+/// Takes the keys from the one focusable widget with this id and leaves every other one as it
+/// is (iced's own `unfocus` takes them from all, the rename field and comment box included).
+fn unfocus_only(target: iced::widget::Id) -> impl iced::advanced::widget::Operation<()> {
+    use iced::advanced::widget::operation::{Focusable, Operation};
+    struct UnfocusOnly {
+        target: iced::widget::Id,
+    }
+    impl Operation<()> for UnfocusOnly {
+        fn focusable(
+            &mut self,
+            id: Option<&iced::widget::Id>,
+            _bounds: iced::Rectangle,
+            state: &mut dyn Focusable,
+        ) {
+            if id == Some(&self.target) {
+                state.unfocus();
+            }
+        }
+
+        fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn Operation<()>)) {
+            operate(self);
+        }
+    }
+    UnfocusOnly { target }
+}
+
 impl FolderWorkspace {
     pub fn new() -> Self {
         Self::with_app_db(AppDatabase::new())
@@ -2226,17 +2252,14 @@ impl FolderWorkspace {
                         self.tag_panel.set_selected(Some(id));
                     }
                 }
-                // The search bar kept the keys after typing: Ctrl+C, Delete, the arrows and
-                // Space would go to its text. Let go of them (typing a letter takes them back);
-                // the comment box is left alone, it is typed in on purpose.
-                if self.file_workspace.comment_focused() {
-                    Task::none()
-                } else {
-                    iced::advanced::widget::operate(
-                        iced::advanced::widget::operation::focusable::unfocus::<()>(),
-                    )
-                    .map(|()| Message::Noop)
-                }
+                // The tag search kept the keys after typing: Ctrl+C, Delete, the arrows and
+                // Space would go to its text. Let go of them (typing a letter takes them back).
+                // Only the search bar: the rename field, the comment box and the marker fields
+                // are typed in on purpose.
+                iced::advanced::widget::operate(unfocus_only(iced::widget::Id::from(
+                    SEARCH_BAR_INPUT_ID,
+                )))
+                .map(|()| Message::Noop)
             }
             tag_panel::Message::DeleteTag(id) => {
                 // Find the deleted tag's position in the filtered list before removal.
@@ -7085,18 +7108,43 @@ mod tests {
         assert_eq!(marker_names(&workspace), [(1_000, String::new())]);
     }
 
+    struct Stub(bool);
+    impl iced::advanced::widget::operation::Focusable for Stub {
+        fn is_focused(&self) -> bool {
+            self.0
+        }
+        fn focus(&mut self) {
+            self.0 = true;
+        }
+        fn unfocus(&mut self) {
+            self.0 = false;
+        }
+    }
+
     /// Issue #32: after Shift+Space toggled a tag the search bar kept the keys, so Ctrl+C went
-    /// to its text. The toggle lets go of the focus, except from the comment box.
+    /// to its text. Only the search bar lets go: the rename field and the comment box keep them.
     #[test]
-    fn shift_space_gives_the_keys_back_from_the_search_bar() {
+    fn unfocus_only_takes_the_keys_from_the_search_bar() {
+        use super::{unfocus_only, SEARCH_BAR_INPUT_ID};
+        use iced::advanced::widget::Operation;
+        let search = iced::widget::Id::from(SEARCH_BAR_INPUT_ID);
+        let mut op = unfocus_only(search.clone());
+        let bounds = iced::Rectangle::default();
+        let (mut bar, mut rename, mut comment) = (Stub(true), Stub(true), Stub(true));
+        op.focusable(Some(&search), bounds, &mut bar);
+        op.focusable(Some(&iced::widget::Id::new("rename")), bounds, &mut rename);
+        op.focusable(None, bounds, &mut comment);
+        assert!(!bar.0, "the search bar lets go");
+        assert!(rename.0, "the inline rename field keeps the keys");
+        assert!(comment.0, "a widget without an id keeps the keys");
+    }
+
+    #[test]
+    fn toggling_the_selected_tag_releases_the_search_bar() {
         use crate::features::tag_panel;
         let (_test_dir, mut workspace) = open_folder(1);
-        let toggle = Message::TagPanel(tag_panel::Message::ToggleSelectedTag);
-        let task = workspace.update(toggle.clone());
-        assert_eq!(task.units(), 1, "the focus is released");
-        workspace.file_workspace.set_comment_focused(true);
-        let task = workspace.update(toggle);
-        assert_eq!(task.units(), 0, "the comment box keeps its focus");
+        let task = workspace.update(Message::TagPanel(tag_panel::Message::ToggleSelectedTag));
+        assert_eq!(task.units(), 1, "the release is issued");
     }
 
     #[test]
