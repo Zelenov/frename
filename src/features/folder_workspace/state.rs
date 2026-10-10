@@ -476,12 +476,26 @@ impl FolderWorkspace {
             }
             Message::GoToStartWhileTyping => {
                 // Only the note's promise takes Home from a search field; a name being typed
-                // keeps it.
-                if self.inline_rename.is_some() || !self.media_viewer.resume_note_shown() {
+                // keeps it. A rename open on another row does not hold the key: ask whether
+                // its field is the one that has it.
+                if !self.media_viewer.resume_note_shown() {
                     return Task::none();
                 }
-                self.unless_writing(Message::GoToStart)
+                if self.inline_rename.is_none() {
+                    return self.unless_writing(Message::GoToStart);
+                }
+                iced::widget::operation::is_focused(iced::widget::Id::from(
+                    folder::FOLDER_RENAME_INPUT_ID,
+                ))
+                .map(|renaming| {
+                    if renaming {
+                        Message::Noop
+                    } else {
+                        Message::GoToStartUnlessWriting
+                    }
+                })
             }
+            Message::GoToStartUnlessWriting => self.unless_writing(Message::GoToStart),
             Message::ToggleMediaFullscreen => self.set_fullscreen(!self.media_fullscreen),
             Message::RestoreListScrolls { markers_y, cues_y } => {
                 // Only a list on screen reports back; armed otherwise it would fire much later.
@@ -1045,10 +1059,7 @@ impl FolderWorkspace {
             self.with_pending_edits(&file)
         };
         self.file_workspace.set_file(Some(opened));
-        if same_file {
-            // Its path may have changed (an in-place rename); the video is not reopened.
-            self.media_viewer.follow_rename(&file);
-        } else {
+        if !same_file {
             self.markers_loaded(file.id());
             self.journal_reset_baseline();
         }
@@ -3412,7 +3423,6 @@ mod tests {
     fn a_clip_opens_where_playback_stopped_once_its_video_loads() {
         use crate::features::media_viewer::{self, video};
         use frename_core::AppStateStore;
-        use std::sync::{Arc, Mutex};
         use std::time::Duration;
         let test_dir = TestDirectory::new(1);
         AppDatabase::new().set_playback_position(&test_dir.target_file(), Duration::from_secs(10));
@@ -3423,20 +3433,17 @@ mod tests {
         });
         flush_file_opened(&mut workspace);
 
-        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/folder/file_example_MP4_480_1_5MG.mp4");
-        let video = video::open_for_test(&fixture);
+        let (clip, _) = video::real_clip();
         let generation = workspace.media_viewer().video_loads_started();
         let _ = workspace.update(Message::MediaViewer(media_viewer::Message::Video(
-            video::Message::VideoLoaded {
-                video: Arc::new(Mutex::new(Some(video))),
-                rotation: None,
-                generation,
-            },
+            video::video_loaded(clip, generation),
         )));
         assert_eq!(workspace.media_viewer().video_position_ms(), Some(8_000));
         assert!(workspace.media_viewer().resume_note_shown());
 
+        // The task of `Home` is one message to the video; a test cannot run a task, so it is
+        // delivered here.
+        assert_eq!(workspace.update(Message::GoToStart).units(), 1);
         let _ = workspace.update(Message::MediaViewer(media_viewer::Message::Video(
             video::Message::GoToStart,
         )));
@@ -4675,8 +4682,9 @@ mod tests {
     }
 
     /// Issue #161: `Home` taken by a text field goes to the start of the clip only while the
-    /// note says Home starts it over, and never while a marker's name or a file name is being
-    /// typed; otherwise the field keeps it.
+    /// note says Home starts it over, and never while a file name is being typed (the focus of
+    /// its field decides, so with a rename open on another row Home still reaches the clip);
+    /// otherwise the field keeps it.
     #[test]
     fn home_from_a_text_field_starts_the_clip_over_only_while_the_note_says_so() {
         let test_dir = TestDirectory::new(1);
@@ -4692,11 +4700,14 @@ mod tests {
         assert_eq!(workspace.update(Message::GoToStartWhileTyping).units(), 1);
         let _ = workspace.update(Message::Folder(folder::Message::StartRename(0)));
         assert!(workspace.inline_rename.is_some(), "renaming by hand");
+        // A rename open on another row does not hold the key: the focus of its field decides,
+        // so the check is asked (a widget operation) instead of dropping Home.
         assert_eq!(
             workspace.update(Message::GoToStartWhileTyping).units(),
-            0,
-            "a file name being typed keeps Home"
+            1,
+            "the rename field's focus decides"
         );
+        assert_eq!(workspace.update(Message::GoToStartUnlessWriting).units(), 1);
     }
 
     /// In batch mode the comment box is not shown, so `Ctrl+Alt+→` after typing in the file

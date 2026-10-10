@@ -138,6 +138,9 @@ pub enum Message {
     /// continued is shown (it says Home starts it over), unless the field is the comment box or
     /// a name being edited; otherwise the field keeps the key (#161).
     GoToStartWhileTyping,
+    /// The second step of [`Message::GoToStartWhileTyping`]: the file name being edited does not
+    /// have the key, so only the comment box can still keep it.
+    GoToStartUnlessWriting,
     /// Open a native folder picker dialog so the user can choose a folder to open.
     OpenFolderPicker,
     /// Open a native file picker dialog so the user can choose a file to open.

@@ -950,7 +950,9 @@ Working on the folder while a job runs (at least previewing files) is #29, not t
 
 **Notices** (short feedback such as "Frame saved") appear as inline status (§8.12) in their own
 slot of the video pane's controls bar (§13.3.5), never as popups: confirmations for 2 s, errors
-until the next action. All their texts are translated (today five are English-only).
+until the next action. All their texts are translated (today five are English-only). The one
+exception to the slot and the 2 s is the resume note (§13.3.5): a pill over the picture for 6 s,
+clickable.
 
 **Esc** does one thing per press: the first of these that applies.
 
@@ -1134,6 +1136,18 @@ left to right, with the widths §13.9 folds by:
   works from the tag and file searches too (the editor has usually just typed a tag), but not in
   the comment box or a name being typed. `Home` does nothing while no video is shown, and a
   file that is not a video opening lets the clip go after keeping where it was.
+
+  ![The resume note over a wide and a narrow video pane](design-system/resume-note.png)
+
+  *The note (§10 Notices) on a wide pane (left) and a narrow one (right), made with
+  `frename --demo` from `docs/screenshots/resume.toml` and `resume-narrow.toml`.* It is the
+  `floating_notice` pill: the `popup` surface (`bg.overlay`, subtle border, shadow), `text.body`,
+  padding 4×8, 8 from the picture's left and bottom edges. **Hover:** the pill does not change,
+  only the pointer becomes a hand; there is no fill or underline, which is why the text names
+  the key. **Narrow:** the pill is at most 280 wide (the tooltip width) and its text wraps inside
+  that, growing upward from the bottom-left corner, so a longer text (a translation) wraps onto
+  a second line where it does not fit and is never cut off. The screenshots show the English
+  text only.
 - **Narrow pane:** what gives way and when is in §13.9. The **More** button (`ellipsis`) sits just
   before fullscreen; its menu opens upward, lists each moved control with its icon, name and key,
   and marks a latched one with a `check`.
