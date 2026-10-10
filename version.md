@@ -1,3 +1,9 @@
+# 0.136
+## Fixed
+- Linux: the AppImage starts faster, because it keeps its own video plugin list in `~/.cache/frename` instead of rebuilding a shared one on every start, which also made other GStreamer programs rescan.
+- Linux: the AppImage starts when the temporary folder is behind a symbolic link.
+- Linux: without a home folder, the AppImage keeps its files in `/tmp/frename` instead of the shared `/tmp`.
+
 # 0.133
 ## Fixed
 - A clip's screenshots (`*.snap.*.jpg`) now follow it when it is renamed, and undo and redo of the rename move them back; a screenshot already under the target name stops the undo instead of being replaced.

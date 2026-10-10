@@ -22,7 +22,9 @@ mod tags;
 pub(crate) mod transliteration;
 pub mod undo;
 
-pub use app_dir::{app_data_dir, log_path, set_app_data_dir, DATA_DIR_VAR};
+pub use app_dir::{
+    app_data_dir, appimage_gstreamer_registry, log_path, set_app_data_dir, DATA_DIR_VAR,
+};
 pub use db::{
     AppDatabase, AppSettings, AppStateStore, BatchRun, Initializable, LoggingAppStateStore,
     StoredTagStore, UpdateCheckState, VideoSettings, WindowGeometry,
