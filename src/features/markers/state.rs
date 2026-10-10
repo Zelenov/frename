@@ -249,9 +249,16 @@ impl MarkersState {
         }
     }
 
-    /// A request found no key: whether that was said already (since the last request was sent).
-    pub fn no_key_said(&mut self) -> bool {
-        std::mem::replace(&mut self.no_key_said, true)
+    /// A request found no key: whether this is the first since the last request was sent, so
+    /// that it is said once. Takes the turn: the next call gets false.
+    pub fn take_first_no_key(&mut self) -> bool {
+        !std::mem::replace(&mut self.no_key_said, true)
+    }
+
+    /// Whether the missing key was said since the last request was sent.
+    #[cfg(test)]
+    pub fn no_key_said(&self) -> bool {
+        self.no_key_said
     }
 
     /// A request failed: whether that was said already (since the last request was sent), so

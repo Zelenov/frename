@@ -171,18 +171,15 @@ impl FolderWorkspace {
     }
 
     /// A request came back, stopped or not: when it was the last, a batch job waiting for it
-    /// starts, unless batch mode was left meanwhile.
+    /// starts.
     fn marker_request_done(&mut self) -> Task<Message> {
         self.marker_requests = self.marker_requests.saturating_sub(1);
         if self.marker_requests > 0 || !self.batch.is_waiting_for_markers() {
             return Task::none();
         }
-        self.batch.set_waiting_for_markers(false);
-        if self.batch.is_active() {
-            self.start_batch()
-        } else {
-            Task::none()
-        }
+        // Leaving batch mode ends the wait, so the job is still wanted.
+        self.batch.update(batch::Message::StopWaiting);
+        self.start_batch()
     }
 
     /// A marker's request came back: fill the marker in, or say why not. The answer of a
@@ -214,15 +211,15 @@ impl FolderWorkspace {
             // Said once, even when several requests find it out; the settings, which read the
             // key, read it again and pass it on, so later clicks send nothing.
             MomentOutcome::NoKey => {
-                if self.markers.no_key_said() {
-                    Task::none()
-                } else {
+                if self.markers.take_first_no_key() {
                     Task::batch([
                         Self::no_key(),
                         Task::done(Message::Batch(batch::Message::Action(
                             batch::ActionMessage::ReadKeyState,
                         ))),
                     ])
+                } else {
+                    Task::none()
                 }
             }
             MomentOutcome::Cancelled => Task::none(),

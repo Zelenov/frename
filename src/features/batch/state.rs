@@ -301,6 +301,9 @@ impl BatchState {
                 }
             }
             Message::CloseReport => self.job = None,
+            // Cleared above, with every message that gives the wait up.
+            Message::StopWaiting => {}
+            Message::WaitForMarkers => self.waiting_for_markers = true,
             Message::Run | Message::Retry | Message::OpenLog | Message::OpenBilling(_) => {}
         }
     }
@@ -519,10 +522,6 @@ impl BatchState {
     /// Whether Run waits for the open clip's marker requests to let go of it.
     pub fn is_waiting_for_markers(&self) -> bool {
         self.waiting_for_markers
-    }
-
-    pub fn set_waiting_for_markers(&mut self, waiting: bool) {
-        self.waiting_for_markers = waiting;
     }
 
     /// The open folder's own tags, which "Describe with AI" may suggest from.

@@ -83,7 +83,7 @@ pub fn marker_text_with_moment(marker: &Marker, name: &str, description: &str) -
     // lines); not merely inside a longer line of the editor's.
     let wanted = one_line(description);
     let described = comment.lines().any(|line| one_line(line) == wanted)
-        || one_line(comment).ends_with(&wanted);
+        || ends_with_words(&one_line(comment), &wanted);
     let new_comment = if description.is_empty() || described {
         marker.comment.clone()
     } else if comment.trim().is_empty() {
@@ -92,6 +92,13 @@ pub fn marker_text_with_moment(marker: &Marker, name: &str, description: &str) -
         format!("{comment}\n{description}")
     };
     (new_name, new_comment)
+}
+
+/// Whether `text` ends with `tail` starting at a word: at the start of `text`, or after a space
+/// (not in the middle of a longer word).
+fn ends_with_words(text: &str, tail: &str) -> bool {
+    text.strip_suffix(tail)
+        .is_some_and(|rest| rest.is_empty() || rest.ends_with(char::is_whitespace))
 }
 
 /// Sort markers by time, the order every list shows them in.
@@ -824,6 +831,10 @@ mod tests {
         let inside = named("Lion", "Note: A lion walks. Keep it.");
         let added = marker_text_with_moment(&inside, "Lion", "A lion walks.");
         assert_eq!(added.1, "Note: A lion walks. Keep it.\nA lion walks.");
+        // The end of a longer word is not the description either.
+        let word = named("Lion", "Note: it stops.");
+        let added = marker_text_with_moment(&word, "Lion", "tops.");
+        assert_eq!(added.1, "Note: it stops.\ntops.");
         let empty = marker_text_with_moment(&named("", "note"), "", "  ");
         assert_eq!(empty, (String::new(), "note".to_string()));
     }

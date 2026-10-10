@@ -641,7 +641,8 @@ markers-ai-failed = Не описано: { $reason }
 markers-ai-failed-unknown = что-то пошло не так
 markers-read-only-notice = Этот маркер только для чтения
 markers-ai-gone = Маркера больше нет: описание не добавлено
-markers-ai-stopping-for-batch = Сначала останавливаю описание маркеров… Это может занять пару минут.
+markers-ai-stopping-for-batch = Сначала останавливаю описание маркеров… Это обычно занимает несколько секунд.
+folder-not-saved-marker-ai = Не сохранено: описание маркера ещё читало клип. Попробуйте ещё раз через минуту.
 
 ## File workspace
 
