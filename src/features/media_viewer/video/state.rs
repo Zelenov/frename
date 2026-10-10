@@ -906,6 +906,8 @@ impl VideoPlayerState {
                 // lands (`VideoLoaded` above). Until then GStreamer's open on the blocking
                 // thread may still hold the file open, so `VideoUnloaded` — the caller's signal
                 // that it is safe to rename or resave the file — has to wait for it (#91).
+                // `VideoUnloaded` can fire while a newer load is still opening; the caller then
+                // always has pending work (`Unload` is only sent with a pending save/scan/batch/close).
                 let load_in_flight = !self.loads_in_flight.is_empty();
                 self.remember_position();
                 self.drop_resume_note();
@@ -2115,8 +2117,9 @@ mod tests {
             "A, the only load older than the Unload, landed: VideoUnloaded now"
         );
         assert!(player.unload_waits_on.is_empty());
+        assert!(player.loading, "B is still opening: the spinner stays up");
         // B is the clip being opened: its landing must not say "unloaded" a second time.
-        let _ = player.update(landed(b));
+        assert_eq!(player.update(landed(b)).units(), 0);
         assert!(player.unload_waits_on.is_empty());
     }
 
