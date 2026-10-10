@@ -17,7 +17,9 @@ use crate::ui::tooltip::{self, Tip};
 use super::chips_panel;
 use super::file_name_line;
 use super::trash_zone;
-use super::{pending_tag_suggestions, suggested_in_out, tag_ideas, FileNamePanelState, Message};
+use super::{
+    pending_tag_suggestions, suggested_in_out, tag_ideas, FileNamePanelState, Message, SaveStatus,
+};
 
 /// Renders the file name card (design system §13.5.6):
 /// - first line: the checked tags as chips in the file's order | the trash
@@ -29,6 +31,7 @@ pub fn view<'a, S>(
     state: &'a FileNamePanelState,
     tag_list: &'a TagList<S>,
     tag_palette: TagPalette,
+    save_status: Option<SaveStatus>,
 ) -> Element<'a, Message>
 where
     S: StoredTagStore + Clone,
@@ -91,6 +94,7 @@ where
     let inner = container(
         column![top_row, bottom_row]
             .push(suggested_tags_row(tag_list))
+            .push(save_status_line(save_status))
             .spacing(SPACE_S)
             .width(Length::Fill),
     )
@@ -102,6 +106,38 @@ where
     mouse_area(container(inner).width(Length::Fill))
         .on_right_press(Message::OpenFileMenu)
         .into()
+}
+
+/// The card's last line: whether the clip's edits are in its file or wait in the recovery
+/// journal (§13.5.6). An icon and a `caption`, quiet: the editor looks for it only to be sure.
+/// With nothing to say it is an empty line of the same height, so the card (and the trash, a
+/// drag target, in it) does not move when the status comes and goes.
+fn save_status_line<'a>(status: Option<SaveStatus>) -> Element<'a, Message> {
+    let height = Length::Fixed(LINE_CAPTION.max(ICON_S));
+    let Some(status) = status else {
+        return container(iced::widget::Space::new())
+            .width(Length::Fill)
+            .height(height)
+            .into();
+    };
+    let (glyph, color, label) = match status {
+        SaveStatus::Saved => (Icon::CircleCheck, SUCCESS, fl!("file-name-panel-saved")),
+        SaveStatus::InRecovery => (
+            Icon::CircleDashed,
+            TEXT_SECONDARY,
+            fl!("file-name-panel-saved-to-recovery"),
+        ),
+    };
+    // A minimum, not a fixed height: a text that wraps in a narrow card grows the card. The
+    // empty strut gives the row its minimum.
+    row![
+        iced::widget::Space::new().width(0).height(height),
+        row![icon(glyph, ICON_S, color), text::caption(label)]
+            .spacing(SPACE_XS)
+            .align_y(Alignment::Center),
+    ]
+    .align_y(Alignment::Center)
+    .into()
 }
 
 /// The tags the AI suggests for the clip, most likely first (F6 adds that one), "Add all" when

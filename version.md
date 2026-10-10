@@ -2,6 +2,14 @@
 ## Fixed
 - Closing the Settings window while the main window is closing no longer stops frename from quitting on the first close, and closing Settings no longer stops a running batch.
 
+# 0.128
+## Fixed
+- Pressing next or previous quickly while a clip loads no longer makes the switch wait on the newer clip's load.
+
+# 0.127
+## Added
+- A line under the file name says "All changes saved", or that your changes wait in recovery until you leave the clip.
+
 # 0.126
 ## Fixed
 - The marker list scrolls a far marker fully into view in a long list of long names, also in a narrow panel, instead of leaving it partly out of view.
