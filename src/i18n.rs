@@ -925,6 +925,49 @@ mod tests {
         loader
     }
 
+    /// Issue #274: these toasts were English literals and stayed English in the Russian UI.
+    #[test]
+    fn the_toasts_of_issue_274_are_translated_and_used() {
+        let keys = [
+            "folder-frame-saved",
+            "folder-not-saved",
+            "markers-deleted-notice",
+            "markers-not-saved-notice",
+            "markers-comment-not-saved-notice",
+        ];
+        let (en, ru) = (loader("en"), loader("ru"));
+        let mut code = String::new();
+        let mut files = Vec::new();
+        collect_rs(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+            &mut files,
+        );
+        for file in files {
+            code.push_str(&std::fs::read_to_string(file).unwrap());
+        }
+        for key in keys {
+            assert_ne!(en.get(key), ru.get(key), "{key} is not translated");
+            assert!(
+                ru.get(key).chars().any(|c| ('а'..='я').contains(&c)),
+                "{key}: {}",
+                ru.get(key)
+            );
+            assert!(code.contains(&format!("fl!(\"{key}\")")), "{key} is unused");
+        }
+        assert_eq!(en.get("folder-frame-saved"), "Frame saved");
+    }
+
+    fn collect_rs(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                collect_rs(&path, out);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                out.push(path);
+            }
+        }
+    }
+
     #[test]
     fn arguments_are_not_wrapped_in_isolation_marks() {
         let mut args = fluent_bundle::FluentArgs::new();

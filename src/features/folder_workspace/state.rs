@@ -638,7 +638,7 @@ impl FolderWorkspace {
                 };
                 let file_path = file.file_path().to_path_buf();
                 frename_core::FileTagger::save_screenshot(&file_path, position_ms, &jpeg);
-                Self::notice("Frame saved")
+                Self::notice(&fl!("folder-frame-saved"))
             }
             Message::EscapePressed => {
                 if self.toolbar_more_open {
@@ -1675,9 +1675,7 @@ impl FolderWorkspace {
             if self.marker_reading_clip() {
                 Self::notice(&fl!("folder-not-saved-marker-ai"))
             } else {
-                Self::notice(
-                    "Not saved: a file with that name already exists, or it is read-only or in use",
-                )
+                Self::notice(&fl!("folder-not-saved"))
             }
         } else {
             Task::none()
