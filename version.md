@@ -1,3 +1,7 @@
+# 0.129
+## Fixed
+- Closing the Settings window while the main window is closing no longer stops frename from quitting on the first close, and closing Settings no longer stops a running batch.
+
 # 0.126
 ## Fixed
 - The marker list scrolls a far marker fully into view in a long list of long names, also in a narrow panel, instead of leaving it partly out of view.
