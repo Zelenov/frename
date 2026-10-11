@@ -6681,6 +6681,66 @@ mod tests {
         }
     }
 
+    /// A crash restore takes the video's markers out of it only when the comment holds them as
+    /// they are (#195): two unnamed markers 0.3 s apart are merged by the comment's line format,
+    /// so they stay in the video.
+    #[test]
+    fn a_crash_restore_keeps_markers_the_comment_cannot_hold_in_the_video() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let file = test_dir.target_file();
+        let in_video = frename_core::use_storage_on_this_thread(
+            frename_core::MetadataStorage {
+                comment: frename_core::CommentStorage::InVideo,
+                in_out: frename_core::InOutStorage::InVideo,
+            },
+            frename_core::MarkerStorage::InVideo,
+        );
+        drop(marker_workspace(&test_dir, 1));
+        let other = frename_core::Marker {
+            name: "Other".to_string(),
+            ..frename_core::Marker::new(30_000)
+        };
+        let guid = other.guid.clone().expect("a guid");
+        let held = vec![
+            frename_core::Marker::new(1_000),
+            frename_core::Marker::new(1_300),
+            other,
+        ];
+        frename_core::FileTagger::save_markers(&file, &held, &Default::default())
+            .expect("markers in the video");
+        drop(in_video);
+
+        let _storage = video_comment_storage();
+        frename_core::recovery::use_dir_on_this_thread(test_dir.file_path("recovery"));
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(file.clone()),
+        });
+        flush_file_opened(&mut workspace);
+        send_marker(&mut workspace, M::Open(guid), 30_000);
+        send_marker(&mut workspace, type_name(" edited"), 30_000);
+        send_marker(&mut workspace, M::Close, 30_000);
+        tick(&mut workspace);
+        drop(workspace); // the process dies before the clip is left
+        let lock = frename_core::recovery::InstanceLock::acquire().expect("the only instance");
+        let restored = frename_core::recovery::restore_all(&lock);
+        assert!(
+            matches!(
+                restored.as_slice(),
+                [frename_core::recovery::Restored::Applied { .. }]
+            ),
+            "{restored:?}"
+        );
+        let kept = frename_core::FileTagger::load_markers(&file).unwrap_or_default();
+        assert_eq!(
+            kept.iter().map(|m| m.start_ms).collect::<Vec<_>>(),
+            [1_000, 1_300, 30_000],
+            "the markers the comment cannot hold are still in the video"
+        );
+    }
+
     /// A save that does not take (here a file already has the clip's new name; a read-only or
     /// busy video fails the same way) keeps markers kept in the video's description: the file is
     /// marked in the list, the clip shows them when opened again, and the next save writes them.

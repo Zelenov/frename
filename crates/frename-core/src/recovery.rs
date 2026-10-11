@@ -472,6 +472,7 @@ fn apply(entry: &Entry) -> Option<PathBuf> {
     // Markers the video holds and the entry still has as they were are not touched.
     let held = FileTagger::load_markers(path).unwrap_or_default();
     let mut clear_from_video = Vec::new();
+    let mut markers_in_comment = Vec::new();
     if let Some(markers) = snapshot.markers().map(<[Marker]>::to_vec) {
         if markers != held {
             match crate::marker_storage() {
@@ -479,6 +480,7 @@ fn apply(entry: &Entry) -> Option<PathBuf> {
                     let comment = crate::markers_into_comment(snapshot.comment(), &markers);
                     snapshot.set_comment(comment);
                     clear_from_video = held.iter().filter_map(|m| m.guid.clone()).collect();
+                    markers_in_comment = markers;
                 }
                 crate::MarkerStorage::InVideo => {
                     let known = held
@@ -507,8 +509,13 @@ fn apply(entry: &Entry) -> Option<PathBuf> {
     if !saved_what_was_wanted(&wanted, &saved) {
         return None;
     }
-    // The markers are in the comment now: the video's own go, so the two never disagree.
-    if !clear_from_video.is_empty() {
+    // The markers are in the comment now: the video's own go, so the two never disagree. Only
+    // when the comment holds them as they are: markers the line format would merge or cut (close
+    // unnamed ones, one with a comment next to an AI block) stay in the video, where they are
+    // kept whole, as when leaving the clip.
+    if !clear_from_video.is_empty()
+        && crate::comment_holds_markers(saved.comment(), &markers_in_comment)
+    {
         let known = clear_from_video.into_iter().collect();
         if let Err(e) = FileTagger::save_markers(&new_path, &[], &known) {
             log::warn!("recovery: markers of {new_path:?} not taken out of the video: {e}");
