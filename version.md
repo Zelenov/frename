@@ -1,3 +1,7 @@
+# 0.148
+## Fixed
+- After a crash, the markers frename could not keep in the comment (two unnamed markers a moment apart, or one with a note next to an AI description) are no longer erased from the video when its edits are restored.
+
 # 0.147
 ## Added
 - Settings work from the keyboard: `Tab` moves a ring through the options and buttons, `Space` picks or presses (a list steps to its next choice), `Enter` presses a button, and `Ctrl+Tab` still changes the page.
