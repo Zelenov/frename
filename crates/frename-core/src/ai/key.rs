@@ -1,14 +1,18 @@
-//! The API keys (Anthropic for AI descriptions, Soniox for subtitles), kept in the operating
+//! The API keys (Anthropic and OpenAI for AI descriptions, Soniox for subtitles), kept in the operating
 //! system's credential store (Windows Credential Manager, macOS Keychain, Secret Service on
 //! Linux). Never in the database, logs or files.
+
+use clipscribe::Provider;
 
 const SERVICE: &str = "frename";
 
 /// Which service a key is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ApiKey {
-    /// AI descriptions.
+    /// AI descriptions by Claude.
     Anthropic,
+    /// AI descriptions by ChatGPT.
+    OpenAi,
     /// Subtitles from speech.
     Soniox,
 }
@@ -18,7 +22,16 @@ impl ApiKey {
     fn user(self) -> &'static str {
         match self {
             Self::Anthropic => "anthropic-api-key",
+            Self::OpenAi => "openai-api-key",
             Self::Soniox => "soniox-api-key",
+        }
+    }
+
+    /// The key the models of `provider` are paid with.
+    pub fn of_provider(provider: Provider) -> Self {
+        match provider {
+            Provider::Anthropic => Self::Anthropic,
+            Provider::OpenAi => Self::OpenAi,
         }
     }
 
@@ -27,6 +40,7 @@ impl ApiKey {
     pub fn billing_url(self) -> &'static str {
         match self {
             Self::Anthropic => "https://console.anthropic.com/settings/billing",
+            Self::OpenAi => "https://platform.openai.com/settings/organization/billing/overview",
             Self::Soniox => "https://console.soniox.com/org/billing/overview",
         }
     }

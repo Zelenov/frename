@@ -64,6 +64,7 @@ pub enum LanguageList {
 #[derive(Debug, Clone, Default)]
 pub struct Keys {
     anthropic: KeySection,
+    openai: KeySection,
     soniox: KeySection,
 }
 
@@ -194,10 +195,25 @@ impl SettingsState {
     /// Esc: cancel a pending key removal or replacement on the page shown, as its Keep or Cancel
     /// button would. `false` when there was none, and Esc closes the window instead.
     pub fn escape(&mut self) -> bool {
-        let which = match self.page {
-            Page::Ai => ApiKey::Anthropic,
-            Page::Subtitles => ApiKey::Soniox,
+        let keys: &[ApiKey] = match self.page {
+            Page::Ai => &[ApiKey::Anthropic, ApiKey::OpenAi],
+            Page::Subtitles => &[ApiKey::Soniox],
             _ => return false,
+        };
+        // The row the keyboard focus is in first, then the others, in the order they show.
+        let focused = match self.focus {
+            Some(Control::Key(row, _)) => Some(row),
+            _ => None,
+        };
+        let pending = |which: ApiKey| {
+            let key = self.key(which);
+            key.confirm_remove || key.replacing
+        };
+        let Some(which) = focused
+            .filter(|row| keys.contains(row) && pending(*row))
+            .or_else(|| keys.iter().copied().find(|which| pending(*which)))
+        else {
+            return false;
         };
         let key = self.key(which);
         let (cancel, focus_to) = if key.confirm_remove {
@@ -344,6 +360,7 @@ impl SettingsState {
     pub fn key(&self, which: ApiKey) -> &KeySection {
         match which {
             ApiKey::Anthropic => &self.keys.anthropic,
+            ApiKey::OpenAi => &self.keys.openai,
             ApiKey::Soniox => &self.keys.soniox,
         }
     }
@@ -351,8 +368,16 @@ impl SettingsState {
     fn key_mut(&mut self, which: ApiKey) -> &mut KeySection {
         match which {
             ApiKey::Anthropic => &mut self.keys.anthropic,
+            ApiKey::OpenAi => &mut self.keys.openai,
             ApiKey::Soniox => &mut self.keys.soniox,
         }
+    }
+
+    /// Whether `model` can be picked: its provider's key is not known to be missing.
+    pub fn model_usable(&self, model: clipscribe::Model) -> bool {
+        let current = frename_core::ai::model_from_id(&self.settings.ai_model);
+        model.id == current.id
+            || self.key(frename_core::ai::key_of(model)).state != Some(KeyState::Missing)
     }
 
     /// The languages Soniox offers as hints.
@@ -502,7 +527,12 @@ impl SettingsState {
             }
             Message::OpenBatchAction(Operation::RespaceTags) => self.tag_spacing_changed = false,
             Message::SetSummaryLanguage(language) => self.settings.summary_language = language,
-            Message::SetAiModel(model) => self.settings.ai_model = model.id.to_string(),
+            // A model whose provider has no key is listed but cannot be picked.
+            Message::SetAiModel(model) => {
+                if self.model_usable(model) {
+                    self.settings.ai_model = model.id.to_string()
+                }
+            }
             Message::SetAiMoments(moments) => self.settings.ai_moments = moments,
             Message::SetAiTagSuggestions(on) => self.settings.ai_tag_suggestions = on,
             Message::SetSubtitleLanguage(code, on) => {
@@ -1051,5 +1081,74 @@ mod tests {
         state.apply(Message::SetSubtitleLanguage("ru".to_string(), false));
         state.apply(Message::SetSubtitleLanguage("de".to_string(), false));
         assert!(state.settings().subtitle_languages.is_empty());
+    }
+
+    fn key_answer(state: &mut SettingsState, which: ApiKey, key_state: KeyState) {
+        let request = state.begin_key_request(which);
+        state.apply(Message::Key(
+            which,
+            KeyMessage::State {
+                request,
+                result: Ok(key_state),
+            },
+        ));
+    }
+
+    #[test]
+    fn a_model_whose_company_has_no_key_cannot_be_picked() {
+        let mut state = test_state();
+        let gpt = frename_core::ai::model_from_id("gpt-4.1");
+        key_answer(&mut state, ApiKey::Anthropic, KeyState::Saved);
+        key_answer(&mut state, ApiKey::OpenAi, KeyState::Missing);
+        assert!(!state.model_usable(gpt));
+        state.apply(Message::SetAiModel(gpt));
+        assert_ne!(state.settings().ai_model, "gpt-4.1", "the pick is ignored");
+
+        key_answer(&mut state, ApiKey::OpenAi, KeyState::Saved);
+        assert!(state.model_usable(gpt));
+        state.apply(Message::SetAiModel(gpt));
+        assert_eq!(state.settings().ai_model, "gpt-4.1");
+
+        // The one chosen stays listed as chosen when its key is removed.
+        key_answer(&mut state, ApiKey::OpenAi, KeyState::Missing);
+        assert!(state.model_usable(gpt));
+    }
+
+    #[test]
+    fn space_on_the_model_skips_models_without_a_key() {
+        let mut state = test_state();
+        key_answer(&mut state, ApiKey::Anthropic, KeyState::Saved);
+        key_answer(&mut state, ApiKey::OpenAi, KeyState::Missing);
+        let models = frename_core::ai::models();
+        state.apply(Message::SetAiModel(
+            *models
+                .iter()
+                .rev()
+                .find(|m| m.provider == clipscribe::Provider::Anthropic)
+                .expect("a Claude model"),
+        ));
+        let Some(Message::SetAiModel(next)) = focus::press(&state, &Control::AiModel, Press::Space)
+        else {
+            panic!("the model dropdown cycles");
+        };
+        assert_eq!(
+            next.provider,
+            clipscribe::Provider::Anthropic,
+            "from the last Claude model it goes round to the first, not to ChatGPT"
+        );
+    }
+
+    #[test]
+    fn the_ai_page_has_a_key_row_per_company_and_esc_cancels_the_pending_one() {
+        let mut state = test_state();
+        state.page = Page::Ai;
+        saved_key(&mut state, ApiKey::Anthropic);
+        saved_key(&mut state, ApiKey::OpenAi);
+        let controls = focus::controls(&state, false);
+        assert!(controls.contains(&Control::Key(ApiKey::OpenAi, KeyControl::Replace)));
+        state.apply(Message::Key(ApiKey::OpenAi, KeyMessage::AskRemove));
+        assert!(state.escape(), "Esc keeps the OpenAI key");
+        assert!(!state.key(ApiKey::OpenAi).confirm_remove);
+        assert!(!state.escape(), "nothing else pending");
     }
 }

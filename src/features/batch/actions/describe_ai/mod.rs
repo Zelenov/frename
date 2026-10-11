@@ -48,8 +48,8 @@ pub enum Message {
     SetRedo(bool),
     /// Clip lengths read in the background.
     Probed(Vec<(FileId, Probe)>),
-    /// Whether an API key is saved, from the settings (which read it).
-    KeyState(KeyState),
+    /// Whether the `ApiKey` is saved, from the settings (which read it).
+    KeyState(key::ApiKey, KeyState),
     /// The language descriptions are written in, from the settings.
     SetLanguage(SummaryLanguage),
     /// The model descriptions are written with, from the settings.
@@ -89,8 +89,10 @@ pub struct Options {
     probes: HashMap<FileId, Probe>,
     /// Videos whose length is being read.
     probing: HashSet<FileId>,
-    /// `None` until read (only when the action is first shown: reading may unlock a keyring).
-    key: Option<KeyState>,
+    /// Each provider's key: `None` until read (only when the action is first shown: reading may
+    /// unlock a keyring). The model chosen decides which one counts ([`Self::key`]).
+    anthropic_key: Option<KeyState>,
+    openai_key: Option<KeyState>,
     /// The key's state has been asked for; the answer is on its way.
     key_requested: bool,
     /// Suggest tags from the folder's tags too (Settings).
@@ -109,7 +111,11 @@ impl Options {
                     self.probes.insert(id, probe);
                 }
             }
-            Message::KeyState(state) => self.key = Some(state),
+            Message::KeyState(which, state) => match which {
+                key::ApiKey::Anthropic => self.anthropic_key = Some(state),
+                key::ApiKey::OpenAi => self.openai_key = Some(state),
+                key::ApiKey::Soniox => {}
+            },
             Message::SetLanguage(language) => self.language = language,
             Message::SetModel(model) => self.model = model,
             Message::SetMoments(moments) => self.moments = moments,
@@ -153,7 +159,8 @@ impl Options {
 
     /// Whether the key's state still has to be read; marks it as asked for.
     pub(in crate::features::batch) fn request_key_state(&mut self) -> bool {
-        let needed = self.key.is_none() && !self.key_requested;
+        let needed =
+            (self.anthropic_key.is_none() || self.openai_key.is_none()) && !self.key_requested;
         self.key_requested = true;
         needed
     }
@@ -247,16 +254,36 @@ impl Options {
         plan
     }
 
-    /// Whether the settings said no key is saved: the action list shows "No key".
+    /// The state of the key of the chosen model's provider.
+    fn key(&self) -> Option<KeyState> {
+        match frename_core::ai::key_of(self.model) {
+            key::ApiKey::OpenAi => self.openai_key,
+            _ => self.anthropic_key,
+        }
+    }
+
+    /// The company of the chosen model.
+    pub fn provider(&self) -> clipscribe::Provider {
+        self.model.provider
+    }
+
+    /// [`Self::provider`] by name.
+    pub fn provider_label(&self) -> &'static str {
+        self.model.provider.label()
+    }
+
+    /// Whether the settings said no key is saved for the chosen model: the action list shows
+    /// "No key".
     pub fn key_missing(&self) -> bool {
-        self.key == Some(KeyState::Missing)
+        self.key() == Some(KeyState::Missing)
     }
 
     /// The page for `checked` and its run button (`Describe 12 videos · about $0.35` once the
     /// estimate and the key are known). The plan is made once.
     pub fn panel(&self, checked: &[&File]) -> Panel<'_> {
         let plan = self.plan(checked);
-        let ready = !plan.estimating && !plan.send.is_empty() && self.key == Some(KeyState::Saved);
+        let ready =
+            !plan.estimating && !plan.send.is_empty() && self.key() == Some(KeyState::Saved);
         let reason = if plan.estimating {
             Some(fl!("batch-reason-estimate"))
         } else if plan.send.is_empty() && !checked.is_empty() {
@@ -318,7 +345,10 @@ impl Options {
         ];
         page::page(
             label(),
-            fl!("batch-action-describe-ai-hint-panel"),
+            fl!(
+                "batch-action-describe-ai-hint-panel",
+                provider = self.provider_label()
+            ),
             &[Change::IntoComments],
             settings
                 .into_iter()
@@ -383,10 +413,10 @@ impl Options {
 
     /// Why the key keeps the run button off, with the button that fixes it.
     fn key_notice(&self) -> Option<Element<'_, ActionMessage>> {
-        let (kind, headline, fix) = match self.key {
+        let (kind, headline, fix) = match self.key() {
             Some(KeyState::Missing) => (
                 NoticeKind::Error,
-                fl!("batch-ai-key-missing"),
+                fl!("batch-ai-key-missing", provider = self.provider_label()),
                 fl!("batch-set-key"),
             ),
             // Opening the settings reads the key's state again.
@@ -583,7 +613,10 @@ pub fn run(options: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgr
     let Some(request) = Request::for_clip(path, options.model(), options.language, options.moments)
     else {
         return ItemResult {
-            stop_job: Some(fl!("batch-ai-stop-no-key")),
+            stop_job: Some(fl!(
+                "batch-ai-stop-no-key",
+                provider = options.model().provider.label()
+            )),
             ..ItemResult::failed(fl!("batch-ai-fail-no-key"))
         };
     };
@@ -643,7 +676,7 @@ pub fn run(options: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgr
         Err(e @ describe::Error::Unreadable(_)) => {
             return ItemResult::failed(failure_reason(&e, path));
         }
-        Err(describe::Error::Ai(e)) => return ai_failed(e),
+        Err(describe::Error::Ai(e)) => return ai_failed(e, options.model().provider),
         Err(describe::Error::BadAnswer { reason, usage }) => {
             return ItemResult {
                 usage: Some(usage),
@@ -703,7 +736,7 @@ pub fn run(options: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgr
 
 /// The result of a file whose request failed; some failures stop the whole job, and losing
 /// the connection stops it after a few files in a row.
-fn ai_failed(error: AiError) -> ItemResult {
+fn ai_failed(error: AiError, provider: clipscribe::Provider) -> ItemResult {
     log::warn!("ai: request failed: {error:?}");
     let offline = matches!(error, AiError::Network(_) | AiError::Timeout);
     ItemResult {
@@ -711,7 +744,8 @@ fn ai_failed(error: AiError) -> ItemResult {
         usage_unknown: error == AiError::Timeout,
         out_of_credit: matches!(error, AiError::OutOfCredit(_)),
         stop_job: error.stops_job(),
-        stop_if_repeated: offline.then(|| fl!("batch-ai-stop-offline")),
+        stop_if_repeated: offline
+            .then(|| fl!("batch-ai-stop-offline", provider = provider.label())),
         ..ItemResult::failed(error.reason())
     }
 }
@@ -729,14 +763,14 @@ pub struct Request {
 
 impl Request {
     /// The request for the clip at `path` with `model`, `language` and `moments`; `None` when
-    /// no Anthropic key is saved. Reads the key and the subtitles: blocking.
+    /// no key is saved for the model's provider. Reads the key and the subtitles: blocking.
     pub fn for_clip(
         path: &Path,
         model: Model,
         language: SummaryLanguage,
         moments: MomentsMode,
     ) -> Option<Self> {
-        let api_key = key::read_key(key::ApiKey::Anthropic)?;
+        let api_key = key::read_key(frename_core::ai::key_of(model))?;
         let on_disk = FileTagger::disk_path(path);
         let subtitles = frename_core::subtitle_cues(&on_disk).unwrap_or_else(|e| {
             log::warn!("ai: subtitles of {} not read: {e}", path.display());
@@ -917,10 +951,33 @@ mod tests {
         );
         assert!(options.request_key_state(), "asked once");
         assert!(!options.request_key_state());
-        options.update(Message::KeyState(KeyState::Missing));
+        options.update(Message::KeyState(key::ApiKey::Anthropic, KeyState::Missing));
         assert!(!run_button(&options, &checked).1);
-        options.update(Message::KeyState(KeyState::Saved));
+        options.update(Message::KeyState(key::ApiKey::Anthropic, KeyState::Saved));
         assert!(run_button(&options, &checked).1);
+    }
+
+    #[test]
+    fn the_key_that_counts_is_the_one_of_the_chosen_models_provider() {
+        let files = [file("a.mp4", "")];
+        let checked: Vec<&File> = files.iter().collect();
+        let mut options = Options::default();
+        options.update(Message::Probed(vec![(files[0].id(), probe(Some(10.0)))]));
+        options.update(Message::KeyState(key::ApiKey::Anthropic, KeyState::Saved));
+        options.update(Message::KeyState(key::ApiKey::OpenAi, KeyState::Missing));
+        assert!(run_button(&options, &checked).1, "Claude with its key");
+        assert!(!options.key_missing());
+
+        options.update(Message::SetModel(frename_core::ai::model_from_id(
+            "gpt-4.1",
+        )));
+        assert!(!run_button(&options, &checked).1, "ChatGPT without its key");
+        assert!(options.key_missing());
+        assert_eq!(options.provider_label(), "OpenAI");
+
+        options.update(Message::KeyState(key::ApiKey::OpenAi, KeyState::Saved));
+        assert!(run_button(&options, &checked).1);
+        assert!(!options.key_missing());
     }
 
     #[test]

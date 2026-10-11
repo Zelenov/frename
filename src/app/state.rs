@@ -715,9 +715,13 @@ impl FrenameApp {
                     settings::Message::SetSummaryLanguage(language) => Task::done(
                         describe_ai_message(batch::describe_ai::Message::SetLanguage(language)),
                     ),
-                    settings::Message::SetAiModel(model) => Task::done(describe_ai_message(
-                        batch::describe_ai::Message::SetModel(model),
-                    )),
+                    // The settings ignored a model whose provider has no key: pass on the one
+                    // they hold.
+                    settings::Message::SetAiModel(_) => {
+                        Task::done(describe_ai_message(batch::describe_ai::Message::SetModel(
+                            frename_core::ai::model_from_id(&self.settings.settings().ai_model),
+                        )))
+                    }
                     settings::Message::SetAiMoments(moments) => Task::done(describe_ai_message(
                         batch::describe_ai::Message::SetMoments(moments),
                     )),
@@ -748,7 +752,7 @@ impl FrenameApp {
                                             batch::generate_subtitles::Message::KeySaved,
                                         )),
                                     ]),
-                                    ApiKey::Anthropic => saved,
+                                    ApiKey::Anthropic | ApiKey::OpenAi => saved,
                                 }
                             }
                             None => Task::none(),
@@ -767,9 +771,11 @@ impl FrenameApp {
                     // Passed on as the settings took it (a stale answer changed nothing).
                     settings::Message::Key(which, settings::KeyMessage::State { .. }) => {
                         match (which, self.settings.key(which).state) {
-                            (ApiKey::Anthropic, Some(state)) => Task::done(describe_ai_message(
-                                batch::describe_ai::Message::KeyState(state),
-                            )),
+                            (ApiKey::Anthropic | ApiKey::OpenAi, Some(state)) => {
+                                Task::done(describe_ai_message(
+                                    batch::describe_ai::Message::KeyState(which, state),
+                                ))
+                            }
                             (ApiKey::Soniox, Some(state)) => {
                                 let passed = Task::done(subtitles_message(
                                     batch::generate_subtitles::Message::KeyState(state),
@@ -822,11 +828,11 @@ impl FrenameApp {
             // One reader of a key's state: the settings, which pass it on to the batch panel.
             Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
                 batch::ActionMessage::ReadKeyState,
-            ))) => key_task(
-                ApiKey::Anthropic,
-                self.settings.begin_key_request(ApiKey::Anthropic),
-                || Ok(()),
-            ),
+            ))) => {
+                Task::batch([ApiKey::Anthropic, ApiKey::OpenAi].map(|which| {
+                    key_task(which, self.settings.begin_key_request(which), || Ok(()))
+                }))
+            }
             Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
                 batch::ActionMessage::ReadSonioxKeyState,
             ))) => key_task(
@@ -1061,7 +1067,7 @@ impl FrenameApp {
             }))
         } else {
             Task::batch(
-                [ApiKey::Anthropic, ApiKey::Soniox].map(|which| {
+                [ApiKey::Anthropic, ApiKey::OpenAi, ApiKey::Soniox].map(|which| {
                     key_task(which, self.settings.begin_key_request(which), || Ok(()))
                 }),
             )

@@ -100,10 +100,16 @@ settings-ai-key-label = Ключ API Anthropic
 settings-ai-key-placeholder = sk-ant-…
 settings-ai-key-get = Получить ключ на console.anthropic.com → API keys.
 settings-ai-key-remove-confirm = Удалить сохранённый ключ Anthropic?
-settings-ai-used-by = Используется действием «Описать с помощью AI» в пакетном режиме и на маркерах (✨, Ctrl+F2).
+settings-ai-used-by = Используется действием «Описать с помощью AI» в пакетном режиме и на маркерах (✨, Ctrl+F2), когда выбрана модель Claude.
+settings-ai-openai-key-label = Ключ API OpenAI
+settings-ai-openai-key-placeholder = sk-…
+settings-ai-openai-key-get = Получить ключ на platform.openai.com/api-keys.
+settings-ai-openai-key-remove-confirm = Удалить сохранённый ключ OpenAI?
+settings-ai-openai-used-by = Используется действием «Описать с помощью AI» в пакетном режиме и на маркерах (✨, Ctrl+F2), когда выбрана модель GPT.
+settings-ai-model-needs-key = { $model } — сначала добавьте ключ { $provider }
 settings-ai-model-label = Модель
 settings-ai-language-label = Язык описания
-settings-ai-hint = Haiku дешевле всех; Sonnet и Opus замечают больше.
+settings-ai-hint = Haiku и GPT-4.1 mini дешевле всех; Sonnet, Opus и GPT-4.1 замечают больше. Модели нужен ключ её собственной компании.
 settings-ai-moments-label = Моменты
 settings-ai-moments-important = Только то, что выделяется
 settings-ai-moments-full = На весь клип
@@ -238,6 +244,7 @@ batch-run-reload = Перечитать: { $count ->
    *[many] { $count } файлов
 }
 batch-service-anthropic = Anthropic
+batch-service-openai = OpenAI
 batch-service-soniox = Soniox
 batch-change-renames = Переименовывает файлы
 batch-change-videos = Пишет в видео
@@ -332,7 +339,7 @@ batch-action-describe-ai-none = Нет видео для описания.
 batch-action-describe-ai-hint = Папка заблокирована до конца. Отмена сохраняет уже описанные видео; повторный запуск пропускает их.
 batch-action-describe-ai-no-subtitles = Без субтитров (описана только картинка): { $videos }.
 batch-action-describe-ai-redo = Переописать видео, у которых уже есть описание от AI
-batch-action-describe-ai-hint-panel = Описывает происходящее в каждом отмеченном видео с привязкой ко времени: краткое содержание и отрезки по времени добавляются в описание от AI в его комментарии; ваш собственный текст сохраняется. Кадры и субтитры отправляются в Anthropic.
+batch-action-describe-ai-hint-panel = Описывает происходящее в каждом отмеченном видео с привязкой ко времени: краткое содержание и отрезки по времени добавляются в описание от AI в его комментарии; ваш собственный текст сохраняется. Кадры и субтитры отправляются в { $provider } — компанию выбранной модели.
 batch-ai-change = Изменить
 batch-ai-tag-suggestions-off = Выключены
 batch-ai-tag-suggestions-no-tags = Включены, но у этой папки пока нет тегов
@@ -341,7 +348,7 @@ batch-ai-tag-suggestions-on = { $tags ->
     [few] Из { $tags } тегов папки
    *[many] Из { $tags } тегов папки
 }
-batch-ai-key-missing = Укажите ключ API Anthropic в настройках
+batch-ai-key-missing = Укажите ключ API { $provider } в настройках
 batch-ai-key-unavailable = Не удалось открыть системное хранилище паролей: оно может быть заблокировано или отсутствовать (например, GNOME Keyring или KWallet).
 ## AI description language names: the Settings picker and { $language } above.
 
@@ -372,12 +379,12 @@ batch-ai-progress-waiting = ожидание ответа Claude
 batch-ai-progress-saving = сохранение
 batch-ai-progress-retry-rate-limit = повтор через { $seconds } с (лимит запросов)
 batch-ai-progress-retry-temporary = повтор через { $seconds } с (временный сбой)
-batch-ai-stop-no-key = Остановлено: нет ключа API Anthropic. Укажите его в настройках.
+batch-ai-stop-no-key = Остановлено: нет ключа API { $provider }. Укажите его в настройках.
 batch-ai-fail-no-key = Нет ключа API
 batch-ai-fail-unreadable = Видео не удалось прочитать
 batch-ai-fail-too-long = Видео слишком длинное для AI (больше 30 мин)
 batch-ai-fail-not-saved = Не удалось сохранить описание
-batch-ai-stop-offline = Остановлено: нет соединения с Anthropic. Запустите ещё раз, чтобы описать оставшиеся.
+batch-ai-stop-offline = Остановлено: нет соединения с { $provider }. Запустите ещё раз, чтобы описать оставшиеся.
 
 batch-action-generate-subtitles = Распознать субтитры
 batch-action-generate-subtitles-install-ffmpeg = чтобы читать .mkv, .m2ts, .avi …, установите ffmpeg с ffmpeg.org, добавьте его в PATH и перезапустите frename
@@ -654,7 +661,7 @@ markers-ai-describing = Описываю…
 markers-ai-done = Маркер описан
 markers-ai-nothing-new = У маркера уже есть это описание
 markers-no-marker-notice = Здесь нет маркера
-markers-ai-no-key = Нет ключа Anthropic API: задайте его в настройках
+markers-ai-no-key = Нет ключа API { $provider }: задайте его в настройках
 markers-ai-failed = Не описано: { $reason }
 markers-ai-failed-unknown = что-то пошло не так
 markers-read-only-notice = Этот маркер только для чтения

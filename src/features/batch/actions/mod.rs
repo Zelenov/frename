@@ -322,7 +322,7 @@ impl ActionMessage {
                 self,
                 Self::DescribeAi(
                     describe_ai::Message::Probed(_)
-                        | describe_ai::Message::KeyState(_)
+                        | describe_ai::Message::KeyState(..)
                         | describe_ai::Message::SetLanguage(_)
                         | describe_ai::Message::SetModel(_)
                 )
@@ -364,9 +364,14 @@ impl Actions {
         }
     }
 
-    /// Whether the settings said no Anthropic key is saved ("Describe with AI", on a marker too).
+    /// Whether the settings said no key is saved for the chosen model's provider ("Describe with AI", on a marker too).
     pub fn ai_key_missing(&self) -> bool {
         self.describe_ai.key_missing()
+    }
+
+    /// The company of the model chosen for "Describe with AI", by name.
+    pub fn ai_provider_label(&self) -> &'static str {
+        self.describe_ai.provider_label()
     }
 
     /// The model and language of "Describe with AI", which describing a marker uses too.
@@ -433,7 +438,10 @@ impl Actions {
     pub fn service(&self, action: Action) -> Option<(String, bool)> {
         match action {
             Action::DescribeAi => Some((
-                fl!("batch-service-anthropic"),
+                match self.describe_ai.provider() {
+                    clipscribe::Provider::OpenAi => fl!("batch-service-openai"),
+                    clipscribe::Provider::Anthropic => fl!("batch-service-anthropic"),
+                },
                 self.describe_ai.key_missing(),
             )),
             Action::GenerateSubtitles => Some((

@@ -70,10 +70,16 @@ settings-ai-key-label = Anthropic API key
 settings-ai-key-placeholder = sk-ant-…
 settings-ai-key-get = Get a key at console.anthropic.com → API keys.
 settings-ai-key-remove-confirm = Remove the saved Anthropic key?
-settings-ai-used-by = Used by Describe with AI in batch mode and on markers (✨, Ctrl+F2).
+settings-ai-used-by = Used by Describe with AI in batch mode and on markers (✨, Ctrl+F2), when a Claude model is chosen.
+settings-ai-openai-key-label = OpenAI API key
+settings-ai-openai-key-placeholder = sk-…
+settings-ai-openai-key-get = Get a key at platform.openai.com/api-keys.
+settings-ai-openai-key-remove-confirm = Remove the saved OpenAI key?
+settings-ai-openai-used-by = Used by Describe with AI in batch mode and on markers (✨, Ctrl+F2), when a GPT model is chosen.
+settings-ai-model-needs-key = { $model } — add an { $provider } key first
 settings-ai-model-label = Model
 settings-ai-language-label = Description language
-settings-ai-hint = Haiku is the cheapest; Sonnet and Opus notice more.
+settings-ai-hint = Haiku and GPT-4.1 mini are the cheapest; Sonnet, Opus and GPT-4.1 notice more. A model needs the key of its own company.
 settings-ai-moments-label = Moments
 settings-ai-moments-important = Only what stands out
 settings-ai-moments-full = Cover the whole clip
@@ -194,6 +200,7 @@ batch-run-reload = Reload { $count ->
    *[other] { $count } files
 }
 batch-service-anthropic = Anthropic
+batch-service-openai = OpenAI
 batch-service-soniox = Soniox
 batch-change-renames = Renames files
 batch-change-videos = Writes into the videos
@@ -286,7 +293,7 @@ batch-action-describe-ai-none = No videos to describe.
 batch-action-describe-ai-hint = The folder is locked until it ends. Cancel keeps the videos already described; running it again skips them.
 batch-action-describe-ai-no-subtitles = Without subtitles (only the picture is described): { $videos }.
 batch-action-describe-ai-redo = Redo videos that already have an AI description
-batch-action-describe-ai-hint-panel = Describes what happens in each checked video, and when: a summary and time-ranged segments go into the AI description of its comment; your own text is kept. Frames and subtitles are sent to Anthropic.
+batch-action-describe-ai-hint-panel = Describes what happens in each checked video, and when: a summary and time-ranged segments go into the AI description of its comment; your own text is kept. Frames and subtitles are sent to { $provider }, the company of the chosen model.
 batch-ai-change = Change
 batch-ai-tag-suggestions-off = Off
 batch-ai-tag-suggestions-no-tags = On, but this folder has no tags yet
@@ -294,7 +301,7 @@ batch-ai-tag-suggestions-on = { $tags ->
     [one] From the folder's { $tags } tag
    *[other] From the folder's { $tags } tags
 }
-batch-ai-key-missing = Set an Anthropic API key in Settings
+batch-ai-key-missing = Set an { $provider } API key in Settings
 batch-ai-key-unavailable = The system keyring could not be opened: it may be locked, or there is none (such as GNOME Keyring or KWallet).
 ## AI description language names: the Settings picker and { $language } above.
 
@@ -324,12 +331,12 @@ batch-ai-progress-waiting = waiting for Claude
 batch-ai-progress-saving = saving
 batch-ai-progress-retry-rate-limit = retrying in { $seconds } s (rate limit)
 batch-ai-progress-retry-temporary = retrying in { $seconds } s (temporary failure)
-batch-ai-stop-no-key = Stopped: no Anthropic API key. Set one in Settings.
+batch-ai-stop-no-key = Stopped: no { $provider } API key. Set one in Settings.
 batch-ai-fail-no-key = No API key
 batch-ai-fail-unreadable = Video could not be read
 batch-ai-fail-too-long = The clip is too long for AI (over 30 min)
 batch-ai-fail-not-saved = The description could not be saved
-batch-ai-stop-offline = Stopped: no connection to Anthropic. Run it again to describe the rest.
+batch-ai-stop-offline = Stopped: no connection to { $provider }. Run it again to describe the rest.
 
 batch-action-generate-subtitles = Generate subtitles
 batch-action-generate-subtitles-install-ffmpeg = to read .mkv, .m2ts, .avi …, install ffmpeg from ffmpeg.org, add it to PATH, restart frename
@@ -591,7 +598,7 @@ markers-ai-describing = Describing…
 markers-ai-done = Marker described
 markers-ai-nothing-new = The marker already has this description
 markers-no-marker-notice = No marker here
-markers-ai-no-key = No Anthropic API key: set one in Settings
+markers-ai-no-key = No { $provider } API key: set one in Settings
 markers-ai-failed = Not described: { $reason }
 markers-ai-failed-unknown = something went wrong
 markers-read-only-notice = That marker is read-only

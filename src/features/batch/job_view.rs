@@ -222,7 +222,11 @@ fn notice<'a>(state: &BatchState, outcome: &Outcome, progress: &Progress) -> Ele
     };
     let fix = state
         .out_of_credit()
-        .then(|| state.job_action().unwrap_or(state.action()).service())
+        .then(|| match state.job_action().unwrap_or(state.action()) {
+            // Credit is added where the job's model is billed.
+            Action::DescribeAi => Some(frename_core::ai::key_of(state.job_ai_model())),
+            action => action.service(),
+        })
         .flatten()
         .map(|service| {
             button::secondary(fl!("batch-add-credit"))

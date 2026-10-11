@@ -42,7 +42,7 @@ impl FolderWorkspace {
             return Task::none();
         }
         if self.batch.actions().ai_key_missing() {
-            return Self::no_key();
+            return Self::no_key(self.batch.actions().ai_provider_label());
         }
         let Some((request, cancel)) = self.markers.start_describing(guid) else {
             return Task::none();
@@ -114,7 +114,7 @@ impl FolderWorkspace {
             return Task::none();
         }
         if self.batch.actions().ai_key_missing() {
-            return Self::no_key();
+            return Self::no_key(self.batch.actions().ai_provider_label());
         }
         // More markers than the price shown was for: ask again with the new count.
         let more_than_asked = confirmed && asked.is_some_and(|asked| guids.len() > asked);
@@ -165,7 +165,7 @@ impl FolderWorkspace {
         // The key was removed meanwhile: the rest would find out the same.
         if self.batch.actions().ai_key_missing() {
             self.markers.clear_waiting();
-            return Self::no_key();
+            return Self::no_key(self.batch.actions().ai_provider_label());
         }
         let mut tasks = Vec::new();
         loop {
@@ -271,7 +271,7 @@ impl FolderWorkspace {
             MomentOutcome::NoKey => {
                 if self.markers.take_first_no_key() {
                     Task::batch([
-                        Self::no_key(),
+                        Self::no_key(self.batch.actions().ai_provider_label()),
                         Task::done(Message::Batch(batch::Message::Action(
                             batch::ActionMessage::ReadKeyState,
                         ))),
@@ -320,9 +320,9 @@ impl FolderWorkspace {
     }
 
     /// No key is saved: say so over the video and open Settings where it is set.
-    fn no_key() -> Task<Message> {
+    fn no_key(provider: &str) -> Task<Message> {
         Task::batch([
-            Self::notice(&fl!("markers-ai-no-key")),
+            Self::notice(&fl!("markers-ai-no-key", provider = provider)),
             Task::done(Message::Batch(batch::Message::Action(
                 batch::ActionMessage::OpenAiSettings,
             ))),

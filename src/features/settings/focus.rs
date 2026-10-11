@@ -16,8 +16,14 @@ use crate::features::batch::Operation;
 use crate::features::updates;
 
 /// The text fields of the settings window; only these are focused or unfocused by Tab.
-pub const FIELD_IDS: &[&str] = &[ANTHROPIC_KEY_FIELD, SONIOX_KEY_FIELD, COMMENTED_TAG_FIELD];
+pub const FIELD_IDS: &[&str] = &[
+    ANTHROPIC_KEY_FIELD,
+    OPENAI_KEY_FIELD,
+    SONIOX_KEY_FIELD,
+    COMMENTED_TAG_FIELD,
+];
 pub const ANTHROPIC_KEY_FIELD: &str = "settings-key-anthropic";
+pub const OPENAI_KEY_FIELD: &str = "settings-key-openai";
 pub const SONIOX_KEY_FIELD: &str = "settings-key-soniox";
 pub const COMMENTED_TAG_FIELD: &str = "settings-commented-tag";
 
@@ -77,6 +83,7 @@ impl Control {
     pub fn field_id(&self) -> Option<&'static str> {
         match self {
             Control::Key(ApiKey::Anthropic, KeyControl::Field) => Some(ANTHROPIC_KEY_FIELD),
+            Control::Key(ApiKey::OpenAi, KeyControl::Field) => Some(OPENAI_KEY_FIELD),
             Control::Key(ApiKey::Soniox, KeyControl::Field) => Some(SONIOX_KEY_FIELD),
             Control::CommentedTagName => Some(COMMENTED_TAG_FIELD),
             _ => None,
@@ -106,6 +113,7 @@ impl Control {
 pub fn key_field_id(which: ApiKey) -> &'static str {
     match which {
         ApiKey::Anthropic => ANTHROPIC_KEY_FIELD,
+        ApiKey::OpenAi => OPENAI_KEY_FIELD,
         ApiKey::Soniox => SONIOX_KEY_FIELD,
     }
 }
@@ -122,6 +130,7 @@ pub fn ui_languages() -> Vec<&'static str> {
 pub fn control_of_field(id: &str) -> Option<Control> {
     match id {
         ANTHROPIC_KEY_FIELD => Some(Control::Key(ApiKey::Anthropic, KeyControl::Field)),
+        OPENAI_KEY_FIELD => Some(Control::Key(ApiKey::OpenAi, KeyControl::Field)),
         SONIOX_KEY_FIELD => Some(Control::Key(ApiKey::Soniox, KeyControl::Field)),
         COMMENTED_TAG_FIELD => Some(Control::CommentedTagName),
         _ => None,
@@ -199,6 +208,7 @@ pub fn controls(state: &SettingsState, batch_running: bool) -> Vec<Control> {
         }
         Page::Ai => {
             controls.extend(key_controls(state, ApiKey::Anthropic));
+            controls.extend(key_controls(state, ApiKey::OpenAi));
             controls.extend([
                 Control::AiModel,
                 Control::SummaryLanguage,
@@ -339,10 +349,15 @@ pub fn press(state: &SettingsState, control: &Control, press: Press) -> Option<M
             Message::Key(*which, message)
         }
         Control::AiModel => {
+            // The next model Space can pick: one whose provider has no key is skipped.
             let models = frename_core::ai::models();
-            let ids: Vec<&str> = models.iter().map(|model| model.id).collect();
-            let current = frename_core::ai::model_from_id(&settings.ai_model).id;
-            Message::SetAiModel(frename_core::ai::model_from_id(next_of(&ids, &current)))
+            let current = frename_core::ai::model_from_id(&settings.ai_model);
+            let from = models.iter().position(|m| m.id == current.id).unwrap_or(0);
+            let next = (1..=models.len())
+                .map(|step| models[(from + step) % models.len()])
+                .find(|model| state.model_usable(*model))
+                .unwrap_or(current);
+            Message::SetAiModel(next)
         }
         Control::SummaryLanguage => {
             Message::SetSummaryLanguage(*next_of(&SummaryLanguage::ALL, &settings.summary_language))
