@@ -535,7 +535,16 @@ mod tests {
     }
 
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
-    const NOT_UI_TEXT: [(&str, &str); 76] = [
+    const NOT_UI_TEXT: [(&str, &str); 85] = [
+        ("explorer", "program name"),
+        ("open", "program name (macOS)"),
+        ("xdg-open", "program name"),
+        ("https://github.com/Zelenov/frename/releases/latest", "address"),
+        ("APP_VERSION", "build-time environment variable name"),
+        ("dev", "version label of a local build, never shown"),
+        ("https://github.com/Zelenov/frename", "repository address"),
+        ("frename.exe", "executable file name"),
+        ("Release({})", "Debug output"),
         ("comment-editor", "widget id"),
         (
             "Rotate videos",
@@ -868,6 +877,7 @@ mod tests {
                     || text.ends_with("/view.rs")
                     || text.contains("/batch/actions/")
                     || text.contains("/folder_controls/")
+                    || text.contains("/src/features/updates/")
                 {
                     out.push(path);
                 }
