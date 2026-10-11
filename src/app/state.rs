@@ -438,7 +438,12 @@ fn settings_window_key(
     let ignored = status == event::Status::Ignored;
     let message = match ev {
         iced::Event::Mouse(iced::mouse::Event::ButtonPressed(_)) => settings::Message::ClearFocus,
-        iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. }) => match key {
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key,
+            modifiers,
+            repeat,
+            ..
+        }) => match key {
             keyboard::Key::Named(Named::Escape) if ignored => settings::Message::Escape,
             keyboard::Key::Named(Named::Tab) => match (modifiers.control(), modifiers.shift()) {
                 (true, true) => settings::Message::PreviousPage,
@@ -446,10 +451,11 @@ fn settings_window_key(
                 (false, true) => settings::Message::FocusPrevious,
                 (false, false) => settings::Message::FocusNext,
             },
-            keyboard::Key::Named(Named::Space) if ignored && modifiers.is_empty() => {
+            // Holding Space or Enter presses once, as a click does.
+            keyboard::Key::Named(Named::Space) if ignored && !repeat && modifiers.is_empty() => {
                 settings::Message::Press(settings::focus::Press::Space)
             }
-            keyboard::Key::Named(Named::Enter) if ignored && modifiers.is_empty() => {
+            keyboard::Key::Named(Named::Enter) if ignored && !repeat && modifiers.is_empty() => {
                 settings::Message::Press(settings::focus::Press::Enter)
             }
             _ => return None,

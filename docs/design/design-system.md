@@ -931,9 +931,10 @@ registry and every surface follow:
   - **A control that goes away otherwise** (a page change, an option hidden by another choice):
     the ring is not drawn. A control that was in the order of the last Tab press (Settings keeps
     that order) is continued from its place: Tab goes to the next control still shown,
-    Shift+Tab to the previous one. After a page change, a click, or when the focus was not
-    set by Tab (a press moved it, a text field took it), the next Tab starts from the first
-    control, Shift+Tab from the last.
+    Shift+Tab to the previous one. A control that is not shown and was not in that order (a page
+    change, a click took the ring away, a press moved the focus onto a control that is gone
+    again) restarts: the next Tab goes to the first control, Shift+Tab to the last. A control
+    still shown always continues from itself.
   - **A click** takes the ring away; a click into a text field puts the focus on that field, so
     Tab goes on from it.
   - The button bar's *Close* never scrolls the page: it is outside it.

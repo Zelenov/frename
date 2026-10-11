@@ -1,6 +1,6 @@
 # 0.147
 ## Added
-- Settings work from the keyboard: `Tab` moves a ring through the options and buttons, `Space` picks or presses, `Enter` presses a button.
+- Settings work from the keyboard: `Tab` moves a ring through the options and buttons, `Space` picks or presses (a list steps to its next choice), `Enter` presses a button, and `Ctrl+Tab` still changes the page.
 
 # 0.146
 ## Fixed
