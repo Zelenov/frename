@@ -199,8 +199,6 @@ batch-run-reload = Reload { $count ->
     [one] { $count } file
    *[other] { $count } files
 }
-batch-service-anthropic = Anthropic
-batch-service-openai = OpenAI
 batch-service-soniox = Soniox
 batch-change-renames = Renames files
 batch-change-videos = Writes into the videos
@@ -327,7 +325,7 @@ batch-ai-skip-too-long = over 30 min
 batch-ai-skip-unreadable = unreadable
 batch-ai-skipped = Skipped: { $parts }.
 batch-ai-progress-frame = frame { $done } of { $total }
-batch-ai-progress-waiting = waiting for Claude
+batch-ai-progress-waiting = waiting for { $provider }
 batch-ai-progress-saving = saving
 batch-ai-progress-retry-rate-limit = retrying in { $seconds } s (rate limit)
 batch-ai-progress-retry-temporary = retrying in { $seconds } s (temporary failure)

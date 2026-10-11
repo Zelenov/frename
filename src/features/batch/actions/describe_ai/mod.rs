@@ -262,12 +262,7 @@ impl Options {
         }
     }
 
-    /// The company of the chosen model.
-    pub fn provider(&self) -> clipscribe::Provider {
-        self.model.provider
-    }
-
-    /// [`Self::provider`] by name.
+    /// The company of the chosen model, by name.
     pub fn provider_label(&self) -> &'static str {
         self.model.provider.label()
     }
@@ -589,7 +584,13 @@ fn retry_label(after: std::time::Duration, reason: RetryReason) -> String {
 /// Demo: `progress` as it is while the request waits `seconds` for a rate limit.
 pub fn show_retry(progress: &ItemProgress, seconds: u64) {
     let after = std::time::Duration::from_secs(seconds);
-    progress.set(0.45, fl!("batch-ai-progress-waiting"));
+    progress.set(
+        0.45,
+        fl!(
+            "batch-ai-progress-waiting",
+            provider = clipscribe::Provider::Anthropic.label()
+        ),
+    );
     progress.note(retry_label(after, RetryReason::RateLimit), after * 3600);
 }
 
@@ -645,7 +646,10 @@ pub fn run(options: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgr
             asked_at,
             0.97,
             std::time::Duration::from_secs_f64(SECONDS_PER_REQUEST),
-            fl!("batch-ai-progress-waiting"),
+            fl!(
+                "batch-ai-progress-waiting",
+                provider = options.model().provider.label()
+            ),
         ),
         // The wait is said for as long as it lasts; the bar keeps creeping, and the "waiting"
         // text comes back when the request is sent again.

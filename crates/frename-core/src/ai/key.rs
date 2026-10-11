@@ -1,5 +1,5 @@
-//! The API keys (Anthropic and OpenAI for AI descriptions, Soniox for subtitles), kept in the operating
-//! system's credential store (Windows Credential Manager, macOS Keychain, Secret Service on
+//! The API keys (Anthropic and OpenAI for AI descriptions, Soniox for subtitles), kept in the
+//! operating system's credential store (Windows Credential Manager, macOS Keychain, Secret Service on
 //! Linux). Never in the database, logs or files.
 
 use clipscribe::Provider;

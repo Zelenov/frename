@@ -715,7 +715,7 @@ impl FrenameApp {
                     settings::Message::SetSummaryLanguage(language) => Task::done(
                         describe_ai_message(batch::describe_ai::Message::SetLanguage(language)),
                     ),
-                    // The settings ignored a model whose provider has no key: pass on the one
+                    // (The settings update ran first, above.) The settings ignored a model whose provider has no key: pass on the one
                     // they hold.
                     settings::Message::SetAiModel(_) => {
                         Task::done(describe_ai_message(batch::describe_ai::Message::SetModel(

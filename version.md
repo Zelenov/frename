@@ -1,6 +1,6 @@
 # 0.149
 ## Added
-- Describe with AI can use ChatGPT with your OpenAI key: Settings → Describe with AI has a second key field, and the model list shows the GPT models next to Claude's. A model whose company has no saved key says "add a key first" and cannot be picked. Errors, the "No key" badge and the Add credit button name the right company.
+- Describe with AI can use ChatGPT with your OpenAI key: Settings → Describe with AI has a second key field, and the model list shows the GPT models next to Claude's. A model whose company has no saved key says "add a key first" and cannot be picked. Errors, the "No key" badge and the out-of-credit message name the right company.
 
 # 0.148
 ## Fixed

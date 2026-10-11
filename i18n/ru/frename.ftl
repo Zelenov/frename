@@ -243,8 +243,6 @@ batch-run-reload = Перечитать: { $count ->
     [few] { $count } файла
    *[many] { $count } файлов
 }
-batch-service-anthropic = Anthropic
-batch-service-openai = OpenAI
 batch-service-soniox = Soniox
 batch-change-renames = Переименовывает файлы
 batch-change-videos = Пишет в видео
@@ -375,7 +373,7 @@ batch-ai-skip-too-long = длиннее 30 мин
 batch-ai-skip-unreadable = не читается
 batch-ai-skipped = Пропущено: { $parts }.
 batch-ai-progress-frame = кадр { $done } из { $total }
-batch-ai-progress-waiting = ожидание ответа Claude
+batch-ai-progress-waiting = ожидание ответа { $provider }
 batch-ai-progress-saving = сохранение
 batch-ai-progress-retry-rate-limit = повтор через { $seconds } с (лимит запросов)
 batch-ai-progress-retry-temporary = повтор через { $seconds } с (временный сбой)
