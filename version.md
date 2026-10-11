@@ -1,3 +1,7 @@
+# 0.150
+## Fixed
+- With markers saved in the comment and comments saved inside the video, deleting markers on a clip that cannot be saved (read-only, open in another app, or its new name is taken) now gets the red ✕ and keeps the deletion, instead of the deleted markers coming back when you reopen the clip.
+
 # 0.149
 ## Added
 - Describe with AI can use ChatGPT with your OpenAI key: Settings → Describe with AI has a second key field, and the model list shows the GPT models next to Claude's. A model whose company has no saved key says "add a key first" and cannot be picked. Errors, the "No key" badge and the out-of-credit message name the right company.

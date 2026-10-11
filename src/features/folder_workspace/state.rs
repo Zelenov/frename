@@ -6782,6 +6782,40 @@ mod tests {
         assert!(comment_on_disk(&saved).contains("1:05"));
     }
 
+    /// Issue #278: deleting markers on a clip whose save fails is noticed. The comment on disk
+    /// still holds the deleted lines, which is more than what was written, not a write that took.
+    #[test]
+    fn a_failed_save_that_only_deletes_markers_marks_the_file() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(2);
+        let _storage = video_comment_storage();
+        let mut workspace = marker_workspace(&test_dir, 2);
+        let id = file_id_at(&workspace, 0);
+        send_marker(&mut workspace, M::Add, 65_000);
+        save_open_clip(&mut workspace);
+        assert!(!workspace.unsaved_markers().contains_key(&id), "written");
+        let file = test_dir.target_file();
+        assert!(comment_on_disk(&file).contains("1:05"), "on disk");
+
+        // The new name is taken, so nothing of the next save reaches the video.
+        pick_tag(&mut workspace);
+        let (_, wanted) = workspace.file_workspace().get_snapshot().expect("open");
+        std::fs::write(test_dir.file_path(&wanted.file_name()), "taken").expect("a blocker");
+        let guid = workspace
+            .file_workspace()
+            .markers()
+            .and_then(|markers| markers.first())
+            .and_then(|marker| marker.guid.clone())
+            .expect("the marker");
+        send_marker(&mut workspace, M::Delete(guid), 0);
+        save_open_clip(&mut workspace);
+        assert!(comment_on_disk(&file).contains("1:05"), "still on disk");
+        assert!(
+            workspace.unsaved_markers().contains_key(&id),
+            "the deletion did not reach the video: the file is marked"
+        );
+    }
+
     /// A marker line typed into the comment box is not a failed write: neither the save nor the
     /// save after opening the clip again marks the file, in both storages.
     fn a_typed_marker_line_is_not_a_failed_write(comment: frename_core::CommentStorage) {

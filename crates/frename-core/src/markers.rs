@@ -491,14 +491,14 @@ pub fn comment_holds_markers(comment: &str, markers: &[Marker]) -> bool {
     sorted_marker_lines(markers) == sorted_marker_lines(&markers_from_comment(comment).1)
 }
 
-/// The `saved` comment has every marker of the `written` one, both as read back from a comment
-/// (so what the line format cannot hold counts on neither side); it may hold more, such as a
-/// line typed into it. Whether a write of the markers took.
+/// The `saved` comment has exactly the markers of the `written` one, both as read back from a
+/// comment (so what the line format cannot hold counts on neither side). Whether a write of the
+/// markers took: a saved comment that lacks a marker lost it, and one that still has a marker the
+/// written one lacks kept a deleted one, so the write did not reach the file. A line typed into
+/// the comment box is in the written comment too, so it is on both sides.
 pub fn comment_kept_markers(written: &str, saved: &str) -> bool {
-    let saved = sorted_marker_lines(&markers_from_comment(saved).1);
     sorted_marker_lines(&markers_from_comment(written).1)
-        .iter()
-        .all(|line| saved.contains(line))
+        == sorted_marker_lines(&markers_from_comment(saved).1)
 }
 
 /// What "comment → markers" does to one file: the markers to add and the comment left over.
@@ -899,12 +899,12 @@ mod tests {
             !comment_kept_markers(&comment, "A note"),
             "the save lost them"
         );
-        // A line typed into the comment is more, not less.
+        // A line the saved comment has more is not what was written.
         let more = format!(
             "{comment}
 0:41 — Typed"
         );
-        assert!(comment_kept_markers(&comment, &more));
+        assert!(!comment_kept_markers(&comment, &more));
         // A marker comment with a line break goes through as well.
         let markers = [marker(
             65_000,
@@ -916,6 +916,22 @@ lines",
         let comment = written("", &markers);
         assert!(comment_holds_markers(&comment, &markers));
         assert!(comment_kept_markers(&comment, &comment));
+    }
+
+    /// Issue #278: a write that only deleted markers did not take when the saved comment still
+    /// holds the deleted lines.
+    #[test]
+    fn a_saved_comment_that_still_holds_deleted_markers_is_not_a_write_that_took() {
+        let both = [
+            marker(1_000, 0, "Lion", ""),
+            marker(5_000, 3_000, "Run", ""),
+        ];
+        let before = written("A note", &both);
+        let after_delete = written("A note", &both[..1]);
+        assert!(!comment_kept_markers(&after_delete, &before));
+        let none = written("A note", &[]);
+        assert!(!comment_kept_markers(&none, &before));
+        assert!(comment_kept_markers(&none, &none));
     }
 
     /// What the line format cannot hold as it is: kept (the write took), not held exactly (the
