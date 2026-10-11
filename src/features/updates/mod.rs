@@ -9,4 +9,4 @@ pub mod view;
 
 pub use messages::{Message, Release};
 pub use source::apply_on_exit;
-pub use state::UpdatesState;
+pub use state::{Control, UpdatesState};

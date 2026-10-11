@@ -296,4 +296,9 @@ pages:
   frename also checks once a day by itself (you can turn that off) and puts a dot on the Settings button
   when an update is ready; it then opens this page. Nothing is downloaded until you click.
 
+**From the keyboard:** `Tab` and `Shift+Tab` move a blue ring through the options and buttons of the
+page (the page list on the left is reached with `Ctrl+Tab`), then **Close**. `Space` checks or picks
+the option with the ring, presses its button, or steps a list to its next choice (it goes forward and
+wraps; it does not open the list). `Enter` presses the button with the ring.
+
 ![Monochrome tags](frename-screenshot-mono.jpg)

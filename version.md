@@ -1,3 +1,7 @@
+# 0.147
+## Added
+- Settings work from the keyboard: `Tab` moves a ring through the options and buttons, `Space` picks or presses (a list steps to its next choice), `Enter` presses a button, and `Ctrl+Tab` still changes the page.
+
 # 0.146
 ## Fixed
 - With markers saved in the comment and comments saved inside the video, a clip that cannot be saved (read-only, open in another app, or its new name is taken) keeps its markers: it gets the red ✕, shows them when reopened, and frename saves them when you next leave it.

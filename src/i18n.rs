@@ -535,7 +535,7 @@ mod tests {
     }
 
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
-    const NOT_UI_TEXT: [(&str, &str); 75] = [
+    const NOT_UI_TEXT: [(&str, &str); 76] = [
         ("comment-editor", "widget id"),
         (
             "Rotate videos",
@@ -564,6 +564,7 @@ mod tests {
         ("folder-file-list", "widget id"),
         ("folder-rename-input", "widget id"),
         ("settings-content", "widget id"),
+        ("focus-ring", "widget id"),
         (
             "Markers <-> comment",
             "English-only log label, see LOG_LABEL",

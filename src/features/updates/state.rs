@@ -291,7 +291,8 @@ impl UpdatesState {
             && now >= self.saved.last_check.saturating_add(CHECK_INTERVAL_SECS)
     }
 
-    fn is_busy(&self) -> bool {
+    /// A check, a download or the restart runs: the buttons wait.
+    pub fn is_busy(&self) -> bool {
         matches!(
             self.status,
             Status::Checking { .. } | Status::Downloading(_) | Status::Restarting
@@ -310,6 +311,12 @@ impl UpdatesState {
     /// Whether this is the Microsoft Store build, which the Store updates.
     pub fn is_store_build(&self) -> bool {
         self.from_store
+    }
+
+    /// Whether the Updates page shows **Import settings from an older frename**: only a package
+    /// or the Store build keeps its settings away from the exe.
+    pub fn shows_import(&self) -> bool {
+        self.installed || self.is_store_build()
     }
 
     /// What the Updates section shows for this build.
@@ -337,6 +344,58 @@ impl UpdatesState {
         let current = semver::Version::parse(&self.current_version).ok()?;
         (self.installed && newest > current).then(|| short_version(&self.saved.newest_version))
     }
+
+    /// The controls of the Version row that take a click now, in page order: the ones Tab
+    /// reaches in Settings (#167). `batch_running` holds **Update and restart** back.
+    pub fn controls(&self, batch_running: bool) -> Vec<Control> {
+        match self.section() {
+            Section::Store => return Vec::new(),
+            Section::ReleasesPage => return vec![Control::OpenReleases],
+            Section::Updater => {}
+        }
+        [
+            (Control::Check, self.check_enabled()),
+            (
+                Control::UpdateAndRestart,
+                self.available_version().is_some() && self.update_enabled(batch_running),
+            ),
+            (Control::CheckOnStart, self.installed),
+        ]
+        .into_iter()
+        .filter_map(|(control, enabled)| enabled.then_some(control))
+        .collect()
+    }
+
+    /// Whether **Check for updates** takes a click: in a package, while nothing runs.
+    pub fn check_enabled(&self) -> bool {
+        self.installed && !self.is_busy()
+    }
+
+    /// Whether **Update and restart**, when shown, takes a click: not while a check, a download
+    /// or a batch job runs.
+    pub fn update_enabled(&self, batch_running: bool) -> bool {
+        !self.is_busy() && !batch_running
+    }
+
+    /// What Space or Enter on `control` does: what a click does.
+    pub fn press(&self, control: Control) -> Message {
+        match control {
+            Control::Check => Message::CheckNow,
+            Control::UpdateAndRestart => Message::UpdateAndRestart,
+            Control::CheckOnStart => Message::SetCheckOnStart(!self.check_on_start()),
+            Control::OpenReleases => Message::OpenReleases,
+        }
+    }
+}
+
+/// A control of the Version row that keyboard focus can reach.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Control {
+    Check,
+    UpdateAndRestart,
+    CheckOnStart,
+    /// The link to the releases page of a build that is updated by hand.
+    OpenReleases,
 }
 
 /// Open the releases page in the browser.
@@ -416,6 +475,23 @@ mod tests {
                 newest_version: String::new(),
             },
         )
+    }
+
+    #[test]
+    fn the_store_build_has_no_update_controls_but_shows_the_import() {
+        let store = UpdatesState::new(
+            false,
+            true,
+            "0.67.0".to_string(),
+            UpdateCheckState {
+                check_on_start: true,
+                last_check: 0,
+                newest_version: String::new(),
+            },
+        );
+        assert!(store.controls(false).is_empty());
+        assert!(store.shows_import());
+        assert!(installed(0).shows_import());
     }
 
     #[test]

@@ -130,6 +130,9 @@ single clip.
 | Key | Action |
 |---|---|
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous page |
+| `Tab` / `Shift+Tab` | Next / previous option on the page (a blue ring shows which) |
+| `Space` | Check or pick the option with the ring, press its button, or step a list to its next choice |
+| `Enter` | Press the button with the ring |
 | `Escape` | Close Settings (while you remove or replace a key, Esc cancels that first) |
 
 The [guide](docs/guide.md) explains which keys a text box takes while you type, and everything

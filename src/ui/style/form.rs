@@ -177,22 +177,33 @@ pub fn field_box(focused: bool) -> impl Fn(&Theme) -> widget::container::Style {
     }
 }
 
-pub fn pick_list(_theme: &Theme, status: widget::pick_list::Status) -> widget::pick_list::Style {
-    let edge = match status {
-        widget::pick_list::Status::Active => BORDER_CONTROL,
-        widget::pick_list::Status::Hovered => TEXT_SECONDARY,
-        widget::pick_list::Status::Opened { .. } => ACCENT_TEXT,
-    };
-    widget::pick_list::Style {
-        text_color: TEXT,
-        placeholder_color: TEXT,
-        handle_color: TEXT_SECONDARY,
-        background: Background::Color(BG_RAISED),
-        border: Border {
-            color: edge,
-            width: LINE,
-            radius: RADIUS_S.into(),
-        },
+pub fn pick_list(theme: &Theme, status: widget::pick_list::Status) -> widget::pick_list::Style {
+    focusable_pick_list(false)(theme, status)
+}
+
+/// A dropdown that keyboard focus can be on (Settings, #167): `focused` draws the focus ring as
+/// its edge, as a focused field does.
+pub fn focusable_pick_list(
+    focused: bool,
+) -> impl Fn(&Theme, widget::pick_list::Status) -> widget::pick_list::Style {
+    move |_theme, status| {
+        let (edge, width) = match status {
+            _ if focused => (ACCENT_TEXT, RING),
+            widget::pick_list::Status::Active => (BORDER_CONTROL, LINE),
+            widget::pick_list::Status::Hovered => (TEXT_SECONDARY, LINE),
+            widget::pick_list::Status::Opened { .. } => (ACCENT_TEXT, LINE),
+        };
+        widget::pick_list::Style {
+            text_color: TEXT,
+            placeholder_color: TEXT,
+            handle_color: TEXT_SECONDARY,
+            background: Background::Color(BG_RAISED),
+            border: Border {
+                color: edge,
+                width,
+                radius: RADIUS_S.into(),
+            },
+        }
     }
 }
 
