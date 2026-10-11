@@ -434,7 +434,7 @@ fn download(release: Release) -> Task<Message> {
             }
             downloader
                 .join()
-                .unwrap_or_else(|_| Err("the download stopped unexpectedly".to_string()))
+                .unwrap_or_else(|_| Err(fl!("updates-reason-download-stopped")))
         })
         .await
         .unwrap_or_else(|e| Err(e.to_string()));

@@ -1,3 +1,7 @@
+# 0.151
+## Fixed
+- The update messages "Close the other frename window first", "GitHub did not respond, try later", "no connection", "the folder is read-only", "updates work in the installed version" and "the download stopped unexpectedly" are now translated.
+
 # 0.150
 ## Fixed
 - With markers saved in the comment and comments saved inside the video, deleting markers on a clip that cannot be saved (read-only, open in another app, or its new name is taken) now gets the red ✕ and keeps the deletion, instead of the deleted markers coming back when you reopen the clip.

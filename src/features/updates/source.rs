@@ -32,7 +32,7 @@ pub fn check() -> Result<Option<Release>, String> {
 pub fn download(release: &Release, progress: Sender<i16>) -> Result<(), String> {
     let manager = manager().map_err(|e| describe(&e))?;
     if other_frename_running(&manager) {
-        return Err("Close the other frename window first".to_string());
+        return Err(fl!("updates-close-other-window"));
     }
     manager
         .download_updates(&release.0, Some(progress))
@@ -53,14 +53,14 @@ fn describe(error: &velopack::Error) -> String {
     match error {
         velopack::Error::Network(network) => match network.as_ref() {
             velopack::NetworkError::Http(ureq::Error::StatusCode(_)) => {
-                "GitHub did not respond, try later".to_string()
+                fl!("updates-reason-github")
             }
-            _ => "no connection".to_string(),
+            _ => fl!("updates-reason-no-connection"),
         },
         velopack::Error::Io(io) if io.kind() == std::io::ErrorKind::PermissionDenied => {
-            "the folder is read-only".to_string()
+            fl!("updates-reason-read-only")
         }
-        velopack::Error::NotInstalled(_) => "updates work in the installed version".to_string(),
+        velopack::Error::NotInstalled(_) => fl!("updates-reason-not-installed"),
         other => other.to_string(),
     }
 }
