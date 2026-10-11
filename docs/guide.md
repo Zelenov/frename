@@ -226,10 +226,10 @@ Actions:
 **Describe with AI** writes what happens in each checked video, and when: a one-line summary and
 time-ranged segments, even for clips with no speech. frename sends up to 60 frames per clip, picked
 where the picture changes the most, and the video's `.srt`, if there is one, to Claude (Haiku 4.5 unless you pick Sonnet
-or Opus in Settings), and puts the answer at the end of the comment, below your own text, which is
+or Opus in Settings) or to ChatGPT (GPT-4.1 mini or GPT-4.1, if you pick one there), and puts the answer at the end of the comment, below your own text, which is
 never changed. Before you run it, the panel shows how many videos will be sent, the price (with
 Haiku, about $10 per 1000 one-minute clips) and how long it takes. Videos already described are skipped unless you tick Redo, and so are clips over 30 min.
-Cancel keeps what is done. You need your own Anthropic API key: set it in Settings.
+Cancel keeps what is done. You need your own API key for the model's company, Anthropic for Claude or OpenAI for ChatGPT: set it in Settings.
 
 The description is part of the comment, in the comment box with your text: edit it or delete it
 there like any other text. It starts at a line beginning with `AI: ` and runs to the end of the
@@ -284,9 +284,10 @@ pages:
   comments are inside the video, frename can tag the videos you comment ("Commented", or a tag
   you name). After a change here, Settings offers the batch action that updates the files
   you already have.
-- **Describe with AI:** your Anthropic API key, kept in the system's password store (Windows
+- **Describe with AI:** your Anthropic and OpenAI API keys (a model uses its own company's key; a
+  model whose key is missing is listed as "… — add an OpenAI key first" and cannot be picked), kept in the system's password store (Windows
   Credential Manager, macOS Keychain, or a keyring such as GNOME Keyring on Linux), the model
-  (Claude Haiku 4.5, Sonnet 5 or Opus 5, with their prices), the language of the descriptions, and
+  (Claude Haiku 4.5, Sonnet 5 or Opus 5, GPT-4.1 mini or GPT-4.1, with their prices), the language of the descriptions, and
   **Moments**: segments only for what stands out (the default, and the only choice that suggests
   an In and Out) or segments covering the whole clip, and whether it also suggests tags from the
   folder's tags (on by default).

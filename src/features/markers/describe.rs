@@ -19,7 +19,7 @@ pub enum MomentOutcome {
         name: String,
         description: String,
     },
-    /// No Anthropic key is saved.
+    /// No key is saved for the model's provider.
     NoKey,
     /// Stopped by the editor, or the clip was left.
     Cancelled,

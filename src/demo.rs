@@ -80,7 +80,7 @@ impl DemoRun {
         self.keys.iter().map(|key| key.message()).collect()
     }
 
-    /// What a demo reads instead of the renderer's own API keys: Anthropic saved, Soniox missing,
+    /// What a demo reads instead of the renderer's own API keys: Anthropic saved, OpenAI and Soniox missing,
     /// so one screenshot has both states and no server is asked for languages. `request`
     /// numbers each answer the way a real read would be numbered.
     pub fn key_states(
@@ -88,6 +88,7 @@ impl DemoRun {
     ) -> Vec<(ApiKey, settings::KeyMessage)> {
         [
             (ApiKey::Anthropic, KeyState::Saved),
+            (ApiKey::OpenAi, KeyState::Missing),
             (ApiKey::Soniox, KeyState::Missing),
         ]
         .into_iter()

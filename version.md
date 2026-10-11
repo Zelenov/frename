@@ -1,3 +1,7 @@
+# 0.149
+## Added
+- Describe with AI can use ChatGPT with your OpenAI key: Settings → Describe with AI has a second key field, and the model list shows the GPT models next to Claude's. A model whose company has no saved key says "add a key first" and cannot be picked. Errors, the "No key" badge and the out-of-credit message name the right company.
+
 # 0.148
 ## Fixed
 - After a crash, the markers frename could not keep in the comment (two unnamed markers a moment apart, or one with a note next to an AI description) are no longer erased from the video when its edits are restored.

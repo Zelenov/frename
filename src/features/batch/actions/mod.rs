@@ -83,7 +83,7 @@ impl Action {
     /// The paid service the action bills, when it is one.
     pub fn service(self) -> Option<ApiKey> {
         match self {
-            Self::DescribeAi => Some(ApiKey::Anthropic),
+            // Billed by the company of the model chosen: see `Operation::ai_model`.
             Self::GenerateSubtitles => Some(ApiKey::Soniox),
             _ => None,
         }
@@ -322,7 +322,7 @@ impl ActionMessage {
                 self,
                 Self::DescribeAi(
                     describe_ai::Message::Probed(_)
-                        | describe_ai::Message::KeyState(_)
+                        | describe_ai::Message::KeyState(..)
                         | describe_ai::Message::SetLanguage(_)
                         | describe_ai::Message::SetModel(_)
                 )
@@ -364,9 +364,15 @@ impl Actions {
         }
     }
 
-    /// Whether the settings said no Anthropic key is saved ("Describe with AI", on a marker too).
+    /// Whether the settings said no key is saved for the chosen model's provider
+    /// ("Describe with AI", on a marker too).
     pub fn ai_key_missing(&self) -> bool {
         self.describe_ai.key_missing()
+    }
+
+    /// The company of the model chosen for "Describe with AI", by name.
+    pub fn ai_provider_label(&self) -> &'static str {
+        self.describe_ai.provider_label()
     }
 
     /// The model and language of "Describe with AI", which describing a marker uses too.
@@ -433,7 +439,7 @@ impl Actions {
     pub fn service(&self, action: Action) -> Option<(String, bool)> {
         match action {
             Action::DescribeAi => Some((
-                fl!("batch-service-anthropic"),
+                self.describe_ai.provider_label().to_string(),
                 self.describe_ai.key_missing(),
             )),
             Action::GenerateSubtitles => Some((
@@ -624,7 +630,7 @@ mod tests {
 
     #[test]
     fn only_the_paid_actions_have_a_service() {
-        assert_eq!(Action::DescribeAi.service(), Some(ApiKey::Anthropic));
+        assert_eq!(Action::DescribeAi.service(), None, "the model decides");
         assert_eq!(Action::GenerateSubtitles.service(), Some(ApiKey::Soniox));
         assert_eq!(Action::Rotate.service(), None);
     }

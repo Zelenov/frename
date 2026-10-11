@@ -5271,6 +5271,7 @@ mod tests {
         // The settings' answer to the read the request asked for.
         let _ = workspace.update(Message::Batch(batch::Message::Action(
             batch::ActionMessage::DescribeAi(batch::describe_ai::Message::KeyState(
+                frename_core::ai::key::ApiKey::Anthropic,
                 frename_core::ai::key::KeyState::Missing,
             )),
         )));
@@ -5474,6 +5475,7 @@ mod tests {
         assert!(workspace.markers.no_key_said(), "said already");
         let _ = workspace.update(Message::Batch(batch::Message::Action(
             batch::ActionMessage::DescribeAi(batch::describe_ai::Message::KeyState(
+                frename_core::ai::key::ApiKey::Anthropic,
                 frename_core::ai::key::KeyState::Missing,
             )),
         )));

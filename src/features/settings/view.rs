@@ -1,6 +1,7 @@
 //! UI for the settings window (`docs/design/design-system.md` §14): a list of pages on the left,
 //! the page on the right, one option per row, and a button bar with Close.
 
+use clipscribe::Model;
 use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::ai::{MomentsMode, SummaryLanguage};
 use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage};
@@ -292,6 +293,21 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
         },
         state.focus(),
     );
+    let openai_key = key_block(
+        ApiKey::OpenAi,
+        state.key(ApiKey::OpenAi),
+        KeyTexts {
+            placeholder: fl!("settings-ai-openai-key-placeholder"),
+            get_one: fl!("settings-ai-openai-key-get"),
+            remove_question: fl!("settings-ai-openai-key-remove-confirm"),
+        },
+        state.focus(),
+    );
+    // Every model is listed; one whose company has no key says so and cannot be picked.
+    let option = |model: Model| ModelOption {
+        model,
+        needs_key: !state.model_usable(model),
+    };
     layout::page(
         Page::Ai.heading(),
         [
@@ -300,14 +316,22 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
                 key_help(state.key(ApiKey::Anthropic), fl!("settings-ai-used-by")),
                 key,
             ),
+            layout::setting_row_with_info(
+                fl!("settings-ai-openai-key-label"),
+                key_help(state.key(ApiKey::OpenAi), fl!("settings-ai-openai-used-by")),
+                openai_key,
+            ),
             layout::setting_row(
                 fl!("settings-ai-model-label"),
                 layout::controls([
                     focusable_dropdown(
                         form::dropdown(
-                            frename_core::ai::models(),
-                            Some(frename_core::ai::model_from_id(&settings.ai_model)),
-                            Message::SetAiModel,
+                            frename_core::ai::models()
+                                .into_iter()
+                                .map(option)
+                                .collect::<Vec<_>>(),
+                            Some(option(frename_core::ai::model_from_id(&settings.ai_model))),
+                            |option| Message::SetAiModel(option.model),
                         )
                         .width(FIELD_WIDTH_L),
                         focused(state, Control::AiModel),
@@ -733,6 +757,31 @@ fn language_options() -> Vec<LanguageOption> {
 /// via [`describe_ai::language_name`], the same name used in the batch panel's plan line.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct SummaryLanguageOption(SummaryLanguage);
+
+/// A model in the dropdown; `needs_key` when its provider has no saved key.
+#[derive(Clone, PartialEq)]
+struct ModelOption {
+    model: Model,
+    needs_key: bool,
+}
+
+impl std::fmt::Display for ModelOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.needs_key {
+            write!(
+                f,
+                "{}",
+                fl!(
+                    "settings-ai-model-needs-key",
+                    model = self.model.to_string(),
+                    provider = self.model.provider.label()
+                )
+            )
+        } else {
+            write!(f, "{}", self.model)
+        }
+    }
+}
 
 impl std::fmt::Display for SummaryLanguageOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
