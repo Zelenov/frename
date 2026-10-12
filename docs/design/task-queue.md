@@ -101,6 +101,12 @@ The lock moves from the whole app to **one clip**:
 
 ## Test plan
 
+Step 1 (in `folder_workspace::state` and `batch::state`): the clip in work is held and the
+others are not, nothing opens while the item waits for the unload, a held message tells why, the
+arrow keys step over the clip in work, a pending save of the clip is applied before its item, a
+cancel before the item starts leaves the clip alone, the panel closes under a running job and the
+strip shows it. For steps 2 and 3:
+
 - Core: queue FIFO, cancel of queued and running, retry, busy guard, per-folder separation,
   budget cap stops the queue.
 - App: a rename/save of a busy clip waits and is applied after the item; a result for a clip

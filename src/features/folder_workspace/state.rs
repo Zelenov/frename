@@ -1336,6 +1336,7 @@ impl FolderWorkspace {
             message,
             Message::Folder(
                 folder::Message::SelectFile(_)
+                    | folder::Message::StartRename(_)
                     | folder::Message::PreviousFile
                     | folder::Message::NextFile
             )
@@ -1398,7 +1399,9 @@ impl FolderWorkspace {
             .selected_file()
             .and_then(|selected| dir.files_in_order().position(|f| f.id() == selected.id()));
         let target = match message {
-            Message::Folder(folder::Message::SelectFile(index)) => Some(*index),
+            Message::Folder(
+                folder::Message::SelectFile(index) | folder::Message::StartRename(index),
+            ) => Some(*index),
             Message::Folder(folder::Message::PreviousFile) => {
                 selected.and_then(|i| i.checked_sub(1))
             }
@@ -1604,10 +1607,14 @@ impl FolderWorkspace {
             cancel,
             progress: self.batch.item_progress().unwrap_or_default(),
         };
-        // The video plays this clip: it lets go of the file first.
-        let plays_it = self.file_workspace.file().map(|f| f.id()) == Some(id)
-            && self.media_viewer.needs_unload_before_rename();
-        if plays_it {
+        // The video plays this clip, or a save of it waits for the video to let go: the file is
+        // free first.
+        let touches_it = self.file_workspace.file().map(|f| f.id()) == Some(id)
+            || self
+                .pending_file_updates
+                .iter()
+                .any(|(pending, _)| *pending == id);
+        if touches_it && self.media_viewer.needs_unload_before_rename() {
             self.batch_item_waits_for_unload = Some(item);
             return Task::done(Message::MediaViewer(media_viewer::Message::Unload));
         }
@@ -1625,6 +1632,22 @@ impl FolderWorkspace {
             cancel,
             progress,
         } = item;
+        // Cancelled while the video let go of the clip: the item is not reached, and the video
+        // that was unloaded for it comes back.
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            self.batch
+                .finish(id, &ItemResult::new(ItemStatus::Pending, None));
+            let video = self
+                .directory
+                .as_ref()
+                .and_then(|d| d.selected_file())
+                .filter(|_| self.file_workspace.file().is_some())
+                .cloned()
+                .map_or_else(Task::none, |file| {
+                    self.media_viewer.open(&file).map(Message::MediaViewer)
+                });
+            return Task::batch([video, self.next_batch_item()]);
+        }
         let mut saved = Task::none();
         let pending_for_it = self
             .pending_file_updates
@@ -1693,12 +1716,11 @@ impl FolderWorkspace {
 
     /// The selected clip was closed for the job: open it again.
     fn reopen_selected_if_closed(&self) -> Task<Message> {
-        if self.file_workspace.file().is_some() {
-            return Task::none();
-        }
+        let open = self.file_workspace.file().map(|f| f.id());
         self.directory
             .as_ref()
             .and_then(|d| d.selected_file())
+            .filter(|selected| open != Some(selected.id()))
             .cloned()
             .map_or_else(Task::none, |file| Task::done(Message::FileOpened(file)))
     }
@@ -4615,6 +4637,81 @@ mod tests {
             !workspace.is_blocked(&select),
             "the other clip opens once the item runs"
         );
+    }
+
+    /// An edit of a clip that waits for the disk is saved before the job's item for that clip
+    /// starts, or the unload would later save it over what the item wrote.
+    #[test]
+    fn a_pending_save_of_the_clip_in_work_is_applied_before_its_item_runs() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = batch_workspace(&test_dir);
+        let first = file_id_at(&workspace, 0);
+        let snapshot = workspace
+            .directory()
+            .and_then(|d| d.file_by_id(first))
+            .map(|f| f.snapshot().clone())
+            .expect("snapshot");
+        // The open clip is the second one; the first one's edit waits for its video to unload.
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        workspace.inject_pending_rename(first, snapshot);
+        assert!(workspace.has_pending_rename());
+        let item = super::BatchItem {
+            id: first,
+            operation: workspace.batch().operation().expect("an operation"),
+            cancel: Default::default(),
+            progress: Default::default(),
+        };
+        let _ = workspace.run_batch_item(item);
+        assert!(!workspace.has_pending_rename(), "saved before the item");
+    }
+
+    /// A double-click on the clip in work renames nothing and selects nothing: its first click
+    /// was held, so the second must be too, or the list and the editor would show two clips.
+    #[test]
+    fn a_rename_of_the_clip_in_work_is_held_while_another_clip_is_open() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(2)));
+        flush_file_opened(&mut workspace);
+        let open = workspace.file_workspace().file().map(|f| f.id());
+        let rename = Message::Folder(folder::Message::StartRename(0));
+        assert!(workspace.is_blocked(&rename));
+        let _ = workspace.update(rename);
+        assert_eq!(
+            workspace
+                .directory()
+                .and_then(|d| d.selected_file())
+                .map(|f| f.id()),
+            open,
+            "the selection stays on the open clip"
+        );
+    }
+
+    /// Cancel while the video lets go of the clip: the item is not reached and the clip's video
+    /// comes back.
+    #[test]
+    fn cancel_before_the_item_starts_leaves_the_clip_untouched() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        assert!(workspace.batch_item_waits_for_unload.is_some());
+        let _ = workspace.update(Message::Batch(batch::Message::Cancel));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert!(!workspace.is_batch_running(), "the job ended");
+        let first = file_id_at(&workspace, 0);
+        assert_eq!(
+            workspace.batch().status(first),
+            Some(ItemStatus::Pending),
+            "not reached"
+        );
+        assert!(workspace.file_workspace().file().is_some(), "still open");
     }
 
     /// What the job holds back says so, instead of doing nothing.

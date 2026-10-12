@@ -1846,11 +1846,11 @@ The action page is replaced by the job (the list and the header stay):
   for Claude", "saving", "transcribing").
 - **Live figures:** changed · unchanged · not done, as in the result (§13.6.7), updating as files
   finish; after a stop, "not reached" is its own figure, never added to "not done".
-- **Button bar:** `secondary` Cancel `Esc` at the right. After a press: "Stopping after this file…"
+- **Button bar:** `secondary` Cancel at the right (`Esc` closes the panel, the job goes on). After a press: "Stopping after this file…"
   with a spinner, disabled.
 - **Closing the app** during a job cancels it and closes after the current file.
 - In the file list (§13.6.6) each file shows its state, and a status line on top of the list:
-  `lock` "Locked while Describe with AI runs".
+  `lock` "Checks are locked while Describe with AI runs".
 
 #### 13.6.6 Per-file status in the file list
 The check column shows the file's state during and after a job (replacing the tinted checkboxes,
