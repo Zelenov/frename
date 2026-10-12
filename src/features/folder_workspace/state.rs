@@ -52,6 +52,7 @@ mod marker_actions;
 mod marker_ai;
 mod recent_list;
 mod rotation;
+mod solo;
 
 /// How many actions undo/redo keeps. Reset per folder, since tags are per folder.
 const HISTORY_DEPTH: usize = 50;
@@ -79,6 +80,8 @@ struct BatchItem {
 
 /// Folder workspace: owns directory, loading. Current file is the directory's selection.
 pub struct FolderWorkspace {
+    /// Runs of the open clip started without the batch panel (#249).
+    solo: solo::Solo,
     directory: Option<Directory>,
     loading: bool,
     /// File currently being edited: copy of file + tag selection. Rename panel reads/updates this.
@@ -104,6 +107,9 @@ pub struct FolderWorkspace {
     closing: bool,
     /// Batch mode: checked files, the chosen action and its job.
     batch: BatchState,
+    /// The job has ended and `BatchFinished` has not been handled yet: its outcome is still to be
+    /// reported, so the next queued run waits for that.
+    batch_end_pending: bool,
     /// The job's next item is the clip that plays: it starts once the video has unloaded, since
     /// the item may write into and rename that very file.
     batch_item_waits_for_unload: Option<BatchItem>,
@@ -277,6 +283,7 @@ impl FolderWorkspace {
             closing: false,
             batch,
             batch_item_waits_for_unload: None,
+            batch_end_pending: false,
             marker_requests: 0,
             marker_readers: std::collections::HashSet::new(),
             inline_rename: None,
@@ -302,6 +309,7 @@ impl FolderWorkspace {
             known_marker_guids: HashSet::new(),
             unsaved_markers: HashMap::new(),
             markers_in_video: HashMap::new(),
+            solo: solo::Solo::default(),
             journal_baseline: None,
             journal_written: None,
             journal_force: false,
@@ -319,6 +327,12 @@ impl FolderWorkspace {
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        let task = self.update_message(message);
+        // Runs of one clip move on after every message: their reads come in as messages.
+        Task::batch([task, self.advance_solo()])
+    }
+
+    fn update_message(&mut self, message: Message) -> Task<Message> {
         self.drop_stale_describe_all_question();
         // The open recent folders list has the arrows, Enter and Esc, also in batch mode.
         if let Some(key) = self.recent_folders_key(&message) {
@@ -511,6 +525,7 @@ impl FolderWorkspace {
             }
             Message::FocusSearchBarAndKey(key) => self.focus_search_bar_and_key(key),
             Message::Noop => Task::none(),
+            Message::RunOnOpenClip(action) => self.run_on_open_clip(action),
             Message::ScrollFolderListToSelected => self.scroll_folder_list_to_selected(),
             Message::FolderListScrollAdjusted(y) => {
                 self.folder_scroll_y = Some(y);
@@ -986,6 +1001,7 @@ impl FolderWorkspace {
         }
         self.directory = Some(directory); // replace previous directory only on success
         self.batch.reset_files();
+        self.forget_solo();
         let folder = self
             .directory
             .as_ref()
@@ -1296,6 +1312,9 @@ impl FolderWorkspace {
     /// Why a running job holds `message` back, if it does: the clip it works on, or the folder
     /// it keeps as it is. The editor is told (`blocked_notice`).
     fn job_holds(&self, message: &Message) -> Option<Hold> {
+        if self.solo_holds(message) {
+            return Some(Hold::Folder);
+        }
         if !self.batch.is_running() {
             return None;
         }
@@ -1440,6 +1459,9 @@ impl FolderWorkspace {
     fn handle_batch(&mut self, msg: batch::Message) -> Task<Message> {
         if let batch::Message::Run = msg {
             return self.start_batch();
+        }
+        if let batch::Message::Cancel = msg {
+            self.cancel_solo();
         }
         if let batch::Message::Retry = msg {
             if !self.batch.prepare_retry() {
@@ -1616,6 +1638,7 @@ impl FolderWorkspace {
     /// clip's current name (a busy clip cannot be renamed meanwhile).
     fn next_batch_item(&mut self) -> Task<Message> {
         let Some((id, operation, cancel)) = self.batch.begin_next() else {
+            self.batch_end_pending = true;
             return Task::done(Message::BatchFinished);
         };
         let item = BatchItem {
@@ -1749,6 +1772,7 @@ impl FolderWorkspace {
 
     /// The job ended: reopen the selected file if it was closed, and resume loading comments.
     fn batch_finished(&mut self) -> Task<Message> {
+        self.batch_end_pending = false;
         // The job renamed files behind the history: undoing across it would use stale paths.
         self.history = WorkspaceHistory::new(HISTORY_DEPTH);
         // The job may have written subtitles: the plan is made again.
@@ -3185,12 +3209,13 @@ impl FolderWorkspace {
             Subscription::none()
         };
         // A running AI job tells how far its file is from another thread: redraw to show it.
-        let job_progress =
-            if self.batch.is_running() && self.batch.action() == batch::Action::DescribeAi {
-                iced::time::every(std::time::Duration::from_millis(200)).map(|_| Message::Noop)
-            } else {
-                Subscription::none()
-            };
+        let job_progress = if self.batch.is_running()
+            && self.batch.job_action() == Some(batch::Action::DescribeAi)
+        {
+            iced::time::every(std::time::Duration::from_millis(200)).map(|_| Message::Noop)
+        } else {
+            Subscription::none()
+        };
         // The recovery journal follows the open clip's edits, a second after they change.
         let journal = if self.file_workspace.file().is_some() {
             iced::time::every(std::time::Duration::from_secs(1)).map(|_| Message::JournalTick)
@@ -4866,6 +4891,165 @@ mod tests {
         assert!(!workspace.batch().is_active());
         let _ = workspace.update(Message::BatchFinished);
         assert!(workspace.batch().is_active(), "the result shows");
+    }
+
+    /// An action of the open clip starts without the panel: the job runs on that clip alone, and
+    /// the checks of the panel come back as they were.
+    #[test]
+    fn a_run_of_one_clip_checks_only_it_and_gives_the_checks_back() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let open = workspace
+            .file_workspace()
+            .file()
+            .map(|f| f.id())
+            .expect("open");
+        let other = (0..3)
+            .map(|i| file_id_at(&workspace, i))
+            .find(|id| *id != open)
+            .expect("another clip");
+        let _ = workspace.update(Message::Batch(batch::Message::CheckAll(vec![other])));
+
+        let _ = workspace.update(Message::RunOnOpenClip(batch::Action::FixTags));
+        assert!(workspace.is_batch_running());
+        assert_eq!(workspace.batch().progress().map(|p| p.total), Some(1));
+        assert_eq!(workspace.batch().current(), Some(open));
+        assert!(!workspace.batch().is_active(), "no panel opened");
+        assert!(workspace.batch().is_checked(other), "the checks are back");
+        assert!(!workspace.batch().is_checked(open));
+    }
+
+    /// An action asked for while a job runs waits, and starts when the job's end is handled.
+    #[test]
+    fn a_run_asked_for_during_a_job_waits_its_turn() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let first = workspace
+            .file_workspace()
+            .file()
+            .map(|f| f.id())
+            .expect("open");
+        let _ = workspace.update(Message::RunOnOpenClip(batch::Action::FixTags));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert_eq!(workspace.batch().current(), Some(first));
+
+        let second = (0..3)
+            .map(|i| file_id_at(&workspace, i))
+            .find(|id| *id != first)
+            .expect("another clip");
+        let index = (0..3)
+            .find(|i| file_id_at(&workspace, *i) == second)
+            .expect("its row");
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(index)));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::RunOnOpenClip(batch::Action::FixTags));
+        assert_eq!(
+            workspace.clip_actions().subtitles,
+            crate::features::file_workspace::ClipAction::Idle
+        );
+        assert_eq!(
+            workspace.clip_action(batch::Action::FixTags, second),
+            crate::features::file_workspace::ClipAction::Queued
+        );
+
+        let _ = workspace.update(Message::BatchItemDone {
+            id: first,
+            result: Box::new(ItemResult::new(ItemStatus::Skipped, None)),
+        });
+        assert!(
+            !workspace.is_batch_running(),
+            "it waits for the end to be reported"
+        );
+        assert_eq!(
+            workspace.clip_action(batch::Action::FixTags, second),
+            crate::features::file_workspace::ClipAction::Queued
+        );
+        let _ = workspace.update(Message::BatchFinished);
+        assert_eq!(workspace.batch().current(), Some(second), "its turn");
+        assert_eq!(workspace.batch().progress().map(|p| p.total), Some(1));
+    }
+
+    /// A run whose key and clip length are still being read waits, shows as running and holds the
+    /// checks meanwhile.
+    #[test]
+    fn a_run_waiting_for_its_reads_holds_the_checks_and_shows_as_running() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let open = workspace
+            .file_workspace()
+            .file()
+            .map(|f| f.id())
+            .expect("open");
+        let _ = workspace.update(Message::RunOnOpenClip(batch::Action::DescribeAi));
+        // The key and the length are still being read: it waits, and holds the checks.
+        assert!(!workspace.is_batch_running());
+        assert_eq!(
+            workspace.clip_action(batch::Action::DescribeAi, open),
+            crate::features::file_workspace::ClipAction::Running
+        );
+        assert!(workspace.is_blocked(&Message::Batch(batch::Message::CheckNone)));
+    }
+
+    /// A run that cannot start (no key) ends its preparing: the panel's selection and checks come
+    /// back, and nothing is held any more.
+    #[test]
+    fn a_run_without_a_key_gives_the_panels_selection_back() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let open = workspace
+            .file_workspace()
+            .file()
+            .map(|f| f.id())
+            .expect("open");
+        let other = (0..2)
+            .map(|i| file_id_at(&workspace, i))
+            .find(|id| *id != open)
+            .expect("another clip");
+        let _ = workspace.update(Message::Batch(batch::Message::SelectAction(
+            batch::Action::Rotate,
+        )));
+        let _ = workspace.update(Message::Batch(batch::Message::CheckAll(vec![other])));
+
+        let _ = workspace.update(Message::RunOnOpenClip(batch::Action::DescribeAi));
+        assert!(workspace.is_blocked(&Message::Batch(batch::Message::CheckNone)));
+        let which = frename_core::ai::key_of(workspace.batch().actions().ai_model_and_language().0);
+        let _ = workspace.update(Message::Batch(batch::Message::Action(
+            batch::ActionMessage::DescribeAi(batch::describe_ai::Message::KeyState(
+                which,
+                frename_core::ai::key::KeyState::Missing,
+            )),
+        )));
+        assert!(!workspace.is_batch_running(), "nothing was started");
+        assert!(!workspace.is_blocked(&Message::Batch(batch::Message::CheckNone)));
+        assert_eq!(workspace.batch().action(), batch::Action::Rotate);
+        assert!(workspace.batch().is_checked(other));
+        assert!(!workspace.batch().is_checked(open));
+        assert_eq!(
+            workspace.clip_action(batch::Action::DescribeAi, open),
+            crate::features::file_workspace::ClipAction::Idle
+        );
     }
 
     /// What the job holds back says so, instead of doing nothing.

@@ -273,6 +273,39 @@ impl Options {
         self.key() == Some(KeyState::Missing)
     }
 
+    /// Whether a run on `checked` can start now, and if not, why (#249).
+    pub fn readiness(&self, checked: &[&File]) -> super::Readiness {
+        use super::Readiness;
+        let blocked = |note: String| Readiness::Blocked {
+            note,
+            fix: Some(ActionMessage::OpenAiSettings),
+        };
+        match self.key() {
+            None => return Readiness::Waiting,
+            Some(KeyState::Missing) => {
+                return blocked(fl!(
+                    "batch-ai-key-missing",
+                    provider = self.provider_label()
+                ))
+            }
+            Some(KeyState::Unavailable) => return blocked(fl!("batch-ai-key-unavailable")),
+            Some(KeyState::Saved) => {}
+        }
+        let plan = self.plan(checked);
+        if plan.estimating {
+            return Readiness::Waiting;
+        }
+        if plan.send.is_empty() {
+            return Readiness::Blocked {
+                note: plan
+                    .skipped_line()
+                    .unwrap_or_else(|| fl!("batch-action-describe-ai-none")),
+                fix: None,
+            };
+        }
+        Readiness::Ready
+    }
+
     /// The page for `checked` and its run button (`Describe 12 videos · about $0.35` once the
     /// estimate and the key are known). The plan is made once.
     pub fn panel(&self, checked: &[&File]) -> Panel<'_> {
@@ -831,6 +864,34 @@ mod tests {
     }
 
     const BLOCK: &str = "AI: x";
+
+    /// A run of one clip, started without the panel, waits for the key and the length, and
+    /// says why it cannot start (#249).
+    #[test]
+    fn a_run_without_a_panel_waits_for_its_reads_and_says_why_it_cannot_start() {
+        use super::super::Readiness;
+        let files = [file("a.mp4", ""), file("b.mp4", BLOCK)];
+        let mut options = Options::default();
+        let which = frename_core::ai::key_of(options.model);
+        let plain: Vec<&File> = vec![&files[0]];
+        let described: Vec<&File> = vec![&files[1]];
+
+        assert!(matches!(options.readiness(&plain), Readiness::Waiting));
+        options.update(Message::KeyState(which, KeyState::Missing));
+        assert!(matches!(
+            options.readiness(&plain),
+            Readiness::Blocked { fix: Some(_), .. }
+        ));
+        options.update(Message::KeyState(which, KeyState::Saved));
+        assert!(matches!(options.readiness(&plain), Readiness::Waiting));
+        options.update(Message::Probed(vec![(files[0].id(), probe(Some(60.0)))]));
+        assert!(matches!(options.readiness(&plain), Readiness::Ready));
+        // Already described: nothing to send, and it says so.
+        assert!(matches!(
+            options.readiness(&described),
+            Readiness::Blocked { fix: None, .. }
+        ));
+    }
 
     #[test]
     fn a_retry_wait_is_told_in_whole_seconds_with_its_reason() {

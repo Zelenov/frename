@@ -428,6 +428,20 @@ impl Actions {
         }
     }
 
+    /// Whether `action` can start on `checked` now. Only the paid actions that a single clip can
+    /// start have a say; the rest are ready as soon as something is checked.
+    pub fn readiness(&self, action: Action, checked: &[&File]) -> Readiness {
+        match action {
+            Action::DescribeAi => self.describe_ai.readiness(checked),
+            Action::GenerateSubtitles => self.generate_subtitles.readiness(checked),
+            _ if checked.is_empty() => Readiness::Waiting,
+            _ => match self.operation(action) {
+                Some(_) => Readiness::Ready,
+                None => Readiness::Waiting,
+            },
+        }
+    }
+
     /// The files a job of `action` runs over: the checked ones, or for "Describe with AI" only
     /// the videos it will send.
     pub fn job_files(&self, action: Action, checked: &[&File]) -> Vec<FileId> {
@@ -593,6 +607,21 @@ impl Actions {
             reason: None,
         }
     }
+}
+
+/// Whether an action can start on some clips now, for a run that has no panel to say why not
+/// (a single-clip action, #249).
+#[derive(Debug, Clone)]
+pub enum Readiness {
+    /// It can start.
+    Ready,
+    /// A background read it needs (clip length, plan, key, price) is not in yet.
+    Waiting,
+    /// It cannot start: what to tell the editor, and the settings page that fixes it, if any.
+    Blocked {
+        note: String,
+        fix: Option<ActionMessage>,
+    },
 }
 
 /// An action's page and its run button.

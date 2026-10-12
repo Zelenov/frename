@@ -351,6 +351,49 @@ impl Options {
         self.key == Some(KeyState::Missing)
     }
 
+    /// Whether a run on `checked` can start now, and if not, why (#249).
+    pub fn readiness(&self, checked: &[&File]) -> super::Readiness {
+        use super::Readiness;
+        let blocked = |note: String| Readiness::Blocked {
+            note,
+            fix: Some(ActionMessage::OpenSubtitleSettings),
+        };
+        if self.formats.is_empty() {
+            return Readiness::Blocked {
+                note: fl!("batch-reason-subtitles-no-format"),
+                fix: None,
+            };
+        }
+        match self.key {
+            None => return Readiness::Waiting,
+            Some(KeyState::Missing) => return blocked(fl!("batch-subtitles-key-missing")),
+            Some(KeyState::Unavailable) => return blocked(fl!("batch-ai-key-unavailable")),
+            Some(KeyState::Saved) => {}
+        }
+        let Some(plan) = self.plan_for(checked) else {
+            return Readiness::Waiting;
+        };
+        if !plan.has_work() {
+            let note = plan_lines(plan, Some(Price::Typical))
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| fl!("batch-subtitles-transcribe"));
+            return Readiness::Blocked { note, fix: None };
+        }
+        if plan.transcribe > 0 {
+            match self.price() {
+                None => return Readiness::Waiting,
+                Some(Price::Rejected) => return blocked(fl!("batch-subtitles-key-rejected")),
+                Some(_) => {}
+            }
+        }
+        if self.operation().is_some() {
+            Readiness::Ready
+        } else {
+            Readiness::Waiting
+        }
+    }
+
     /// The page for `checked` and its run button.
     pub fn panel(&self, checked: &[&File]) -> Panel<'_> {
         let plan = self.plan_for(checked);
@@ -1271,6 +1314,80 @@ mod tests {
             assert_eq!(plan.shared_name, 1, "{formats:?}");
             assert!(plan.excluded.contains_key(&second), "{formats:?}");
         }
+    }
+
+    /// A run of one clip, started without the panel, waits for what it needs and says why it
+    /// cannot start (#249).
+    #[test]
+    fn a_run_without_a_panel_walks_its_states_to_ready_or_blocked() {
+        use super::super::Readiness;
+        let video = File::from_path("C:/clips/a.mp4", std::time::SystemTime::UNIX_EPOCH);
+        let checked: Vec<&File> = vec![&video];
+        let state = |options: &Options| options.readiness(&checked);
+        let plan_ready = |options: &mut Options, plan: Plan| {
+            let reads = options.reads(&checked);
+            let generation = reads.plan.map_or(options.generation, |(g, ..)| g);
+            options.update(Message::PlanReady {
+                generation,
+                plan: Box::new(plan),
+            });
+        };
+
+        let mut options = Options::default();
+        options.update(Message::SetSrt(false));
+        assert!(
+            matches!(state(&options), Readiness::Blocked { fix: None, .. }),
+            "no file to write"
+        );
+        options.update(Message::SetSrt(true));
+
+        assert!(matches!(state(&options), Readiness::Waiting), "key unknown");
+        options.update(Message::KeyState(KeyState::Missing));
+        assert!(matches!(
+            state(&options),
+            Readiness::Blocked { fix: Some(_), .. }
+        ));
+        options.update(Message::KeyState(KeyState::Saved));
+        assert!(
+            matches!(state(&options), Readiness::Waiting),
+            "plan pending"
+        );
+
+        plan_ready(&mut options, Plan::default());
+        assert!(
+            matches!(state(&options), Readiness::Blocked { fix: None, .. }),
+            "nothing to do"
+        );
+
+        // A free rebuild needs no price.
+        plan_ready(
+            &mut options,
+            Plan {
+                rebuilt_free: 1,
+                ..Plan::default()
+            },
+        );
+        assert!(matches!(state(&options), Readiness::Ready));
+
+        // A transcription waits for the price, and is refused when the key is rejected.
+        let transcribe = Plan {
+            transcribe: 1,
+            audio_s: 60.0,
+            ..Plan::default()
+        };
+        plan_ready(&mut options, transcribe.clone());
+        options.price = Some(None);
+        assert!(
+            matches!(state(&options), Readiness::Waiting),
+            "price pending"
+        );
+        options.update(Message::PriceReady(Price::Rejected));
+        assert!(matches!(
+            state(&options),
+            Readiness::Blocked { fix: Some(_), .. }
+        ));
+        options.update(Message::PriceReady(Price::Learned(0.1)));
+        assert!(matches!(state(&options), Readiness::Ready));
     }
 
     #[test]

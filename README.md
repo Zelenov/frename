@@ -30,10 +30,11 @@ frename is free and open source (MIT license).
 - **Let AI describe your footage.** Describe with AI writes a short summary of each clip and marks
   what happens when, even in clips with no speech. It can also suggest an in and out point and
   name a single marker, or every unnamed marker in one click. You use your own Anthropic or
-  OpenAI API key (Claude or ChatGPT), and Haiku costs about $10 per 1,000 one-minute clips.
+  OpenAI API key (Claude or ChatGPT), and Haiku costs about $10 per 1,000 one-minute clips. One
+  button in the corner of the comment box describes the clip you have open, with no batch panel.
 - **Get subtitles from speech.** Generate subtitles sends the audio to Soniox, a paid
   speech-to-text service, and saves an `.srt` file, a Premiere Pro transcript, or both next to
-  the video.
+  the video. A button in the corner of the comment box does it for the clip you have open.
 - **Find any clip later.** Search the list by name, tag or comment, and filter it to untagged clips
   or clips with subtitles, comments or markers.
 - **Work on many clips at once.** Batch mode runs one action on all the clips you check, for

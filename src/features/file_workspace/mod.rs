@@ -7,5 +7,5 @@ mod messages;
 mod state;
 pub mod view;
 
-pub use messages::{CommentLayout, Message};
+pub use messages::{ClipAction, ClipActions, CommentLayout, Message};
 pub use state::FileWorkspace;

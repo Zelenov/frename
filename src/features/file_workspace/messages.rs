@@ -13,6 +13,28 @@ pub enum Message {
     CommentAction(text_editor::Action),
     /// Resize the comment box, or let it take the whole panel.
     CommentLayout(CommentLayout),
+    /// "Describe with AI" for this clip, from the comment's corner.
+    DescribeClip,
+    /// "Generate subtitles" for this clip, from the comment's corner.
+    SubtitlesClip,
+}
+
+/// Where a paid action of the open clip stands, for its button in the comment's corner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClipAction {
+    /// Not asked for: the button starts it.
+    Idle,
+    /// Asked for; the job in work comes first.
+    Queued,
+    /// Its clip is in work.
+    Running,
+}
+
+/// The buttons of the clip's paid actions.
+#[derive(Debug, Clone, Copy)]
+pub struct ClipActions {
+    pub describe: ClipAction,
+    pub subtitles: ClipAction,
 }
 
 /// How much room the comment box takes.
