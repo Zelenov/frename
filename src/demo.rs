@@ -127,8 +127,7 @@ impl DemoRun {
         // The screenshot re-renders what was last drawn. A message would rebuild the UI first,
         // and a text editor's rebuilt text is not in the last drawing, so the comment box would
         // come out empty: chain the screenshot straight onto the wait, with no message between.
-        // A turn, or a held press, shows a note over the picture for 2 s: take the shot while it
-        // is there (the
+        // A turn, or a held press, shows a note for 2 s: take the shot while it is there (the
         // reopened clip of a demo is small and ready well before).
         let settle = if self.scenario.rotate != 0 || self.scenario.press_held {
             ROTATE_SETTLE

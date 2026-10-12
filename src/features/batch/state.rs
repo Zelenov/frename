@@ -1,7 +1,7 @@
 //! State for batch mode: the checked files, the chosen action, and the job running it.
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -402,6 +402,14 @@ impl BatchState {
         job.statuses.insert(id, ItemStatus::Running);
         job.item = Arc::default();
         Some((id, job.operation.clone(), job.cancel.clone()))
+    }
+
+    /// A clip was renamed while the job runs (the editor saved a tag change on one it has not
+    /// reached): what the action keeps by path follows it.
+    pub fn path_changed(&self, old: &Path, new: &Path) {
+        if let Some(job) = self.job.as_ref().filter(|job| job.running) {
+            job.operation.path_changed(old, new);
+        }
     }
 
     /// Where the file in work tells how far it is; handed to its operation.

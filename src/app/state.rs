@@ -971,7 +971,10 @@ impl FrenameApp {
                 if batch_finished && self.pending_close.is_some() {
                     return Task::batch([task, self.close_pending()]);
                 }
-                let Some(id) = is_unloaded.then(|| self.pending_close.take()).flatten() else {
+                // A job still running closes the window when it ends (`close_pending`, which saves the
+                // open clip first), not at the first unload.
+                let closes_now = is_unloaded && !self.folder_workspace.is_batch_running();
+                let Some(id) = closes_now.then(|| self.pending_close.take()).flatten() else {
                     return task;
                 };
                 Task::batch([task, window::close(id)])

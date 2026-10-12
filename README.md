@@ -38,7 +38,8 @@ frename is free and open source (MIT license).
   or clips with subtitles, comments or markers.
 - **Work on many clips at once.** Batch mode runs one action on all the clips you check, for
   example rotating them, moving comments between the video and text files, or turning comment
-  lines into markers. A long action runs in the background while you keep working; click the strip above the file list to see its progress or cancel it.
+  lines into markers. A long action runs in the background while you keep working; click the strip
+  above the toolbar under the file list to see its progress or cancel it.
 - **Never lose your work.** `Ctrl+Z` undoes almost everything, and frename keeps a recovery file
   of the open clip a second after each change, so a crash or a power cut does not cost you your
   tags, comments or markers. A line under the file name says "All changes saved", or that they

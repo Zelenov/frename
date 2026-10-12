@@ -1664,6 +1664,8 @@ impl FolderWorkspace {
                     open_saved = self.apply_file_updated(open, snapshot);
                 }
                 self.file_workspace.set_file(None);
+                // Nothing is left to show full screen.
+                self.media_fullscreen = false;
             }
             saved = Task::batch([pending_saved, open_saved]);
         }
@@ -1854,6 +1856,10 @@ impl FolderWorkspace {
         };
         let path_before = current_path.clone();
         let (new_path, snapshot_after_save) = snapshot.save_and_reparse(&current_path);
+        // A running job keeps some of its plan by path: the renamed clip keeps its place in it.
+        if new_path != path_before {
+            self.batch.path_changed(&path_before, &new_path);
+        }
         // The save did not do what the tags/comment wanted: most likely a file with that name
         // already exists (issue #84), or the video is read-only or open elsewhere. The same
         // check the drag-out path already uses to detect this.
