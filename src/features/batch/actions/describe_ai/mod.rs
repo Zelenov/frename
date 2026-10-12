@@ -744,7 +744,6 @@ pub fn run_clip(
             clip.usage = Default::default();
             clip
         });
-    let from_cache = cached.is_some();
     // One request either way: with tags to suggest from, it suggests them too.
     let described = match cached {
         Some(clip) => Ok(Some(clip)),
@@ -758,6 +757,7 @@ pub fn run_clip(
             on_stage,
         ),
     };
+    let described_clip: describe::DescribedClip;
     let (description, tags, usage, frames) = match described {
         // Its frames were read, but the request could pass the cap: nothing was sent, and the
         // clips after it would be refused the same way.
@@ -768,9 +768,7 @@ pub fn run_clip(
             };
         }
         Ok(Some(clip)) => {
-            if let Some(cache) = cache.filter(|_| !from_cache) {
-                keep_in_cache(cache, &on_disk, &describe_options, &vocabulary, &clip);
-            }
+            described_clip = clip.clone();
             (
                 clip.description,
                 clip.tags.filter(|_| !vocabulary.is_empty()),
@@ -827,6 +825,18 @@ pub fn run_clip(
     // A save that failed (a read-only share) only logs: check the description is there, so a
     // paid answer that was lost is reported, not counted as done.
     let (new_path, saved) = super::reparsed(new_path);
+    // Kept under the file as it is now: the save wrote into it (XMP), which changes the identity
+    // the cache finds it by, so a key made before the save would never be found again.
+    if let Some(cache) = cache {
+        let saved_on_disk = FileTagger::disk_path(&new_path);
+        keep_in_cache(
+            cache,
+            &saved_on_disk,
+            &describe_options,
+            &vocabulary,
+            &described_clip,
+        );
+    }
     if block::ai_block(saved.comment()) != Some(new_block.as_str()) {
         return ItemResult {
             usage,

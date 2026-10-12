@@ -824,31 +824,45 @@ impl PartialEq for Run {
 impl Eq for Run {}
 
 impl Run {
+    /// A run with default options at a price, for tests of the steps that use it.
+    #[cfg(test)]
+    pub(super) fn priced_for_test(usd_per_hour: f64) -> Self {
+        Self(Arc::new(SubtitleJob {
+            options: job::Options::default(),
+            excluded: Mutex::new(HashMap::new()),
+            usd_per_hour,
+            uploaded_ms: AtomicU64::new(0),
+            failed_deletes: AtomicUsize::new(0),
+        }))
+    }
+
     /// The price per hour of audio the run counted with.
     pub fn usd_per_hour(&self) -> f64 {
         self.0.usd_per_hour
     }
 
-    /// Whether the job may send the clip at `path` (as it is on disk) to Soniox: the plan did not
-    /// exclude it, and an output of a ticked format is missing (or Replace is on). A clip it
-    /// cannot send costs nothing, so the cap sets nothing aside for it.
-    pub fn may_transcribe(&self, path: &Path) -> bool {
+    /// What sending the clip at `path` (as it is on disk) to Soniox would take: `None` when the
+    /// job will not send it (the plan excluded it, its outputs exist, a saved transcript is
+    /// used, it has no audio), else the seconds of audio, `None` inside when the header does not
+    /// say. A clip it cannot send costs nothing, so the cap sets nothing aside for it.
+    pub fn audio_to_send(&self, path: &Path) -> Option<Option<f64>> {
         let excluded = self
             .0
             .excluded
             .lock()
             .is_ok_and(|excluded| excluded.contains_key(path));
         if excluded {
-            return false;
+            return None;
         }
-        let output = subtitle_path(path);
-        self.0.options.force
-            || self
-                .0
-                .options
-                .formats
-                .iter()
-                .any(|format| !format.path(&output).exists())
+        let item = plan_batch::Item {
+            input: path.to_path_buf(),
+            output: subtitle_path(path),
+            name: String::new(),
+        };
+        match plan_batch::plan(&[item], &self.0.options).pop()?.action {
+            Planned::Transcribe { audio_s } => Some(audio_s),
+            _ => None,
+        }
     }
 
     /// The audio sent to Soniox so far, in seconds.

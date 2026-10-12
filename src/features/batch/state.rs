@@ -1115,6 +1115,23 @@ mod tests {
     }
 
     #[test]
+    fn checking_only_some_clips_replaces_the_checks_and_clears_their_old_results() {
+        let files = ids(4);
+        let mut batch = state();
+        batch.start(files.clone());
+        let (id, _, _) = batch.begin_next().expect("first");
+        batch.finish(id, &ItemResult::new(ItemStatus::Done, None));
+        while let Some((id, _, _)) = batch.begin_next() {
+            batch.finish(id, &ItemResult::new(ItemStatus::Done, None));
+        }
+        batch.update(Message::CheckAll(files[..2].to_vec()));
+        batch.update(Message::CheckOnly(files[2..].to_vec()));
+        assert!(!batch.is_checked(files[0]) && !batch.is_checked(files[1]));
+        assert!(batch.is_checked(files[2]) && batch.is_checked(files[3]));
+        assert_eq!(batch.status(files[0]), None, "the old result is gone");
+    }
+
+    #[test]
     fn retry_checks_only_the_files_that_failed_or_were_not_reached() {
         let files = ids(4);
         let mut batch = state();

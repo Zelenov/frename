@@ -140,7 +140,14 @@ impl Options {
             ("cap".to_string(), self.cap_text.trim().to_string()),
         ];
         if !self.left.is_empty() {
-            saved.push(("left".to_string(), self.left.join("\n")));
+            // One name per line: a name with a line break cannot be told apart, and is not kept.
+            let names: Vec<&str> = self
+                .left
+                .iter()
+                .map(String::as_str)
+                .filter(|name| !name.contains('\n'))
+                .collect();
+            saved.push(("left".to_string(), names.join("\n")));
             saved.push(("left_folder".to_string(), self.left_folder.clone()));
         }
         saved
@@ -455,9 +462,11 @@ fn subtitles_step(
     progress: &ItemProgress,
 ) -> ItemResult {
     let disk = FileTagger::disk_path(path);
-    let reservation = if subtitles.may_transcribe(&disk) {
+    let reservation = if let Some(audio_s) = subtitles.audio_to_send(&disk) {
         // A length that cannot be read is priced as an hour, so the cap is not passed unseen.
-        let seconds = clipscribe::frames::clip_duration_s(&disk).unwrap_or(UNKNOWN_LENGTH_S);
+        let seconds = audio_s
+            .or_else(|| clipscribe::frames::clip_duration_s(&disk))
+            .unwrap_or(UNKNOWN_LENGTH_S);
         let bound = job.usd_per_hour * seconds / 3600.0;
         match job.budget.reserve(bound) {
             Some(reservation) => Some(reservation),
@@ -715,6 +724,7 @@ fn estimate<'a>(
 mod tests {
     use super::*;
     use clipscribe::AiUsage;
+    use std::sync::atomic::AtomicBool;
 
     #[test]
     fn the_cap_is_a_positive_number_or_nothing() {
@@ -754,6 +764,35 @@ mod tests {
         let result = stopped_after_subtitles(subtitles, rejected);
         assert_eq!(result.status, ItemStatus::Failed);
         assert!(result.stop_job.is_some());
+    }
+
+    /// The cap is checked before a clip is sent: a clip whose audio could pass it is not sent, and
+    /// the job stops with the clip unreached. A clip that costs nothing (its subtitles exist) is
+    /// not held back by a cap it cannot touch.
+    #[test]
+    fn the_cap_stops_the_job_before_a_clip_that_could_pass_it() {
+        let dir = frename_core::test_support::fresh_dir("pipeline-cap");
+        let video = dir.join("clip.mp4");
+        std::fs::write(&video, b"not a video").expect("clip");
+        let run = Run::new(
+            Some(generate_subtitles::Run::priced_for_test(0.12)),
+            None,
+            Some(0.01),
+            None,
+        );
+        let result = run_now(&run, &video);
+        assert_eq!(result.status, ItemStatus::Pending, "not reached");
+        assert!(result.stop_job.is_some(), "the job stops");
+
+        // Its subtitles exist: nothing would be sent, nothing is set aside, the job goes on.
+        std::fs::write(dir.join("clip.srt"), b"1\n").expect("srt");
+        let result = run_now(&run, &video);
+        assert!(result.stop_job.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn run_now(run: &Run, path: &Path) -> ItemResult {
+        super::run(run, path, &AtomicBool::new(false), &ItemProgress::default())
     }
 
     #[test]

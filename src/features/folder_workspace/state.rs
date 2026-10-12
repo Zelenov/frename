@@ -1463,6 +1463,18 @@ impl FolderWorkspace {
         if let batch::Message::Cancel = msg {
             self.cancel_solo();
         }
+        // Groups worked out in the background belong to the run whose result is shown: one that
+        // comes late, after a new run started or the job was dismissed, is dropped.
+        if let batch::Message::Action(batch::ActionMessage::PrepareClips(
+            batch::pipeline::Message::Groups(_),
+        )) = msg
+        {
+            if self.batch.is_running()
+                || self.batch.job_action() != Some(batch::Action::PrepareClips)
+            {
+                return Task::none();
+            }
+        }
         // The clips the last Prepare clips run left: check exactly those.
         if let batch::Message::Action(batch::ActionMessage::CheckLeft) = msg {
             let names = self.left_names();
@@ -1859,12 +1871,12 @@ impl FolderWorkspace {
         let Some(dir) = self.directory.as_ref() else {
             return Vec::new();
         };
+        let names: std::collections::HashSet<&std::ffi::OsStr> = names
+            .iter()
+            .map(|name| std::ffi::OsStr::new(name.as_str()))
+            .collect();
         dir.all_files()
-            .filter(|f| {
-                f.file_path()
-                    .file_name()
-                    .is_some_and(|n| names.iter().any(|name| name.as_str() == n))
-            })
+            .filter(|f| f.file_path().file_name().is_some_and(|n| names.contains(n)))
             .map(|f| f.id())
             .collect()
     }

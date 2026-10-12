@@ -22,7 +22,7 @@ one click away). For each clip, in this order, in one pass:
 5. **Comment**: the summary goes into the AI block of the comment; the editor's own text is never
    touched.
 
-Steps 4 and 5 are what `Describe with AI` already writes in one save; the pipeline adds steps 1 and 3
+Steps 4 and 5 are what `Describe with AI` already writes in one save; the pipeline adds step 1
 around it and one plan, one cap and one progress view over all of it.
 
 The panel shows, before Run: how many clips, what each step will do or skip (already subtitled, already
@@ -88,7 +88,7 @@ use on edited sequences (filed as an idea).
   cache.
 - `Operation::run` for one clip: (1) `generate_subtitles::run` when the plan says transcribe; (2)
   `describe_ai::run_clip` (the existing run, made to call `describe_clip` with the run's budget; it keeps
-  the clip, with its fingerprints, in the cache, which is where grouping reads them back); (3) the tags step; the results are added up (the status of the
+  the clip, with its fingerprints, in the cache, which is where grouping reads them back); (3) the tag suggestions come out of the same request; the results are added up (the status of the
   clip is the worst of its steps' failures, `usage` is the sum, a stop of either step stops the job).
 - The plan (`pipeline::Plan`) is the two existing plans over the checked clips: the subtitles plan
   (`generate_subtitles::plan`, header reads) and the description plan (`describe_ai::Options::plan`,
@@ -99,6 +99,9 @@ use on edited sequences (filed as an idea).
   and the job page shows the groups.
 
 ## Decisions made without the owner
+
+- The cache layout (`cache_dir_in`, `folder_key`) is in the UI crate on purpose: it is frename's own
+  data folder policy for a feature of this crate, not logic `frename-core` needs.
 
 - One new action, not a mode of Describe with AI: the panel of a pipeline has its own options (the cap,
   the two steps), and the existing two actions stay as they are.
