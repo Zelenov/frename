@@ -114,8 +114,9 @@ fn list<'a>(props: &ListProps<'a, '_>, dir: &'a Directory) -> Element<'a, Messag
         );
     }
     let selected = dir.selected_index();
-    // A running job locks the list: no other file may open while files are written.
+    // A running job locks the checks, and the row of the file in work; the other files open.
     let locked = props.batch.is_some_and(|b| b.is_running());
+    let busy = props.batch.and_then(|b| b.current());
     let failures: HashMap<FileId, &str> = props
         .batch
         .map(|b| {
@@ -133,6 +134,7 @@ fn list<'a>(props: &ListProps<'a, '_>, dir: &'a Directory) -> Element<'a, Messag
                 index,
                 selected: selected == Some(index),
                 locked,
+                busy: busy == Some(file.id()),
                 failure: failures.get(&file.id()).copied(),
             },
         )
@@ -189,7 +191,7 @@ fn searching_comments(dir: &Directory) -> Option<Element<'_, Message>> {
     })
 }
 
-/// The line over the list while a job runs: why the rows take no clicks (§13.2 "Locks").
+/// The line over the list while a job runs: why the checks take no clicks (§13.2 "Locks").
 fn lock_line<'a>(batch: &BatchState) -> Element<'a, Message> {
     let action = batch.job_action().unwrap_or(batch.action()).label();
     container(

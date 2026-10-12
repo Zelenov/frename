@@ -62,6 +62,10 @@ pub struct DemoScenario {
     /// that waits this many seconds (rate limit) before it is sent again, without sending one.
     #[serde(default)]
     pub ai_retry_wait_s: Option<u64>,
+    /// With `ai_retry_wait_s`: close the batch panel, so the job runs behind it and the
+    /// strip over the file list's toolbar shows it (#249).
+    #[serde(default)]
+    pub close_batch_panel: bool,
     /// Turn the open clip by this many quarter turns clockwise (negative: counter-clockwise),
     /// as `Ctrl+Alt+→` / `←` do, after the seek. The shot is then taken while the note is still
     /// shown over the picture.
@@ -408,6 +412,13 @@ name = "pick.a.mp4"
         let scenario = DemoScenario::parse(&text).unwrap();
         assert_eq!(scenario.describing.as_deref(), Some("Lion"));
         assert_eq!(DemoScenario::parse(MINIMAL).unwrap().describing, None);
+    }
+
+    #[test]
+    fn a_scenario_can_close_the_panel_of_a_running_job() {
+        let text = MINIMAL.replace("[[files]]", "close_batch_panel = true\n[[files]]");
+        assert!(DemoScenario::parse(&text).unwrap().close_batch_panel);
+        assert!(!DemoScenario::parse(MINIMAL).unwrap().close_batch_panel);
     }
 
     #[test]

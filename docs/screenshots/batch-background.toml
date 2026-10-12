@@ -1,0 +1,15 @@
+# PR screenshot for #249: a "Describe with AI" job runs behind a closed batch panel (`--batch --ai`); the strip over the toolbar shows it. Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.night.city.MVI_0410.mp4"
+window = [1440, 720]
+panels = [640, 360]
+ai_retry_wait_s = 8
+close_batch_panel = true
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.drone.landscape.MVI_0404.mp4"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.MVI_0410.mp4"

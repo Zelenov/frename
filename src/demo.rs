@@ -281,6 +281,11 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
     }
     if let Some(seconds) = scenario.ai_retry_wait_s.filter(|_| batch) {
         steps.push(folder_workspace::Message::ShowBatchRetry(seconds));
+        if scenario.close_batch_panel {
+            steps.push(folder_workspace::Message::Folder(
+                folder::Message::SetBatchMode(false),
+            ));
+        }
     }
     steps
 }
