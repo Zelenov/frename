@@ -297,10 +297,26 @@ impl Options {
 
     /// The job, when the plan is known, the key accepted and there is something to do.
     pub fn operation(&self) -> Option<super::Operation> {
+        self.build(true)
+    }
+
+    /// The run as a step of a longer one (#17): the plan is known and the key accepted, but there
+    /// may be nothing to do (every clip has its subtitles), when the other step has work.
+    pub fn step_run(&self) -> Option<Run> {
+        match self.build(false)? {
+            super::Operation::GenerateSubtitles(run) => Some(run),
+            _ => None,
+        }
+    }
+
+    fn build(&self, require_work: bool) -> Option<super::Operation> {
         if self.formats.is_empty() {
             return None;
         }
-        let plan = self.plan.as_ref().filter(|p| p.has_work())?;
+        let plan = self
+            .plan
+            .as_ref()
+            .filter(|p| !require_work || p.has_work())?;
         if self.key != Some(KeyState::Saved) {
             return None;
         }
@@ -1451,6 +1467,20 @@ mod tests {
         ));
         options.update(Message::PriceReady(Price::Learned(0.1)));
         assert!(matches!(state(&options), Readiness::Ready));
+    }
+
+    /// As a step of a longer run, a plan with nothing to transcribe still gives a run (the other
+    /// step has the work); on its own it does not.
+    #[test]
+    fn a_plan_with_nothing_to_do_gives_a_step_but_not_an_operation() {
+        let mut options = Options::default();
+        options.update(Message::KeyState(KeyState::Saved));
+        options.update(Message::PriceReady(Price::Learned(0.1)));
+        options.plan = Some(Plan::default());
+        assert!(options.operation().is_none());
+        assert!(options.step_run().is_some());
+        options.plan = None;
+        assert!(options.step_run().is_none(), "no plan yet");
     }
 
     #[test]

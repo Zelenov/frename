@@ -413,7 +413,12 @@ pub fn run(job: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress)
     if let Some(subtitles) = &job.subtitles {
         progress.window(0.0, subtitles_share);
         let step = subtitles_step(job, subtitles, path, cancel, progress);
-        if step.stop_job.is_some() || step.status == ItemStatus::Pending {
+        // A clip whose subtitles failed is not described: the description would be made without
+        // them, and a described clip is skipped on the next run, so it would stay that way.
+        if step.stop_job.is_some()
+            || step.status == ItemStatus::Pending
+            || step.status == ItemStatus::Failed
+        {
             return step;
         }
         merge(&mut result, step);

@@ -128,7 +128,7 @@ decisions rather than by a fake service; a live run is the owner's check):
 
 - Plan: counts and skipped reasons for the steps together; the price sums both services; Redo of
   Describe with AI is ignored.
-- Steps: a stop of the description after the subtitles leaves the clip unreached with a stop; a
+- Steps: a clip whose subtitles failed is not described; a stop of the description after the subtitles leaves the clip unreached with a stop; a
   step's failure and usage are added up.
 - Cap: a clip that could pass it is not sent and stops the job; a clip that costs nothing is not
   held back; what was set aside is replaced by what was sent.
