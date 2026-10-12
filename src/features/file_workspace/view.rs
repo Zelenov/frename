@@ -41,7 +41,7 @@ const AREA_PADDING: Padding = Padding {
 /// The comment's text keeps clear of the expand button over its top right corner.
 const COMMENT_PADDING: Padding = Padding {
     top: CONTROL_PADDING_Y,
-    right: 3.0 * ICON_BUTTON_SMALL + 2.0 * SPACE_XXS + SPACE_XS,
+    right: COMMENT_CORNER_WIDTH,
     bottom: CONTROL_PADDING_Y,
     left: SPACE_S,
 };

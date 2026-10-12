@@ -84,6 +84,10 @@ pub const CUE_TEXT_WIDTH: f32 = SIDE_LIST_MAX_WIDTH - 3.0 * SPACE_S - SCROLL_GUT
 /// name adds `LINE_BODY` per line.
 pub const MARKER_ROW_HEIGHT: f32 = ICON_BUTTON_SMALL + SPACE_XXS + LINE_BODY + 2.0 * SPACE_TIGHT;
 
+/// What the corner of the comment box holds: the clip's two paid-action buttons and the expand
+/// button, with the room the text keeps clear of them.
+pub const COMMENT_CORNER_WIDTH: f32 = 3.0 * ICON_BUTTON_SMALL + 2.0 * SPACE_XXS + SPACE_XS;
+
 // File list (§13.4).
 /// The search bar over a list: a 28 px field with 6 px around it.
 pub const SEARCH_BAR_HEIGHT: f32 = CONTROL_HEIGHT + 2.0 * SPACE_TIGHT;
