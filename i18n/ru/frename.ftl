@@ -151,7 +151,6 @@ settings-key-save-into = «Сохранить ключ» помещает его
 
 ## Batch mode
 
-batch-back-while-running = Сначала отмените действие
 batch-checked-count = { $count ->
     [one] отмечен { $count } файл
     [few] отмечено { $count } файла
@@ -179,7 +178,7 @@ batch-progress-files = { $finished } из { $total ->
 batch-time-left = осталось около { $time }
 batch-time-estimating = оцениваем время…
 batch-time-spent = прошло { $time }
-batch-locked-until-end = Папка заблокирована до конца
+batch-runs-in-background = Пока идёт, можно работать дальше
 batch-run-again = Запустить снова для { $count ->
     [one] { $count } файла
     [few] { $count } файлов

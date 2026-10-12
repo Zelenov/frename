@@ -254,21 +254,24 @@ impl Default for BatchState {
 impl BatchState {
     /// Apply a message. `Run` is started by the workspace through [`Self::start`].
     pub fn update(&mut self, message: Message) {
-        // Nothing changes under a running job but its own cancel, and what background reads
-        // bring in (clip lengths, the key's state).
+        // Nothing changes under a running job but its own cancel, showing or hiding its panel,
+        // and what background reads bring in (clip lengths, the key's state).
         // A run waiting for the open clip's marker requests is given up by anything but an
         // option change and Run itself: leaving batch mode, Cancel, another action, other files.
         if !matches!(message, Message::Action(_) | Message::Run) {
             self.waiting_for_markers = false;
         }
         let background = matches!(&message, Message::Action(m) if m.applies_while_running());
-        if self.is_running() && !matches!(message, Message::Cancel) && !background {
+        // Showing or hiding the panel is the editor's own business: the job goes on behind it
+        // (#249).
+        let panel = matches!(message, Message::SetActive(_));
+        if self.is_running() && !matches!(message, Message::Cancel) && !background && !panel {
             return;
         }
         match message {
             Message::SetActive(active) => {
                 // Files may have been renamed or got subtitles outside batch mode.
-                if active && !self.active {
+                if active && !self.active && !self.is_running() {
                     self.actions.generate_subtitles_mut().invalidate_plan();
                 }
                 self.active = active;
@@ -550,7 +553,8 @@ impl BatchState {
         self.active
     }
 
-    /// Whether a job is running; the folder and its files are locked meanwhile.
+    /// Whether a job is running. The folder stays locked (no other folder opens) and the clip in
+    /// work is busy; the rest of the app works on (#249).
     pub fn is_running(&self) -> bool {
         self.job.as_ref().is_some_and(|job| job.running)
     }

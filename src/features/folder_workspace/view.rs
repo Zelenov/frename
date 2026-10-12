@@ -97,8 +97,14 @@ pub fn view(
             width: state.folder_width(),
         }))
         .height(Length::Fill),
-        folder_controls::view::view(toolbar),
     ]
+    .push(batch::view::indicator(
+        state.batch(),
+        state.directory(),
+        state.spinner_frame(),
+        folder::Message::SetBatchMode(true),
+    ))
+    .push(folder_controls::view::view(toolbar))
     .height(Length::Fill)
     .into();
     let folder_with_controls = folder_col.map(Message::Folder);

@@ -82,11 +82,11 @@ impl FolderWorkspace {
     /// What the journal needs written now, if anything; an entry that is not needed any more is
     /// removed here.
     pub(super) fn journal_next_write(&mut self) -> Option<(FileId, Entry)> {
-        // A running job locks the folder and writes its files itself.
-        if self.batch.is_running() {
+        let (id, now) = self.journal_entry()?;
+        // The job writes the clip it works on itself.
+        if self.busy_clip() == Some(id) {
             return None;
         }
-        let (id, now) = self.journal_entry()?;
         // The baseline is set when a clip opens; these only catch a tick before that.
         let Some((baseline_id, baseline)) = self.journal_baseline.as_ref() else {
             self.journal_baseline = Some((id, now));
@@ -185,7 +185,7 @@ impl FolderWorkspace {
         let file = self.file_workspace.file()?;
         let id = file.id();
         let (baseline_id, baseline) = self.journal_baseline.as_ref()?;
-        if *baseline_id != id || self.batch.is_running() {
+        if *baseline_id != id || self.busy_clip() == Some(id) {
             return None;
         }
         let path = self.open_clip_path()?;

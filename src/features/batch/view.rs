@@ -73,19 +73,28 @@ pub fn view<'a>(
         .into()
 }
 
+/// The strip that shows a running job while the panel is closed; see [`job_view::indicator`].
+pub fn indicator<'a, M: Clone + 'a>(
+    state: &'a BatchState,
+    directory: Option<&'a Directory>,
+    spinner_frame: usize,
+    on_press: M,
+) -> Option<Element<'a, M>> {
+    if state.is_active() {
+        return None;
+    }
+    job_view::indicator(state, directory, spinner_frame, on_press)
+}
+
 /// "Batch actions", how many files are checked, and the way back to the open file.
 fn header(state: &BatchState) -> Element<'_, Message> {
     let back = IconButton::new(Icon::X)
         .small()
         .tip(
-            if state.is_running() {
-                Tip::new(fl!("batch-back-while-running"))
-            } else {
-                Tip::new(fl!("folder-controls-batch-back")).keys(&["Esc"])
-            },
+            Tip::new(fl!("folder-controls-batch-back")).keys(&["Esc"]),
             Position::Left,
         )
-        .on_press_maybe((!state.is_running()).then_some(Message::SetActive(false)));
+        .on_press(Message::SetActive(false));
     container(
         row![
             text::heading(fl!("batch-title")),

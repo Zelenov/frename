@@ -121,7 +121,6 @@ settings-key-save-into = Save key keeps it in { $store } on this computer.
 
 ## Batch mode
 
-batch-back-while-running = Cancel the action first
 batch-checked-count = { $count ->
     [one] { $count } file checked
    *[other] { $count } files checked
@@ -146,7 +145,7 @@ batch-progress-files = { $finished } of { $total ->
 batch-time-left = about { $time } left
 batch-time-estimating = estimating time…
 batch-time-spent = { $time } so far
-batch-locked-until-end = The folder is locked until it ends
+batch-runs-in-background = You can keep working while it runs
 batch-run-again = Run again on { $count ->
     [one] { $count } file
    *[other] { $count } files
