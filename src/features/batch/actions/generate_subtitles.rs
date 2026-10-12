@@ -297,26 +297,28 @@ impl Options {
 
     /// The job, when the plan is known, the key accepted and there is something to do.
     pub fn operation(&self) -> Option<super::Operation> {
-        self.build(true)
+        self.build()
     }
 
-    /// The run as a step of a longer one (#17): the plan is known and the key accepted, but there
-    /// may be nothing to do (every clip has its subtitles), when the other step has work.
-    pub fn step_run(&self) -> Option<Run> {
-        match self.build(false)? {
-            super::Operation::GenerateSubtitles(run) => Some(run),
+    /// The run as a step of a longer one (#17), the way [`Self::step`] sees it: `None` while it
+    /// has to wait (no plan, no key, no price), `Some(None)` when the step has nothing to do (no
+    /// format, or every clip has its subtitles) so the other step goes on alone, else the run.
+    pub fn step_run(&self) -> Option<Option<Run>> {
+        let plan = self.plan.as_ref()?;
+        if self.formats.is_empty() || !plan.has_work() {
+            return Some(None);
+        }
+        match self.build()? {
+            super::Operation::GenerateSubtitles(run) => Some(Some(run)),
             _ => None,
         }
     }
 
-    fn build(&self, require_work: bool) -> Option<super::Operation> {
+    fn build(&self) -> Option<super::Operation> {
         if self.formats.is_empty() {
             return None;
         }
-        let plan = self
-            .plan
-            .as_ref()
-            .filter(|p| !require_work || p.has_work())?;
+        let plan = self.plan.as_ref().filter(|p| p.has_work())?;
         if self.key != Some(KeyState::Saved) {
             return None;
         }
@@ -1469,18 +1471,33 @@ mod tests {
         assert!(matches!(state(&options), Readiness::Ready));
     }
 
-    /// As a step of a longer run, a plan with nothing to transcribe still gives a run (the other
-    /// step has the work); on its own it does not.
+    /// As a step of a longer run, a plan with nothing to transcribe (or no format) is a step that
+    /// is skipped, not one that waits; on its own it gives no operation.
     #[test]
-    fn a_plan_with_nothing_to_do_gives_a_step_but_not_an_operation() {
+    fn a_plan_with_nothing_to_do_is_a_skipped_step_but_not_an_operation() {
         let mut options = Options::default();
+        assert!(options.step_run().is_none(), "no plan yet waits");
         options.update(Message::KeyState(KeyState::Saved));
-        options.update(Message::PriceReady(Price::Learned(0.1)));
+        options.update(Message::PriceReady(Price::Rejected));
         options.plan = Some(Plan::default());
         assert!(options.operation().is_none());
-        assert!(options.step_run().is_some());
-        options.plan = None;
-        assert!(options.step_run().is_none(), "no plan yet");
+        assert!(
+            matches!(options.step_run(), Some(None)),
+            "skipped, key or not"
+        );
+        options.update(Message::PriceReady(Price::Learned(0.1)));
+        options.plan = Some(Plan {
+            transcribe: 1,
+            audio_s: 60.0,
+            ..Plan::default()
+        });
+        assert!(matches!(options.step_run(), Some(Some(_))));
+        options.update(Message::SetSrt(false));
+        options.update(Message::SetPremiere(false));
+        assert!(
+            matches!(options.step_run(), Some(None)),
+            "no format: skipped"
+        );
     }
 
     #[test]

@@ -457,7 +457,7 @@ impl Actions {
                 // The subtitles step is on but its plan is not in (a run again starts before it
                 // is): not now, rather than a run that quietly leaves the subtitles out.
                 let subtitles = if self.pipeline.subtitles() {
-                    Some(self.generate_subtitles.step_run()?)
+                    self.generate_subtitles.step_run()?
                 } else {
                     None
                 };
