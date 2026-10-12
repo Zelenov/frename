@@ -9,7 +9,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 use frename_core::ai::key::{self, ApiKey, KeyState};
@@ -338,7 +338,7 @@ impl Options {
         Some(super::Operation::GenerateSubtitles(Run(Arc::new(
             SubtitleJob {
                 options,
-                excluded: plan.excluded.clone(),
+                excluded: Mutex::new(plan.excluded.clone()),
                 usd_per_hour: price.usd_per_hour(),
                 uploaded_ms: AtomicU64::new(0),
                 failed_deletes: AtomicUsize::new(0),
@@ -746,6 +746,15 @@ pub fn supported_languages() -> Result<Vec<(String, String)>, String> {
 #[derive(Debug, Clone)]
 pub struct Run(Arc<SubtitleJob>);
 
+impl Run {
+    /// A clip the run has not reached was renamed (the editor saved a tag change): what the plan
+    /// excluded under its old name stays excluded under the new one.
+    pub fn path_changed(&self, old: &Path, new: &Path) {
+        self.0
+            .path_changed(&FileTagger::disk_path(old), &FileTagger::disk_path(new));
+    }
+}
+
 impl PartialEq for Run {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
@@ -769,8 +778,10 @@ impl Run {
 /// One run of the action.
 pub struct SubtitleJob {
     options: job::Options,
-    /// Files the plan excluded, with their reason.
-    excluded: HashMap<PathBuf, String>,
+    /// Files the plan excluded, with their reason. Kept by the clip's path: when the editor
+    /// saves a clip the job has not reached yet and that renames it, its entry moves along
+    /// (`Run::path_changed`).
+    excluded: Mutex<HashMap<PathBuf, String>>,
     /// The price the estimate used, for what the run spent.
     usd_per_hour: f64,
     /// Audio sent to Soniox by the files that finished.
@@ -784,12 +795,23 @@ impl std::fmt::Debug for SubtitleJob {
         f.debug_struct(stringify!(SubtitleJob))
             .field(stringify!(languages), &self.options.languages)
             .field(stringify!(force), &self.options.force)
-            .field(stringify!(excluded), &self.excluded.len())
+            .field(
+                stringify!(excluded),
+                &self.excluded.lock().map_or(0, |excluded| excluded.len()),
+            )
             .finish_non_exhaustive()
     }
 }
 
 impl SubtitleJob {
+    fn path_changed(&self, old: &Path, new: &Path) {
+        if let Ok(mut excluded) = self.excluded.lock() {
+            if let Some(reason) = excluded.remove(old) {
+                excluded.insert(new.to_path_buf(), reason);
+            }
+        }
+    }
+
     fn report(&self) -> Option<String> {
         let seconds = self.uploaded_ms.load(Ordering::Relaxed) as f64 / 1000.0;
         let failed_deletes = self.failed_deletes.load(Ordering::Relaxed);
@@ -836,9 +858,14 @@ pub fn run(job: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress)
     let job = &job.0;
     // A debug build renames in memory only: the clip is on disk under its old name.
     let path = FileTagger::disk_path(path);
-    if let Some(reason) = job.excluded.get(&path) {
+    let excluded = job
+        .excluded
+        .lock()
+        .ok()
+        .and_then(|excluded| excluded.get(&path).cloned());
+    if let Some(reason) = excluded {
         log::info!("subtitles: {} skipped: {reason}", path.display());
-        return with_reason(ItemStatus::Skipped, reason);
+        return with_reason(ItemStatus::Skipped, &reason);
     }
     if cancel.load(Ordering::Relaxed) {
         return ItemResult::new(ItemStatus::Pending, None);
@@ -1063,7 +1090,7 @@ mod tests {
                 force,
                 ..job::Options::default()
             },
-            excluded,
+            excluded: Mutex::new(excluded),
             usd_per_hour: 0.12,
             uploaded_ms: AtomicU64::new(0),
             failed_deletes: AtomicUsize::new(0),
@@ -1323,7 +1350,7 @@ mod tests {
                 formats: BOTH.list(),
                 ..job::Options::default()
             },
-            excluded: HashMap::new(),
+            excluded: Mutex::new(HashMap::new()),
             usd_per_hour: 0.12,
             uploaded_ms: AtomicU64::new(0),
             failed_deletes: AtomicUsize::new(0),
@@ -1344,7 +1371,7 @@ mod tests {
                 formats: PREMIERE_ONLY.list(),
                 ..job::Options::default()
             },
-            excluded: HashMap::new(),
+            excluded: Mutex::new(HashMap::new()),
             usd_per_hour: 0.12,
             uploaded_ms: AtomicU64::new(0),
             failed_deletes: AtomicUsize::new(0),
@@ -1364,6 +1391,24 @@ mod tests {
         let video = folder.file("clip.mov", "x");
         let excluded = HashMap::from([(video.clone(), fl!("batch-subtitles-shared-name-reason"))]);
         let result = run_now(&job(excluded, true), &video);
+        assert_eq!(result.status, ItemStatus::Skipped);
+        assert_eq!(
+            result.reason,
+            Some(fl!("batch-subtitles-shared-name-reason"))
+        );
+    }
+
+    /// The editor saves a tag change on a clip the run has not reached: the clip is renamed, and
+    /// what the plan excluded follows it, or it would be sent to Soniox and paid for.
+    #[test]
+    fn an_excluded_clip_renamed_before_its_turn_stays_excluded() {
+        let folder = Folder::new("excluded-renamed");
+        let video = folder.video("clip.mp4");
+        let renamed = video.with_file_name("clip [tag].mp4");
+        let excluded = HashMap::from([(video.clone(), fl!("batch-subtitles-shared-name-reason"))]);
+        let job = job(excluded, true);
+        job.path_changed(&video, &renamed);
+        let result = run_now(&job, &renamed);
         assert_eq!(result.status, ItemStatus::Skipped);
         assert_eq!(
             result.reason,

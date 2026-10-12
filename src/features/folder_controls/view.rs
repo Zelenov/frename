@@ -22,7 +22,8 @@ pub struct ToolbarProps {
     pub has_selected: bool,
     /// Batch mode is on: its toggle is latched.
     pub batch_mode: bool,
-    /// A job runs: the batch toggle waits for it.
+    /// A job runs: the folder cannot change meanwhile, so the recent folders wait for it. The
+    /// batch toggle does not: the job goes on behind the closed panel (#249).
     pub batch_running: bool,
     /// The recent folders list is open: its button is latched.
     pub recent_open: bool,
@@ -91,12 +92,12 @@ pub fn view(props: ToolbarProps) -> Element<'static, folder::Message> {
         .dot(props.update_available.is_some())
         .tip(settings_tip, Position::Top)
         .on_press(M::OpenSettings);
-    // Esc leaves batch mode (`EscapePressed`), but not while its job runs.
-    let batch_tip = batch_toggle_tip(props.batch_mode, props.batch_running);
+    // Esc leaves batch mode (`EscapePressed`); a running job goes on without the panel.
+    let batch_tip = batch_toggle_tip(props.batch_mode);
     let batch = IconButton::new(Icon::ListChecks)
         .latched(props.batch_mode)
         .tip(batch_tip, Position::Top)
-        .on_press_maybe((!props.batch_running).then_some(M::SetBatchMode(!props.batch_mode)));
+        .on_press(M::SetBatchMode(!props.batch_mode));
 
     let more = IconButton::new(Icon::Ellipsis)
         .latched(props.more_open)
@@ -180,13 +181,13 @@ pub fn more_menu(
                 on_press: (!props.batch_running).then_some(M::ToggleRecentFolders),
             },
             Folded::Batch => {
-                let tip = batch_toggle_tip(props.batch_mode, props.batch_running);
+                let tip = batch_toggle_tip(props.batch_mode);
                 MenuItem {
                     icon: Some(Icon::ListChecks),
                     label: tip.label,
                     keys: tip.keys,
                     checked: props.batch_mode,
-                    on_press: (!props.batch_running).then_some(M::SetBatchMode(!props.batch_mode)),
+                    on_press: Some(M::SetBatchMode(!props.batch_mode)),
                 }
             }
         })
@@ -233,13 +234,13 @@ fn items_to_rows(items: &[MenuItem<folder::Message>]) -> Vec<Element<'static, fo
 }
 
 /// The batch toggle's tip: its name, and `Esc` when `Esc` would leave batch mode.
-fn batch_toggle_tip(batch_mode: bool, batch_running: bool) -> Tip {
+fn batch_toggle_tip(batch_mode: bool) -> Tip {
     let tip = Tip::new(if batch_mode {
         fl!("folder-controls-batch-back")
     } else {
         fl!("folder-controls-batch")
     });
-    if batch_mode && !batch_running {
+    if batch_mode {
         tip.keys(&["Esc"])
     } else {
         tip
@@ -271,15 +272,12 @@ mod batch_tip_tests {
     use super::*;
 
     #[test]
-    fn the_batch_toggle_tip_names_the_way_back_and_shows_esc_only_when_idle() {
-        let enter = batch_toggle_tip(false, false);
+    fn the_batch_toggle_tip_names_the_way_back_and_shows_esc_only_in_batch_mode() {
+        let enter = batch_toggle_tip(false);
         assert_eq!(enter.label, fl!("folder-controls-batch"));
         assert!(enter.keys.is_empty());
-        let back = batch_toggle_tip(true, false);
+        let back = batch_toggle_tip(true);
         assert_eq!(back.label, fl!("folder-controls-batch-back"));
         assert_eq!(back.keys, vec!["Esc"]);
-        let running = batch_toggle_tip(true, true);
-        assert_eq!(running.label, fl!("folder-controls-batch-back"));
-        assert!(running.keys.is_empty());
     }
 }

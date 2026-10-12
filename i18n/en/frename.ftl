@@ -121,7 +121,6 @@ settings-key-save-into = Save key keeps it in { $store } on this computer.
 
 ## Batch mode
 
-batch-back-while-running = Cancel the action first
 batch-checked-count = { $count ->
     [one] { $count } file checked
    *[other] { $count } files checked
@@ -146,7 +145,10 @@ batch-progress-files = { $finished } of { $total ->
 batch-time-left = about { $time } left
 batch-time-estimating = estimating time…
 batch-time-spent = { $time } so far
-batch-locked-until-end = The folder is locked until it ends
+batch-runs-in-background = You can keep working while it runs
+batch-clip-in-work = In use: { $action }
+batch-folder-held = Busy: { $action }
+batch-indicator-hint = Click for the panel and Cancel
 batch-run-again = Run again on { $count ->
     [one] { $count } file
    *[other] { $count } files
@@ -288,7 +290,7 @@ batch-action-describe-ai = Describe with AI
 batch-action-describe-ai-run = Describe { $videos } · about { $dollars }
 batch-action-describe-ai-estimating = Estimating… { $known } / { $total }
 batch-action-describe-ai-none = No videos to describe.
-batch-action-describe-ai-hint = The folder is locked until it ends. Cancel keeps the videos already described; running it again skips them.
+batch-action-describe-ai-hint = { batch-runs-in-background }. Cancel keeps the videos already described; running it again skips them.
 batch-action-describe-ai-no-subtitles = Without subtitles (only the picture is described): { $videos }.
 batch-action-describe-ai-redo = Redo videos that already have an AI description
 batch-action-describe-ai-hint-panel = Describes what happens in each checked video, and when: a summary and time-ranged segments go into the AI description of its comment; your own text is kept. Frames and subtitles are sent to { $provider }, the company of the chosen model.
@@ -344,7 +346,7 @@ batch-action-generate-subtitles-srt = SRT subtitles (clip.srt)
 batch-action-generate-subtitles-premiere = Premiere Pro transcript (clip.premiere.json)
 batch-action-generate-subtitles-premiere-hint = In Premiere Pro: Text panel → Transcript → Import Static Transcript.
 batch-action-generate-subtitles-privacy = The audio of these videos is sent to Soniox and deleted there afterwards.
-batch-action-generate-subtitles-duration-hint = Takes a few minutes per hour of audio; the folder is locked until it ends. Closing frename stops the run; finished subtitles are kept.
+batch-action-generate-subtitles-duration-hint = Takes a few minutes per hour of audio. { batch-runs-in-background }. Closing frename stops the run; finished subtitles are kept.
 batch-action-generate-subtitles-hint = Transcribes the speech of each checked video with Soniox and saves the result next to it: subtitles (clip.srt), where frename shows them, and/or a Premiere Pro transcript.
 batch-subtitles-transcribe = Transcribe
 batch-subtitles-transcribe-count = Transcribe { $videos }
@@ -427,7 +429,7 @@ folder-empty-line = frename shows MP4, MOV, MKV and other video files.
 folder-open-another = Open another folder…
 folder-no-match = No files match
 folder-show-all = Show all
-folder-locked = Locked while { $action } runs
+folder-locked = Checks are locked while { $action } runs
 folder-checked-hidden = { $count } checked · { $hidden } hidden
 folder-checked-hidden-tip = { $hidden ->
     [one] 1 checked file is hidden by the search or a filter; the action runs on it too

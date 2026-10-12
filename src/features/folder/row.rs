@@ -32,8 +32,11 @@ const FRAGMENT_LEAD_CHARS: usize = 12;
 pub struct RowState<'a> {
     pub index: usize,
     pub selected: bool,
-    /// A job runs: the row neither opens nor checks its file.
+    /// A job runs: the row's check is locked. The row still opens its file (#249), except the
+    /// one in work (`busy`).
     pub locked: bool,
+    /// The job is working on this file now.
+    pub busy: bool,
     /// Why the file failed in the last job, when it did and the action said.
     pub failure: Option<&'a str>,
 }
@@ -61,10 +64,7 @@ pub fn view<'a>(
             props.spinner_frame,
         ));
     }
-    let lead = lead.push(status_cell(
-        file.has_subtitles(),
-        state.selected && state.locked,
-    ));
+    let lead = lead.push(status_cell(file.has_subtitles(), state.busy));
     let lead_width = STATUS_COLUMN + if batch.is_some() { CHECK_COLUMN } else { 0.0 };
 
     let body: Element<'a, Message> = match rename {
@@ -111,9 +111,10 @@ pub fn view<'a>(
         .height(Length::Fill)
         .center_y(Length::Fill);
 
-    // A job's rows keep their look but take no clicks, and nothing hovers; the open file closed
-    // by the job keeps its fill without the bar (its status column shows the lock).
-    let item: Element<'a, Message> = if state.locked {
+    // The row of the file in work keeps its look but takes no clicks, and nothing hovers; the
+    // open file closed by the job keeps its fill without the bar (its status column shows the
+    // lock). The other rows open their files as always.
+    let item: Element<'a, Message> = if state.busy {
         container(body)
             .width(Length::Fill)
             .height(Length::Fill)

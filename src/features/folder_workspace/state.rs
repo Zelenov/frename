@@ -60,6 +60,23 @@ const HISTORY_DEPTH: usize = 50;
 /// TagList uses the tag store of the open folder.
 type WorkspaceHistory = History<LoggingAppStateStore<AppDatabase>, FolderTagStore>;
 
+/// What a running job holds back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Hold {
+    /// The clip the job works on.
+    Clip,
+    /// The folder: no other folder opens, no file moves, nothing is undone.
+    Folder,
+}
+
+/// The job's item that has begun (marked running) and is about to run on its thread.
+struct BatchItem {
+    id: FileId,
+    operation: batch::Operation,
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    progress: std::sync::Arc<batch::ItemProgress>,
+}
+
 /// Folder workspace: owns directory, loading. Current file is the directory's selection.
 pub struct FolderWorkspace {
     directory: Option<Directory>,
@@ -87,9 +104,9 @@ pub struct FolderWorkspace {
     closing: bool,
     /// Batch mode: checked files, the chosen action and its job.
     batch: BatchState,
-    /// A batch job waits for a playing video to unload, since it may write into and rename
-    /// that very file.
-    batch_waits_for_unload: bool,
+    /// The job's next item is the clip that plays: it starts once the video has unloaded, since
+    /// the item may write into and rename that very file.
+    batch_item_waits_for_unload: Option<BatchItem>,
     /// Marker "Describe with AI" requests whose answer has not come back yet, stopped ones too.
     marker_requests: usize,
     /// Of those, the ones (guid, request number) that have not yet let go of the clip: one may
@@ -259,7 +276,7 @@ impl FolderWorkspace {
             pending_scan: None,
             closing: false,
             batch,
-            batch_waits_for_unload: false,
+            batch_item_waits_for_unload: None,
             marker_requests: 0,
             marker_readers: std::collections::HashSet::new(),
             inline_rename: None,
@@ -308,7 +325,9 @@ impl FolderWorkspace {
             return key.map_or_else(Task::none, |key| self.handle_recent_folders(key));
         }
         if self.is_blocked(&message) {
-            return Task::none();
+            return self
+                .blocked_notice(&message)
+                .map_or_else(Task::none, |note| Self::notice(&note));
         }
         match message {
             // While a marker row is open, keys belong to its fields: `[b-roll]` is typed, not in
@@ -384,6 +403,16 @@ impl FolderWorkspace {
                     }
                 }
                 Task::none()
+            }
+            Message::ShowHeldPress => {
+                if self.batch.is_running() {
+                    return self.update(Message::OpenFolderPicker);
+                }
+                // The job has not started yet (the clip lengths are still being read).
+                Task::future(async {
+                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                    Message::ShowHeldPress
+                })
             }
             Message::ShowConfirmingDescribeUnnamed => {
                 let asked = self.unnamed_marker_guids().len();
@@ -663,12 +692,8 @@ impl FolderWorkspace {
                     return self.set_fullscreen(false);
                 }
                 if self.batch.is_active() {
-                    // A running job ignores `SetActive` (see `BatchState::update`), so batch mode
-                    // stays on: keep the anchor too, or a Shift+click after the job finishes would
-                    // silently range from the wrong file instead of the documented last-Ctrl-click.
-                    if !self.batch.is_running() {
-                        self.select_anchor = None;
-                    }
+                    // A running job goes on behind the closed panel (#249).
+                    self.select_anchor = None;
                     return self.handle_batch(batch::Message::SetActive(false));
                 }
                 // Both search bars label their clear button "Esc", so clear both.
@@ -1113,6 +1138,11 @@ impl FolderWorkspace {
     }
 
     fn apply_file_opened(&mut self, file: frename_core::File) -> Task<Message> {
+        // The click that selected it came before the job reached it: the job is writing it now.
+        if self.busy_clip() == Some(file.id()) {
+            self.pending_to_file_id = None;
+            return Task::none();
+        }
         // The typing in the comment box belongs to the file it was typed in.
         self.end_comment_session();
         let file = self.with_comment_loaded(file);
@@ -1213,10 +1243,16 @@ impl FolderWorkspace {
     }
 
     /// Messages to drop now. Batch mode shows batch actions instead of the open file, so what
-    /// would edit that file is off. A running job also locks the folder: no file may open or
-    /// change while the job writes its files.
+    /// would edit that file is off. A running job keeps the folder as it is (no other folder
+    /// opens, no file is deleted or moved) and its clip in work is busy: it cannot be opened or
+    /// edited until its item ends. Everything else goes on while the job runs (#249).
     fn is_blocked(&self, message: &Message) -> bool {
-        let edits_open_file = matches!(
+        self.blocked_by_batch_mode(message) || self.job_holds(message).is_some()
+    }
+
+    /// Messages that edit the open file: off in batch mode, which shows no open file.
+    fn edits_open_file(message: &Message) -> bool {
+        matches!(
             message,
             Message::TagPanel(_)
                 | Message::FileNamePanel(_)
@@ -1235,27 +1271,41 @@ impl FolderWorkspace {
                         | folder::Message::RenameInput(_)
                         | folder::Message::SubmitRename
                 )
-        );
-        if edits_open_file && self.batch.is_active() {
+        )
+    }
+
+    /// Batch mode shows batch actions instead of the open file, so what would edit that file is
+    /// off. Silent: the panel is what the editor sees.
+    fn blocked_by_batch_mode(&self, message: &Message) -> bool {
+        if !self.batch.is_active() {
+            return false;
+        }
+        if Self::edits_open_file(message) {
             return true;
         }
         // Undo and redo follow what they step over: a marker or a turn of the open video is
         // undone in batch mode (when no job runs), a tag change is not.
-        if self.batch.is_active() {
-            let not_media = match message {
-                Message::Undo => !self.history.undo_edits_open_video(),
-                Message::Redo => !self.history.redo_edits_open_video(),
-                _ => false,
-            };
-            if not_media && matches!(message, Message::Undo | Message::Redo) {
-                return true;
-            }
-            if self.batch.is_running() && matches!(message, Message::Undo | Message::Redo) {
-                return true;
-            }
+        let not_media = match message {
+            Message::Undo => !self.history.undo_edits_open_video(),
+            Message::Redo => !self.history.redo_edits_open_video(),
+            _ => false,
+        };
+        not_media && matches!(message, Message::Undo | Message::Redo)
+    }
+
+    /// Why a running job holds `message` back, if it does: the clip it works on, or the folder
+    /// it keeps as it is. The editor is told (`blocked_notice`).
+    fn job_holds(&self, message: &Message) -> Option<Hold> {
+        if !self.batch.is_running() {
+            return None;
         }
+        // The job renames files behind the history, so a step back could use a stale path.
+        if matches!(message, Message::Undo | Message::Redo) {
+            return Some(Hold::Folder);
+        }
+        let open_is_busy = self.open_clip_is_busy();
         // The video and its marker list stay in batch mode, unlike the tags: markers and turns of
-        // the open video are off only while a job runs (the job has closed the file then).
+        // the open video are off only while the job works on that clip (it has closed the file).
         let edits_open_media = matches!(
             message,
             Message::MediaViewer(media_viewer::Message::Video(
@@ -1263,9 +1313,10 @@ impl FolderWorkspace {
                     | media_viewer_video::Message::Controls(video_controls::Message::Rotate(_))
             )) | Message::RotateVideo(_)
                 | Message::RotateVideoWhileTyping(_)
+                | Message::ToggleMediaFullscreen
         );
-        if edits_open_media && self.batch.is_running() {
-            return true;
+        if open_is_busy && (Self::edits_open_file(message) || edits_open_media) {
+            return Some(Hold::Clip);
         }
         let changes_files = matches!(
             message,
@@ -1276,23 +1327,107 @@ impl FolderWorkspace {
                 | Message::OpenFilePicker
                 | Message::RecentFolders(recent_folders::Message::Toggle)
                 | Message::PrepareBatch(_)
-                | Message::ToggleMediaFullscreen
                 | Message::FileAction(_)
                 | Message::RunFileAction(..)
                 | Message::FileMenu(file_menu::Message::Open(_))
                 | Message::Folder(
-                    folder::Message::SelectFile(_)
-                        | folder::Message::PreviousFile
-                        | folder::Message::NextFile
-                        | folder::Message::OpenFolder
+                    folder::Message::OpenFolder
                         | folder::Message::ToggleRecentFolders
-                        | folder::Message::SetBatchMode(_)
                         | folder::Message::ToggleChecked(_)
                         | folder::Message::ToggleAllChecked
                         | folder::Message::InvertChecks
                 )
         );
-        self.batch.is_running() && (edits_open_file || changes_files)
+        if changes_files {
+            return Some(Hold::Folder);
+        }
+        // Another clip must not open while the job waits for the video to let go of this one:
+        // the unload would meet the switch half way.
+        let steps = matches!(
+            message,
+            Message::Folder(
+                folder::Message::SelectFile(_)
+                    | folder::Message::StartRename(_)
+                    | folder::Message::PreviousFile
+                    | folder::Message::NextFile
+            )
+        );
+        if steps && self.batch_item_waits_for_unload.is_some() {
+            return Some(Hold::Clip);
+        }
+        // The clip in work cannot be opened: the job is writing it. A step with the arrow keys
+        // goes past it instead (`select_next`, `select_previous`).
+        let by_step = matches!(
+            message,
+            Message::Folder(folder::Message::PreviousFile | folder::Message::NextFile)
+        );
+        (!by_step && self.opens_busy_clip(message)).then_some(Hold::Clip)
+    }
+
+    /// The note for something the running job holds back that no message stands for (a marker
+    /// description): nothing while no job runs.
+    pub(super) fn job_holds_note(&self) -> Task<Message> {
+        if !self.batch.is_running() {
+            return Task::none();
+        }
+        let action = self
+            .batch
+            .job_action()
+            .unwrap_or(self.batch.action())
+            .label();
+        Self::notice(&fl!("batch-folder-held", action = action))
+    }
+
+    /// What the editor is told when `message` is held back by the running job, so a lock is
+    /// never mistaken for a hang.
+    fn blocked_notice(&self, message: &Message) -> Option<String> {
+        let action = self
+            .batch
+            .job_action()
+            .unwrap_or(self.batch.action())
+            .label();
+        Some(match self.job_holds(message)? {
+            Hold::Clip => fl!("batch-clip-in-work", action = action),
+            Hold::Folder => fl!("batch-folder-held", action = action),
+        })
+    }
+
+    /// The clip the running job works on now.
+    fn busy_clip(&self) -> Option<FileId> {
+        self.batch.current()
+    }
+
+    /// The open clip is the one the running job works on.
+    fn open_clip_is_busy(&self) -> bool {
+        self.busy_clip()
+            .is_some_and(|busy| self.file_workspace.file().map(|f| f.id()) == Some(busy))
+    }
+
+    /// `message` would open the clip the running job works on: a click on its row, or a step
+    /// to it with the arrow keys of the list.
+    fn opens_busy_clip(&self, message: &Message) -> bool {
+        let Some(busy) = self.busy_clip() else {
+            return false;
+        };
+        let Some(dir) = self.directory.as_ref() else {
+            return false;
+        };
+        let selected = dir
+            .selected_file()
+            .and_then(|selected| dir.files_in_order().position(|f| f.id() == selected.id()));
+        let target = match message {
+            Message::Folder(
+                folder::Message::SelectFile(index) | folder::Message::StartRename(index),
+            ) => Some(*index),
+            Message::Folder(folder::Message::PreviousFile) => {
+                selected.and_then(|i| i.checked_sub(1))
+            }
+            Message::Folder(folder::Message::NextFile) => selected.map(|i| i + 1),
+            _ => None,
+        };
+        target
+            .and_then(|index| dir.files_in_order().nth(index))
+            .is_some_and(|f| f.id() == busy)
     }
 
     /// IDs of the files the folder list shows, in list order.
@@ -1431,8 +1566,8 @@ impl FolderWorkspace {
         Task::batch([key, probes])
     }
 
-    /// Start the selected batch action on the checked files, in folder order. A playing video
-    /// is unloaded first; see [`Self::run_batch`].
+    /// Start the selected batch action on the checked files, in folder order. The job runs in the
+    /// background (#249); see [`Self::run_batch_item`] for the clip that is open.
     fn start_batch(&mut self) -> Task<Message> {
         // A list left open would swallow the keys with nothing to show for it.
         let _ = self.recent_folders.update(recent_folders::Message::Close);
@@ -1463,12 +1598,9 @@ impl FolderWorkspace {
             action: action.id().to_string(),
             options: self.batch.actions().persist(action),
         });
-        self.media_fullscreen = false;
-        if self.media_viewer.needs_unload_before_rename() {
-            self.batch_waits_for_unload = true;
-            return Task::done(Message::MediaViewer(media_viewer::Message::Unload));
-        }
-        self.run_batch()
+        // The editor keeps the open clip; it is closed only while the job's item for that very
+        // clip runs (see `run_batch_item`).
+        self.next_batch_item()
     }
 
     /// Tell "Describe with AI" the folder's own tags, so its panel and its next run suggest from
@@ -1478,28 +1610,80 @@ impl FolderWorkspace {
         self.batch.set_folder_tags(tags);
     }
 
-    /// Save the edits waiting for the disk (the open file may be one of the job's), close the
-    /// open file until the job ends, and start the first file.
-    fn run_batch(&mut self) -> Task<Message> {
-        let pending_saved = self.apply_pending_file_updates();
-        let open_saved = self
-            .file_workspace
-            .get_snapshot()
-            .map_or(Task::none(), |(id, snapshot)| {
-                self.apply_file_updated(id, snapshot)
-            });
-        self.file_workspace.set_file(None);
-        Task::batch([pending_saved, open_saved, self.next_batch_item()])
-    }
-
-    /// Run the job on its next file on a blocking thread, or end the job when it has none
-    /// left or was cancelled. One file per step: progress names the file in work, and a
-    /// cancel stops after it, so no file is left half done.
+    /// Start the job's next file on a blocking thread, or end the job when it has none left or was
+    /// cancelled. One file per step: progress names the file in work, and a cancel stops after it,
+    /// so no file is left half done. The file's path is read now, so an item always works on the
+    /// clip's current name (a busy clip cannot be renamed meanwhile).
     fn next_batch_item(&mut self) -> Task<Message> {
         let Some((id, operation, cancel)) = self.batch.begin_next() else {
             return Task::done(Message::BatchFinished);
         };
-        let progress = self.batch.item_progress().unwrap_or_default();
+        let item = BatchItem {
+            id,
+            operation,
+            cancel,
+            progress: self.batch.item_progress().unwrap_or_default(),
+        };
+        // The video plays this clip, or a save of it waits for the video to let go: the file is
+        // free first.
+        let touches_it = self.file_workspace.file().map(|f| f.id()) == Some(id)
+            || self
+                .pending_file_updates
+                .iter()
+                .any(|(pending, _)| *pending == id);
+        if touches_it && self.media_viewer.needs_unload_before_rename() {
+            self.batch_item_waits_for_unload = Some(item);
+            return Task::done(Message::MediaViewer(media_viewer::Message::Unload));
+        }
+        self.run_batch_item(item)
+    }
+
+    /// Run `item`. When the job reaches the open clip, the edits waiting for the disk are saved
+    /// and the clip is closed until its item ends (`batch_item_done` opens it again): the item
+    /// may rename it and rewrite its comment, and the editor must not hold a copy that is
+    /// about to be stale.
+    fn run_batch_item(&mut self, item: BatchItem) -> Task<Message> {
+        let BatchItem {
+            id,
+            operation,
+            cancel,
+            progress,
+        } = item;
+        // Cancelled while the video let go of the clip: the item is not reached, and the video
+        // that was unloaded for it comes back.
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            self.batch
+                .finish(id, &ItemResult::new(ItemStatus::Pending, None));
+            let saved = self.apply_pending_file_updates();
+            let video = self
+                .directory
+                .as_ref()
+                .and_then(|d| d.selected_file())
+                .filter(|_| self.file_workspace.file().is_some())
+                .cloned()
+                .map_or_else(Task::none, |file| {
+                    self.media_viewer.open(&file).map(Message::MediaViewer)
+                });
+            return Task::batch([saved, video, self.next_batch_item()]);
+        }
+        let mut saved = Task::none();
+        let pending_for_it = self
+            .pending_file_updates
+            .iter()
+            .any(|(pending, _)| *pending == id);
+        if self.file_workspace.file().map(|f| f.id()) == Some(id) || pending_for_it {
+            let pending_saved = self.apply_pending_file_updates();
+            let mut open_saved = Task::none();
+            if self.file_workspace.file().map(|f| f.id()) == Some(id) {
+                if let Some((open, snapshot)) = self.file_workspace.get_snapshot() {
+                    open_saved = self.apply_file_updated(open, snapshot);
+                }
+                self.file_workspace.set_file(None);
+                // Nothing is left to show full screen.
+                self.media_fullscreen = false;
+            }
+            saved = Task::batch([pending_saved, open_saved]);
+        }
         let Some(path) = self
             .directory
             .as_ref()
@@ -1508,9 +1692,9 @@ impl FolderWorkspace {
         else {
             self.batch
                 .finish(id, &ItemResult::new(ItemStatus::Failed, None));
-            return self.next_batch_item();
+            return Task::batch([saved, self.next_batch_item()]);
         };
-        Task::future(async move {
+        let run = Task::future(async move {
             let result =
                 tokio::task::spawn_blocking(move || operation.run(&path, &cancel, &progress))
                     .await
@@ -1522,7 +1706,8 @@ impl FolderWorkspace {
                 id,
                 result: Box::new(result),
             }
-        })
+        });
+        Task::batch([saved, run])
     }
 
     /// Take a finished file into the list (it may have been renamed), then start the next.
@@ -1544,25 +1729,52 @@ impl FolderWorkspace {
             }
         }
         self.batch.finish(id, &result);
-        self.next_batch_item()
+        // The clip was closed for its item: the editor gets it back, under its name now.
+        let reopen = self.reopen_selected_if_closed();
+        Task::batch([reopen, self.next_batch_item()])
     }
 
-    /// The job ended: reopen the selected file, and resume loading comments.
+    /// The selected clip was closed for the job: open it again.
+    fn reopen_selected_if_closed(&self) -> Task<Message> {
+        let open = self.file_workspace.file().map(|f| f.id());
+        self.directory
+            .as_ref()
+            .and_then(|d| d.selected_file())
+            // A click that selected it has its `FileOpened` on the way.
+            .filter(|selected| open != Some(selected.id()))
+            .filter(|selected| self.pending_to_file_id != Some(selected.id()))
+            .cloned()
+            .map_or_else(Task::none, |file| Task::done(Message::FileOpened(file)))
+    }
+
+    /// The job ended: reopen the selected file if it was closed, and resume loading comments.
     fn batch_finished(&mut self) -> Task<Message> {
         // The job renamed files behind the history: undoing across it would use stale paths.
         self.history = WorkspaceHistory::new(HISTORY_DEPTH);
         // The job may have written subtitles: the plan is made again.
         let load_comments =
             Task::batch([self.load_next_comment_batch(false), self.subtitle_reads()]);
-        let Some(file) = self
-            .directory
-            .as_ref()
-            .and_then(|d| d.selected_file())
-            .cloned()
-        else {
-            return load_comments;
+        Task::batch([
+            self.reopen_selected_if_closed(),
+            load_comments,
+            self.report_job_behind_closed_panel(),
+        ])
+    }
+
+    /// A job that ended behind a closed panel must not end unseen: when something went wrong (a
+    /// file not done, a stop for a bad key or no credit, a cancel before the end) the panel comes
+    /// back with the result; otherwise a note says it finished.
+    fn report_job_behind_closed_panel(&mut self) -> Task<Message> {
+        if self.batch.is_active() {
+            return Task::none();
+        }
+        let Some(progress) = self.batch.progress() else {
+            return Task::none();
         };
-        Task::batch([Task::done(Message::FileOpened(file)), load_comments])
+        if progress.failed > 0 || self.batch.stopped().is_some() || progress.not_reached() > 0 {
+            return self.handle_batch(batch::Message::SetActive(true));
+        }
+        Self::notice(&fl!("batch-result-done", total = (progress.total as i64)))
     }
 
     /// Every queued deferred save, applied in order (there is normally one; see
@@ -1579,8 +1791,25 @@ impl FolderWorkspace {
     /// deferred close, a deferred folder scan, or a plain file-switch save — then, for the plain
     /// case, opens the newly selected file.
     fn on_media_unloaded(&mut self) -> Task<Message> {
-        if std::mem::take(&mut self.batch_waits_for_unload) {
-            return self.run_batch();
+        if let Some(item) = self.batch_item_waits_for_unload.take() {
+            let item_clip = item.id;
+            let run = self.run_batch_item(item);
+            // The editor may have moved to another clip while the video let go: that clip's
+            // video was waiting for this unload too.
+            let selected = self
+                .directory
+                .as_ref()
+                .and_then(|d| d.selected_file())
+                .filter(|f| {
+                    f.id() != item_clip
+                        && self.file_workspace.file().map(|open| open.id()) == Some(f.id())
+                })
+                .cloned()
+                .filter(|_| !self.media_viewer.needs_unload_before_rename());
+            let video = selected.map_or_else(Task::none, |file| {
+                self.media_viewer.open(&file).map(Message::MediaViewer)
+            });
+            return Task::batch([run, video]);
         }
         // Closing wins over any scan/switch also waiting on this same unload: just save, and
         // let the caller (CloseRequested's window::close) proceed. Reopening the video (the
@@ -1664,6 +1893,10 @@ impl FolderWorkspace {
         };
         let path_before = current_path.clone();
         let (new_path, snapshot_after_save) = snapshot.save_and_reparse(&current_path);
+        // A running job keeps some of its plan by path: the renamed clip keeps its place in it.
+        if new_path != path_before {
+            self.batch.path_changed(&path_before, &new_path);
+        }
         // The save did not do what the tags/comment wanted: most likely a file with that name
         // already exists (issue #84), or the video is read-only or open elsewhere. The same
         // check the drag-out path already uses to detect this.
@@ -1871,10 +2104,7 @@ impl FolderWorkspace {
             }
             folder::Message::SubmitRename => self.submit_rename(),
             folder::Message::SetBatchMode(on) => {
-                // A running job ignores `SetActive` (see `BatchState::update`): the UI already
-                // disables the ☑ button then, but keep the anchor too in case something else
-                // sends this message while a job runs.
-                if !on && !self.batch.is_running() {
+                if !on {
                     self.select_anchor = None;
                 }
                 // The open file starts checked: it is usually the one to act on.
@@ -2122,6 +2352,10 @@ impl FolderWorkspace {
         };
         let previously_open = dir.selected_file().map(|f| f.id());
         let open = self.select_file_at(index);
+        // The checks are locked while a job runs: the click only opens the clip.
+        if self.batch.is_running() {
+            return open;
+        }
         let check = if self.batch.is_active() {
             self.handle_batch(batch::Message::Toggle(id))
         } else {
@@ -2167,6 +2401,9 @@ impl FolderWorkspace {
             self.select_anchor = anchor.or(Some(clicked_id));
         }
         let open = self.select_file_at(index);
+        if self.batch.is_running() {
+            return open;
+        }
         let check = self.handle_batch_many([
             batch::Message::SetActive(true),
             batch::Message::CheckNone,
@@ -2192,7 +2429,46 @@ impl FolderWorkspace {
         Task::batch([self.describe_ai_reads(), self.subtitle_reads()])
     }
 
+    /// The arrow keys of the list step over the clip the job works on: `None` when the next clip
+    /// is not it (the plain step), `Some(None)` when nothing lies beyond it, else the index to
+    /// open instead.
+    fn step_past_busy(&self, forward: bool) -> Option<Option<usize>> {
+        let busy = self.busy_clip()?;
+        let dir = self.directory.as_ref()?;
+        let selected = dir
+            .selected_file()
+            .and_then(|selected| dir.files_in_order().position(|f| f.id() == selected.id()))?;
+        let at = |index: Option<usize>| index.and_then(|i| dir.files_in_order().nth(i));
+        let near = if forward {
+            selected.checked_add(1)
+        } else {
+            selected.checked_sub(1)
+        };
+        if at(near)?.id() != busy {
+            return None;
+        }
+        let far = near.and_then(|n| {
+            if forward {
+                n.checked_add(1)
+            } else {
+                n.checked_sub(1)
+            }
+        });
+        Some(at(far).map(|_| far.unwrap_or_default()))
+    }
+
+    /// Open the clip at `index` as the arrow keys do, and bring its row into view.
+    fn step_to(&mut self, index: usize) -> Task<Message> {
+        Task::batch([
+            self.select_file_at(index),
+            Task::done(Message::ScrollFolderListToSelected),
+        ])
+    }
+
     fn select_previous(&mut self) -> Task<Message> {
+        if let Some(over) = self.step_past_busy(false) {
+            return over.map_or_else(Task::none, |index| self.step_to(index));
+        }
         let Some(file) = self
             .directory
             .as_mut()
@@ -2209,6 +2485,9 @@ impl FolderWorkspace {
     }
 
     fn select_next(&mut self) -> Task<Message> {
+        if let Some(over) = self.step_past_busy(true) {
+            return over.map_or_else(Task::none, |index| self.step_to(index));
+        }
         let Some(file) = self.directory.as_mut().and_then(|dir| dir.select_next()) else {
             self.pending_to_file_id = None;
             return Task::none();
@@ -4310,10 +4589,11 @@ mod tests {
         assert!(!workspace.batch.is_checked(other));
     }
 
-    /// A job waits for the playing video to unload, runs file by file with the folder locked,
-    /// and gives the open file back when it ends.
+    /// A job runs in the background (#249): the clip it works on is closed and cannot be opened
+    /// until its item ends; another clip opens and edits meanwhile. The clip that was closed
+    /// comes back when the job ends.
     #[test]
-    fn a_batch_job_locks_the_folder_and_reopens_the_file_when_done() {
+    fn a_batch_job_busies_only_the_clip_in_work_and_reopens_it_when_done() {
         let test_dir = TestDirectory::new(2);
         let mut workspace = batch_workspace(&test_dir);
 
@@ -4328,14 +4608,21 @@ mod tests {
         ));
         assert!(
             workspace.file_workspace().file().is_none(),
-            "the open file is closed during the job"
+            "the clip in work is closed"
         );
 
+        assert!(
+            workspace.is_blocked(&Message::Folder(folder::Message::SelectFile(0))),
+            "the clip in work cannot be opened"
+        );
+
+        let second = file_id_at(&workspace, 1);
         let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
         assert_eq!(
-            workspace.directory().and_then(|d| d.selected_index()),
-            Some(0),
-            "navigation is locked"
+            workspace.file_workspace().file().map(|f| f.id()),
+            Some(second),
+            "another clip opens while the job runs"
         );
 
         let skipped = || ItemResult::new(ItemStatus::Skipped, None);
@@ -4344,8 +4631,16 @@ mod tests {
             result: Box::new(skipped()),
         });
         assert!(workspace.is_batch_running());
+        assert!(
+            workspace.batch_item_waits_for_unload.is_some(),
+            "the next item is the clip that plays: it waits for the video to let go"
+        );
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert!(workspace.file_workspace().file().is_none());
         let _ = workspace.update(Message::BatchItemDone {
-            id: file_id_at(&workspace, 1),
+            id: second,
             result: Box::new(skipped()),
         });
         assert!(!workspace.is_batch_running(), "ended after the last file");
@@ -4355,8 +4650,280 @@ mod tests {
         flush_file_opened(&mut workspace);
         assert!(
             workspace.file_workspace().file().is_some(),
-            "the file is open again"
+            "the clip is open again"
         );
+    }
+
+    /// While a job runs the folder stays as it is, but the editor works on: the batch panel can
+    /// be closed, and a clip that is not in work can be edited.
+    #[test]
+    fn a_running_job_locks_the_folder_but_not_the_editor() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert!(workspace.is_blocked(&Message::OpenFolderPicker));
+        assert!(workspace.is_blocked(&Message::Undo));
+        assert!(!workspace.is_blocked(&Message::Folder(folder::Message::SetBatchMode(false))));
+
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(false)));
+        assert!(!workspace.batch().is_active(), "the panel closes");
+        assert!(workspace.is_batch_running(), "the job goes on behind it");
+
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(2)));
+        flush_file_opened(&mut workspace);
+        assert!(
+            !workspace.is_blocked(&Message::RemoveTag),
+            "the open clip is not in work"
+        );
+        assert!(workspace.is_blocked(&Message::Folder(folder::Message::SelectFile(0))));
+    }
+
+    /// While the job waits for the video to let go of the clip, no other clip opens: the unload
+    /// would meet the switch half way and the clip's edits would be saved over what the job wrote.
+    #[test]
+    fn no_clip_opens_while_the_job_waits_for_the_video_to_unload() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        assert!(workspace.batch_item_waits_for_unload.is_some());
+        let select = Message::Folder(folder::Message::SelectFile(1));
+        assert!(workspace.is_blocked(&select));
+        assert!(workspace.is_blocked(&Message::Folder(folder::Message::NextFile)));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert!(workspace.batch_item_waits_for_unload.is_none());
+        assert!(
+            !workspace.is_blocked(&select),
+            "the other clip opens once the item runs"
+        );
+    }
+
+    /// An edit of a clip that waits for the disk is saved before the job's item for that clip
+    /// starts, or the unload would later save it over what the item wrote.
+    #[test]
+    fn a_pending_save_of_the_clip_in_work_is_applied_before_its_item_runs() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = batch_workspace(&test_dir);
+        let first = file_id_at(&workspace, 0);
+        let snapshot = workspace
+            .directory()
+            .and_then(|d| d.file_by_id(first))
+            .map(|f| f.snapshot().clone())
+            .expect("snapshot");
+        // The open clip is the second one; the first one's edit waits for its video to unload.
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        workspace.inject_pending_rename(first, snapshot);
+        assert!(workspace.has_pending_rename());
+        let item = super::BatchItem {
+            id: first,
+            operation: workspace.batch().operation().expect("an operation"),
+            cancel: Default::default(),
+            progress: Default::default(),
+        };
+        let _ = workspace.run_batch_item(item);
+        assert!(!workspace.has_pending_rename(), "saved before the item");
+    }
+
+    /// A double-click on the clip in work renames nothing and selects nothing: its first click
+    /// was held, so the second must be too, or the list and the editor would show two clips.
+    #[test]
+    fn a_rename_of_the_clip_in_work_is_held_while_another_clip_is_open() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(2)));
+        flush_file_opened(&mut workspace);
+        let open = workspace.file_workspace().file().map(|f| f.id());
+        let rename = Message::Folder(folder::Message::StartRename(0));
+        assert!(workspace.is_blocked(&rename));
+        let _ = workspace.update(rename);
+        assert_eq!(
+            workspace
+                .directory()
+                .and_then(|d| d.selected_file())
+                .map(|f| f.id()),
+            open,
+            "the selection stays on the open clip"
+        );
+    }
+
+    /// Cancel while the video lets go of the clip: the item is not reached and the clip's video
+    /// comes back.
+    #[test]
+    fn cancel_before_the_item_starts_leaves_the_clip_untouched() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        assert!(workspace.batch_item_waits_for_unload.is_some());
+        let _ = workspace.update(Message::Batch(batch::Message::Cancel));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert!(!workspace.is_batch_running(), "the job ended");
+        let first = file_id_at(&workspace, 0);
+        assert_eq!(
+            workspace.batch().status(first),
+            Some(ItemStatus::Pending),
+            "not reached"
+        );
+        assert!(workspace.file_workspace().file().is_some(), "still open");
+    }
+
+    /// The editor moved to another clip while the job waited for the video of the previous one to
+    /// let go: the unload that starts the item also opens the new clip's video.
+    #[test]
+    fn the_clip_the_editor_moved_to_gets_its_video_when_the_waited_for_unload_comes() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        assert!(workspace.batch_item_waits_for_unload.is_none());
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(2)));
+        flush_file_opened(&mut workspace);
+        let third = file_id_at(&workspace, 2);
+        let _ = workspace.update(Message::BatchItemDone {
+            id: file_id_at(&workspace, 0),
+            result: Box::new(ItemResult::new(ItemStatus::Skipped, None)),
+        });
+        assert!(
+            workspace.batch_item_waits_for_unload.is_some(),
+            "the item for the clip left behind waits for its save and its video"
+        );
+        let loads = workspace.media_viewer().video_loads_started();
+        // The unload that was sent has been done by the player.
+        workspace.media_viewer_mut().pretend_video_loading(false);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert_eq!(
+            workspace.file_workspace().file().map(|f| f.id()),
+            Some(third)
+        );
+        assert_eq!(
+            workspace.media_viewer().video_loads_started(),
+            loads + 1,
+            "the clip the editor is on plays"
+        );
+    }
+
+    /// The arrow keys also step back over the clip in work, and stop when nothing lies beyond.
+    #[test]
+    fn the_arrow_keys_step_back_over_the_clip_in_work_and_stop_at_the_end() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        let _ = workspace.update(Message::BatchItemDone {
+            id: file_id_at(&workspace, 0),
+            result: Box::new(ItemResult::new(ItemStatus::Skipped, None)),
+        });
+        // The job is on file 1. From file 2, the previous clip is it: step to file 0.
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(2)));
+        flush_file_opened(&mut workspace);
+        assert_eq!(workspace.step_past_busy(false), Some(Some(0)));
+        assert_eq!(workspace.step_past_busy(true), None, "nothing after file 2");
+        // From file 0, forward is the clip in work: step to file 2.
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        flush_file_opened(&mut workspace);
+        assert_eq!(workspace.step_past_busy(true), Some(Some(2)));
+    }
+
+    /// A job that ends behind a closed panel does not end unseen: when something went wrong, or
+    /// it was stopped, the panel comes back with the result.
+    #[test]
+    fn a_job_that_stopped_behind_a_closed_panel_brings_the_panel_back() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(false)));
+        let failed = || ItemResult::new(ItemStatus::Failed, None);
+        let _ = workspace.update(Message::BatchItemDone {
+            id: file_id_at(&workspace, 0),
+            result: Box::new(failed()),
+        });
+        let _ = workspace.update(Message::BatchItemDone {
+            id: file_id_at(&workspace, 1),
+            result: Box::new(failed()),
+        });
+        assert!(!workspace.is_batch_running());
+        assert!(!workspace.batch().is_active());
+        let _ = workspace.update(Message::BatchFinished);
+        assert!(workspace.batch().is_active(), "the result shows");
+    }
+
+    /// What the job holds back says so, instead of doing nothing.
+    #[test]
+    fn what_a_job_holds_back_tells_the_editor_why() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        let on_busy = Message::Folder(folder::Message::SelectFile(0));
+        let clip = workspace.blocked_notice(&on_busy).expect("told");
+        assert!(!clip.is_empty());
+        let folder_note = workspace
+            .blocked_notice(&Message::OpenFolderPicker)
+            .expect("told");
+        assert_ne!(clip, folder_note);
+        assert_eq!(
+            workspace.blocked_notice(&Message::Folder(folder::Message::SelectFile(1))),
+            None,
+            "an open clip is not held"
+        );
+    }
+
+    /// The arrow keys of the list step over the clip in work instead of stopping at it.
+    #[test]
+    fn the_arrow_keys_step_over_the_clip_in_work() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        // The job is on file 0 (selected). Next is file 1: no skipping needed.
+        assert_eq!(workspace.step_past_busy(true), None);
+        let busy_second = file_id_at(&workspace, 1);
+        let _ = workspace.update(Message::BatchItemDone {
+            id: file_id_at(&workspace, 0),
+            result: Box::new(ItemResult::new(ItemStatus::Skipped, None)),
+        });
+        assert_eq!(workspace.batch().current(), Some(busy_second));
+        // File 0 is selected again; the next clip is the one in work: go to file 2.
+        assert_eq!(workspace.step_past_busy(true), Some(Some(2)));
+        assert_eq!(workspace.step_past_busy(false), None);
+    }
+
+    /// The open clip is the one in work: what edits it waits for the item to end.
+    #[test]
+    fn what_edits_the_clip_in_work_waits() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        // Not unloaded yet: the video still plays the clip the job has begun.
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(false)));
+        assert!(workspace.open_clip_is_busy());
+        assert!(workspace.is_blocked(&Message::RemoveTag));
+        assert!(workspace.is_blocked(&Message::ToggleMediaFullscreen));
     }
 
     /// A cancelled job stops after the file in work and leaves the rest untouched.
@@ -7868,29 +8435,22 @@ mod tests {
         assert_eq!(workspace.select_anchor, None);
     }
 
-    /// A running job ignores `SetActive(false)` (`BatchState::update`'s own guard), so batch
-    /// mode stays on: the anchor must stay too, or a Shift+click once the job ends would range
-    /// from the wrong file with no sign anything changed.
+    /// Esc closes the panel of a running job (#249), and the anchor goes like it does out of a
+    /// job.
     #[test]
-    fn escape_during_a_running_batch_job_keeps_batch_mode_and_the_anchor() {
+    fn escape_during_a_running_batch_job_closes_the_panel_and_the_job_goes_on() {
         let (_test_dir, mut workspace) = open_folder(3);
         ctrl_click(&mut workspace, 1);
-        ctrl_click(&mut workspace, 2); // anchor = file_2
-        let anchor = workspace.select_anchor;
+        ctrl_click(&mut workspace, 2);
         let _ = workspace.update(Message::Batch(batch::Message::Run));
         assert!(
             workspace.is_batch_running(),
             "the job must actually be running"
         );
         let _ = workspace.update(Message::EscapePressed);
-        assert!(
-            workspace.batch().is_active(),
-            "SetActive(false) had no effect while the job runs"
-        );
-        assert_eq!(
-            workspace.select_anchor, anchor,
-            "the anchor must not be dropped either"
-        );
+        assert!(!workspace.batch().is_active());
+        assert!(workspace.is_batch_running());
+        assert_eq!(workspace.select_anchor, None);
     }
 
     /// Ctrl/Shift+click must index the *filtered* list (as the issue's own "in the list's

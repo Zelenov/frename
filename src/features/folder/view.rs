@@ -35,6 +35,8 @@ pub struct ListProps<'a, 'm> {
     pub spinner_frame: usize,
     /// The batch state while batch mode is on: rows get the check column.
     pub batch: Option<&'a BatchState>,
+    /// The file a running job works on, also with batch mode off: its row is marked.
+    pub busy: Option<FileId>,
     /// Files whose markers could not be written.
     pub markers_not_saved: &'a HashMap<FileId, Vec<Marker>>,
     /// The filter menu is open over the list.
@@ -114,8 +116,9 @@ fn list<'a>(props: &ListProps<'a, '_>, dir: &'a Directory) -> Element<'a, Messag
         );
     }
     let selected = dir.selected_index();
-    // A running job locks the list: no other file may open while files are written.
+    // A running job locks the checks, and the row of the file in work; the other files open.
     let locked = props.batch.is_some_and(|b| b.is_running());
+    let busy = props.busy;
     let failures: HashMap<FileId, &str> = props
         .batch
         .map(|b| {
@@ -133,6 +136,7 @@ fn list<'a>(props: &ListProps<'a, '_>, dir: &'a Directory) -> Element<'a, Messag
                 index,
                 selected: selected == Some(index),
                 locked,
+                busy: busy == Some(file.id()),
                 failure: failures.get(&file.id()).copied(),
             },
         )
@@ -189,7 +193,7 @@ fn searching_comments(dir: &Directory) -> Option<Element<'_, Message>> {
     })
 }
 
-/// The line over the list while a job runs: why the rows take no clicks (§13.2 "Locks").
+/// The line over the list while a job runs: why the checks take no clicks (§13.2 "Locks").
 fn lock_line<'a>(batch: &BatchState) -> Element<'a, Message> {
     let action = batch.job_action().unwrap_or(batch.action()).label();
     container(

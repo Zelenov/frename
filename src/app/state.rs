@@ -971,7 +971,10 @@ impl FrenameApp {
                 if batch_finished && self.pending_close.is_some() {
                     return Task::batch([task, self.close_pending()]);
                 }
-                let Some(id) = is_unloaded.then(|| self.pending_close.take()).flatten() else {
+                // A job still running closes the window when it ends (`close_pending`, which saves the
+                // open clip first), not at the first unload.
+                let closes_now = is_unloaded && !self.folder_workspace.is_batch_running();
+                let Some(id) = closes_now.then(|| self.pending_close.take()).flatten() else {
                     return task;
                 };
                 Task::batch([task, window::close(id)])
@@ -981,14 +984,25 @@ impl FrenameApp {
 
     /// Close the window waiting to close, unloading a video first (it closes on `Unloaded`).
     fn close_pending(&mut self) -> Task<Message> {
+        // The editor kept working on the open clip while the job ran: its edits are saved now,
+        // like on any close (issue #21).
+        let save = self
+            .folder_workspace
+            .flush_open_file()
+            .map(Message::FolderWorkspace);
         if self.folder_workspace.needs_media_unload() {
-            return Task::done(Message::FolderWorkspace(
-                folder_workspace::Message::MediaViewer(media_viewer::Message::Unload),
-            ));
+            return Task::batch([
+                save,
+                Task::done(Message::FolderWorkspace(
+                    folder_workspace::Message::MediaViewer(media_viewer::Message::Unload),
+                )),
+            ]);
         }
-        self.pending_close
+        let close = self
+            .pending_close
             .take()
-            .map_or_else(Task::none, window::close)
+            .map_or_else(Task::none, window::close);
+        Task::batch([save, close])
     }
 
     pub fn view(&self, window_id: window::Id) -> Element<'_, Message> {

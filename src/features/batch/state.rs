@@ -1,7 +1,7 @@
 //! State for batch mode: the checked files, the chosen action, and the job running it.
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -254,21 +254,24 @@ impl Default for BatchState {
 impl BatchState {
     /// Apply a message. `Run` is started by the workspace through [`Self::start`].
     pub fn update(&mut self, message: Message) {
-        // Nothing changes under a running job but its own cancel, and what background reads
-        // bring in (clip lengths, the key's state).
+        // Nothing changes under a running job but its own cancel, showing or hiding its panel,
+        // and what background reads bring in (clip lengths, the key's state).
         // A run waiting for the open clip's marker requests is given up by anything but an
         // option change and Run itself: leaving batch mode, Cancel, another action, other files.
         if !matches!(message, Message::Action(_) | Message::Run) {
             self.waiting_for_markers = false;
         }
         let background = matches!(&message, Message::Action(m) if m.applies_while_running());
-        if self.is_running() && !matches!(message, Message::Cancel) && !background {
+        // Showing or hiding the panel is the editor's own business: the job goes on behind it
+        // (#249).
+        let panel = matches!(message, Message::SetActive(_));
+        if self.is_running() && !matches!(message, Message::Cancel) && !background && !panel {
             return;
         }
         match message {
             Message::SetActive(active) => {
                 // Files may have been renamed or got subtitles outside batch mode.
-                if active && !self.active {
+                if active && !self.active && !self.is_running() {
                     self.actions.generate_subtitles_mut().invalidate_plan();
                 }
                 self.active = active;
@@ -399,6 +402,14 @@ impl BatchState {
         job.statuses.insert(id, ItemStatus::Running);
         job.item = Arc::default();
         Some((id, job.operation.clone(), job.cancel.clone()))
+    }
+
+    /// A clip was renamed while the job runs (the editor saved a tag change on one it has not
+    /// reached): what the action keeps by path follows it.
+    pub fn path_changed(&self, old: &Path, new: &Path) {
+        if let Some(job) = self.job.as_ref().filter(|job| job.running) {
+            job.operation.path_changed(old, new);
+        }
     }
 
     /// Where the file in work tells how far it is; handed to its operation.
@@ -550,7 +561,8 @@ impl BatchState {
         self.active
     }
 
-    /// Whether a job is running; the folder and its files are locked meanwhile.
+    /// Whether a job is running. The folder stays locked (no other folder opens) and the clip in
+    /// work is busy; the rest of the app works on (#249).
     pub fn is_running(&self) -> bool {
         self.job.as_ref().is_some_and(|job| job.running)
     }
@@ -776,6 +788,27 @@ mod tests {
 
         batch.update(Message::CloseReport);
         assert!(batch.progress().is_none());
+    }
+
+    #[test]
+    fn the_panel_closes_under_a_running_job_and_a_strip_shows_the_job() {
+        let strip = |batch: &BatchState| {
+            super::super::job_view::indicator::<()>(batch, None, 0, ()).is_some()
+        };
+        let mut batch = state();
+        batch.update(Message::SetActive(true));
+        assert!(batch.start(ids(1)));
+        assert!(!strip(&batch), "the panel shows the job itself");
+
+        batch.update(Message::SetActive(false));
+        assert!(!batch.is_active());
+        assert!(batch.is_running(), "the job goes on behind the panel");
+        assert!(strip(&batch));
+
+        let (id, _, _) = batch.begin_next().expect("the file");
+        batch.finish(id, &ItemResult::new(ItemStatus::Done, None));
+        assert!(batch.begin_next().is_none());
+        assert!(!strip(&batch), "nothing runs any more");
     }
 
     #[test]

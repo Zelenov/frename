@@ -248,6 +248,14 @@ impl Operation {
         }
     }
 
+    /// A clip the job has not reached was renamed while the job runs: what the action keeps by
+    /// the clip's path follows it.
+    pub fn path_changed(&self, old: &Path, new: &Path) {
+        if let Self::GenerateSubtitles(run) = self {
+            run.path_changed(old, new);
+        }
+    }
+
     /// A line for the job's summary, for actions with more to say than the counts.
     pub fn report(&self) -> Option<String> {
         match self {

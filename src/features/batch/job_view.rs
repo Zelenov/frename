@@ -3,10 +3,11 @@
 //! figures, what it cost, the files not done, and Run again / Close.
 
 use frename_core::FileId;
-use iced::widget::{column, container, progress_bar, row, Column};
+use iced::widget::{column, container, mouse_area, progress_bar, row, Column};
 use iced::{Alignment, Color, Element, Length, Padding};
 
 use crate::features::folder_workspace::Directory;
+use crate::ui::icons::spinner;
 use crate::ui::layout::{self, NoticeKind};
 use crate::ui::tokens::*;
 use crate::ui::{button, scroll, style, text};
@@ -89,6 +90,71 @@ fn file_name(directory: Option<&Directory>, id: FileId) -> String {
         .unwrap_or_default()
 }
 
+/// The strip over the file list's toolbar while a job runs behind a closed panel (#249): the
+/// action, how far it is, what it cost so far and the clip in work. A press brings the panel
+/// back (`on_press`). `None` when no job runs or the panel is open.
+pub fn indicator<'a, M: Clone + 'a>(
+    state: &'a BatchState,
+    directory: Option<&'a Directory>,
+    spinner_frame: usize,
+    on_press: M,
+) -> Option<Element<'a, M>> {
+    if state.is_active() {
+        return None;
+    }
+    let progress = state.progress().filter(|progress| progress.running)?;
+    let action = state.job_action().unwrap_or(state.action());
+    let (item_fraction, _) = state.item_now();
+    let name = state
+        .current()
+        .map(|id| file_name(directory, id))
+        .unwrap_or_default();
+    let mut head = row![
+        spinner(spinner_frame, ICON_M, TEXT_SECONDARY),
+        text::strong(action.label()),
+        text::secondary(fl!(
+            "batch-progress-files",
+            finished = (progress.finished as i64),
+            total = (progress.total as i64)
+        )),
+    ]
+    .spacing(SPACE_S)
+    .align_y(Alignment::Center);
+    if let Some(usage) = progress.usage {
+        let spend = spend_line(state.job_ai_model(), usage);
+        head = head.push(text::secondary(if progress.usage_unknown {
+            format!("{} {spend}", fl!("batch-ai-at-least"))
+        } else {
+            spend
+        }));
+    }
+    // What a click does, so the strip is found to be the way to Cancel.
+    let head = column![head, text::secondary(fl!("batch-indicator-hint"))].spacing(SPACE_XXS);
+    let bar = progress_bar(
+        0.0..=progress.total.max(1) as f32,
+        progress.finished as f32 + item_fraction,
+    )
+    .girth(PROGRESS_HEIGHT)
+    .style(style::progress);
+    let name = container(text::mono(name).wrapping(iced::widget::text::Wrapping::None)).clip(true);
+    let strip = container(column![head, bar, name].spacing(SPACE_XS))
+        .padding([SPACE_S, SPACE_S])
+        .width(iced::Length::Fill)
+        .style(style::panel);
+    Some(
+        column![
+            container(iced::widget::space())
+                .width(iced::Length::Fill)
+                .height(LINE)
+                .style(style::divider),
+            mouse_area(strip)
+                .on_press(on_press)
+                .interaction(iced::mouse::Interaction::Pointer),
+        ]
+        .into(),
+    )
+}
+
 fn running<'a>(
     state: &'a BatchState,
     action: Action,
@@ -142,7 +208,7 @@ fn running<'a>(
     };
     with_button_bar(
         page_body(body),
-        text::secondary(fl!("batch-locked-until-end")).into(),
+        text::secondary(fl!("batch-runs-in-background")).into(),
         [cancel.into()],
     )
 }

@@ -1,3 +1,9 @@
+# 0.152
+## Changed
+- A batch action no longer freezes frename: while it runs you can close its panel and keep working, open other clips, tag, rename, comment and mark them.
+- A strip above the toolbar of the file list shows the running action, its progress and its cost so far; click it to bring the panel back and Cancel.
+- Only the clip the action is working on is held back until its turn ends, and frename says so. If the action stops or some files fail while its panel is closed, the panel comes back with the result. Opening another folder, deleting or moving files, and Undo are still off until the action ends, and Undo starts again from there.
+
 # 0.151
 ## Fixed
 - The update messages "Close the other frename window first", "GitHub did not respond, try later", "no connection", "the folder is read-only", "updates work in the installed version" and "the download stopped unexpectedly" are now translated.

@@ -31,7 +31,7 @@ impl FolderWorkspace {
     pub(super) fn describe_marker(&mut self, guid: &str) -> Task<Message> {
         // A batch job is about to close the clip, or has.
         if self.batch.is_running() || self.batch.is_waiting_for_markers() {
-            return Task::none();
+            return self.job_holds_note();
         }
         let editable = self
             .file_workspace
@@ -107,7 +107,7 @@ impl FolderWorkspace {
         let asked = self.markers.describe_all_asked();
         self.markers.set_describe_all_asked(None);
         if self.batch.is_running() || self.batch.is_waiting_for_markers() {
-            return Task::none();
+            return self.job_holds_note();
         }
         let guids = self.unnamed_marker_guids();
         if guids.is_empty() {

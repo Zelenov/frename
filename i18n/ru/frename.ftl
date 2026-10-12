@@ -151,7 +151,6 @@ settings-key-save-into = «Сохранить ключ» помещает его
 
 ## Batch mode
 
-batch-back-while-running = Сначала отмените действие
 batch-checked-count = { $count ->
     [one] отмечен { $count } файл
     [few] отмечено { $count } файла
@@ -179,7 +178,10 @@ batch-progress-files = { $finished } из { $total ->
 batch-time-left = осталось около { $time }
 batch-time-estimating = оцениваем время…
 batch-time-spent = прошло { $time }
-batch-locked-until-end = Папка заблокирована до конца
+batch-runs-in-background = Пока идёт, можно работать дальше
+batch-clip-in-work = Файл занят: «{ $action }»
+batch-folder-held = Занято: «{ $action }»
+batch-indicator-hint = Нажмите, чтобы открыть панель и отменить
 batch-run-again = Запустить снова для { $count ->
     [one] { $count } файла
     [few] { $count } файлов
@@ -334,7 +336,7 @@ batch-action-describe-ai = Описать с помощью AI
 batch-action-describe-ai-run = Описать { $videos } · около { $dollars }
 batch-action-describe-ai-estimating = Оценка… { $known } / { $total }
 batch-action-describe-ai-none = Нет видео для описания.
-batch-action-describe-ai-hint = Папка заблокирована до конца. Отмена сохраняет уже описанные видео; повторный запуск пропускает их.
+batch-action-describe-ai-hint = { batch-runs-in-background }. Отмена сохраняет уже описанные видео; повторный запуск пропускает их.
 batch-action-describe-ai-no-subtitles = Без субтитров (описана только картинка): { $videos }.
 batch-action-describe-ai-redo = Переописать видео, у которых уже есть описание от AI
 batch-action-describe-ai-hint-panel = Описывает происходящее в каждом отмеченном видео с привязкой ко времени: краткое содержание и отрезки по времени добавляются в описание от AI в его комментарии; ваш собственный текст сохраняется. Кадры и субтитры отправляются в { $provider } — компанию выбранной модели.
@@ -392,7 +394,7 @@ batch-action-generate-subtitles-srt = Субтитры SRT (clip.srt)
 batch-action-generate-subtitles-premiere = Транскрипт для Premiere Pro (clip.premiere.json)
 batch-action-generate-subtitles-premiere-hint = В Premiere Pro: панель «Текст» → «Транскрипция» → «Импортировать статическую транскрипцию».
 batch-action-generate-subtitles-privacy = Аудио этих видео отправляется в Soniox и затем удаляется там.
-batch-action-generate-subtitles-duration-hint = Занимает несколько минут на час аудио; папка заблокирована до конца. Закрытие frename останавливает распознавание; готовые субтитры сохраняются.
+batch-action-generate-subtitles-duration-hint = Занимает несколько минут на час аудио. { batch-runs-in-background }. Закрытие frename останавливает распознавание; готовые субтитры сохраняются.
 batch-action-generate-subtitles-hint = Распознаёт речь каждого отмеченного видео через Soniox и сохраняет результат рядом с ним: субтитры (clip.srt), где их показывает frename, и/или транскрипт для Premiere Pro.
 batch-subtitles-transcribe = Распознать
 batch-subtitles-transcribe-count = Распознать { $videos }
@@ -480,7 +482,7 @@ folder-empty-line = frename показывает MP4, MOV, MKV и другие �
 folder-open-another = Открыть другую папку…
 folder-no-match = Нет подходящих файлов
 folder-show-all = Показать все
-folder-locked = Заблокировано, пока выполняется «{ $action }»
+folder-locked = Отметки заблокированы, пока выполняется «{ $action }»
 folder-checked-hidden = Отмечено: { $count } · скрыто: { $hidden }
 folder-checked-hidden-tip = { $hidden ->
     [one] { $hidden } отмеченный файл скрыт поиском или фильтром; действие применится и к нему

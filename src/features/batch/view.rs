@@ -15,6 +15,7 @@ use crate::ui::tooltip::{self, Position, Tip};
 use crate::ui::{button, form, layout, scroll, style, text};
 
 use super::actions::Group;
+pub use super::job_view::indicator;
 use super::{job_view, Action, BatchState, Message};
 
 /// The page's inset: 16 above and below, 24 at the sides.
@@ -78,14 +79,10 @@ fn header(state: &BatchState) -> Element<'_, Message> {
     let back = IconButton::new(Icon::X)
         .small()
         .tip(
-            if state.is_running() {
-                Tip::new(fl!("batch-back-while-running"))
-            } else {
-                Tip::new(fl!("folder-controls-batch-back")).keys(&["Esc"])
-            },
+            Tip::new(fl!("folder-controls-batch-back")).keys(&["Esc"]),
             Position::Left,
         )
-        .on_press_maybe((!state.is_running()).then_some(Message::SetActive(false)));
+        .on_press(Message::SetActive(false));
     container(
         row![
             text::heading(fl!("batch-title")),

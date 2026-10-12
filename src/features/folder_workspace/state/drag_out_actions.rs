@@ -85,9 +85,15 @@ impl FolderWorkspace {
             return Task::none();
         };
         let listed = dir.files_in_order().map(|file| file.id());
-        let ids = drag_out::files_to_drag(pressed, listed, self.batch.is_active(), |id| {
-            self.batch.is_checked(id)
-        });
+        // A running job renames and rewrites the clips it has still to do: only the pressed clip
+        // is dragged then.
+        let ids: Vec<FileId> = if self.batch.is_running() {
+            vec![pressed]
+        } else {
+            drag_out::files_to_drag(pressed, listed, self.batch.is_active(), |id| {
+                self.batch.is_checked(id)
+            })
+        };
         let open = self
             .file_workspace
             .file()

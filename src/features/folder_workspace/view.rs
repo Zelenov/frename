@@ -3,7 +3,7 @@
 //! We pass only data to each feature view (directory, current_file, selected_file, etc.).
 //! We do not tell any feature how to look (scrollable, rectangular, etc.); each feature view owns its appearance.
 
-use iced::widget::{column, container, mouse_area, row, stack};
+use iced::widget::{column, container, mouse_area, row, stack, Column};
 use iced::{Alignment, Element, Length};
 
 use crate::features::folder::view::ListProps;
@@ -83,24 +83,33 @@ pub fn view(
 
     // Bound to a local so the folder list can borrow it instead of taking a clone per frame.
     let tag_color_mapping = state.file_workspace().tag_color_mapping();
-    let folder_col: Element<'_, folder::Message> = column![
-        container(folder::view::view(ListProps {
-            directory: state.directory(),
-            loading: state.is_loading(),
-            tag_color_mapping: &tag_color_mapping,
-            tag_palette,
-            rename: state.inline_rename(),
-            spinner_frame: state.spinner_frame(),
-            batch: state.batch().is_active().then_some(state.batch()),
-            markers_not_saved: state.unsaved_markers(),
-            filter_menu_open: state.filter_menu_open(),
-            width: state.folder_width(),
-        }))
-        .height(Length::Fill),
-        folder_controls::view::view(toolbar),
-    ]
-    .height(Length::Fill)
-    .into();
+    let list = container(folder::view::view(ListProps {
+        directory: state.directory(),
+        loading: state.is_loading(),
+        tag_color_mapping: &tag_color_mapping,
+        tag_palette,
+        rename: state.inline_rename(),
+        spinner_frame: state.spinner_frame(),
+        batch: state.batch().is_active().then_some(state.batch()),
+        busy: state.batch().current(),
+        markers_not_saved: state.unsaved_markers(),
+        filter_menu_open: state.filter_menu_open(),
+        width: state.folder_width(),
+    }))
+    .height(Length::Fill);
+    // A job that runs behind the closed batch panel shows as a strip over the toolbar.
+    let job_strip = batch::view::indicator(
+        state.batch(),
+        state.directory(),
+        state.spinner_frame(),
+        folder::Message::SetBatchMode(true),
+    );
+    let folder_col: Element<'_, folder::Message> = Column::new()
+        .push(list)
+        .push(job_strip)
+        .push(folder_controls::view::view(toolbar))
+        .height(Length::Fill)
+        .into();
     let folder_with_controls = folder_col.map(Message::Folder);
 
     let folder_list = container(folder_with_controls)

@@ -864,8 +864,8 @@ words ("No markers yet", not "No items to display", BIR «Язык робото�
   "n of total", time left, Cancel (§8.15).
 - Skeleton of the result rather than a blank area where the layout is known (BIR: skeletons over
   splash screens).
-- Background work never blocks other windows; a batch job keeps the file list locked (as today) and
-  says so.
+- Background work never blocks other windows, and a batch job no longer blocks the editor (#249):
+  only the clip in work, the checks and the folder itself are held, and the window says so.
 - Never report success before it happened (BIR «Мгновенно, но без обмана»).
 
 ### 10.7 Feedback
@@ -1036,24 +1036,31 @@ Today, for comparison (screenshots of the app):
 **Empty, loading and error states** of every region are listed in §13.7; each one says what is
 missing in words and offers the next step (§8.20). No region is ever blank or shows a lone glyph.
 
-**Locks.** While a batch job runs (§13.6.5) the open file is closed (its media unloads) and comes
-back when the job ends. Locked controls keep their place and are drawn disabled; a one-line status
-at the top of the file list says why ("Locked while Describe with AI runs").
+**Locks.** A batch job runs in the background (#249). Only what it needs is held, drawn
+disabled in its place; a one-line status at the top of the file list says why the checks are held
+("Checks are locked while Describe with AI runs"). When the job reaches the open file, that file
+is closed (its media unloads) for the length of its item and comes back by itself.
 
 | Locked while a job runs | Still works |
 |---|---|
-| file rows (select, open, check, rename), All, Invert, PageUp/PageDown | scrolling the list, the file search and the filter menu (they only hide rows) |
-| the action list and every control of the action page | Cancel, and the job's own progress |
-| Open a folder, the batch toggle, Settings' *Update and restart* | the rest of Settings |
-| the video pane (no file is open: its empty state) and F5 | – |
-| the batch panel's `x` (disabled, tooltip "Cancel the action first"; Esc cancels, §13.2) | – |
+| the row of the file in work (no click, no hover; its status column shows `lock`) | the other rows: select, open, play; tags, name, comment and markers of the open clip |
+| the checkboxes, All, Invert | scrolling the list, the file search and the filter menu |
+| the action list and every control of the action page | Cancel, and the job's own progress; closing the batch panel (`x`, Esc, the toolbar toggle) |
+| Open a folder, file actions that move or delete files, Undo and Redo, Settings' *Update and restart* | the rest of Settings |
+| the open clip's own edits, rotation and fullscreen, while it is the file in work | – |
+
+What a lock does when pressed: nothing but a note over the video that says why ("Busy: Describe with AI"; for the clip in work "In use: Describe with AI"). Nothing held is silent.
 
 The **lock line** is a 28 px row at the top of the file list, above the search field, `bg.raised`,
 padding 0×8: `lock` 14 and the sentence in `secondary`. It pushes the list down (the rows keep
-their scroll position) and goes when the job ends. The batch page's button bar says the same on
-its left: "The folder is locked until it ends".
+their scroll position) and goes when the job ends. The batch page's button bar says on its left:
+"You can keep working while it runs".
 
-Working on the folder while a job runs (at least previewing files) is #29, not this spec.
+The **job strip** is shown while a job runs and the batch panel is closed: above the toolbar of the
+file list, a divider line and a `bg.panel` block, padding 8, with the loader, the action's name
+(`strong`), "n of total files" and what it cost so far (`secondary`), a progress bar, and the file
+in work in `mono`, cut at the edge, and a `secondary` hint "Click for the panel and Cancel". A click brings
+the panel back.
 
 **Notices** (short feedback such as "Frame saved") appear as inline status (§8.12) in their own
 slot of the video pane's controls bar (§13.3.5), never as popups: confirmations for 2 s, errors
@@ -1473,10 +1480,10 @@ chips are clipped mid-letter.
 | Normal | transparent |
 | Hover | `state.hover` (today no hover at all) |
 | Selected = open | `state.selected`, a 2 px `accent.text` bar on the left edge |
-| Selected, file closed by a running job | `state.selected` without the bar, `lock` 12 in the status column |
+| The file in work of a running job | the status column shows `lock` 12; when it is the selected one it is closed, drawn without the bar |
 | Renaming | started by a double-click on the row (off in batch mode); the row becomes a text field (§8.6) with the whole file name, the part before the extension selected; an error goes on the second line in `error` with `circle-alert` 12 (Name is empty · Not allowed: \ / : * ? " < > \| · Cannot end with a dot or space · A file with this name exists; today it shares the field's line); Enter renames, Esc cancels. A rename re-reads the tags and in/out points from the new name; it is one undo step (#139) |
 | Checked (batch) | the checkbox; no other change |
-| Locked (batch job running) | rows unchanged, pointer cursor off, checkboxes disabled (§13.2 "Locks") |
+| Locked (batch job running) | the row of the file in work: unchanged, pointer cursor off; the checkboxes of every row disabled (§13.2 "Locks") |
 
 The list is sorted by date modified, oldest first (unchanged); there is no sort control.
 
@@ -1837,11 +1844,11 @@ The action page is replaced by the job (the list and the header stay):
   for Claude", "saving", "transcribing").
 - **Live figures:** changed · unchanged · not done, as in the result (§13.6.7), updating as files
   finish; after a stop, "not reached" is its own figure, never added to "not done".
-- **Button bar:** `secondary` Cancel `Esc` at the right. After a press: "Stopping after this file…"
+- **Button bar:** `secondary` Cancel at the right (`Esc` closes the panel, the job goes on). After a press: "Stopping after this file…"
   with a spinner, disabled.
 - **Closing the app** during a job cancels it and closes after the current file.
 - In the file list (§13.6.6) each file shows its state, and a status line on top of the list:
-  `lock` "Locked while Describe with AI runs".
+  `lock` "Checks are locked while Describe with AI runs".
 
 #### 13.6.6 Per-file status in the file list
 The check column shows the file's state during and after a job (replacing the tinted checkboxes,
