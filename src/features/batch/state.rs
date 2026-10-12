@@ -26,6 +26,8 @@ struct ItemStep {
     creep: Option<(Instant, f32, Duration)>,
     /// A label shown instead of `label` until the instant, then `label` again.
     note: Option<(String, Instant)>,
+    /// The part of the file's bar this step may fill, for an item made of steps (from, to).
+    window: Option<(f32, f32)>,
 }
 
 impl ItemProgress {
@@ -37,6 +39,7 @@ impl ItemProgress {
                 label: label.into(),
                 creep: None,
                 note: None,
+                window: step.window,
             };
         }
     }
@@ -50,7 +53,19 @@ impl ItemProgress {
                 label: label.into(),
                 creep: Some((Instant::now(), to, usual)),
                 note: None,
+                window: step.window,
             };
+        }
+    }
+
+    /// From now on the steps' own 0..=1 fill only `from..=to` of the file's bar: an item made of
+    /// several steps (Prepare clips) gives each its share. The bar stays where it was.
+    pub fn window(&self, from: f32, to: f32) {
+        if let Ok(mut step) = self.0.lock() {
+            step.window = Some((from, to));
+            step.fraction = 0.0;
+            step.creep = None;
+            step.note = None;
         }
     }
 
@@ -78,7 +93,11 @@ impl ItemProgress {
             Some((note, until)) if Instant::now() < *until => note.clone(),
             _ => step.label.clone(),
         };
-        (fraction.clamp(0.0, 1.0), label)
+        let fraction = fraction.clamp(0.0, 1.0);
+        let fraction = step
+            .window
+            .map_or(fraction, |(from, to)| from + fraction * (to - from));
+        (fraction, label)
     }
 }
 
@@ -300,6 +319,16 @@ impl BatchState {
                 if !self.checked.remove(&id) {
                     self.checked.insert(id);
                 }
+            }
+            Message::CheckOnly(ids) => {
+                self.dismiss(
+                    self.checked
+                        .iter()
+                        .copied()
+                        .chain(ids.iter().copied())
+                        .collect::<Vec<_>>(),
+                );
+                self.checked = ids.into_iter().collect();
             }
             Message::CheckAll(ids) => {
                 self.dismiss(ids.iter().copied());
@@ -532,7 +561,7 @@ impl BatchState {
     /// marked as asked for.
     pub fn subtitle_reads(&mut self, checked: &[&File]) -> generate_subtitles::Reads {
         if !(self.active || self.borrowed)
-            || self.action != Action::GenerateSubtitles
+            || !self.actions.reads_subtitles(self.action)
             || self.is_running()
         {
             return generate_subtitles::Reads::default();
@@ -547,7 +576,7 @@ impl BatchState {
         &mut self,
         checked: impl Iterator<Item = &'a File>,
     ) -> (Vec<(FileId, PathBuf)>, bool) {
-        if !(self.active || self.borrowed) || self.action != Action::DescribeAi {
+        if !(self.active || self.borrowed) || !self.actions.reads_clips(self.action) {
             return (Vec::new(), false);
         }
         let options = self.actions.describe_ai_mut();
@@ -680,6 +709,43 @@ impl BatchState {
                 .filter_map(|id| job.reasons.get(&id).map(|r| (id, r.as_str())))
                 .collect()
         })
+    }
+
+    /// The clips of the finished job it never reached (it stopped or was cancelled first), in job
+    /// order. Empty while it runs.
+    pub fn not_reached(&self) -> Vec<FileId> {
+        self.job
+            .as_ref()
+            .filter(|job| !job.running)
+            .map_or_else(Vec::new, |job| {
+                job.order
+                    .iter()
+                    .copied()
+                    .filter(|id| job.statuses.get(id) == Some(&ItemStatus::Pending))
+                    .collect()
+            })
+    }
+
+    /// The clips of the current job, in the order it takes them.
+    pub fn job_files(&self) -> Vec<FileId> {
+        self.job
+            .as_ref()
+            .map_or_else(Vec::new, |job| job.order.clone())
+    }
+
+    /// The operation of the current job, as it was started.
+    pub fn job_operation(&self) -> Option<&Operation> {
+        self.job.as_ref().map(|job| &job.operation)
+    }
+
+    /// Forget the groups of the last Prepare clips run: a new run starts.
+    pub fn forget_prepare_groups(&mut self) {
+        self.actions.clear_prepare_groups();
+    }
+
+    /// Tell Prepare clips which clips the last run left, and how many of them the open folder has.
+    pub fn set_prepare_left(&mut self, names: Vec<String>, found: usize) {
+        self.actions.set_prepare_left(names, found);
     }
 
     /// The action of the current job, which the report's wording follows.

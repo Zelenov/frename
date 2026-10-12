@@ -551,7 +551,8 @@ impl SettingsState {
                 | Operation::ReloadFiles
                 | Operation::Rotate(_)
                 | Operation::DescribeAi(_)
-                | Operation::GenerateSubtitles(_),
+                | Operation::GenerateSubtitles(_)
+                | Operation::PrepareClips(_),
             ) => {}
             // Handled by `update`, or by the app.
             Message::ShowPage(_)

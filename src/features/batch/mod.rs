@@ -12,6 +12,7 @@ mod page;
 mod state;
 pub mod view;
 
+pub use actions::pipeline;
 pub use actions::{
     describe_ai, generate_subtitles, Action, ActionMessage, MarkersDirection, Operation, Readiness,
 };

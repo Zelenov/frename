@@ -275,13 +275,18 @@ impl Options {
 
     /// Whether a run on `checked` can start now, and if not, why (#249).
     pub fn readiness(&self, checked: &[&File]) -> super::Readiness {
-        use super::Readiness;
-        let blocked = |note: String| Readiness::Blocked {
+        self.step(checked).readiness()
+    }
+
+    /// Where a run on `checked` stands as a step of a longer run (#17).
+    pub fn step(&self, checked: &[&File]) -> super::Step<Run> {
+        use super::Step;
+        let blocked = |note: String| Step::Blocked {
             note,
             fix: Some(ActionMessage::OpenAiSettings),
         };
         match self.key() {
-            None => return Readiness::Waiting,
+            None => return Step::Wait,
             Some(KeyState::Missing) => {
                 return blocked(fl!(
                     "batch-ai-key-missing",
@@ -293,17 +298,32 @@ impl Options {
         }
         let plan = self.plan(checked);
         if plan.estimating {
-            return Readiness::Waiting;
+            return Step::Wait;
         }
         if plan.send.is_empty() {
-            return Readiness::Blocked {
-                note: plan
-                    .skipped_line()
+            return Step::Skip(
+                plan.skipped_line()
                     .unwrap_or_else(|| fl!("batch-action-describe-ai-none")),
-                fix: None,
-            };
+            );
         }
-        Readiness::Ready
+        match self.operation() {
+            super::Operation::DescribeAi(run) => Step::Ready(run),
+            _ => unreachable!(),
+        }
+    }
+
+    /// What a run on `checked` would send and cost, for a page that adds up several steps:
+    /// videos, seconds of footage, dollars, seconds it takes. `None` while it is estimated.
+    pub fn totals(&self, checked: &[&File]) -> Option<(usize, f64, f64, f64)> {
+        let plan = self.plan(checked);
+        (!plan.estimating).then(|| {
+            (
+                plan.send.len(),
+                plan.seconds,
+                self.model.cost_usd(plan.usage),
+                plan.run_seconds,
+            )
+        })
     }
 
     /// The page for `checked` and its run button (`Describe 12 videos · about $0.35` once the
@@ -440,7 +460,7 @@ impl Options {
     }
 
     /// Why the key keeps the run button off, with the button that fixes it.
-    fn key_notice(&self) -> Option<Element<'_, ActionMessage>> {
+    pub(super) fn key_notice(&self) -> Option<Element<'_, ActionMessage>> {
         let (kind, headline, fix) = match self.key() {
             Some(KeyState::Missing) => (
                 NoticeKind::Error,
@@ -631,7 +651,15 @@ pub fn show_retry(progress: &ItemProgress, seconds: u64) {
 /// into the video as markers while markers are kept there (Settings), where Premiere Pro shows
 /// them on the clip; with markers kept in comments, into the comment too.
 pub fn run(options: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress) -> ItemResult {
-    run_clip(options, &describe::Budget::new(None), path, cancel, progress).0
+    run_clip(
+        options,
+        &describe::Budget::new(None),
+        None,
+        path,
+        cancel,
+        progress,
+    )
+    .0
 }
 
 /// [`run`] within `budget` (a cap shared by the clips of a run: a clip whose request could take
@@ -640,18 +668,20 @@ pub fn run(options: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgr
 pub fn run_clip(
     options: &Run,
     budget: &describe::Budget,
+    cache: Option<&describe::Cache>,
     path: &Path,
     cancel: &AtomicBool,
     progress: &ItemProgress,
 ) -> (ItemResult, Option<describe::DescribedClip>) {
     let mut kept = None;
-    let result = run_inner(options, budget, path, cancel, progress, &mut kept);
+    let result = run_inner(options, budget, cache, path, cancel, progress, &mut kept);
     (result, kept)
 }
 
 fn run_inner(
     options: &Run,
     budget: &describe::Budget,
+    cache: Option<&describe::Cache>,
     path: &Path,
     cancel: &AtomicBool,
     progress: &ItemProgress,
@@ -738,6 +768,9 @@ fn run_inner(
         }
         Ok(Some(clip)) => {
             *kept = Some(clip.clone());
+            if let Some(cache) = cache {
+                keep_in_cache(cache, &on_disk, &describe_options, &vocabulary, &clip);
+            }
             (
                 clip.description,
                 clip.tags.filter(|_| !vocabulary.is_empty()),
@@ -806,6 +839,59 @@ fn run_inner(
         usage,
         ..ItemResult::new(ItemStatus::Done, Some((new_path, saved)))
     }
+}
+
+/// Keep the described clip in `cache` (its fingerprints are what grouping reads later); a cache
+/// that cannot be written only logs: the description itself is saved to the clip.
+fn keep_in_cache(
+    cache: &describe::Cache,
+    on_disk: &Path,
+    options: &describe::Options,
+    vocabulary: &[describe::Tag],
+    clip: &describe::DescribedClip,
+) {
+    let key = describe::CacheKey::new(
+        on_disk,
+        options,
+        (!vocabulary.is_empty()).then_some(vocabulary),
+        true,
+    );
+    let record = key.map(|key| describe::ClipRecord {
+        file: on_disk.to_path_buf(),
+        key,
+        model: options.model.id.to_string(),
+        clip: clip.clone(),
+    });
+    match record {
+        Ok(record) => {
+            if let Err(e) = cache.put(&record) {
+                log::warn!("ai: {} not kept in the cache: {e}", on_disk.display());
+            }
+        }
+        Err(e) => log::warn!(
+            "ai: {} cannot be keyed for the cache: {e}",
+            on_disk.display()
+        ),
+    }
+}
+
+/// The clip at `path` as `cache` has it for the settings of `options`: its fingerprints, for
+/// grouping. `None` when it was not described with them, or the key is gone.
+pub fn cached_clip(
+    options: &Run,
+    cache: &describe::Cache,
+    path: &Path,
+) -> Option<describe::DescribedClip> {
+    let request = Request::for_clip(path, options.model(), options.language, options.moments)?;
+    let vocabulary = vocabulary(&options.tags);
+    let key = describe::CacheKey::new(
+        &request.on_disk,
+        &request.options,
+        (!vocabulary.is_empty()).then_some(vocabulary.as_slice()),
+        true,
+    )
+    .ok()?;
+    cache.get(&key).map(|record| record.clip)
 }
 
 /// Why a run stopped before the next clip: what the cap is, what was spent, and what to do.
