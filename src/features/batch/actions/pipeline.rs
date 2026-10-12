@@ -483,10 +483,19 @@ fn subtitles_step(
     let before = subtitles.uploaded_seconds();
     let result = generate_subtitles::run(subtitles, path, cancel, progress);
     if let Some(reservation) = reservation {
-        let spent = (subtitles.uploaded_seconds() - before).max(0.0);
-        reservation.settle(job.usd_per_hour * spent / 3600.0);
+        settle_upload(
+            reservation,
+            job.usd_per_hour,
+            subtitles.uploaded_seconds() - before,
+        );
     }
     result
+}
+
+/// Replace what was set aside for a clip's audio by what was really sent: `uploaded_s` seconds
+/// at `usd_per_hour`.
+fn settle_upload(reservation: clipscribe::Reservation<'_>, usd_per_hour: f64, uploaded_s: f64) {
+    reservation.settle(usd_per_hour * uploaded_s.max(0.0) / 3600.0);
 }
 
 /// Add one step's result to the clip's.
@@ -793,6 +802,23 @@ mod tests {
 
     fn run_now(run: &Run, path: &Path) -> ItemResult {
         super::run(run, path, &AtomicBool::new(false), &ItemProgress::default())
+    }
+
+    /// What was set aside for a clip is replaced by what was sent, so the cap counts each clip's
+    /// own audio and nothing stays held.
+    #[test]
+    fn the_cap_counts_the_audio_each_clip_sent() {
+        let budget = Budget::new(Some(1.0));
+        let first = budget.reserve(0.5).expect("fits");
+        settle_upload(first, 1.0, 360.0);
+        assert!((budget.spent_usd() - 0.1).abs() < 1e-9, "6 minutes at $1/h");
+        let second = budget.reserve(0.9).expect("the first one's hold is gone");
+        settle_upload(second, 1.0, -5.0);
+        assert!(
+            (budget.spent_usd() - 0.1).abs() < 1e-9,
+            "nothing sent, nothing spent"
+        );
+        assert!(budget.reserve(0.95).is_none(), "passing the cap is refused");
     }
 
     #[test]

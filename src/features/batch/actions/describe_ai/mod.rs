@@ -143,9 +143,15 @@ impl Options {
 
     /// The run these options make.
     pub fn run(&self) -> Run {
+        self.run_with(self.redo)
+    }
+
+    /// The run these options make, with Redo set by the caller: Prepare clips never redoes, whatever
+    /// the Describe with AI panel remembers.
+    pub fn run_with(&self, redo: bool) -> Run {
         Run {
             language: self.language,
-            redo: self.redo,
+            redo,
             model: self.model.id,
             moments: self.moments,
             tags: self.tags_to_suggest().to_vec(),
@@ -203,6 +209,10 @@ impl Options {
 
     /// What a run on `checked` would send, skip and cost.
     fn plan(&self, checked: &[&File]) -> Plan {
+        self.plan_with(checked, self.redo)
+    }
+
+    fn plan_with(&self, checked: &[&File], redo: bool) -> Plan {
         let mut plan = Plan {
             checked_videos: checked
                 .iter()
@@ -222,7 +232,7 @@ impl Options {
                 plan.estimating = true;
                 continue;
             }
-            if !self.redo && block::ai_block(file.comment()).is_some() {
+            if !redo && block::ai_block(file.comment()).is_some() {
                 plan.described += 1;
                 continue;
             }
@@ -285,6 +295,11 @@ impl Options {
 
     /// Where a run on `checked` stands as a step of a longer run (#17).
     pub fn step(&self, checked: &[&File]) -> super::Step<Run> {
+        self.step_with(checked, self.redo)
+    }
+
+    /// [`Self::step`] with Redo set by the caller (see [`Self::run_with`]).
+    pub fn step_with(&self, checked: &[&File], redo: bool) -> super::Step<Run> {
         use super::Step;
         let blocked = |note: String| Step::Blocked {
             note,
@@ -301,7 +316,7 @@ impl Options {
             Some(KeyState::Unavailable) => return blocked(fl!("batch-ai-key-unavailable")),
             Some(KeyState::Saved) => {}
         }
-        let plan = self.plan(checked);
+        let plan = self.plan_with(checked, redo);
         if plan.estimating {
             return Step::Wait;
         }
@@ -311,13 +326,13 @@ impl Options {
                     .unwrap_or_else(|| fl!("batch-action-describe-ai-none")),
             );
         }
-        Step::Ready(self.run())
+        Step::Ready(self.run_with(redo))
     }
 
     /// What a run on `checked` would send and cost, for a page that adds up several steps:
     /// videos, seconds of footage, dollars, seconds it takes. `None` while it is estimated.
     pub fn totals(&self, checked: &[&File]) -> Option<(usize, f64, f64, f64)> {
-        let plan = self.plan(checked);
+        let plan = self.plan_with(checked, false);
         (!plan.estimating).then(|| {
             (
                 plan.send.len(),
@@ -1014,7 +1029,7 @@ mod tests {
     /// A description kept in the cache is used again for nothing, and a clip over the cap is
     /// neither sent nor reached and stops the job.
     #[test]
-    fn a_kept_description_costs_nothing_again_and_a_clip_over_the_cap_stops_the_job() {
+    fn a_kept_description_costs_nothing_again_and_an_over_budget_clip_is_not_reached() {
         let dir = frename_core::test_support::fresh_dir("describe-reuse");
         let video = dir.join("clip.mp4");
         let source = Path::new(env!("CARGO_MANIFEST_DIR"))

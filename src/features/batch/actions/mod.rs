@@ -463,10 +463,12 @@ impl Actions {
                     _ if self.pipeline.subtitles() => return None,
                     _ => None,
                 };
-                let description = match self.describe_ai.operation() {
-                    Operation::DescribeAi(run) if self.pipeline.description() => Some(run),
-                    _ => None,
-                };
+                // Never redoes, whatever the Describe with AI panel remembers: a run again costs
+                // nothing for what is done.
+                let description = self
+                    .pipeline
+                    .description()
+                    .then(|| self.describe_ai.run_with(false));
                 (subtitles.is_some() || description.is_some()).then(|| {
                     Operation::PrepareClips(pipeline::Run::new(
                         subtitles,
@@ -499,7 +501,7 @@ impl Actions {
         pipeline::plan(
             &self.pipeline,
             self.generate_subtitles.step(checked),
-            self.describe_ai.step(checked),
+            self.describe_ai.step_with(checked, false),
         )
     }
 
@@ -824,6 +826,27 @@ fn reparsed(path: PathBuf) -> (PathBuf, FileSnapshot) {
 
 #[cfg(test)]
 mod tests {
+    /// Prepare clips never redoes a described clip, whatever Describe with AI remembers: a run
+    /// again costs nothing for what is done.
+    #[test]
+    fn prepare_clips_ignores_the_redo_of_describe_ai() {
+        let mut actions = Actions::default();
+        actions.update(ActionMessage::PrepareClips(
+            pipeline::Message::SetSubtitles(false),
+        ));
+        actions.update(ActionMessage::DescribeAi(describe_ai::Message::SetRedo(
+            true,
+        )));
+        let Some(Operation::PrepareClips(run)) = actions.operation(Action::PrepareClips) else {
+            panic!("a description-only run");
+        };
+        assert!(!run.description().expect("described").redo);
+        let Some(Operation::DescribeAi(run)) = actions.operation(Action::DescribeAi) else {
+            panic!("describe");
+        };
+        assert!(run.redo, "Describe with AI itself keeps it");
+    }
+
     /// Prepare clips with its subtitles step on does not start without the subtitles plan (a
     /// run again right after a stop), instead of running the description alone.
     #[test]

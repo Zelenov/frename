@@ -100,6 +100,11 @@ use on edited sequences (filed as an idea).
 
 ## Decisions made without the owner
 
+- The clips-left record lives in the last-run record, which any other action overwrites; after a
+  restart it is offered only if Prepare clips was the last action. Clips are kept by name, so a clip
+  renamed meanwhile is not offered. Grouping lists a clip under the group covering most of it, and
+  only clips described by Prepare clips are in the cache.
+
 - The cache layout (`cache_dir_in`, `folder_key`) is in the UI crate on purpose: it is frename's own
   data folder policy for a feature of this crate, not logic `frename-core` needs.
 
@@ -116,15 +121,21 @@ use on edited sequences (filed as an idea).
 - Clips run one at a time (the batch job runs one item at a time); clipscribe's concurrency
   (`jobs`) is not used. Revisit when the queue of #249 can run tasks of different providers together.
 
-## Test plan
+## Tests
 
-- Plan: counts and skipped reasons for clips with and without subtitles / AI block; the price sums
-  both services; the cap shows.
-- Run (with a fake describer): the steps in order; a clip with subtitles skips step 1; one with an AI
-  block skips step 2; failures and usage add up; a stop of either step stops the job; the cap stops
-  the job before the clip that would pass it, and Run again continues.
-- Budget: reserved before a request, settled after; a clip over the cap is not sent.
-- Resume: the left-clips record round-trips; **Check them** checks exactly those.
-- Grouping: fingerprints of cached clips are read back; groups list their clips; **Check these
-  clips** checks exactly them.
-- Persistence: the new options (cap, steps) round-trip through the last-run record.
+What exists (the requests to Claude and Soniox need keys and credit, so they are covered by their
+decisions rather than by a fake service; a live run is the owner's check):
+
+- Plan: counts and skipped reasons for the steps together; the price sums both services; Redo of
+  Describe with AI is ignored.
+- Steps: a stop of the description after the subtitles leaves the clip unreached with a stop; a
+  step's failure and usage are added up.
+- Cap: a clip that could pass it is not sent and stops the job; a clip that costs nothing is not
+  held back; what was set aside is replaced by what was sent.
+- Resume: a kept description is used again at no cost; the left-clips record round-trips and is
+  tied to its folder; **Check them** and **Check these clips** check exactly those; Run again waits
+  for the subtitles plan instead of leaving the step out.
+- Persistence: the options (cap, steps) round-trip through the last-run record.
+
+Not covered by tests: `Run::group` over real fingerprints (needs described frames) and the live
+requests; both are for the owner to see in a real run.
