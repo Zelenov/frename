@@ -631,6 +631,32 @@ pub fn show_retry(progress: &ItemProgress, seconds: u64) {
 /// into the video as markers while markers are kept there (Settings), where Premiere Pro shows
 /// them on the clip; with markers kept in comments, into the comment too.
 pub fn run(options: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress) -> ItemResult {
+    run_clip(options, &describe::Budget::new(None), path, cancel, progress).0
+}
+
+/// [`run`] within `budget` (a cap shared by the clips of a run: a clip whose request could take
+/// the run past it is not sent, and the job stops), also giving back the clip as it was
+/// described (its fingerprints, for grouping similar footage) when it was.
+pub fn run_clip(
+    options: &Run,
+    budget: &describe::Budget,
+    path: &Path,
+    cancel: &AtomicBool,
+    progress: &ItemProgress,
+) -> (ItemResult, Option<describe::DescribedClip>) {
+    let mut kept = None;
+    let result = run_inner(options, budget, path, cancel, progress, &mut kept);
+    (result, kept)
+}
+
+fn run_inner(
+    options: &Run,
+    budget: &describe::Budget,
+    path: &Path,
+    cancel: &AtomicBool,
+    progress: &ItemProgress,
+    kept: &mut Option<describe::DescribedClip>,
+) -> ItemResult {
     let is_video = path
         .extension()
         .and_then(|e| e.to_str())
@@ -692,22 +718,33 @@ pub fn run(options: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgr
     };
     let vocabulary = vocabulary(&options.tags);
     // One request either way: with tags to suggest from, it suggests them too.
-    let described = if vocabulary.is_empty() {
-        describe::describe(&on_disk, &subtitles, &describe_options, cancel, on_stage)
-            .map(|d| (d.description, None, d.usage, d.frames))
-    } else {
-        describe::describe_with_tags(
-            &on_disk,
-            &subtitles,
-            &vocabulary,
-            &describe_options,
-            cancel,
-            on_stage,
-        )
-        .map(|d| (d.description, Some(d.tags), d.usage, d.frames))
-    };
+    let described = describe::describe_clip(
+        &on_disk,
+        &subtitles,
+        (!vocabulary.is_empty()).then_some(vocabulary.as_slice()),
+        &describe_options,
+        budget,
+        cancel,
+        on_stage,
+    );
     let (description, tags, usage, frames) = match described {
-        Ok(described) => described,
+        // Its frames were read, but the request could pass the cap: nothing was sent, and the
+        // clips after it would be refused the same way.
+        Ok(None) => {
+            return ItemResult {
+                stop_job: Some(over_budget_text(budget)),
+                ..ItemResult::new(ItemStatus::Pending, None)
+            };
+        }
+        Ok(Some(clip)) => {
+            *kept = Some(clip.clone());
+            (
+                clip.description,
+                clip.tags.filter(|_| !vocabulary.is_empty()),
+                clip.usage,
+                clip.frames.len(),
+            )
+        }
         Err(describe::Error::Cancelled) => return ItemResult::new(ItemStatus::Pending, None),
         Err(describe::Error::TooLong(_)) => return ItemResult::new(ItemStatus::Skipped, None),
         Err(e @ describe::Error::Unreadable(_)) => {
@@ -769,6 +806,15 @@ pub fn run(options: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgr
         usage,
         ..ItemResult::new(ItemStatus::Done, Some((new_path, saved)))
     }
+}
+
+/// Why a run stopped before the next clip: what the cap is, what was spent, and what to do.
+pub fn over_budget_text(budget: &describe::Budget) -> String {
+    fl!(
+        "batch-stop-over-budget",
+        cap = dollars(budget.max_usd().unwrap_or_default()),
+        spent = dollars(budget.spent_usd())
+    )
 }
 
 /// The result of a file whose request failed; some failures stop the whole job, and losing
