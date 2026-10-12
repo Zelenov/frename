@@ -5163,6 +5163,10 @@ mod tests {
         let _ = workspace.update(Message::Batch(batch::Message::SelectAction(
             batch::Action::PrepareClips,
         )));
+        // The subtitles step needs a plan read from real headers; this test is about the left clips.
+        let _ = workspace.update(Message::Batch(batch::Message::Action(
+            batch::ActionMessage::PrepareClips(batch::pipeline::Message::SetSubtitles(false)),
+        )));
         // The clip lengths the description step asked for come in.
         let probes = (0..3)
             .map(|i| {

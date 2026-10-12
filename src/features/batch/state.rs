@@ -999,7 +999,7 @@ mod tests {
         assert!(!batch.start(Vec::new()), "nothing checked");
         for action in Action::ALL {
             batch.update(Message::SelectAction(action));
-            if action == Action::GenerateSubtitles {
+            if matches!(action, Action::GenerateSubtitles | Action::PrepareClips) {
                 // Waits for its plan, key and price.
                 assert_eq!(batch.operation(), None);
                 continue;
