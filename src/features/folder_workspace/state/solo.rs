@@ -73,6 +73,7 @@ impl FolderWorkspace {
         } else if let Some(at) = self.solo.waiting.iter().position(|w| *w == (action, clip)) {
             self.solo.waiting.remove(at);
         } else if self.batch.job_action() == Some(action) && self.batch.withdraw(clip) {
+            // Taken out of the running job's line before its turn.
         } else if self.batch.is_running() && self.batch.current() == Some(clip) {
             self.batch.update(batch::Message::Cancel);
         } else {

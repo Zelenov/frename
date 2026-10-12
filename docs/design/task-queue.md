@@ -105,11 +105,22 @@ The lock moves from the whole app to **one clip**:
    would change the checks waits (`solo_holds`, given up after 30 s). The button is lit while its
    clip is queued or in work. Marker description keeps its own path until step 3, and tag
    suggestions are part of Describe with AI (#250).
-3. **Button clean-up:** every AI button follows the model above; list of today's buttons and
-   what each becomes is filled in then (marker rows ✨, "describe all unnamed", the In/Out AI
-   pill, batch actions). Also then: withdraw one queued run (a latched button takes no press
-   today), and a keyboard shortcut for the two single-clip actions with its row in the README's
-   shortcut table.
+3. **One model for every AI button (0.155).** Every slow button follows the model above: it is lit
+   while its run is queued or in work, and a press on a lit button *withdraws* the run if it is
+   still waiting (a run in work is cancelled from the job page or the strip, as before). Runs that
+   wait are listed on the job page ("Waiting", each with Remove) and counted on the strip. The
+   marker descriptions stop being a separate path that waits behind a job: they join the line.
+
+   | Button (today) | Becomes |
+   |---|---|
+   | Describe with AI, comment corner (step 2) | Lit while queued or in work; a press while waiting withdraws it. |
+   | Generate subtitles, comment corner (step 2) | The same. |
+   | Marker row ✨ (describe one marker) | While a job works the request waits and starts when it ends (note "waits for the running job"); no longer refused. |
+   | "Describe all unnamed" markers | The same: the markers wait as one batch of requests. |
+   | In/Out AI pill (name a new range) | The same as the marker ✨. |
+   | Batch panel actions (Describe with AI, Generate subtitles, Prepare clips, ...) | Unchanged: a batch is the queue's own job; the panel and the strip show it. |
+
+   A keyboard shortcut for the two single-clip actions is not added: the issue does not ask for one.
 
 ## Test plan
 
