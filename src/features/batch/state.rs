@@ -585,6 +585,23 @@ impl BatchState {
         self.checked.contains(&id)
     }
 
+    /// Select `action` and check only `file`, as a run of one clip needs; the checks it had are
+    /// returned to be put back with [`Self::restore_checked`]. A finished job's result is kept
+    /// until the next job replaces it. Does nothing while a job runs.
+    pub fn borrow_for_one(&mut self, action: Action, file: FileId) -> Option<HashSet<FileId>> {
+        if self.is_running() {
+            return None;
+        }
+        self.action = action;
+        Some(std::mem::replace(&mut self.checked, HashSet::from([file])))
+    }
+
+    /// Put the checks back as they were. Not a message: it works while a job runs, which the
+    /// checks of the panel do not.
+    pub fn restore_checked(&mut self, checked: HashSet<FileId>) {
+        self.checked = checked;
+    }
+
     pub fn checked_count(&self) -> usize {
         self.checked.len()
     }

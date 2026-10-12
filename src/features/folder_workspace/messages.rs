@@ -59,6 +59,9 @@ pub enum Message {
     FocusSearchBarAndKey(GlobalSearchKey),
     /// No-op (e.g. used when returning a focus operation from update).
     Noop,
+    /// Run a paid action on the open clip alone, without the batch panel (#249): it is queued
+    /// behind the job that runs, if any.
+    RunOnOpenClip(batch::Action),
     /// Scroll the tag list so the selected row is in view (deferred to next frame).
     ScrollTagListToSelection,
     /// Internal: update cached scroll Y after programmatic scroll (so next scroll-into-view uses correct viewport).

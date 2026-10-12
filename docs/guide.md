@@ -264,6 +264,15 @@ all** (`Shift+F6`); each is one undo step, and nothing is added until you do. Ta
 that the folder does not have are listed as ideas, never added. Turn this off in Settings →
 Describe with AI.
 
+**For the clip you have open**, without the batch panel: the sparkles button in the corner of the
+comment box (next to the expand button) describes it with the settings you chose in Settings →
+Describe with AI, and the captions button next to it generates its subtitles (below). Nothing
+needs checking first. If something is missing, for example the key, you are told so, and the
+settings open where it is set. Both are paid, and a clip costs a few cents; the batch panel still
+shows the price before many clips. The button stays lit while the clip waits for its turn or is
+being worked on. A second action asked for while one runs waits in line and starts when the one
+before it ends: everything slow runs through one queue, one clip at a time.
+
 ### Generate subtitles
 
 **Generate subtitles** sends the audio of each checked video to [Soniox](https://soniox.com), a

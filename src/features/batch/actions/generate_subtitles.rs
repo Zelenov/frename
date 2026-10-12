@@ -351,6 +351,49 @@ impl Options {
         self.key == Some(KeyState::Missing)
     }
 
+    /// Whether a run on `checked` can start now, and if not, why (#249).
+    pub fn readiness(&self, checked: &[&File]) -> super::Readiness {
+        use super::Readiness;
+        let blocked = |note: String| Readiness::Blocked {
+            note,
+            fix: Some(ActionMessage::OpenSubtitleSettings),
+        };
+        if self.formats.is_empty() {
+            return Readiness::Blocked {
+                note: fl!("batch-reason-subtitles-no-format"),
+                fix: None,
+            };
+        }
+        match self.key {
+            None => return Readiness::Waiting,
+            Some(KeyState::Missing) => return blocked(fl!("batch-subtitles-key-missing")),
+            Some(KeyState::Unavailable) => return blocked(fl!("batch-ai-key-unavailable")),
+            Some(KeyState::Saved) => {}
+        }
+        let Some(plan) = self.plan_for(checked) else {
+            return Readiness::Waiting;
+        };
+        if !plan.has_work() {
+            let note = plan_lines(plan, Some(Price::Typical))
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| fl!("batch-subtitles-transcribe"));
+            return Readiness::Blocked { note, fix: None };
+        }
+        if plan.transcribe > 0 {
+            match self.price() {
+                None => return Readiness::Waiting,
+                Some(Price::Rejected) => return blocked(fl!("batch-subtitles-key-rejected")),
+                Some(_) => {}
+            }
+        }
+        if self.operation().is_some() {
+            Readiness::Ready
+        } else {
+            Readiness::Waiting
+        }
+    }
+
     /// The page for `checked` and its run button.
     pub fn panel(&self, checked: &[&File]) -> Panel<'_> {
         let plan = self.plan_for(checked);

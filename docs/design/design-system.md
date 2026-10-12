@@ -1710,7 +1710,10 @@ Both buttons, and the lock, are undoable (#139); a press that changes nothing pu
 #### 13.5.7 Comment
 - A multi-line field (§8.6) with the placeholder "Comment", `maximize-2` "Give the comment the whole
   panel" / `minimize-2` "Back to the tags" as a 24 px icon button inside its top-right corner; the
-  field's own scrollbar keeps the gutter.
+  field's own scrollbar keeps the gutter. Two 24 px icon buttons stand left of it, 2 px apart:
+  `sparkles` "Describe this clip with AI" and `captions` "Generate subtitles for this clip" (#249).
+  Pressed, a button is latched while its action waits for its turn or runs (tooltip "…: waiting
+  for its turn" / "…: running") and takes no press; without a key the settings open where it is set.
 - The **height handle** above it: an 8 px hit area with a 2 px `border.subtle` line, `border.control`
   and the resize cursor on hover; the height stays while the folder is open (today too) and is
   not saved.

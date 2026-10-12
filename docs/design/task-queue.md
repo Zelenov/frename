@@ -93,10 +93,18 @@ The lock moves from the whole app to **one clip**:
      folder, so a per-folder background queue is left for later), file actions that delete or
      move files, Undo and Redo (the job renames files behind the history; the history is reset
      when it ends), and marker descriptions (`marker_ai`).
-2. **Single-clip actions** start directly (describe, subtitles, suggest tags per #250, marker
-   describe) and enter the same queue. This needs the job to hold items of different actions
-   and accept new ones while it runs; the queue model is designed then (the pure `TaskQueue`
-   of the first draft was dropped because nothing used it yet).
+2. **Single-clip actions (step 2).** "Describe with AI" and "Generate subtitles" start for the open
+   clip from two buttons in the corner of the comment box (`file_workspace::view`), without the
+   batch panel. A run borrows the batch machinery (`folder_workspace::state::solo`): it selects the
+   action and checks only that clip (the panel's checks are put back), asks the action whether it
+   can start (`Actions::readiness`: ready, waiting for a read, or blocked with a note and the
+   settings page that fixes it), starts the job, and gives the checks back. Many runs are a line of
+   `(action, clip)`: a run asked for while a job works, or while another prepares, waits and
+   starts once the job's end is reported (`batch_end_pending`), so everything slow goes through one
+   queue, one clip at a time. While a run prepares (a few moments: clip length, key, price), what
+   would change the checks waits (`solo_holds`, given up after 30 s). The button is lit while its
+   clip is queued or in work. Marker description keeps its own path until step 3, and tag
+   suggestions are part of Describe with AI (#250).
 3. **Button clean-up:** every AI button follows the model above; list of today's buttons and
    what each becomes is filled in then (marker rows ✨, "describe all unnamed", the In/Out AI
    pill, batch actions).

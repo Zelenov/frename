@@ -5,7 +5,9 @@
 //! [crate::widgets::file_name_display].
 
 use iced::keyboard::key::Named;
-use iced::widget::{column, container, responsive, stack, text_editor as text_editor_widget, Id};
+use iced::widget::{
+    column, container, responsive, row, stack, text_editor as text_editor_widget, Id,
+};
 use iced::{Element, Length, Padding};
 
 use crate::ui::icon_button::IconButton;
@@ -20,7 +22,7 @@ use crate::widgets::starred_tags_panel;
 
 use crate::features::{file_name_panel, sync_panel, tag_grid, tag_panel};
 
-use super::{CommentLayout, FileWorkspace, Message};
+use super::{ClipAction, ClipActions, CommentLayout, FileWorkspace, Message};
 
 /// The scrollable around the comment box, snapped to its end while typing on the last line.
 pub const COMMENT_SCROLLABLE_ID: &str = "comment-scrollable";
@@ -39,7 +41,7 @@ const AREA_PADDING: Padding = Padding {
 /// The comment's text keeps clear of the expand button over its top right corner.
 const COMMENT_PADDING: Padding = Padding {
     top: CONTROL_PADDING_Y,
-    right: ICON_BUTTON_SMALL + SPACE_XS,
+    right: 3.0 * ICON_BUTTON_SMALL + 2.0 * SPACE_XXS + SPACE_XS,
     bottom: CONTROL_PADDING_Y,
     left: SPACE_S,
 };
@@ -52,6 +54,14 @@ const TOGGLE_PADDING: Padding = Padding {
     left: 0.0,
 };
 
+/// What the tags area says about the open clip besides its tags.
+pub struct Status {
+    /// Whether the clip's edits are in its file.
+    pub save_status: Option<file_name_panel::SaveStatus>,
+    /// The paid actions of the clip, for the buttons of the comment's corner.
+    pub clip_actions: ClipActions,
+}
+
 /// Render the tags area.
 pub fn view<'a, S>(
     file_workspace: &'a FileWorkspace<S>,
@@ -60,7 +70,7 @@ pub fn view<'a, S>(
     is_synced: bool,
     sync_locked: bool,
     tag_palette: TagPalette,
-    save_status: Option<file_name_panel::SaveStatus>,
+    status: Status,
 ) -> Element<'a, Message>
 where
     S: frename_core::StoredTagStore + Clone,
@@ -81,7 +91,7 @@ where
         return column![search, container(grid).padding(AREA_PADDING)].into();
     }
 
-    let comment_box = comment(file_workspace);
+    let comment_box = comment(file_workspace, status.clip_actions);
     // Expanded, the comment box is the whole area.
     if file_workspace.comment_expanded() {
         return container(comment_box)
@@ -103,9 +113,13 @@ where
     let order = tag_list
         .has_tags()
         .then(|| sync_panel::view::view(is_synced, sync_locked).map(Message::SyncPanel));
-    let card =
-        file_name_panel::view::view(file_name_panel_state, tag_list, tag_palette, save_status)
-            .map(Message::FileNamePanel);
+    let card = file_name_panel::view::view(
+        file_name_panel_state,
+        tag_list,
+        tag_palette,
+        status.save_status,
+    )
+    .map(Message::FileNamePanel);
     // Dragging the handle up makes the comment box taller.
     let handle = HeightHandle::new(|grow| Message::CommentLayout(CommentLayout::Grow(grow)));
 
@@ -161,7 +175,10 @@ where
 }
 
 /// The comment (§13.5.7): a multi-line field with the expand button in its top right corner.
-fn comment<'a, S>(file_workspace: &'a FileWorkspace<S>) -> Element<'a, Message>
+fn comment<'a, S>(
+    file_workspace: &'a FileWorkspace<S>,
+    clip_actions: ClipActions,
+) -> Element<'a, Message>
 where
     S: frename_core::StoredTagStore + Clone,
 {
@@ -199,12 +216,42 @@ where
         .small()
         .tip(tip, Position::Left)
         .on_press(Message::CommentLayout(CommentLayout::ToggleExpanded));
+    // The clip's paid actions beside it: a latched button while one is asked for or running.
+    let clip_action = |glyph, state, idle: String, queued: String, running: String, press| {
+        let tip = match state {
+            ClipAction::Idle => idle,
+            ClipAction::Queued => queued,
+            ClipAction::Running => running,
+        };
+        IconButton::new(glyph)
+            .small()
+            .latched(state != ClipAction::Idle)
+            .tip(tip, Position::Left)
+            .on_press_maybe((state == ClipAction::Idle).then_some(press))
+    };
+    let describe = clip_action(
+        Icon::Sparkles,
+        clip_actions.describe,
+        fl!("file-workspace-describe-clip"),
+        fl!("file-workspace-describe-clip-queued"),
+        fl!("file-workspace-describe-clip-running"),
+        Message::DescribeClip,
+    );
+    let subtitles = clip_action(
+        Icon::Captions,
+        clip_actions.subtitles,
+        fl!("file-workspace-subtitles-clip"),
+        fl!("file-workspace-subtitles-clip-queued"),
+        fl!("file-workspace-subtitles-clip-running"),
+        Message::SubtitlesClip,
+    );
+    let corner = row![describe, subtitles, toggle].spacing(SPACE_XXS);
     // The box draws the field's fill and edge (and the focus ring) outside the scroll area, so
     // the edge stays put while the text scrolls, and the scrollbar sits inside the box. It keeps
     // the ring's width free inside, so the ring never covers the text.
     container(stack![
         comment_scroll,
-        container(toggle)
+        container(corner)
             .align_right(Length::Fill)
             .padding(TOGGLE_PADDING),
     ])

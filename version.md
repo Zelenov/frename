@@ -1,3 +1,8 @@
+# 0.153
+## Added
+- Describe with AI and Generate subtitles start for the clip you have open from two buttons in the corner of the comment box, without the batch panel. If something is missing, such as the key, frename says so and opens the settings.
+- An action asked for while another runs waits in line and starts when the one before it ends.
+
 # 0.152
 ## Changed
 - A batch action no longer freezes frename: while it runs you can close its panel and keep working, open other clips, tag, rename, comment and mark them.

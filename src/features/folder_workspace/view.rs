@@ -135,7 +135,10 @@ pub fn view(
             is_synced,
             state.sync_locked(),
             tag_palette,
-            state.save_status(),
+            file_workspace::view::Status {
+                save_status: state.save_status(),
+                clip_actions: state.clip_actions(),
+            },
         )
         .map(|m| match m {
             file_workspace::Message::TagPanel(m) => Message::TagPanel(m),
@@ -143,6 +146,12 @@ pub fn view(
             file_workspace::Message::SyncPanel(m) => Message::SyncPanel(m),
             file_workspace::Message::CommentAction(a) => Message::CommentAction(a),
             file_workspace::Message::CommentLayout(l) => Message::CommentLayout(l),
+            file_workspace::Message::DescribeClip => {
+                Message::RunOnOpenClip(batch::Action::DescribeAi)
+            }
+            file_workspace::Message::SubtitlesClip => {
+                Message::RunOnOpenClip(batch::Action::GenerateSubtitles)
+            }
         })
     };
 
