@@ -288,6 +288,7 @@ fn result<'a>(
     }
     body = body.push(files_not_done(state, action, &outcome, directory));
     body = body.push(files_written(state, action, directory));
+    body = body.push(similar_footage(state, action));
 
     let retry = state.retryable();
     let again = (!retry.is_empty()).then(|| {
@@ -350,6 +351,51 @@ fn notice<'a>(state: &BatchState, outcome: &Outcome, progress: &Progress) -> Ele
         });
     layout::notice(outcome.kind(), headline, detail, fix)
 }
+
+/// The groups of similar footage a finished Prepare clips run found (clips that look like the
+/// same shot), each with a button that checks exactly its clips, so another batch action can be
+/// run on one group.
+fn similar_footage<'a>(state: &'a BatchState, action: Action) -> Option<Element<'a, Message>> {
+    if action != Action::PrepareClips {
+        return None;
+    }
+    let mut groups: Vec<_> = state.actions().prepare_groups().iter().collect();
+    if groups.is_empty() {
+        return None;
+    }
+    groups.sort_by_key(|group| std::cmp::Reverse(group.files.len()));
+    let rows = Column::with_children(groups.into_iter().take(SIMILAR_GROUPS_SHOWN).map(|group| {
+        row![
+            column![
+                text::body(group.label.clone()),
+                text::secondary(fl!(
+                    "batch-prepare-group-clips",
+                    count = (group.files.len() as i64)
+                )),
+            ]
+            .spacing(SPACE_XXS)
+            .width(iced::Length::Fill),
+            button::secondary(fl!("batch-prepare-check-group"))
+                .on_press(Message::CheckOnly(group.files.clone())),
+        ]
+        .spacing(SPACE_M)
+        .align_y(Alignment::Center)
+        .into()
+    }))
+    .spacing(SPACE_S);
+    Some(
+        column![
+            text::title(fl!("batch-prepare-groups-title")),
+            text::secondary(fl!("batch-prepare-groups-hint")),
+            rows,
+        ]
+        .spacing(SPACE_S)
+        .into(),
+    )
+}
+
+/// How many groups of similar footage the result lists.
+const SIMILAR_GROUPS_SHOWN: usize = 12;
 
 /// Changed, unchanged, not done, and not reached when the job stopped early: a number over its
 /// word each, "not done" in red only when there are some.

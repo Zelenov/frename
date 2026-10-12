@@ -13,6 +13,7 @@ pub mod describe_ai;
 mod fix_tags;
 pub mod generate_subtitles;
 mod markers_comment;
+pub mod pipeline;
 pub use markers_comment::Direction as MarkersDirection;
 mod move_comments;
 mod move_in_out;
@@ -48,11 +49,13 @@ pub enum Action {
     ReloadFiles,
     DescribeAi,
     GenerateSubtitles,
+    /// Subtitles, then the description, over many clips under one cap (#17).
+    PrepareClips,
 }
 
 impl Action {
     /// Every action, in list order.
-    pub const ALL: [Action; 10] = [
+    pub const ALL: [Action; 11] = [
         Action::MoveComments,
         Action::MoveInOut,
         Action::MarkersComment,
@@ -63,6 +66,7 @@ impl Action {
         Action::ReloadFiles,
         Action::DescribeAi,
         Action::GenerateSubtitles,
+        Action::PrepareClips,
     ];
 
     pub fn label(self) -> String {
@@ -77,6 +81,7 @@ impl Action {
             Self::ReloadFiles => reload_files::label(),
             Self::DescribeAi => describe_ai::label(),
             Self::GenerateSubtitles => generate_subtitles::label(),
+            Self::PrepareClips => pipeline::label(),
         }
     }
 
@@ -102,6 +107,7 @@ impl Action {
             Self::ReloadFiles => "Reset cache and reload",
             Self::DescribeAi => "Describe with AI",
             Self::GenerateSubtitles => "Generate subtitles",
+            Self::PrepareClips => "Prepare clips",
         }
     }
 
@@ -114,7 +120,7 @@ impl Action {
             | Self::FixTags
             | Self::RespaceTags
             | Self::ReloadFiles => Group::FixFiles,
-            Self::DescribeAi | Self::GenerateSubtitles => Group::PaidServices,
+            Self::DescribeAi | Self::GenerateSubtitles | Self::PrepareClips => Group::PaidServices,
         }
     }
 
@@ -131,6 +137,7 @@ impl Action {
             Self::ReloadFiles => Icon::RotateCcw,
             Self::DescribeAi => Icon::Sparkles,
             Self::GenerateSubtitles => Icon::Captions,
+            Self::PrepareClips => Icon::Clapperboard,
         }
     }
 
@@ -150,7 +157,7 @@ impl Action {
             Self::FixTags => fl!("batch-run-fix-tags", count = count),
             Self::RespaceTags => fl!("batch-run-rename", count = count),
             Self::ReloadFiles => fl!("batch-run-reload", count = count),
-            Self::DescribeAi | Self::GenerateSubtitles => self.label(),
+            Self::DescribeAi | Self::GenerateSubtitles | Self::PrepareClips => self.label(),
         }
     }
 
@@ -177,6 +184,7 @@ impl Action {
             Self::ReloadFiles => "reload_files",
             Self::DescribeAi => "describe_ai",
             Self::GenerateSubtitles => "generate_subtitles",
+            Self::PrepareClips => "prepare_clips",
         }
     }
 
@@ -228,6 +236,8 @@ pub enum Operation {
     DescribeAi(describe_ai::Run),
     /// Transcribe each video with Soniox into `clip.srt`.
     GenerateSubtitles(generate_subtitles::Run),
+    /// Subtitles, then the description, of each clip (#17).
+    PrepareClips(pipeline::Run),
 }
 
 impl Operation {
@@ -245,14 +255,17 @@ impl Operation {
             Self::ReloadFiles => reload_files::run(path),
             Self::DescribeAi(options) => describe_ai::run(options, path, cancel, progress),
             Self::GenerateSubtitles(run) => generate_subtitles::run(run, path, cancel, progress),
+            Self::PrepareClips(run) => pipeline::run(run, path, cancel, progress),
         }
     }
 
     /// A clip the job has not reached was renamed while the job runs: what the action keeps by
     /// the clip's path follows it.
     pub fn path_changed(&self, old: &Path, new: &Path) {
-        if let Self::GenerateSubtitles(run) = self {
-            run.path_changed(old, new);
+        match self {
+            Self::GenerateSubtitles(run) => run.path_changed(old, new),
+            Self::PrepareClips(run) => run.path_changed(old, new),
+            _ => {}
         }
     }
 
@@ -260,6 +273,7 @@ impl Operation {
     pub fn report(&self) -> Option<String> {
         match self {
             Self::GenerateSubtitles(run) => run.report(),
+            Self::PrepareClips(run) => run.report(),
             _ => None,
         }
     }
@@ -268,6 +282,7 @@ impl Operation {
     pub fn log_report(&self) -> Option<String> {
         match self {
             Self::GenerateSubtitles(run) => run.log_report(),
+            Self::PrepareClips(run) => run.log_report(),
             _ => None,
         }
     }
@@ -276,6 +291,7 @@ impl Operation {
     pub fn ai_model(&self) -> Model {
         match self {
             Self::DescribeAi(run) => run.model(),
+            Self::PrepareClips(run) => run.description().map_or_else(Model::default, |d| d.model()),
             _ => Model::default(),
         }
     }
@@ -293,6 +309,7 @@ impl Operation {
             Self::ReloadFiles => Action::ReloadFiles,
             Self::DescribeAi(_) => Action::DescribeAi,
             Self::GenerateSubtitles(_) => Action::GenerateSubtitles,
+            Self::PrepareClips(_) => Action::PrepareClips,
         }
     }
 }
@@ -306,6 +323,10 @@ pub enum ActionMessage {
     Rotate(rotate::Message),
     DescribeAi(describe_ai::Message),
     GenerateSubtitles(generate_subtitles::Message),
+    PrepareClips(pipeline::Message),
+    /// Check the clips the last Prepare clips run of this folder left undone. Handled by the
+    /// workspace, which owns the files.
+    CheckLeft,
     /// Open the settings window, where an action's global settings live (e.g. the commented
     /// tag). Handled by the app, which owns the windows.
     OpenSettings,
@@ -348,6 +369,9 @@ pub struct Actions {
     rotate: rotate::Options,
     describe_ai: describe_ai::Options,
     generate_subtitles: generate_subtitles::Options,
+    pipeline: pipeline::Options,
+    /// How many of the clips Prepare clips left are in the open folder (set by the workspace).
+    prepare_left_found: usize,
 }
 
 impl Actions {
@@ -364,7 +388,9 @@ impl Actions {
             ActionMessage::Rotate(message) => self.rotate.update(message),
             ActionMessage::DescribeAi(message) => self.describe_ai.update(message),
             ActionMessage::GenerateSubtitles(message) => self.generate_subtitles.update(message),
-            ActionMessage::OpenSettings
+            ActionMessage::PrepareClips(message) => self.pipeline.update(message),
+            ActionMessage::CheckLeft
+            | ActionMessage::OpenSettings
             | ActionMessage::OpenAiSettings
             | ActionMessage::ReadKeyState
             | ActionMessage::OpenSubtitleSettings
@@ -408,7 +434,8 @@ impl Actions {
             | Operation::RespaceTags
             | Operation::ReloadFiles
             | Operation::DescribeAi(_)
-            | Operation::GenerateSubtitles(_) => {}
+            | Operation::GenerateSubtitles(_)
+            | Operation::PrepareClips(_) => {}
         }
     }
 
@@ -425,6 +452,30 @@ impl Actions {
             Action::ReloadFiles => Some(Operation::ReloadFiles),
             Action::DescribeAi => Some(self.describe_ai.operation()),
             Action::GenerateSubtitles => self.generate_subtitles.operation(),
+            Action::PrepareClips => {
+                let cap = self.pipeline.cap().ok()?;
+                // The subtitles step is on but its plan is not in (a run again starts before it
+                // is): not now, rather than a run that quietly leaves the subtitles out.
+                let subtitles = if self.pipeline.subtitles() {
+                    self.generate_subtitles.step_run()?
+                } else {
+                    None
+                };
+                // Never redoes, whatever the Describe with AI panel remembers: a run again costs
+                // nothing for what is done.
+                let description = self
+                    .pipeline
+                    .description()
+                    .then(|| self.describe_ai.run_with(false));
+                (subtitles.is_some() || description.is_some()).then(|| {
+                    Operation::PrepareClips(pipeline::Run::new(
+                        subtitles,
+                        description,
+                        cap,
+                        Some(pipeline::cache_dir_in(&frename_core::app_data_dir())),
+                    ))
+                })
+            }
         }
     }
 
@@ -434,12 +485,81 @@ impl Actions {
         match action {
             Action::DescribeAi => self.describe_ai.readiness(checked),
             Action::GenerateSubtitles => self.generate_subtitles.readiness(checked),
+            Action::PrepareClips => pipeline::readiness(self.prepare_plan(checked)),
             _ if checked.is_empty() => Readiness::Waiting,
             _ => match self.operation(action) {
                 Some(_) => Readiness::Ready,
                 None => Readiness::Waiting,
             },
         }
+    }
+
+    /// What the steps of Prepare clips say for `checked`, together.
+    fn prepare_plan(&self, checked: &[&File]) -> pipeline::Plan {
+        pipeline::plan(
+            &self.pipeline,
+            self.generate_subtitles.step(checked),
+            self.describe_ai.step_with(checked, false),
+        )
+    }
+
+    /// The page of Prepare clips for `checked`.
+    fn prepare_panel(&self, checked: &[&File]) -> Panel<'_> {
+        let readiness = pipeline::readiness(self.prepare_plan(checked));
+        pipeline::panel(
+            &self.pipeline,
+            &self.generate_subtitles,
+            &self.describe_ai,
+            checked,
+            &readiness,
+            self.prepare_left_found,
+        )
+    }
+
+    /// Whether the plan of `action` reads the subtitles of the checked clips (Generate subtitles,
+    /// and Prepare clips with its subtitles step on).
+    pub fn reads_subtitles(&self, action: Action) -> bool {
+        match action {
+            Action::GenerateSubtitles => true,
+            Action::PrepareClips => self.pipeline.subtitles(),
+            _ => false,
+        }
+    }
+
+    /// Whether the plan of `action` reads the clip lengths and the key (Describe with AI, and
+    /// Prepare clips with its description step on).
+    pub fn reads_clips(&self, action: Action) -> bool {
+        match action {
+            Action::DescribeAi => true,
+            Action::PrepareClips => self.pipeline.description(),
+            _ => false,
+        }
+    }
+
+    /// Forget the groups of the last Prepare clips run: a new run starts.
+    pub fn clear_prepare_groups(&mut self) {
+        self.pipeline.clear_groups();
+    }
+
+    /// The groups of similar footage the last Prepare clips run found.
+    pub fn prepare_groups(&self) -> &[pipeline::Group] {
+        self.pipeline.groups()
+    }
+
+    /// The names of the clips the last Prepare clips run left undone in `folder`.
+    pub fn prepare_left(&self, folder: &Path) -> &[String] {
+        self.pipeline.left(folder)
+    }
+
+    /// Remember which clips the run left in `folder`, and how many of them are in it now.
+    pub fn set_prepare_left(&mut self, names: Vec<String>, folder: &Path, found: usize) {
+        self.pipeline.set_left(names, folder);
+        self.prepare_left_found = found;
+    }
+
+    /// How many of the clips left are in the open folder now.
+    pub fn set_prepare_left_found(&mut self, found: usize) {
+        self.prepare_left_found = found;
     }
 
     /// The files a job of `action` runs over: the checked ones, or for "Describe with AI" only
@@ -467,6 +587,14 @@ impl Actions {
             Action::GenerateSubtitles => Some((
                 fl!("batch-service-soniox"),
                 self.generate_subtitles.key_missing(),
+            )),
+            Action::PrepareClips => Some((
+                fl!(
+                    "batch-service-prepare",
+                    provider = self.describe_ai.provider_label()
+                ),
+                (self.pipeline.subtitles() && self.generate_subtitles.key_missing())
+                    || (self.pipeline.description() && self.describe_ai.key_missing()),
             )),
             _ => None,
         }
@@ -516,6 +644,7 @@ impl Actions {
                     ("premiere".to_string(), formats.premiere.to_string()),
                 ]
             }
+            Action::PrepareClips => self.pipeline.persist(),
             Action::TagCommented | Action::FixTags | Action::RespaceTags | Action::ReloadFiles => {
                 Vec::new()
             }
@@ -579,6 +708,7 @@ impl Actions {
                         .update(generate_subtitles::Message::SetPremiere(v == "true"));
                 }
             }
+            Action::PrepareClips => self.pipeline.restore(options),
             Action::TagCommented | Action::FixTags | Action::RespaceTags | Action::ReloadFiles => {}
         }
     }
@@ -588,6 +718,7 @@ impl Actions {
         let page = match action {
             Action::DescribeAi => return self.describe_ai.panel(checked),
             Action::GenerateSubtitles => return self.generate_subtitles.panel(checked),
+            Action::PrepareClips => return self.prepare_panel(checked),
             Action::MoveComments => self.move_comments.view().map(ActionMessage::MoveComments),
             Action::MoveInOut => self.move_in_out.view().map(ActionMessage::MoveInOut),
             Action::MarkersComment => self
@@ -622,6 +753,36 @@ pub enum Readiness {
         note: String,
         fix: Option<ActionMessage>,
     },
+}
+
+/// Where one paid step of a run stands, for a run made of steps (Prepare clips, #17): the step's
+/// own run when it can start, why it is skipped, or what holds it.
+#[derive(Debug, Clone)]
+pub enum Step<R> {
+    /// A background read it needs (clip length, plan, key, price) is not in yet.
+    Wait,
+    /// Nothing for this step to do on these clips (or it is switched off): why.
+    Skip(String),
+    /// It cannot run: what to tell the editor, and the settings page that fixes it, if any.
+    Blocked {
+        note: String,
+        fix: Option<ActionMessage>,
+    },
+    /// It runs with these options.
+    Ready(R),
+}
+
+impl<R> Step<R> {
+    /// The step as the readiness of an action of its own: a step with nothing to do is blocked,
+    /// with the reason, when it is all the action does.
+    pub fn readiness(self) -> Readiness {
+        match self {
+            Step::Wait => Readiness::Waiting,
+            Step::Skip(note) => Readiness::Blocked { note, fix: None },
+            Step::Blocked { note, fix } => Readiness::Blocked { note, fix },
+            Step::Ready(_) => Readiness::Ready,
+        }
+    }
 }
 
 /// An action's page and its run button.
@@ -663,7 +824,73 @@ fn reparsed(path: PathBuf) -> (PathBuf, FileSnapshot) {
 
 #[cfg(test)]
 mod tests {
+    /// Prepare clips never redoes a described clip, whatever Describe with AI remembers: a run
+    /// again costs nothing for what is done.
+    #[test]
+    fn prepare_clips_ignores_the_redo_of_describe_ai() {
+        let mut actions = Actions::default();
+        actions.update(ActionMessage::PrepareClips(
+            pipeline::Message::SetSubtitles(false),
+        ));
+        actions.update(ActionMessage::DescribeAi(describe_ai::Message::SetRedo(
+            true,
+        )));
+        let Some(Operation::PrepareClips(run)) = actions.operation(Action::PrepareClips) else {
+            panic!("a description-only run");
+        };
+        assert!(!run.description().expect("described").redo);
+        let Some(Operation::DescribeAi(run)) = actions.operation(Action::DescribeAi) else {
+            panic!("describe");
+        };
+        assert!(run.redo, "Describe with AI itself keeps it");
+    }
+
+    /// Prepare clips with its subtitles step on does not start without the subtitles plan (a
+    /// run again right after a stop), instead of running the description alone.
+    #[test]
+    fn prepare_clips_does_not_start_without_the_plan_of_its_subtitles_step() {
+        let mut actions = Actions::default();
+        assert!(actions.operation(Action::PrepareClips).is_none());
+        actions.update(ActionMessage::PrepareClips(
+            pipeline::Message::SetSubtitles(false),
+        ));
+        assert!(actions.operation(Action::PrepareClips).is_some());
+    }
+
     use super::*;
+
+    #[test]
+    fn prepare_clips_remembers_its_steps_and_cap_and_is_ready_only_with_a_sound_cap() {
+        let mut actions = Actions::default();
+        actions.update(ActionMessage::PrepareClips(
+            pipeline::Message::SetSubtitles(false),
+        ));
+        actions.update(ActionMessage::PrepareClips(pipeline::Message::SetCap(
+            "7".to_string(),
+        )));
+        let saved = actions.persist(Action::PrepareClips);
+        let mut restored = Actions::default();
+        restored.restore(Action::PrepareClips, &saved);
+        assert_eq!(restored.persist(Action::PrepareClips), saved);
+        assert!(matches!(
+            restored.operation(Action::PrepareClips),
+            Some(Operation::PrepareClips(_))
+        ));
+
+        // A cap that is no number holds the run.
+        restored.update(ActionMessage::PrepareClips(pipeline::Message::SetCap(
+            "lots".to_string(),
+        )));
+        assert!(restored.operation(Action::PrepareClips).is_none());
+        // With both steps off there is nothing to run.
+        restored.update(ActionMessage::PrepareClips(pipeline::Message::SetCap(
+            String::new(),
+        )));
+        restored.update(ActionMessage::PrepareClips(
+            pipeline::Message::SetDescription(false),
+        ));
+        assert!(restored.operation(Action::PrepareClips).is_none());
+    }
 
     #[test]
     fn only_the_paid_actions_have_a_service() {

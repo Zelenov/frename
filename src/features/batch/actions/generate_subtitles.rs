@@ -297,6 +297,24 @@ impl Options {
 
     /// The job, when the plan is known, the key accepted and there is something to do.
     pub fn operation(&self) -> Option<super::Operation> {
+        self.build()
+    }
+
+    /// The run as a step of a longer one (#17), the way [`Self::step`] sees it: `None` while it
+    /// has to wait (no plan, no key, no price), `Some(None)` when the step has nothing to do (no
+    /// format, or every clip has its subtitles) so the other step goes on alone, else the run.
+    pub fn step_run(&self) -> Option<Option<Run>> {
+        let plan = self.plan.as_ref()?;
+        if self.formats.is_empty() || !plan.has_work() {
+            return Some(None);
+        }
+        match self.build()? {
+            super::Operation::GenerateSubtitles(run) => Some(Some(run)),
+            _ => None,
+        }
+    }
+
+    fn build(&self) -> Option<super::Operation> {
         if self.formats.is_empty() {
             return None;
         }
@@ -353,45 +371,62 @@ impl Options {
 
     /// Whether a run on `checked` can start now, and if not, why (#249).
     pub fn readiness(&self, checked: &[&File]) -> super::Readiness {
-        use super::Readiness;
-        let blocked = |note: String| Readiness::Blocked {
+        self.step(checked).readiness()
+    }
+
+    /// Where a run on `checked` stands as a step of a longer run (#17).
+    pub fn step(&self, checked: &[&File]) -> super::Step<Run> {
+        use super::Step;
+        let blocked = |note: String| Step::Blocked {
             note,
             fix: Some(ActionMessage::OpenSubtitleSettings),
         };
         if self.formats.is_empty() {
-            return Readiness::Blocked {
-                note: fl!("batch-reason-subtitles-no-format"),
-                fix: None,
-            };
+            return Step::Skip(fl!("batch-reason-subtitles-no-format"));
         }
         match self.key {
-            None => return Readiness::Waiting,
+            None => return Step::Wait,
             Some(KeyState::Missing) => return blocked(fl!("batch-subtitles-key-missing")),
             Some(KeyState::Unavailable) => return blocked(fl!("batch-ai-key-unavailable")),
             Some(KeyState::Saved) => {}
         }
         let Some(plan) = self.plan_for(checked) else {
-            return Readiness::Waiting;
+            return Step::Wait;
         };
         if !plan.has_work() {
-            let note = plan_lines(plan, Some(Price::Typical))
-                .into_iter()
-                .next()
-                .unwrap_or_else(|| fl!("batch-subtitles-transcribe"));
-            return Readiness::Blocked { note, fix: None };
+            return Step::Skip(
+                plan_lines(plan, Some(Price::Typical))
+                    .into_iter()
+                    .next()
+                    .unwrap_or_else(|| fl!("batch-subtitles-transcribe")),
+            );
         }
         if plan.transcribe > 0 {
             match self.price() {
-                None => return Readiness::Waiting,
+                None => return Step::Wait,
                 Some(Price::Rejected) => return blocked(fl!("batch-subtitles-key-rejected")),
                 Some(_) => {}
             }
         }
-        if self.operation().is_some() {
-            Readiness::Ready
-        } else {
-            Readiness::Waiting
+        match self.operation() {
+            Some(super::Operation::GenerateSubtitles(run)) => Step::Ready(run),
+            _ => Step::Wait,
         }
+    }
+
+    /// What a run on `checked` would send and cost, for a page that adds up several steps: videos
+    /// to transcribe, seconds of audio, dollars. `None` while the plan is worked out.
+    pub fn totals(&self, checked: &[&File]) -> Option<(usize, f64, f64)> {
+        let plan = self.plan_for(checked)?;
+        let usd_per_hour = match self.price() {
+            Some(price) => price.usd_per_hour(),
+            None => Price::Typical.usd_per_hour(),
+        };
+        Some((
+            plan.transcribe,
+            plan.audio_s,
+            usd_per_hour * plan.audio_s / 3600.0,
+        ))
     }
 
     /// The page for `checked` and its run button.
@@ -509,7 +544,7 @@ impl Options {
     }
 
     /// Why the key keeps the run button off, with the button that fixes it.
-    fn key_notice(&self) -> Option<Element<'_, ActionMessage>> {
+    pub(super) fn key_notice(&self) -> Option<Element<'_, ActionMessage>> {
         let (kind, headline, fix) = match (self.key, self.price()) {
             (Some(KeyState::Missing), _) => (
                 NoticeKind::Error,
@@ -807,6 +842,52 @@ impl PartialEq for Run {
 impl Eq for Run {}
 
 impl Run {
+    /// A run with default options at a price, for tests of the steps that use it.
+    #[cfg(test)]
+    pub(super) fn priced_for_test(usd_per_hour: f64) -> Self {
+        Self(Arc::new(SubtitleJob {
+            options: job::Options::default(),
+            excluded: Mutex::new(HashMap::new()),
+            usd_per_hour,
+            uploaded_ms: AtomicU64::new(0),
+            failed_deletes: AtomicUsize::new(0),
+        }))
+    }
+
+    /// The price per hour of audio the run counted with.
+    pub fn usd_per_hour(&self) -> f64 {
+        self.0.usd_per_hour
+    }
+
+    /// What sending the clip at `path` (as it is on disk) to Soniox would take: `None` when the
+    /// job will not send it (the plan excluded it, its outputs exist, a saved transcript is
+    /// used, it has no audio), else the seconds of audio, `None` inside when the header does not
+    /// say. A clip it cannot send costs nothing, so the cap sets nothing aside for it.
+    pub fn audio_to_send(&self, path: &Path) -> Option<Option<f64>> {
+        let excluded = self
+            .0
+            .excluded
+            .lock()
+            .is_ok_and(|excluded| excluded.contains_key(path));
+        if excluded {
+            return None;
+        }
+        let item = plan_batch::Item {
+            input: path.to_path_buf(),
+            output: subtitle_path(path),
+            name: String::new(),
+        };
+        match plan_batch::plan(&[item], &self.0.options).pop()?.action {
+            Planned::Transcribe { audio_s } => Some(audio_s),
+            _ => None,
+        }
+    }
+
+    /// The audio sent to Soniox so far, in seconds.
+    pub fn uploaded_seconds(&self) -> f64 {
+        self.0.uploaded_ms.load(Ordering::Relaxed) as f64 / 1000.0
+    }
+
     /// What the run spent, and uploads left on Soniox; `None` when nothing was sent.
     pub fn report(&self) -> Option<String> {
         self.0.report()
@@ -1388,6 +1469,35 @@ mod tests {
         ));
         options.update(Message::PriceReady(Price::Learned(0.1)));
         assert!(matches!(state(&options), Readiness::Ready));
+    }
+
+    /// As a step of a longer run, a plan with nothing to transcribe (or no format) is a step that
+    /// is skipped, not one that waits; on its own it gives no operation.
+    #[test]
+    fn a_plan_with_nothing_to_do_is_a_skipped_step_but_not_an_operation() {
+        let mut options = Options::default();
+        assert!(options.step_run().is_none(), "no plan yet waits");
+        options.update(Message::KeyState(KeyState::Saved));
+        options.update(Message::PriceReady(Price::Rejected));
+        options.plan = Some(Plan::default());
+        assert!(options.operation().is_none());
+        assert!(
+            matches!(options.step_run(), Some(None)),
+            "skipped, key or not"
+        );
+        let mut options = Options::default();
+        options.update(Message::KeyState(KeyState::Saved));
+        options.plan = Some(Plan {
+            rebuilt_free: 1,
+            ..Plan::default()
+        });
+        assert!(matches!(options.step_run(), Some(Some(_))));
+        options.update(Message::SetSrt(false));
+        options.update(Message::SetPremiere(false));
+        assert!(
+            matches!(options.step_run(), Some(None)),
+            "no format: skipped"
+        );
     }
 
     #[test]

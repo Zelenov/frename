@@ -1770,11 +1770,12 @@ in `text.secondary`:
 | | `rotate-ccw` | Reset cache and reload | |
 | Paid services | `sparkles` | Describe with AI | Anthropic |
 | | `captions` | Generate subtitles | Soniox |
+| | `clapperboard` | Prepare clips (#17) | Soniox + Anthropic |
 
-As built there are ten actions in three groups: *Move between places* (Move comments, Move
+As built there are eleven actions in three groups: *Move between places* (Move comments, Move
 in/out points, Markers ⇄ comment), *Fix
 names and videos* (Rotate videos with `rotate-cw`, Tag commented, Fix tags by priority, Apply tag
-spacing, Reset cache and reload), *Paid services* (Describe with AI, Generate subtitles).
+spacing, Reset cache and reload), *Paid services* (Describe with AI, Generate subtitles, Prepare clips).
 
 - Rows as the Settings navigation (§14): 32 px, the selected one `state.selected` with the bar and
   SemiBold; hover `state.hover`. Icons `text.secondary`, the selected row's `text.primary`; badges
@@ -1785,8 +1786,9 @@ spacing, Reset cache and reload), *Paid services* (Describe with AI, Generate su
   issue adds it. The choice is a setting, not an option on the page (settings choose, actions
   use). The page's first option row repeats it with the model: "Service: Anthropic · Claude Haiku
   4.5 *Change*". With no service set up yet, the badge is `badge.warning` "No key", and the page
-  shows the notice with *Set the key…*. The badge never lists several services: the one that will
-  bill is the only fact the list needs. When the row is too narrow for both, the name is cut with
+  shows the notice with *Set the key…*. The badge never lists several services, except Prepare
+  clips, which bills two (Soniox for the subtitles, the model's company for the description) and
+  reads "Soniox + Anthropic": the one action whose cost has two bills. When the row is too narrow for both, the name is cut with
   "…" before the badge goes, and the badge goes before the icon (§13.9).
 - **Why icons for all:** an icon is for recognition (BIR «Пиктограммы»): after a week the editor
   finds "Describe with AI" by its sparkles without reading. One action with an icon and eight
@@ -1795,6 +1797,19 @@ spacing, Reset cache and reload), *Paid services* (Describe with AI, Generate su
 - `Ctrl`+`Tab` / `Ctrl`+`Shift`+`Tab` move to the next / previous action (as between Settings pages).
 - While a job runs, the list is disabled (`text.disabled`, no hover) and the running action keeps
   its selection.
+
+#### 13.6.3a Prepare clips (#17)
+The page of the whole-folder pipeline follows §13.6.4 in this order: the title and what it does;
+what it changes (`captions` "Writes subtitle files next to the videos", `message-square-text`
+"Writes into the comments"); **Steps** (two checkboxes: "Make the subtitles first (Soniox)",
+"Describe the clips with AI"); **Stop spending at** (a text field, placeholder "No cap (US
+dollars)", `error` border when it holds no positive number); when the last run of the folder
+stopped, an `info` notice "The last run stopped with N clips left" with *Check them*; the plan
+(Subtitles, Description, Cost; then a `secondary` note that each step skips what is done); the key
+notices of the steps that are on. The run button reads "Prepare N clips · about $x". The result page
+adds, after the files written, **Similar footage**: a `title` and a `secondary` line, then one row per
+group (up to 12, the largest first): its label in `body`, "N clips" in `secondary`, and a
+`secondary` button *Check these clips*. Design notes: `docs/design/folder-pipeline.md`.
 
 #### 13.6.4 Action pages
 Every page has the same parts, in this order:

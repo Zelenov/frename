@@ -182,6 +182,52 @@ batch-runs-in-background = Пока идёт, можно работать дал
 batch-clip-in-work = Файл занят: «{ $action }»
 batch-folder-held = Занято: «{ $action }»
 batch-indicator-hint = Нажмите, чтобы открыть панель и отменить
+batch-action-prepare = Подготовить клипы
+batch-action-prepare-hint = Для каждого отмеченного клипа за один проход: субтитры (Soniox), если их нет, затем описание с помощью ИИ: краткое содержание, моменты как маркеры, комментарий и подсказки тегов. Одна цена, один предел и один индикатор хода на всё.
+batch-prepare-step-off = выключено
+batch-prepare-nothing = Для этих клипов делать нечего
+batch-prepare-report-cap = Потрачено { $spent } из предела { $cap }
+batch-option-steps = Шаги
+batch-prepare-step-subtitles = Сначала сделать субтитры (Soniox)
+batch-prepare-step-description = Описать клипы с помощью ИИ
+batch-prepare-cap = Остановиться, потратив
+batch-prepare-cap-none = Без предела (доллары США)
+batch-prepare-cap-invalid = Предел — число долларов, например 5
+batch-prepare-left = Прошлый запуск остановился, осталось { $count ->
+    [one] { $count } клип
+    [few] { $count } клипа
+   *[many] { $count } клипов
+}
+batch-prepare-check-left = Отметить их
+batch-prepare-estimating = Считаем, что сделает каждый шаг…
+batch-prepare-plan-subtitles = Субтитры
+batch-prepare-plan-description = Описание
+batch-prepare-plan-none = делать нечего
+batch-prepare-plan-subtitles-line = { $videos ->
+    [one] { $videos } видео
+    [few] { $videos } видео
+   *[many] { $videos } видео
+} для распознавания, { $duration } звука
+batch-prepare-plan-description-line = { $videos ->
+    [one] { $videos } видео
+    [few] { $videos } видео
+   *[many] { $videos } видео
+} для описания
+batch-prepare-resume-note = Каждый шаг пропускает то, что уже есть, поэтому остановленный запуск продолжается повторным запуском: за одно и то же не платят дважды.
+batch-prepare-run = Подготовить { $clips ->
+    [one] { $clips } клип
+    [few] { $clips } клипа
+   *[many] { $clips } клипов
+} · примерно { $dollars }
+batch-service-prepare = Soniox + { $provider }
+batch-prepare-groups-title = Похожие кадры
+batch-prepare-groups-hint = Клипы, снятые одинаково: дубликаты, повторные экспорты, неподвижная камера.
+batch-prepare-group-clips = { $count ->
+    [one] { $count } клип
+    [few] { $count } клипа
+   *[many] { $count } клипов
+}
+batch-prepare-check-group = Отметить эти клипы
 batch-solo-queued = В очереди: «{ $action }»
 batch-solo-gave-up = Не удалось подготовить запуск
 markers-ai-queued = Ждёт: «{ $action }»
@@ -301,6 +347,7 @@ batch-done-label-subtitled = субтитровано
 batch-ai-at-least = как минимум
 batch-cancel = Отмена
 batch-stopping = Остановка…
+batch-stop-over-budget = Остановлено: следующий клип мог бы выйти за предел { $cap } ({ $spent } потрачено). Поднимите предел, чтобы сделать остальное.
 batch-stopped = Остановлено после { $finished } из { $total ->
     [one] { $total } файла
     [few] { $total } файлов

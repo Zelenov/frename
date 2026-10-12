@@ -149,6 +149,44 @@ batch-runs-in-background = You can keep working while it runs
 batch-clip-in-work = In use: { $action }
 batch-folder-held = Busy: { $action }
 batch-indicator-hint = Click for the panel and Cancel
+batch-action-prepare = Prepare clips
+batch-action-prepare-hint = For each checked clip, in one pass: subtitles (Soniox) when it has none, then the description with AI: a summary, its moments as markers, the comment and tag suggestions. One price, one cap and one progress for all of it.
+batch-prepare-step-off = switched off
+batch-prepare-nothing = Nothing to do for these clips
+batch-prepare-report-cap = Spent { $spent } of the { $cap } cap
+batch-option-steps = Steps
+batch-prepare-step-subtitles = Make the subtitles first (Soniox)
+batch-prepare-step-description = Describe the clips with AI
+batch-prepare-cap = Stop spending at
+batch-prepare-cap-none = No cap (US dollars)
+batch-prepare-cap-invalid = The cap is a number of dollars, like 5
+batch-prepare-left = The last run stopped with { $count ->
+    [one] 1 clip
+   *[other] { $count } clips
+} left
+batch-prepare-check-left = Check them
+batch-prepare-estimating = Working out what each step will do…
+batch-prepare-plan-subtitles = Subtitles
+batch-prepare-plan-description = Description
+batch-prepare-plan-none = nothing to do
+batch-prepare-plan-subtitles-line = { $videos ->
+    [one] 1 video
+   *[other] { $videos } videos
+} to transcribe, { $duration } of audio
+batch-prepare-plan-description-line = { $videos ->
+    [one] 1 video
+   *[other] { $videos } videos
+} to describe
+batch-prepare-resume-note = Each step skips what is already there, so a stopped run is resumed by running it again: nothing is paid for twice.
+batch-prepare-run = Prepare { $clips ->
+    [one] 1 clip
+   *[other] { $clips } clips
+} · about { $dollars }
+batch-service-prepare = Soniox + { $provider }
+batch-prepare-groups-title = Similar footage
+batch-prepare-groups-hint = Clips that look like the same shot: duplicates, re-exports, a camera that did not move.
+batch-prepare-group-clips = { $count } clips
+batch-prepare-check-group = Check these clips
 batch-solo-queued = Queued: { $action }
 batch-solo-gave-up = Could not get ready
 markers-ai-queued = Waits for { $action }
@@ -256,6 +294,7 @@ batch-done-label-subtitled = subtitled
 batch-ai-at-least = at least
 batch-cancel = Cancel
 batch-stopping = Stopping…
+batch-stop-over-budget = Stopped: the next clip could take the run past the { $cap } cap ({ $spent } spent). Raise the cap to do the rest.
 batch-stopped = Stopped after { $finished } of { $total ->
     [one] { $total } file
    *[other] { $total } files
