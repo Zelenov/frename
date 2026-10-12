@@ -77,6 +77,9 @@ pub enum Message {
     /// Demo (a scenario's `ai_retry_wait_s`): the batch job on the checked files, its first file
     /// waiting this many seconds before its request is sent again; nothing is sent.
     ShowBatchRetry(u64),
+    /// Demo (a scenario's `press_held`): press Open folder once the job runs, so the note that
+    /// says why it is held shows.
+    ShowHeldPress,
     /// Demo: the unnamed markers as "Describe N unnamed" leaves them, without a request.
     ShowDescribingUnnamed,
     /// Demo: "Describe N unnamed" asking whether to send, without a request.

@@ -44,7 +44,7 @@ The lock moves from the whole app to **one clip**:
 
 1. **Busy clip.** `BatchState::current` is the clip in work. In step 1 a message that would edit
    it, open it or change its file is **dropped and the editor is told why** in the video's note
-   ("<name> is in use by <action>: it can be opened and edited when its turn ends"); the arrow
+   ("In use: <action>"); the arrow
    keys of the list step over it. Holding such an edit until the item ends (the
    `pending_file_updates` queue the media viewer uses for renames) is for a later step.
 2. **Path follows renames.** A task reads and writes the clip's **current** path, never the one

@@ -179,8 +179,8 @@ batch-time-left = осталось около { $time }
 batch-time-estimating = оцениваем время…
 batch-time-spent = прошло { $time }
 batch-runs-in-background = Пока идёт, можно работать дальше
-batch-clip-in-work = «{ $name }» занят: выполняется «{ $action }». Открыть и править его можно, когда дойдёт очередь до конца
-batch-folder-held = Выполняется «{ $action }»: пока оно не закончится, это недоступно
+batch-clip-in-work = Файл занят: «{ $action }»
+batch-folder-held = Занято: «{ $action }»
 batch-indicator-hint = Нажмите, чтобы открыть панель и отменить
 batch-run-again = Запустить снова для { $count ->
     [one] { $count } файла

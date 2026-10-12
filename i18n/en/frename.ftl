@@ -146,8 +146,8 @@ batch-time-left = about { $time } left
 batch-time-estimating = estimating time…
 batch-time-spent = { $time } so far
 batch-runs-in-background = You can keep working while it runs
-batch-clip-in-work = { $name } is in use by { $action }: it can be opened and edited when its turn ends
-batch-folder-held = { $action } is running: this is off until it ends
+batch-clip-in-work = In use: { $action }
+batch-folder-held = Busy: { $action }
 batch-indicator-hint = Click for the panel and Cancel
 batch-run-again = Run again on { $count ->
     [one] { $count } file

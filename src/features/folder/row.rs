@@ -64,10 +64,7 @@ pub fn view<'a>(
             props.spinner_frame,
         ));
     }
-    let lead = lead.push(status_cell(
-        file.has_subtitles(),
-        state.selected && state.busy,
-    ));
+    let lead = lead.push(status_cell(file.has_subtitles(), state.busy));
     let lead_width = STATUS_COLUMN + if batch.is_some() { CHECK_COLUMN } else { 0.0 };
 
     let body: Element<'a, Message> = match rename {

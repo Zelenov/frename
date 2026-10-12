@@ -35,6 +35,8 @@ pub struct ListProps<'a, 'm> {
     pub spinner_frame: usize,
     /// The batch state while batch mode is on: rows get the check column.
     pub batch: Option<&'a BatchState>,
+    /// The file a running job works on, also with batch mode off: its row is marked.
+    pub busy: Option<FileId>,
     /// Files whose markers could not be written.
     pub markers_not_saved: &'a HashMap<FileId, Vec<Marker>>,
     /// The filter menu is open over the list.
@@ -116,7 +118,7 @@ fn list<'a>(props: &ListProps<'a, '_>, dir: &'a Directory) -> Element<'a, Messag
     let selected = dir.selected_index();
     // A running job locks the checks, and the row of the file in work; the other files open.
     let locked = props.batch.is_some_and(|b| b.is_running());
-    let busy = props.batch.and_then(|b| b.current());
+    let busy = props.busy;
     let failures: HashMap<FileId, &str> = props
         .batch
         .map(|b| {

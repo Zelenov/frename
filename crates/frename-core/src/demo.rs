@@ -66,6 +66,10 @@ pub struct DemoScenario {
     /// strip over the file list's toolbar shows it (#249).
     #[serde(default)]
     pub close_batch_panel: bool,
+    /// With `close_batch_panel`: press something the running job holds back (opening a folder),
+    /// so the shot shows the note that says why.
+    #[serde(default)]
+    pub press_held: bool,
     /// Turn the open clip by this many quarter turns clockwise (negative: counter-clockwise),
     /// as `Ctrl+Alt+→` / `←` do, after the seek. The shot is then taken while the note is still
     /// shown over the picture.
@@ -412,6 +416,13 @@ name = "pick.a.mp4"
         let scenario = DemoScenario::parse(&text).unwrap();
         assert_eq!(scenario.describing.as_deref(), Some("Lion"));
         assert_eq!(DemoScenario::parse(MINIMAL).unwrap().describing, None);
+    }
+
+    #[test]
+    fn a_scenario_can_press_something_a_running_job_holds() {
+        let text = MINIMAL.replace("[[files]]", "press_held = true\n[[files]]");
+        assert!(DemoScenario::parse(&text).unwrap().press_held);
+        assert!(!DemoScenario::parse(MINIMAL).unwrap().press_held);
     }
 
     #[test]

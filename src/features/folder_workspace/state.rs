@@ -404,6 +404,16 @@ impl FolderWorkspace {
                 }
                 Task::none()
             }
+            Message::ShowHeldPress => {
+                if self.batch.is_running() {
+                    return self.update(Message::OpenFolderPicker);
+                }
+                // The job has not started yet (the clip lengths are still being read).
+                Task::future(async {
+                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                    Message::ShowHeldPress
+                })
+            }
             Message::ShowConfirmingDescribeUnnamed => {
                 let asked = self.unnamed_marker_guids().len();
                 self.markers.set_describe_all_asked(Some(asked));
@@ -1362,15 +1372,7 @@ impl FolderWorkspace {
             .unwrap_or(self.batch.action())
             .label();
         Some(match self.job_holds(message)? {
-            Hold::Clip => {
-                let name = self
-                    .busy_clip()
-                    .and_then(|id| self.directory.as_ref()?.file_by_id(id))
-                    .and_then(|f| f.file_path().file_name())
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                fl!("batch-clip-in-work", name = name, action = action)
-            }
+            Hold::Clip => fl!("batch-clip-in-work", action = action),
             Hold::Folder => fl!("batch-folder-held", action = action),
         })
     }
@@ -1637,6 +1639,7 @@ impl FolderWorkspace {
         if cancel.load(std::sync::atomic::Ordering::Relaxed) {
             self.batch
                 .finish(id, &ItemResult::new(ItemStatus::Pending, None));
+            let saved = self.apply_pending_file_updates();
             let video = self
                 .directory
                 .as_ref()
@@ -1646,7 +1649,7 @@ impl FolderWorkspace {
                 .map_or_else(Task::none, |file| {
                     self.media_viewer.open(&file).map(Message::MediaViewer)
                 });
-            return Task::batch([video, self.next_batch_item()]);
+            return Task::batch([saved, video, self.next_batch_item()]);
         }
         let mut saved = Task::none();
         let pending_for_it = self
@@ -1750,7 +1753,24 @@ impl FolderWorkspace {
     /// case, opens the newly selected file.
     fn on_media_unloaded(&mut self) -> Task<Message> {
         if let Some(item) = self.batch_item_waits_for_unload.take() {
-            return self.run_batch_item(item);
+            let item_clip = item.id;
+            let run = self.run_batch_item(item);
+            // The editor may have moved to another clip while the video let go: that clip's
+            // video was waiting for this unload too.
+            let selected = self
+                .directory
+                .as_ref()
+                .and_then(|d| d.selected_file())
+                .filter(|f| {
+                    f.id() != item_clip
+                        && self.file_workspace.file().map(|open| open.id()) == Some(f.id())
+                })
+                .cloned()
+                .filter(|_| !self.media_viewer.needs_unload_before_rename());
+            let video = selected.map_or_else(Task::none, |file| {
+                self.media_viewer.open(&file).map(Message::MediaViewer)
+            });
+            return Task::batch([run, video]);
         }
         // Closing wins over any scan/switch also waiting on this same unload: just save, and
         // let the caller (CloseRequested's window::close) proceed. Reopening the video (the
@@ -4714,6 +4734,71 @@ mod tests {
         assert!(workspace.file_workspace().file().is_some(), "still open");
     }
 
+    /// The editor moved to another clip while the job waited for the video of the previous one to
+    /// let go: the unload that starts the item also opens the new clip's video.
+    #[test]
+    fn the_clip_the_editor_moved_to_gets_its_video_when_the_waited_for_unload_comes() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        assert!(workspace.batch_item_waits_for_unload.is_none());
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(2)));
+        flush_file_opened(&mut workspace);
+        let third = file_id_at(&workspace, 2);
+        let _ = workspace.update(Message::BatchItemDone {
+            id: file_id_at(&workspace, 0),
+            result: Box::new(ItemResult::new(ItemStatus::Skipped, None)),
+        });
+        assert!(
+            workspace.batch_item_waits_for_unload.is_some(),
+            "the item for the clip left behind waits for its save and its video"
+        );
+        let loads = workspace.media_viewer().video_loads_started();
+        // The unload that was sent has been done by the player.
+        workspace.media_viewer_mut().pretend_video_loading(false);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert_eq!(
+            workspace.file_workspace().file().map(|f| f.id()),
+            Some(third)
+        );
+        assert_eq!(
+            workspace.media_viewer().video_loads_started(),
+            loads + 1,
+            "the clip the editor is on plays"
+        );
+    }
+
+    /// The arrow keys also step back over the clip in work, and stop when nothing lies beyond.
+    #[test]
+    fn the_arrow_keys_step_back_over_the_clip_in_work_and_stop_at_the_end() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        let _ = workspace.update(Message::BatchItemDone {
+            id: file_id_at(&workspace, 0),
+            result: Box::new(ItemResult::new(ItemStatus::Skipped, None)),
+        });
+        // The job is on file 1. From file 2, the previous clip is it: step to file 0.
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(2)));
+        flush_file_opened(&mut workspace);
+        assert_eq!(workspace.step_past_busy(false), Some(Some(0)));
+        assert_eq!(workspace.step_past_busy(true), None, "nothing after file 2");
+        // From file 0, forward is the clip in work: step to file 2.
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        flush_file_opened(&mut workspace);
+        assert_eq!(workspace.step_past_busy(true), Some(Some(2)));
+    }
+
     /// What the job holds back says so, instead of doing nothing.
     #[test]
     fn what_a_job_holds_back_tells_the_editor_why() {
@@ -4725,7 +4810,7 @@ mod tests {
         ));
         let on_busy = Message::Folder(folder::Message::SelectFile(0));
         let clip = workspace.blocked_notice(&on_busy).expect("told");
-        assert!(clip.contains(".mp4"), "{clip}");
+        assert!(!clip.is_empty());
         let folder_note = workspace
             .blocked_notice(&Message::OpenFolderPicker)
             .expect("told");

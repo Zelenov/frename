@@ -91,6 +91,7 @@ pub fn view(
         rename: state.inline_rename(),
         spinner_frame: state.spinner_frame(),
         batch: state.batch().is_active().then_some(state.batch()),
+        busy: state.batch().current(),
         markers_not_saved: state.unsaved_markers(),
         filter_menu_open: state.filter_menu_open(),
         width: state.folder_width(),

@@ -1049,9 +1049,7 @@ is closed (its media unloads) for the length of its item and comes back by itsel
 | Open a folder, file actions that move or delete files, Undo and Redo, Settings' *Update and restart* | the rest of Settings |
 | the open clip's own edits, rotation and fullscreen, while it is the file in work | – |
 
-What a lock does when pressed: nothing but a note over the video that says why ("Describe with AI
-is running: this is off until it ends"; for the clip in work "<name> is in use by Describe with
-AI: it can be opened and edited when its turn ends"). Nothing held is silent.
+What a lock does when pressed: nothing but a note over the video that says why ("Busy: Describe with AI"; for the clip in work "In use: Describe with AI"). Nothing held is silent.
 
 The **lock line** is a 28 px row at the top of the file list, above the search field, `bg.raised`,
 padding 0×8: `lock` 14 and the sentence in `secondary`. It pushes the list down (the rows keep
@@ -1482,7 +1480,7 @@ chips are clipped mid-letter.
 | Normal | transparent |
 | Hover | `state.hover` (today no hover at all) |
 | Selected = open | `state.selected`, a 2 px `accent.text` bar on the left edge |
-| Selected, file closed by a running job | `state.selected` without the bar, `lock` 12 in the status column |
+| The file in work of a running job | the status column shows `lock` 12; when it is the selected one it is closed, drawn without the bar |
 | Renaming | started by a double-click on the row (off in batch mode); the row becomes a text field (§8.6) with the whole file name, the part before the extension selected; an error goes on the second line in `error` with `circle-alert` 12 (Name is empty · Not allowed: \ / : * ? " < > \| · Cannot end with a dot or space · A file with this name exists; today it shares the field's line); Enter renames, Esc cancels. A rename re-reads the tags and in/out points from the new name; it is one undo step (#139) |
 | Checked (batch) | the checkbox; no other change |
 | Locked (batch job running) | the row of the file in work: unchanged, pointer cursor off; the checkboxes of every row disabled (§13.2 "Locks") |

@@ -15,6 +15,7 @@ use crate::ui::tooltip::{self, Position, Tip};
 use crate::ui::{button, form, layout, scroll, style, text};
 
 use super::actions::Group;
+pub use super::job_view::indicator;
 use super::{job_view, Action, BatchState, Message};
 
 /// The page's inset: 16 above and below, 24 at the sides.
@@ -72,8 +73,6 @@ pub fn view<'a>(
         .style(style::panel)
         .into()
 }
-
-pub use super::job_view::indicator;
 
 /// "Batch actions", how many files are checked, and the way back to the open file.
 fn header(state: &BatchState) -> Element<'_, Message> {

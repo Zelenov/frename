@@ -85,9 +85,15 @@ impl FolderWorkspace {
             return Task::none();
         };
         let listed = dir.files_in_order().map(|file| file.id());
-        let ids = drag_out::files_to_drag(pressed, listed, self.batch.is_active(), |id| {
-            self.batch.is_checked(id)
-        });
+        // The clip a running job works on is left out: the job is writing or renaming it.
+        let busy = self.busy_clip();
+        let ids: Vec<FileId> =
+            drag_out::files_to_drag(pressed, listed, self.batch.is_active(), |id| {
+                self.batch.is_checked(id)
+            })
+            .into_iter()
+            .filter(|id| Some(*id) != busy)
+            .collect();
         let open = self
             .file_workspace
             .file()
