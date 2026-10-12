@@ -31,8 +31,8 @@ pub(super) struct Solo {
 struct Preparing {
     action: Action,
     file: FileId,
-    /// The checks of the batch panel, which the run borrowed.
-    saved: HashSet<FileId>,
+    /// What the batch panel had selected and checked, which the run borrowed.
+    saved: (Action, HashSet<FileId>),
     since: Instant,
 }
 
@@ -152,6 +152,11 @@ impl FolderWorkspace {
                     Task::batch([Self::notice(&note), fix, self.advance_solo()])
                 }
                 Readiness::Ready => {
+                    // Waiting for the marker requests to let go of the clip: the job starts by
+                    // itself then.
+                    if self.batch.is_waiting_for_markers() {
+                        return Task::none();
+                    }
                     let started = self.start_batch();
                     if self.batch.is_running() {
                         self.end_preparing();
@@ -191,10 +196,23 @@ impl FolderWorkspace {
         Task::none()
     }
 
-    /// The run is over with preparing (started, blocked, or given up): the checks come back.
+    /// Cancel stops the line too: the run that prepares and the ones that wait.
+    pub(super) fn cancel_solo(&mut self) {
+        self.solo.waiting.clear();
+        self.end_preparing();
+    }
+
+    /// The folder changed: the runs asked for belong to the one that was open.
+    pub(super) fn forget_solo(&mut self) {
+        self.solo = Solo::default();
+    }
+
+    /// The run is over with preparing (started, blocked, or given up): the selection comes back.
     fn end_preparing(&mut self) {
         if let Some(run) = self.solo.preparing.take() {
-            self.batch.restore_checked(run.saved);
+            // A start that waited for the marker requests is not wanted any more.
+            self.batch.update(batch::Message::StopWaiting);
+            self.batch.restore_selection(run.saved);
         }
     }
 }

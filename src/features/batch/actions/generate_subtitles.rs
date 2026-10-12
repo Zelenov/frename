@@ -1316,6 +1316,80 @@ mod tests {
         }
     }
 
+    /// A run of one clip, started without the panel, waits for what it needs and says why it
+    /// cannot start (#249).
+    #[test]
+    fn a_run_without_a_panel_walks_its_states_to_ready_or_blocked() {
+        use super::super::Readiness;
+        let video = File::from_path("C:/clips/a.mp4", std::time::SystemTime::UNIX_EPOCH);
+        let checked: Vec<&File> = vec![&video];
+        let state = |options: &Options| options.readiness(&checked);
+        let plan_ready = |options: &mut Options, plan: Plan| {
+            let reads = options.reads(&checked);
+            let generation = reads.plan.map_or(options.generation, |(g, ..)| g);
+            options.update(Message::PlanReady {
+                generation,
+                plan: Box::new(plan),
+            });
+        };
+
+        let mut options = Options::default();
+        options.update(Message::SetSrt(false));
+        assert!(
+            matches!(state(&options), Readiness::Blocked { fix: None, .. }),
+            "no file to write"
+        );
+        options.update(Message::SetSrt(true));
+
+        assert!(matches!(state(&options), Readiness::Waiting), "key unknown");
+        options.update(Message::KeyState(KeyState::Missing));
+        assert!(matches!(
+            state(&options),
+            Readiness::Blocked { fix: Some(_), .. }
+        ));
+        options.update(Message::KeyState(KeyState::Saved));
+        assert!(
+            matches!(state(&options), Readiness::Waiting),
+            "plan pending"
+        );
+
+        plan_ready(&mut options, Plan::default());
+        assert!(
+            matches!(state(&options), Readiness::Blocked { fix: None, .. }),
+            "nothing to do"
+        );
+
+        // A free rebuild needs no price.
+        plan_ready(
+            &mut options,
+            Plan {
+                rebuilt_free: 1,
+                ..Plan::default()
+            },
+        );
+        assert!(matches!(state(&options), Readiness::Ready));
+
+        // A transcription waits for the price, and is refused when the key is rejected.
+        let transcribe = Plan {
+            transcribe: 1,
+            audio_s: 60.0,
+            ..Plan::default()
+        };
+        plan_ready(&mut options, transcribe.clone());
+        options.price = Some(None);
+        assert!(
+            matches!(state(&options), Readiness::Waiting),
+            "price pending"
+        );
+        options.update(Message::PriceReady(Price::Rejected));
+        assert!(matches!(
+            state(&options),
+            Readiness::Blocked { fix: Some(_), .. }
+        ));
+        options.update(Message::PriceReady(Price::Learned(0.1)));
+        assert!(matches!(state(&options), Readiness::Ready));
+    }
+
     #[test]
     fn the_run_writes_the_formats_the_plan_was_made_for() {
         let mut options = Options::default();

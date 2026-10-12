@@ -268,8 +268,9 @@ Describe with AI.
 comment box (next to the expand button) describes it with the settings you chose in Settings →
 Describe with AI, and the captions button next to it generates its subtitles (below). Nothing
 needs checking first. If something is missing, for example the key, you are told so, and the
-settings open where it is set. Both are paid, and a clip costs a few cents; the batch panel still
-shows the price before many clips. The button stays lit while the clip waits for its turn or is
+settings open where it is set. Both are paid: on Haiku a clip usually costs about a cent or less, more on the larger models
+(Settings → Describe with AI lists them), and the batch panel shows the price before you run
+many clips. The button stays lit while the clip waits for its turn or is
 being worked on. A second action asked for while one runs waits in line and starts when the one
 before it ends: everything slow runs through one queue, one clip at a time.
 

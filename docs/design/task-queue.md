@@ -107,7 +107,9 @@ The lock moves from the whole app to **one clip**:
    suggestions are part of Describe with AI (#250).
 3. **Button clean-up:** every AI button follows the model above; list of today's buttons and
    what each becomes is filled in then (marker rows ✨, "describe all unnamed", the In/Out AI
-   pill, batch actions).
+   pill, batch actions). Also then: withdraw one queued run (a latched button takes no press
+   today), and a keyboard shortcut for the two single-clip actions with its row in the README's
+   shortcut table.
 
 ## Test plan
 

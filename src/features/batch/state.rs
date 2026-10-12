@@ -236,6 +236,9 @@ pub struct BatchState {
     /// Run was pressed while the open clip's marker requests still hold it: the job starts once
     /// they let go (the workspace knows), unless it is cancelled first.
     waiting_for_markers: bool,
+    /// A run of one clip has borrowed the selection (`borrow_for_one`): the action reads what it
+    /// needs for that clip as if its panel were shown.
+    borrowed: bool,
 }
 
 impl Default for BatchState {
@@ -247,6 +250,7 @@ impl Default for BatchState {
             checked: HashSet::new(),
             job: None,
             waiting_for_markers: false,
+            borrowed: false,
         }
     }
 }
@@ -518,6 +522,7 @@ impl BatchState {
     pub fn reset_files(&mut self) {
         self.checked.clear();
         self.job = None;
+        self.borrowed = false;
         self.actions.describe_ai_mut().reset_files();
         self.actions.generate_subtitles_mut().invalidate_plan();
     }
@@ -526,7 +531,10 @@ impl BatchState {
     /// for `checked` (in list order): its plan, the price, whether a key is saved. Each is
     /// marked as asked for.
     pub fn subtitle_reads(&mut self, checked: &[&File]) -> generate_subtitles::Reads {
-        if !self.active || self.action != Action::GenerateSubtitles || self.is_running() {
+        if !(self.active || self.borrowed)
+            || self.action != Action::GenerateSubtitles
+            || self.is_running()
+        {
             return generate_subtitles::Reads::default();
         }
         self.actions.generate_subtitles_mut().reads(checked)
@@ -539,7 +547,7 @@ impl BatchState {
         &mut self,
         checked: impl Iterator<Item = &'a File>,
     ) -> (Vec<(FileId, PathBuf)>, bool) {
-        if !self.active || self.action != Action::DescribeAi {
+        if !(self.active || self.borrowed) || self.action != Action::DescribeAi {
             return (Vec::new(), false);
         }
         let options = self.actions.describe_ai_mut();
@@ -585,21 +593,31 @@ impl BatchState {
         self.checked.contains(&id)
     }
 
-    /// Select `action` and check only `file`, as a run of one clip needs; the checks it had are
-    /// returned to be put back with [`Self::restore_checked`]. A finished job's result is kept
-    /// until the next job replaces it. Does nothing while a job runs.
-    pub fn borrow_for_one(&mut self, action: Action, file: FileId) -> Option<HashSet<FileId>> {
+    /// Select `action` and check only `file`, as a run of one clip needs; what the panel had
+    /// selected and checked is returned, to be put back with [`Self::restore_selection`]. A
+    /// finished job's result is kept until the next job replaces it. Does nothing while a job runs.
+    pub fn borrow_for_one(
+        &mut self,
+        action: Action,
+        file: FileId,
+    ) -> Option<(Action, HashSet<FileId>)> {
         if self.is_running() {
             return None;
         }
-        self.action = action;
-        Some(std::mem::replace(&mut self.checked, HashSet::from([file])))
+        self.borrowed = true;
+        let action = std::mem::replace(&mut self.action, action);
+        Some((
+            action,
+            std::mem::replace(&mut self.checked, HashSet::from([file])),
+        ))
     }
 
-    /// Put the checks back as they were. Not a message: it works while a job runs, which the
-    /// checks of the panel do not.
-    pub fn restore_checked(&mut self, checked: HashSet<FileId>) {
+    /// Put the action and the checks back as they were. Not a message: it works while a job
+    /// runs, which the checks of the panel do not.
+    pub fn restore_selection(&mut self, (action, checked): (Action, HashSet<FileId>)) {
+        self.action = action;
         self.checked = checked;
+        self.borrowed = false;
     }
 
     pub fn checked_count(&self) -> usize {
@@ -826,6 +844,34 @@ mod tests {
         batch.finish(id, &ItemResult::new(ItemStatus::Done, None));
         assert!(batch.begin_next().is_none());
         assert!(!strip(&batch), "nothing runs any more");
+    }
+
+    /// A run of one clip has no panel, yet its action reads what it needs (the key, the plan, the
+    /// clip's length) for that clip, and gives the selection back after.
+    #[test]
+    fn a_run_of_one_clip_reads_what_it_needs_without_the_panel() {
+        let files = ids(2);
+        let video =
+            frename_core::File::from_path("C:/none/0.mp4", std::time::SystemTime::UNIX_EPOCH);
+        let mut batch = state();
+        batch.update(Message::SelectAction(Action::Rotate));
+        batch.update(Message::CheckAll(vec![files[1]]));
+        assert!(!batch.is_active());
+        assert!(!batch.subtitle_reads(&[&video]).key_state);
+
+        let saved = batch
+            .borrow_for_one(Action::GenerateSubtitles, video.id())
+            .expect("idle");
+        assert!(batch.is_checked(video.id()));
+        assert!(!batch.is_checked(files[1]));
+        let reads = batch.subtitle_reads(&[&video]);
+        assert!(reads.key_state, "the key is asked for");
+        assert!(reads.plan.is_some(), "the plan is worked out");
+
+        batch.restore_selection(saved);
+        assert_eq!(batch.action(), Action::Rotate);
+        assert!(batch.is_checked(files[1]));
+        assert!(!batch.is_checked(video.id()));
     }
 
     #[test]
