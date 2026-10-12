@@ -509,14 +509,8 @@ impl Actions {
             &self.describe_ai,
             checked,
             &readiness,
-            self.prepare_left_count(),
+            self.prepare_left_found,
         )
-    }
-
-    /// How many clips the last run left, as the panel offers them; the workspace tells how many
-    /// of the names are in the open folder.
-    fn prepare_left_count(&self) -> usize {
-        self.prepare_left_found
     }
 
     /// Whether the plan of `action` reads the subtitles of the checked clips (Generate subtitles,
@@ -549,14 +543,19 @@ impl Actions {
         self.pipeline.groups()
     }
 
-    /// The names of the clips the last Prepare clips run left undone.
-    pub fn prepare_left(&self) -> &[String] {
-        self.pipeline.left()
+    /// The names of the clips the last Prepare clips run left undone in `folder`.
+    pub fn prepare_left(&self, folder: &Path) -> &[String] {
+        self.pipeline.left(folder)
     }
 
-    /// Remember which clips the run left, and how many of them are in the folder now.
-    pub fn set_prepare_left(&mut self, names: Vec<String>, found: usize) {
-        self.pipeline.set_left(names);
+    /// Remember which clips the run left in `folder`, and how many of them are in it now.
+    pub fn set_prepare_left(&mut self, names: Vec<String>, folder: &Path, found: usize) {
+        self.pipeline.set_left(names, folder);
+        self.prepare_left_found = found;
+    }
+
+    /// How many of the clips left are in the open folder now.
+    pub fn set_prepare_left_found(&mut self, found: usize) {
         self.prepare_left_found = found;
     }
 

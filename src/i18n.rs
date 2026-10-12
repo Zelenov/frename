@@ -535,7 +535,7 @@ mod tests {
     }
 
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
-    const NOT_UI_TEXT: [(&str, &str); 92] = [
+    const NOT_UI_TEXT: [(&str, &str); 93] = [
         ("explorer", "program name"),
         ("open", "program name (macOS)"),
         ("xdg-open", "program name"),
@@ -745,6 +745,10 @@ mod tests {
         ),
         (
             "description",
+            "stable option key for the batch run remembered across restarts (#17), see pipeline::Options::persist",
+        ),
+        (
+            "left_folder",
             "stable option key for the batch run remembered across restarts (#17), see pipeline::Options::persist",
         ),
         (

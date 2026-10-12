@@ -138,13 +138,18 @@ impl Options {
     }
 
     pub fn operation(&self) -> super::Operation {
-        super::Operation::DescribeAi(Run {
+        super::Operation::DescribeAi(self.run())
+    }
+
+    /// The run these options make.
+    pub fn run(&self) -> Run {
+        Run {
             language: self.language,
             redo: self.redo,
             model: self.model.id,
             moments: self.moments,
             tags: self.tags_to_suggest().to_vec(),
-        })
+        }
     }
 
     /// The model and language set in the settings.
@@ -306,10 +311,7 @@ impl Options {
                     .unwrap_or_else(|| fl!("batch-action-describe-ai-none")),
             );
         }
-        match self.operation() {
-            super::Operation::DescribeAi(run) => Step::Ready(run),
-            _ => unreachable!(),
-        }
+        Step::Ready(self.run())
     }
 
     /// What a run on `checked` would send and cost, for a page that adds up several steps:
@@ -659,12 +661,12 @@ pub fn run(options: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgr
         cancel,
         progress,
     )
-    .0
 }
 
 /// [`run`] within `budget` (a cap shared by the clips of a run: a clip whose request could take
-/// the run past it is not sent, and the job stops), also giving back the clip as it was
-/// described (its fingerprints, for grouping similar footage) when it was.
+/// the run past it is not sent, and the job stops). The described clip is also kept in `cache`
+/// (its fingerprints, for grouping similar footage); a clip the cache already has, described
+/// with the same settings, is not asked for again, so a retry after a failed save costs nothing.
 pub fn run_clip(
     options: &Run,
     budget: &describe::Budget,
@@ -672,20 +674,6 @@ pub fn run_clip(
     path: &Path,
     cancel: &AtomicBool,
     progress: &ItemProgress,
-) -> (ItemResult, Option<describe::DescribedClip>) {
-    let mut kept = None;
-    let result = run_inner(options, budget, cache, path, cancel, progress, &mut kept);
-    (result, kept)
-}
-
-fn run_inner(
-    options: &Run,
-    budget: &describe::Budget,
-    cache: Option<&describe::Cache>,
-    path: &Path,
-    cancel: &AtomicBool,
-    progress: &ItemProgress,
-    kept: &mut Option<describe::DescribedClip>,
 ) -> ItemResult {
     let is_video = path
         .extension()
@@ -747,16 +735,29 @@ fn run_inner(
         _ => {}
     };
     let vocabulary = vocabulary(&options.tags);
+    let vocabulary_ref = (!vocabulary.is_empty()).then_some(vocabulary.as_slice());
+    // Described before, with these settings, but not saved (a read-only share): no second request.
+    let cached = cache
+        .filter(|_| !options.redo)
+        .and_then(|cache| cached_in(cache, &on_disk, &describe_options, vocabulary_ref))
+        .map(|mut clip| {
+            clip.usage = Default::default();
+            clip
+        });
+    let from_cache = cached.is_some();
     // One request either way: with tags to suggest from, it suggests them too.
-    let described = describe::describe_clip(
-        &on_disk,
-        &subtitles,
-        (!vocabulary.is_empty()).then_some(vocabulary.as_slice()),
-        &describe_options,
-        budget,
-        cancel,
-        on_stage,
-    );
+    let described = match cached {
+        Some(clip) => Ok(Some(clip)),
+        None => describe::describe_clip(
+            &on_disk,
+            &subtitles,
+            vocabulary_ref,
+            &describe_options,
+            budget,
+            cancel,
+            on_stage,
+        ),
+    };
     let (description, tags, usage, frames) = match described {
         // Its frames were read, but the request could pass the cap: nothing was sent, and the
         // clips after it would be refused the same way.
@@ -767,8 +768,7 @@ fn run_inner(
             };
         }
         Ok(Some(clip)) => {
-            *kept = Some(clip.clone());
-            if let Some(cache) = cache {
+            if let Some(cache) = cache.filter(|_| !from_cache) {
                 keep_in_cache(cache, &on_disk, &describe_options, &vocabulary, &clip);
             }
             (
@@ -884,13 +884,21 @@ pub fn cached_clip(
 ) -> Option<describe::DescribedClip> {
     let request = Request::for_clip(path, options.model(), options.language, options.moments)?;
     let vocabulary = vocabulary(&options.tags);
-    let key = describe::CacheKey::new(
+    cached_in(
+        cache,
         &request.on_disk,
         &request.options,
         (!vocabulary.is_empty()).then_some(vocabulary.as_slice()),
-        true,
     )
-    .ok()?;
+}
+
+fn cached_in(
+    cache: &describe::Cache,
+    on_disk: &Path,
+    options: &describe::Options,
+    vocabulary: Option<&[describe::Tag]>,
+) -> Option<describe::DescribedClip> {
+    let key = describe::CacheKey::new(on_disk, options, vocabulary, true).ok()?;
     cache.get(&key).map(|record| record.clip)
 }
 

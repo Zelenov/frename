@@ -1465,7 +1465,7 @@ impl FolderWorkspace {
         }
         // The clips the last Prepare clips run left: check exactly those.
         if let batch::Message::Action(batch::ActionMessage::CheckLeft) = msg {
-            let names = self.batch.actions().prepare_left().to_vec();
+            let names = self.left_names();
             let ids = self.left_clips(&names);
             return self.handle_batch_many([batch::Message::CheckOnly(ids)]);
         }
@@ -1638,9 +1638,9 @@ impl FolderWorkspace {
         let tags = self.file_workspace.tag_list().saved_tag_names();
         self.batch.set_folder_tags(tags);
         // Prepare clips offers the clips its last run left, those of them the folder has now.
-        let names = self.batch.actions().prepare_left().to_vec();
+        let names = self.left_names();
         let found = self.left_clips(&names).len();
-        self.batch.set_prepare_left(names, found);
+        self.batch.set_prepare_left_found(found);
     }
 
     /// Start the job's next file on a blocking thread, or end the job when it has none left or was
@@ -1825,16 +1825,14 @@ impl FolderWorkspace {
             .filter_map(|id| Some((id, dir.file_by_id(id)?.file_path().to_path_buf())))
             .collect();
         let found = left.len();
-        self.batch.set_prepare_left(left, found);
-        let action = self.batch.action();
-        let saved_action = batch::Action::PrepareClips;
+        let folder = dir.path().to_path_buf();
+        self.batch.set_prepare_left(left, &folder, found);
         // The record of the last run carries the clips left, for the next time.
-        if action == saved_action {
-            self.app_db.set_batch_run(BatchRun {
-                action: saved_action.id().to_string(),
-                options: self.batch.actions().persist(saved_action),
-            });
-        }
+        let saved_action = batch::Action::PrepareClips;
+        self.app_db.set_batch_run(BatchRun {
+            action: saved_action.id().to_string(),
+            options: self.batch.actions().persist(saved_action),
+        });
         let Some(batch::Operation::PrepareClips(run)) = self.batch.job_operation().cloned() else {
             return Task::none();
         };
@@ -1846,6 +1844,14 @@ impl FolderWorkspace {
                 batch::pipeline::Message::Groups(groups),
             )))
         })
+    }
+
+    /// The names the last Prepare clips run left in the open folder.
+    fn left_names(&self) -> Vec<String> {
+        self.directory
+            .as_ref()
+            .map(|d| self.batch.actions().prepare_left(d.path()).to_vec())
+            .unwrap_or_default()
     }
 
     /// The clips of the open folder whose names are in `names`, in list order.
@@ -5177,7 +5183,7 @@ mod tests {
                     .expect("a name")
             })
             .collect();
-        assert_eq!(workspace.batch().actions().prepare_left(), left.as_slice());
+        assert_eq!(workspace.left_names(), left);
 
         // The next time, with the checks changed, Check them checks exactly those.
         let _ = workspace.update(Message::Batch(batch::Message::CheckNone));

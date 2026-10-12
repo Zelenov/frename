@@ -744,8 +744,13 @@ impl BatchState {
     }
 
     /// Tell Prepare clips which clips the last run left, and how many of them the open folder has.
-    pub fn set_prepare_left(&mut self, names: Vec<String>, found: usize) {
-        self.actions.set_prepare_left(names, found);
+    pub fn set_prepare_left(&mut self, names: Vec<String>, folder: &Path, found: usize) {
+        self.actions.set_prepare_left(names, folder, found);
+    }
+
+    /// How many of the clips the last run left the open folder has.
+    pub fn set_prepare_left_found(&mut self, found: usize) {
+        self.actions.set_prepare_left_found(found);
     }
 
     /// The action of the current job, which the report's wording follows.

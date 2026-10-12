@@ -829,9 +829,26 @@ impl Run {
         self.0.usd_per_hour
     }
 
-    /// Whether a clip that has subtitles is transcribed again ("Replace existing subtitles").
-    pub fn replaces(&self) -> bool {
+    /// Whether the job may send the clip at `path` (as it is on disk) to Soniox: the plan did not
+    /// exclude it, and an output of a ticked format is missing (or Replace is on). A clip it
+    /// cannot send costs nothing, so the cap sets nothing aside for it.
+    pub fn may_transcribe(&self, path: &Path) -> bool {
+        let excluded = self
+            .0
+            .excluded
+            .lock()
+            .is_ok_and(|excluded| excluded.contains_key(path));
+        if excluded {
+            return false;
+        }
+        let output = subtitle_path(path);
         self.0.options.force
+            || self
+                .0
+                .options
+                .formats
+                .iter()
+                .any(|format| !format.path(&output).exists())
     }
 
     /// The audio sent to Soniox so far, in seconds.

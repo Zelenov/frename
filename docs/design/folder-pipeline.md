@@ -8,16 +8,16 @@ runs in the background and goes through the one queue.
 ## What the editor gets
 
 One action in the batch panel, **Prepare clips**, over the clips checked in the file list (All, None,
-Invert, Ctrl+click and Shift+click work as in batch mode; with nothing checked yet, All is the default
-the panel offers). For each clip, in this order, in one pass:
+Invert, Ctrl+click and Shift+click work as in batch mode; batch mode checks the open file, and All is
+one click away). For each clip, in this order, in one pass:
 
 1. **Subtitles** (Soniox), when the clip has none and a Soniox key is saved. Free when a transcript
    is already saved next to the video (the existing "rebuilt free" case).
 2. **Description** (Claude or ChatGPT, the model of Settings): the summary and the time-ranged
    moments, from the key frames and the subtitles just made, in one request.
 3. **Tags**: the request also suggests tags from the folder's own tags (Settings → Describe with AI,
-   as today). They are stored with the description for review. An option, **Add the suggested tags
-   to the clips**, applies them (off: the editor reviews them, as today).
+   as today). They are stored with the description for the editor to review, as today; Prepare clips
+   does not apply them.
 4. **Markers**: the moments become AI markers (in the video or in the comment, as the settings say).
 5. **Comment**: the summary goes into the AI block of the comment; the editor's own text is never
    touched.
@@ -52,8 +52,10 @@ Nothing is paid for twice, because each step skips what is already there: a clip
 no new transcription, a clip with an AI description is not described again (unless "Redo" is
 ticked), and the description of an unchanged clip is also kept in a cache that frename's own data
 folder holds (clipscribe's `Cache`, keyed by the file's size, time and a sample of its content, so a
-renamed clip still finds its description). So a stopped run is resumed by running it again on the same
-clips: finished clips are skipped at once, at no cost.
+renamed clip still finds its description). A description that was paid for but not saved (a read-only share) is
+taken from the cache when the clip is run again, so a retry does not pay twice. So a stopped run is
+resumed by running it again on the same clips: finished clips are skipped at once, at no cost. A clip
+stopped between its two steps counts as not reached and is offered again; its subtitles are kept.
 
 "A resumed run offers the same set again": when a run stopped before the end, frename remembers which
 clips were not done (their names, in the batch's last-run record, #65). The next time **Prepare
@@ -81,12 +83,12 @@ use on edited sequences (filed as an idea).
 ## How it works
 
 - `Action::PrepareClips`, `Operation::PrepareClips(pipeline::Run)` in `src/features/batch/actions/
-  pipeline/`. `Run` holds the options of both steps (the Soniox `generate_subtitles::Run` and the
+  pipeline.rs`. `Run` holds the options of both steps (the Soniox `generate_subtitles::Run` and the
   description `describe_ai::Run`), the clipscribe `Budget` (shared by every item of the run), and the
   cache.
 - `Operation::run` for one clip: (1) `generate_subtitles::run` when the plan says transcribe; (2)
-  `describe_ai::run_clip` (the existing run, made to call `describe_clip` with the run's budget and
-  to return the fingerprints it got); (3) the tags step; the results are added up (the status of the
+  `describe_ai::run_clip` (the existing run, made to call `describe_clip` with the run's budget; it keeps
+  the clip, with its fingerprints, in the cache, which is where grouping reads them back); (3) the tags step; the results are added up (the status of the
   clip is the worst of its steps' failures, `usage` is the sum, a stop of either step stops the job).
 - The plan (`pipeline::Plan`) is the two existing plans over the checked clips: the subtitles plan
   (`generate_subtitles::plan`, header reads) and the description plan (`describe_ai::Options::plan`,
@@ -99,11 +101,10 @@ use on edited sequences (filed as an idea).
 ## Decisions made without the owner
 
 - One new action, not a mode of Describe with AI: the panel of a pipeline has its own options (the cap,
-  apply tags, the steps), and the existing two actions stay as they are.
+  the two steps), and the existing two actions stay as they are.
 - Steps cannot be reordered; each can be switched off (no subtitles, no description) so the same action
   serves "only describe what is already subtitled".
-- Tags are suggested, applied only when the editor ticks the option (the owner's review rule of
-  stage 2 stays the default).
+- Tags are only suggested and stored for review (the owner's review rule of stage 2 stays).
 - The cap is in dollars and per run, not per day.
 - Resume is "run again, finished steps are skipped" plus a remembered "clips left" set per folder;
   no background resume after a restart without the editor pressing Run.
@@ -123,4 +124,4 @@ use on edited sequences (filed as an idea).
 - Resume: the left-clips record round-trips; **Check them** checks exactly those.
 - Grouping: fingerprints of cached clips are read back; groups list their clips; **Check these
   clips** checks exactly them.
-- Persistence: the new options (cap, steps, apply tags) round-trip through the last-run record.
+- Persistence: the new options (cap, steps) round-trip through the last-run record.

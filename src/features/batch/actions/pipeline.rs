@@ -54,6 +54,8 @@ pub struct Options {
     cap_text: String,
     /// The names of the clips the last run of this folder left undone, to offer again.
     left: Vec<String>,
+    /// The folder `left` belongs to: the names mean nothing in another one.
+    left_folder: String,
     groups: Vec<Group>,
 }
 
@@ -64,6 +66,7 @@ impl Default for Options {
             description: true,
             cap_text: String::new(),
             left: Vec::new(),
+            left_folder: String::new(),
             groups: Vec::new(),
         }
     }
@@ -109,13 +112,18 @@ impl Options {
         self.groups.clear();
     }
 
-    /// The clips the last run of this folder left, by name.
-    pub fn left(&self) -> &[String] {
-        &self.left
+    /// The clips the last run left in `folder`, by name; none when that run was in another folder.
+    pub fn left(&self, folder: &Path) -> &[String] {
+        if self.left_folder == folder.to_string_lossy() {
+            &self.left
+        } else {
+            &[]
+        }
     }
 
-    pub fn set_left(&mut self, names: Vec<String>) {
+    pub fn set_left(&mut self, names: Vec<String>, folder: &Path) {
         self.left = names;
+        self.left_folder = folder.to_string_lossy().into_owned();
     }
 
     /// The options as key/value pairs to remember for next time (#65), with the clips left.
@@ -133,6 +141,7 @@ impl Options {
         ];
         if !self.left.is_empty() {
             saved.push(("left".to_string(), self.left.join("\n")));
+            saved.push(("left_folder".to_string(), self.left_folder.clone()));
         }
         saved
     }
@@ -154,6 +163,7 @@ impl Options {
         if let Some(cap) = get("cap") {
             self.cap_text = cap.to_string();
         }
+        self.left_folder = get("left_folder").unwrap_or_default().to_string();
         self.left = get("left")
             .map(|names| {
                 names
@@ -404,7 +414,7 @@ pub fn run(job: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress)
     if let Some(description) = &job.description {
         progress.window(1.0 - description_share, 1.0);
         let cache = job.cache_for(path);
-        let (step, _) = describe_ai::run_clip(
+        let step = describe_ai::run_clip(
             description,
             &job.budget,
             cache.as_ref().and_then(|c| c.as_ref()),
@@ -413,18 +423,27 @@ pub fn run(job: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress)
             progress,
         );
         if step.stop_job.is_some() || step.status == ItemStatus::Pending {
-            // A stop or a cancel here still leaves the first step's work done.
-            let done = result.status == ItemStatus::Done;
-            merge(&mut result, step);
-            if done && result.status == ItemStatus::Pending {
-                result.status = ItemStatus::Done;
-            }
-            return result;
+            return stopped_after_subtitles(result, step);
         }
         merge(&mut result, step);
     }
     result
 }
+
+/// The clip's result when the description step stopped the job or was cancelled, after the
+/// subtitles step (whose result is `result`) ran. The clip is left unreached, so it is offered
+/// again and a retry resumes it; the subtitles are kept (and not paid for again).
+fn stopped_after_subtitles(mut result: ItemResult, step: ItemResult) -> ItemResult {
+    let failed = step.status == ItemStatus::Failed;
+    merge(&mut result, step);
+    if !failed {
+        result.status = ItemStatus::Pending;
+    }
+    result
+}
+
+/// What a clip of unreadable length is priced at, in seconds.
+const UNKNOWN_LENGTH_S: f64 = 3600.0;
 
 /// The subtitles of the clip, inside the cap: a clip that has none (or is to be replaced) needs
 /// its audio's price set aside first.
@@ -436,9 +455,9 @@ fn subtitles_step(
     progress: &ItemProgress,
 ) -> ItemResult {
     let disk = FileTagger::disk_path(path);
-    let has = frename_core::existing_subtitle_path(&disk).is_some();
-    let reservation = if !has || subtitles.replaces() {
-        let seconds = clipscribe::frames::clip_duration_s(&disk).unwrap_or(0.0);
+    let reservation = if subtitles.may_transcribe(&disk) {
+        // A length that cannot be read is priced as an hour, so the cap is not passed unseen.
+        let seconds = clipscribe::frames::clip_duration_s(&disk).unwrap_or(UNKNOWN_LENGTH_S);
         let bound = job.usd_per_hour * seconds / 3600.0;
         match job.budget.reserve(bound) {
             Some(reservation) => Some(reservation),
@@ -716,24 +735,51 @@ mod tests {
     }
 
     #[test]
+    fn a_description_stopped_by_the_cap_leaves_the_clip_unreached_with_its_subtitles_kept() {
+        let subtitles = ItemResult::new(ItemStatus::Done, None);
+        let stop = ItemResult {
+            stop_job: Some("cap".to_string()),
+            ..ItemResult::new(ItemStatus::Pending, None)
+        };
+        let result = stopped_after_subtitles(subtitles, stop);
+        assert_eq!(result.status, ItemStatus::Pending);
+        assert_eq!(result.stop_job.as_deref(), Some("cap"));
+
+        // A key the service rejected is a failure of the clip, and stops the job too.
+        let subtitles = ItemResult::new(ItemStatus::Done, None);
+        let rejected = ItemResult {
+            stop_job: Some("key".to_string()),
+            ..ItemResult::failed("rejected".to_string())
+        };
+        let result = stopped_after_subtitles(subtitles, rejected);
+        assert_eq!(result.status, ItemStatus::Failed);
+        assert!(result.stop_job.is_some());
+    }
+
+    #[test]
     fn the_options_and_the_clips_left_round_trip() {
         let mut options = Options::default();
         options.update(Message::SetSubtitles(false));
         options.update(Message::SetCap("4.5".to_string()));
-        options.set_left(vec!["a.mp4".to_string(), "b c.mov".to_string()]);
+        options.set_left(
+            vec!["a.mp4".to_string(), "b c.mov".to_string()],
+            Path::new("/clips"),
+        );
         let saved = options.persist();
         let mut restored = Options::default();
         restored.restore(&saved);
         assert!(!restored.subtitles());
         assert!(restored.description());
         assert_eq!(restored.cap(), Ok(Some(4.5)));
-        assert_eq!(restored.left(), ["a.mp4", "b c.mov"]);
+        assert_eq!(restored.left(Path::new("/clips")), ["a.mp4", "b c.mov"]);
+        // The names mean nothing in another folder.
+        assert!(restored.left(Path::new("/other")).is_empty());
 
         // Nothing saved, or nonsense: the defaults.
         let mut fresh = Options::default();
         fresh.restore(&[("subtitles".to_string(), "maybe".to_string())]);
         assert!(fresh.subtitles() && fresh.description());
-        assert!(fresh.left().is_empty());
+        assert!(fresh.left(Path::new("/clips")).is_empty());
     }
 
     #[test]
