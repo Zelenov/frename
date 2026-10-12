@@ -1485,10 +1485,10 @@ mod tests {
             matches!(options.step_run(), Some(None)),
             "skipped, key or not"
         );
-        options.update(Message::PriceReady(Price::Learned(0.1)));
+        let mut options = Options::default();
+        options.update(Message::KeyState(KeyState::Saved));
         options.plan = Some(Plan {
-            transcribe: 1,
-            audio_s: 60.0,
+            rebuilt_free: 1,
             ..Plan::default()
         });
         assert!(matches!(options.step_run(), Some(Some(_))));
