@@ -454,10 +454,13 @@ impl Actions {
             Action::GenerateSubtitles => self.generate_subtitles.operation(),
             Action::PrepareClips => {
                 let cap = self.pipeline.cap().ok()?;
+                // The subtitles step is on but its plan is not in (a run again starts before it
+                // is): not now, rather than a run that quietly leaves the subtitles out.
                 let subtitles = match self.generate_subtitles.operation() {
                     Some(Operation::GenerateSubtitles(run)) if self.pipeline.subtitles() => {
                         Some(run)
                     }
+                    _ if self.pipeline.subtitles() => return None,
                     _ => None,
                 };
                 let description = match self.describe_ai.operation() {
@@ -821,6 +824,18 @@ fn reparsed(path: PathBuf) -> (PathBuf, FileSnapshot) {
 
 #[cfg(test)]
 mod tests {
+    /// Prepare clips with its subtitles step on does not start without the subtitles plan (a
+    /// run again right after a stop), instead of running the description alone.
+    #[test]
+    fn prepare_clips_does_not_start_without_the_plan_of_its_subtitles_step() {
+        let mut actions = Actions::default();
+        assert!(actions.operation(Action::PrepareClips).is_none());
+        actions.update(ActionMessage::PrepareClips(
+            pipeline::Message::SetSubtitles(false),
+        ));
+        assert!(actions.operation(Action::PrepareClips).is_some());
+    }
+
     use super::*;
 
     #[test]

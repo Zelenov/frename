@@ -1485,7 +1485,13 @@ impl FolderWorkspace {
             if !self.batch.prepare_retry() {
                 return Task::none();
             }
-            return self.start_batch();
+            let started = self.start_batch();
+            if self.batch.is_running() {
+                return started;
+            }
+            // Not started: the plan of the clips is made again first (Prepare clips and Generate
+            // subtitles need it), and Run starts it.
+            return Task::batch([started, self.describe_ai_reads(), self.subtitle_reads()]);
         }
         if let batch::Message::OpenLog = msg {
             open_in_default_app(crate::package::log_path_for_other_apps());
