@@ -22,6 +22,8 @@ pub enum Message {
     },
     /// Check or uncheck one file.
     Toggle(FileId),
+    /// Check exactly these files and no others (a group of similar clips, the clips a run left).
+    CheckOnly(Vec<FileId>),
     /// Check these files (the listed ones), keeping the other checks.
     CheckAll(Vec<FileId>),
     /// Uncheck every file.

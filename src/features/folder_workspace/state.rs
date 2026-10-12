@@ -1463,6 +1463,12 @@ impl FolderWorkspace {
         if let batch::Message::Cancel = msg {
             self.cancel_solo();
         }
+        // The clips the last Prepare clips run left: check exactly those.
+        if let batch::Message::Action(batch::ActionMessage::CheckLeft) = msg {
+            let names = self.batch.actions().prepare_left().to_vec();
+            let ids = self.left_clips(&names);
+            return self.handle_batch_many([batch::Message::CheckOnly(ids)]);
+        }
         if let batch::Message::Retry = msg {
             if !self.batch.prepare_retry() {
                 return Task::none();
@@ -1616,6 +1622,7 @@ impl FolderWorkspace {
             return Task::none();
         }
         let action = self.batch.action();
+        self.batch.forget_prepare_groups();
         self.app_db.set_batch_run(BatchRun {
             action: action.id().to_string(),
             options: self.batch.actions().persist(action),
@@ -1630,6 +1637,10 @@ impl FolderWorkspace {
     fn share_folder_tags(&mut self) {
         let tags = self.file_workspace.tag_list().saved_tag_names();
         self.batch.set_folder_tags(tags);
+        // Prepare clips offers the clips its last run left, those of them the folder has now.
+        let names = self.batch.actions().prepare_left().to_vec();
+        let found = self.left_clips(&names).len();
+        self.batch.set_prepare_left(names, found);
     }
 
     /// Start the job's next file on a blocking thread, or end the job when it has none left or was
@@ -1781,8 +1792,75 @@ impl FolderWorkspace {
         Task::batch([
             self.reopen_selected_if_closed(),
             load_comments,
+            self.prepare_clips_finished(),
             self.report_job_behind_closed_panel(),
         ])
+    }
+
+    /// What a finished Prepare clips run leaves behind: the clips it did not reach, remembered
+    /// by name to be offered again, and the groups of similar footage, worked out from the clips
+    /// kept in the cache (no request; in the background).
+    fn prepare_clips_finished(&mut self) -> Task<Message> {
+        if self.batch.job_action() != Some(batch::Action::PrepareClips) {
+            return Task::none();
+        }
+        let Some(dir) = self.directory.as_ref() else {
+            return Task::none();
+        };
+        let name_of = |id: FileId| {
+            dir.file_by_id(id)
+                .and_then(|f| f.file_path().file_name())
+                .map(|n| n.to_string_lossy().into_owned())
+        };
+        let left: Vec<String> = self
+            .batch
+            .not_reached()
+            .into_iter()
+            .filter_map(name_of)
+            .collect();
+        let files: Vec<(FileId, PathBuf)> = self
+            .batch
+            .job_files()
+            .into_iter()
+            .filter_map(|id| Some((id, dir.file_by_id(id)?.file_path().to_path_buf())))
+            .collect();
+        let found = left.len();
+        self.batch.set_prepare_left(left, found);
+        let action = self.batch.action();
+        let saved_action = batch::Action::PrepareClips;
+        // The record of the last run carries the clips left, for the next time.
+        if action == saved_action {
+            self.app_db.set_batch_run(BatchRun {
+                action: saved_action.id().to_string(),
+                options: self.batch.actions().persist(saved_action),
+            });
+        }
+        let Some(batch::Operation::PrepareClips(run)) = self.batch.job_operation().cloned() else {
+            return Task::none();
+        };
+        Task::future(async move {
+            let groups = tokio::task::spawn_blocking(move || run.group(&files))
+                .await
+                .unwrap_or_default();
+            Message::Batch(batch::Message::Action(batch::ActionMessage::PrepareClips(
+                batch::pipeline::Message::Groups(groups),
+            )))
+        })
+    }
+
+    /// The clips of the open folder whose names are in `names`, in list order.
+    fn left_clips(&self, names: &[String]) -> Vec<FileId> {
+        let Some(dir) = self.directory.as_ref() else {
+            return Vec::new();
+        };
+        dir.all_files()
+            .filter(|f| {
+                f.file_path()
+                    .file_name()
+                    .is_some_and(|n| names.iter().any(|name| name.as_str() == n))
+            })
+            .map(|f| f.id())
+            .collect()
     }
 
     /// A job that ended behind a closed panel must not end unseen: when something went wrong (a

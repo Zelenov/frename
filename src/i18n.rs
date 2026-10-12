@@ -535,7 +535,7 @@ mod tests {
     }
 
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
-    const NOT_UI_TEXT: [(&str, &str); 85] = [
+    const NOT_UI_TEXT: [(&str, &str); 92] = [
         ("explorer", "program name"),
         ("open", "program name (macOS)"),
         ("xdg-open", "program name"),
@@ -738,6 +738,31 @@ mod tests {
         (
             "turn",
             "stable option key for the batch run remembered across restarts (#65), see Actions::persist",
+        ),
+        (
+            "subtitles",
+            "stable option key for the batch run remembered across restarts (#17), see pipeline::Options::persist",
+        ),
+        (
+            "description",
+            "stable option key for the batch run remembered across restarts (#17), see pipeline::Options::persist",
+        ),
+        (
+            "cap",
+            "stable option key for the batch run remembered across restarts (#17), see pipeline::Options::persist",
+        ),
+        (
+            "spent ${:.2} of the ${cap:.2} cap",
+            "English-only log line of a Prepare clips run",
+        ),
+        ("clip-cache", "folder name under frename's data folder"),
+        (
+            "Prepare clips",
+            "English-only log id, see Action::log_id",
+        ),
+        (
+            "prepare_clips",
+            "stable action id remembered across restarts (#65), see Action::id",
         ),
         (
             "redo",

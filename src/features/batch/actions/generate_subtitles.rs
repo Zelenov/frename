@@ -353,45 +353,62 @@ impl Options {
 
     /// Whether a run on `checked` can start now, and if not, why (#249).
     pub fn readiness(&self, checked: &[&File]) -> super::Readiness {
-        use super::Readiness;
-        let blocked = |note: String| Readiness::Blocked {
+        self.step(checked).readiness()
+    }
+
+    /// Where a run on `checked` stands as a step of a longer run (#17).
+    pub fn step(&self, checked: &[&File]) -> super::Step<Run> {
+        use super::Step;
+        let blocked = |note: String| Step::Blocked {
             note,
             fix: Some(ActionMessage::OpenSubtitleSettings),
         };
         if self.formats.is_empty() {
-            return Readiness::Blocked {
-                note: fl!("batch-reason-subtitles-no-format"),
-                fix: None,
-            };
+            return Step::Skip(fl!("batch-reason-subtitles-no-format"));
         }
         match self.key {
-            None => return Readiness::Waiting,
+            None => return Step::Wait,
             Some(KeyState::Missing) => return blocked(fl!("batch-subtitles-key-missing")),
             Some(KeyState::Unavailable) => return blocked(fl!("batch-ai-key-unavailable")),
             Some(KeyState::Saved) => {}
         }
         let Some(plan) = self.plan_for(checked) else {
-            return Readiness::Waiting;
+            return Step::Wait;
         };
         if !plan.has_work() {
-            let note = plan_lines(plan, Some(Price::Typical))
-                .into_iter()
-                .next()
-                .unwrap_or_else(|| fl!("batch-subtitles-transcribe"));
-            return Readiness::Blocked { note, fix: None };
+            return Step::Skip(
+                plan_lines(plan, Some(Price::Typical))
+                    .into_iter()
+                    .next()
+                    .unwrap_or_else(|| fl!("batch-subtitles-transcribe")),
+            );
         }
         if plan.transcribe > 0 {
             match self.price() {
-                None => return Readiness::Waiting,
+                None => return Step::Wait,
                 Some(Price::Rejected) => return blocked(fl!("batch-subtitles-key-rejected")),
                 Some(_) => {}
             }
         }
-        if self.operation().is_some() {
-            Readiness::Ready
-        } else {
-            Readiness::Waiting
+        match self.operation() {
+            Some(super::Operation::GenerateSubtitles(run)) => Step::Ready(run),
+            _ => Step::Wait,
         }
+    }
+
+    /// What a run on `checked` would send and cost, for a page that adds up several steps: videos
+    /// to transcribe, seconds of audio, dollars. `None` while the plan is worked out.
+    pub fn totals(&self, checked: &[&File]) -> Option<(usize, f64, f64)> {
+        let plan = self.plan_for(checked)?;
+        let usd_per_hour = match self.price() {
+            Some(price) => price.usd_per_hour(),
+            None => Price::Typical.usd_per_hour(),
+        };
+        Some((
+            plan.transcribe,
+            plan.audio_s,
+            usd_per_hour * plan.audio_s / 3600.0,
+        ))
     }
 
     /// The page for `checked` and its run button.
@@ -509,7 +526,7 @@ impl Options {
     }
 
     /// Why the key keeps the run button off, with the button that fixes it.
-    fn key_notice(&self) -> Option<Element<'_, ActionMessage>> {
+    pub(super) fn key_notice(&self) -> Option<Element<'_, ActionMessage>> {
         let (kind, headline, fix) = match (self.key, self.price()) {
             (Some(KeyState::Missing), _) => (
                 NoticeKind::Error,
@@ -807,6 +824,21 @@ impl PartialEq for Run {
 impl Eq for Run {}
 
 impl Run {
+    /// The price per hour of audio the run counted with.
+    pub fn usd_per_hour(&self) -> f64 {
+        self.0.usd_per_hour
+    }
+
+    /// Whether a clip that has subtitles is transcribed again ("Replace existing subtitles").
+    pub fn replaces(&self) -> bool {
+        self.0.options.force
+    }
+
+    /// The audio sent to Soniox so far, in seconds.
+    pub fn uploaded_seconds(&self) -> f64 {
+        self.0.uploaded_ms.load(Ordering::Relaxed) as f64 / 1000.0
+    }
+
     /// What the run spent, and uploads left on Soniox; `None` when nothing was sent.
     pub fn report(&self) -> Option<String> {
         self.0.report()
