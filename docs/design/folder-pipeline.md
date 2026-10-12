@@ -1,0 +1,126 @@
+# Prepare clips: the whole-folder pipeline (#17, stage 3)
+
+Written by the agent; nothing here waited for an answer. It builds on stage 1 (Describe with AI, 0.71),
+on clipscribe 0.11 to 0.13 (`describe_clip`, `Budget`, `Cache`, `group_clips`, `detect_shots`, all
+already pinned) and on the task queue of #249 (`docs/design/task-queue.md`): a run is a batch job, so it
+runs in the background and goes through the one queue.
+
+## What the editor gets
+
+One action in the batch panel, **Prepare clips**, over the clips checked in the file list (All, None,
+Invert, Ctrl+click and Shift+click work as in batch mode; with nothing checked yet, All is the default
+the panel offers). For each clip, in this order, in one pass:
+
+1. **Subtitles** (Soniox), when the clip has none and a Soniox key is saved. Free when a transcript
+   is already saved next to the video (the existing "rebuilt free" case).
+2. **Description** (Claude or ChatGPT, the model of Settings): the summary and the time-ranged
+   moments, from the key frames and the subtitles just made, in one request.
+3. **Tags**: the request also suggests tags from the folder's own tags (Settings → Describe with AI,
+   as today). They are stored with the description for review. An option, **Add the suggested tags
+   to the clips**, applies them (off: the editor reviews them, as today).
+4. **Markers**: the moments become AI markers (in the video or in the comment, as the settings say).
+5. **Comment**: the summary goes into the AI block of the comment; the editor's own text is never
+   touched.
+
+Steps 4 and 5 are what `Describe with AI` already writes in one save; the pipeline adds steps 1 and 3
+around it and one plan, one cap and one progress view over all of it.
+
+The panel shows, before Run: how many clips, what each step will do or skip (already subtitled, already
+described, too long, unreadable), the price of each paid step and the total, the time, and the cap.
+While it runs, the job page of #249 shows one progress bar over the clips and, under it, the clip in
+work and its step ("subtitles", "frame 12 of 40", "waiting for Claude", "saving"). The strip of #249
+shows it with the panel closed.
+
+### Budget cap
+
+**Stop spending at** (US dollars, empty = no cap; the field remembers its last value). The cap covers
+both paid steps of the whole run:
+
+- the description goes through clipscribe's `Budget`: its request's upper bound is set aside before
+  it is sent, and a clip that could take the run past the cap is not sent (`describe_clip` answers
+  `None`);
+- the subtitles are counted from the price the plan used (audio length × the account's price per hour),
+  checked before a clip's transcription starts and settled with the real audio sent after it.
+
+A clip that does not fit stops the job ("Stopped: the next clip could take the run past the $5.00
+cap. Spent $4.62. Raise the cap to do the rest."); the clips not reached stay unreached, and
+**Run again** continues from them.
+
+### Resume
+
+Nothing is paid for twice, because each step skips what is already there: a clip with subtitles gets
+no new transcription, a clip with an AI description is not described again (unless "Redo" is
+ticked), and the description of an unchanged clip is also kept in a cache that frename's own data
+folder holds (clipscribe's `Cache`, keyed by the file's size, time and a sample of its content, so a
+renamed clip still finds its description). So a stopped run is resumed by running it again on the same
+clips: finished clips are skipped at once, at no cost.
+
+"A resumed run offers the same set again": when a run stopped before the end, frename remembers which
+clips were not done (their names, in the batch's last-run record, #65). The next time **Prepare
+clips** is chosen in that folder, the panel says "The last run stopped with 37 clips left" and has a
+button **Check them** that checks exactly those clips. Nothing is checked on its own.
+
+### Similar footage
+
+Describing a clip through clipscribe's `describe_clip` also gives the fingerprints of the frames it was
+described from. After the run, `group_clips` groups the clips (and stretches of them) whose pictures are
+the same shot: duplicates, re-exports, a clip stored sideways, a camera that did not move. It costs
+nothing (no request). The result page lists the groups, each with a label from the description of its
+most typical stretch and its clips, and a button **Check these clips** per group, so the editor can
+run another batch action (a tag, a comment, a move) on one group at once. Groups by words
+(experimental in clipscribe) are not offered. Grouping reads the fingerprints of clips described
+earlier from the cache, so a resumed run groups the whole set, not only what it described this time.
+
+### Shots
+
+`detect_shots` finds the cuts of an **edited** video. The footage this app prepares is raw: one take
+per file, where the key frames already follow the changes of the picture, and a shot count adds
+nothing the description does not say. It is not used by Prepare clips. It stays available for a later
+use on edited sequences (filed as an idea).
+
+## How it works
+
+- `Action::PrepareClips`, `Operation::PrepareClips(pipeline::Run)` in `src/features/batch/actions/
+  pipeline/`. `Run` holds the options of both steps (the Soniox `generate_subtitles::Run` and the
+  description `describe_ai::Run`), the clipscribe `Budget` (shared by every item of the run), and the
+  cache.
+- `Operation::run` for one clip: (1) `generate_subtitles::run` when the plan says transcribe; (2)
+  `describe_ai::run_clip` (the existing run, made to call `describe_clip` with the run's budget and
+  to return the fingerprints it got); (3) the tags step; the results are added up (the status of the
+  clip is the worst of its steps' failures, `usage` is the sum, a stop of either step stops the job).
+- The plan (`pipeline::Plan`) is the two existing plans over the checked clips: the subtitles plan
+  (`generate_subtitles::plan`, header reads) and the description plan (`describe_ai::Options::plan`,
+  clip lengths), read in the background while the panel is shown; `Actions::readiness` says when
+  both are in, so the single-clip path of #249 could run it too.
+- Per clip, the item's progress is the share of each step in the estimated time.
+- After the last item, the workspace groups the described clips (`group_clips`) in the background
+  and the job page shows the groups.
+
+## Decisions made without the owner
+
+- One new action, not a mode of Describe with AI: the panel of a pipeline has its own options (the cap,
+  apply tags, the steps), and the existing two actions stay as they are.
+- Steps cannot be reordered; each can be switched off (no subtitles, no description) so the same action
+  serves "only describe what is already subtitled".
+- Tags are suggested, applied only when the editor ticks the option (the owner's review rule of
+  stage 2 stays the default).
+- The cap is in dollars and per run, not per day.
+- Resume is "run again, finished steps are skipped" plus a remembered "clips left" set per folder;
+  no background resume after a restart without the editor pressing Run.
+- Grouping is by pictures only; words are experimental in clipscribe and off.
+- Shots are not used (raw footage): see above.
+- Clips run one at a time (the batch job runs one item at a time); clipscribe's concurrency
+  (`jobs`) is not used. Revisit when the queue of #249 can run tasks of different providers together.
+
+## Test plan
+
+- Plan: counts and skipped reasons for clips with and without subtitles / AI block; the price sums
+  both services; the cap shows.
+- Run (with a fake describer): the steps in order; a clip with subtitles skips step 1; one with an AI
+  block skips step 2; failures and usage add up; a stop of either step stops the job; the cap stops
+  the job before the clip that would pass it, and Run again continues.
+- Budget: reserved before a request, settled after; a clip over the cap is not sent.
+- Resume: the left-clips record round-trips; **Check them** checks exactly those.
+- Grouping: fingerprints of cached clips are read back; groups list their clips; **Check these
+  clips** checks exactly them.
+- Persistence: the new options (cap, steps, apply tags) round-trip through the last-run record.
