@@ -1043,7 +1043,7 @@ is closed (its media unloads) for the length of its item and comes back by itsel
 
 | Locked while a job runs | Still works |
 |---|---|
-| the row of the file in work (no click, no hover; its status column shows `lock` while it is the selected one) | the other rows: select, open, play; tags, name, comment and markers of the open clip |
+| the row of the file in work (no click, no hover; its status column shows `lock`) | the other rows: select, open, play; tags, name, comment and markers of the open clip |
 | the checkboxes, All, Invert | scrolling the list, the file search and the filter menu |
 | the action list and every control of the action page | Cancel, and the job's own progress; closing the batch panel (`x`, Esc, the toolbar toggle) |
 | Open a folder, file actions that move or delete files, Undo and Redo, Settings' *Update and restart* | the rest of Settings |

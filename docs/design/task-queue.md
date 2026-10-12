@@ -44,7 +44,7 @@ The lock moves from the whole app to **one clip**:
 
 1. **Busy clip.** `BatchState::current` is the clip in work. In step 1 a message that would edit
    it, open it or change its file is **dropped and the editor is told why** in the video's note
-   ("In use: <action>"); the arrow
+   ("In use: <action>"; "Busy: <action>" for what the folder-wide hold stops: another folder, file moves, Undo, marker descriptions); the arrow
    keys of the list step over it. Holding such an edit until the item ends (the
    `pending_file_updates` queue the media viewer uses for renames) is for a later step.
 2. **Path follows renames.** A task reads and writes the clip's **current** path, never the one
@@ -87,6 +87,8 @@ The lock moves from the whole app to **one clip**:
    - the job no longer closes the open clip at its start. When the next item is the clip that is
      open, the pending saves are applied, the video unloads, the clip closes, the item runs, and
      the clip opens again under its current name (`run_batch_item`, `reopen_selected_if_closed`);
+   - a job that ends or stops while its panel is closed brings the panel back when something went
+     wrong (a failed file, a stop, files not reached), otherwise a note says it finished;
    - still locked while a job runs: opening another folder (the job's files belong to this
      folder, so a per-folder background queue is left for later), file actions that delete or
      move files, Undo and Redo (the job renames files behind the history; the history is reset

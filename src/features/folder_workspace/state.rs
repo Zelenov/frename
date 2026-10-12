@@ -1140,6 +1140,7 @@ impl FolderWorkspace {
     fn apply_file_opened(&mut self, file: frename_core::File) -> Task<Message> {
         // The click that selected it came before the job reached it: the job is writing it now.
         if self.busy_clip() == Some(file.id()) {
+            self.pending_to_file_id = None;
             return Task::none();
         }
         // The typing in the comment box belongs to the file it was typed in.
@@ -1361,6 +1362,20 @@ impl FolderWorkspace {
             Message::Folder(folder::Message::PreviousFile | folder::Message::NextFile)
         );
         (!by_step && self.opens_busy_clip(message)).then_some(Hold::Clip)
+    }
+
+    /// The note for something the running job holds back that no message stands for (a marker
+    /// description): nothing while no job runs.
+    pub(super) fn job_holds_note(&self) -> Task<Message> {
+        if !self.batch.is_running() {
+            return Task::none();
+        }
+        let action = self
+            .batch
+            .job_action()
+            .unwrap_or(self.batch.action())
+            .label();
+        Self::notice(&fl!("batch-folder-held", action = action))
     }
 
     /// What the editor is told when `message` is held back by the running job, so a lock is
@@ -1725,7 +1740,9 @@ impl FolderWorkspace {
         self.directory
             .as_ref()
             .and_then(|d| d.selected_file())
+            // A click that selected it has its `FileOpened` on the way.
             .filter(|selected| open != Some(selected.id()))
+            .filter(|selected| self.pending_to_file_id != Some(selected.id()))
             .cloned()
             .map_or_else(Task::none, |file| Task::done(Message::FileOpened(file)))
     }
@@ -1737,7 +1754,27 @@ impl FolderWorkspace {
         // The job may have written subtitles: the plan is made again.
         let load_comments =
             Task::batch([self.load_next_comment_batch(false), self.subtitle_reads()]);
-        Task::batch([self.reopen_selected_if_closed(), load_comments])
+        Task::batch([
+            self.reopen_selected_if_closed(),
+            load_comments,
+            self.report_job_behind_closed_panel(),
+        ])
+    }
+
+    /// A job that ended behind a closed panel must not end unseen: when something went wrong (a
+    /// file not done, a stop for a bad key or no credit, a cancel before the end) the panel comes
+    /// back with the result; otherwise a note says it finished.
+    fn report_job_behind_closed_panel(&mut self) -> Task<Message> {
+        if self.batch.is_active() {
+            return Task::none();
+        }
+        let Some(progress) = self.batch.progress() else {
+            return Task::none();
+        };
+        if progress.failed > 0 || self.batch.stopped().is_some() || progress.not_reached() > 0 {
+            return self.handle_batch(batch::Message::SetActive(true));
+        }
+        Self::notice(&fl!("batch-result-done", total = (progress.total as i64)))
     }
 
     /// Every queued deferred save, applied in order (there is normally one; see
@@ -4803,6 +4840,32 @@ mod tests {
         let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
         flush_file_opened(&mut workspace);
         assert_eq!(workspace.step_past_busy(true), Some(Some(2)));
+    }
+
+    /// A job that ends behind a closed panel does not end unseen: when something went wrong, or
+    /// it was stopped, the panel comes back with the result.
+    #[test]
+    fn a_job_that_stopped_behind_a_closed_panel_brings_the_panel_back() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(false)));
+        let failed = || ItemResult::new(ItemStatus::Failed, None);
+        let _ = workspace.update(Message::BatchItemDone {
+            id: file_id_at(&workspace, 0),
+            result: Box::new(failed()),
+        });
+        let _ = workspace.update(Message::BatchItemDone {
+            id: file_id_at(&workspace, 1),
+            result: Box::new(failed()),
+        });
+        assert!(!workspace.is_batch_running());
+        assert!(!workspace.batch().is_active());
+        let _ = workspace.update(Message::BatchFinished);
+        assert!(workspace.batch().is_active(), "the result shows");
     }
 
     /// What the job holds back says so, instead of doing nothing.
