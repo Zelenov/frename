@@ -739,11 +739,7 @@ pub fn run_clip(
     // Described before, with these settings, but not saved (a read-only share): no second request.
     let cached = cache
         .filter(|_| !options.redo)
-        .and_then(|cache| cached_in(cache, &on_disk, &describe_options, vocabulary_ref))
-        .map(|mut clip| {
-            clip.usage = Default::default();
-            clip
-        });
+        .and_then(|cache| reusable(cache, &on_disk, &describe_options, vocabulary_ref));
     // One request either way: with tags to suggest from, it suggests them too.
     let described = match cached {
         Some(clip) => Ok(Some(clip)),
@@ -761,12 +757,7 @@ pub fn run_clip(
     let (description, tags, usage, frames) = match described {
         // Its frames were read, but the request could pass the cap: nothing was sent, and the
         // clips after it would be refused the same way.
-        Ok(None) => {
-            return ItemResult {
-                stop_job: Some(over_budget_text(budget)),
-                ..ItemResult::new(ItemStatus::Pending, None)
-            };
-        }
+        Ok(None) => return over_budget(budget),
         Ok(Some(clip)) => {
             described_clip = clip.clone();
             (
@@ -902,6 +893,28 @@ pub fn cached_clip(
     )
 }
 
+/// A description the cache keeps for this clip and these settings, to use again at no cost: what
+/// it cost was paid when it was made.
+fn reusable(
+    cache: &describe::Cache,
+    on_disk: &Path,
+    options: &describe::Options,
+    vocabulary: Option<&[describe::Tag]>,
+) -> Option<describe::DescribedClip> {
+    let mut clip = cached_in(cache, on_disk, options, vocabulary)?;
+    clip.usage = Default::default();
+    Some(clip)
+}
+
+/// The result of a clip whose request could take the run past its cap: not sent, not reached, and
+/// the clips after it would be refused the same way, so the job stops.
+fn over_budget(budget: &describe::Budget) -> ItemResult {
+    ItemResult {
+        stop_job: Some(over_budget_text(budget)),
+        ..ItemResult::new(ItemStatus::Pending, None)
+    }
+}
+
 fn cached_in(
     cache: &describe::Cache,
     on_disk: &Path,
@@ -997,6 +1010,54 @@ pub fn failure_reason(error: &describe::Error, path: &Path) -> String {
 mod tests {
     use super::*;
     use std::time::SystemTime;
+
+    /// A description kept in the cache is used again for nothing, and a clip over the cap is
+    /// neither sent nor reached and stops the job.
+    #[test]
+    fn a_kept_description_costs_nothing_again_and_a_clip_over_the_cap_stops_the_job() {
+        let dir = frename_core::test_support::fresh_dir("describe-reuse");
+        let video = dir.join("clip.mp4");
+        let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("crates/frename-core/tests/fixtures/tiny.mov");
+        std::fs::copy(source, &video).expect("clip");
+        let cache = describe::Cache::open(&dir.join("cache.jsonl")).expect("cache");
+        let options = describe::Options {
+            api_key: String::new(),
+            model: describe::MODELS[0],
+            language: Default::default(),
+            frame_sampling: Default::default(),
+            moments: Default::default(),
+        };
+        assert!(
+            reusable(&cache, &video, &options, None).is_none(),
+            "nothing kept yet"
+        );
+
+        let clip = describe::DescribedClip {
+            description: describe::Description {
+                summary: "A lion.".to_string(),
+                segments: Vec::new(),
+                main: None,
+            },
+            tags: None,
+            usage: clipscribe::AiUsage {
+                input_tokens: 1000,
+                output_tokens: 200,
+            },
+            duration_s: 1.0,
+            frames: Vec::new(),
+        };
+        keep_in_cache(&cache, &video, &options, &[], &clip);
+        let again = reusable(&cache, &video, &options, None).expect("kept");
+        assert_eq!(again.description, clip.description);
+        assert_eq!(again.usage, clipscribe::AiUsage::default(), "paid once");
+
+        let budget = describe::Budget::new(Some(0.5));
+        let result = over_budget(&budget);
+        assert_eq!(result.status, ItemStatus::Pending);
+        assert!(result.stop_job.is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     fn file(name: &str, comment: &str) -> File {
         let mut file = File::from_path(format!("C:/clips/{name}"), SystemTime::UNIX_EPOCH);

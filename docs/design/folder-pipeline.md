@@ -26,7 +26,7 @@ Steps 4 and 5 are what `Describe with AI` already writes in one save; the pipeli
 around it and one plan, one cap and one progress view over all of it.
 
 The panel shows, before Run: how many clips, what each step will do or skip (already subtitled, already
-described, too long, unreadable), the price of each paid step and the total, the time, and the cap.
+described, too long, unreadable), the price of each paid step and the total, and the cap.
 While it runs, the job page of #249 shows one progress bar over the clips and, under it, the clip in
 work and its step ("subtitles", "frame 12 of 40", "waiting for Claude", "saving"). The strip of #249
 shows it with the panel closed.
@@ -49,8 +49,7 @@ cap. Spent $4.62. Raise the cap to do the rest."); the clips not reached stay un
 ### Resume
 
 Nothing is paid for twice, because each step skips what is already there: a clip with subtitles gets
-no new transcription, a clip with an AI description is not described again (unless "Redo" is
-ticked), and the description of an unchanged clip is also kept in a cache that frename's own data
+no new transcription, a clip with an AI description is not described again (Prepare clips has no Redo; use Describe with AI for that), and the description of an unchanged clip is also kept in a cache that frename's own data
 folder holds (clipscribe's `Cache`, keyed by the file's size, time and a sample of its content, so a
 renamed clip still finds its description). A description that was paid for but not saved (a read-only share) is
 taken from the cache when the clip is run again, so a retry does not pay twice. So a stopped run is
@@ -94,7 +93,8 @@ use on edited sequences (filed as an idea).
   (`generate_subtitles::plan`, header reads) and the description plan (`describe_ai::Options::plan`,
   clip lengths), read in the background while the panel is shown; `Actions::readiness` says when
   both are in, so the single-clip path of #249 could run it too.
-- Per clip, the item's progress is the share of each step in the estimated time.
+- Per clip, the item's progress is split between the steps, 40 % for the subtitles and 60 % for the
+  description (the whole bar for a single step).
 - After the last item, the workspace groups the described clips (`group_clips`) in the background
   and the job page shows the groups.
 
