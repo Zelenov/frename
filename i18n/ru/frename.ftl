@@ -293,6 +293,7 @@ batch-done-label-subtitled = субтитровано
 batch-ai-at-least = как минимум
 batch-cancel = Отмена
 batch-stopping = Остановка…
+batch-stop-over-budget = Остановлено: следующий клип мог бы выйти за предел { $cap } ({ $spent } потрачено). Поднимите предел, чтобы сделать остальное.
 batch-stopped = Остановлено после { $finished } из { $total ->
     [one] { $total } файла
     [few] { $total } файлов

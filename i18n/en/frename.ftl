@@ -249,6 +249,7 @@ batch-done-label-subtitled = subtitled
 batch-ai-at-least = at least
 batch-cancel = Cancel
 batch-stopping = Stopping…
+batch-stop-over-budget = Stopped: the next clip could take the run past the { $cap } cap ({ $spent } spent). Raise the cap to do the rest.
 batch-stopped = Stopped after { $finished } of { $total ->
     [one] { $total } file
    *[other] { $total } files
