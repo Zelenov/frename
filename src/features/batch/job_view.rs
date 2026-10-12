@@ -99,6 +99,9 @@ pub fn indicator<'a, M: Clone + 'a>(
     spinner_frame: usize,
     on_press: M,
 ) -> Option<Element<'a, M>> {
+    if state.is_active() {
+        return None;
+    }
     let progress = state.progress().filter(|progress| progress.running)?;
     let action = state.job_action().unwrap_or(state.action());
     let (item_fraction, _) = state.item_now();
@@ -125,6 +128,8 @@ pub fn indicator<'a, M: Clone + 'a>(
             spend
         }));
     }
+    // What a click does, so the strip is found to be the way to Cancel.
+    let head = column![head, text::secondary(fl!("batch-indicator-hint"))].spacing(SPACE_XXS);
     let bar = progress_bar(
         0.0..=progress.total.max(1) as f32,
         progress.finished as f32 + item_fraction,

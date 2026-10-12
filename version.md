@@ -1,6 +1,8 @@
 # 0.152
 ## Changed
-- A batch action no longer freezes frename. While it runs you can close its panel and keep working: open other clips, tag, rename, comment and mark them. Only the clip the action is working on is held back until its turn ends. A strip above the toolbar of the file list shows the action, its progress and its cost so far; click it to bring the panel back.
+- A batch action no longer freezes frename: while it runs you can close its panel and keep working, open other clips, tag, rename, comment and mark them.
+- A strip above the toolbar of the file list shows the running action, its progress and its cost so far; click it to bring the panel back and Cancel.
+- Only the clip the action is working on is held back until its turn ends, and frename says so. Opening another folder, deleting or moving files, and Undo are still off until the action ends.
 
 # 0.151
 ## Fixed

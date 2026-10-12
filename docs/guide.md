@@ -196,8 +196,9 @@ in/out points move, or "Replace existing subtitles") as they were then, even acr
 rename, comment and mark them. A strip above the bar under the file list shows the action, how
 far it is, what it cost so far and the clip in work; click it to see the panel and Cancel. Only
 the clip the action is working on is held back: it closes while its turn lasts, cannot be opened
-until it is done, and opens again by itself. Opening another folder, deleting or moving files,
-and Undo wait until the action ends.
+until it is done, and opens again by itself (the arrow keys of the list step over it). Opening
+another folder, deleting or moving files, and Undo are off until the action ends; pressing them
+tells you so in a note over the video.
 
 **Select several clips without the button**: **Ctrl+click** a clip to add it (and the one open before it) to
 the selection; Ctrl+click a selected clip to drop it. **Shift+click** a clip to select every clip

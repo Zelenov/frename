@@ -1049,6 +1049,10 @@ is closed (its media unloads) for the length of its item and comes back by itsel
 | Open a folder, file actions that move or delete files, Undo and Redo, Settings' *Update and restart* | the rest of Settings |
 | the open clip's own edits, rotation and fullscreen, while it is the file in work | – |
 
+What a lock does when pressed: nothing but a note over the video that says why ("Describe with AI
+is running: this is off until it ends"; for the clip in work "<name> is in use by Describe with
+AI: it can be opened and edited when its turn ends"). Nothing held is silent.
+
 The **lock line** is a 28 px row at the top of the file list, above the search field, `bg.raised`,
 padding 0×8: `lock` 14 and the sentence in `secondary`. It pushes the list down (the rows keep
 their scroll position) and goes when the job ends. The batch page's button bar says on its left:
@@ -1057,7 +1061,8 @@ their scroll position) and goes when the job ends. The batch page's button bar s
 The **job strip** is shown while a job runs and the batch panel is closed: above the toolbar of the
 file list, a divider line and a `bg.panel` block, padding 8, with the loader, the action's name
 (`strong`), "n of total files" and what it cost so far (`secondary`), a progress bar, and the file
-in work in `mono`, cut at the edge. A click brings the panel back.
+in work in `mono`, cut at the edge, and a `secondary` hint "Click for the panel and Cancel". A click brings
+the panel back.
 
 **Notices** (short feedback such as "Frame saved") appear as inline status (§8.12) in their own
 slot of the video pane's controls bar (§13.3.5), never as popups: confirmations for 2 s, errors

@@ -783,6 +783,27 @@ mod tests {
     }
 
     #[test]
+    fn the_panel_closes_under_a_running_job_and_a_strip_shows_the_job() {
+        let strip = |batch: &BatchState| {
+            super::super::job_view::indicator::<()>(batch, None, 0, ()).is_some()
+        };
+        let mut batch = state();
+        batch.update(Message::SetActive(true));
+        assert!(batch.start(ids(1)));
+        assert!(!strip(&batch), "the panel shows the job itself");
+
+        batch.update(Message::SetActive(false));
+        assert!(!batch.is_active());
+        assert!(batch.is_running(), "the job goes on behind the panel");
+        assert!(strip(&batch));
+
+        let (id, _, _) = batch.begin_next().expect("the file");
+        batch.finish(id, &ItemResult::new(ItemStatus::Done, None));
+        assert!(batch.begin_next().is_none());
+        assert!(!strip(&batch), "nothing runs any more");
+    }
+
+    #[test]
     fn picking_an_action_after_a_job_leaves_its_result() {
         let files = ids(1);
         let mut batch = state();

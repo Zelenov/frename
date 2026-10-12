@@ -146,6 +146,9 @@ batch-time-left = about { $time } left
 batch-time-estimating = estimating time…
 batch-time-spent = { $time } so far
 batch-runs-in-background = You can keep working while it runs
+batch-clip-in-work = { $name } is in use by { $action }: it can be opened and edited when its turn ends
+batch-folder-held = { $action } is running: this is off until it ends
+batch-indicator-hint = Click for the panel and Cancel
 batch-run-again = Run again on { $count ->
     [one] { $count } file
    *[other] { $count } files
@@ -287,7 +290,7 @@ batch-action-describe-ai = Describe with AI
 batch-action-describe-ai-run = Describe { $videos } · about { $dollars }
 batch-action-describe-ai-estimating = Estimating… { $known } / { $total }
 batch-action-describe-ai-none = No videos to describe.
-batch-action-describe-ai-hint = You can keep working while it runs. Cancel keeps the videos already described; running it again skips them.
+batch-action-describe-ai-hint = { batch-runs-in-background }. Cancel keeps the videos already described; running it again skips them.
 batch-action-describe-ai-no-subtitles = Without subtitles (only the picture is described): { $videos }.
 batch-action-describe-ai-redo = Redo videos that already have an AI description
 batch-action-describe-ai-hint-panel = Describes what happens in each checked video, and when: a summary and time-ranged segments go into the AI description of its comment; your own text is kept. Frames and subtitles are sent to { $provider }, the company of the chosen model.
@@ -343,7 +346,7 @@ batch-action-generate-subtitles-srt = SRT subtitles (clip.srt)
 batch-action-generate-subtitles-premiere = Premiere Pro transcript (clip.premiere.json)
 batch-action-generate-subtitles-premiere-hint = In Premiere Pro: Text panel → Transcript → Import Static Transcript.
 batch-action-generate-subtitles-privacy = The audio of these videos is sent to Soniox and deleted there afterwards.
-batch-action-generate-subtitles-duration-hint = Takes a few minutes per hour of audio; you can keep working while it runs. Closing frename stops the run; finished subtitles are kept.
+batch-action-generate-subtitles-duration-hint = Takes a few minutes per hour of audio. { batch-runs-in-background }. Closing frename stops the run; finished subtitles are kept.
 batch-action-generate-subtitles-hint = Transcribes the speech of each checked video with Soniox and saves the result next to it: subtitles (clip.srt), where frename shows them, and/or a Premiere Pro transcript.
 batch-subtitles-transcribe = Transcribe
 batch-subtitles-transcribe-count = Transcribe { $videos }

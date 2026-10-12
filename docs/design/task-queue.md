@@ -42,18 +42,20 @@ state: Queued -> Running -> Done | Failed(reason) | Cancelled
 
 The lock moves from the whole app to **one clip**:
 
-1. **Busy clip.** `Queue::busy(file)` is true while a task of that clip is running. A busy
-   clip's own saves, renames and rotation **wait** for the task's item to end and say so
-   ("Waiting for the description to finish"). This reuses `pending_file_updates`, the queue the
-   media viewer already uses to hold a rename until the video is unloaded.
+1. **Busy clip.** `BatchState::current` is the clip in work. In step 1 a message that would edit
+   it, open it or change its file is **dropped and the editor is told why** in the video's note
+   ("<name> is in use by <action>: it can be opened and edited when its turn ends"); the arrow
+   keys of the list step over it. Holding such an edit until the item ends (the
+   `pending_file_updates` queue the media viewer uses for renames) is for a later step.
 2. **Path follows renames.** A task reads and writes the clip's **current** path, never the one
    captured at the start. While a task is running its clip cannot be renamed (guard 1), so the
    path read at item start is valid for the whole item; the result's `update` is applied to
    whatever the clip is called then.
-3. **Open clip.** A task on the clip that is open does not close the video. Tasks that only read
-   (frames, audio) let the video play; tasks that write the file (comment, markers) wait for the
-   editor to leave the clip, or run when the viewer is idle. The first PR keeps today's rule for
-   the open clip: a write task waits (state `Queued`, reason "open") until the clip is left.
+3. **Open clip.** A task on the clip that is open does not close the video at the start of the
+   run. Step 1: when the job reaches the open clip, its pending edits are saved, the video
+   unloads, the clip closes for the length of its item (`run_batch_item`) and opens again under
+   its current name (`reopen_selected_if_closed`). While the job waits for the unload, no other
+   clip opens (`job_holds`).
 4. **Undo.** A task's result applied to the **open** clip is one undoable step (later PR). A
    result for a clip that is not open is written straight to the file, as a batch does, and
    resets nothing: undo history is per open clip.
