@@ -1463,11 +1463,35 @@ impl FolderWorkspace {
         if let batch::Message::Cancel = msg {
             self.cancel_solo();
         }
+        // Groups worked out in the background belong to the run whose result is shown: one that
+        // comes late, after a new run started or the job was dismissed, is dropped.
+        if let batch::Message::Action(batch::ActionMessage::PrepareClips(
+            batch::pipeline::Message::Groups(_),
+        )) = msg
+        {
+            if self.batch.is_running()
+                || self.batch.job_action() != Some(batch::Action::PrepareClips)
+            {
+                return Task::none();
+            }
+        }
+        // The clips the last Prepare clips run left: check exactly those.
+        if let batch::Message::Action(batch::ActionMessage::CheckLeft) = msg {
+            let names = self.left_names();
+            let ids = self.left_clips(&names);
+            return self.handle_batch_many([batch::Message::CheckOnly(ids)]);
+        }
         if let batch::Message::Retry = msg {
             if !self.batch.prepare_retry() {
                 return Task::none();
             }
-            return self.start_batch();
+            let started = self.start_batch();
+            if self.batch.is_running() {
+                return started;
+            }
+            // Not started: the plan of the clips is made again first (Prepare clips and Generate
+            // subtitles need it), and Run starts it.
+            return Task::batch([started, self.describe_ai_reads(), self.subtitle_reads()]);
         }
         if let batch::Message::OpenLog = msg {
             open_in_default_app(crate::package::log_path_for_other_apps());
@@ -1616,6 +1640,7 @@ impl FolderWorkspace {
             return Task::none();
         }
         let action = self.batch.action();
+        self.batch.forget_prepare_groups();
         self.app_db.set_batch_run(BatchRun {
             action: action.id().to_string(),
             options: self.batch.actions().persist(action),
@@ -1630,6 +1655,10 @@ impl FolderWorkspace {
     fn share_folder_tags(&mut self) {
         let tags = self.file_workspace.tag_list().saved_tag_names();
         self.batch.set_folder_tags(tags);
+        // Prepare clips offers the clips its last run left, those of them the folder has now.
+        let names = self.left_names();
+        let found = self.left_clips(&names).len();
+        self.batch.set_prepare_left_found(found);
     }
 
     /// Start the job's next file on a blocking thread, or end the job when it has none left or was
@@ -1781,8 +1810,81 @@ impl FolderWorkspace {
         Task::batch([
             self.reopen_selected_if_closed(),
             load_comments,
+            self.prepare_clips_finished(),
             self.report_job_behind_closed_panel(),
         ])
+    }
+
+    /// What a finished Prepare clips run leaves behind: the clips it did not reach, remembered
+    /// by name to be offered again, and the groups of similar footage, worked out from the clips
+    /// kept in the cache (no request; in the background).
+    fn prepare_clips_finished(&mut self) -> Task<Message> {
+        if self.batch.job_action() != Some(batch::Action::PrepareClips) {
+            return Task::none();
+        }
+        let Some(dir) = self.directory.as_ref() else {
+            return Task::none();
+        };
+        let name_of = |id: FileId| {
+            dir.file_by_id(id)
+                .and_then(|f| f.file_path().file_name())
+                .map(|n| n.to_string_lossy().into_owned())
+        };
+        let left: Vec<String> = self
+            .batch
+            .not_reached()
+            .into_iter()
+            .filter_map(name_of)
+            .collect();
+        let files: Vec<(FileId, PathBuf)> = self
+            .batch
+            .job_files()
+            .into_iter()
+            .filter_map(|id| Some((id, dir.file_by_id(id)?.file_path().to_path_buf())))
+            .collect();
+        let found = left.len();
+        let folder = dir.path().to_path_buf();
+        self.batch.set_prepare_left(left, &folder, found);
+        // The record of the last run carries the clips left, for the next time.
+        let saved_action = batch::Action::PrepareClips;
+        self.app_db.set_batch_run(BatchRun {
+            action: saved_action.id().to_string(),
+            options: self.batch.actions().persist(saved_action),
+        });
+        let Some(batch::Operation::PrepareClips(run)) = self.batch.job_operation().cloned() else {
+            return Task::none();
+        };
+        Task::future(async move {
+            let groups = tokio::task::spawn_blocking(move || run.group(&files))
+                .await
+                .unwrap_or_default();
+            Message::Batch(batch::Message::Action(batch::ActionMessage::PrepareClips(
+                batch::pipeline::Message::Groups(groups),
+            )))
+        })
+    }
+
+    /// The names the last Prepare clips run left in the open folder.
+    fn left_names(&self) -> Vec<String> {
+        self.directory
+            .as_ref()
+            .map(|d| self.batch.actions().prepare_left(d.path()).to_vec())
+            .unwrap_or_default()
+    }
+
+    /// The clips of the open folder whose names are in `names`, in list order.
+    fn left_clips(&self, names: &[String]) -> Vec<FileId> {
+        let Some(dir) = self.directory.as_ref() else {
+            return Vec::new();
+        };
+        let names: std::collections::HashSet<&std::ffi::OsStr> = names
+            .iter()
+            .map(|name| std::ffi::OsStr::new(name.as_str()))
+            .collect();
+        dir.all_files()
+            .filter(|f| f.file_path().file_name().is_some_and(|n| names.contains(n)))
+            .map(|f| f.id())
+            .collect()
     }
 
     /// A job that ended behind a closed panel must not end unseen: when something went wrong (a
@@ -5050,6 +5152,69 @@ mod tests {
             workspace.clip_action(batch::Action::DescribeAi, open),
             crate::features::file_workspace::ClipAction::Idle
         );
+    }
+
+    /// A Prepare clips run that stopped remembers the clips it did not reach, by name, and
+    /// offers exactly those again; a run that reached them all remembers none.
+    #[test]
+    fn a_stopped_prepare_run_offers_the_clips_it_left() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Batch(batch::Message::SelectAction(
+            batch::Action::PrepareClips,
+        )));
+        // The subtitles step needs a plan read from real headers; this test is about the left clips.
+        let _ = workspace.update(Message::Batch(batch::Message::Action(
+            batch::ActionMessage::PrepareClips(batch::pipeline::Message::SetSubtitles(false)),
+        )));
+        // The clip lengths the description step asked for come in.
+        let probes = (0..3)
+            .map(|i| {
+                (
+                    file_id_at(&workspace, i),
+                    batch::describe_ai::Probe {
+                        duration_s: Some(60.0),
+                        subtitle_bytes: 0,
+                    },
+                )
+            })
+            .collect();
+        let _ = workspace.update(Message::Batch(batch::Message::Action(
+            batch::ActionMessage::DescribeAi(batch::describe_ai::Message::Probed(probes)),
+        )));
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        assert!(workspace.is_batch_running());
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        let _ = workspace.update(Message::Batch(batch::Message::Cancel));
+        let first = file_id_at(&workspace, 0);
+        let _ = workspace.update(Message::BatchItemDone {
+            id: first,
+            result: Box::new(ItemResult::new(ItemStatus::Done, None)),
+        });
+        let _ = workspace.update(Message::BatchFinished);
+
+        let left: Vec<String> = (1..3)
+            .map(|i| {
+                workspace
+                    .directory()
+                    .and_then(|d| d.files_in_order().nth(i))
+                    .and_then(|f| f.file_path().file_name())
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .expect("a name")
+            })
+            .collect();
+        assert_eq!(workspace.left_names(), left);
+
+        // The next time, with the checks changed, Check them checks exactly those.
+        let _ = workspace.update(Message::Batch(batch::Message::CheckNone));
+        let _ = workspace.update(Message::Batch(batch::Message::Action(
+            batch::ActionMessage::CheckLeft,
+        )));
+        assert!(!workspace.batch().is_checked(first));
+        assert!(workspace.batch().is_checked(file_id_at(&workspace, 1)));
+        assert!(workspace.batch().is_checked(file_id_at(&workspace, 2)));
     }
 
     /// What the job holds back says so, instead of doing nothing.

@@ -138,13 +138,24 @@ impl Options {
     }
 
     pub fn operation(&self) -> super::Operation {
-        super::Operation::DescribeAi(Run {
+        super::Operation::DescribeAi(self.run())
+    }
+
+    /// The run these options make.
+    pub fn run(&self) -> Run {
+        self.run_with(self.redo)
+    }
+
+    /// The run these options make, with Redo set by the caller: Prepare clips never redoes, whatever
+    /// the Describe with AI panel remembers.
+    pub fn run_with(&self, redo: bool) -> Run {
+        Run {
             language: self.language,
-            redo: self.redo,
+            redo,
             model: self.model.id,
             moments: self.moments,
             tags: self.tags_to_suggest().to_vec(),
-        })
+        }
     }
 
     /// The model and language set in the settings.
@@ -198,6 +209,10 @@ impl Options {
 
     /// What a run on `checked` would send, skip and cost.
     fn plan(&self, checked: &[&File]) -> Plan {
+        self.plan_with(checked, self.redo)
+    }
+
+    fn plan_with(&self, checked: &[&File], redo: bool) -> Plan {
         let mut plan = Plan {
             checked_videos: checked
                 .iter()
@@ -217,7 +232,7 @@ impl Options {
                 plan.estimating = true;
                 continue;
             }
-            if !self.redo && block::ai_block(file.comment()).is_some() {
+            if !redo && block::ai_block(file.comment()).is_some() {
                 plan.described += 1;
                 continue;
             }
@@ -275,13 +290,23 @@ impl Options {
 
     /// Whether a run on `checked` can start now, and if not, why (#249).
     pub fn readiness(&self, checked: &[&File]) -> super::Readiness {
-        use super::Readiness;
-        let blocked = |note: String| Readiness::Blocked {
+        self.step(checked).readiness()
+    }
+
+    /// Where a run on `checked` stands as a step of a longer run (#17).
+    pub fn step(&self, checked: &[&File]) -> super::Step<Run> {
+        self.step_with(checked, self.redo)
+    }
+
+    /// [`Self::step`] with Redo set by the caller (see [`Self::run_with`]).
+    pub fn step_with(&self, checked: &[&File], redo: bool) -> super::Step<Run> {
+        use super::Step;
+        let blocked = |note: String| Step::Blocked {
             note,
             fix: Some(ActionMessage::OpenAiSettings),
         };
         match self.key() {
-            None => return Readiness::Waiting,
+            None => return Step::Wait,
             Some(KeyState::Missing) => {
                 return blocked(fl!(
                     "batch-ai-key-missing",
@@ -291,19 +316,31 @@ impl Options {
             Some(KeyState::Unavailable) => return blocked(fl!("batch-ai-key-unavailable")),
             Some(KeyState::Saved) => {}
         }
-        let plan = self.plan(checked);
+        let plan = self.plan_with(checked, redo);
         if plan.estimating {
-            return Readiness::Waiting;
+            return Step::Wait;
         }
         if plan.send.is_empty() {
-            return Readiness::Blocked {
-                note: plan
-                    .skipped_line()
+            return Step::Skip(
+                plan.skipped_line()
                     .unwrap_or_else(|| fl!("batch-action-describe-ai-none")),
-                fix: None,
-            };
+            );
         }
-        Readiness::Ready
+        Step::Ready(self.run_with(redo))
+    }
+
+    /// What a run on `checked` would send and cost, for a page that adds up several steps:
+    /// videos, seconds of footage, dollars, seconds it takes. `None` while it is estimated.
+    pub fn totals(&self, checked: &[&File]) -> Option<(usize, f64, f64, f64)> {
+        let plan = self.plan_with(checked, false);
+        (!plan.estimating).then(|| {
+            (
+                plan.send.len(),
+                plan.seconds,
+                self.model.cost_usd(plan.usage),
+                plan.run_seconds,
+            )
+        })
     }
 
     /// The page for `checked` and its run button (`Describe 12 videos · about $0.35` once the
@@ -440,7 +477,7 @@ impl Options {
     }
 
     /// Why the key keeps the run button off, with the button that fixes it.
-    fn key_notice(&self) -> Option<Element<'_, ActionMessage>> {
+    pub(super) fn key_notice(&self) -> Option<Element<'_, ActionMessage>> {
         let (kind, headline, fix) = match self.key() {
             Some(KeyState::Missing) => (
                 NoticeKind::Error,
@@ -631,6 +668,28 @@ pub fn show_retry(progress: &ItemProgress, seconds: u64) {
 /// into the video as markers while markers are kept there (Settings), where Premiere Pro shows
 /// them on the clip; with markers kept in comments, into the comment too.
 pub fn run(options: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress) -> ItemResult {
+    run_clip(
+        options,
+        &describe::Budget::new(None),
+        None,
+        path,
+        cancel,
+        progress,
+    )
+}
+
+/// [`run`] within `budget` (a cap shared by the clips of a run: a clip whose request could take
+/// the run past it is not sent, and the job stops). The described clip is also kept in `cache`
+/// (its fingerprints, for grouping similar footage); a clip the cache already has, described
+/// with the same settings, is not asked for again, so a retry after a failed save costs nothing.
+pub fn run_clip(
+    options: &Run,
+    budget: &describe::Budget,
+    cache: Option<&describe::Cache>,
+    path: &Path,
+    cancel: &AtomicBool,
+    progress: &ItemProgress,
+) -> ItemResult {
     let is_video = path
         .extension()
         .and_then(|e| e.to_str())
@@ -691,23 +750,38 @@ pub fn run(options: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgr
         _ => {}
     };
     let vocabulary = vocabulary(&options.tags);
+    let vocabulary_ref = (!vocabulary.is_empty()).then_some(vocabulary.as_slice());
+    // Described before, with these settings, but not saved (a read-only share): no second request.
+    let cached = cache
+        .filter(|_| !options.redo)
+        .and_then(|cache| reusable(cache, &on_disk, &describe_options, vocabulary_ref));
     // One request either way: with tags to suggest from, it suggests them too.
-    let described = if vocabulary.is_empty() {
-        describe::describe(&on_disk, &subtitles, &describe_options, cancel, on_stage)
-            .map(|d| (d.description, None, d.usage, d.frames))
-    } else {
-        describe::describe_with_tags(
+    let described = match cached {
+        Some(clip) => Ok(Some(clip)),
+        None => describe::describe_clip(
             &on_disk,
             &subtitles,
-            &vocabulary,
+            vocabulary_ref,
             &describe_options,
+            budget,
             cancel,
             on_stage,
-        )
-        .map(|d| (d.description, Some(d.tags), d.usage, d.frames))
+        ),
     };
+    let described_clip: describe::DescribedClip;
     let (description, tags, usage, frames) = match described {
-        Ok(described) => described,
+        // Its frames were read, but the request could pass the cap: nothing was sent, and the
+        // clips after it would be refused the same way.
+        Ok(None) => return over_budget(budget),
+        Ok(Some(clip)) => {
+            described_clip = clip.clone();
+            (
+                clip.description,
+                clip.tags.filter(|_| !vocabulary.is_empty()),
+                clip.usage,
+                clip.frames.len(),
+            )
+        }
         Err(describe::Error::Cancelled) => return ItemResult::new(ItemStatus::Pending, None),
         Err(describe::Error::TooLong(_)) => return ItemResult::new(ItemStatus::Skipped, None),
         Err(e @ describe::Error::Unreadable(_)) => {
@@ -757,6 +831,18 @@ pub fn run(options: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgr
     // A save that failed (a read-only share) only logs: check the description is there, so a
     // paid answer that was lost is reported, not counted as done.
     let (new_path, saved) = super::reparsed(new_path);
+    // Kept under the file as it is now: the save wrote into it (XMP), which changes the identity
+    // the cache finds it by, so a key made before the save would never be found again.
+    if let Some(cache) = cache {
+        let saved_on_disk = FileTagger::disk_path(&new_path);
+        keep_in_cache(
+            cache,
+            &saved_on_disk,
+            &describe_options,
+            &vocabulary,
+            &described_clip,
+        );
+    }
     if block::ai_block(saved.comment()) != Some(new_block.as_str()) {
         return ItemResult {
             usage,
@@ -769,6 +855,98 @@ pub fn run(options: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgr
         usage,
         ..ItemResult::new(ItemStatus::Done, Some((new_path, saved)))
     }
+}
+
+/// Keep the described clip in `cache` (its fingerprints are what grouping reads later); a cache
+/// that cannot be written only logs: the description itself is saved to the clip.
+fn keep_in_cache(
+    cache: &describe::Cache,
+    on_disk: &Path,
+    options: &describe::Options,
+    vocabulary: &[describe::Tag],
+    clip: &describe::DescribedClip,
+) {
+    let key = describe::CacheKey::new(
+        on_disk,
+        options,
+        (!vocabulary.is_empty()).then_some(vocabulary),
+        true,
+    );
+    let record = key.map(|key| describe::ClipRecord {
+        file: on_disk.to_path_buf(),
+        key,
+        model: options.model.id.to_string(),
+        clip: clip.clone(),
+    });
+    match record {
+        Ok(record) => {
+            if let Err(e) = cache.put(&record) {
+                log::warn!("ai: {} not kept in the cache: {e}", on_disk.display());
+            }
+        }
+        Err(e) => log::warn!(
+            "ai: {} cannot be keyed for the cache: {e}",
+            on_disk.display()
+        ),
+    }
+}
+
+/// The clip at `path` as `cache` has it for the settings of `options`: its fingerprints, for
+/// grouping. `None` when it was not described with them, or the key is gone.
+pub fn cached_clip(
+    options: &Run,
+    cache: &describe::Cache,
+    path: &Path,
+) -> Option<describe::DescribedClip> {
+    let request = Request::for_clip(path, options.model(), options.language, options.moments)?;
+    let vocabulary = vocabulary(&options.tags);
+    cached_in(
+        cache,
+        &request.on_disk,
+        &request.options,
+        (!vocabulary.is_empty()).then_some(vocabulary.as_slice()),
+    )
+}
+
+/// A description the cache keeps for this clip and these settings, to use again at no cost: what
+/// it cost was paid when it was made.
+fn reusable(
+    cache: &describe::Cache,
+    on_disk: &Path,
+    options: &describe::Options,
+    vocabulary: Option<&[describe::Tag]>,
+) -> Option<describe::DescribedClip> {
+    let mut clip = cached_in(cache, on_disk, options, vocabulary)?;
+    clip.usage = Default::default();
+    Some(clip)
+}
+
+/// The result of a clip whose request could take the run past its cap: not sent, not reached, and
+/// the clips after it would be refused the same way, so the job stops.
+fn over_budget(budget: &describe::Budget) -> ItemResult {
+    ItemResult {
+        stop_job: Some(over_budget_text(budget)),
+        ..ItemResult::new(ItemStatus::Pending, None)
+    }
+}
+
+fn cached_in(
+    cache: &describe::Cache,
+    on_disk: &Path,
+    options: &describe::Options,
+    vocabulary: Option<&[describe::Tag]>,
+) -> Option<describe::DescribedClip> {
+    let key = describe::CacheKey::new(on_disk, options, vocabulary, true).ok()?;
+    cache.get(&key).map(|record| record.clip)
+}
+
+/// Why a run stopped before the next clip: what the cap is, what was spent, and what to do.
+pub fn over_budget_text(budget: &describe::Budget) -> String {
+    fl!(
+        "batch-stop-over-budget",
+        cap = dollars(budget.max_usd().unwrap_or_default()),
+        spent = dollars(budget.spent_usd())
+    )
 }
 
 /// The result of a file whose request failed; some failures stop the whole job, and losing
@@ -847,6 +1025,54 @@ pub fn failure_reason(error: &describe::Error, path: &Path) -> String {
 mod tests {
     use super::*;
     use std::time::SystemTime;
+
+    /// A description kept in the cache is used again for nothing, and a clip over the cap is
+    /// neither sent nor reached and stops the job.
+    #[test]
+    fn a_kept_description_costs_nothing_again_and_an_over_budget_clip_is_not_reached() {
+        let dir = frename_core::test_support::fresh_dir("describe-reuse");
+        let video = dir.join("clip.mp4");
+        let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("crates/frename-core/tests/fixtures/tiny.mov");
+        std::fs::copy(source, &video).expect("clip");
+        let cache = describe::Cache::open(&dir.join("cache.jsonl")).expect("cache");
+        let options = describe::Options {
+            api_key: String::new(),
+            model: describe::MODELS[0],
+            language: Default::default(),
+            frame_sampling: Default::default(),
+            moments: Default::default(),
+        };
+        assert!(
+            reusable(&cache, &video, &options, None).is_none(),
+            "nothing kept yet"
+        );
+
+        let clip = describe::DescribedClip {
+            description: describe::Description {
+                summary: "A lion.".to_string(),
+                segments: Vec::new(),
+                main: None,
+            },
+            tags: None,
+            usage: clipscribe::AiUsage {
+                input_tokens: 1000,
+                output_tokens: 200,
+            },
+            duration_s: 1.0,
+            frames: Vec::new(),
+        };
+        keep_in_cache(&cache, &video, &options, &[], &clip);
+        let again = reusable(&cache, &video, &options, None).expect("kept");
+        assert_eq!(again.description, clip.description);
+        assert_eq!(again.usage, clipscribe::AiUsage::default(), "paid once");
+
+        let budget = describe::Budget::new(Some(0.5));
+        let result = over_budget(&budget);
+        assert_eq!(result.status, ItemStatus::Pending);
+        assert!(result.stop_job.is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     fn file(name: &str, comment: &str) -> File {
         let mut file = File::from_path(format!("C:/clips/{name}"), SystemTime::UNIX_EPOCH);

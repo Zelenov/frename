@@ -1,3 +1,8 @@
+# 0.154
+## Added
+- Prepare clips (batch actions, paid services): subtitles and then the description for every checked clip in one run, with one price, one progress and a spending cap in dollars. A clip whose next step could pass the cap is not sent, and the run stops; Run again continues. Each step skips what is already done, so nothing is paid for twice, and a run that stopped remembers the clips it left and offers to check them again.
+- After Prepare clips, the result lists groups of similar footage (the same shot: duplicates, re-exports, a camera that did not move), and checks a group's clips in one click for another batch action.
+
 # 0.153
 ## Added
 - Describe with AI and Generate subtitles start for the clip you have open from two buttons in the corner of the comment box, without the batch panel. If something is missing, such as the key, frename says so and opens the settings.
