@@ -64,10 +64,11 @@ pub fn view<'a>(
     state: &'a BatchState,
     progress: Progress,
     directory: Option<&'a Directory>,
+    waiting: Vec<(Action, FileId)>,
 ) -> Element<'a, Message> {
     let action = state.job_action().unwrap_or(state.action());
     if progress.running {
-        running(state, action, progress, directory)
+        running(state, action, progress, directory, waiting)
     } else {
         result(state, action, progress, directory)
     }
@@ -97,6 +98,7 @@ pub fn indicator<'a, M: Clone + 'a>(
     state: &'a BatchState,
     directory: Option<&'a Directory>,
     spinner_frame: usize,
+    waiting: usize,
     on_press: M,
 ) -> Option<Element<'a, M>> {
     if state.is_active() {
@@ -128,8 +130,18 @@ pub fn indicator<'a, M: Clone + 'a>(
             spend
         }));
     }
-    // What a click does, so the strip is found to be the way to Cancel.
-    let head = column![head, text::secondary(fl!("batch-indicator-hint"))].spacing(SPACE_XXS);
+    // What a click does, so the strip is found to be the way to Cancel; and the runs of one clip
+    // waiting behind this job.
+    let hint = if waiting > 0 {
+        format!(
+            "{} · {}",
+            fl!("batch-indicator-waiting", count = (waiting as i64)),
+            fl!("batch-indicator-hint")
+        )
+    } else {
+        fl!("batch-indicator-hint")
+    };
+    let head = column![head, text::secondary(hint)].spacing(SPACE_XXS);
     let bar = progress_bar(
         0.0..=progress.total.max(1) as f32,
         progress.finished as f32 + item_fraction,
@@ -160,6 +172,7 @@ fn running<'a>(
     action: Action,
     progress: Progress,
     directory: Option<&'a Directory>,
+    waiting: Vec<(Action, FileId)>,
 ) -> Element<'a, Message> {
     let (item_fraction, step) = state.item_now();
     let time_left = match progress.time_left() {
@@ -200,6 +213,7 @@ fn running<'a>(
         column![counts, bar, current].spacing(SPACE_S),
         figures(action, &progress),
     ]
+    .push(waiting_runs(waiting, directory))
     .spacing(SPACE_XL);
     let cancel = if progress.cancelled {
         button::secondary(fl!("batch-stopping"))
@@ -210,6 +224,41 @@ fn running<'a>(
         page_body(body),
         text::secondary(fl!("batch-runs-in-background")).into(),
         [cancel.into()],
+    )
+}
+
+/// The runs of one clip waiting behind the job, each with a button that takes it out of the line.
+fn waiting_runs<'a>(
+    waiting: Vec<(Action, FileId)>,
+    directory: Option<&'a Directory>,
+) -> Option<Element<'a, Message>> {
+    if waiting.is_empty() {
+        return None;
+    }
+    let count = waiting.len();
+    let rows = Column::with_children(waiting.into_iter().map(|(action, clip)| {
+        row![
+            container(
+                text::mono(file_name(directory, clip)).wrapping(iced::widget::text::Wrapping::None)
+            )
+            .clip(true)
+            .width(iced::Length::Fill),
+            text::secondary(action.label()),
+            button::secondary(fl!("batch-waiting-remove"))
+                .on_press(Message::Withdraw(action, clip)),
+        ]
+        .spacing(SPACE_M)
+        .align_y(Alignment::Center)
+        .into()
+    }))
+    .spacing(SPACE_S);
+    Some(
+        column![
+            text::title(fl!("batch-waiting-title", count = (count as i64))),
+            rows
+        ]
+        .spacing(SPACE_S)
+        .into(),
     )
 }
 

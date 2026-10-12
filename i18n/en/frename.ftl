@@ -150,14 +150,21 @@ batch-clip-in-work = In use: { $action }
 batch-folder-held = Busy: { $action }
 batch-indicator-hint = Click for the panel and Cancel
 batch-solo-queued = Queued: { $action }
-batch-solo-already = { $action }: already asked
 batch-solo-gave-up = Could not get ready
+markers-ai-queued = Waits for { $action }
+batch-solo-withdrawn = Withdrawn: { $action }
+batch-waiting-title = { $count ->
+    [one] 1 run waiting
+   *[other] { $count } runs waiting
+}
+batch-waiting-remove = Remove
+batch-indicator-waiting = { $count } waiting
 file-workspace-describe-clip = Describe this clip with AI
 file-workspace-subtitles-clip = Generate subtitles for this clip
-file-workspace-describe-clip-queued = Describe with AI: waiting for its turn
-file-workspace-describe-clip-running = Describe with AI: running
-file-workspace-subtitles-clip-queued = Generate subtitles: waiting for its turn
-file-workspace-subtitles-clip-running = Generate subtitles: running
+file-workspace-describe-clip-queued = Describe with AI: waiting for its turn. Click to withdraw
+file-workspace-describe-clip-running = Describe with AI: getting ready. Click to withdraw
+file-workspace-subtitles-clip-queued = Generate subtitles: waiting for its turn. Click to withdraw
+file-workspace-subtitles-clip-running = Generate subtitles: getting ready. Click to withdraw
 batch-run-again = Run again on { $count ->
     [one] { $count } file
    *[other] { $count } files

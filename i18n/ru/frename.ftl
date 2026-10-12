@@ -183,14 +183,22 @@ batch-clip-in-work = Файл занят: «{ $action }»
 batch-folder-held = Занято: «{ $action }»
 batch-indicator-hint = Нажмите, чтобы открыть панель и отменить
 batch-solo-queued = В очереди: «{ $action }»
-batch-solo-already = «{ $action }» уже запрошено
 batch-solo-gave-up = Не удалось подготовить запуск
+markers-ai-queued = Ждёт: «{ $action }»
+batch-solo-withdrawn = Отменено: «{ $action }»
+batch-waiting-title = { $count ->
+    [one] { $count } запуск ждёт
+    [few] { $count } запуска ждут
+   *[many] { $count } запусков ждут
+}
+batch-waiting-remove = Убрать
+batch-indicator-waiting = ждёт: { $count }
 file-workspace-describe-clip = Описать этот клип с помощью ИИ
 file-workspace-subtitles-clip = Создать субтитры для этого клипа
-file-workspace-describe-clip-queued = Описание с помощью ИИ: ждёт своей очереди
-file-workspace-describe-clip-running = Описание с помощью ИИ: выполняется
-file-workspace-subtitles-clip-queued = Субтитры: ждут своей очереди
-file-workspace-subtitles-clip-running = Субтитры: создаются
+file-workspace-describe-clip-queued = Описание с помощью ИИ: ждёт своей очереди. Нажмите, чтобы отменить
+file-workspace-describe-clip-running = Описание с помощью ИИ: готовится. Нажмите, чтобы отменить
+file-workspace-subtitles-clip-queued = Субтитры: ждут своей очереди. Нажмите, чтобы отменить
+file-workspace-subtitles-clip-running = Субтитры: готовятся. Нажмите, чтобы отменить
 batch-run-again = Запустить снова для { $count ->
     [one] { $count } файла
     [few] { $count } файлов

@@ -22,6 +22,9 @@ pub enum Message {
     },
     /// Check or uncheck one file.
     Toggle(FileId),
+    /// Take a run of one clip out of the line (the queue list's Remove). Handled by the
+    /// workspace, which owns the line.
+    Withdraw(super::Action, FileId),
     /// Check these files (the listed ones), keeping the other checks.
     CheckAll(Vec<FileId>),
     /// Uncheck every file.

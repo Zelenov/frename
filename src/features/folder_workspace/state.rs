@@ -1463,6 +1463,9 @@ impl FolderWorkspace {
         if let batch::Message::Cancel = msg {
             self.cancel_solo();
         }
+        if let batch::Message::Withdraw(action, clip) = msg {
+            return self.remove_waiting(action, clip);
+        }
         if let batch::Message::Retry = msg {
             if !self.batch.prepare_retry() {
                 return Task::none();
@@ -1781,6 +1784,8 @@ impl FolderWorkspace {
         Task::batch([
             self.reopen_selected_if_closed(),
             load_comments,
+            // The marker descriptions that waited for the job go now.
+            self.send_waiting_markers(),
             self.report_job_behind_closed_panel(),
         ])
     }

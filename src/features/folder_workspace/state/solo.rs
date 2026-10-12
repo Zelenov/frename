@@ -43,8 +43,9 @@ impl FolderWorkspace {
             return Task::none();
         };
         let label = action.label();
+        // Pressed again while asked for or in work: the button takes the run back.
         if self.clip_action(action, id) != ClipAction::Idle {
-            return Self::notice(&fl!("batch-solo-already", action = label));
+            return self.withdraw_run(action, id);
         }
         let busy = self.batch.is_running()
             || self.solo.preparing.is_some()
@@ -55,6 +56,45 @@ impl FolderWorkspace {
         }
         // `advance_solo` starts it right after this message.
         Task::none()
+    }
+
+    /// Take the run of `action` on `clip` back: from the line, from the preparing, from a job that
+    /// has not reached the clip; a job already working on it is cancelled (it stops after the
+    /// clip).
+    fn withdraw_run(&mut self, action: Action, clip: FileId) -> Task<Message> {
+        let label = action.label();
+        if self
+            .solo
+            .preparing
+            .as_ref()
+            .is_some_and(|run| run.action == action && run.file == clip)
+        {
+            self.end_preparing();
+        } else if let Some(at) = self.solo.waiting.iter().position(|w| *w == (action, clip)) {
+            self.solo.waiting.remove(at);
+        } else if self.batch.job_action() == Some(action) && self.batch.withdraw(clip) {
+        } else if self.batch.is_running() && self.batch.current() == Some(clip) {
+            self.batch.update(batch::Message::Cancel);
+        } else {
+            return Task::none();
+        }
+        Self::notice(&fl!("batch-solo-withdrawn", action = label))
+    }
+
+    /// The runs of one clip waiting for their turn, the one preparing first: for the queue list of
+    /// the job page.
+    pub fn waiting_runs(&self) -> Vec<(Action, FileId)> {
+        self.solo
+            .preparing
+            .iter()
+            .map(|run| (run.action, run.file))
+            .chain(self.solo.waiting.iter().copied())
+            .collect()
+    }
+
+    /// A run of the queue list taken out by its Remove button.
+    pub(super) fn remove_waiting(&mut self, action: Action, clip: FileId) -> Task<Message> {
+        self.withdraw_run(action, clip)
     }
 
     /// Where `action` stands for `clip`.

@@ -102,6 +102,7 @@ pub fn view(
         state.batch(),
         state.directory(),
         state.spinner_frame(),
+        state.waiting_runs().len(),
         folder::Message::SetBatchMode(true),
     );
     let folder_col: Element<'_, folder::Message> = Column::new()
@@ -123,8 +124,13 @@ pub fn view(
 
     // Batch mode shows the batch actions where the open file's tags and name are.
     let right_panel: Element<'_, Message> = if state.batch().is_active() {
-        batch::view::view(state.batch(), state.directory(), state.spinner_frame())
-            .map(Message::Batch)
+        batch::view::view(
+            state.batch(),
+            state.directory(),
+            state.spinner_frame(),
+            state.waiting_runs(),
+        )
+        .map(Message::Batch)
     } else {
         let file_ws = state.file_workspace();
         let is_synced = file_ws.tag_list().is_selected_match_display_order();
