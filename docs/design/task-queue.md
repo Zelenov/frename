@@ -77,7 +77,7 @@ The lock moves from the whole app to **one clip**:
 
 ## Steps (each its own PR)
 
-1. **Background batch (this PR).** The batch job is the queue already (one job, its files in
+1. **Background batch (0.152).** The batch job is the queue already (one job, its files in
    order, per-file outcome, cancel, retry, progress, cost). It stops locking the app:
    - the lock of `FolderWorkspace::is_blocked` shrinks from the app to the **clip in work**
      (`BatchState::current`): that clip cannot be opened or edited until its item ends;
