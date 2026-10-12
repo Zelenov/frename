@@ -1,0 +1,15 @@
+# PR screenshot for #17 stage 3: the Prepare clips panel in batch mode (`--batch`) with its steps, the
+# cap and the plan. The keys are the real ones of the machine it is run on. Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.night.city.MVI_0410.mp4"
+window = [1440, 720]
+panels = [640, 360]
+batch_action = "Prepare clips"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.drone.landscape.MVI_0404.mp4"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.MVI_0410.mp4"

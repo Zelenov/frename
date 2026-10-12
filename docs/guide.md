@@ -229,7 +229,8 @@ Actions:
 - add or remove the space after each tag, as set in Settings;
 - read every file again (use this if the list looks out of date);
 - describe each video with AI (see below);
-- generate subtitles from the speech (see below).
+- generate subtitles from the speech (see below);
+- prepare many clips in one run: subtitles, then the description (see below).
 
 ### Describe with AI
 
@@ -289,6 +290,28 @@ otherwise the video is transcribed again. When a Premiere transcript was written
 lists the files written for each video. Afterwards the panel lists
 every video that got no subtitles and why. You need your own Soniox API key: set it in Settings →
 Subtitles. Formats such as mkv, m2ts and avi need [ffmpeg](https://ffmpeg.org) on your PATH.
+
+### Prepare clips
+
+**Prepare clips** does both paid jobs for every checked clip in one run: first the subtitles
+(Generate subtitles, for a clip that has none), then Describe with AI (summary, moments as
+markers, the comment and tag suggestions, which you review as before). Check the clips you want
+(All, Invert, Ctrl+click and Shift+click work as in any batch action), open **Prepare clips**, and
+the panel shows what each step will do, what is skipped, the price of both steps added up, and
+**Stop spending at**: a cap in US dollars for the whole run (empty means none). A clip whose next
+step could take the run past the cap is not sent, the run stops, and **Run again** continues from
+there once you raise the cap.
+
+Each step skips what is already done, so nothing is paid for twice: after a stop, or a crash, or
+the next day, run it again on the same clips and the finished ones pass at once. When a run stops
+before the end, frename remembers which clips it did not reach; the next time you open Prepare
+clips in that folder it says so and offers **Check them**. You can untick either step to do only
+the other (for example only the descriptions of clips that already have subtitles).
+
+When the run ends, the result lists **Similar footage**: groups of clips that look like the same
+shot (duplicates, re-exports, a camera that did not move), found from the frames frename already
+looked at, at no extra cost. **Check these clips** on a group checks exactly its clips, so you can
+run another batch action on one group.
 
 ## Settings
 

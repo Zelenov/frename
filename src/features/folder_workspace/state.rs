@@ -5130,6 +5130,65 @@ mod tests {
         );
     }
 
+    /// A Prepare clips run that stopped remembers the clips it did not reach, by name, and
+    /// offers exactly those again; a run that reached them all remembers none.
+    #[test]
+    fn a_stopped_prepare_run_offers_the_clips_it_left() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Batch(batch::Message::SelectAction(
+            batch::Action::PrepareClips,
+        )));
+        // The clip lengths the description step asked for come in.
+        let probes = (0..3)
+            .map(|i| {
+                (
+                    file_id_at(&workspace, i),
+                    batch::describe_ai::Probe {
+                        duration_s: Some(60.0),
+                        subtitle_bytes: 0,
+                    },
+                )
+            })
+            .collect();
+        let _ = workspace.update(Message::Batch(batch::Message::Action(
+            batch::ActionMessage::DescribeAi(batch::describe_ai::Message::Probed(probes)),
+        )));
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        assert!(workspace.is_batch_running());
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        let _ = workspace.update(Message::Batch(batch::Message::Cancel));
+        let first = file_id_at(&workspace, 0);
+        let _ = workspace.update(Message::BatchItemDone {
+            id: first,
+            result: Box::new(ItemResult::new(ItemStatus::Done, None)),
+        });
+        let _ = workspace.update(Message::BatchFinished);
+
+        let left: Vec<String> = (1..3)
+            .map(|i| {
+                workspace
+                    .directory()
+                    .and_then(|d| d.files_in_order().nth(i))
+                    .and_then(|f| f.file_path().file_name())
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .expect("a name")
+            })
+            .collect();
+        assert_eq!(workspace.batch().actions().prepare_left(), left.as_slice());
+
+        // The next time, with the checks changed, Check them checks exactly those.
+        let _ = workspace.update(Message::Batch(batch::Message::CheckNone));
+        let _ = workspace.update(Message::Batch(batch::Message::Action(
+            batch::ActionMessage::CheckLeft,
+        )));
+        assert!(!workspace.batch().is_checked(first));
+        assert!(workspace.batch().is_checked(file_id_at(&workspace, 1)));
+        assert!(workspace.batch().is_checked(file_id_at(&workspace, 2)));
+    }
+
     /// What the job holds back says so, instead of doing nothing.
     #[test]
     fn what_a_job_holds_back_tells_the_editor_why() {

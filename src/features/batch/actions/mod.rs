@@ -825,6 +825,39 @@ mod tests {
     use super::*;
 
     #[test]
+    fn prepare_clips_remembers_its_steps_and_cap_and_is_ready_only_with_a_sound_cap() {
+        let mut actions = Actions::default();
+        actions.update(ActionMessage::PrepareClips(
+            pipeline::Message::SetSubtitles(false),
+        ));
+        actions.update(ActionMessage::PrepareClips(pipeline::Message::SetCap(
+            "7".to_string(),
+        )));
+        let saved = actions.persist(Action::PrepareClips);
+        let mut restored = Actions::default();
+        restored.restore(Action::PrepareClips, &saved);
+        assert_eq!(restored.persist(Action::PrepareClips), saved);
+        assert!(matches!(
+            restored.operation(Action::PrepareClips),
+            Some(Operation::PrepareClips(_))
+        ));
+
+        // A cap that is no number holds the run.
+        restored.update(ActionMessage::PrepareClips(pipeline::Message::SetCap(
+            "lots".to_string(),
+        )));
+        assert!(restored.operation(Action::PrepareClips).is_none());
+        // With both steps off there is nothing to run.
+        restored.update(ActionMessage::PrepareClips(pipeline::Message::SetCap(
+            String::new(),
+        )));
+        restored.update(ActionMessage::PrepareClips(
+            pipeline::Message::SetDescription(false),
+        ));
+        assert!(restored.operation(Action::PrepareClips).is_none());
+    }
+
+    #[test]
     fn only_the_paid_actions_have_a_service() {
         assert_eq!(Action::DescribeAi.service(), None, "the model decides");
         assert_eq!(Action::GenerateSubtitles.service(), Some(ApiKey::Soniox));

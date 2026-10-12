@@ -32,6 +32,9 @@ frename is free and open source (MIT license).
   name a single marker, or every unnamed marker in one click. You use your own Anthropic or
   OpenAI API key (Claude or ChatGPT), and Haiku costs about $10 per 1,000 one-minute clips. One
   button in the corner of the comment box describes the clip you have open, with no batch panel.
+- **Prepare a whole folder in one run.** Prepare clips makes the subtitles, then the description,
+  of every clip you check, under a spending cap you set, skips what is already done so a stopped
+  run is resumed by running it again, and then groups clips that look like the same shot.
 - **Get subtitles from speech.** Generate subtitles sends the audio to Soniox, a paid
   speech-to-text service, and saves an `.srt` file, a Premiere Pro transcript, or both next to
   the video. A button in the corner of the comment box does it for the clip you have open.
