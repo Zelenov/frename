@@ -191,6 +191,14 @@ files (an unchecked one drags only itself). Esc leaves batch mode, the same as c
 Batch mode opens with the action you last ran selected, and its own options (e.g. which way
 in/out points move, or "Replace existing subtitles") as they were then, even across restarts.
 
+**A running action does not stop your work.** While it runs you can close the batch panel (the
+✕ in its corner, Esc, or **Batch actions** again) and go on: open other clips, play them, tag,
+rename, comment and mark them. A strip above the bar under the file list shows the action, how
+far it is, what it cost so far and the clip in work; click it to see the panel and Cancel. Only
+the clip the action is working on is held back: it closes while its turn lasts, cannot be opened
+until it is done, and opens again by itself. Opening another folder, deleting or moving files,
+and Undo wait until the action ends.
+
 **Select several clips without the button**: **Ctrl+click** a clip to add it (and the one open before it) to
 the selection; Ctrl+click a selected clip to drop it. **Shift+click** a clip to select every clip
 between it and the last one you clicked with Ctrl (or the open clip, if you have not Ctrl+clicked

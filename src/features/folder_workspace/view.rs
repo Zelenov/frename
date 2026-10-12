@@ -83,8 +83,8 @@ pub fn view(
 
     // Bound to a local so the folder list can borrow it instead of taking a clone per frame.
     let tag_color_mapping = state.file_workspace().tag_color_mapping();
-    let folder_col: Element<'_, folder::Message> = column![
-        container(folder::view::view(ListProps {
+    let folder_col: Element<'_, folder::Message> =
+        column![container(folder::view::view(ListProps {
             directory: state.directory(),
             loading: state.is_loading(),
             tag_color_mapping: &tag_color_mapping,
@@ -96,17 +96,16 @@ pub fn view(
             filter_menu_open: state.filter_menu_open(),
             width: state.folder_width(),
         }))
-        .height(Length::Fill),
-    ]
-    .push(batch::view::indicator(
-        state.batch(),
-        state.directory(),
-        state.spinner_frame(),
-        folder::Message::SetBatchMode(true),
-    ))
-    .push(folder_controls::view::view(toolbar))
-    .height(Length::Fill)
-    .into();
+        .height(Length::Fill),]
+        .push(batch::view::indicator(
+            state.batch(),
+            state.directory(),
+            state.spinner_frame(),
+            folder::Message::SetBatchMode(true),
+        ))
+        .push(folder_controls::view::view(toolbar))
+        .height(Length::Fill)
+        .into();
     let folder_with_controls = folder_col.map(Message::Folder);
 
     let folder_list = container(folder_with_controls)

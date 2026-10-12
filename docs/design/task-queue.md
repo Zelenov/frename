@@ -75,12 +75,24 @@ The lock moves from the whole app to **one clip**:
 
 ## Steps (each its own PR)
 
-1. **Queue and background.** Task model and per-clip busy guard in `frename-core` (pure,
-   unit-tested: states, FIFO, cancel, busy, per-folder); the batch run becomes a queue filled
-   with the checked clips; the lock of `is_blocked` shrinks from the app to the busy clip; the
-   open clip is no longer closed by a job; indicator and panel. Screenshots of both.
+1. **Background batch (this PR).** The batch job is the queue already (one job, its files in
+   order, per-file outcome, cancel, retry, progress, cost). It stops locking the app:
+   - the lock of `FolderWorkspace::is_blocked` shrinks from the app to the **clip in work**
+     (`BatchState::current`): that clip cannot be opened or edited until its item ends;
+   - the panel can be closed while the job runs (the ✕, `Esc`, the toolbar toggle); a strip above
+     the file list's toolbar (`batch::view::indicator`) shows the action, `finished of total`,
+     the cost so far, the clip in work and a progress bar, and brings the panel back on click;
+   - the job no longer closes the open clip at its start. When the next item is the clip that is
+     open, the pending saves are applied, the video unloads, the clip closes, the item runs, and
+     the clip opens again under its current name (`run_batch_item`, `reopen_selected_if_closed`);
+   - still locked while a job runs: opening another folder (the job's files belong to this
+     folder, so a per-folder background queue is left for later), file actions that delete or
+     move files, Undo and Redo (the job renames files behind the history; the history is reset
+     when it ends), and marker descriptions (`marker_ai`).
 2. **Single-clip actions** start directly (describe, subtitles, suggest tags per #250, marker
-   describe) and enter the same queue.
+   describe) and enter the same queue. This needs the job to hold items of different actions
+   and accept new ones while it runs; the queue model is designed then (the pure `TaskQueue`
+   of the first draft was dropped because nothing used it yet).
 3. **Button clean-up:** every AI button follows the model above; list of today's buttons and
    what each becomes is filled in then (marker rows ✨, "describe all unnamed", the In/Out AI
    pill, batch actions).
@@ -95,7 +107,7 @@ The lock moves from the whole app to **one clip**:
 ## Decisions made without the owner
 
 - One running task per provider; no parallel tasks on one clip.
-- Queue per folder; changing folder never waits or asks.
+- Step 1 keeps the folder locked while a job runs (a queue per folder is a later step).
 - Busy-clip guard instead of closing the video; a write task on the open clip waits.
 - No resume of the queue after a restart in step 1.
 - Marker describe joins the queue in step 2 (not step 1), so its own request path stays

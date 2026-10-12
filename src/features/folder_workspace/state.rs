@@ -671,12 +671,8 @@ impl FolderWorkspace {
                     return self.set_fullscreen(false);
                 }
                 if self.batch.is_active() {
-                    // A running job ignores `SetActive` (see `BatchState::update`), so batch mode
-                    // stays on: keep the anchor too, or a Shift+click after the job finishes would
-                    // silently range from the wrong file instead of the documented last-Ctrl-click.
-                    if !self.batch.is_running() {
-                        self.select_anchor = None;
-                    }
+                    // A running job goes on behind the closed panel (#249).
+                    self.select_anchor = None;
                     return self.handle_batch(batch::Message::SetActive(false));
                 }
                 // Both search bars label their clear button "Esc", so clear both.
@@ -1635,9 +1631,7 @@ impl FolderWorkspace {
             .as_ref()
             .and_then(|d| d.selected_file())
             .cloned()
-            .map_or_else(Task::none, |file| {
-                Task::done(Message::FileOpened(file))
-            })
+            .map_or_else(Task::none, |file| Task::done(Message::FileOpened(file)))
     }
 
     /// The job ended: reopen the selected file if it was closed, and resume loading comments.
@@ -1956,10 +1950,7 @@ impl FolderWorkspace {
             }
             folder::Message::SubmitRename => self.submit_rename(),
             folder::Message::SetBatchMode(on) => {
-                // A running job ignores `SetActive` (see `BatchState::update`): the UI already
-                // disables the ☑ button then, but keep the anchor too in case something else
-                // sends this message while a job runs.
-                if !on && !self.batch.is_running() {
+                if !on {
                     self.select_anchor = None;
                 }
                 // The open file starts checked: it is usually the one to act on.
@@ -4395,10 +4386,11 @@ mod tests {
         assert!(!workspace.batch.is_checked(other));
     }
 
-    /// A job waits for the playing video to unload, runs file by file with the folder locked,
-    /// and gives the open file back when it ends.
+    /// A job runs in the background (#249): the clip it works on is closed and cannot be opened
+    /// until its item ends; another clip opens and edits meanwhile. The clip that was closed
+    /// comes back when the job ends.
     #[test]
-    fn a_batch_job_locks_the_folder_and_reopens_the_file_when_done() {
+    fn a_batch_job_busies_only_the_clip_in_work_and_reopens_it_when_done() {
         let test_dir = TestDirectory::new(2);
         let mut workspace = batch_workspace(&test_dir);
 
@@ -4413,14 +4405,21 @@ mod tests {
         ));
         assert!(
             workspace.file_workspace().file().is_none(),
-            "the open file is closed during the job"
+            "the clip in work is closed"
         );
 
+        assert!(
+            workspace.is_blocked(&Message::Folder(folder::Message::SelectFile(0))),
+            "the clip in work cannot be opened"
+        );
+
+        let second = file_id_at(&workspace, 1);
         let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
         assert_eq!(
-            workspace.directory().and_then(|d| d.selected_index()),
-            Some(0),
-            "navigation is locked"
+            workspace.file_workspace().file().map(|f| f.id()),
+            Some(second),
+            "another clip opens while the job runs"
         );
 
         let skipped = || ItemResult::new(ItemStatus::Skipped, None);
@@ -4429,8 +4428,16 @@ mod tests {
             result: Box::new(skipped()),
         });
         assert!(workspace.is_batch_running());
+        assert!(
+            workspace.batch_item_waits_for_unload.is_some(),
+            "the next item is the clip that plays: it waits for the video to let go"
+        );
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert!(workspace.file_workspace().file().is_none());
         let _ = workspace.update(Message::BatchItemDone {
-            id: file_id_at(&workspace, 1),
+            id: second,
             result: Box::new(skipped()),
         });
         assert!(!workspace.is_batch_running(), "ended after the last file");
@@ -4440,8 +4447,48 @@ mod tests {
         flush_file_opened(&mut workspace);
         assert!(
             workspace.file_workspace().file().is_some(),
-            "the file is open again"
+            "the clip is open again"
         );
+    }
+
+    /// While a job runs the folder stays as it is, but the editor works on: the batch panel can
+    /// be closed, and a clip that is not in work can be edited.
+    #[test]
+    fn a_running_job_locks_the_folder_but_not_the_editor() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert!(workspace.is_blocked(&Message::OpenFolderPicker));
+        assert!(workspace.is_blocked(&Message::Undo));
+        assert!(!workspace.is_blocked(&Message::Folder(folder::Message::SetBatchMode(false))));
+
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(false)));
+        assert!(!workspace.batch().is_active(), "the panel closes");
+        assert!(workspace.is_batch_running(), "the job goes on behind it");
+
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(2)));
+        flush_file_opened(&mut workspace);
+        assert!(
+            !workspace.is_blocked(&Message::RemoveTag),
+            "the open clip is not in work"
+        );
+        assert!(workspace.is_blocked(&Message::Folder(folder::Message::SelectFile(0))));
+    }
+
+    /// The open clip is the one in work: what edits it waits for the item to end.
+    #[test]
+    fn what_edits_the_clip_in_work_waits() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = batch_workspace(&test_dir);
+        let _ = workspace.update(Message::Batch(batch::Message::Run));
+        // Not unloaded yet: the video still plays the clip the job has begun.
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(false)));
+        assert!(workspace.open_clip_is_busy());
+        assert!(workspace.is_blocked(&Message::RemoveTag));
+        assert!(workspace.is_blocked(&Message::ToggleMediaFullscreen));
     }
 
     /// A cancelled job stops after the file in work and leaves the rest untouched.
@@ -7953,29 +8000,22 @@ mod tests {
         assert_eq!(workspace.select_anchor, None);
     }
 
-    /// A running job ignores `SetActive(false)` (`BatchState::update`'s own guard), so batch
-    /// mode stays on: the anchor must stay too, or a Shift+click once the job ends would range
-    /// from the wrong file with no sign anything changed.
+    /// Esc closes the panel of a running job (#249), and the anchor goes like it does out of a
+    /// job.
     #[test]
-    fn escape_during_a_running_batch_job_keeps_batch_mode_and_the_anchor() {
+    fn escape_during_a_running_batch_job_closes_the_panel_and_the_job_goes_on() {
         let (_test_dir, mut workspace) = open_folder(3);
         ctrl_click(&mut workspace, 1);
-        ctrl_click(&mut workspace, 2); // anchor = file_2
-        let anchor = workspace.select_anchor;
+        ctrl_click(&mut workspace, 2);
         let _ = workspace.update(Message::Batch(batch::Message::Run));
         assert!(
             workspace.is_batch_running(),
             "the job must actually be running"
         );
         let _ = workspace.update(Message::EscapePressed);
-        assert!(
-            workspace.batch().is_active(),
-            "SetActive(false) had no effect while the job runs"
-        );
-        assert_eq!(
-            workspace.select_anchor, anchor,
-            "the anchor must not be dropped either"
-        );
+        assert!(!workspace.batch().is_active());
+        assert!(workspace.is_batch_running());
+        assert_eq!(workspace.select_anchor, None);
     }
 
     /// Ctrl/Shift+click must index the *filtered* list (as the issue's own "in the list's
