@@ -1,7 +1,6 @@
 # 0.155
 ## Added
-- Press the lit sparkles or captions button again to take its run out of the line, or use **Remove** in the list of waiting runs on the running job's page. The strip says how many runs wait.
-- Describing a marker, or every unnamed marker, while a batch action runs now waits for it and starts when it ends, instead of being refused.
+- Press the lit sparkles or captions button again while its run waits to take it out of the line, or use **Remove** in the list of waiting runs on the running job's page. The strip says how many runs wait.
 
 # 0.154
 ## Added

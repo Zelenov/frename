@@ -1157,6 +1157,31 @@ mod tests {
     }
 
     #[test]
+    fn a_withdrawn_clip_is_skipped_and_the_job_moves_on_or_ends() {
+        let files = ids(3);
+        let mut batch = state();
+        batch.start(files.clone());
+        let (first, _, _) = batch.begin_next().expect("first");
+        assert!(!batch.withdraw(first), "the clip in work stays");
+        assert!(batch.withdraw(files[1]), "a waiting clip comes out");
+        assert!(!batch.withdraw(files[1]), "only once");
+        batch.finish(first, &ItemResult::new(ItemStatus::Done, None));
+        let (next, _, _) = batch.begin_next().expect("the third");
+        assert_eq!(next, files[2], "the withdrawn clip is skipped");
+        assert_eq!(batch.status(files[1]), Some(ItemStatus::Skipped));
+        batch.finish(next, &ItemResult::new(ItemStatus::Done, None));
+        assert!(batch.begin_next().is_none(), "the job ends");
+
+        // Withdrawing the last waiting clip ends the job after the one in work.
+        let mut batch = state();
+        batch.start(files.clone());
+        let (first, _, _) = batch.begin_next().expect("first");
+        assert!(batch.withdraw(files[1]) && batch.withdraw(files[2]));
+        batch.finish(first, &ItemResult::new(ItemStatus::Done, None));
+        assert!(batch.begin_next().is_none());
+    }
+
+    #[test]
     fn retry_checks_only_the_files_that_failed_or_were_not_reached() {
         let files = ids(4);
         let mut batch = state();

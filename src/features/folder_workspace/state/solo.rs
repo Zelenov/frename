@@ -59,9 +59,9 @@ impl FolderWorkspace {
     }
 
     /// Take the run of `action` on `clip` back: from the line, from the preparing, from a job that
-    /// has not reached the clip; a job already working on it is cancelled (it stops after the
-    /// clip).
-    fn withdraw_run(&mut self, action: Action, clip: FileId) -> Task<Message> {
+    /// has not reached the clip. A job already working on the clip is not stopped from here (that
+    /// would stop all its clips): a note says where to cancel it.
+    pub(super) fn withdraw_run(&mut self, action: Action, clip: FileId) -> Task<Message> {
         let label = action.label();
         if self
             .solo
@@ -75,7 +75,8 @@ impl FolderWorkspace {
         } else if self.batch.job_action() == Some(action) && self.batch.withdraw(clip) {
             // Taken out of the running job's line before its turn.
         } else if self.batch.is_running() && self.batch.current() == Some(clip) {
-            self.batch.update(batch::Message::Cancel);
+            // In work: stopping it stops the whole job, which is the strip's and the page's Cancel.
+            return Self::notice(&fl!("batch-solo-in-work", action = label));
         } else {
             return Task::none();
         }
@@ -99,17 +100,18 @@ impl FolderWorkspace {
     /// The runs of one clip waiting for their turn, the one preparing first: for the queue list of
     /// the job page.
     pub fn waiting_runs(&self) -> Vec<(Action, FileId)> {
+        // A clip a rescan renewed is not listed: its row would have no name.
         self.solo
             .preparing
             .iter()
             .map(|run| (run.action, run.file))
             .chain(self.solo.waiting.iter().copied())
+            .filter(|(_, id)| {
+                self.directory
+                    .as_ref()
+                    .is_some_and(|d| d.file_by_id(*id).is_some())
+            })
             .collect()
-    }
-
-    /// A run of the queue list taken out by its Remove button.
-    pub(super) fn remove_waiting(&mut self, action: Action, clip: FileId) -> Task<Message> {
-        self.withdraw_run(action, clip)
     }
 
     /// Where `action` stands for `clip`.

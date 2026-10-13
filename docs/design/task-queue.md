@@ -109,18 +109,26 @@ The lock moves from the whole app to **one clip**:
    while its run is queued or in work, and a press on a lit button *withdraws* the run if it is
    still waiting (a run in work is cancelled from the job page or the strip, as before). Runs that
    wait are listed on the job page ("Waiting", each with Remove) and counted on the strip. The
-   marker descriptions stop being a separate path that waits behind a job: they join the line.
+   marker descriptions stay a separate path (see the table).
 
    | Button (today) | Becomes |
    |---|---|
    | Describe with AI, comment corner (step 2) | Lit while queued or in work; a press while waiting withdraws it. |
    | Generate subtitles, comment corner (step 2) | The same. |
-   | Marker row ✨ (describe one marker) | While a job works the request waits and starts when it ends (note "waits for the running job"); no longer refused. |
-   | "Describe all unnamed" markers | The same: the markers wait as one batch of requests. |
+   | Marker row ✨ (describe one marker) | Unchanged: while a job works the press says why it is held (the job closes the clip it works on, and a marker request is tied to the open clip, so it cannot wait in the line). |
+   | "Describe all unnamed" markers | The same. |
    | In/Out AI pill (name a new range) | The same as the marker ✨. |
    | Batch panel actions (Describe with AI, Generate subtitles, Prepare clips, ...) | Unchanged: a batch is the queue's own job; the panel and the strip show it. |
 
-   A keyboard shortcut for the two single-clip actions is not added: the issue does not ask for one.
+   A run in work is not stopped from its button (that would stop every clip of the job): the press
+   says where to cancel it, the strip or the job page. Marker requests do not join the line: a
+   first version that queued them lost requests when the job closed and reopened the open clip or
+   when a one-clip run waited too, so they keep saying why they are held until the job ends.
+
+   Not built, on purpose: a per-folder queue (a job keeps the folder locked), a prompt when the app
+   closes with a job running (it already waits for the job, step 1), Retry and Cancel all inside a
+   queue list (the job page has Retry and Cancel), and a keyboard shortcut for the two single-clip
+   actions (the issue does not ask for one).
 
 ## Test plan
 

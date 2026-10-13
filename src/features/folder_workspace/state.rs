@@ -1475,7 +1475,7 @@ impl FolderWorkspace {
             self.cancel_solo();
         }
         if let batch::Message::Withdraw(action, clip) = msg {
-            return self.remove_waiting(action, clip);
+            return self.withdraw_run(action, clip);
         }
         // Groups worked out in the background belong to the run whose result is shown: one that
         // comes late, after a new run started or the job was dismissed, is dropped.

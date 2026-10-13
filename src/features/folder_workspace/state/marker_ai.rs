@@ -29,8 +29,8 @@ impl FolderWorkspace {
     /// Send the marker `guid` of the open clip to the AI, unless it is on its way already. With
     /// no key saved, nothing is sent: Settings opens where the key is set.
     pub(super) fn describe_marker(&mut self, guid: &str) -> Task<Message> {
-        // A batch job is about to start on the clip.
-        if self.batch.is_waiting_for_markers() {
+        // A batch job is about to close the clip, or has.
+        if self.batch.is_running() || self.batch.is_waiting_for_markers() {
             return self.job_holds_note();
         }
         let editable = self
@@ -43,11 +43,6 @@ impl FolderWorkspace {
         }
         if self.batch.actions().ai_key_missing() {
             return Self::no_key(self.batch.actions().ai_provider_label());
-        }
-        // A job works: the request waits its turn, and goes when the job ends.
-        if self.batch.is_running() {
-            self.markers.queue_describing([guid.to_string()]);
-            return self.queued_note();
         }
         let Some((request, cancel)) = self.markers.start_describing(guid) else {
             return Task::none();
@@ -111,7 +106,7 @@ impl FolderWorkspace {
     pub(super) fn describe_unnamed_markers(&mut self, confirmed: bool) -> Task<Message> {
         let asked = self.markers.describe_all_asked();
         self.markers.set_describe_all_asked(None);
-        if self.batch.is_waiting_for_markers() {
+        if self.batch.is_running() || self.batch.is_waiting_for_markers() {
             return self.job_holds_note();
         }
         let guids = self.unnamed_marker_guids();
@@ -128,20 +123,7 @@ impl FolderWorkspace {
             return Task::none();
         }
         self.markers.queue_describing(guids);
-        if self.batch.is_running() {
-            return self.queued_note();
-        }
         self.send_waiting_markers()
-    }
-
-    /// The note for a marker description that waits for the job in work.
-    fn queued_note(&self) -> Task<Message> {
-        let action = self
-            .batch
-            .job_action()
-            .unwrap_or(self.batch.action())
-            .label();
-        Self::notice(&fl!("markers-ai-queued", action = action))
     }
 
     /// Forget a question about sending that no longer applies: with this few markers the button
@@ -175,11 +157,8 @@ impl FolderWorkspace {
         if self.markers.waiting_count() == 0 {
             return Task::none();
         }
-        // A job works: they go when it ends. One about to start on the clip drops them.
-        if self.batch.is_running() {
-            return Task::none();
-        }
-        if self.batch.is_waiting_for_markers() {
+        // A batch job is about to close the clip, or has.
+        if self.batch.is_running() || self.batch.is_waiting_for_markers() {
             self.markers.clear_waiting();
             return Task::none();
         }
