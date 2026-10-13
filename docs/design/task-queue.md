@@ -105,7 +105,7 @@ The lock moves from the whole app to **one clip**:
    would change the checks waits (`solo_holds`, given up after 30 s). The button is lit while its
    clip is queued or in work. Marker description keeps its own path until step 3, and tag
    suggestions are part of Describe with AI (#250).
-3. **One model for every AI button (0.155).** Every slow button follows the model above: it is lit
+3. **One model for every AI button (0.155, shipped).** Every slow button follows the model above: it is lit
    while its run is queued or in work, and a press on a lit button *withdraws* the run if it is
    still waiting (a run in work is cancelled from the job page or the strip, as before). Runs that
    wait are listed on the job page ("Waiting", each with Remove) and counted on the strip. The

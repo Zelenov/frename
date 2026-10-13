@@ -82,6 +82,20 @@ impl FolderWorkspace {
         Self::notice(&fl!("batch-solo-withdrawn", action = label))
     }
 
+    /// Demo: two runs on the last two clips of the list wait in line, as if asked for.
+    pub(super) fn show_waiting_runs(&mut self) {
+        let Some(dir) = self.directory.as_ref() else {
+            return;
+        };
+        let ids: Vec<FileId> = dir.files_in_order().map(|f| f.id()).collect();
+        for (action, id) in [Action::DescribeAi, Action::GenerateSubtitles]
+            .into_iter()
+            .zip(ids.iter().rev())
+        {
+            self.solo.waiting.push_back((action, *id));
+        }
+    }
+
     /// The runs of one clip waiting for their turn, the one preparing first: for the queue list of
     /// the job page.
     pub fn waiting_runs(&self) -> Vec<(Action, FileId)> {

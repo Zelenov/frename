@@ -70,6 +70,10 @@ pub struct DemoScenario {
     /// so the shot shows the note that says why.
     #[serde(default)]
     pub press_held: bool,
+    /// With `ai_retry_wait_s`: two more one-clip runs wait in line behind the job, so the strip
+    /// and the job page list them (#249).
+    #[serde(default)]
+    pub queue_waiting: bool,
     /// Turn the open clip by this many quarter turns clockwise (negative: counter-clockwise),
     /// as `Ctrl+Alt+→` / `←` do, after the seek. The shot is then taken while the note is still
     /// shown over the picture.
@@ -416,6 +420,13 @@ name = "pick.a.mp4"
         let scenario = DemoScenario::parse(&text).unwrap();
         assert_eq!(scenario.describing.as_deref(), Some("Lion"));
         assert_eq!(DemoScenario::parse(MINIMAL).unwrap().describing, None);
+    }
+
+    #[test]
+    fn a_scenario_can_queue_runs_behind_the_job() {
+        let text = MINIMAL.replace("[[files]]", "queue_waiting = true\n[[files]]");
+        assert!(DemoScenario::parse(&text).unwrap().queue_waiting);
+        assert!(!DemoScenario::parse(MINIMAL).unwrap().queue_waiting);
     }
 
     #[test]

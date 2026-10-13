@@ -31,7 +31,8 @@ frename is free and open source (MIT license).
   what happens when, even in clips with no speech. It can also suggest an in and out point and
   name a single marker, or every unnamed marker in one click. You use your own Anthropic or
   OpenAI API key (Claude or ChatGPT), and Haiku costs about $10 per 1,000 one-minute clips. One
-  button in the corner of the comment box describes the clip you have open, with no batch panel.
+  button in the corner of the comment box describes the clip you have open, with no batch panel, and
+  waits its turn behind a running job; press it again to take it back.
 - **Prepare a whole folder in one run.** Prepare clips makes the subtitles, then the description (with its markers, comment and tag
   suggestions), of every clip you check, under a spending cap you set, skips what is already done so a stopped
   run is resumed by running it again, and then groups clips that look like the same shot.

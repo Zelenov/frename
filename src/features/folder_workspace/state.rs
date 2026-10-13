@@ -418,6 +418,17 @@ impl FolderWorkspace {
                 }
                 Task::none()
             }
+            Message::ShowWaitingRuns => {
+                if self.batch.is_running() {
+                    self.show_waiting_runs();
+                    return Task::none();
+                }
+                // The job has not started yet (the clip lengths are still being read).
+                Task::future(async {
+                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                    Message::ShowWaitingRuns
+                })
+            }
             Message::ShowHeldPress => {
                 if self.batch.is_running() {
                     return self.update(Message::OpenFolderPicker);

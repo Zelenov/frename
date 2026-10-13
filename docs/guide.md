@@ -273,7 +273,10 @@ settings open where it is set. Both are paid: on Haiku a clip usually costs abou
 (Settings → Describe with AI lists them), and the batch panel shows the price before you run
 many clips. The button stays lit while the clip waits for its turn or is
 being worked on. A second action asked for while one runs waits in line and starts when the one
-before it ends: everything slow runs through one queue, one clip at a time.
+before it ends: everything slow runs through one queue, one clip at a time. Press a lit button again
+to take its run back out of the line. The running job's page lists the runs that wait, each with
+**Remove**, and the strip says how many wait. Describing a marker, or every unnamed marker, while a
+job runs waits for the job too.
 
 ### Generate subtitles
 

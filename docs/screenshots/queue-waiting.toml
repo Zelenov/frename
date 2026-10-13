@@ -1,0 +1,21 @@
+# PR screenshot for #249 step 3: a "Describe with AI" job runs behind a closed batch panel, two
+# one-clip runs wait in line behind it (`--batch --ai`); the strip says "2 waiting". Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.night.city.MVI_0410.mp4"
+window = [1440, 720]
+panels = [640, 360]
+ai_retry_wait_s = 8
+close_batch_panel = true
+queue_waiting = true
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.drone.landscape.MVI_0404.mp4"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.MVI_0410.mp4"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.sunrise.MVI_0412.mp4"
