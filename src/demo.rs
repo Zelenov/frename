@@ -289,6 +289,9 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
                 steps.push(folder_workspace::Message::ShowHeldPress);
             }
         }
+        if scenario.queue_waiting {
+            steps.push(folder_workspace::Message::ShowWaitingRuns);
+        }
     }
     steps
 }

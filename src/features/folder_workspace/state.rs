@@ -418,6 +418,17 @@ impl FolderWorkspace {
                 }
                 Task::none()
             }
+            Message::ShowWaitingRuns => {
+                if self.batch.is_running() {
+                    self.show_waiting_runs();
+                    return Task::none();
+                }
+                // The job has not started yet (the clip lengths are still being read).
+                Task::future(async {
+                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                    Message::ShowWaitingRuns
+                })
+            }
             Message::ShowHeldPress => {
                 if self.batch.is_running() {
                     return self.update(Message::OpenFolderPicker);
@@ -1463,6 +1474,9 @@ impl FolderWorkspace {
         if let batch::Message::Cancel = msg {
             self.cancel_solo();
         }
+        if let batch::Message::Withdraw(action, clip) = msg {
+            return self.withdraw_run(action, clip);
+        }
         // Groups worked out in the background belong to the run whose result is shown: one that
         // comes late, after a new run started or the job was dismissed, is dropped.
         if let batch::Message::Action(batch::ActionMessage::PrepareClips(
@@ -1810,6 +1824,8 @@ impl FolderWorkspace {
         Task::batch([
             self.reopen_selected_if_closed(),
             load_comments,
+            // The marker descriptions that waited for the job go now.
+            self.send_waiting_markers(),
             self.prepare_clips_finished(),
             self.report_job_behind_closed_panel(),
         ])
@@ -5081,6 +5097,62 @@ mod tests {
         let _ = workspace.update(Message::BatchFinished);
         assert_eq!(workspace.batch().current(), Some(second), "its turn");
         assert_eq!(workspace.batch().progress().map(|p| p.total), Some(1));
+    }
+
+    /// A run that waits for its turn is listed, and pressing its button again (or Remove in the
+    /// list) takes it back: it does not start when the job ends.
+    #[test]
+    fn a_waiting_run_is_listed_and_can_be_withdrawn() {
+        let test_dir = TestDirectory::new(3);
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let first = workspace
+            .file_workspace()
+            .file()
+            .map(|f| f.id())
+            .expect("open");
+        let _ = workspace.update(Message::RunOnOpenClip(batch::Action::FixTags));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        let index = (0..3)
+            .find(|i| file_id_at(&workspace, *i) != first)
+            .expect("another row");
+        let second = file_id_at(&workspace, index);
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(index)));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::RunOnOpenClip(batch::Action::FixTags));
+        assert_eq!(
+            workspace.waiting_runs(),
+            vec![(batch::Action::FixTags, second)]
+        );
+
+        // The same button again takes the run back.
+        let _ = workspace.update(Message::RunOnOpenClip(batch::Action::FixTags));
+        assert!(workspace.waiting_runs().is_empty());
+        assert_eq!(
+            workspace.clip_action(batch::Action::FixTags, second),
+            crate::features::file_workspace::ClipAction::Idle
+        );
+
+        // Asked for again, then removed from the list: the job's end starts nothing.
+        let _ = workspace.update(Message::RunOnOpenClip(batch::Action::FixTags));
+        assert_eq!(workspace.waiting_runs().len(), 1);
+        let _ = workspace.update(Message::Batch(batch::Message::Withdraw(
+            batch::Action::FixTags,
+            second,
+        )));
+        assert!(workspace.waiting_runs().is_empty());
+        let _ = workspace.update(Message::BatchItemDone {
+            id: first,
+            result: Box::new(ItemResult::new(ItemStatus::Skipped, None)),
+        });
+        let _ = workspace.update(Message::BatchFinished);
+        assert!(!workspace.is_batch_running(), "nothing was left to start");
     }
 
     /// A run whose key and clip length are still being read waits, shows as running and holds the

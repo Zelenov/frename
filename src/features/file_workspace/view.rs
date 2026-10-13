@@ -227,7 +227,7 @@ where
             .small()
             .latched(state != ClipAction::Idle)
             .tip(tip, Position::Left)
-            .on_press_maybe((state == ClipAction::Idle).then_some(press))
+            .on_press(press)
     };
     let describe = clip_action(
         Icon::Sparkles,

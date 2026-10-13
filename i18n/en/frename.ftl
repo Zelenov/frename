@@ -188,14 +188,21 @@ batch-prepare-groups-hint = Clips that look like the same shot: duplicates, re-e
 batch-prepare-group-clips = { $count } clips
 batch-prepare-check-group = Check these clips
 batch-solo-queued = Queued: { $action }
-batch-solo-already = { $action }: already asked
 batch-solo-gave-up = Could not get ready
+batch-solo-withdrawn = Withdrawn: { $action }
+batch-solo-in-work = { $action } is in work. Cancel it from the strip or the job page
+batch-waiting-title = { $count ->
+    [one] 1 run waiting
+   *[other] { $count } runs waiting
+}
+batch-waiting-remove = Remove
+batch-indicator-waiting = { $count } waiting
 file-workspace-describe-clip = Describe this clip with AI
 file-workspace-subtitles-clip = Generate subtitles for this clip
-file-workspace-describe-clip-queued = Describe with AI: waiting for its turn
-file-workspace-describe-clip-running = Describe with AI: running
-file-workspace-subtitles-clip-queued = Generate subtitles: waiting for its turn
-file-workspace-subtitles-clip-running = Generate subtitles: running
+file-workspace-describe-clip-queued = Describe with AI: waiting for its turn. Click to withdraw
+file-workspace-describe-clip-running = Describe with AI: working on it
+file-workspace-subtitles-clip-queued = Generate subtitles: waiting for its turn. Click to withdraw
+file-workspace-subtitles-clip-running = Generate subtitles: working on it
 batch-run-again = Run again on { $count ->
     [one] { $count } file
    *[other] { $count } files

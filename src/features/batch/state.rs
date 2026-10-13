@@ -356,7 +356,11 @@ impl BatchState {
             // Cleared above, with every message that gives the wait up.
             Message::StopWaiting => {}
             Message::WaitForMarkers => self.waiting_for_markers = true,
-            Message::Run | Message::Retry | Message::OpenLog | Message::OpenBilling(_) => {}
+            Message::Run
+            | Message::Retry
+            | Message::Withdraw(..)
+            | Message::OpenLog
+            | Message::OpenBilling(_) => {}
         }
     }
 
@@ -406,6 +410,14 @@ impl BatchState {
     /// checks, or end the job when it is cancelled, stopped, or has no files left (`None`).
     pub fn begin_next(&mut self) -> Option<(FileId, Operation, Arc<AtomicBool>)> {
         let job = self.job.as_mut().filter(|job| job.running)?;
+        // A clip withdrawn from the line (`withdraw`) is passed over.
+        while job
+            .order
+            .get(job.next)
+            .is_some_and(|id| job.statuses.get(id) != Some(&ItemStatus::Pending))
+        {
+            job.next += 1;
+        }
         let Some(id) = job
             .order
             .get(job.next)
@@ -443,6 +455,19 @@ impl BatchState {
         if let Some(job) = self.job.as_ref().filter(|job| job.running) {
             job.operation.path_changed(old, new);
         }
+    }
+
+    /// Take a clip the running job has not reached out of its line: it is left alone (counted as
+    /// unchanged). False when it is not waiting in the job (done, in work, or not part of it).
+    pub fn withdraw(&mut self, id: FileId) -> bool {
+        let Some(job) = self.job.as_mut().filter(|job| job.running) else {
+            return false;
+        };
+        if job.statuses.get(&id) != Some(&ItemStatus::Pending) {
+            return false;
+        }
+        job.statuses.insert(id, ItemStatus::Skipped);
+        true
     }
 
     /// Where the file in work tells how far it is; handed to its operation.
@@ -899,7 +924,7 @@ mod tests {
     #[test]
     fn the_panel_closes_under_a_running_job_and_a_strip_shows_the_job() {
         let strip = |batch: &BatchState| {
-            super::super::job_view::indicator::<()>(batch, None, 0, ()).is_some()
+            super::super::job_view::indicator::<()>(batch, None, 0, 0, ()).is_some()
         };
         let mut batch = state();
         batch.update(Message::SetActive(true));
@@ -1129,6 +1154,31 @@ mod tests {
         assert!(!batch.is_checked(files[0]) && !batch.is_checked(files[1]));
         assert!(batch.is_checked(files[2]) && batch.is_checked(files[3]));
         assert_eq!(batch.status(files[0]), None, "the old result is gone");
+    }
+
+    #[test]
+    fn a_withdrawn_clip_is_skipped_and_the_job_moves_on_or_ends() {
+        let files = ids(3);
+        let mut batch = state();
+        batch.start(files.clone());
+        let (first, _, _) = batch.begin_next().expect("first");
+        assert!(!batch.withdraw(first), "the clip in work stays");
+        assert!(batch.withdraw(files[1]), "a waiting clip comes out");
+        assert!(!batch.withdraw(files[1]), "only once");
+        batch.finish(first, &ItemResult::new(ItemStatus::Done, None));
+        let (next, _, _) = batch.begin_next().expect("the third");
+        assert_eq!(next, files[2], "the withdrawn clip is skipped");
+        assert_eq!(batch.status(files[1]), Some(ItemStatus::Skipped));
+        batch.finish(next, &ItemResult::new(ItemStatus::Done, None));
+        assert!(batch.begin_next().is_none(), "the job ends");
+
+        // Withdrawing the last waiting clip ends the job after the one in work.
+        let mut batch = state();
+        batch.start(files.clone());
+        let (first, _, _) = batch.begin_next().expect("first");
+        assert!(batch.withdraw(files[1]) && batch.withdraw(files[2]));
+        batch.finish(first, &ItemResult::new(ItemStatus::Done, None));
+        assert!(batch.begin_next().is_none());
     }
 
     #[test]

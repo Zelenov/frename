@@ -55,10 +55,11 @@ pub fn view<'a>(
     state: &'a BatchState,
     directory: Option<&'a Directory>,
     spinner_frame: usize,
+    waiting: Vec<(Action, FileId)>,
 ) -> Element<'a, Message> {
     let body = responsive(move |size| {
         let page = match state.progress() {
-            Some(progress) => job_view::view(state, progress, directory),
+            Some(progress) => job_view::view(state, progress, directory, waiting.clone()),
             None => action_page(state, directory, spinner_frame),
         };
         match ListForm::for_width(size.width) {

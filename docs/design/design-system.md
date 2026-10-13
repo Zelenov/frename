@@ -1059,8 +1059,13 @@ their scroll position) and goes when the job ends. The batch page's button bar s
 The **job strip** is shown while a job runs and the batch panel is closed: above the toolbar of the
 file list, a divider line and a `bg.panel` block, padding 8, with the loader, the action's name
 (`strong`), "n of total files" and what it cost so far (`secondary`), a progress bar, and the file
-in work in `mono`, cut at the edge, and a `secondary` hint "Click for the panel and Cancel". A click brings
-the panel back.
+in work in `mono`, cut at the edge, and a `secondary` hint "Click for the panel and Cancel". With runs of one
+clip waiting behind the job (#249) the hint starts with "N waiting · ". A click brings the panel back.
+
+The running page lists those runs under the counters: a `strong` "N runs waiting" and one row each,
+the file name (`mono`, cut at the edge), the action's name in `secondary` and a secondary **Remove**
+button that takes the run out of the line. The two buttons in the corner of the comment box take a waiting
+run back when pressed again; their tooltip says so.
 
 **Notices** (short feedback such as "Frame saved") appear as inline status (§8.12) in their own
 slot of the video pane's controls bar (§13.3.5), never as popups: confirmations for 2 s, errors

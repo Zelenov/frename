@@ -43,8 +43,9 @@ impl FolderWorkspace {
             return Task::none();
         };
         let label = action.label();
+        // Pressed again while asked for or in work: the button takes the run back.
         if self.clip_action(action, id) != ClipAction::Idle {
-            return Self::notice(&fl!("batch-solo-already", action = label));
+            return self.withdraw_run(action, id);
         }
         let busy = self.batch.is_running()
             || self.solo.preparing.is_some()
@@ -55,6 +56,62 @@ impl FolderWorkspace {
         }
         // `advance_solo` starts it right after this message.
         Task::none()
+    }
+
+    /// Take the run of `action` on `clip` back: from the line, from the preparing, from a job that
+    /// has not reached the clip. A job already working on the clip is not stopped from here (that
+    /// would stop all its clips): a note says where to cancel it.
+    pub(super) fn withdraw_run(&mut self, action: Action, clip: FileId) -> Task<Message> {
+        let label = action.label();
+        if self
+            .solo
+            .preparing
+            .as_ref()
+            .is_some_and(|run| run.action == action && run.file == clip)
+        {
+            self.end_preparing();
+        } else if let Some(at) = self.solo.waiting.iter().position(|w| *w == (action, clip)) {
+            self.solo.waiting.remove(at);
+        } else if self.batch.job_action() == Some(action) && self.batch.withdraw(clip) {
+            // Taken out of the running job's line before its turn.
+        } else if self.batch.is_running() && self.batch.current() == Some(clip) {
+            // In work: stopping it stops the whole job, which is the strip's and the page's Cancel.
+            return Self::notice(&fl!("batch-solo-in-work", action = label));
+        } else {
+            return Task::none();
+        }
+        Self::notice(&fl!("batch-solo-withdrawn", action = label))
+    }
+
+    /// Demo: two runs on the last two clips of the list wait in line, as if asked for.
+    pub(super) fn show_waiting_runs(&mut self) {
+        let Some(dir) = self.directory.as_ref() else {
+            return;
+        };
+        let ids: Vec<FileId> = dir.files_in_order().map(|f| f.id()).collect();
+        for (action, id) in [Action::DescribeAi, Action::GenerateSubtitles]
+            .into_iter()
+            .zip(ids.iter().rev())
+        {
+            self.solo.waiting.push_back((action, *id));
+        }
+    }
+
+    /// The runs of one clip waiting for their turn, the one preparing first: for the queue list of
+    /// the job page.
+    pub fn waiting_runs(&self) -> Vec<(Action, FileId)> {
+        // A clip a rescan renewed is not listed: its row would have no name.
+        self.solo
+            .preparing
+            .iter()
+            .map(|run| (run.action, run.file))
+            .chain(self.solo.waiting.iter().copied())
+            .filter(|(_, id)| {
+                self.directory
+                    .as_ref()
+                    .is_some_and(|d| d.file_by_id(*id).is_some())
+            })
+            .collect()
     }
 
     /// Where `action` stands for `clip`.

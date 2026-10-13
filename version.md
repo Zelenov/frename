@@ -1,3 +1,7 @@
+# 0.155
+## Added
+- Press the lit sparkles or captions button again while its run waits to take it out of the line, or use **Remove** in the list of waiting runs on the running job's page. The strip says how many runs wait.
+
 # 0.154
 ## Added
 - Prepare clips (batch actions, paid services): subtitles and then the description for every checked clip in one run, with one price, one progress and a spending cap in dollars. A clip whose next step could pass the cap is not sent, and the run stops; Run again continues. Each step skips what is already done, so nothing is paid for twice, and a run that stopped remembers the clips it left and offers to check them again.
