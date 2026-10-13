@@ -15,7 +15,7 @@ members = [".", "crates/frename-core"]
 frename-core = { path = "crates/frename-core" }
 # Describing clips with Claude: frames and subtitles in, a summary and key moments out.
 # Pinned to a commit of Zelenov/clipscribe; the library with frames, without its command line.
-clipscribe = { git = "https://github.com/Zelenov/clipscribe", rev = "0d9ec92da9c349480375f730a3d41deb9d507691", default-features = false, features = ["frames"] }
+clipscribe = { git = "https://github.com/Zelenov/clipscribe", rev = "ef8d43fbb13c1056148ac9dde2a8528fc6cb1b69", default-features = false, features = ["frames"] }
 
 # GUI framework - Iced for cross-platform GUI
 iced = { version = "0.14", features = ["tokio", "image", "svg"] }
