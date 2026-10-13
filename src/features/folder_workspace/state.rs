@@ -61,6 +61,15 @@ const HISTORY_DEPTH: usize = 50;
 /// TagList uses the tag store of the open folder.
 type WorkspaceHistory = History<LoggingAppStateStore<AppDatabase>, FolderTagStore>;
 
+/// What an undo or redo step did to the open clip, for what to refresh after it.
+#[derive(Clone, Copy)]
+struct UndoKind {
+    /// It turned the video: the player reopens it.
+    turns_a_video: bool,
+    /// It only changed markers: nothing is saved or reopened.
+    markers_only: bool,
+}
+
 /// What a running job holds back.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Hold {
@@ -3047,6 +3056,7 @@ impl FolderWorkspace {
         }
         let turns_a_video = self.history.undo_turns_a_video();
         let switches_file = self.history.undo_switches_file();
+        let markers_only = self.history.undo_edits_open_video() && !turns_a_video;
         // Inner block: limits the lifetime of dir/tl borrows so we can use self after.
         let result: Result<(), UndoError> = {
             let dir = self.directory.as_mut().expect("checked above");
@@ -3059,7 +3069,10 @@ impl FolderWorkspace {
         };
         self.after_undo_redo(
             result,
-            turns_a_video,
+            UndoKind {
+                turns_a_video,
+                markers_only,
+            },
             switches_file.then(|| fl!("undo-back-on-clip")),
         )
     }
@@ -3070,6 +3083,7 @@ impl FolderWorkspace {
         }
         let turns_a_video = self.history.redo_turns_a_video();
         let switches_file = self.history.redo_switches_file();
+        let markers_only = self.history.redo_edits_open_video() && !turns_a_video;
         let result: Result<(), UndoError> = {
             let dir = self.directory.as_mut().expect("checked above");
             let tl = self.file_workspace.tag_list_mut();
@@ -3081,7 +3095,10 @@ impl FolderWorkspace {
         };
         self.after_undo_redo(
             result,
-            turns_a_video,
+            UndoKind {
+                turns_a_video,
+                markers_only,
+            },
             switches_file.then(|| fl!("redo-on-clip")),
         )
     }
@@ -3092,9 +3109,13 @@ impl FolderWorkspace {
     fn after_undo_redo(
         &mut self,
         result: Result<(), UndoError>,
-        turns_a_video: bool,
+        kind: UndoKind,
         file_notice: Option<String>,
     ) -> Task<Message> {
+        let UndoKind {
+            turns_a_video,
+            markers_only,
+        } = kind;
         self.file_workspace.sync_comment_editor();
         let comment_write = if result.is_ok() {
             self.write_markers_to_comment_now()
@@ -3109,6 +3130,9 @@ impl FolderWorkspace {
             // A turn changes no tags, name or selection, so the open file needs no refresh; one
             // would unload the video to save it while the reopen below is still opening it.
             Ok(()) if turns_a_video => self.follow_rotation(),
+            // Markers live in the workspace already: a refresh would save the open clip, which
+            // unloads the video to do so, and the player would reload (#304).
+            Ok(()) if markers_only => Task::none(),
             Ok(()) => self.refresh_after_undo_redo(),
             Err(e) => {
                 log::warn!("Undo/redo failed: {}", e);
@@ -6945,6 +6969,23 @@ mod tests {
         assert_eq!(marker_names(&workspace).len(), 1);
         let _ = workspace.update(Message::Redo);
         assert!(marker_names(&workspace).is_empty());
+    }
+
+    /// Issue #304: undoing or redoing a marker only changes the marker list. A refresh of the
+    /// open clip would save it, and saving unloads the video, which then reloads.
+    #[test]
+    fn undoing_and_redoing_a_marker_does_not_refresh_the_open_clip() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        send_marker(&mut workspace, M::Add, 1_000);
+        assert_eq!(marker_names(&workspace).len(), 1);
+        let undo = workspace.update(Message::Undo);
+        assert!(marker_names(&workspace).is_empty());
+        assert_eq!(undo.units(), 0, "undo: nothing to refresh");
+        let redo = workspace.update(Message::Redo);
+        assert_eq!(marker_names(&workspace).len(), 1);
+        assert_eq!(redo.units(), 0, "redo: nothing to refresh");
     }
 
     /// Issue #97: Enter on a saved tag changes nothing, so it is no undo step and Ctrl+Z after

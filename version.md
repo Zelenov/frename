@@ -1,3 +1,7 @@
+# 0.156
+## Fixed
+- Undoing or redoing a marker (add, delete, rename, color, range) no longer reloads the video: it keeps playing or stays paused where it was.
+
 # 0.155
 ## Added
 - Press the lit sparkles or captions button again while its run waits to take it out of the line, or use **Remove** in the list of waiting runs on the running job's page. The strip says how many runs wait.
