@@ -184,6 +184,9 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
     if scenario.more {
         steps.push(video(video::Message::ToggleMore));
     }
+    if scenario.fullscreen {
+        steps.push(folder_workspace::Message::ToggleMediaFullscreen);
+    }
     if scenario.slow_step {
         steps.push(video(video::Message::ShowSlowStep));
     }
@@ -678,6 +681,18 @@ mod tests {
                 video::Message::ToggleCueList
             ))
         ));
+    }
+
+    #[test]
+    fn fullscreen_is_asked_for_by_the_scenario() {
+        let mut full = scenario();
+        full.fullscreen = true;
+        let steps = steps(&full, false, false);
+        assert!(matches!(
+            steps.last(),
+            Some(folder_workspace::Message::ToggleMediaFullscreen)
+        ));
+        assert_eq!(super::steps(&scenario(), false, false).len(), 1);
     }
 
     #[test]

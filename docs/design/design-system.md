@@ -373,7 +373,7 @@ selected where it has one). iced 0.14 gives buttons, checkboxes and radios no ke
 | **danger-ghost** | no fill, `error` text and a 1 px `error` edge | The first step of a destructive action: *Remove…*. Clearly a button, but quieter than a filled one until confirmed (PUI "friction"; RUI "Semantics are secondary"). |
 | **danger** | `danger` fill, white SemiBold | Only inside the confirmation of a destructive action: *Remove key*. |
 | **icon** | 32×32 (toolbar) or 24×24 (row), transparent | Frequent toolbar actions with a known picture. Always a tooltip. |
-| **icon, latched** | `state.selected` fill drawn 2 px inside the box (two latched buttons side by side stay two), icon `accent.text` | A toggle that shows its state: subtitle list, marker list, fullscreen, batch mode today. |
+| **icon, latched** | `state.selected` fill drawn 2 px inside the box (two latched buttons side by side stay two), icon `accent.text`; hover and press tint the 2 px around the fill, as before the fill itself does not change | A toggle that shows its state: subtitle list, marker list, fullscreen, batch mode today. |
 
 - Height 28, padding 0×12, radius 4, text `body` (primary/danger SemiBold). Icon + text: 16 px
   icon, 6 px gap.
@@ -1233,8 +1233,8 @@ left to right, with the widths §13.9 folds by:
 - **Rotate** (64) `rotate-ccw` / `rotate-cw` (added after this spec) sit after Mark when the pane
   has room and are the first to move into **More**; they are used rarely and have their keys
   (`Ctrl`+`Alt`+`←` / `→`).
-- **Latched** (list shown, fullscreen): `state.selected` fill and the icon in `accent.text`
-  (§8.1), not only a blue glyph.
+- **Latched** (list shown, fullscreen): `state.selected` fill (inset 2 px, §8.1) and the icon in
+  `accent.text`, not only a blue glyph.
 - **Held** (`map-pin` while F2 or the button is held to draw a range): `state.pressed` fill and a
   pulsing 6 px `error` dot at its corner: recording.
 - **Play/pause** shows the action the button will do (the media exception of §8.1), and must
