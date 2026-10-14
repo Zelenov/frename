@@ -1,6 +1,6 @@
 # 0.158
 ## Fixed
-- Typing a marker's name no longer stops after the first letter: the name field kept losing its keyboard focus when "Describe N unnamed" went away as the name got its first letter.
+- Typing a marker's name no longer drops out of the field after the first letter, and the clip's comment box keeps the cursor when the starred strip or the order strip appears or goes.
 
 # 0.157
 ## Fixed

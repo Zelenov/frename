@@ -123,16 +123,14 @@ where
     // Dragging the handle up makes the comment box taller.
     let handle = HeightHandle::new(|grow| Message::CommentLayout(CommentLayout::Grow(grow)));
 
-    let content = column![]
-        .push(starred)
-        .push(grid)
-        .push(order)
-        .push(card)
-        .push(handle)
-        .push(comment_box)
-        .spacing(SPACE_XS)
-        .width(Length::Fill)
-        .height(Length::Fill);
+    let content = area(
+        starred,
+        grid.into(),
+        order,
+        card,
+        handle.into(),
+        comment_box,
+    );
 
     column![
         search,
@@ -142,6 +140,31 @@ where
             .padding(AREA_PADDING),
     ]
     .into()
+}
+
+/// The starred strip, the grid, the order strip, the card, the handle and the comment, 4 px
+/// apart. The strip and the order strip come and go; the comment box must not move with them in
+/// the column's children, or its text editor starts over and loses the keyboard focus. So the
+/// three that stay and go share one child, which is always there.
+fn area<'a>(
+    starred: Option<Element<'a, Message>>,
+    grid: Element<'a, Message>,
+    order: Option<Element<'a, Message>>,
+    card: Element<'a, Message>,
+    handle: Element<'a, Message>,
+    comment_box: Element<'a, Message>,
+) -> iced::widget::Column<'a, Message> {
+    let tags = column![]
+        .push(starred)
+        .push(grid)
+        .push(order)
+        .spacing(SPACE_XS)
+        .width(Length::Fill)
+        .height(Length::Fill);
+    column![tags, card, handle, comment_box]
+        .spacing(SPACE_XS)
+        .width(Length::Fill)
+        .height(Length::Fill)
 }
 
 /// The tag search: typing anywhere in the window types here; Enter creates the tag when the
@@ -278,6 +301,34 @@ fn comment_key_binding<M>(
         Some(Binding::Enter)
     } else {
         Binding::from_key_press(press)
+    }
+}
+
+#[cfg(test)]
+mod area_tests {
+    use super::*;
+    use iced::advanced::Widget;
+    use iced::widget::space;
+
+    /// The comment box keeps its place whatever shows above it (#303).
+    #[test]
+    fn the_comment_box_keeps_its_place_when_the_strips_come_and_go() {
+        let part = || -> Element<'static, Message> { space().into() };
+        let children = |starred: bool, order: bool| {
+            let column = area(
+                starred.then(part),
+                part(),
+                order.then(part),
+                part(),
+                part(),
+                part(),
+            );
+            Widget::<Message, _, _>::children(&column).len()
+        };
+        assert_eq!(children(true, true), 4);
+        assert_eq!(children(false, true), 4);
+        assert_eq!(children(true, false), 4);
+        assert_eq!(children(false, false), 4);
     }
 }
 
