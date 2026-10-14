@@ -158,11 +158,16 @@ pub fn view<'a>(
     let list = marker_list(markers, state, position_ms, spinner_frame);
     let describe_all =
         markers.and_then(|_| describe_all_bar(state, spinner_frame, unnamed, price_usd));
-    column![]
-        .push(in_out.map(in_out_line))
-        .push(describe_all)
-        .push(list)
-        .into()
+    // The list keeps its place in the column whatever shows above it: a child that is missing
+    // moves the ones after it, and a widget that moved starts over, so the name field open in
+    // a row would lose its focus the moment "Describe N unnamed" went away (the first letter
+    // typed into the only unnamed marker).
+    column![slot(in_out.map(in_out_line)), slot(describe_all), list].into()
+}
+
+/// `line`, or an empty element that holds its place in the column.
+fn slot<'a>(line: Option<Element<'a, Message>>) -> Element<'a, Message> {
+    line.unwrap_or_else(|| space().into())
 }
 
 /// Over the list, under the in/out points: while a run is on its way, how many markers are
@@ -733,6 +738,27 @@ mod tests {
             Some(""),
             "unnamed: labelled so it can be named"
         );
+    }
+
+    /// The name field of the open row keeps its focus only while the list keeps its place in
+    /// the widget tree: the lines above it come and go (#303).
+    #[test]
+    fn the_list_keeps_its_place_whatever_shows_above_it() {
+        let mut marker = Marker::new(1_000);
+        marker.guid = Some("a".into());
+        let markers = [marker];
+        let state = MarkersState::default();
+        let children = |in_out, unnamed| {
+            view(Some(&markers), &state, 0, in_out, 0, unnamed, None)
+                .as_widget()
+                .children()
+                .len()
+        };
+        let all = children(Some((0, 1_000)), 1);
+        assert_eq!(all, 3);
+        assert_eq!(children(None, 1), all, "no in and out points");
+        assert_eq!(children(None, 0), all, "nothing unnamed to describe");
+        assert_eq!(children(Some((0, 1_000)), 0), all);
     }
 
     #[test]

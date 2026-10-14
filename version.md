@@ -1,3 +1,7 @@
+# 0.158
+## Fixed
+- Naming the only unnamed marker no longer stops after the first letter, and the clip's comment box keeps the cursor when starred tags appear or go. (If typing into a marker still drops out of the field while the pointer is elsewhere, that is a different cause, still open.)
+
 # 0.157
 ## Fixed
 - Two toggle buttons that are both on, side by side (for example the marker list and ⋯ in the video controls), no longer merge into one blue block.
