@@ -227,14 +227,10 @@ impl<'a, M: Clone + 'a> From<IconButton<M>> for Element<'a, M> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn two_latched_buttons_side_by_side_keep_a_gap_between_their_fills() {
-        assert!(2.0 * LATCH_INSET >= SPACE_XS);
-        assert!(BAR_HEIGHT - 2.0 * LATCH_INSET > ICON_M);
-        assert!(ICON_BUTTON_SMALL - 2.0 * LATCH_INSET > ICON_MARK);
-    }
-}
+// Two latched buttons side by side keep a gap between their fills, and the fill stays larger
+// than its icon.
+const _: () = {
+    assert!(2.0 * LATCH_INSET >= SPACE_XS);
+    assert!(BAR_HEIGHT - 2.0 * LATCH_INSET > ICON_M);
+    assert!(ICON_BUTTON_SMALL - 2.0 * LATCH_INSET > ICON_MARK);
+};
