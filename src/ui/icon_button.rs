@@ -159,6 +159,27 @@ impl<'a, M: Clone + 'a> From<IconButton<M>> for Element<'a, M> {
                 .into(),
         };
         let face: Element<'a, M> = container(face).center(Length::Fill).into();
+        // Latched, the fill sits `LATCH_INSET` inside the box: neighbouring toggles that are
+        // both on keep a gap between their fills, and the buttons keep their size.
+        let face: Element<'a, M> = if b.latched && !b.overlay {
+            let disabled = b.on_press.is_none();
+            let fill = if disabled {
+                faded(SELECTED, DISABLED_ALPHA)
+            } else {
+                SELECTED
+            };
+            let inner = b.side - 2.0 * LATCH_INSET;
+            container(
+                container(face)
+                    .width(inner)
+                    .height(inner)
+                    .style(style::fill(fill)),
+            )
+            .center(Length::Fill)
+            .into()
+        } else {
+            face
+        };
         let face = match b.hold.clone() {
             Some((down, up)) => mouse_area(face)
                 .on_press(down)
@@ -203,5 +224,17 @@ impl<'a, M: Clone + 'a> From<IconButton<M>> for Element<'a, M> {
             Some((tip, position)) => tooltip::tip(body, tip, position),
             None => body,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn two_latched_buttons_side_by_side_keep_a_gap_between_their_fills() {
+        assert!(2.0 * LATCH_INSET >= SPACE_XS);
+        assert!(BAR_HEIGHT - 2.0 * LATCH_INSET > ICON_M);
+        assert!(ICON_BUTTON_SMALL - 2.0 * LATCH_INSET > ICON_MARK);
     }
 }

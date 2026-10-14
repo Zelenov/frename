@@ -62,7 +62,7 @@ impl ButtonKind {
                 clear,
             ),
             ButtonKind::Secondary => (layer(BG_RAISED), TEXT, BORDER_CONTROL),
-            ButtonKind::Ghost | ButtonKind::Icon(false) => (layer(clear), TEXT, clear),
+            ButtonKind::Ghost => (layer(clear), TEXT, clear),
             ButtonKind::DangerGhost => (
                 match status {
                     Hovered | Pressed => DANGER_TINT,
@@ -72,7 +72,10 @@ impl ButtonKind {
                 ERROR,
             ),
             ButtonKind::Link => (clear, ACCENT_TEXT, clear),
-            ButtonKind::Nav(true) | ButtonKind::Icon(true) => (SELECTED, TEXT, clear),
+            ButtonKind::Nav(true) => (SELECTED, TEXT, clear),
+            // A latched icon button draws its fill itself, a little inside its box (see
+            // `IconButton`), so two latched buttons side by side stay two; here it is as idle.
+            ButtonKind::Icon(_) => (layer(clear), TEXT, clear),
             ButtonKind::Nav(false) => (layer(clear), TEXT_SECONDARY, clear),
             ButtonKind::OverlayIcon => (
                 match status {

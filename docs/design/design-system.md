@@ -373,7 +373,7 @@ selected where it has one). iced 0.14 gives buttons, checkboxes and radios no ke
 | **danger-ghost** | no fill, `error` text and a 1 px `error` edge | The first step of a destructive action: *Remove…*. Clearly a button, but quieter than a filled one until confirmed (PUI "friction"; RUI "Semantics are secondary"). |
 | **danger** | `danger` fill, white SemiBold | Only inside the confirmation of a destructive action: *Remove key*. |
 | **icon** | 32×32 (toolbar) or 24×24 (row), transparent | Frequent toolbar actions with a known picture. Always a tooltip. |
-| **icon, latched** | `state.selected` fill, icon `accent.text` | A toggle that shows its state: subtitle list, marker list, fullscreen, batch mode today. |
+| **icon, latched** | `state.selected` fill drawn 2 px inside the box (two latched buttons side by side stay two), icon `accent.text` | A toggle that shows its state: subtitle list, marker list, fullscreen, batch mode today. |
 
 - Height 28, padding 0×12, radius 4, text `body` (primary/danger SemiBold). Icon + text: 16 px
   icon, 6 px gap.
