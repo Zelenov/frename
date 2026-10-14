@@ -23,8 +23,9 @@ pub enum ButtonKind {
     Link,
     /// A navigation item or a list row; `true` when it is the one selected.
     Nav(bool),
-    /// An icon button: transparent; `true` when it is latched on (§8.1).
-    Icon(bool),
+    /// An icon button: transparent. Latched on, `IconButton` draws the fill itself, a little
+    /// inside the box, so two latched buttons side by side stay two (§8.1).
+    Icon,
     /// An icon button over the video, where `HOVER` does not show.
     OverlayIcon,
     /// A segment of a segmented control; `true` when it is the current one (§8.4).
@@ -73,9 +74,7 @@ impl ButtonKind {
             ),
             ButtonKind::Link => (clear, ACCENT_TEXT, clear),
             ButtonKind::Nav(true) => (SELECTED, TEXT, clear),
-            // A latched icon button draws its fill itself, a little inside its box (see
-            // `IconButton`), so two latched buttons side by side stay two; here it is as idle.
-            ButtonKind::Icon(_) => (layer(clear), TEXT, clear),
+            ButtonKind::Icon => (layer(clear), TEXT, clear),
             ButtonKind::Nav(false) => (layer(clear), TEXT_SECONDARY, clear),
             ButtonKind::OverlayIcon => (
                 match status {
@@ -158,9 +157,6 @@ mod tests {
             style(ButtonKind::Secondary, Status::Active).border.width,
             LINE
         );
-        assert_eq!(
-            style(ButtonKind::Icon(false), Status::Active).border.width,
-            0.0
-        );
+        assert_eq!(style(ButtonKind::Icon, Status::Active).border.width, 0.0);
     }
 }

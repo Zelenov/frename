@@ -133,7 +133,7 @@ impl<M: Clone> IconButton<M> {
         if self.overlay {
             ButtonKind::OverlayIcon
         } else {
-            ButtonKind::Icon(self.latched)
+            ButtonKind::Icon
         }
     }
 

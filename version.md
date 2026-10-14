@@ -1,6 +1,6 @@
 # 0.157
 ## Fixed
-- Two toggle buttons that are both on side by side (the marker list and ⋯ or fullscreen in the video controls, batch mode and ⋯ in the toolbar) no longer merge into one blue block: each keeps its own fill with a gap between.
+- Two toggle buttons that are both on, side by side (for example the marker list and ⋯ in the video controls), no longer merge into one blue block.
 
 # 0.156
 ## Fixed

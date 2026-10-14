@@ -1,0 +1,14 @@
+# The same two toggles on at the narrowest video panel (#307): the fills stay two there too.
+# Not a README image; for looking at the feature (`frename --demo`).
+source = "../../tests/folder"
+open = "pick.wide.MVI_0901.mp4"
+seek = 2.0
+window = [1000, 640]
+panels = [300, 220]
+marker_list = true
+more = true
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_0901.mp4"
+markers = ["0:01 — Wide shot", "0:03 [red] — Boat leaves"]
