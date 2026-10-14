@@ -1,6 +1,6 @@
 # 0.158
 ## Fixed
-- Typing a marker's name no longer drops out of the field after the first letter, and the clip's comment box keeps the cursor when the starred strip or the order strip appears or goes.
+- Naming the only unnamed marker no longer stops after the first letter, and the clip's comment box keeps the cursor when starred tags appear or go. (If typing into a marker still drops out of the field while the pointer is elsewhere, that is a different cause, still open.)
 
 # 0.157
 ## Fixed
