@@ -1,3 +1,7 @@
+# 0.158
+## Fixed
+- Typing a marker's name no longer stops after the first letter: the name field kept losing its keyboard focus when "Describe N unnamed" went away as the name got its first letter.
+
 # 0.157
 ## Fixed
 - Two toggle buttons that are both on, side by side (for example the marker list and ⋯ in the video controls), no longer merge into one blue block.
