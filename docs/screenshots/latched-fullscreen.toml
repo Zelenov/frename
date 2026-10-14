@@ -1,0 +1,16 @@
+# Fullscreen with the marker list and ⋯ on (#307): the three latched buttons at the right end of
+# the controls bar keep their own fills. Not a README image; for looking at the feature
+# (`frename --demo`).
+source = "../../tests/folder"
+open = "pick.wide.MVI_0901.mp4"
+seek = 2.0
+window = [1000, 640]
+panels = [444, 380]
+marker_list = true
+more = true
+fullscreen = true
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_0901.mp4"
+markers = ["0:01 — Wide shot", "0:03 [red] — Boat leaves"]

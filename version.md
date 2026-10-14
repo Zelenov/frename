@@ -1,3 +1,7 @@
+# 0.157
+## Fixed
+- Two toggle buttons that are both on, side by side (for example the marker list and ⋯ in the video controls), no longer merge into one blue block.
+
 # 0.156
 ## Fixed
 - Undoing or redoing a marker (add, delete, rename, color, range) no longer reloads the video: it keeps playing or stays paused where it was.

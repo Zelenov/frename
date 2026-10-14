@@ -106,6 +106,10 @@ pub struct DemoScenario {
     /// Open the recent folders dropdown (the ▾ next to the open button).
     #[serde(default)]
     pub recent_menu: bool,
+    /// Show the open video in fullscreen (demo only: the screenshot of the video controls over the
+    /// picture, #307).
+    #[serde(default)]
+    pub fullscreen: bool,
     /// Open the toolbar's More menu (demo only: the screenshot of a narrow file list, #228).
     #[serde(default)]
     pub toolbar_more: bool,

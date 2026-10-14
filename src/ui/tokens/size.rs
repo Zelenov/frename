@@ -13,6 +13,9 @@ pub const BAR_HEIGHT: f32 = 32.0;
 pub const ICON_BUTTON_SMALL: f32 = 24.0;
 /// Around a 16-px icon in a button as high as a field (the file filter).
 pub const CONTROL_ICON_INSET: f32 = (CONTROL_HEIGHT - ICON_M) / 2.0;
+/// How far a latched icon button's fill sits inside its box on each side, so two latched
+/// buttons side by side show a gap (2 × this) between their fills.
+pub const LATCH_INSET: f32 = SPACE_XXS;
 /// The button bar at the bottom of a window or titled panel.
 pub const BUTTON_BAR_HEIGHT: f32 = 56.0;
 /// A navigation item, a one-line list row.
