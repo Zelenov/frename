@@ -535,7 +535,7 @@ mod tests {
     }
 
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
-    const NOT_UI_TEXT: [(&str, &str); 93] = [
+    const NOT_UI_TEXT: [(&str, &str); 95] = [
         ("explorer", "program name"),
         ("open", "program name (macOS)"),
         ("xdg-open", "program name"),
