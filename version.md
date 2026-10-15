@@ -1,3 +1,7 @@
+# 0.159
+## Fixed
+- Generate subtitles: the file's bar no longer sits at 0 % for minutes and jumps to 100 %. It moves through extracting the audio, uploading and transcribing (an estimate with the time left, which holds back until Soniox is done) and saving, the label names the step, and the batch total moves with it.
+
 # 0.158
 ## Fixed
 - Naming the only unnamed marker no longer stops after the first letter, and the clip's comment box keeps the cursor when starred tags appear or go. (If typing into a marker still drops out of the field while the pointer is elsewhere, that is a different cause, still open.)
