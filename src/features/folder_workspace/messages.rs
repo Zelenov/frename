@@ -80,6 +80,9 @@ pub enum Message {
     /// Demo (a scenario's `ai_retry_wait_s`): the batch job on the checked files, its first file
     /// waiting this many seconds before its request is sent again; nothing is sent.
     ShowBatchRetry(u64),
+    /// Demo (a scenario's `subtitles_stage`): the batch job on the checked files, its first file
+    /// in this stage of "Generate subtitles"; nothing is sent.
+    ShowSubtitleStage(String),
     /// Demo (a scenario's `press_held`): press Open folder once the job runs, so the note that
     /// says why it is held shows.
     ShowHeldPress,

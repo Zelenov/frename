@@ -1,0 +1,17 @@
+# PR screenshot for #316: the batch job's first clip is 70 % through uploading its audio for
+# subtitles; the bar and the label are what "Generate subtitles" sets (`subtitles_stage`). A demo
+# cannot start that job (it needs a Soniox key saved in the credential store), so it runs with
+# `--batch --ai`, the job a demo can start, and sets the same bar and label on it. Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.night.city.MVI_0410.mp4"
+window = [1440, 720]
+panels = [640, 360]
+subtitles_stage = "uploading"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.drone.landscape.MVI_0404.mp4"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.MVI_0410.mp4"

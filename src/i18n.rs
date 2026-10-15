@@ -579,6 +579,8 @@ mod tests {
             "English-only log label, see LOG_LABEL",
         ),
         ("SONIOX_API_KEY", "environment variable name"),
+        ("extracting", "a demo scenario's `subtitles_stage` value, never shown"),
+        ("uploading", "a demo scenario's `subtitles_stage` value, never shown"),
         (
             "frename-{}",
             "an internal reference sent to Soniox, never shown",

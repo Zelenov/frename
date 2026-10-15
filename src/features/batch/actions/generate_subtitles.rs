@@ -1046,6 +1046,17 @@ fn show(progress: &ItemProgress, p: &sonisub_progress::Progress) {
     progress.set(p.overall, stage_label(p.stage, p.fraction, p.remaining));
 }
 
+/// Demo: `progress` as it is part-way through `stage` ("extracting", "uploading", "transcribing").
+pub fn show_stage(progress: &ItemProgress, stage: &str) {
+    let (stage, fraction, remaining) = match stage {
+        "extracting" => (Stage::Extracting, 0.4, None),
+        "uploading" => (Stage::Uploading, 0.7, None),
+        _ => (Stage::Transcribing, 0.4, Some(Duration::from_secs(75))),
+    };
+    let overall = stage.start() + stage.weight() * fraction;
+    progress.set(overall, stage_label(stage, Some(fraction), remaining));
+}
+
 /// What the file is doing: the stage with its own percent, and while Soniox transcribes, the time
 /// it is estimated to need still.
 fn stage_label(stage: Stage, fraction: Option<f32>, remaining: Option<Duration>) -> String {

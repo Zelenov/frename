@@ -427,6 +427,27 @@ impl FolderWorkspace {
                 }
                 Task::none()
             }
+            Message::ShowSubtitleStage(stage) => {
+                let files: Vec<FileId> = self.directory.as_ref().map_or_else(Vec::new, |dir| {
+                    dir.all_files()
+                        .filter(|f| self.batch.is_checked(f.id()))
+                        .map(|f| f.id())
+                        .collect()
+                });
+                if !self.batch.start(files) {
+                    // The clip lengths are still being read: try again shortly.
+                    return Task::future(async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                        Message::ShowSubtitleStage(stage)
+                    });
+                }
+                if self.batch.begin_next().is_some() {
+                    if let Some(progress) = self.batch.item_progress() {
+                        batch::generate_subtitles::show_stage(&progress, &stage);
+                    }
+                }
+                Task::none()
+            }
             Message::ShowWaitingRuns => {
                 if self.batch.is_running() {
                     self.show_waiting_runs();
