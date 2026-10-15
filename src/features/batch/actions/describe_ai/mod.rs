@@ -794,6 +794,10 @@ pub fn run_clip(
                 ..ItemResult::failed(reason)
             }
         }
+        // frename sends no instructions, so this cannot happen; fail the item with the library's text.
+        Err(e @ describe::Error::InstructionsTooLong { .. }) => {
+            return ItemResult::failed(e.to_string());
+        }
     };
     progress.set(0.98, fl!("batch-ai-progress-saving"));
     let mut new_block = match frename_core::marker_storage() {
@@ -1000,6 +1004,7 @@ impl Request {
                 language,
                 frame_sampling: FrameSampling::KeyFrames,
                 moments,
+                instructions: None,
             },
         })
     }
@@ -1018,6 +1023,7 @@ pub fn failure_reason(error: &describe::Error, path: &Path) -> String {
         describe::Error::Ai(e) => e.reason(),
         describe::Error::BadAnswer { reason, .. } => reason.clone(),
         describe::Error::Cancelled => String::new(),
+        describe::Error::InstructionsTooLong { .. } => error.to_string(),
     }
 }
 
@@ -1041,6 +1047,7 @@ mod tests {
             model: describe::MODELS[0],
             language: Default::default(),
             frame_sampling: Default::default(),
+            instructions: None,
             moments: Default::default(),
         };
         assert!(
