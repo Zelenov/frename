@@ -99,6 +99,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 22,
         sql: schema::M22_RECENT_FOLDERS,
     },
+    Migration {
+        version: 23,
+        sql: schema::M23_SUBTITLE_SIZE,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
@@ -184,7 +188,7 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 22);
+        assert_eq!(current_version(&conn).expect("version"), 23);
     }
 
     #[test]

@@ -8,7 +8,7 @@
 
 use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::ai::{MomentsMode, SummaryLanguage};
-use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage};
+use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage, SubtitleSize};
 
 use super::state::{KeySection, SettingsState};
 use super::{KeyMessage, Message, Page};
@@ -33,6 +33,7 @@ pub enum Control {
     UiLanguage,
     MonochromeTags,
     AutoplayVideo,
+    SubtitleSize,
     SpaceAfterTags,
     /// The offer to rename the files to the tag spacing just chosen.
     RespaceTags,
@@ -174,6 +175,7 @@ pub fn controls(state: &SettingsState, batch_running: bool) -> Vec<Control> {
             Control::UiLanguage,
             Control::MonochromeTags,
             Control::AutoplayVideo,
+            Control::SubtitleSize,
         ]),
         Page::Saving => {
             controls.push(Control::SpaceAfterTags);
@@ -319,6 +321,9 @@ pub fn press(state: &SettingsState, control: &Control, press: Press) -> Option<M
         ),
         Control::MonochromeTags => Message::SetMonochromeTags(!settings.monochrome_tags),
         Control::AutoplayVideo => Message::SetAutoplayVideo(!settings.autoplay_video),
+        Control::SubtitleSize => {
+            Message::SetSubtitleSize(*next_of(&SubtitleSize::ALL, &settings.subtitle_size))
+        }
         Control::SpaceAfterTags => Message::SetSpaceAfterTags(!settings.space_after_tags),
         Control::RespaceTags => Message::OpenBatchAction(Operation::RespaceTags),
         Control::CommentStorage(storage) => Message::SetCommentStorage(*storage),
@@ -435,6 +440,7 @@ mod tests {
                 Control::UiLanguage,
                 Control::MonochromeTags,
                 Control::AutoplayVideo,
+                Control::SubtitleSize,
                 Control::Close
             ]
         );
@@ -604,6 +610,11 @@ mod tests {
         assert!(matches!(
             press(&state, &Control::UiLanguage, Press::Space),
             Some(Message::SetUiLanguage(language)) if language.is_empty()
+        ));
+        state.apply_for_tests(Message::SetSubtitleSize(SubtitleSize::ExtraLarge));
+        assert!(matches!(
+            press(&state, &Control::SubtitleSize, Press::Space),
+            Some(Message::SetSubtitleSize(SubtitleSize::Small))
         ));
         let last = *SummaryLanguage::ALL.last().unwrap();
         state.apply_for_tests(Message::SetSummaryLanguage(last));

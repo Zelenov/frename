@@ -4,7 +4,7 @@
 use clipscribe::Model;
 use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::ai::{MomentsMode, SummaryLanguage};
-use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage};
+use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage, SubtitleSize};
 use std::borrow::Borrow;
 
 use iced::widget::{column, row, PickList, Row};
@@ -109,6 +109,18 @@ fn interface(state: &SettingsState) -> Element<'_, Message> {
                         .on_toggle(Message::SetAutoplayVideo),
                     focused(state, Control::AutoplayVideo),
                 )]),
+            ),
+            layout::setting_row(
+                fl!("settings-subtitle-size"),
+                focusable_dropdown(
+                    form::dropdown(
+                        SubtitleSize::ALL.map(SubtitleSizeOption),
+                        Some(SubtitleSizeOption(settings.subtitle_size)),
+                        |option| Message::SetSubtitleSize(option.0),
+                    )
+                    .width(FIELD_WIDTH_M),
+                    focused(state, Control::SubtitleSize),
+                ),
             ),
         ],
     )
@@ -741,6 +753,22 @@ impl std::fmt::Display for LanguageOption {
         } else {
             write!(f, "{}", crate::i18n::language_name(&self.0))
         }
+    }
+}
+
+/// One item of the subtitle size pick list, by its translated name.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct SubtitleSizeOption(SubtitleSize);
+
+impl std::fmt::Display for SubtitleSizeOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self.0 {
+            SubtitleSize::Small => fl!("settings-subtitle-size-small"),
+            SubtitleSize::Medium => fl!("settings-subtitle-size-medium"),
+            SubtitleSize::Large => fl!("settings-subtitle-size-large"),
+            SubtitleSize::ExtraLarge => fl!("settings-subtitle-size-extra-large"),
+        };
+        write!(f, "{name}")
     }
 }
 

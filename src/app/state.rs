@@ -666,7 +666,8 @@ impl FrenameApp {
             }
             Message::Settings(msg) => {
                 let task = self.settings.update(msg.clone()).map(Message::Settings);
-                // Tag colors are read from the settings at view time; autoplay lives in the player;
+                // Tag colors are read from the settings at view time; autoplay and the subtitle size
+                // live in the player;
                 // comment and in/out storage live in core, which saves them. Moving what the
                 // files already have is a batch action in the main window.
                 let effect = match msg {
@@ -705,6 +706,13 @@ impl FrenameApp {
                         Task::done(Message::FolderWorkspace(
                             folder_workspace::Message::MediaViewer(media_viewer::Message::Video(
                                 media_viewer_video::Message::SetAutoplay(autoplay),
+                            )),
+                        ))
+                    }
+                    settings::Message::SetSubtitleSize(size) => {
+                        Task::done(Message::FolderWorkspace(
+                            folder_workspace::Message::MediaViewer(media_viewer::Message::Video(
+                                media_viewer_video::Message::SetSubtitleSize(size),
                             )),
                         ))
                     }

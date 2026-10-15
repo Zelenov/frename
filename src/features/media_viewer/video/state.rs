@@ -20,7 +20,8 @@ use crate::ui::tokens::{SPACE_XXS, SPINNER_TICK};
 use frename_core::playback::{self, OpenAt};
 use frename_core::FileId;
 use frename_core::{
-    load_subtitles, AppDatabase, AppStateStore, FileTagger, Rotation, RotationError, Subtitles,
+    load_subtitles, AppDatabase, AppStateStore, FileTagger, Rotation, RotationError, SubtitleSize,
+    Subtitles,
 };
 
 /// How long a note over the picture stays.
@@ -140,6 +141,8 @@ pub struct VideoPlayerState {
     controls: VideoControlsState,
     /// Start playback as soon as a video is opened; otherwise it opens paused.
     autoplay: bool,
+    /// How large the subtitles are drawn.
+    subtitle_size: SubtitleSize,
     /// Whether playback is paused, as last requested. Kept here because
     /// `Video::paused` reads the pipeline's current state, which a flushing seek drops
     /// to `Paused` until preroll completes: sampled then, it switched the playback tick
@@ -238,16 +241,15 @@ pub struct VideoPlayerState {
 
 impl Default for VideoPlayerState {
     fn default() -> Self {
-        let autoplay = AppDatabase::new()
-            .get_app_settings()
-            .unwrap_or_default()
-            .autoplay_video;
+        let settings = AppDatabase::new().get_app_settings().unwrap_or_default();
+        let autoplay = settings.autoplay_video;
         Self {
             current_video: None,
             loading: false,
             load_failed: false,
             controls: VideoControlsState::default(),
             autoplay,
+            subtitle_size: settings.subtitle_size,
             paused: !autoplay,
             current_path: None,
             subtitles: None,
@@ -952,6 +954,10 @@ impl VideoPlayerState {
                 self.autoplay = autoplay;
                 Task::none()
             }
+            Message::SetSubtitleSize(size) => {
+                self.subtitle_size = size;
+                Task::none()
+            }
             Message::ToggleMore => {
                 self.more_open = !self.more_open;
                 Task::none()
@@ -991,6 +997,10 @@ impl VideoPlayerState {
     }
     pub fn subtitles(&self) -> Option<&Subtitles> {
         self.subtitles.as_deref()
+    }
+    /// How large the subtitles are drawn.
+    pub fn subtitle_size(&self) -> SubtitleSize {
+        self.subtitle_size
     }
     /// Where the subtitle list is scrolled to.
     pub fn cue_scroll_y(&self) -> f32 {

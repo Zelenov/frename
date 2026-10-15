@@ -96,6 +96,41 @@ impl CueLength {
     }
 }
 
+/// How large subtitles are drawn over and under the video.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SubtitleSize {
+    Small,
+    #[default]
+    Medium,
+    Large,
+    ExtraLarge,
+}
+
+impl SubtitleSize {
+    /// Every size, smallest first.
+    pub const ALL: [Self; 4] = [Self::Small, Self::Medium, Self::Large, Self::ExtraLarge];
+
+    /// Stable name for persisting the setting.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Small => "small",
+            Self::Medium => "medium",
+            Self::Large => "large",
+            Self::ExtraLarge => "extra_large",
+        }
+    }
+
+    /// Parse a persisted name; unknown names fall back to the default.
+    pub fn from_name(name: &str) -> Self {
+        match name {
+            "small" => Self::Small,
+            "large" => Self::Large,
+            "extra_large" => Self::ExtraLarge,
+            _ => Self::Medium,
+        }
+    }
+}
+
 /// Language hints checked until the user changes them.
 pub const DEFAULT_SUBTITLE_LANGUAGES: [&str; 2] = ["en", "ru"];
 
