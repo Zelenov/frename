@@ -19,6 +19,7 @@ use iced::Element;
 use sonisub::batch::{self as plan_batch, Action as Planned, Totals};
 use sonisub::cancel::CancelToken;
 use sonisub::job::{self, Outcome};
+use sonisub::progress::{self as sonisub_progress, Stage};
 use sonisub::soniox::{self, api_error, Client};
 use sonisub::{audio, languages, srt, usage};
 
@@ -360,6 +361,7 @@ impl Options {
                 usd_per_hour: price.usd_per_hour(),
                 uploaded_ms: AtomicU64::new(0),
                 failed_deletes: AtomicUsize::new(0),
+                soniox: None,
             },
         ))))
     }
@@ -851,6 +853,7 @@ impl Run {
             usd_per_hour,
             uploaded_ms: AtomicU64::new(0),
             failed_deletes: AtomicUsize::new(0),
+            soniox: None,
         }))
     }
 
@@ -912,6 +915,8 @@ pub struct SubtitleJob {
     uploaded_ms: AtomicU64,
     /// Uploads that could not be deleted on Soniox afterwards.
     failed_deletes: AtomicUsize,
+    /// A Soniox (API address, key) to use instead of the real one and the saved key; set by tests.
+    soniox: Option<(String, String)>,
 }
 
 impl std::fmt::Debug for SubtitleJob {
@@ -994,10 +999,18 @@ pub fn run(job: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress)
     if cancel.load(Ordering::Relaxed) {
         return ItemResult::new(ItemStatus::Pending, None);
     }
-    progress.set(0.0, fl!("batch-subtitles-progress-transcribing"));
+    progress.set(0.0, fl!("batch-subtitles-progress-extracting-unknown"));
     let token = CancelToken::new();
+    // sonisub tells from its own threads; the file's bar is moved from this one.
+    let latest: Arc<Mutex<Option<sonisub_progress::Progress>>> = Arc::default();
+    let sink = latest.clone();
     let options = job::Options {
         cancel: token.clone(),
+        on_progress: Some(sonisub_progress::Callback::new(move |p| {
+            if let Ok(mut latest) = sink.lock() {
+                *latest = Some(p);
+            }
+        })),
         ..job.options.clone()
     };
     let finished = AtomicBool::new(false);
@@ -1008,6 +1021,10 @@ pub fn run(job: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress)
                 if cancel.load(Ordering::Relaxed) {
                     token.cancel();
                     return;
+                }
+                let news = latest.lock().ok().and_then(|mut latest| latest.take());
+                if let Some(news) = news {
+                    show(progress, &news);
                 }
                 std::thread::sleep(CANCEL_POLL);
             }
@@ -1024,6 +1041,46 @@ pub fn run(job: &Run, path: &Path, cancel: &AtomicBool, progress: &ItemProgress)
     item_result(&path, result, token.is_cancelled())
 }
 
+/// Moves the file's bar to sonisub's report.
+fn show(progress: &ItemProgress, p: &sonisub_progress::Progress) {
+    progress.set(p.overall, stage_label(p.stage, p.fraction, p.remaining));
+}
+
+/// Demo: `progress` as it is part-way through `stage` ("extracting", "uploading", "transcribing").
+pub fn show_stage(progress: &ItemProgress, stage: &str) {
+    let (stage, fraction, remaining) = match stage {
+        "extracting" => (Stage::Extracting, 0.4, None),
+        "uploading" => (Stage::Uploading, 0.7, None),
+        _ => (Stage::Transcribing, 0.4, Some(Duration::from_secs(75))),
+    };
+    let overall = stage.start() + stage.weight() * fraction;
+    progress.set(overall, stage_label(stage, Some(fraction), remaining));
+}
+
+/// What the file is doing: the stage with its own percent, and while Soniox transcribes, the time
+/// it is estimated to need still.
+fn stage_label(stage: Stage, fraction: Option<f32>, remaining: Option<Duration>) -> String {
+    let percent = fraction.map(|f| (f * 100.0).round() as i64);
+    match (stage, percent) {
+        (Stage::Extracting, Some(percent)) => {
+            fl!("batch-subtitles-progress-extracting", percent = percent)
+        }
+        (Stage::Extracting, None) => fl!("batch-subtitles-progress-extracting-unknown"),
+        (Stage::Uploading, Some(percent)) => {
+            fl!("batch-subtitles-progress-uploading", percent = percent)
+        }
+        (Stage::Uploading, None) => fl!("batch-subtitles-progress-uploading-unknown"),
+        (Stage::Transcribing, _) => match remaining {
+            Some(left) => fl!(
+                "batch-subtitles-progress-transcribing-left",
+                time = duration_text(left.as_secs_f64().max(1.0))
+            ),
+            None => fl!("batch-subtitles-progress-transcribing"),
+        },
+        _ => fl!("batch-subtitles-progress-saving"),
+    }
+}
+
 /// One file through sonisub. A saved transcript next to it needs no key.
 fn transcribe(
     job: &SubtitleJob,
@@ -1032,10 +1089,14 @@ fn transcribe(
     token: &CancelToken,
 ) -> anyhow::Result<Outcome> {
     let output = subtitle_path(path);
-    let Some(key) = soniox_key() else {
-        return job::process(path, &output, options, None);
+    let (base, key) = match &job.soniox {
+        Some(soniox) => soniox.clone(),
+        None => match soniox_key() {
+            Some(key) => (soniox::DEFAULT_BASE.to_string(), key),
+            None => return job::process(path, &output, options, None),
+        },
     };
-    let client = Client::new(soniox::DEFAULT_BASE, &key)?.with_cancel(token.clone());
+    let client = Client::new(&base, &key)?.with_cancel(token.clone());
     let result = job::process(path, &output, options, Some(&client));
     job.failed_deletes
         .fetch_add(client.failed_deletes(), Ordering::Relaxed);
@@ -1218,6 +1279,7 @@ mod tests {
             usd_per_hour: 0.12,
             uploaded_ms: AtomicU64::new(0),
             failed_deletes: AtomicUsize::new(0),
+            soniox: None,
         }))
     }
 
@@ -1581,6 +1643,7 @@ mod tests {
             usd_per_hour: 0.12,
             uploaded_ms: AtomicU64::new(0),
             failed_deletes: AtomicUsize::new(0),
+            soniox: None,
         }));
         let result = run_now(&job, &video);
         assert_eq!(result.status, ItemStatus::Done, "{:?}", result.reason);
@@ -1602,6 +1665,7 @@ mod tests {
             usd_per_hour: 0.12,
             uploaded_ms: AtomicU64::new(0),
             failed_deletes: AtomicUsize::new(0),
+            soniox: None,
         }));
         assert_eq!(run_now(&job, &only).status, ItemStatus::Done);
         assert!(!subtitle_path(&only).exists());
@@ -1980,5 +2044,215 @@ mod tests {
             "{:?}",
             job.report()
         );
+    }
+
+    /// A scripted Soniox on a local port: uploads take `upload_ms`, the job stays "processing" for
+    /// `polls` status checks.
+    struct MockSoniox {
+        url: String,
+    }
+
+    impl MockSoniox {
+        fn start(upload_ms: u64, polls: usize) -> Self {
+            use std::io::{BufRead, BufReader, Read, Write};
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+            let url = format!("http://{}/v1", listener.local_addr().expect("addr"));
+            let checks = Arc::new(AtomicUsize::new(0));
+            std::thread::spawn(move || {
+                for stream in listener.incoming().flatten() {
+                    let checks = checks.clone();
+                    std::thread::spawn(move || {
+                        let mut reader = BufReader::new(stream.try_clone().expect("clone"));
+                        let mut line = String::new();
+                        if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                            return;
+                        }
+                        let mut parts = line.split_whitespace();
+                        let method = parts.next().unwrap_or_default().to_string();
+                        let path = parts.next().unwrap_or_default().to_string();
+                        let (mut length, mut chunked) = (0usize, false);
+                        loop {
+                            let mut header = String::new();
+                            reader.read_line(&mut header).unwrap_or(0);
+                            let header = header.trim_end().to_ascii_lowercase();
+                            if header.is_empty() {
+                                break;
+                            }
+                            if let Some(v) = header.strip_prefix("content-length:") {
+                                length = v.trim().parse().unwrap_or(0);
+                            }
+                            chunked |= header.starts_with("transfer-encoding:")
+                                && header.contains("chunked");
+                        }
+                        if chunked {
+                            loop {
+                                let mut size = String::new();
+                                reader.read_line(&mut size).unwrap_or(0);
+                                let n = usize::from_str_radix(size.trim(), 16).unwrap_or(0);
+                                let mut chunk = vec![0; n + 2];
+                                if reader.read_exact(&mut chunk).is_err() || n == 0 {
+                                    break;
+                                }
+                            }
+                        } else {
+                            let mut body = vec![0; length];
+                            let _ = reader.read_exact(&mut body);
+                        }
+                        let (status, body) = match (method.as_str(), path.as_str()) {
+                            ("POST", "/v1/files") => {
+                                std::thread::sleep(Duration::from_millis(upload_ms));
+                                (201, r#"{"id": "f1"}"#.to_string())
+                            }
+                            ("POST", "/v1/transcriptions") => {
+                                (201, r#"{"id": "t1", "status": "queued"}"#.to_string())
+                            }
+                            ("GET", "/v1/transcriptions/t1") => {
+                                let done = checks.fetch_add(1, Ordering::Relaxed) >= polls;
+                                let status = if done { "completed" } else { "processing" };
+                                (200, format!(r#"{{"id": "t1", "status": "{status}"}}"#))
+                            }
+                            ("GET", "/v1/transcriptions/t1/transcript") => {
+                                (200, TRANSCRIPT.to_string())
+                            }
+                            ("DELETE", _) => (204, String::new()),
+                            _ => (404, "{}".to_string()),
+                        };
+                        let mut stream = stream;
+                        let _ = write!(
+                            stream,
+                            "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                            body.len()
+                        );
+                    });
+                }
+            });
+            Self { url }
+        }
+    }
+
+    /// A job against `mock`, polling every 100 ms.
+    fn job_against(mock: &MockSoniox) -> Run {
+        Run(Arc::new(SubtitleJob {
+            options: job::Options {
+                poll: Duration::from_millis(100),
+                ..job::Options::default()
+            },
+            excluded: Mutex::new(HashMap::new()),
+            usd_per_hour: 0.12,
+            uploaded_ms: AtomicU64::new(0),
+            failed_deletes: AtomicUsize::new(0),
+            soniox: Some((mock.url.clone(), "test-key".to_string())),
+        }))
+    }
+
+    /// Runs the file and looks at its bar every few milliseconds. `stop_at` raises the batch's
+    /// cancel flag the first time the label starts with it.
+    fn watch_run(
+        job: &Run,
+        video: &Path,
+        stop_at: Option<&str>,
+    ) -> (ItemResult, Vec<(f32, String)>) {
+        let progress = ItemProgress::default();
+        let cancel = AtomicBool::new(false);
+        let done = AtomicBool::new(false);
+        let mut seen: Vec<(f32, String)> = Vec::new();
+        let result = std::thread::scope(|scope| {
+            let worker = scope.spawn(|| {
+                let result = run(job, video, &cancel, &progress);
+                done.store(true, Ordering::Relaxed);
+                result
+            });
+            while !done.load(Ordering::Relaxed) {
+                let now = progress.now();
+                if stop_at.is_some_and(|label| now.1.starts_with(label)) {
+                    cancel.store(true, Ordering::Relaxed);
+                }
+                if seen.last() != Some(&now) {
+                    seen.push(now);
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            worker.join().expect("the file's work does not panic")
+        });
+        (result, seen)
+    }
+
+    #[test]
+    fn the_bar_moves_through_the_stages_and_never_sits_at_zero() {
+        let folder = Folder::new("progress");
+        let video = folder.video("clip.mp4");
+        let mock = MockSoniox::start(300, 6);
+
+        let (result, seen) = watch_run(&job_against(&mock), &video, None);
+
+        assert_eq!(result.status, ItemStatus::Done, "{:?}", result.reason);
+        let fractions: Vec<f32> = seen.iter().map(|(f, _)| *f).collect();
+        assert!(
+            fractions.windows(2).all(|w| w[0] <= w[1]),
+            "only forward: {seen:?}"
+        );
+        // Saving takes a few milliseconds: the bar is not looked at in time to catch it.
+        for stage in ["extracting audio", "uploading", "transcribing"] {
+            assert!(
+                seen.iter().any(|(_, label)| label.starts_with(stage)),
+                "no `{stage}` in {seen:?}"
+            );
+        }
+        assert!(
+            seen.iter().any(|(f, _)| (0.2..0.9).contains(f)),
+            "the bar was somewhere in the middle: {seen:?}"
+        );
+        assert!(
+            seen.iter()
+                .any(|(_, label)| label.starts_with("uploading") && label.contains('%')),
+            "a stage with a fraction says it: {seen:?}"
+        );
+        assert!(
+            seen.iter().any(|(_, label)| label.contains("left")),
+            "the estimate says the time left: {seen:?}"
+        );
+        assert!(subtitle_path(&video).exists());
+    }
+
+    #[test]
+    fn cancelling_in_each_stage_leaves_the_file_not_reached() {
+        for stage in ["extracting audio", "uploading", "transcribing"] {
+            let folder = Folder::new(&format!("cancel-{}", stage.replace(' ', "-")));
+            let video = folder.video("clip.mp4");
+            let mock = MockSoniox::start(800, 1000);
+
+            let (result, seen) = watch_run(&job_against(&mock), &video, Some(stage));
+
+            assert_eq!(result.status, ItemStatus::Pending, "{stage}: {seen:?}");
+            assert!(result.reason.is_none(), "{stage}: {:?}", result.reason);
+            assert!(!subtitle_path(&video).exists(), "{stage}");
+        }
+    }
+
+    #[test]
+    fn what_a_report_says_on_the_bar() {
+        let left = Some(Duration::from_secs(75));
+        assert_eq!(
+            stage_label(Stage::Extracting, Some(0.4), None),
+            "extracting audio 40 %"
+        );
+        assert_eq!(
+            stage_label(Stage::Extracting, None, None),
+            "extracting audio"
+        );
+        assert_eq!(
+            stage_label(Stage::Uploading, Some(0.7), None),
+            "uploading 70 %"
+        );
+        assert_eq!(
+            stage_label(Stage::Transcribing, Some(0.5), left),
+            "transcribing… about 1 min left"
+        );
+        assert_eq!(
+            stage_label(Stage::Transcribing, Some(0.95), None),
+            "transcribing…"
+        );
+        assert_eq!(stage_label(Stage::Downloading, Some(0.0), None), "saving");
+        assert_eq!(stage_label(Stage::Writing, Some(1.0), None), "saving");
     }
 }

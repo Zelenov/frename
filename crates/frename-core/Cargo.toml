@@ -24,5 +24,5 @@ toml = "1"
 # the API key in the OS credential store.
 clipscribe = { git = "https://github.com/Zelenov/clipscribe", rev = "b2328ba80524eb65b2dcbf59179b3a1ca1d0b141", default-features = false }
 # Reading a Premiere Pro transcript back as subtitles (`.premiere.json`, #219); same version as the root crate.
-sonisub = { version = "0.4", default-features = false }
+sonisub = { version = "0.5", default-features = false }
 keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service", "crypto-rust", "vendored"] }

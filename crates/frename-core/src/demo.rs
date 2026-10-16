@@ -62,6 +62,10 @@ pub struct DemoScenario {
     /// that waits this many seconds (rate limit) before it is sent again, without sending one.
     #[serde(default)]
     pub ai_retry_wait_s: Option<u64>,
+    /// In batch mode, show the running "Generate subtitles" job on its first file in this stage
+    /// ("extracting", "uploading" or "transcribing"), without sending anything to Soniox.
+    #[serde(default)]
+    pub subtitles_stage: Option<String>,
     /// With `ai_retry_wait_s`: close the batch panel, so the job runs behind it and the
     /// strip over the file list's toolbar shows it (#249).
     #[serde(default)]
@@ -445,6 +449,19 @@ name = "pick.a.mp4"
         let text = MINIMAL.replace("[[files]]", "close_batch_panel = true\n[[files]]");
         assert!(DemoScenario::parse(&text).unwrap().close_batch_panel);
         assert!(!DemoScenario::parse(MINIMAL).unwrap().close_batch_panel);
+    }
+
+    #[test]
+    fn a_scenario_can_show_a_subtitle_stage() {
+        let text = MINIMAL.replace("[[files]]", "subtitles_stage = \"uploading\"\n[[files]]");
+        assert_eq!(
+            DemoScenario::parse(&text)
+                .unwrap()
+                .subtitles_stage
+                .as_deref(),
+            Some("uploading")
+        );
+        assert_eq!(DemoScenario::parse(MINIMAL).unwrap().subtitles_stage, None);
     }
 
     #[test]
