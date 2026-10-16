@@ -83,12 +83,13 @@ impl FolderWorkspace {
         if self.clip_action(Action::DescribeAi, id) != ClipAction::Idle {
             // A description of this clip waits in the line: it suggests tags too. One in a job
             // (waiting for its turn there, or in work) was made without them: a note says so.
+            // A run that already waits for the marker requests has its options built.
             let in_line = self.solo.waiting.contains(&(Action::DescribeAi, id))
-                || self
-                    .solo
-                    .preparing
-                    .as_ref()
-                    .is_some_and(|run| run.action == Action::DescribeAi && run.file == id);
+                || self.solo.preparing.as_ref().is_some_and(|run| {
+                    run.action == Action::DescribeAi
+                        && run.file == id
+                        && !self.batch.is_waiting_for_markers()
+                });
             if !in_line {
                 return Self::notice(&fl!("batch-suggest-in-job"));
             }

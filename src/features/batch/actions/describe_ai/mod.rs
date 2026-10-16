@@ -243,6 +243,8 @@ impl Options {
                 plan.estimating = true;
                 continue;
             }
+            // Suggest tags on a clip that is described but has no suggestions describes it again.
+            let redo = redo || (self.tags_requested && !has_suggestions(file.comment()));
             if !redo && block::ai_block(file.comment()).is_some() {
                 plan.described += 1;
                 continue;
@@ -1357,6 +1359,33 @@ mod tests {
 
         options.request_tags(false);
         assert_eq!(run_of(&options), plain, "the next run is an ordinary one");
+    }
+
+    #[test]
+    fn suggest_tags_sends_a_described_clip_that_has_no_suggestions_yet() {
+        let described = file("a.mp4", "AI: A walk.");
+        let suggested = file("b.mp4", "AI: A walk.\nSuggested tags: night (90%)");
+        let checked = [&described, &suggested];
+        let mut options = Options::default();
+        options.set_folder_tags(vec!["night".to_string()]);
+        for file in checked {
+            options.update(Message::Probed(vec![(file.id(), probe(Some(60.0)))]));
+        }
+        let plain = options.plan(&checked);
+        assert_eq!(plain.described, 2);
+        assert!(
+            plain.send.is_empty(),
+            "an ordinary run leaves described clips alone"
+        );
+
+        options.request_tags(true);
+        let asked = options.plan(&checked);
+        assert_eq!(
+            asked.send,
+            [described.id()],
+            "the clip with no suggestions is sent"
+        );
+        assert_eq!(asked.described, 1, "the one that has them is not");
     }
 
     #[test]

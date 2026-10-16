@@ -283,7 +283,7 @@ The tag button before them (`Ctrl+F6`) asks for tag suggestions for the open cli
 request as the sparkles button, with the folder's tags, whatever Settings → Describe with AI says
 about suggesting tags, so it costs the same as a description. A clip that has no suggestions yet is
 described again: its AI description is replaced (what you wrote in the comment stays). A clip that
-has suggestions is left alone. The suggestions show under the clip's name, and `F6` adds the first.
+has suggestions is left alone, with a note saying so. If the AI found nothing to suggest, asking again describes the clip again. The suggestions show under the clip's name, and `F6` adds the first.
 
 ### Generate subtitles
 

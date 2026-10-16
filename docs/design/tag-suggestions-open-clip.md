@@ -27,7 +27,8 @@ needed Settings → tag suggestions on, plus the whole description.
   run for the open clip that suggests the folder's tags **whatever the setting says**.
 - It is lit while it waits or works (the sparkles button is lit too: it is the same run), pressing
   it again takes the run back out of the line, a run in work is cancelled from the strip.
-- A clip that already has suggestions (or ideas) is left as it is: they are showing. A clip that
+- A clip that already has suggestions (or ideas) is left as it is: they are showing, and a note says
+  so (the plan counts it as described). A clip that
   is described but has none is described again; its description is replaced by the new one.
 - A folder without tags says so in a notice and nothing is asked for.
 
