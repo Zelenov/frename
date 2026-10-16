@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 
-use frename_core::{Marker, Subtitles};
+use frename_core::{Marker, SubtitleSize, Subtitles};
 use iced::widget::{column, container, mouse_area, row, space, stack, Column, Row};
 use iced::{Alignment, Element, Length, Padding};
 use iced_video_player::VideoPlayer;
@@ -154,7 +154,7 @@ pub fn view<'a>(
     // Fullscreen lays the subtitles over the picture; otherwise they get a strip of their own.
     let strip = subtitles
         .filter(|_| !is_fullscreen)
-        .map(|subs| subtitle_strip(subs, active_cue));
+        .map(|subs| subtitle_strip(subs, active_cue, subtitle_scale(state.subtitle_size())));
     let bars_style = if is_fullscreen {
         style::video
     } else {
@@ -492,13 +492,27 @@ fn cue_text(subtitles: &Subtitles, index: Option<usize>) -> &str {
         .map_or("", |cue| cue.text.as_str())
 }
 
+/// How many times their medium size the subtitles are drawn at `size`.
+pub fn subtitle_scale(size: SubtitleSize) -> f32 {
+    match size {
+        SubtitleSize::Small => 0.8,
+        SubtitleSize::Medium => 1.0,
+        SubtitleSize::Large => 1.3,
+        SubtitleSize::ExtraLarge => 1.6,
+    }
+}
+
 /// The current cue on a strip of its own below the picture (windowed mode): at most two lines,
 /// at a fixed height so the picture never jumps between cues.
-fn subtitle_strip<'a>(subtitles: &'a Subtitles, active_cue: Option<usize>) -> Element<'a, Message> {
-    container(text::subtitle(cue_text(subtitles, active_cue)).align_x(Alignment::Center))
+fn subtitle_strip<'a>(
+    subtitles: &'a Subtitles,
+    active_cue: Option<usize>,
+    scale: f32,
+) -> Element<'a, Message> {
+    container(text::subtitle(cue_text(subtitles, active_cue), scale).align_x(Alignment::Center))
         .center_x(Length::Fill)
         .align_y(Alignment::Center)
-        .height(SUBTITLE_STRIP_HEIGHT)
+        .height(subtitle_strip_height(scale))
         .padding(Padding {
             top: SPACE_XS,
             bottom: SPACE_XS,
@@ -545,7 +559,7 @@ fn side_overlay<'a>(
     } else {
         None
     };
-    let caption_area = fullscreen_caption(caption);
+    let caption_area = fullscreen_caption(caption, subtitle_scale(state.subtitle_size()));
     let Some(shown) = shown else {
         return (!caption.is_empty()).then(|| caption_area.width(Length::Fill).into());
     };
@@ -586,11 +600,11 @@ fn side_overlay<'a>(
 }
 
 /// The fullscreen caption: a pill centred at the bottom of the area it is given.
-fn fullscreen_caption<'a>(caption: &'a str) -> container::Container<'a, Message> {
+fn fullscreen_caption<'a>(caption: &'a str, scale: f32) -> container::Container<'a, Message> {
     let pill: Element<'a, Message> = if caption.is_empty() {
         space().into()
     } else {
-        container(text::video_caption(caption).align_x(Alignment::Center))
+        container(text::video_caption(caption, scale).align_x(Alignment::Center))
             .padding(Padding {
                 top: CAPTION_PADDING_Y,
                 bottom: CAPTION_PADDING_Y,

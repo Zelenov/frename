@@ -1,6 +1,6 @@
 //! Messages for the video player sub-feature.
 
-use frename_core::{Rotation, RotationError, Subtitles};
+use frename_core::{Rotation, RotationError, SubtitleSize, Subtitles};
 use iced_video_player::Video;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -92,6 +92,8 @@ pub enum Message {
     ToggleCueList,
     /// Autoplay setting changed: whether videos opened from now on start playing.
     SetAutoplay(bool),
+    /// Subtitle size setting changed.
+    SetSubtitleSize(SubtitleSize),
     /// Open or close **More**, the menu of the controls a narrow pane has no room for.
     ToggleMore,
     /// Close More: a click outside it.

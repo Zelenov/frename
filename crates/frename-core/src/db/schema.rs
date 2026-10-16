@@ -219,3 +219,8 @@ FROM folder_history
 ORDER BY opened_at DESC, id DESC
 LIMIT 10;
 ";
+
+/// Migration 23: how large subtitles are drawn on the video (`SubtitleSize::as_str`).
+pub const M23_SUBTITLE_SIZE: &str = "
+ALTER TABLE app_settings ADD COLUMN subtitle_size TEXT NOT NULL DEFAULT 'medium';
+";

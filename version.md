@@ -1,6 +1,10 @@
-# 0.159
+# 0.160
 ## Fixed
 - Generate subtitles: the file's bar no longer sits at 0 % for minutes and jumps to 100 %. It moves through extracting the audio, uploading and transcribing (an estimate with the time left, which holds back until Soniox is done) and saving, the label names the step, and the batch total moves with it.
+
+# 0.159
+## Added
+- Subtitle size: Settings → Interface → Subtitle size makes the subtitles under the video and over fullscreen video smaller or bigger (Small, Medium, Large, Extra large).
 
 # 0.158
 ## Fixed
