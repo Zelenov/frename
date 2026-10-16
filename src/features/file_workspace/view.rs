@@ -268,7 +268,15 @@ where
         fl!("file-workspace-subtitles-clip-running"),
         Message::SubtitlesClip,
     );
-    let corner = row![describe, subtitles, toggle].spacing(SPACE_XXS);
+    let suggest_tags = clip_action(
+        Icon::Tag,
+        clip_actions.suggest_tags,
+        fl!("file-workspace-suggest-tags-clip"),
+        fl!("file-workspace-suggest-tags-clip-queued"),
+        fl!("file-workspace-suggest-tags-clip-running"),
+        Message::SuggestTagsClip,
+    );
+    let corner = row![suggest_tags, describe, subtitles, toggle].spacing(SPACE_XXS);
     // The box draws the field's fill and edge (and the focus ring) outside the scroll area, so
     // the edge stays put while the text scrolls, and the scrollbar sits inside the box. It keeps
     // the ring's width free inside, so the ring never covers the text.
