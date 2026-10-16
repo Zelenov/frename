@@ -1,3 +1,7 @@
+# 0.161
+## Added
+- Suggest tags for the open clip: a tag button in the corner of the comment box (and `Ctrl+F6`) asks the AI for tags from the folder's list without the batch panel and whatever Settings say. It runs in the same line as every slow run and can be taken back; the suggestions show under the clip's name, and `F6` adds the first, as before. A clip that is already described but has no suggestions is described again to get them.
+
 # 0.160
 ## Fixed
 - Generate subtitles: the file's bar no longer sits at 0 % for minutes and jumps to 100 %. It moves through extracting the audio, uploading and transcribing (an estimate with the time left, which holds back until Soniox is done) and saving, the label names the step, and the batch total moves with it.

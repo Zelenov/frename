@@ -71,6 +71,9 @@ pub struct Run {
     pub moments: MomentsMode,
     /// The folder's tags to suggest from; none when tag suggestions are off.
     pub tags: Vec<String>,
+    /// The tags were asked for on their own (Suggest tags on the open clip), whatever Settings
+    /// say: a clip already described, but without suggestions, is described again to get them.
+    pub tags_requested: bool,
 }
 
 impl Run {
@@ -97,6 +100,8 @@ pub struct Options {
     key_requested: bool,
     /// Suggest tags from the folder's tags too (Settings).
     suggest_tags: bool,
+    /// The next run is a "Suggest tags" of the open clip: it suggests whatever Settings say.
+    tags_requested: bool,
     /// The open folder's own tags, kept up to date by the folder workspace.
     folder_tags: Vec<String>,
 }
@@ -128,9 +133,14 @@ impl Options {
         self.folder_tags = tags;
     }
 
-    /// The tags a run suggests from: the folder's, while tag suggestions are on.
+    /// The next run is (or is not) a "Suggest tags" of the open clip (#250).
+    pub fn request_tags(&mut self, on: bool) {
+        self.tags_requested = on;
+    }
+
+    /// The tags a run suggests from: the folder's, while tag suggestions are on or asked for.
     fn tags_to_suggest(&self) -> &[String] {
-        if self.suggest_tags {
+        if self.suggest_tags || self.tags_requested {
             &self.folder_tags
         } else {
             &[]
@@ -155,6 +165,7 @@ impl Options {
             model: self.model.id,
             moments: self.moments,
             tags: self.tags_to_suggest().to_vec(),
+            tags_requested: self.tags_requested,
         }
     }
 
@@ -699,7 +710,9 @@ pub fn run_clip(
     }
     // Read from the file itself, so a comment the folder had not loaded yet is kept.
     let mut snapshot = FileTagger::parse(path, &FolderInfo::default());
-    if !options.redo && block::ai_block(snapshot.comment()).is_some() {
+    // Suggest tags on a clip that is described but has no suggestions yet describes it again.
+    let redo = options.redo || (options.tags_requested && !has_suggestions(snapshot.comment()));
+    if !redo && block::ai_block(snapshot.comment()).is_some() {
         return ItemResult::new(ItemStatus::Skipped, None);
     }
     // Removed in the settings while the job runs: every later video would fail the same way.
@@ -753,7 +766,7 @@ pub fn run_clip(
     let vocabulary_ref = (!vocabulary.is_empty()).then_some(vocabulary.as_slice());
     // Described before, with these settings, but not saved (a read-only share): no second request.
     let cached = cache
-        .filter(|_| !options.redo)
+        .filter(|_| !redo)
         .and_then(|cache| reusable(cache, &on_disk, &describe_options, vocabulary_ref));
     // One request either way: with tags to suggest from, it suggests them too.
     let described = match cached {
@@ -859,6 +872,11 @@ pub fn run_clip(
         usage,
         ..ItemResult::new(ItemStatus::Done, Some((new_path, saved)))
     }
+}
+
+/// Whether the comment already holds tag suggestions or tag ideas from an earlier run.
+fn has_suggestions(comment: &str) -> bool {
+    !block::suggested_tags(comment).is_empty() || !block::tag_ideas(comment).is_empty()
 }
 
 /// Keep the described clip in `cache` (its fingerprints are what grouping reads later); a cache
@@ -1319,6 +1337,36 @@ mod tests {
     }
 
     #[test]
+    fn a_suggest_tags_run_suggests_whatever_the_settings_say() {
+        let mut options = Options::default();
+        options.set_folder_tags(vec!["night".to_string(), "beach".to_string()]);
+        let run_of = |options: &Options| match options.operation() {
+            super::super::Operation::DescribeAi(run) => run,
+            _ => unreachable!(),
+        };
+        let plain = run_of(&options);
+        assert!(
+            plain.tags.is_empty() && !plain.tags_requested,
+            "Settings say no"
+        );
+
+        options.request_tags(true);
+        let asked = run_of(&options);
+        assert_eq!(asked.tags, ["night", "beach"]);
+        assert!(asked.tags_requested);
+
+        options.request_tags(false);
+        assert_eq!(run_of(&options), plain, "the next run is an ordinary one");
+    }
+
+    #[test]
+    fn a_comment_has_suggestions_when_it_holds_tags_or_ideas() {
+        assert!(!has_suggestions("Mine\n\nAI: A walk."));
+        assert!(has_suggestions("AI: A walk.\nSuggested tags: night (90%)"));
+        assert!(has_suggestions("AI: A walk.\nTag ideas: kayak race"));
+    }
+
+    #[test]
     fn money_and_minutes_read_short() {
         assert_eq!(dollars(0.347), "$0.35");
         assert_eq!(dollars(0.001), fl!("batch-ai-dollars-under"));
@@ -1342,6 +1390,7 @@ mod tests {
                 model: Model::default().id,
                 moments: MomentsMode::default(),
                 tags: Vec::new(),
+                tags_requested: false,
             },
             Path::new("C:/clips/photo.jpg"),
             &AtomicBool::new(false),

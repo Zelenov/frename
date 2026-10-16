@@ -268,7 +268,11 @@ Describe with AI.
 
 **For the clip you have open**, without the batch panel: the sparkles button in the corner of the
 comment box (next to the expand button) describes it with the settings you chose in Settings →
-Describe with AI, and the captions button next to it generates its subtitles (below). Nothing
+Describe with AI, and the captions button next to it generates its subtitles (below). The tag
+button before them (`Ctrl+F6`) asks for tag suggestions: it is the same description request with
+the folder's tags, whatever Settings → Describe with AI says about suggesting tags, so a clip that
+has no suggestions yet is described again (and paid for again); a clip that has them is left as
+it is. The suggestions then show under the clip's name (`F6` adds the first). Nothing
 needs checking first. If something is missing, for example the key, you are told so, and the
 settings open where it is set. Both are paid: on Haiku a clip usually costs about a cent or less, more on the larger models
 (Settings → Describe with AI lists them), and the batch panel shows the price before you run

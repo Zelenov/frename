@@ -17,6 +17,8 @@ pub enum Message {
     DescribeClip,
     /// "Generate subtitles" for this clip, from the comment's corner.
     SubtitlesClip,
+    /// "Suggest tags" for this clip, from the comment's corner.
+    SuggestTagsClip,
 }
 
 /// Where a paid action of the open clip stands, for its button in the comment's corner.
@@ -35,6 +37,7 @@ pub enum ClipAction {
 pub struct ClipActions {
     pub describe: ClipAction,
     pub subtitles: ClipAction,
+    pub suggest_tags: ClipAction,
 }
 
 /// How much room the comment box takes.

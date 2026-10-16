@@ -180,8 +180,8 @@ fn main_window_event(
                 media_viewer_video::Message::TogglePause,
             )),
         )),
-        // F6 adds the most likely tag the AI suggests, Shift+F6 every one: always, like the other
-        // F-keys. A held key adds once, not one suggestion after another.
+        // F6 adds the most likely tag the AI suggests, Shift+F6 every one, Ctrl+F6 asks the AI for
+        // suggestions for the open clip: always, like the other F-keys. A held key acts once.
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
             key: keyboard::Key::Named(keyboard::key::Named::F6),
             modifiers,
@@ -190,6 +190,11 @@ fn main_window_event(
         }) => {
             if repeat {
                 return Some(Message::Noop);
+            }
+            if modifiers.control() {
+                return Some(Message::FolderWorkspace(
+                    folder_workspace::Message::SuggestTagsOnOpenClip,
+                ));
             }
             let add = if modifiers.shift() {
                 file_name_panel::Message::AddAllSuggestedTags
@@ -1449,6 +1454,11 @@ mod tests {
             Some(Message::FolderWorkspace(W::FileNamePanel(
                 P::AddAllSuggestedTags
             )))
+        ));
+        // Ctrl+F6 asks for suggestions for the open clip.
+        assert!(matches!(
+            f6(keyboard::Modifiers::CTRL, false, event::Status::Captured),
+            Some(Message::FolderWorkspace(W::SuggestTagsOnOpenClip))
         ));
         assert!(
             matches!(f6(none, true, event::Status::Ignored), Some(Message::Noop)),

@@ -62,6 +62,8 @@ pub enum Message {
     /// Run a paid action on the open clip alone, without the batch panel (#249): it is queued
     /// behind the job that runs, if any.
     RunOnOpenClip(batch::Action),
+    /// "Suggest tags" for the open clip, from its button or Ctrl+F6 (#250).
+    SuggestTagsOnOpenClip,
     /// Scroll the tag list so the selected row is in view (deferred to next frame).
     ScrollTagListToSelection,
     /// Internal: update cached scroll Y after programmatic scroll (so next scroll-into-view uses correct viewport).

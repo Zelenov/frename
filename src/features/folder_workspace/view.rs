@@ -158,6 +158,7 @@ pub fn view(
             file_workspace::Message::SubtitlesClip => {
                 Message::RunOnOpenClip(batch::Action::GenerateSubtitles)
             }
+            file_workspace::Message::SuggestTagsClip => Message::SuggestTagsOnOpenClip,
         })
     };
 

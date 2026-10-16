@@ -25,6 +25,11 @@ const PREPARE_LIMIT: Duration = Duration::from_secs(30);
 pub(super) struct Solo {
     preparing: Option<Preparing>,
     waiting: VecDeque<(Action, FileId)>,
+    /// Clips whose asked-for "Describe with AI" is a "Suggest tags" (#250): the run suggests tags
+    /// whatever Settings say, and describes a clip that has no suggestions yet.
+    tags: HashSet<FileId>,
+    /// The clip whose "Suggest tags" job is in work.
+    pub(super) tags_running: Option<FileId>,
 }
 
 /// A run that checked its clip and waits for what the action needs to know.
@@ -34,6 +39,8 @@ struct Preparing {
     /// What the batch panel had selected and checked, which the run borrowed.
     saved: (Action, HashSet<FileId>),
     since: Instant,
+    /// It is a "Suggest tags" run.
+    tags: bool,
 }
 
 impl FolderWorkspace {
@@ -58,11 +65,54 @@ impl FolderWorkspace {
         Task::none()
     }
 
+    /// "Suggest tags" for the open clip (#250): a "Describe with AI" run that suggests the folder's
+    /// tags whatever Settings say, through the same line as every slow run. The suggestions show
+    /// in the file-name panel (F6 adds them), like those of a batch run.
+    pub(super) fn suggest_tags_on_open_clip(&mut self) -> Task<Message> {
+        let Some(id) = self.file_workspace.file().map(|f| f.id()) else {
+            return Task::none();
+        };
+        // Pressed again while asked for or in work: the button takes the run back.
+        if self.suggest_tags_state(id) != ClipAction::Idle {
+            self.solo.tags.remove(&id);
+            return self.withdraw_run(Action::DescribeAi, id);
+        }
+        if self.file_workspace.tag_list().saved_tag_names().is_empty() {
+            return Self::notice(&fl!("batch-suggest-no-tags"));
+        }
+        if self.clip_action(Action::DescribeAi, id) != ClipAction::Idle {
+            // A description of this clip is already asked for: it suggests tags too, unless it is
+            // in work already.
+            if self.batch.is_running() && self.batch.current() == Some(id) {
+                return Self::notice(&fl!(
+                    "batch-solo-in-work",
+                    action = Action::DescribeAi.label()
+                ));
+            }
+            self.solo.tags.insert(id);
+            return Task::none();
+        }
+        self.solo.tags.insert(id);
+        self.run_on_open_clip(Action::DescribeAi)
+    }
+
+    /// Where "Suggest tags" stands for `clip`.
+    pub fn suggest_tags_state(&self, clip: FileId) -> ClipAction {
+        if self.solo.tags.contains(&clip) || self.solo.tags_running == Some(clip) {
+            self.clip_action(Action::DescribeAi, clip)
+        } else {
+            ClipAction::Idle
+        }
+    }
+
     /// Take the run of `action` on `clip` back: from the line, from the preparing, from a job that
     /// has not reached the clip. A job already working on the clip is not stopped from here (that
     /// would stop all its clips): a note says where to cancel it.
     pub(super) fn withdraw_run(&mut self, action: Action, clip: FileId) -> Task<Message> {
         let label = action.label();
+        if action == Action::DescribeAi {
+            self.solo.tags.remove(&clip);
+        }
         if self
             .solo
             .preparing
@@ -140,11 +190,13 @@ impl FolderWorkspace {
             return ClipActions {
                 describe: ClipAction::Idle,
                 subtitles: ClipAction::Idle,
+                suggest_tags: ClipAction::Idle,
             };
         };
         ClipActions {
             describe: self.clip_action(Action::DescribeAi, id),
             subtitles: self.clip_action(Action::GenerateSubtitles, id),
+            suggest_tags: self.suggest_tags_state(id),
         }
     }
 
@@ -182,6 +234,10 @@ impl FolderWorkspace {
         if let Some(run) = &self.solo.preparing {
             // The job started (here, or once the marker requests let go): give the checks back.
             if self.batch.is_running() {
+                // A "Suggest tags" job keeps its button latched until it ends.
+                if run.tags {
+                    self.solo.tags_running = Some(run.file);
+                }
                 self.end_preparing();
                 return Task::none();
             }
@@ -214,8 +270,13 @@ impl FolderWorkspace {
                     if self.batch.is_waiting_for_markers() {
                         return Task::none();
                     }
+                    let tags = run.tags;
+                    let file_id = run.file;
                     let started = self.start_batch();
                     if self.batch.is_running() {
+                        if tags {
+                            self.solo.tags_running = Some(file_id);
+                        }
                         self.end_preparing();
                     }
                     started
@@ -233,19 +294,23 @@ impl FolderWorkspace {
                 .and_then(|d| d.file_by_id(file))
                 .is_none()
             {
+                self.solo.tags.remove(&file);
                 continue;
             }
             let Some(saved) = self.batch.borrow_for_one(action, file) else {
                 self.solo.waiting.push_front((action, file));
                 return Task::none();
             };
+            let tags = action == Action::DescribeAi && self.solo.tags.contains(&file);
             self.solo.preparing = Some(Preparing {
                 action,
                 file,
                 saved,
                 since: Instant::now(),
+                tags,
             });
             self.share_folder_tags();
+            self.batch.request_tags(tags);
             let reads = Task::batch([self.describe_ai_reads(), self.subtitle_reads()]);
             // Nothing to read (a free action, or everything cached): it may start at once.
             return Task::batch([reads, self.advance_solo()]);
@@ -256,6 +321,7 @@ impl FolderWorkspace {
     /// Cancel stops the line too: the run that prepares and the ones that wait.
     pub(super) fn cancel_solo(&mut self) {
         self.solo.waiting.clear();
+        self.solo.tags.clear();
         self.end_preparing();
     }
 
@@ -267,6 +333,8 @@ impl FolderWorkspace {
     /// The run is over with preparing (started, blocked, or given up): the selection comes back.
     fn end_preparing(&mut self) {
         if let Some(run) = self.solo.preparing.take() {
+            self.solo.tags.remove(&run.file);
+            self.batch.request_tags(false);
             // A start that waited for the marker requests is not wanted any more.
             self.batch.update(batch::Message::StopWaiting);
             self.batch.restore_selection(run.saved);
