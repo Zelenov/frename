@@ -618,6 +618,11 @@ impl BatchState {
         self.actions.set_folder_tags(tags);
     }
 
+    /// The next "Describe with AI" run is (or is not) a "Suggest tags" of the open clip (#250).
+    pub fn request_tags(&mut self, on: bool) {
+        self.actions.request_tags(on);
+    }
+
     /// Whether the right half shows the batch panel instead of the open file.
     pub fn is_active(&self) -> bool {
         self.active

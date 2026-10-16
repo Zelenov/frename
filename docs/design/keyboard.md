@@ -42,6 +42,7 @@ From the code at `main` (63a2bb5). "Always" = works while a text field has the c
 | `Ctrl+R` | always | Recent folders list | `state.rs` |
 | `F5` | always | Fullscreen | `state.rs` |
 | `F6`, `Shift+F6` | always, no repeat | Add the first / all tags the AI suggested | `state.rs` |
+| `Ctrl+F6` | always, no repeat | Ask the AI to suggest tags for the open clip (#250) | `state.rs` |
 | `F11`, `Shift+F11`, `Ctrl+F11` | always, no repeat | Show file in file manager, copy path, copy name | `state.rs`; `features/file_menu/action.rs` |
 | `[` / `]` | always | Set in / out point (matches the logical character, so not on a layout where `[` is another letter - to be checked) | `state.rs` |
 | `Home` | not typing (typing: only in a search field while the "Resumed at" note shows) | Go to the clip's start | `state.rs` (#161) |

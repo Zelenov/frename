@@ -567,6 +567,7 @@ impl FolderWorkspace {
             Message::FocusSearchBarAndKey(key) => self.focus_search_bar_and_key(key),
             Message::Noop => Task::none(),
             Message::RunOnOpenClip(action) => self.run_on_open_clip(action),
+            Message::SuggestTagsOnOpenClip => self.suggest_tags_on_open_clip(),
             Message::ScrollFolderListToSelected => self.scroll_folder_list_to_selected(),
             Message::FolderListScrollAdjusted(y) => {
                 self.folder_scroll_y = Some(y);
@@ -1846,6 +1847,8 @@ impl FolderWorkspace {
     /// The job ended: reopen the selected file if it was closed, and resume loading comments.
     fn batch_finished(&mut self) -> Task<Message> {
         self.batch_end_pending = false;
+        self.solo.tags_running = None;
+        self.prune_suggest_tags();
         // The job renamed files behind the history: undoing across it would use stale paths.
         self.history = WorkspaceHistory::new(HISTORY_DEPTH);
         // The job may have written subtitles: the plan is made again.
@@ -5224,6 +5227,102 @@ mod tests {
             crate::features::file_workspace::ClipAction::Running
         );
         assert!(workspace.is_blocked(&Message::Batch(batch::Message::CheckNone)));
+    }
+
+    /// "Suggest tags" on the open clip (#250) is a description run that suggests the folder's tags
+    /// whatever Settings say. Its button shows the run (so does the describe button: it is the same
+    /// run), a second press takes it back, and a run that cannot start (no key) leaves nothing
+    /// behind. A description already waiting in the line becomes a "Suggest tags" run.
+    #[test]
+    fn suggest_tags_on_the_open_clip_is_a_run_that_can_be_withdrawn() {
+        use crate::features::file_workspace::ClipAction;
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let open = workspace
+            .file_workspace()
+            .file()
+            .map(|f| f.id())
+            .expect("open");
+
+        let list = workspace.file_workspace.tag_list_mut();
+        list.set_checked_by_name("night", true);
+        list.set_checked_by_name("night", false);
+
+        let _ = workspace.update(Message::SuggestTagsOnOpenClip);
+        assert_eq!(workspace.suggest_tags_state(open), ClipAction::Running);
+        assert_eq!(
+            workspace.clip_action(batch::Action::DescribeAi, open),
+            ClipAction::Running
+        );
+        assert_eq!(
+            workspace.clip_actions().suggest_tags,
+            ClipAction::Running,
+            "the button of the clip shows it"
+        );
+
+        // Pressed again: the button takes the run back.
+        let _ = workspace.update(Message::SuggestTagsOnOpenClip);
+        assert_eq!(workspace.suggest_tags_state(open), ClipAction::Idle);
+        assert_eq!(
+            workspace.clip_action(batch::Action::DescribeAi, open),
+            ClipAction::Idle
+        );
+
+        // Asked for again, but the key is missing: it ends, and nothing stays marked.
+        let _ = workspace.update(Message::SuggestTagsOnOpenClip);
+        let which = frename_core::ai::key_of(workspace.batch().actions().ai_model_and_language().0);
+        let _ = workspace.update(Message::Batch(batch::Message::Action(
+            batch::ActionMessage::DescribeAi(batch::describe_ai::Message::KeyState(
+                which,
+                frename_core::ai::key::KeyState::Missing,
+            )),
+        )));
+        assert!(!workspace.is_batch_running());
+        assert_eq!(workspace.suggest_tags_state(open), ClipAction::Idle);
+    }
+
+    /// A "Suggest tags" asked for while a plain description waits in the line makes that run the
+    /// "Suggest tags" run; and a folder that changes meanwhile leaves no flag behind for the next
+    /// ordinary description job.
+    #[test]
+    fn suggest_tags_joins_a_waiting_description_and_leaves_no_flag_behind() {
+        use crate::features::file_workspace::ClipAction;
+        let tags_requested = |w: &FolderWorkspace| match w.batch().operation() {
+            Some(batch::Operation::DescribeAi(run)) => run.tags_requested,
+            _ => false,
+        };
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let open = workspace
+            .file_workspace()
+            .file()
+            .map(|f| f.id())
+            .expect("open");
+        let list = workspace.file_workspace.tag_list_mut();
+        list.set_checked_by_name("night", true);
+        list.set_checked_by_name("night", false);
+
+        // A plain description is asked for, then the tags: it is the same run.
+        let _ = workspace.update(Message::RunOnOpenClip(batch::Action::DescribeAi));
+        assert_eq!(workspace.suggest_tags_state(open), ClipAction::Idle);
+        let _ = workspace.update(Message::SuggestTagsOnOpenClip);
+        assert_eq!(workspace.suggest_tags_state(open), ClipAction::Running);
+        assert!(tags_requested(&workspace), "the run that prepares suggests");
+
+        // The folder changes while it prepares: nothing is left for the next job.
+        workspace.forget_solo();
+        assert_eq!(workspace.suggest_tags_state(open), ClipAction::Idle);
+        assert!(!tags_requested(&workspace), "no flag stays for a later job");
     }
 
     /// A run that cannot start (no key) ends its preparing: the panel's selection and checks come
