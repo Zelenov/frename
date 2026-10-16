@@ -11,8 +11,9 @@ description: >
 # Bug hunt
 
 The goal is bugs the editor would hit, found and proven by the agent. A finding that is not
-reproduced (a screenshot that shows it, a failing test, or a step list a second reviewer confirmed
-in the code) is not filed. A preference ("this would look better as …") is not a bug: file it as
+reproduced (a screenshot that shows it, a failing test, a step list a second reviewer confirmed
+in the code, or a CI job that failed and then passed on the same commit for a reason other than
+infrastructure) is not filed. A preference ("this would look better as …") is not a bug: file it as
 an `idea` or drop it.
 
 What counts as a bug: the app does something other than what the README, a design doc in
@@ -20,6 +21,24 @@ What counts as a bug: the app does something other than what the README, a desig
 `undo-dev`, `core-dev`) say; or something no editor would want: a crash or panic, lost or wrong
 data on disk, text cut off or overlapping, a control that does nothing, a key that does the wrong
 thing, an untranslated string, a state the user cannot get out of.
+
+Defects inside the code count too, even when no editor sees them today (owner, 2026-10-10: "if a
+leak is possible, fix it at once"):
+- a leak: temp files or folders, file handles, memory, threads, processes, a database or lock left
+  behind, in the app or in the tests;
+- tests that share state or can pass or fail depending on order, timing, the machine or a reused
+  process id; a CI job that fails at random;
+- a race, a wrong window or state id, an error that is swallowed, a panic path in production code;
+- a code-review finding with a failure scenario that was not fixed in a PR that merged to `main`
+  (design-mode review notes the agent chose not to take are not findings, unless the merged code
+  has the failure, which is then a bug like any other).
+
+For leaks and races, a code path that a second reviewer confirms is enough proof; no failing run
+is needed.
+
+Rule of thumb: if you can describe a concrete way it goes wrong, it is a bug. `idea` is only for
+something new or different that the app was not meant to do: a feature, a behaviour change, a
+choice between designs, or a refactor with no failure behind it.
 
 ## 0. Before hunting
 
@@ -30,9 +49,11 @@ thing, an untranslated string, a state the user cannot get out of.
    `hold`): one that describes a defect by the definition above becomes a bug: remove `idea`, add
    `bug` and a priority (below), and comment `🤖 agent: this is a defect, not a proposal; it will be
    fixed without waiting for approval.` Proposals stay `idea`.
-3. Limits: skip the hunt when 8 or more agent-filed `bug` issues are open (fix those first). File
-   at most 5 new bugs per hunt, most severe first; keep the rest of the candidates in the hunt
-   notes of the last one filed so the next hunt starts from them.
+3. Limits: skip the hunt when 8 or more agent-filed `bug` issues the agent can work on are open
+   (not `needs-owner`, `hold`, `blocked` or `rejected`; fix those first). File at most 5 new bugs
+   per hunt, most severe first; keep the rest of the candidates in the hunt notes of the last one
+   filed. The next hunt reads the hunt notes of the newest bug issue that has them, open or
+   closed, and files those candidates first, after checking them again on `main`.
 
 ## 1. UI sweep (always first)
 
@@ -70,12 +91,13 @@ everything under Xvfb (`CLAUDE.md` → "Looking at the UI"); also install `xdoto
 
 Run read-only subagents in parallel (`Explore` or `general-purpose`), one per area, each given the
 skill it audits against and told to report only rule violations with `file:line`, the rule, and a
-concrete user-visible failure:
+concrete failure (user-visible, or in the code or tests, per "What counts as a bug"):
 
 | Area | Rules from | Look for |
 |---|---|---|
 | Views and widgets | `ui-dev`, `ui-core` | each "must"/"never" rule broken somewhere; hard-coded strings or colours; scroll ids reused wrongly |
 | Undo | `undo-dev` | an edit that is not undoable, undo that leaves files or sidecars behind (#31, #110) |
+| Leaks and flaky tests | `core-dev`, this skill | tests with fixed temp paths, ports or process ids and no cleanup at the start or end; files, folders, handles, threads or processes the app or a test leaves behind; tests that depend on order or timing; jobs on any branch that failed and then passed on a rerun of the same commit, and failed CI runs on `main` whose PR head had passed (Actions run history; the squash commit has the same tree, so that counts as the same commit) |
 | Keyboard | `app-guide`, `ui-dev` | a shortcut that fires while typing, or stops working after typing (#32); two bindings for one key; focus lost after an action |
 | Files and metadata | `core-dev` | non-atomic writes, a write while Windows locks the file, errors swallowed, a sidecar not moved with its clip |
 | Async and windows | `app-guide` | a task result applied to the wrong clip or window after navigation (#105, #112) |
@@ -98,14 +120,15 @@ test; one that fails on `main` is a finding, and its test goes into the fix PR.
 For each candidate, a fresh subagent that did not find it tries to prove it wrong from the code and
 the evidence (the same rule as the review gate: never reuse the finder). Only `CONFIRMED`
 candidates are filed. A screenshot that shows the bug, or a test that fails on `main`, counts as
-proof by itself.
+proof by itself, and so is a CI job that failed and then passed on the same commit (or a
+failed run on `main` whose PR head passed), when the failure is not infrastructure.
 
 ## 6. File
 
 One issue per bug, English, body:
 
 ```
-🤖 agent: found by the bug hunt on <YYYY-MM-DD>.
+🤖 agent: found by <the bug hunt | work on #N | CI run <link> | review of PR #N> on <YYYY-MM-DD>.
 
 **What happens:** …
 **Expected:** … (and where that is stated: README, design doc, skill rule, issue #)
@@ -117,9 +140,11 @@ One issue per bug, English, body:
 Screenshots go on the `pr-screenshots` branch under `bugs/<YYYY-MM-DD>/<name>.png` (nightly →
 "Screenshots in the PR" for how), embedded by their raw URL.
 
-Labels: `bug` and one priority:
-- `P1` — crash, lost or wrong data on disk, the editor cannot go on;
-- `P2` — wrong behaviour or broken layout in a main flow;
+Labels: `bug` and one priority, the highest band that applies:
+- `P1` — crash, lost or wrong data on disk, the editor cannot go on, or a leak that grows while
+  the app runs;
+- `P2` — wrong behaviour or broken layout in a main flow, a flaky test or random CI failure, a
+  leak in the tests or one that does not grow;
 - `P3` — cosmetic, or only in a rare state.
 
 Never `regression` (only the owner sets it). The nightly pipeline picks these up by priority like
