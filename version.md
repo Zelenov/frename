@@ -1,3 +1,7 @@
+# 0.159
+## Added
+- Subtitle size: Settings → Interface → Subtitle size makes the subtitles under the video and over fullscreen video smaller or bigger (Small, Medium, Large, Extra large).
+
 # 0.158
 ## Fixed
 - Naming the only unnamed marker no longer stops after the first letter, and the clip's comment box keeps the cursor when starred tags appear or go. (If typing into a marker still drops out of the field while the pointer is elsewhere, that is a different cause, still open.)

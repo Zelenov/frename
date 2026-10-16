@@ -11,7 +11,7 @@ use rusqlite::Connection;
 
 use crate::ai::{self, SummaryLanguage};
 use crate::recent_folders::{self, now_ms, RecentFolder};
-use crate::{CommentStorage, CueLength, FolderAndFile, InOutStorage, MarkerStorage};
+use crate::{CommentStorage, CueLength, FolderAndFile, InOutStorage, MarkerStorage, SubtitleSize};
 
 use super::migrations;
 use super::traits::{
@@ -366,7 +366,7 @@ impl AppStateStore for AppDatabase {
         conn.query_row(
             "SELECT autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled,
                     space_after_tags, summary_language, ai_model, subtitle_languages, subtitle_cue_length,
-                    marker_storage, ui_language, ai_moments, ai_tag_suggestions
+                    marker_storage, ui_language, ai_moments, ai_tag_suggestions, subtitle_size
              FROM app_settings WHERE id = 1",
             [],
             |row| Ok(AppSettings {
@@ -390,6 +390,7 @@ impl AppStateStore for AppDatabase {
                 ui_language: row.get::<_, String>(12)?,
                 ai_moments: ai::moments_from_name(&row.get::<_, String>(13)?),
                 ai_tag_suggestions: row.get::<_, i64>(14)? != 0,
+                subtitle_size: SubtitleSize::from_name(&row.get::<_, String>(15)?),
             }),
         ).ok()
     }
@@ -399,8 +400,8 @@ impl AppStateStore for AppDatabase {
             let conn = lock_connection(&conn);
             let _ = conn.execute(
                 "INSERT INTO app_settings (id, autoplay_video, monochrome_tags, comment_storage, in_out_storage, commented_tag, commented_tag_enabled, space_after_tags, summary_language, ai_model,
-                                           subtitle_languages, subtitle_cue_length, marker_storage, ui_language, ai_moments, ai_tag_suggestions)
-                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+                                           subtitle_languages, subtitle_cue_length, marker_storage, ui_language, ai_moments, ai_tag_suggestions, subtitle_size)
+                 VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
                  ON CONFLICT(id) DO UPDATE SET
                      autoplay_video = excluded.autoplay_video,
                      monochrome_tags = excluded.monochrome_tags,
@@ -416,7 +417,8 @@ impl AppStateStore for AppDatabase {
                      marker_storage = excluded.marker_storage,
                      ui_language = excluded.ui_language,
                      ai_moments = excluded.ai_moments,
-                     ai_tag_suggestions = excluded.ai_tag_suggestions",
+                     ai_tag_suggestions = excluded.ai_tag_suggestions,
+                     subtitle_size = excluded.subtitle_size",
                 rusqlite::params![
                     settings.autoplay_video,
                     settings.monochrome_tags,
@@ -433,6 +435,7 @@ impl AppStateStore for AppDatabase {
                     settings.ui_language,
                     ai::moments_as_str(settings.ai_moments),
                     settings.ai_tag_suggestions,
+                    settings.subtitle_size.as_str(),
                 ],
             );
         }
@@ -734,6 +737,7 @@ mod tests {
         assert_eq!(settings.subtitle_languages, ["en", "ru"]);
         settings.subtitle_languages = vec!["de".into(), "fr".into()];
         settings.subtitle_cue_length = CueLength::Sentence;
+        settings.subtitle_size = SubtitleSize::ExtraLarge;
         db.set_app_settings(settings.clone());
         assert_eq!(db.get_app_settings(), Some(settings.clone()));
 

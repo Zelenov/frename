@@ -87,14 +87,26 @@ pub fn chip_mini<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
     styled(content, TEXT_CHIP_MINI, LINE_CHIP_MINI, FONT, TAG_TEXT)
 }
 
-/// The cue under the windowed video.
-pub fn subtitle<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
-    styled(content, TEXT_SUBTITLE, LINE_SUBTITLE, FONT, TEXT)
+/// The cue under the windowed video, `scale` times its medium size.
+pub fn subtitle<'a>(content: impl IntoFragment<'a>, scale: f32) -> Text<'a> {
+    styled(
+        content,
+        TEXT_SUBTITLE * scale,
+        LINE_SUBTITLE * scale,
+        FONT,
+        TEXT,
+    )
 }
 
-/// The caption over fullscreen video.
-pub fn video_caption<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
-    styled(content, TEXT_VIDEO_CAPTION, LINE_VIDEO_CAPTION, FONT, TEXT)
+/// The caption over fullscreen video, `scale` times its medium size.
+pub fn video_caption<'a>(content: impl IntoFragment<'a>, scale: f32) -> Text<'a> {
+    styled(
+        content,
+        TEXT_VIDEO_CAPTION * scale,
+        LINE_VIDEO_CAPTION * scale,
+        FONT,
+        TEXT,
+    )
 }
 
 /// The text of a tooltip. It breaks between words, and inside a word longer than the line (a file

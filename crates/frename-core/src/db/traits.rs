@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::ai::{MomentsMode, SummaryLanguage};
 use crate::recent_folders::RecentFolder;
 use crate::{
-    CommentStorage, CueLength, FolderAndFile, InOutStorage, MarkerStorage, StoredTag,
+    CommentStorage, CueLength, FolderAndFile, InOutStorage, MarkerStorage, StoredTag, SubtitleSize,
     TagColorMapping,
 };
 
@@ -81,6 +81,8 @@ pub struct AppSettings {
     pub subtitle_languages: Vec<String>,
     /// How long generated subtitle cues may get. Defaults to short.
     pub subtitle_cue_length: CueLength,
+    /// How large subtitles are drawn on the video. Defaults to medium.
+    pub subtitle_size: SubtitleSize,
     /// UI language code (`en`, `ru`); empty follows the OS language. Defaults to empty. Core
     /// only stores it; the UI owns the supported languages.
     pub ui_language: String,
@@ -106,6 +108,7 @@ impl Default for AppSettings {
                 .map(|code| code.to_string())
                 .collect(),
             subtitle_cue_length: CueLength::default(),
+            subtitle_size: SubtitleSize::default(),
             ui_language: String::new(),
         }
     }

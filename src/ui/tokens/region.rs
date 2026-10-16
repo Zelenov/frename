@@ -4,7 +4,8 @@
 use super::size::*;
 use super::space::*;
 use super::typography::{
-    BODY_CHAR_WIDTH, LINE_BODY, LINE_CAPTION, LINE_TOOLTIP, TEXT_BODY, TEXT_CHIP_MINI,
+    BODY_CHAR_WIDTH, LINE_BODY, LINE_CAPTION, LINE_SUBTITLE, LINE_TOOLTIP, TEXT_BODY,
+    TEXT_CHIP_MINI,
 };
 
 // The main window (§13.9): the minimum fits a 1280×680 work area with room to spare.
@@ -29,8 +30,11 @@ pub const HANDLE_HIT: f32 = 8.0;
 pub const HANDLE_LINE: f32 = RING;
 
 // Video pane (§13.3).
-/// The strip of the windowed subtitle, so the picture never jumps between cues.
-pub const SUBTITLE_STRIP_HEIGHT: f32 = 48.0;
+/// The strip of the windowed subtitle at subtitle size `scale`: two lines and its inset, so the
+/// picture never jumps between cues.
+pub fn subtitle_strip_height(scale: f32) -> f32 {
+    2.0 * LINE_SUBTITLE * scale + 2.0 * SPACE_XS
+}
 /// The timeline row with no or one lane of ranges; each more lane adds `LANE_PITCH`.
 pub const TIMELINE_HEIGHT: f32 = 24.0;
 /// The side list over the picture: its widest, and the pane width from which it covers only part.

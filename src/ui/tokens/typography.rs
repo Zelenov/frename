@@ -25,7 +25,8 @@ pub const CAPTION_CHAR_WIDTH: f32 = 6.5;
 /// A mini chip in a file list row.
 pub const TEXT_CHIP_MINI: f32 = 12.0;
 pub const LINE_CHIP_MINI: f32 = 16.0;
-/// The subtitle strip under the windowed video.
+/// The subtitle strip under the windowed video, at the medium subtitle size; the setting scales
+/// it and the fullscreen caption alike (`media_viewer::video::view::subtitle_scale`).
 pub const TEXT_SUBTITLE: f32 = 15.0;
 pub const LINE_SUBTITLE: f32 = 20.0;
 /// The subtitle caption over fullscreen video.

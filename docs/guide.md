@@ -165,7 +165,8 @@ button is off. mp4 and mov hold everything.
 
 A `.srt` with the same name as the video (`clip.srt` for `clip.mp4`) is shown under the picture.
 The CC button opens a list of every line; click a line to jump to it. In fullscreen the subtitles
-are shown over the picture, and CC opens the list beside them there too.
+are shown over the picture, and CC opens the list beside them there too. To make them bigger or
+smaller, change **Subtitle size** in Settings → Interface.
 
 A `.ass` or `.ssa` file (from Aegisub, Subtitle Edit, YouTube or ffmpeg) works the same way, as plain
 text: styles, positions and effects are not drawn, only the words and their line breaks. If a video
@@ -323,7 +324,8 @@ pages:
 
 - **Interface:** the UI language (follows your system by default, or pick English or Russian;
   more languages are on the way), monochrome tags (a tag you added shows darker, one that is not
-  in your list stays the lighter gray it always was), and playing videos as soon as they open.
+  in your list stays the lighter gray it always was), playing videos as soon as they open, and
+  the subtitle size (Small, Medium, Large or Extra large).
 - **Saving:** a space after each tag in file names (`Food. Goat. clip.mp4`), and where comments,
   markers and in/out points are kept: inside the video, or in a text file (comments) or the
   comment (markers; in/out points as one line, `In/Out: 00:01:05.250 – 00:02:10.000`). While
