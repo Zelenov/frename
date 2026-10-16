@@ -234,6 +234,7 @@ batch-prepare-group-clips = { $count ->
 }
 batch-prepare-check-group = Отметить эти клипы
 batch-solo-queued = В очереди: «{ $action }»
+batch-suggest-in-job = Описание этого клипа уже в выполняющейся задаче, без предложений тегов. Попросите ещё раз, когда она закончится
 batch-suggest-no-tags = В этой папке ещё нет тегов, из которых можно предлагать: сначала добавьте их
 batch-solo-gave-up = Не удалось подготовить запуск
 batch-solo-withdrawn = Отменено: «{ $action }»

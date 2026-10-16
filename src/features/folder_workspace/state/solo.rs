@@ -81,19 +81,37 @@ impl FolderWorkspace {
             return Self::notice(&fl!("batch-suggest-no-tags"));
         }
         if self.clip_action(Action::DescribeAi, id) != ClipAction::Idle {
-            // A description of this clip is already asked for: it suggests tags too, unless it is
-            // in work already.
-            if self.batch.is_running() && self.batch.current() == Some(id) {
-                return Self::notice(&fl!(
-                    "batch-solo-in-work",
-                    action = Action::DescribeAi.label()
-                ));
+            // A description of this clip waits in the line: it suggests tags too. One in a job
+            // (waiting for its turn there, or in work) was made without them: a note says so.
+            let in_line = self.solo.waiting.contains(&(Action::DescribeAi, id))
+                || self
+                    .solo
+                    .preparing
+                    .as_ref()
+                    .is_some_and(|run| run.action == Action::DescribeAi && run.file == id);
+            if !in_line {
+                return Self::notice(&fl!("batch-suggest-in-job"));
             }
             self.solo.tags.insert(id);
+            // Already preparing: its options were set when it began, set them again.
+            if let Some(run) = self.solo.preparing.as_mut().filter(|run| run.file == id) {
+                run.tags = true;
+                self.batch.request_tags(true);
+            }
             return Task::none();
         }
         self.solo.tags.insert(id);
         self.run_on_open_clip(Action::DescribeAi)
+    }
+
+    /// Forget the "Suggest tags" marks of runs that are not in the line any more (the job that
+    /// they started has ended).
+    pub(super) fn prune_suggest_tags(&mut self) {
+        let waiting = &self.solo.waiting;
+        let preparing = self.solo.preparing.as_ref().map(|run| run.file);
+        self.solo
+            .tags
+            .retain(|id| preparing == Some(*id) || waiting.contains(&(Action::DescribeAi, *id)));
     }
 
     /// Where "Suggest tags" stands for `clip`.
@@ -327,6 +345,8 @@ impl FolderWorkspace {
 
     /// The folder changed: the runs asked for belong to the one that was open.
     pub(super) fn forget_solo(&mut self) {
+        // A run that prepared had set the flag of the next description job.
+        self.batch.request_tags(false);
         self.solo = Solo::default();
     }
 

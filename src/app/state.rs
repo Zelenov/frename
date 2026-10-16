@@ -191,7 +191,7 @@ fn main_window_event(
             if repeat {
                 return Some(Message::Noop);
             }
-            if modifiers.control() {
+            if modifiers.control() && !modifiers.shift() && !modifiers.alt() {
                 return Some(Message::FolderWorkspace(
                     folder_workspace::Message::SuggestTagsOnOpenClip,
                 ));

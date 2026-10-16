@@ -193,6 +193,7 @@ batch-prepare-groups-hint = Clips that look like the same shot: duplicates, re-e
 batch-prepare-group-clips = { $count } clips
 batch-prepare-check-group = Check these clips
 batch-solo-queued = Queued: { $action }
+batch-suggest-in-job = A description of this clip is already in the running job, without tag suggestions. Ask again when it ends
 batch-suggest-no-tags = No tags in this folder yet to suggest from: add some first
 batch-solo-gave-up = Could not get ready
 batch-solo-withdrawn = Withdrawn: { $action }
