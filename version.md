@@ -1,3 +1,7 @@
+# 0.163
+## Added
+- The interface in German (Deutsch): follows the system language, or pick it in Settings → Language.
+
 # 0.162
 ## Added
 - Export markers as text: the marker list has Copy and Export… buttons for the open clip (one line per marker in time order, such as `0:41–0:47 [red] — Lion crossing — walks left to right`), and the batch action Export markers to text writes `clip.markers.txt` next to each checked clip. Markers ⇄ comment reads such lines back as markers.

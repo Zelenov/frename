@@ -5,7 +5,7 @@
 //! [`fl!`](crate::fl): the same pattern as the settings core keeps globally. English is the
 //! source language and the fallback for any message a translation lacks.
 //!
-//! `LANGUAGES` is deliberately short today (English and Russian): each further language is its
+//! `LANGUAGES` is deliberately short today (English, Russian and German): each further language is its
 //! own small PR that adds one `.ftl` file and one entry here, reviewed on its own. CJK languages
 //! wait for a bundled font that covers them (issue #57).
 
@@ -22,7 +22,7 @@ use rust_embed::RustEmbed;
 struct Localizations;
 
 /// Language codes the UI is translated into, in the order Settings lists them.
-pub const LANGUAGES: [&str; 2] = ["en", "ru"];
+pub const LANGUAGES: [&str; 3] = ["en", "ru", "de"];
 
 /// The source language, used when nothing else matches.
 const FALLBACK: &str = "en";
@@ -163,6 +163,7 @@ fn supported(code: &str) -> Option<&'static str> {
 pub fn language_name(language: &str) -> String {
     match language {
         "ru" => crate::fl!("language-name-ru"),
+        "de" => crate::fl!("language-name-de"),
         _ => crate::fl!("language-name-en"),
     }
 }
@@ -188,7 +189,8 @@ mod tests {
             "ru",
             "second preference"
         );
-        assert_eq!(resolve("", &os(&["de-DE"])), "en");
+        assert_eq!(resolve("", &os(&["de-DE"])), "de");
+        assert_eq!(resolve("", &os(&["fr-FR"])), "en");
         assert_eq!(
             resolve("", &os(&["uk-UA"])),
             "en",
