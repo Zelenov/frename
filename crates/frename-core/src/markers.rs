@@ -5,6 +5,7 @@
 //! into comments and reads back: `<time>[–<time>] — <name>[ — <comment>]`. The segment lines of
 //! a comment's AI block (`0:00–0:14 Street.`) become markers too, in [`AI_MARKER_COLOR`].
 
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use regex::Regex;
@@ -235,6 +236,37 @@ pub fn format_marker_line(marker: &Marker) -> String {
         line.push_str(&comment);
     }
     line.trim_end().to_string()
+}
+
+/// The markers as a text list: [`format_marker_line`] for each, in time order, one per line, with
+/// a line break after the last. Empty for no markers. [`parse_marker_line`] reads every line back.
+pub fn markers_text(markers: &[Marker]) -> String {
+    let mut sorted = markers.to_vec();
+    sort_markers(&mut sorted);
+    sorted
+        .iter()
+        .map(|marker| format!("{}\n", format_marker_line(marker)))
+        .collect()
+}
+
+/// `text` with the line breaks of this system: `\r\n` on Windows, `\n` elsewhere.
+pub fn native_line_breaks(text: &str) -> String {
+    if cfg!(windows) {
+        text.replace("\r\n", "\n").replace('\n', "\r\n")
+    } else {
+        text.to_string()
+    }
+}
+
+/// Where the video's markers go as text: `clip.markers.txt` next to `clip.mov`.
+pub fn markers_text_path(video: &Path) -> PathBuf {
+    video.with_extension("markers.txt")
+}
+
+/// Write [`markers_text`] of `markers` to `path`: UTF-8 without a byte order mark, with the line
+/// breaks of this system.
+pub fn write_markers_text(path: &Path, markers: &[Marker]) -> std::io::Result<()> {
+    std::fs::write(path, native_line_breaks(&markers_text(markers)))
 }
 
 /// A comment line that starts with a time: the marker it stands for.
@@ -788,6 +820,112 @@ fn merge_text(a: &str, b: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn span_marker(
+        start_ms: u64,
+        duration_ms: u64,
+        name: &str,
+        comment: &str,
+        color: MarkerColor,
+    ) -> Marker {
+        let mut marker = Marker::new(start_ms);
+        marker.duration_ms = duration_ms;
+        marker.name = name.to_string();
+        marker.comment = comment.to_string();
+        marker.color = color;
+        marker
+    }
+
+    #[test]
+    fn no_markers_make_no_text() {
+        assert_eq!(markers_text(&[]), "");
+    }
+
+    #[test]
+    fn markers_text_has_one_line_each_in_time_order() {
+        let text = markers_text(&[
+            span_marker(
+                41_000,
+                6_000,
+                "Lion crossing",
+                "walks left to right",
+                MarkerColor::Red,
+            ),
+            span_marker(12_500, 0, "Lion", "", MarkerColor::Green),
+        ]);
+        assert_eq!(
+            text,
+            "0:12.500 — Lion\n0:41–0:47 [red] — Lion crossing — walks left to right\n"
+        );
+    }
+
+    #[test]
+    fn the_text_reads_back_as_the_same_markers() {
+        let markers = [
+            span_marker(0, 0, "Start", "", MarkerColor::Green),
+            span_marker(41_000, 0, "Lion", "", MarkerColor::Green),
+            span_marker(
+                41_000,
+                6_000,
+                "Lion crossing",
+                "walks left to right",
+                MarkerColor::Red,
+            ),
+            span_marker(
+                3_725_250,
+                1_500,
+                "Late",
+                "after the hour",
+                MarkerColor::Blue,
+            ),
+        ];
+        let text = markers_text(&markers);
+        let read: Vec<MarkerLine> = text.lines().filter_map(parse_marker_line).collect();
+        assert_eq!(read.len(), markers.len(), "{text}");
+        for (line, marker) in read.iter().zip(&markers) {
+            assert_eq!(line.start_ms, marker.start_ms);
+            assert_eq!(line.duration_ms, marker.duration_ms);
+            assert_eq!(line.name, marker.name);
+            assert_eq!(line.comment, marker.comment);
+            assert_eq!(line.color, marker.color);
+        }
+    }
+
+    #[test]
+    fn a_comment_with_line_breaks_stays_on_its_marker_line() {
+        let text = markers_text(&[span_marker(
+            1_000,
+            0,
+            "A",
+            "one\ntwo\r\nthree",
+            MarkerColor::Green,
+        )]);
+        assert_eq!(text, "0:01 — A — one two three\n");
+    }
+
+    #[test]
+    fn the_text_goes_next_to_the_video_as_clip_markers_txt() {
+        assert_eq!(
+            markers_text_path(Path::new("/footage/clip.mov")),
+            Path::new("/footage/clip.markers.txt")
+        );
+    }
+
+    #[test]
+    fn the_file_is_utf8_without_a_byte_order_mark() {
+        let dir = crate::test_support::fresh_dir("markers-text-file");
+        let path = dir.join("clip.markers.txt");
+        write_markers_text(
+            &path,
+            &[span_marker(1_000, 0, "Лев", "", MarkerColor::Green)],
+        )
+        .expect("write");
+        let bytes = std::fs::read(&path).expect("read");
+        assert!(!bytes.starts_with(&[0xEF, 0xBB, 0xBF]));
+        let expected = native_line_breaks("0:01 — Лев\n");
+        assert_eq!(String::from_utf8(bytes).expect("utf-8"), expected);
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     #[test]
     fn a_marker_is_unnamed_when_it_is_editable_and_its_name_is_blank() {

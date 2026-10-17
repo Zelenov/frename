@@ -265,6 +265,10 @@ batch-run-reload = Reload { $count ->
     [one] { $count } file
    *[other] { $count } files
 }
+batch-run-export-markers = Export markers of { $count ->
+    [one] { $count } file
+   *[other] { $count } files
+}
 batch-service-soniox = Soniox
 batch-change-renames = Renames files
 batch-change-videos = Writes into the videos
@@ -348,6 +352,9 @@ batch-action-respace-tags-hint-space = Renames each checked file to put a space 
 batch-action-respace-tags-hint-no-space = Renames each checked file to have no space after its tags, as set in the settings: Food.Goat.clip.mp4.
 batch-action-respace-tags-status-space = Spacing: a space after each tag
 batch-action-respace-tags-status-no-space = Spacing: no space after tags
+batch-action-export-markers = Export markers to text
+batch-action-export-markers-hint = Writes the markers of each checked file as a text file next to it, clip.markers.txt: one line per marker in time order, like "0:41–0:47 [red] — Lion crossing — walks left to right". A color other than green is in brackets; the comment follows the name. "Markers ⇄ comment" reads such lines back as markers. A file with no markers gets no text file, and a text file from an earlier run is replaced.
+batch-export-markers-cannot-hold = This file cannot hold markers
 batch-action-reload-files = Reset cache and reload
 batch-action-reload-files-hint = Reads the comment and in/out points of each checked file from the file itself again and replaces what the folder remembered for it. Use it after the files were changed in another program. Files whose remembered values were missing or out of date count as changed.
 
@@ -775,3 +782,9 @@ folder-not-saved = Not saved: a file with that name already exists, or it is rea
 markers-deleted-notice = Marker deleted
 markers-not-saved-notice = Markers not saved: the file is read-only or in use
 markers-comment-not-saved-notice = Markers not saved: the comment file is read-only or in use
+markers-copy = Copy
+markers-copy-tip = Copy the markers as text, one line each
+markers-export = Export…
+markers-export-tip = Save the markers as a text file
+markers-exported = Markers saved to { $name }
+markers-not-exported = Markers not saved: the file could not be written

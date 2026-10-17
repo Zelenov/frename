@@ -318,6 +318,11 @@ batch-run-reload = Перечитать: { $count ->
     [few] { $count } файла
    *[many] { $count } файлов
 }
+batch-run-export-markers = Выгрузить маркеры: { $count ->
+    [one] { $count } файл
+    [few] { $count } файла
+   *[many] { $count } файлов
+}
 batch-service-soniox = Soniox
 batch-change-renames = Переименовывает файлы
 batch-change-videos = Пишет в видео
@@ -403,6 +408,9 @@ batch-action-respace-tags-hint-space = Переименовывает кажды
 batch-action-respace-tags-hint-no-space = Переименовывает каждый отмеченный файл так, чтобы после тегов не было пробелов, как задано в настройках: Food.Goat.clip.mp4.
 batch-action-respace-tags-status-space = Пробел после каждого тега
 batch-action-respace-tags-status-no-space = Без пробелов после тегов
+batch-action-export-markers = Выгрузить маркеры в текст
+batch-action-export-markers-hint = Записывает маркеры каждого отмеченного файла в текстовый файл рядом с ним, clip.markers.txt: по строке на маркер, по порядку времени, например «0:41–0:47 [red] — Лев идёт — слева направо». Цвет, кроме зелёного, стоит в скобках; комментарий идёт после имени. «Маркеры ⇄ комментарий» читает такие строки обратно как маркеры. У файла без маркеров текстового файла не будет, а текст от прошлого запуска заменяется.
+batch-export-markers-cannot-hold = Этот файл не может хранить маркеры
 batch-action-reload-files = Сбросить кэш и перечитать
 batch-action-reload-files-hint = Заново читает комментарий и точки входа и выхода каждого отмеченного файла из самого файла и заменяет то, что папка о нём запомнила. Нужно, если файлы менялись в другой программе. Файлы, у которых запомненное отсутствовало или устарело, считаются изменёнными.
 
@@ -849,3 +857,9 @@ folder-not-saved = Не сохранено: файл с таким именем 
 markers-deleted-notice = Маркер удалён
 markers-not-saved-notice = Маркеры не сохранены: файл только для чтения или занят
 markers-comment-not-saved-notice = Маркеры не сохранены: файл комментария только для чтения или занят
+markers-copy = Копировать
+markers-copy-tip = Скопировать маркеры текстом, по строке на маркер
+markers-export = Экспорт…
+markers-export-tip = Сохранить маркеры в текстовый файл
+markers-exported = Маркеры сохранены: { $name }
+markers-not-exported = Маркеры не сохранены: файл не удалось записать

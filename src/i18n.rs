@@ -535,7 +535,7 @@ mod tests {
     }
 
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
-    const NOT_UI_TEXT: [(&str, &str); 95] = [
+    const NOT_UI_TEXT: [(&str, &str); 98] = [
         ("explorer", "program name"),
         ("open", "program name (macOS)"),
         ("xdg-open", "program name"),
@@ -577,6 +577,14 @@ mod tests {
         (
             "Markers <-> comment",
             "English-only log label, see LOG_LABEL",
+        ),
+        (
+            "Export markers",
+            "English-only log label, see LOG_LABEL",
+        ),
+        (
+            "Export markers to text",
+            "English-only action name for logs, see Action::log_id",
         ),
         ("SONIOX_API_KEY", "environment variable name"),
         ("extracting", "a demo scenario's `subtitles_stage` value, never shown"),
@@ -675,6 +683,10 @@ mod tests {
         ),
         (
             "markers_comment",
+            "stable action id for the batch run remembered across restarts (#65), see Action::id",
+        ),
+        (
+            "export_markers",
             "stable action id for the batch run remembered across restarts (#65), see Action::id",
         ),
         (
