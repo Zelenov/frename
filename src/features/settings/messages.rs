@@ -36,7 +36,7 @@ pub enum Message {
     ClearFocus,
     /// Which of the window's text fields has focus after a click: the focus goes there.
     FieldFocused(Option<&'static str>),
-    /// The UI language code (`en`, `ru`); empty follows the OS language.
+    /// The UI language code (`en`, `ru`, `de`); empty follows the OS language.
     SetUiLanguage(String),
     /// Start playing videos as soon as they are opened.
     SetAutoplayVideo(bool),

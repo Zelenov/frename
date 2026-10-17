@@ -36,6 +36,7 @@
 
 language-name-en = English
 language-name-ru = Русский
+language-name-de = Deutsch
 
 ## Settings window
 
