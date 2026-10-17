@@ -10,12 +10,12 @@
 #   screenshot                        Screenshot
 #   marker (Premiere)                 Marker
 #   range (a marker with a duration)  Bereich
-#   subclip (Premiere)                Subclip
-#   Description column (Premiere)     Spalte „Description“
+#   subclip (Premiere)                Teilclip (as in German Premiere Pro)
+#   Description column (Premiere)     Spalte „Beschreibung“
 #   checked (files)                   ausgewählt
 #   All / Invert (check boxes)        Alle / Umkehren
 #   video / clip                      Video / Clip
-#   tag panel                         Tag-Leiste
+#   tag panel / tag list              Tag-Leiste / Tag-Liste (the folder's list of tags)
 #   file name                         Dateiname
 #   a tag name inside a sentence      in „…“ quotes: „Commented“
 #   untagged (filter)                 Ohne Tags
@@ -23,7 +23,9 @@
 #   Cancel / Stopping…                Abbrechen / Wird beendet…
 #   log, "see the log"                Protokoll, „siehe Protokoll“
 #   System (language list)            System (…)
-#   batch action                      Stapelaktion
+#   batch action / batch mode         Stapelaktion / Stapelmodus
+#   request (to the AI)               Anfrage
+#   moments (AI)                      Momente
 #   file list / folder                Dateiliste / Ordner
 #   settings                          Einstellungen
 #   update (a newer frename)          Update
@@ -66,7 +68,7 @@ settings-tags-space-add = Leerzeichen zu den Dateinamen hinzufügen…
 settings-tags-space-remove = Leerzeichen aus den Dateinamen entfernen…
 settings-comments = Kommentare
 settings-comments-in-video = In der Videodatei
-settings-comments-in-video-hint = XMP, die Spalte „Description“ in Premiere Pro
+settings-comments-in-video-hint = XMP, die Spalte „Beschreibung“ in Premiere Pro
 settings-comments-text-file = In einer Textdatei neben dem Video
 settings-comments-text-file-example = clip.comment.txt
 settings-comments-note = Dateien behalten ihre Kommentare, wo sie sind, bis sie verschoben werden.
@@ -78,7 +80,7 @@ settings-commented-tag-hint = Wird gesetzt, wenn du einen Kommentar zu einem Vid
 settings-commented-tag-off = Videos mit Kommentar bekommen keinen Tag.
 settings-in-out = In-/Out-Punkte
 settings-in-out-in-video = In der Videodatei
-settings-in-out-in-video-hint = Ein Subclip-Marker in Premiere Pro
+settings-in-out-in-video-hint = Ein Teilclip-Marker in Premiere Pro
 settings-in-out-comment = Im Kommentar, in einer Zeile
 settings-in-out-comment-example = In/Out: 00:01:05.250 – 00:02:10.000
 settings-in-out-note = Dateien behalten ihre In-/Out-Punkte, wo sie sind, bis sie verschoben werden.
@@ -122,7 +124,7 @@ settings-ai-moments-full = Den ganzen Clip abdecken
 settings-ai-moments-important-hint = Schlägt auch vor, wo In und Out gesetzt werden (die KI-Schaltfläche neben IN und OUT)
 settings-ai-moments-full-hint = Ein Moment für jeden Abschnitt, auch für ruhige; kein Vorschlag für In und Out
 settings-ai-tag-suggestions = Auch Tags aus den Tags des Ordners vorschlagen
-settings-ai-tag-suggestions-hint = Im selben Request sagt die KI, welche Tags des Ordners zu jedem Clip passen. Ein vorgeschlagener Tag wird nur hinzugefügt, wenn du ihn anklickst.
+settings-ai-tag-suggestions-hint = In derselben Anfrage sagt die KI, welche Tags des Ordners zu jedem Clip passen. Ein vorgeschlagener Tag wird nur hinzugefügt, wenn du ihn anklickst.
 settings-subtitles = Untertitel
 settings-subtitles-key-label = Soniox-API-Schlüssel
 settings-subtitles-key-placeholder = Schlüssel einfügen
@@ -189,17 +191,17 @@ batch-action-prepare = Clips vorbereiten
 batch-action-prepare-hint = Für jeden ausgewählten Clip in einem Durchgang: Untertitel (Soniox), falls er keine hat, dann die Beschreibung mit KI: eine Zusammenfassung, ihre Momente als Marker, der Kommentar und Tag-Vorschläge. Ein Preis, ein Limit und ein Fortschritt für alles.
 batch-prepare-step-off = ausgeschaltet
 batch-prepare-nothing = Für diese Clips gibt es nichts zu tun
-batch-prepare-report-cap = { $spent } von { $cap } Limit ausgegeben
+batch-prepare-report-cap = { $spent } ausgegeben (Limit { $cap })
 batch-option-steps = Schritte
 batch-prepare-step-subtitles = Zuerst die Untertitel erzeugen (Soniox)
 batch-prepare-step-description = Die Clips mit KI beschreiben
 batch-prepare-cap = Ausgaben stoppen bei
 batch-prepare-cap-none = Kein Limit (US-Dollar)
 batch-prepare-cap-invalid = Das Limit ist ein Dollarbetrag, z. B. 5
-batch-prepare-left = Der letzte Lauf wurde mit { $count ->
-    [one] 1 Clip
-   *[other] { $count } Clips
-} Rest beendet
+batch-prepare-left = Der letzte Lauf wurde beendet; { $count ->
+    [one] 1 Clip ist
+   *[other] { $count } Clips sind
+} übrig
 batch-prepare-check-left = Auswählen
 batch-prepare-estimating = Es wird ermittelt, was jeder Schritt tut…
 batch-prepare-plan-subtitles = Untertitel
@@ -213,7 +215,7 @@ batch-prepare-plan-description-line = { $videos ->
     [one] 1 Video
    *[other] { $videos } Videos
 } zu beschreiben
-batch-prepare-resume-note = Jeder Schritt überspringt, was schon da ist; ein beendeter Lauf wird also fortgesetzt, indem man ihn erneut startet: nichts wird doppelt bezahlt.
+batch-prepare-resume-note = Jeder Schritt überspringt, was schon da ist; ein beendeter Lauf wird also fortgesetzt, indem du ihn erneut startest: nichts wird doppelt bezahlt.
 batch-prepare-run = { $clips ->
     [one] 1 Clip
    *[other] { $clips } Clips
@@ -234,7 +236,10 @@ batch-waiting-title = { $count ->
    *[other] { $count } Läufe warten
 }
 batch-waiting-remove = Entfernen
-batch-indicator-waiting = { $count } warten
+batch-indicator-waiting = { $count ->
+    [one] { $count } wartet
+   *[other] { $count } warten
+}
 file-workspace-describe-clip = Diesen Clip mit KI beschreiben
 file-workspace-subtitles-clip = Untertitel für diesen Clip erzeugen
 file-workspace-describe-clip-queued = Mit KI beschreiben: wartet auf seinen Zug. Klicken zum Zurückziehen
@@ -447,7 +452,7 @@ batch-action-generate-subtitles-replace = Vorhandene Untertitel ersetzen
 batch-action-generate-subtitles-replace-hint = Transkribiert erneut; kostet wie angezeigt.
 batch-action-generate-subtitles-srt = SRT-Untertitel (clip.srt)
 batch-action-generate-subtitles-premiere = Premiere-Pro-Transkript (clip.premiere.json)
-batch-action-generate-subtitles-premiere-hint = In Premiere Pro: Bereich „Text“ → Transkript → Statisches Transkript importieren.
+batch-action-generate-subtitles-premiere-hint = In Premiere Pro: Bedienfeld „Text“ → Transkript → Statisches Transkript importieren.
 batch-action-generate-subtitles-privacy = Das Audio dieser Videos wird an Soniox gesendet und dort danach gelöscht.
 batch-action-generate-subtitles-duration-hint = Dauert einige Minuten pro Stunde Audio. { batch-runs-in-background }. Wenn frename geschlossen wird, endet der Lauf; fertige Untertitel bleiben erhalten.
 batch-action-generate-subtitles-hint = Transkribiert die Sprache jedes ausgewählten Videos mit Soniox und speichert das Ergebnis daneben: Untertitel (clip.srt), wo frename sie anzeigt, und/oder ein Premiere-Pro-Transkript.
@@ -467,7 +472,10 @@ batch-subtitles-already = { $n ->
    *[other] { $n } haben schon Untertitel
 }
 batch-subtitles-rebuilt-free = { $n } kostenlos aus einem gespeicherten Transkript neu erstellt
-batch-subtitles-no-speech-before = { $n } hatten beim letzten Mal keine Sprache
+batch-subtitles-no-speech-before = { $n ->
+    [one] { $n } hatte beim letzten Mal keine Sprache
+   *[other] { $n } hatten beim letzten Mal keine Sprache
+}
 batch-subtitles-no-audio = { $n ->
     [one] { $n } hat kein Audio
    *[other] { $n } haben kein Audio
@@ -498,9 +506,9 @@ batch-subtitles-stop-other = Beendet: Soniox hat die Fortsetzung verweigert ({ $
 batch-subtitles-stop-unreachable = Beendet: Soniox ist nicht erreichbar. Prüfe die Internetverbindung.
 batch-subtitles-report-spend = Soniox: mindestens { $duration } · { $usd }
 batch-subtitles-report-failed-deletes = { $n ->
-    [one] { $n } Upload
-   *[other] { $n } Uploads
-} konnte(n) bei Soniox nicht gelöscht werden (siehe Protokoll)
+    [one] { $n } Upload konnte
+   *[other] { $n } Uploads konnten
+} bei Soniox nicht gelöscht werden (siehe Protokoll)
 batch-subtitles-languages-need-key = Speichere einen Soniox-Schlüssel, um aus allen Sprachen zu wählen.
 batch-subtitles-languages-rejected = Soniox hat den Schlüssel abgelehnt.
 batch-subtitles-languages-failed = Die Sprachen konnten nicht von Soniox geholt werden.
@@ -529,7 +537,7 @@ folder-outcome-failed = Fehlgeschlagen, siehe Protokoll
 folder-rename-error-empty = Der Name ist leer
 folder-rename-error-bad-character = Nicht erlaubt: \ / : * ? " < > |
 folder-rename-error-trailing = Darf nicht mit Punkt oder Leerzeichen enden
-folder-rename-error-exists = Eine Datei mit diesem Namen existiert
+folder-rename-error-exists = Eine Datei mit diesem Namen existiert bereits
 folder-markers-not-saved = Marker nicht gespeichert: Die Datei ist schreibgeschützt oder in Gebrauch (schließe sie in Premiere, öffne dann die Datei und verlasse sie wieder)
 drag-out-not-saved = Nicht gezogen: Die Datei kann nicht gespeichert werden (schreibgeschützt oder in Premiere geöffnet)
 folder-opening = Ordner wird geöffnet…
@@ -686,22 +694,22 @@ markers-name-placeholder = Name
 markers-ai-describe = Mit KI beschreiben: den Marker benennen und ergänzen, was passiert
 markers-ai-stop = Beschreiben beenden
 markers-ai-describe-unnamed = { $count } unbenannte beschreiben
-markers-ai-describe-unnamed-hint = Benennt und beschreibt jeden Marker ohne Namen mit KI, einige gleichzeitig. Ein Request pro Marker; ein Name, den du inzwischen eingibst, bleibt erhalten.
+markers-ai-describe-unnamed-hint = Benennt und beschreibt jeden Marker ohne Namen mit KI, einige gleichzeitig. Eine Anfrage pro Marker; ein Name, den du inzwischen eingibst, bleibt erhalten.
 markers-ai-price-about = etwa { $dollars }
-markers-ai-describe-unnamed-cost = Ein Request pro Marker: { $each } je Marker, { $total } für alle.
+markers-ai-describe-unnamed-cost = Eine Anfrage pro Marker: { $each } je Marker, { $total } für alle.
 markers-ai-confirm = { $count ->
-    [one] { $count } Marker beschreiben? Ein Request: { $total }.
-   *[other] { $count } Marker beschreiben? Ein Request pro Marker: { $total } insgesamt.
+    [one] { $count } Marker beschreiben? Eine Anfrage: { $total }.
+   *[other] { $count } Marker beschreiben? Eine Anfrage pro Marker: { $total } insgesamt.
 }
 markers-ai-confirm-unpriced = { $count ->
-    [one] { $count } Marker beschreiben? Ein kostenpflichtiger Request.
-   *[other] { $count } Marker beschreiben? Je ein kostenpflichtiger Request.
+    [one] { $count } Marker beschreiben? Eine kostenpflichtige Anfrage.
+   *[other] { $count } Marker beschreiben? Je eine kostenpflichtige Anfrage.
 }
 markers-ai-confirm-yes = Beschreiben
 markers-ai-confirm-no = Abbrechen
 markers-ai-waiting = Wartet auf seinen Zug…
-markers-ai-run = { $describing } werden beschrieben · { $waiting } warten
-markers-ai-run-last = { $describing } werden beschrieben
+markers-ai-run = Beschreibe { $describing } · wartend: { $waiting }
+markers-ai-run-last = Beschreibe { $describing }
 markers-ai-stop-all = Alle beenden
 markers-ai-describing = Wird beschrieben…
 markers-ai-done = Marker beschrieben
