@@ -49,6 +49,11 @@ pub enum Message {
     StopDescribingAll,
     /// Stop describing this marker.
     StopDescribing(String),
+    /// "Copy": the markers as text (one line each) onto the clipboard.
+    CopyText,
+    /// "Export…": ask where, then save the markers as a text file (`clip.markers.txt` by
+    /// default).
+    ExportText,
     /// The list scrolled: its offset from the top and its viewport's height.
     Scrolled(f32, f32),
     /// A row (by index) was laid out this tall.

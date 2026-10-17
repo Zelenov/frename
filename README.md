@@ -24,7 +24,7 @@ frename is free and open source (MIT license).
   range, and press `[` and `]` to set the usable part of the clip. Premiere Pro shows the markers on
   the clip, with their names, lengths and colors, and turns the in and out points into a subclip.
   Describe with AI can suggest in and out points: its AI pill sets them in one click, rounded to
-  whole seconds.
+  whole seconds. Copy the markers as text, or export them to a `.txt` file, from the marker list.
 - **Write a comment for each clip.** By default the comment is saved inside the video, where
   Premiere Pro shows it in the Description column and finds it by search.
 - **Let AI describe your footage.** Describe with AI writes a short summary of each clip and marks
@@ -43,8 +43,9 @@ frename is free and open source (MIT license).
   or clips with subtitles, comments or markers.
 - **Work on many clips at once.** Batch mode runs one action on all the clips you check, for
   example rotating them, moving comments between the video and text files, or turning comment
-  lines into markers. A long action runs in the background while you keep working; click the strip
-  above the toolbar under the file list to see its progress or cancel it.
+  lines into markers, or writing each clip's markers to a text file. A long action runs in the
+  background while you keep working; click the strip above the toolbar under the file list to see
+  its progress or cancel it.
 - **Never lose your work.** `Ctrl+Z` undoes almost everything, and frename keeps a recovery file
   of the open clip a second after each change, so a crash or a power cut does not cost you your
   tags, comments or markers. A line under the file name says "All changes saved", or that they

@@ -547,7 +547,8 @@ impl SettingsState {
             Message::SetSubtitleCueLength(length) => self.settings.subtitle_cue_length = length,
             Message::Key(which, message) => self.apply_key(which, message),
             Message::OpenBatchAction(
-                Operation::TagCommented
+                Operation::ExportMarkers
+                | Operation::TagCommented
                 | Operation::FixTags
                 | Operation::ReloadFiles
                 | Operation::Rotate(_)

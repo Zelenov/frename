@@ -162,7 +162,49 @@ pub fn view<'a>(
     // moves the ones after it, and a widget that moved starts over, so the name field open in
     // a row would lose its focus the moment "Describe N unnamed" went away (the first letter
     // typed into the only unnamed marker).
-    column![slot(in_out.map(in_out_line)), slot(describe_all), list].into()
+    let share = markers.and_then(|markers| share_bar(!markers.is_empty()));
+    column![
+        slot(in_out.map(in_out_line)),
+        slot(share),
+        slot(describe_all),
+        list
+    ]
+    .into()
+}
+
+/// Over the list: "Copy" and "Export…" the markers as text. Nothing for a list with no markers.
+fn share_bar<'a>(any: bool) -> Option<Element<'a, Message>> {
+    if !any {
+        return None;
+    }
+    let copy = tooltip::tip(
+        ui_button::with_icon(ButtonKind::Ghost, Icon::Copy, fl!("markers-copy"), true)
+            .on_press(Message::CopyText),
+        Tip::new(fl!("markers-copy-tip")),
+        Position::Bottom,
+    );
+    let export = tooltip::tip(
+        ui_button::with_icon(
+            ButtonKind::Ghost,
+            Icon::FileText,
+            fl!("markers-export"),
+            true,
+        )
+        .on_press(Message::ExportText),
+        Tip::new(fl!("markers-export-tip")),
+        Position::Bottom,
+    );
+    Some(
+        container(row![copy, export].spacing(SPACE_XS))
+            .padding(Padding {
+                left: SPACE_S,
+                right: SCROLL_GUTTER,
+                top: SPACE_XS,
+                bottom: 0.0,
+            })
+            .width(Length::Fill)
+            .into(),
+    )
 }
 
 /// `line`, or an empty element that holds its place in the column.
@@ -755,10 +797,17 @@ mod tests {
                 .len()
         };
         let all = children(Some((0, 1_000)), 1);
-        assert_eq!(all, 3);
+        assert_eq!(all, 4);
         assert_eq!(children(None, 1), all, "no in and out points");
         assert_eq!(children(None, 0), all, "nothing unnamed to describe");
         assert_eq!(children(Some((0, 1_000)), 0), all);
+        let none: [Marker; 0] = [];
+        let without = view(Some(&none), &state, 0, None, 0, 0, None);
+        assert_eq!(
+            without.as_widget().children().len(),
+            all,
+            "no markers to copy or export"
+        );
     }
 
     #[test]

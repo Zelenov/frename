@@ -1,0 +1,20 @@
+# PR screenshots for #306: `--batch` shows "Export markers to text" selected for the checked
+# clips. Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.night.city.MVI_0410.mp4"
+window = [1440, 720]
+panels = [640, 360]
+batch_action = "Export markers to text"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.drone.landscape.MVI_0404.mp4"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.MVI_0410.mp4"
+markers = [
+  "0:02 — Night falls over the ocean",
+  "0:06.120 [red] — City lights — Lights come on along the coast",
+  "0:14–0:18 — Africa stays dark",
+]

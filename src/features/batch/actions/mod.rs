@@ -10,6 +10,7 @@
 //! runs over ([`Actions::job_files`]), as "Describe with AI" does.
 
 pub mod describe_ai;
+mod export_markers;
 mod fix_tags;
 pub mod generate_subtitles;
 mod markers_comment;
@@ -42,6 +43,7 @@ pub enum Action {
     MoveComments,
     MoveInOut,
     MarkersComment,
+    ExportMarkers,
     Rotate,
     TagCommented,
     FixTags,
@@ -55,10 +57,11 @@ pub enum Action {
 
 impl Action {
     /// Every action, in list order.
-    pub const ALL: [Action; 11] = [
+    pub const ALL: [Action; 12] = [
         Action::MoveComments,
         Action::MoveInOut,
         Action::MarkersComment,
+        Action::ExportMarkers,
         Action::Rotate,
         Action::TagCommented,
         Action::FixTags,
@@ -74,6 +77,7 @@ impl Action {
             Self::MoveComments => move_comments::label(),
             Self::MoveInOut => move_in_out::label(),
             Self::MarkersComment => markers_comment::label(),
+            Self::ExportMarkers => export_markers::label(),
             Self::Rotate => rotate::label(),
             Self::TagCommented => tag_commented::label(),
             Self::FixTags => fix_tags::label(),
@@ -100,6 +104,7 @@ impl Action {
             Self::MoveComments => "Move comments",
             Self::MoveInOut => "In/out points: comment <-> video",
             Self::MarkersComment => "Markers <-> comment",
+            Self::ExportMarkers => "Export markers to text",
             Self::Rotate => "Rotate videos",
             Self::TagCommented => "Tag commented videos",
             Self::FixTags => "Fix tags by priority",
@@ -114,7 +119,9 @@ impl Action {
     /// The group of the action list it is under.
     pub fn group(self) -> Group {
         match self {
-            Self::MoveComments | Self::MoveInOut | Self::MarkersComment => Group::MoveBetweenPlaces,
+            Self::MoveComments | Self::MoveInOut | Self::MarkersComment | Self::ExportMarkers => {
+                Group::MoveBetweenPlaces
+            }
             Self::Rotate
             | Self::TagCommented
             | Self::FixTags
@@ -130,6 +137,7 @@ impl Action {
             Self::MoveComments => Icon::MessageSquareText,
             Self::MoveInOut => Icon::Scissors,
             Self::MarkersComment => Icon::MapPin,
+            Self::ExportMarkers => Icon::FileText,
             Self::Rotate => Icon::RotateCw,
             Self::TagCommented => Icon::Tag,
             Self::FixTags => Icon::ListOrdered,
@@ -152,6 +160,7 @@ impl Action {
             Self::MoveComments => fl!("batch-run-move-comments", count = count),
             Self::MoveInOut => fl!("batch-run-move-in-out", count = count),
             Self::MarkersComment => fl!("batch-run-convert", count = count),
+            Self::ExportMarkers => fl!("batch-run-export-markers", count = count),
             Self::Rotate => fl!("batch-run-rotate", count = count),
             Self::TagCommented => fl!("batch-run-tag", count = count),
             Self::FixTags => fl!("batch-run-fix-tags", count = count),
@@ -177,6 +186,7 @@ impl Action {
             Self::MoveComments => "move_comments",
             Self::MoveInOut => "move_in_out",
             Self::MarkersComment => "markers_comment",
+            Self::ExportMarkers => "export_markers",
             Self::Rotate => "rotate",
             Self::TagCommented => "tag_commented",
             Self::FixTags => "fix_tags",
@@ -225,6 +235,8 @@ pub enum Operation {
     MoveComments(CommentStorage),
     MoveInOut(InOutStorage),
     MarkersComment(markers_comment::Direction),
+    /// Write each clip's markers as `clip.markers.txt`.
+    ExportMarkers,
     /// Turn each video by changing its rotation flag.
     Rotate(rotate::Turn),
     TagCommented,
@@ -248,6 +260,7 @@ impl Operation {
             Self::MoveComments(to) => move_comments::run(*to, path),
             Self::MoveInOut(to) => move_in_out::run(*to, path),
             Self::MarkersComment(direction) => markers_comment::run(*direction, path),
+            Self::ExportMarkers => export_markers::run(path),
             Self::Rotate(turn) => rotate::run(*turn, path),
             Self::TagCommented => tag_commented::run(path),
             Self::FixTags => fix_tags::run(path),
@@ -302,6 +315,7 @@ impl Operation {
             Self::MoveComments(_) => Action::MoveComments,
             Self::MoveInOut(_) => Action::MoveInOut,
             Self::MarkersComment(_) => Action::MarkersComment,
+            Self::ExportMarkers => Action::ExportMarkers,
             Self::Rotate(_) => Action::Rotate,
             Self::TagCommented => Action::TagCommented,
             Self::FixTags => Action::FixTags,
@@ -433,7 +447,8 @@ impl Actions {
             Operation::MoveComments(to) => self.move_comments.prepare(to),
             Operation::MoveInOut(to) => self.move_in_out.prepare(to),
             Operation::MarkersComment(direction) => self.markers_comment.prepare(direction),
-            Operation::Rotate(_)
+            Operation::ExportMarkers
+            | Operation::Rotate(_)
             | Operation::TagCommented
             | Operation::FixTags
             | Operation::RespaceTags
@@ -450,6 +465,7 @@ impl Actions {
             Action::MoveComments => Some(self.move_comments.operation()),
             Action::MoveInOut => Some(self.move_in_out.operation()),
             Action::MarkersComment => Some(self.markers_comment.operation()),
+            Action::ExportMarkers => Some(Operation::ExportMarkers),
             Action::Rotate => Some(self.rotate.operation()),
             Action::TagCommented => tag_commented::operation(),
             Action::FixTags => Some(Operation::FixTags),
@@ -650,9 +666,11 @@ impl Actions {
                 ]
             }
             Action::PrepareClips => self.pipeline.persist(),
-            Action::TagCommented | Action::FixTags | Action::RespaceTags | Action::ReloadFiles => {
-                Vec::new()
-            }
+            Action::ExportMarkers
+            | Action::TagCommented
+            | Action::FixTags
+            | Action::RespaceTags
+            | Action::ReloadFiles => Vec::new(),
         }
     }
 
@@ -714,7 +732,11 @@ impl Actions {
                 }
             }
             Action::PrepareClips => self.pipeline.restore(options),
-            Action::TagCommented | Action::FixTags | Action::RespaceTags | Action::ReloadFiles => {}
+            Action::ExportMarkers
+            | Action::TagCommented
+            | Action::FixTags
+            | Action::RespaceTags
+            | Action::ReloadFiles => {}
         }
     }
 
@@ -735,6 +757,7 @@ impl Actions {
             Action::FixTags => fix_tags::view(),
             Action::RespaceTags => tag_spacing::view(),
             Action::ReloadFiles => reload_files::view(),
+            Action::ExportMarkers => export_markers::view(),
         };
         Panel {
             page,
@@ -1054,6 +1077,7 @@ mod tests {
     fn actions_without_a_choice_persist_nothing() {
         let actions = Actions::default();
         for action in [
+            Action::ExportMarkers,
             Action::TagCommented,
             Action::FixTags,
             Action::RespaceTags,

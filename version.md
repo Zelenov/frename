@@ -1,3 +1,7 @@
+# 0.162
+## Added
+- Export markers as text: the marker list has Copy and Export… buttons for the open clip (one line per marker in time order, such as `0:41–0:47 [red] — Lion crossing — walks left to right`), and the batch action Export markers to text writes `clip.markers.txt` next to each checked clip. Markers ⇄ comment reads such lines back as markers.
+
 # 0.161
 ## Added
 - Suggest tags for the open clip: a tag button in the corner of the comment box (and `Ctrl+F6`) asks the AI for tags from the folder's list without the batch panel and whatever Settings say. It runs in the same line as every slow run and can be taken back; the suggestions show under the clip's name, and `F6` adds the first, as before. A clip that is already described but has no suggestions is described again to get them.

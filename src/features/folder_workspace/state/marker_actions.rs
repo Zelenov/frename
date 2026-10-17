@@ -239,6 +239,8 @@ impl FolderWorkspace {
                 self.markers.stop_all_describing();
                 Task::none()
             }
+            M::CopyText => self.copy_markers_text(),
+            M::ExportText => self.export_markers_text(),
             M::RowHeight(index, height) => {
                 self.markers.set_row_height(index, height);
                 Task::none()
@@ -568,6 +570,69 @@ impl FolderWorkspace {
                 Self::notice(&markers_not_saved())
             }
         }
+    }
+
+    /// Put the open clip's markers on the clipboard as text.
+    fn copy_markers_text(&mut self) -> Task<Message> {
+        let text = match self.file_workspace.markers() {
+            Some(markers) if !markers.is_empty() => {
+                frename_core::native_line_breaks(&frename_core::markers_text(markers))
+            }
+            _ => return Task::none(),
+        };
+        match self.set_clipboard_text(text) {
+            Ok(()) => Self::notice(&fl!("file-menu-copied")),
+            Err(e) => {
+                log::warn!("could not copy the markers to the clipboard: {e}");
+                Self::notice(&fl!("file-menu-not-copied"))
+            }
+        }
+    }
+
+    /// Ask where to save the open clip's markers as text (`clip.markers.txt` next to the video
+    /// to begin with), then write them there.
+    fn export_markers_text(&mut self) -> Task<Message> {
+        let (Some(file), Some(markers)) =
+            (self.file_workspace.file(), self.file_workspace.markers())
+        else {
+            return Task::none();
+        };
+        if markers.is_empty() {
+            return Task::none();
+        }
+        let markers = markers.to_vec();
+        let suggested = frename_core::markers_text_path(file.file_path());
+        Task::perform(
+            async move {
+                let mut dialog = rfd::AsyncFileDialog::new()
+                    .add_filter("Text", &["txt"])
+                    .set_title(fl!("markers-export"));
+                if let Some(folder) = suggested.parent() {
+                    dialog = dialog.set_directory(folder);
+                }
+                if let Some(name) = suggested.file_name() {
+                    dialog = dialog.set_file_name(name.to_string_lossy());
+                }
+                let Some(target) = dialog.save_file().await else {
+                    return Message::Noop;
+                };
+                let target = target.path().to_path_buf();
+                match frename_core::write_markers_text(&target, &markers) {
+                    Ok(()) => Self::notice_message(&fl!(
+                        "markers-exported",
+                        name = target
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_default()
+                    )),
+                    Err(e) => {
+                        log::warn!("markers not written to {target:?}: {e}");
+                        Self::notice_message(&fl!("markers-not-exported"))
+                    }
+                }
+            },
+            |message| message,
+        )
     }
 
     /// Show a short note over the video's picture.
