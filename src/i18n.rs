@@ -537,7 +537,7 @@ mod tests {
     }
 
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
-    const NOT_UI_TEXT: [(&str, &str); 98] = [
+    const NOT_UI_TEXT: [(&str, &str); 101] = [
         ("explorer", "program name"),
         ("open", "program name (macOS)"),
         ("xdg-open", "program name"),
@@ -565,6 +565,9 @@ mod tests {
         ("OUT", "badge that mirrors out_ in file names"),
         ("CC", "subtitle button, a symbol"),
         ("SRT", "file format name"),
+        ("ASS", "file format name"),
+        ("SSA", "file format name"),
+        ("Premiere", "file format name, Premiere Pro transcript"),
         ("AI", "marker color badge, mirrors the AI marker color name"),
         ("subtitle_cue_list", "widget id"),
         ("search-bar-input", "widget id"),

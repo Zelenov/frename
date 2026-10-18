@@ -7,8 +7,10 @@
 //! clipscribe's (`clipscribe::srt`, `clipscribe::ass`), which describes clips from the same files.
 //! A Premiere Pro transcript (`clip.premiere.json`, which Generate subtitles can write) is read
 //! as subtitles too, by sonisub, laid out by the "short line" / "whole sentence" setting.
-//! When a video has several, `.srt` wins, then `.ass`, then `.ssa`, then `.premiere.json`;
-//! frename writes only `.srt` (and the transcript when asked).
+//! When a video has several, `.ass` wins, then `.ssa`, then `.premiere.json`, then `.srt`, unless
+//! the editor picked one for that clip ([`SubtitleFormat`], kept by the app database); a file
+//! that is empty or cannot be read gives way to the next. frename writes only `.srt` (and the
+//! transcript when asked).
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -163,23 +165,54 @@ pub fn cue_length() -> CueLength {
     }
 }
 
-/// The names a video's subtitles may have, in the order they win: `clip.srt`, `clip.ass`,
-/// `clip.ssa`, `clip.premiere.json`.
+/// The kinds of subtitle file a video may have next to it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SubtitleFormat {
+    Ass,
+    Ssa,
+    /// A Premiere Pro transcript, `clip.premiere.json`.
+    Premiere,
+    Srt,
+}
+
+impl SubtitleFormat {
+    /// Every format in the order they win when the editor has not picked one.
+    pub const DEFAULT_ORDER: [Self; 4] = [Self::Ass, Self::Ssa, Self::Premiere, Self::Srt];
+
+    /// The extension of the file (after the video's stem); also the name it is persisted under.
+    pub fn extension(self) -> &'static str {
+        match self {
+            Self::Ass => "ass",
+            Self::Ssa => "ssa",
+            Self::Premiere => PREMIERE_EXTENSION,
+            Self::Srt => "srt",
+        }
+    }
+
+    /// Parse a persisted name; `None` for one this version does not know.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::DEFAULT_ORDER
+            .into_iter()
+            .find(|format| format.extension() == name)
+    }
+
+    /// The file of this format next to `video_path`.
+    pub fn path(self, video_path: &Path) -> PathBuf {
+        video_path.with_extension(self.extension())
+    }
+}
+
+/// The names a video's subtitles may have, in the order they win: `clip.ass`, `clip.ssa`,
+/// `clip.premiere.json`, `clip.srt`.
 pub fn subtitle_candidates(video_path: &Path) -> Vec<PathBuf> {
-    std::iter::once(subtitle_path(video_path))
-        .chain(
-            clipscribe::ass::EXTENSIONS
-                .iter()
-                .map(|extension| video_path.with_extension(extension)),
-        )
-        .chain(std::iter::once(
-            video_path.with_extension(PREMIERE_EXTENSION),
-        ))
+    SubtitleFormat::DEFAULT_ORDER
+        .iter()
+        .map(|format| format.path(video_path))
         .collect()
 }
 
-/// The subtitle file next to `video_path` that is shown: `.srt` if there is one, else `.ass`,
-/// else `.ssa`, else the Premiere transcript.
+/// The first subtitle file next to `video_path` in the default order (`.ass`, `.ssa`, the
+/// Premiere transcript, `.srt`), whether or not it can be read. `None` when there is none.
 pub fn existing_subtitle_path(video_path: &Path) -> Option<PathBuf> {
     subtitle_candidates(video_path)
         .into_iter()
@@ -229,53 +262,117 @@ fn read_cues(path: &Path, length: CueLength) -> std::io::Result<Vec<SubtitleCue>
     })
 }
 
-/// The cues of the subtitles next to `video_path` (`.srt` before `.ass` before `.ssa`); empty when
-/// there are none. A file that exists but cannot be read is an error.
-pub fn subtitle_cues(video_path: &Path) -> std::io::Result<Vec<SubtitleCue>> {
-    match existing_subtitle_path(video_path) {
-        None => Ok(Vec::new()),
-        Some(path) => read_cues(&path, cue_length()),
-    }
+/// One subtitle file next to a video.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubtitleFile {
+    pub format: SubtitleFormat,
+    pub path: PathBuf,
+    /// False when the file is empty, holds no valid cue, or cannot be read.
+    pub readable: bool,
 }
 
-/// About how many bytes of subtitles `video_path` has: the size of its `.srt` / `.ass` / `.ssa`;
-/// for a Premiere transcript, whose JSON is many times the text, what the same cues would take as
-/// an `.srt`. 0 when there are none.
-pub fn subtitle_bytes(video_path: &Path) -> usize {
-    let Some(path) = existing_subtitle_path(video_path) else {
-        return 0;
-    };
-    if is_premiere(&path) {
-        // The text, a timing line and the numbering of each cue.
-        return read_cues(&path, CueLength::Short)
-            .map_or(0, |cues| cues.iter().map(|c| c.text.len() + 40).sum());
-    }
-    std::fs::metadata(path).map_or(0, |m| m.len() as usize)
+/// What a clip shows: the subtitle files it has, which of them is shown, and its cues.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SubtitleView {
+    /// Every file that exists, in the default order.
+    pub files: Vec<SubtitleFile>,
+    /// The format shown; `None` when no file can be read.
+    pub shown: Option<SubtitleFormat>,
+    pub subtitles: Option<Subtitles>,
 }
 
-/// Load the subtitles next to `video_path`. `None` when there is no file, it cannot be
-/// read, or it holds no valid cue.
-pub fn load_subtitles(video_path: &Path) -> Option<Subtitles> {
-    let path = existing_subtitle_path(video_path)?;
-    let cues = match read_cues(&path, cue_length()) {
-        Ok(cues) => cues,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
-        Err(e) => {
-            log::warn!("subtitles: failed to read {}: {e}", path.display());
+/// The formats to try, the editor's pick (when there is one) first, then the default order.
+fn tried_in_order(chosen: Option<SubtitleFormat>) -> impl Iterator<Item = SubtitleFormat> {
+    chosen.into_iter().chain(
+        SubtitleFormat::DEFAULT_ORDER
+            .into_iter()
+            .filter(move |format| Some(*format) != chosen),
+    )
+}
+
+/// The first file that can be read, in the order of [`tried_in_order`], with its cues laid out
+/// by `length`. A file that is there but empty or unreadable is logged and passed over.
+fn first_readable(
+    video_path: &Path,
+    chosen: Option<SubtitleFormat>,
+    length: CueLength,
+) -> Option<(SubtitleFormat, PathBuf, Vec<SubtitleCue>)> {
+    tried_in_order(chosen).find_map(|format| {
+        let path = format.path(video_path);
+        if !path.is_file() {
             return None;
         }
+        match read_cues(&path, length) {
+            Ok(cues) if !cues.is_empty() => Some((format, path, cues)),
+            Ok(_) => {
+                log::warn!("subtitles: no valid cues in {}", path.display());
+                None
+            }
+            Err(e) => {
+                log::warn!("subtitles: failed to read {}: {e}", path.display());
+                None
+            }
+        }
+    })
+}
+
+/// Open the subtitles next to `video_path`: the file the editor `chosen` for it, or the first in
+/// the default order; if that cannot be read, the next one.
+pub fn open_subtitles(video_path: &Path, chosen: Option<SubtitleFormat>) -> SubtitleView {
+    let shown = first_readable(video_path, chosen, cue_length());
+    let files = SubtitleFormat::DEFAULT_ORDER
+        .into_iter()
+        .filter_map(|format| {
+            let path = format.path(video_path);
+            if !path.is_file() {
+                return None;
+            }
+            let readable = match &shown {
+                Some((shown_format, _, _)) if *shown_format == format => true,
+                _ => read_cues(&path, cue_length()).is_ok_and(|cues| !cues.is_empty()),
+            };
+            Some(SubtitleFile {
+                format,
+                path,
+                readable,
+            })
+        })
+        .collect();
+    let Some((format, path, cues)) = shown else {
+        return SubtitleView {
+            files,
+            ..SubtitleView::default()
+        };
     };
-    let subtitles = Subtitles { cues };
-    if subtitles.is_empty() {
-        log::warn!("subtitles: no valid cues in {}", path.display());
-        return None;
-    }
     log::info!(
         "subtitles: loaded {} cues from {}",
-        subtitles.cues.len(),
+        cues.len(),
         path.display()
     );
-    Some(subtitles)
+    SubtitleView {
+        files,
+        shown: Some(format),
+        subtitles: Some(Subtitles { cues }),
+    }
+}
+
+/// The cues of the file `open_subtitles` shows for `video_path`; empty when there are none.
+pub fn subtitle_cues(video_path: &Path, chosen: Option<SubtitleFormat>) -> Vec<SubtitleCue> {
+    first_readable(video_path, chosen, cue_length()).map_or_else(Vec::new, |(_, _, cues)| cues)
+}
+
+/// About how many bytes of subtitles `video_path` has: the size of the `.srt` / `.ass` / `.ssa`
+/// shown; for a Premiere transcript, whose JSON is many times the text, what the same cues would
+/// take as an `.srt`. 0 when there are none.
+pub fn subtitle_bytes(video_path: &Path, chosen: Option<SubtitleFormat>) -> usize {
+    let Some((format, path, cues)) = first_readable(video_path, chosen, CueLength::Short) else {
+        return 0;
+    };
+    if format == SubtitleFormat::Premiere {
+        // The text, a timing line and the numbering of each cue.
+        return cues.iter().map(|c| c.text.len() + 40).sum();
+    }
+    std::fs::metadata(path).map_or(0, |m| m.len() as usize)
 }
 
 /// Move the subtitle file and the saved transcript along when their video is renamed, so they
@@ -323,6 +420,11 @@ fn rename_companion(old_path: &Path, new_path: &Path) {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    /// What the default order shows for `video`.
+    fn load_subtitles(video: &Path) -> Option<Subtitles> {
+        open_subtitles(video, None).subtitles
+    }
 
     const SAMPLE: &str = "1\r\n00:00:08,850 --> 00:00:11,730\r\nFirst line\r\nsecond line\r\n\r\n\
                           2\r\n00:00:12,810 --> 00:00:17,310\r\nSecond cue\r\n";
@@ -459,28 +561,35 @@ mod tests {
             (subs.cues()[0].start, subs.cues()[0].end),
             (ms(1_000), ms(2_500))
         );
-        assert_eq!(subtitle_cues(&video).expect("read").len(), 1);
+        assert_eq!(subtitle_cues(&video, None).len(), 1);
 
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
-    fn srt_beats_ass_and_ass_beats_ssa() {
+    fn ass_beats_ssa_and_ssa_beats_srt() {
         let dir = temp_dir("order");
         let video = dir.join("clip.mp4");
+        std::fs::write(subtitle_path(&video), SAMPLE).expect("srt");
+        assert_eq!(existing_subtitle_path(&video), Some(subtitle_path(&video)));
         std::fs::write(dir.join("clip.ssa"), ASS.replace("Hello", "From ssa")).expect("ssa");
         assert_eq!(existing_subtitle_path(&video), Some(dir.join("clip.ssa")));
         std::fs::write(dir.join("clip.ass"), ASS.replace("Hello", "From ass")).expect("ass");
         assert_eq!(existing_subtitle_path(&video), Some(dir.join("clip.ass")));
-        std::fs::write(subtitle_path(&video), SAMPLE).expect("srt");
-        assert_eq!(existing_subtitle_path(&video), Some(subtitle_path(&video)));
 
-        let cues = subtitle_cues(&video).expect("read");
-        assert_eq!(cues, Subtitles::parse(SAMPLE).cues(), "the .srt is shown");
-        let _ = std::fs::remove_file(subtitle_path(&video));
         assert!(load_subtitles(&video).expect("ass").cues()[0]
             .text
             .starts_with("From ass"));
+        let _ = std::fs::remove_file(dir.join("clip.ass"));
+        assert!(load_subtitles(&video).expect("ssa").cues()[0]
+            .text
+            .starts_with("From ssa"));
+        let _ = std::fs::remove_file(dir.join("clip.ssa"));
+        assert_eq!(
+            subtitle_cues(&video, None),
+            Subtitles::parse(SAMPLE).cues(),
+            "the .srt is shown when it is alone"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -583,19 +692,107 @@ and the gulls follow them home across the quiet water until the lights go out."
     }
 
     #[test]
-    fn the_order_is_srt_then_ass_then_ssa_then_the_transcript() {
+    fn the_order_is_ass_then_ssa_then_the_transcript_then_srt() {
         let (dir, video) = premiere_file("order-all");
-        std::fs::write(dir.join("clip.ssa"), ASS.replace("Hello", "From ssa")).expect("ssa");
-        assert_eq!(existing_subtitle_path(&video), Some(dir.join("clip.ssa")));
-        std::fs::write(dir.join("clip.ass"), ASS).expect("ass");
-        assert_eq!(existing_subtitle_path(&video), Some(dir.join("clip.ass")));
         std::fs::write(subtitle_path(&video), SAMPLE).expect("srt");
-        assert_eq!(existing_subtitle_path(&video), Some(subtitle_path(&video)));
-        assert_eq!(
-            subtitle_cues(&video).expect("read"),
-            Subtitles::parse(SAMPLE).cues()
-        );
+        let shown = |video: &Path| open_subtitles(video, None).shown;
+        assert_eq!(shown(&video), Some(SubtitleFormat::Premiere));
+        std::fs::write(dir.join("clip.ssa"), ASS.replace("Hello", "From ssa")).expect("ssa");
+        assert_eq!(shown(&video), Some(SubtitleFormat::Ssa));
+        std::fs::write(dir.join("clip.ass"), ASS).expect("ass");
+        assert_eq!(shown(&video), Some(SubtitleFormat::Ass));
+        let formats: Vec<_> = open_subtitles(&video, None)
+            .files
+            .iter()
+            .map(|file| file.format)
+            .collect();
+        assert_eq!(formats, SubtitleFormat::DEFAULT_ORDER);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_picked_file_is_shown_instead_of_the_default() {
+        let (dir, video) = premiere_file("picked");
+        std::fs::write(subtitle_path(&video), SAMPLE).expect("srt");
+        std::fs::write(dir.join("clip.ass"), ASS).expect("ass");
+
+        let view = open_subtitles(&video, Some(SubtitleFormat::Srt));
+        assert_eq!(view.shown, Some(SubtitleFormat::Srt));
+        assert_eq!(view.files.len(), 3, "all three are offered");
+        assert_eq!(view.subtitles, Some(Subtitles::parse(SAMPLE)));
+        assert_eq!(
+            subtitle_cues(&video, Some(SubtitleFormat::Srt)),
+            Subtitles::parse(SAMPLE).cues(),
+            "Describe with AI reads the picked file"
+        );
+        assert!(subtitle_bytes(&video, Some(SubtitleFormat::Srt)) > 0);
+        assert_ne!(
+            subtitle_bytes(&video, Some(SubtitleFormat::Srt)),
+            subtitle_bytes(&video, None),
+            "the default (.ass) is another file"
+        );
+
+        // A pick that is no longer there gives way to the default order.
+        let _ = std::fs::remove_file(subtitle_path(&video));
+        let view = open_subtitles(&video, Some(SubtitleFormat::Srt));
+        assert_eq!(view.shown, Some(SubtitleFormat::Ass));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_file_that_is_empty_or_unreadable_gives_way_to_the_next_and_is_marked() {
+        let dir = temp_dir("fallback");
+        let video = dir.join("clip.mp4");
+        std::fs::write(dir.join("clip.ass"), "").expect("empty ass");
+        std::fs::write(dir.join("clip.ssa"), vec![0xff_u8; 8]).expect("garbage ssa");
+        std::fs::write(subtitle_path(&video), SAMPLE).expect("srt");
+
+        let view = open_subtitles(&video, None);
+        assert_eq!(view.shown, Some(SubtitleFormat::Srt));
+        let readable: Vec<_> = view
+            .files
+            .iter()
+            .map(|file| (file.format, file.readable))
+            .collect();
+        assert_eq!(
+            readable,
+            [
+                (SubtitleFormat::Ass, false),
+                (SubtitleFormat::Ssa, false),
+                (SubtitleFormat::Srt, true)
+            ]
+        );
+        // The pick is empty too: the next in the default order is shown.
+        let view = open_subtitles(&video, Some(SubtitleFormat::Ssa));
+        assert_eq!(view.shown, Some(SubtitleFormat::Srt));
+        assert_eq!(subtitle_cues(&video, None), Subtitles::parse(SAMPLE).cues());
+
+        // Nothing readable: nothing is shown, and every file is marked.
+        let _ = std::fs::remove_file(subtitle_path(&video));
+        let view = open_subtitles(&video, None);
+        assert_eq!((view.shown, view.subtitles), (None, None));
+        assert!(view.files.iter().all(|file| !file.readable));
+        assert_eq!(subtitle_bytes(&video, None), 0);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_clip_with_one_file_or_none_offers_what_it_has() {
+        let dir = temp_dir("offered");
+        let video = dir.join("clip.mp4");
+        assert!(open_subtitles(&video, None).files.is_empty());
+        std::fs::write(subtitle_path(&video), SAMPLE).expect("srt");
+        assert_eq!(open_subtitles(&video, None).files.len(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_format_round_trips_through_its_persisted_name() {
+        for format in SubtitleFormat::DEFAULT_ORDER {
+            assert_eq!(SubtitleFormat::from_name(format.extension()), Some(format));
+        }
+        assert_eq!(SubtitleFormat::from_name("vtt"), None);
     }
 
     #[test]
@@ -605,7 +802,7 @@ and the gulls follow them home across the quiet water until the lights go out."
         for content in ["not json", "{\"tokens\": []}", "[1,2]", ""] {
             std::fs::write(dir.join("clip.premiere.json"), content).expect("write");
             assert!(load_subtitles(&video).is_none(), "{content}");
-            assert!(subtitle_cues(&video).expect("no error").is_empty());
+            assert!(subtitle_cues(&video, None).is_empty());
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -616,7 +813,7 @@ and the gulls follow them home across the quiet water until the lights go out."
         let json_len = std::fs::metadata(dir.join("clip.premiere.json"))
             .expect("meta")
             .len() as usize;
-        let bytes = subtitle_bytes(&video);
+        let bytes = subtitle_bytes(&video, None);
         assert!(
             bytes > 0 && bytes < json_len,
             "{bytes} vs the JSON's {json_len}"

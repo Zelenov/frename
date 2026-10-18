@@ -1,6 +1,8 @@
 //! Messages for the video player sub-feature.
 
-use frename_core::{Rotation, RotationError, SubtitleSize, Subtitles};
+use frename_core::{
+    Rotation, RotationError, SubtitleFile, SubtitleFormat, SubtitleSize, Subtitles,
+};
 use iced_video_player::Video;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -77,11 +79,16 @@ pub enum Message {
     ShowLongNotice(String),
     /// Hide the note with this number, unless a newer one replaced it (internal).
     ClearNotice(u64),
-    /// Subtitle file next to `video_path` was read; `None` when there is none.
+    /// The subtitle files next to `video_path` were read: which exist, which is shown, and its
+    /// cues (`None` when no file can be read).
     SubtitlesLoaded {
         video_path: PathBuf,
         subtitles: Option<Arc<Subtitles>>,
+        files: Vec<SubtitleFile>,
+        shown: Option<SubtitleFormat>,
     },
+    /// The editor picked which subtitle file the clip shows.
+    PickSubtitleFile(SubtitleFormat),
     /// User picked a cue in the subtitle list: seek to its start.
     SeekToCue(usize),
     /// The subtitle list scrolled: its offset from the top and its viewport's height.

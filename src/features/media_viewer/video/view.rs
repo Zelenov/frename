@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 
-use frename_core::{Marker, SubtitleSize, Subtitles};
+use frename_core::{Marker, SubtitleFormat, SubtitleSize, Subtitles};
 use iced::widget::{column, container, mouse_area, row, space, stack, Column, Row};
 use iced::{Alignment, Element, Length, Padding};
 use iced_video_player::VideoPlayer;
@@ -579,8 +579,14 @@ fn side_overlay<'a>(
         .map(Message::Markers),
     };
     let (width, covers) = side_list_width(pane_width);
+    let picker = (shown == Overlay::Subtitles)
+        .then(|| subtitle_file_picker(state))
+        .flatten();
     let panel = container(
-        column![side_list_header(state, markers, shown, covers), list].height(Length::Fill),
+        column![side_list_header(state, markers, shown, covers)]
+            .push(picker)
+            .push(list)
+            .height(Length::Fill),
     )
     .width(if covers {
         Length::Fill
@@ -597,6 +603,44 @@ fn side_overlay<'a>(
             .height(Length::Fill)
             .into()
     })
+}
+
+/// The subtitle files the clip has as one segment each, the one shown selected; none when the
+/// clip has a single file. A file that cannot be read is marked and says so in its tooltip.
+fn subtitle_file_picker<'a>(state: &'a VideoPlayerState) -> Option<Element<'a, Message>> {
+    let files = state.subtitle_files();
+    if files.len() < 2 {
+        return None;
+    }
+    let segments = files.iter().map(|file| Segment {
+        icon: (!file.readable).then_some(Icon::CircleAlert),
+        label: subtitle_format_label(file.format),
+        count: None,
+        selected: state.subtitle_shown() == Some(file.format),
+        on_press: Message::PickSubtitleFile(file.format),
+        tip: (!file.readable).then(|| fl!("media-viewer-video-subtitle-file-unreadable")),
+    });
+    Some(
+        container(segmented(segments))
+            .padding(Padding {
+                left: SPACE_S,
+                right: SPACE_S,
+                bottom: SPACE_XS,
+                ..Padding::ZERO
+            })
+            .into(),
+    )
+}
+
+/// How a subtitle format is named on its segment.
+fn subtitle_format_label(format: SubtitleFormat) -> String {
+    match format {
+        SubtitleFormat::Ass => "ASS",
+        SubtitleFormat::Ssa => "SSA",
+        SubtitleFormat::Premiere => "Premiere",
+        SubtitleFormat::Srt => "SRT",
+    }
+    .to_string()
 }
 
 /// The fullscreen caption: a pill centred at the bottom of the area it is given.
@@ -645,6 +689,7 @@ fn side_list_header<'a>(
                 count: count(subs.cues().len()),
                 selected: shown == Overlay::Subtitles,
                 on_press: Message::ShowOverlay(Overlay::Subtitles),
+                tip: None,
             },
             Segment {
                 icon: Some(Icon::MapPin),
@@ -652,6 +697,7 @@ fn side_list_header<'a>(
                 count: count(list.len()),
                 selected: shown == Overlay::Markers,
                 on_press: Message::ShowOverlay(Overlay::Markers),
+                tip: None,
             },
         ]),
         _ if shown == Overlay::Subtitles => text::title(fl!("settings-subtitles")).into(),
@@ -740,5 +786,27 @@ mod tests {
     #[test]
     fn on_a_narrow_pane_the_side_list_covers_the_picture() {
         assert_eq!(side_list_width(500.0), (500.0, true));
+    }
+
+    fn file(format: SubtitleFormat) -> frename_core::SubtitleFile {
+        frename_core::SubtitleFile {
+            format,
+            path: std::path::PathBuf::from("clip"),
+            readable: true,
+        }
+    }
+
+    /// Issue #242: the picker is for a clip with more than one subtitle file.
+    #[test]
+    fn the_subtitle_file_picker_shows_only_for_several_files() {
+        let mut state = VideoPlayerState::default();
+        assert!(subtitle_file_picker(&state).is_none(), "no file");
+        state.set_subtitle_files_for_test(vec![file(SubtitleFormat::Srt)], SubtitleFormat::Srt);
+        assert!(subtitle_file_picker(&state).is_none(), "one file");
+        state.set_subtitle_files_for_test(
+            vec![file(SubtitleFormat::Ass), file(SubtitleFormat::Srt)],
+            SubtitleFormat::Ass,
+        );
+        assert!(subtitle_file_picker(&state).is_some(), "two files");
     }
 }

@@ -103,6 +103,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 23,
         sql: schema::M23_SUBTITLE_SIZE,
     },
+    Migration {
+        version: 24,
+        sql: schema::M24_SUBTITLE_CHOICE,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
@@ -178,6 +182,7 @@ mod tests {
             "app_settings",
             "playback_position",
             "recent_folders",
+            "subtitle_choice",
         ] {
             assert!(table_exists(&conn, table), "{table} must survive");
         }
@@ -188,7 +193,7 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 23);
+        assert_eq!(current_version(&conn).expect("version"), 24);
     }
 
     #[test]

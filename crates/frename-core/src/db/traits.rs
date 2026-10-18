@@ -8,8 +8,8 @@ use uuid::Uuid;
 use crate::ai::{MomentsMode, SummaryLanguage};
 use crate::recent_folders::RecentFolder;
 use crate::{
-    CommentStorage, CueLength, FolderAndFile, InOutStorage, MarkerStorage, StoredTag, SubtitleSize,
-    TagColorMapping,
+    CommentStorage, CueLength, FolderAndFile, InOutStorage, MarkerStorage, StoredTag,
+    SubtitleFormat, SubtitleSize, TagColorMapping,
 };
 
 /// Saved window position and size (logical pixels).
@@ -242,6 +242,17 @@ pub trait AppStateStore: Send + Sync {
     /// `folder` now lists the files `names`: positions of files that are gone are dropped, or
     /// follow a file renamed outside frename (see [`crate::playback::tidy`]).
     fn tidy_playback_positions(&self, _folder: &Path, _names: &[String]) {}
+
+    /// The subtitle file the editor picked to show for the clip at `clip` (#242), if any.
+    fn get_subtitle_choice(&self, _clip: &Path) -> Option<SubtitleFormat> {
+        None
+    }
+
+    /// Remembers which subtitle file `clip` shows.
+    fn set_subtitle_choice(&self, _clip: &Path, _choice: SubtitleFormat) {}
+
+    /// The clip at `from` was renamed to `to`: the subtitle file picked for it goes along.
+    fn move_subtitle_choice(&self, _from: &Path, _to: &Path) {}
 }
 
 /// Interface for stored tags and tag color mapping. Tags are keyed by tag id (UUID); tag colors are keyed by tag name.

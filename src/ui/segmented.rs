@@ -10,14 +10,16 @@ use super::icons::{icon, Icon};
 use super::style::{self, ButtonKind};
 use super::text;
 use super::tokens::*;
+use super::tooltip::{self, Position};
 
-/// One segment: its icon, its words, an optional count after them.
+/// One segment: its icon, its words, an optional count after them and an optional tooltip.
 pub struct Segment<M> {
     pub icon: Option<Icon>,
     pub label: String,
     pub count: Option<usize>,
     pub selected: bool,
     pub on_press: M,
+    pub tip: Option<String>,
 }
 
 const PADDING: Padding = Padding {
@@ -75,7 +77,7 @@ fn segment<'a, M: Clone + 'a>(s: Segment<M>, first: bool, last: bool) -> Element
     .align_x(Alignment::Center);
     let kind = ButtonKind::Segment(s.selected);
     let radius = corners(first, last);
-    button(content)
+    let button = button(content)
         .padding(PADDING)
         .height(CONTROL_HEIGHT - 2.0 * LINE)
         .on_press(s.on_press)
@@ -85,8 +87,11 @@ fn segment<'a, M: Clone + 'a>(s: Segment<M>, first: bool, last: bool) -> Element
             look.border.width = 0.0;
             look.border.radius = radius;
             look
-        })
-        .into()
+        });
+    match s.tip {
+        Some(tip) => tooltip::tip_text(button, tip, Position::Bottom),
+        None => button.into(),
+    }
 }
 
 /// The segments side by side in one box, a line between each two.

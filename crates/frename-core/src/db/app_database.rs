@@ -11,7 +11,10 @@ use rusqlite::Connection;
 
 use crate::ai::{self, SummaryLanguage};
 use crate::recent_folders::{self, now_ms, RecentFolder};
-use crate::{CommentStorage, CueLength, FolderAndFile, InOutStorage, MarkerStorage, SubtitleSize};
+use crate::{
+    CommentStorage, CueLength, FolderAndFile, InOutStorage, MarkerStorage, SubtitleFormat,
+    SubtitleSize,
+};
 
 use super::migrations;
 use super::traits::{
@@ -571,6 +574,61 @@ impl AppStateStore for AppDatabase {
         }
     }
 
+    fn get_subtitle_choice(&self, clip: &Path) -> Option<SubtitleFormat> {
+        let (folder, file_name) = clip_key(clip)?;
+        let conn = self.conn().ok()?;
+        let conn = lock_connection(&conn);
+        conn.query_row(
+            "SELECT format FROM subtitle_choice WHERE folder = ?1 AND file_name = ?2",
+            rusqlite::params![folder, file_name],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .and_then(|name| SubtitleFormat::from_name(&name))
+    }
+
+    fn set_subtitle_choice(&self, clip: &Path, choice: SubtitleFormat) {
+        let Some((folder, file_name)) = clip_key(clip) else {
+            return;
+        };
+        let Ok(conn) = self.conn() else { return };
+        let conn = lock_connection(&conn);
+        if let Err(e) = conn.execute(
+            "INSERT INTO subtitle_choice (folder, file_name, format) VALUES (?1, ?2, ?3)
+             ON CONFLICT(folder, file_name) DO UPDATE SET format = excluded.format",
+            rusqlite::params![folder, file_name, choice.extension()],
+        ) {
+            log::warn!("set_subtitle_choice failed: {e}");
+        }
+    }
+
+    fn move_subtitle_choice(&self, from: &Path, to: &Path) {
+        let (Some(from), Some(to)) = (clip_key(from), clip_key(to)) else {
+            return;
+        };
+        if from == to {
+            return;
+        }
+        let Ok(conn) = self.conn() else { return };
+        let conn = lock_connection(&conn);
+        let moved = conn
+            .execute(
+                "DELETE FROM subtitle_choice WHERE folder = ?1 AND file_name = ?2
+                 AND EXISTS (SELECT 1 FROM subtitle_choice WHERE folder = ?3 AND file_name = ?4)",
+                rusqlite::params![to.0, to.1, from.0, from.1],
+            )
+            .and_then(|_| {
+                conn.execute(
+                    "UPDATE subtitle_choice SET folder = ?3, file_name = ?4
+                     WHERE folder = ?1 AND file_name = ?2",
+                    rusqlite::params![from.0, from.1, to.0, to.1],
+                )
+            });
+        if let Err(e) = moved {
+            log::warn!("move_subtitle_choice failed: {e}");
+        }
+    }
+
     fn set_window_state(&self, geometry: WindowGeometry) {
         if let Ok(conn) = self.conn() {
             let conn = lock_connection(&conn);
@@ -821,6 +879,44 @@ mod tests {
         let reopened = AppDatabase::with_path(&db.path);
         reopened.initialize().expect("migrate again");
         assert_eq!(reopened.get_playback_position(clip), Some(secs(75)));
+    }
+
+    #[test]
+    fn a_subtitle_choice_round_trips_survives_a_restart_and_follows_a_rename() {
+        let db = database("subtitle-choice");
+        let clip = Path::new("/footage/MVI_0410.mp4");
+        let renamed = Path::new("/footage/pick.MVI_0410.mp4");
+        assert_eq!(db.get_subtitle_choice(clip), None, "never picked");
+        db.set_subtitle_choice(clip, SubtitleFormat::Srt);
+        db.set_subtitle_choice(clip, SubtitleFormat::Premiere);
+        assert_eq!(db.get_subtitle_choice(clip), Some(SubtitleFormat::Premiere));
+        assert_eq!(
+            db.get_subtitle_choice(Path::new("/footage/day2/MVI_0410.mp4")),
+            None,
+            "another folder, another clip"
+        );
+
+        let reopened = AppDatabase::with_path(&db.path);
+        reopened.initialize().expect("migrate again");
+        assert_eq!(
+            reopened.get_subtitle_choice(clip),
+            Some(SubtitleFormat::Premiere)
+        );
+
+        // A stale pick under the new name is replaced, not kept.
+        db.set_subtitle_choice(renamed, SubtitleFormat::Ass);
+        db.move_subtitle_choice(clip, renamed);
+        assert_eq!(db.get_subtitle_choice(clip), None);
+        assert_eq!(
+            db.get_subtitle_choice(renamed),
+            Some(SubtitleFormat::Premiere)
+        );
+        // A clip with no pick leaves the other one alone.
+        db.move_subtitle_choice(Path::new("/footage/other.mp4"), renamed);
+        assert_eq!(
+            db.get_subtitle_choice(renamed),
+            Some(SubtitleFormat::Premiere)
+        );
     }
 
     #[test]

@@ -696,6 +696,7 @@ media-viewer-video-markers-hint = Shift+F1 / Shift+F3 — переход меж�
 media-viewer-video-tab-markers = Маркеры
 media-viewer-video-fullscreen = Во весь экран
 media-viewer-video-close-list = Закрыть список
+media-viewer-video-subtitle-file-unreadable = Не удалось прочитать этот файл
 media-viewer-video-resumed = Продолжено с { $time } · Home: с начала
 
 ## Markers list
