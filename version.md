@@ -1,3 +1,7 @@
+# 0.165
+## Added
+- The interface in French (Français): follows the system language, or pick it in Settings → Language.
+
 # 0.164
 ## Added
 - A clip with more than one subtitle file (`.ass`, `.ssa`, a Premiere transcript, `.srt`) has a button for each at the top of the subtitle list: pick the file to show, in the window and in fullscreen. frename remembers the pick for that clip, also after a rename, and Describe with AI reads the file shown. A file that is empty or cannot be read is marked.
