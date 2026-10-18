@@ -334,7 +334,7 @@ run another batch action on one group.
 The **Settings** button (under the file list) opens Settings. Changes apply right away; **Close** or `Esc` closes it. It has five
 pages:
 
-- **Interface:** the UI language (follows your system by default, or pick English, Russian or German;
+- **Interface:** the UI language (follows your system by default, or pick English, Russian, German or French;
   more languages are on the way), monochrome tags (a tag you added shows darker, one that is not
   in your list stays the lighter gray it always was), playing videos as soon as they open, and
   the subtitle size (Small, Medium, Large or Extra large).
