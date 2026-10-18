@@ -319,40 +319,53 @@ fn first_readable(
 /// Open the subtitles next to `video_path`: the file the editor `chosen` for it, or the first in
 /// the default order; if that cannot be read, the next one.
 pub fn open_subtitles(video_path: &Path, chosen: Option<SubtitleFormat>) -> SubtitleView {
-    let shown = first_readable(video_path, chosen, cue_length());
-    let files = SubtitleFormat::DEFAULT_ORDER
+    // Each file that is there is read once.
+    let mut read: Vec<(SubtitleFile, Vec<SubtitleCue>)> = SubtitleFormat::DEFAULT_ORDER
         .into_iter()
         .filter_map(|format| {
             let path = format.path(video_path);
             if !path.is_file() {
                 return None;
             }
-            let readable = match &shown {
-                Some((shown_format, _, _)) if *shown_format == format => true,
-                _ => read_cues(&path, cue_length()).is_ok_and(|cues| !cues.is_empty()),
+            let cues = match read_cues(&path, cue_length()) {
+                Ok(cues) => cues,
+                Err(e) => {
+                    log::warn!("subtitles: failed to read {}: {e}", path.display());
+                    Vec::new()
+                }
             };
-            Some(SubtitleFile {
-                format,
-                path,
-                readable,
-            })
+            if cues.is_empty() {
+                log::warn!("subtitles: no valid cues in {}", path.display());
+            }
+            let readable = !cues.is_empty();
+            Some((
+                SubtitleFile {
+                    format,
+                    path,
+                    readable,
+                },
+                cues,
+            ))
         })
         .collect();
-    let Some((format, path, cues)) = shown else {
-        return SubtitleView {
-            files,
-            ..SubtitleView::default()
-        };
-    };
-    log::info!(
-        "subtitles: loaded {} cues from {}",
-        cues.len(),
-        path.display()
-    );
+    let shown = tried_in_order(chosen).find(|format| {
+        read.iter()
+            .any(|(file, _)| file.format == *format && file.readable)
+    });
+    let subtitles = shown.and_then(|format| {
+        let index = read.iter().position(|(file, _)| file.format == format)?;
+        let cues = std::mem::take(&mut read[index].1);
+        log::info!(
+            "subtitles: loaded {} cues from {}",
+            cues.len(),
+            read[index].0.path.display()
+        );
+        Some(Subtitles { cues })
+    });
     SubtitleView {
-        files,
-        shown: Some(format),
-        subtitles: Some(Subtitles { cues }),
+        files: read.into_iter().map(|(file, _)| file).collect(),
+        shown,
+        subtitles,
     }
 }
 
@@ -785,6 +798,17 @@ and the gulls follow them home across the quiet water until the lights go out."
         std::fs::write(subtitle_path(&video), SAMPLE).expect("srt");
         assert_eq!(open_subtitles(&video, None).files.len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_ass_formats_are_the_extensions_clipscribe_reads() {
+        assert_eq!(
+            [
+                SubtitleFormat::Ass.extension(),
+                SubtitleFormat::Ssa.extension()
+            ],
+            clipscribe::ass::EXTENSIONS
+        );
     }
 
     #[test]

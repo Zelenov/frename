@@ -83,6 +83,8 @@ pub enum Message {
     /// cues (`None` when no file can be read).
     SubtitlesLoaded {
         video_path: PathBuf,
+        /// Number of the load that read them (see `VideoPlayerState::load_subtitles`).
+        generation: u64,
         subtitles: Option<Arc<Subtitles>>,
         files: Vec<SubtitleFile>,
         shown: Option<SubtitleFormat>,
