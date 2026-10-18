@@ -5,9 +5,9 @@
 //! [`fl!`](crate::fl): the same pattern as the settings core keeps globally. English is the
 //! source language and the fallback for any message a translation lacks.
 //!
-//! `LANGUAGES` is deliberately short today (English, Russian, German and French): each further language
-//! is its own small PR that adds one `.ftl` file and one entry here, reviewed on its own. CJK
-//! languages wait for a bundled font that covers them (issue #57).
+//! `LANGUAGES` is deliberately short today (English, Russian, German and French): each further
+//! language is its own small PR that adds one `.ftl` file and one entry here, reviewed on its own.
+//! CJK languages wait for a bundled font that covers them (issue #57).
 
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 

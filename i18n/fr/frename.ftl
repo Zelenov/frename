@@ -2,8 +2,8 @@
 # same order (checked by the tests in src/i18n.rs).
 #
 # Glossary (docs/design/localization.md): every string uses these terms; the reader is addressed
-# impersonally (infinitive or noun phrases for actions and labels), and with «vous» only where a
-# sentence needs a subject, as in the French Premiere Pro and most French video software.
+# impersonally (infinitive or noun phrases for actions and labels), and with «vous» or «votre» only where a
+# sentence needs a subject or a possessive, as in the French Premiere Pro and most French video software.
 # Typography: a no-break space (U+00A0) before « : » and inside «guillemets», a narrow no-break
 # space (U+202F) before «;», «!», «?» and «%».
 #   tag / tags                        tag / tags (never «étiquette»: that is Premiere's Label)
@@ -96,7 +96,7 @@ settings-in-out-move-into-comments = Déplacer les points d’entrée/de sortie 
 settings-markers = Marqueurs et plages
 settings-markers-in-video = Dans le fichier vidéo
 settings-markers-in-video-hint = XMP, affiché sur le clip dans Premiere Pro
-settings-markers-comment = Dans le commentaire, une ligne chacun
+settings-markers-comment = Dans le commentaire, une ligne chacune
 settings-markers-comment-example = 0:41–0:47 — Lion
 settings-markers-note = Les fichiers gardent leurs marqueurs là où ils sont tant qu’ils ne sont pas déplacés.
 settings-markers-move-into-videos = Déplacer les marqueurs dans les vidéos…
@@ -172,7 +172,7 @@ batch-checked-count = { $count ->
 }
 batch-no-key = Pas de clé
 batch-group-move = Déplacer entre emplacements
-batch-group-fix = Corriger noms et vidéos
+batch-group-fix = Corriger les noms et les vidéos
 batch-group-paid = Services payants
 batch-reason-none-checked = Aucun fichier coché
 batch-reason-reading = Lecture des durées des clips…
@@ -228,7 +228,7 @@ batch-prepare-run = Préparer { $clips ->
    *[other] { $clips } clips
 } · environ { $dollars }
 batch-service-prepare = Soniox + { $provider }
-batch-prepare-groups-title = Images similaires
+batch-prepare-groups-title = Plans similaires
 batch-prepare-groups-hint = Des clips qui ressemblent au même plan : doublons, réexportations, caméra qui n’a pas bougé.
 batch-prepare-group-clips = { $count } clips
 batch-prepare-check-group = Cocher ces clips
@@ -237,7 +237,7 @@ batch-suggest-in-job = Une description de ce clip figure déjà dans la tâche e
 batch-suggest-no-tags = Ce dossier n’a pas encore de tags à proposer : en ajouter d’abord
 batch-solo-gave-up = Préparation impossible
 batch-solo-withdrawn = Retiré : { $action }
-batch-solo-in-work = { $action } est en cours. L’annuler depuis la bande ou la page de la tâche
+batch-solo-in-work = { $action } est en cours. L’annuler depuis le bandeau ou la page de la tâche
 batch-waiting-title = { $count ->
     [one] { $count } exécution en attente
    *[other] { $count } exécutions en attente
@@ -714,16 +714,16 @@ markers-name-placeholder = Nom
 markers-ai-describe = Décrire par IA : nommer le marqueur et ajouter ce qui se passe
 markers-ai-stop = Arrêter la description
 markers-ai-describe-unnamed = Décrire { $count } sans nom
-markers-ai-describe-unnamed-hint = Nomme et décrit par IA chaque marqueur sans nom, quelques-uns à la fois. Une requête chacun ; un nom saisi entre-temps est conservé.
+markers-ai-describe-unnamed-hint = Nomme et décrit par IA chaque marqueur sans nom, quelques-uns à la fois. Une requête chacune ; un nom saisi entre-temps est conservé.
 markers-ai-price-about = environ { $dollars }
-markers-ai-describe-unnamed-cost = Une requête chacun : { $each } par marqueur, { $total } pour tous.
+markers-ai-describe-unnamed-cost = Une requête chacune : { $each } par marqueur, { $total } pour tous.
 markers-ai-confirm = { $count ->
     [one] Décrire { $count } marqueur ? Une requête : { $total }.
-   *[other] Décrire { $count } marqueurs ? Une requête chacun : { $total } au total.
+   *[other] Décrire { $count } marqueurs ? Une requête chacune : { $total } au total.
 }
 markers-ai-confirm-unpriced = { $count ->
     [one] Décrire { $count } marqueur ? Une requête payante.
-   *[other] Décrire { $count } marqueurs ? Une requête payante chacun.
+   *[other] Décrire { $count } marqueurs ? Une requête payante chacune.
 }
 markers-ai-confirm-yes = Décrire
 markers-ai-confirm-no = Annuler
@@ -842,7 +842,7 @@ markers-deleted-notice = Marqueur supprimé
 markers-not-saved-notice = Marqueurs non enregistrés : le fichier est en lecture seule ou utilisé
 markers-comment-not-saved-notice = Marqueurs non enregistrés : le fichier de commentaire est en lecture seule ou utilisé
 markers-copy = Copier
-markers-copy-tip = Copier les marqueurs en texte, une ligne chacun
+markers-copy-tip = Copier les marqueurs en texte, une ligne chacune
 markers-export = Exporter…
 markers-export-tip = Enregistrer les marqueurs dans un fichier texte
 markers-exported = Marqueurs enregistrés dans { $name }
