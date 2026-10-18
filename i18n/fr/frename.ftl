@@ -115,12 +115,12 @@ settings-ai-key-label = Clé d’API Anthropic
 settings-ai-key-placeholder = sk-ant-…
 settings-ai-key-get = Obtenir une clé sur console.anthropic.com → API keys.
 settings-ai-key-remove-confirm = Supprimer la clé Anthropic enregistrée ?
-settings-ai-used-by = Utilisée par « Décrire avec l’IA » en mode par lot et sur les marqueurs (✨, Ctrl+F2), quand un modèle Claude est choisi.
+settings-ai-used-by = Utilisée par « Décrire par IA » en mode par lot et sur les marqueurs (✨, Ctrl+F2), quand un modèle Claude est choisi.
 settings-ai-openai-key-label = Clé d’API OpenAI
 settings-ai-openai-key-placeholder = sk-…
 settings-ai-openai-key-get = Obtenir une clé sur platform.openai.com/api-keys.
 settings-ai-openai-key-remove-confirm = Supprimer la clé OpenAI enregistrée ?
-settings-ai-openai-used-by = Utilisée par « Décrire avec l’IA » en mode par lot et sur les marqueurs (✨, Ctrl+F2), quand un modèle GPT est choisi.
+settings-ai-openai-used-by = Utilisée par « Décrire par IA » en mode par lot et sur les marqueurs (✨, Ctrl+F2), quand un modèle GPT est choisi.
 settings-ai-model-needs-key = { $model } — ajouter d’abord une clé { $provider }
 settings-ai-model-label = Modèle
 settings-ai-language-label = Langue de la description
@@ -234,7 +234,7 @@ batch-prepare-group-clips = { $count } clips
 batch-prepare-check-group = Cocher ces clips
 batch-solo-queued = En attente : { $action }
 batch-suggest-in-job = Une description de ce clip figure déjà dans la tâche en cours, sans propositions de tags. Redemander à la fin de la tâche
-batch-suggest-no-tags = Aucun tag dans ce dossier pour l’instant pour en proposer : en ajouter d’abord
+batch-suggest-no-tags = Ce dossier n’a pas encore de tags à proposer : en ajouter d’abord
 batch-solo-gave-up = Préparation impossible
 batch-solo-withdrawn = Retiré : { $action }
 batch-solo-in-work = { $action } est en cours. L’annuler depuis la bande ou la page de la tâche
@@ -261,7 +261,10 @@ batch-result-done = Terminé : { $total ->
     [one] { $total } fichier
    *[other] { $total } fichiers
 }
-batch-result-done-detail = { $changed } modifiés, { $unchanged } sans rien à modifier
+batch-result-done-detail = { $changed ->
+    [one] { $changed } modifié
+   *[other] { $changed } modifiés
+}, { $unchanged } sans rien à modifier
 batch-result-problems = Terminé avec des problèmes : { $failed } sur { $total ->
     [one] { $total } fichier
    *[other] { $total } fichiers
@@ -475,7 +478,10 @@ batch-subtitles-already = { $n ->
     [one] { $n } a déjà des sous-titres
    *[other] { $n } ont déjà des sous-titres
 }
-batch-subtitles-rebuilt-free = { $n } recréés gratuitement à partir d’une transcription enregistrée
+batch-subtitles-rebuilt-free = { $n ->
+    [one] { $n } recréé
+   *[other] { $n } recréés
+} gratuitement à partir d’une transcription enregistrée
 batch-subtitles-no-speech-before = { $n } sans parole la dernière fois
 batch-subtitles-no-audio = { $n ->
     [one] { $n } n’a pas d’audio
@@ -485,7 +491,10 @@ batch-subtitles-shared-name = { $n ->
     [one] { $n } partage le nom de ses sous-titres avec une autre vidéo
    *[other] { $n } partagent le nom de leurs sous-titres avec une autre vidéo
 }
-batch-subtitles-unreadable = { $n } illisibles ({ $how_to })
+batch-subtitles-unreadable = { $n ->
+    [one] { $n } illisible
+   *[other] { $n } illisibles
+} ({ $how_to })
 batch-subtitles-shared-name-reason = partage le nom de ses sous-titres avec une autre vidéo
 batch-subtitles-unsupported-reason = format audio non pris en charge
 batch-subtitles-progress-transcribing = transcription…
@@ -531,7 +540,10 @@ folder-search-comments-loading = Recherche dans les commentaires… { $n } resta
 folder-search-clear = Effacer
 folder-all = Tous
 folder-invert = Inverser
-folder-checked = { $count } cochés
+folder-checked = { $count ->
+    [one] { $count } coché
+   *[other] { $count } cochés
+}
 folder-outcome-changed = Modifié
 folder-outcome-unchanged = Rien à modifier
 folder-outcome-failed = Échec, voir le journal
@@ -548,7 +560,13 @@ folder-open-another = Ouvrir un autre dossier…
 folder-no-match = Aucun fichier ne correspond
 folder-show-all = Tout afficher
 folder-locked = Les cases sont verrouillées pendant l’exécution de { $action }
-folder-checked-hidden = { $count } cochés · { $hidden } masqués
+folder-checked-hidden = { $count ->
+    [one] { $count } coché
+   *[other] { $count } cochés
+} · { $hidden ->
+    [one] { $hidden } masqué
+   *[other] { $hidden } masqués
+}
 folder-checked-hidden-tip = { $hidden ->
     [one] { $hidden } fichier coché est masqué par la recherche ou un filtre ; l’action s’exécute aussi sur lui
    *[other] { $hidden } fichiers cochés sont masqués par la recherche ou un filtre ; l’action s’exécute aussi sur eux
