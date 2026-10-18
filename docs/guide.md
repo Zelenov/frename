@@ -169,9 +169,15 @@ are shown over the picture, and CC opens the list beside them there too. To make
 smaller, change **Subtitle size** in Settings → Interface.
 
 A `.ass` or `.ssa` file (from Aegisub, Subtitle Edit, YouTube or ffmpeg) works the same way, as plain
-text: styles, positions and effects are not drawn, only the words and their line breaks. If a video
-has several, `.srt` is shown first, then `.ass`, then `.ssa`, then a Premiere transcript. The subtitles icon, the "has
+text: styles, positions and effects are not drawn, only the words and their line breaks. The subtitles icon, the "has
 subtitles" filter, renaming with the video and Describe with AI treat them like a `.srt`.
+
+If a video has several subtitle files, `.ass` is shown first, then `.ssa`, then a Premiere
+transcript, then `.srt`. The header of the subtitle list then has one button per file (`ASS`,
+`SSA`, `Premiere`, `SRT`): click one to show that file instead, in the window and in fullscreen,
+without moving the playhead. frename remembers the choice for that clip, also after you rename it
+or restart. Describe with AI reads the file the clip shows. A file that is empty or cannot be read
+is passed over for the next one, and its button is marked with a warning sign.
 
 A Premiere Pro transcript next to the video (`clip.premiere.json`, which **Generate subtitles** can
 write) is shown the same way. Its words are cut into lines by the setting of Settings → Subtitles
@@ -237,7 +243,7 @@ Actions:
 
 **Describe with AI** writes what happens in each checked video, and when: a one-line summary and
 time-ranged segments, even for clips with no speech. frename sends up to 60 frames per clip, picked
-where the picture changes the most, and the video's `.srt`, if there is one, to Claude (Haiku 4.5 unless you pick Sonnet
+where the picture changes the most, and the subtitles the clip shows, if it has any, to Claude (Haiku 4.5 unless you pick Sonnet
 or Opus in Settings) or to ChatGPT (GPT-4.1 mini or GPT-4.1, if you pick one there), and puts the answer at the end of the comment, below your own text, which is
 never changed. Before you run it, the panel shows how many videos will be sent, the price (with
 Haiku, about $10 per 1000 one-minute clips) and how long it takes. Videos already described are skipped unless you tick Redo, and so are clips over 30 min.

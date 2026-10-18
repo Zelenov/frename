@@ -4,7 +4,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::recent_folders::RecentFolder;
-use crate::FolderAndFile;
+use crate::{FolderAndFile, SubtitleFormat};
 
 use super::traits::{AppStateStore, Initializable};
 
@@ -87,6 +87,28 @@ impl<S: AppStateStore> AppStateStore for LoggingAppStateStore<S> {
             names.len()
         );
         self.inner.tidy_playback_positions(folder, names);
+    }
+
+    fn get_subtitle_choice(&self, clip: &Path) -> Option<SubtitleFormat> {
+        self.inner.get_subtitle_choice(clip)
+    }
+
+    fn set_subtitle_choice(&self, clip: &Path, choice: SubtitleFormat) {
+        log::debug!(
+            "AppStateStore::set_subtitle_choice({}, {})",
+            clip.display(),
+            choice.extension()
+        );
+        self.inner.set_subtitle_choice(clip, choice);
+    }
+
+    fn move_subtitle_choice(&self, from: &Path, to: &Path) {
+        log::debug!(
+            "AppStateStore::move_subtitle_choice({} -> {})",
+            from.display(),
+            to.display()
+        );
+        self.inner.move_subtitle_choice(from, to);
     }
 }
 

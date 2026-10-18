@@ -628,6 +628,7 @@ media-viewer-video-markers-hint = Shift+F1 / Shift+F3 jump between markers; Shif
 media-viewer-video-tab-markers = Markers
 media-viewer-video-fullscreen = Full screen
 media-viewer-video-close-list = Close the list
+media-viewer-video-subtitle-file-unreadable = Could not read this file
 # Shown over the picture when a clip opens where playback stopped last time; Home or a click goes to the start.
 media-viewer-video-resumed = Resumed at { $time } · Home: start over
 

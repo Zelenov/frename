@@ -54,9 +54,10 @@ pub use metadata::{
 pub use ordered::{OrderKey, OrderableEntry, OrderedCollection, OrderedThing};
 pub use search::CommentFragment;
 pub use subtitles::{
-    cue_length, existing_subtitle_path, load_subtitles, set_cue_length, subtitle_bytes,
+    cue_length, existing_subtitle_path, open_subtitles, set_cue_length, subtitle_bytes,
     subtitle_candidates, subtitle_cues, subtitle_path, transcript_path, CueLength, SubtitleCue,
-    SubtitleSize, Subtitles, DEFAULT_SUBTITLE_LANGUAGES,
+    SubtitleFile, SubtitleFormat, SubtitleSize, SubtitleView, Subtitles,
+    DEFAULT_SUBTITLE_LANGUAGES,
 };
 pub use tags::{
     install_file_tagger, set_space_after_tags, space_after_tags, CachedFile, DefaultTag,

@@ -19,7 +19,9 @@ use clipscribe::{
 };
 use frename_core::ai::block;
 use frename_core::ai::key::{self, KeyState};
-use frename_core::{File, FileId, FileKind, FileTagger, FolderInfo, MarkerStorage};
+use frename_core::{
+    AppDatabase, AppStateStore, File, FileId, FileKind, FileTagger, FolderInfo, MarkerStorage,
+};
 use iced::widget::column;
 use iced::Element;
 
@@ -625,11 +627,12 @@ pub struct Probe {
 
 /// Read what the estimate needs about the clip at `path`.
 fn probe(path: &Path) -> Probe {
+    let chosen = AppDatabase::new().get_subtitle_choice(path);
     // A debug build renames in memory only: GStreamer needs the name on disk.
     let path = &FileTagger::disk_path(path);
     Probe {
         duration_s: describe::frames::clip_duration_s(path),
-        subtitle_bytes: frename_core::subtitle_bytes(path),
+        subtitle_bytes: frename_core::subtitle_bytes(path, chosen),
     }
 }
 
@@ -1011,10 +1014,8 @@ impl Request {
     ) -> Option<Self> {
         let api_key = key::read_key(frename_core::ai::key_of(model))?;
         let on_disk = FileTagger::disk_path(path);
-        let subtitles = frename_core::subtitle_cues(&on_disk).unwrap_or_else(|e| {
-            log::warn!("ai: subtitles of {} not read: {e}", path.display());
-            Vec::new()
-        });
+        let chosen = AppDatabase::new().get_subtitle_choice(path);
+        let subtitles = frename_core::subtitle_cues(&on_disk, chosen);
         Some(Self {
             on_disk,
             subtitles,

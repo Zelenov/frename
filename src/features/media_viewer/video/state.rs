@@ -20,8 +20,8 @@ use crate::ui::tokens::{SPACE_XXS, SPINNER_TICK};
 use frename_core::playback::{self, OpenAt};
 use frename_core::FileId;
 use frename_core::{
-    load_subtitles, AppDatabase, AppStateStore, FileTagger, Rotation, RotationError, SubtitleSize,
-    Subtitles,
+    open_subtitles, AppDatabase, AppStateStore, FileTagger, Rotation, RotationError, SubtitleFile,
+    SubtitleFormat, SubtitleSize, Subtitles,
 };
 
 /// How long a note over the picture stays.
@@ -153,6 +153,12 @@ pub struct VideoPlayerState {
     current_path: Option<PathBuf>,
     /// Subtitles found next to the current video, if any.
     subtitles: Option<Arc<Subtitles>>,
+    /// Every subtitle file next to the current video, in the default order.
+    subtitle_files: Vec<SubtitleFile>,
+    /// The format of `subtitles`.
+    subtitle_shown: Option<SubtitleFormat>,
+    /// Number of the latest subtitle load; a `SubtitlesLoaded` of an older one is dropped.
+    subtitles_generation: u64,
     /// The list shown over the picture; see [`Overlay`].
     overlay: Overlay,
     /// Note shown over the picture.
@@ -253,6 +259,9 @@ impl Default for VideoPlayerState {
             paused: !autoplay,
             current_path: None,
             subtitles: None,
+            subtitle_files: Vec::new(),
+            subtitle_shown: None,
+            subtitles_generation: 0,
             overlay: Overlay::Closed,
             notice: None,
             notice_count: 0,
@@ -512,7 +521,7 @@ impl VideoPlayerState {
         self.current_video = None;
         self.controls = VideoControlsState::with_volume(self.controls.volume());
         self.current_path = Some(path.clone());
-        self.subtitles = None;
+        self.clear_subtitles();
         self.position = Duration::ZERO;
         self.followed_cue = FollowedRow::default();
         self.cue_scroll_y = 0.0;
@@ -528,7 +537,7 @@ impl VideoPlayerState {
         let generation = self.load_generation;
         self.loads_in_flight.push(generation);
 
-        let subtitles_task = Self::load_subtitles(path.clone());
+        let subtitles_task = self.load_subtitles(None);
         let video_task = Task::future(async move {
             // The video is opened once, here on a blocking thread, and handed to the
             // update below. Opening it a second time on the update thread would stall
@@ -569,17 +578,39 @@ impl VideoPlayerState {
         Task::batch([video_task, subtitles_task])
     }
 
-    /// Read the `.srt` next to the video on a blocking thread.
-    fn load_subtitles(video_path: PathBuf) -> Task<Message> {
+    fn clear_subtitles(&mut self) {
+        self.subtitles = None;
+        self.subtitle_files.clear();
+        self.subtitle_shown = None;
+    }
+
+    /// Read the subtitle files next to the current video on a blocking thread: `pick` (the
+    /// file the editor just picked), else the one picked for this clip earlier, else the first
+    /// of the default order. The pick is kept under the clip's own path, which is not the
+    /// video's on-disk path in a debug build.
+    fn load_subtitles(&mut self, pick: Option<SubtitleFormat>) -> Task<Message> {
+        let Some(video_path) = self.current_path.clone() else {
+            return Task::none();
+        };
+        let clip_path = self.clip.as_ref().map(|clip| clip.path.clone());
+        self.subtitles_generation = self.subtitles_generation.wrapping_add(1);
+        let generation = self.subtitles_generation;
         Task::future(async move {
             let path = video_path.clone();
-            let subtitles = tokio::task::spawn_blocking(move || load_subtitles(&path))
-                .await
-                .unwrap_or(None)
-                .map(Arc::new);
+            let view = tokio::task::spawn_blocking(move || {
+                let chosen = pick.or_else(|| {
+                    clip_path.and_then(|clip| AppDatabase::new().get_subtitle_choice(&clip))
+                });
+                open_subtitles(&path, chosen)
+            })
+            .await
+            .unwrap_or_default();
             Message::SubtitlesLoaded {
                 video_path,
-                subtitles,
+                generation,
+                subtitles: view.subtitles.map(Arc::new),
+                files: view.files,
+                shown: view.shown,
             }
         })
     }
@@ -804,12 +835,31 @@ impl VideoPlayerState {
             Message::ScreenshotTaken(_, _) => Task::none(),
             Message::SubtitlesLoaded {
                 video_path,
+                generation,
                 subtitles,
+                files,
+                shown,
             } => {
-                if self.current_path.as_ref() == Some(&video_path) {
-                    self.subtitles = subtitles;
+                // A load for another clip, or one a later pick has overtaken, is dropped.
+                if self.current_path.as_ref() != Some(&video_path)
+                    || generation != self.subtitles_generation
+                {
+                    return Task::none();
                 }
+                self.subtitles = subtitles;
+                self.subtitle_files = files;
+                self.subtitle_shown = shown;
                 Task::none()
+            }
+            Message::PickSubtitleFile(format) => {
+                let Some(clip) = self.clip.as_ref().map(|clip| clip.path.clone()) else {
+                    return Task::none();
+                };
+                if self.subtitle_shown == Some(format) {
+                    return Task::none();
+                }
+                AppDatabase::new().set_subtitle_choice(&clip, format);
+                self.load_subtitles(Some(format))
             }
             Message::ToggleCueList => {
                 self.overlay = if self.overlay == Overlay::Subtitles {
@@ -933,7 +983,7 @@ impl VideoPlayerState {
                 self.stepped_onto = None;
                 self.current_video = None;
                 self.current_path = None;
-                self.subtitles = None;
+                self.clear_subtitles();
                 if load_in_flight {
                     // `loading` stays true for this same wait: the view keeps showing its
                     // spinner instead of falling back to "nothing loaded", and `is_active()`
@@ -997,6 +1047,14 @@ impl VideoPlayerState {
     }
     pub fn subtitles(&self) -> Option<&Subtitles> {
         self.subtitles.as_deref()
+    }
+    /// Every subtitle file next to the clip, in the default order.
+    pub fn subtitle_files(&self) -> &[SubtitleFile] {
+        &self.subtitle_files
+    }
+    /// The format of the subtitles shown.
+    pub fn subtitle_shown(&self) -> Option<SubtitleFormat> {
+        self.subtitle_shown
     }
     /// How large the subtitles are drawn.
     pub fn subtitle_size(&self) -> SubtitleSize {
@@ -2363,6 +2421,102 @@ mod tests {
         assert_eq!(player.follow_cue(false).units(), 1);
         player.position = Duration::from_secs(3);
         assert_eq!(player.follow_cue(false).units(), 1, "the next cue: scroll");
+    }
+
+    /// Issue #242: a pick is kept under the clip's own path (not the on-disk one, which differs
+    /// in a debug build), and what loads next shows that file; a load for another clip or one a
+    /// later pick overtook changes nothing.
+    #[test]
+    fn picking_a_subtitle_file_is_kept_for_the_clip_and_its_load_is_shown() {
+        let srt = "1\n00:00:01,000 --> 00:00:02,000\none\n";
+        let disk = unique_clip("pick-subtitles");
+        let clip = disk.with_file_name("pick.clip.mp4");
+        let dir = disk.parent().expect("folder").to_path_buf();
+        std::fs::create_dir_all(&dir).expect("folder");
+        std::fs::write(disk.with_extension("srt"), srt).expect("srt");
+        std::fs::write(
+            disk.with_extension("ass"),
+            "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n\
+             Dialogue: 0,0:00:01.00,0:00:02.50,Default,,0,0,0,,From ass\n",
+        )
+        .expect("ass");
+        let mut player = VideoPlayerState {
+            current_path: Some(disk.clone()),
+            clip: clip_at(&clip),
+            ..VideoPlayerState::default()
+        };
+        let loaded = |player: &VideoPlayerState, generation, shown| {
+            let view = open_subtitles(&disk, shown);
+            Message::SubtitlesLoaded {
+                video_path: player.current_path.clone().expect("a clip"),
+                generation,
+                subtitles: view.subtitles.map(Arc::new),
+                files: view.files,
+                shown: view.shown,
+            }
+        };
+
+        let _ = player.update(Message::PickSubtitleFile(SubtitleFormat::Srt));
+        assert_eq!(
+            AppDatabase::new().get_subtitle_choice(&clip),
+            Some(SubtitleFormat::Srt)
+        );
+        assert_eq!(AppDatabase::new().get_subtitle_choice(&disk), None);
+        let first = player.subtitles_generation;
+        let message = loaded(&player, first, Some(SubtitleFormat::Srt));
+        let _ = player.update(message);
+        assert_eq!(player.subtitle_shown(), Some(SubtitleFormat::Srt));
+        assert_eq!(player.subtitle_files().len(), 2);
+        assert_eq!(player.subtitles().expect("cues").cues()[0].text, "one");
+
+        // Picking what is shown does nothing; another pick starts a newer load.
+        let _ = player.update(Message::PickSubtitleFile(SubtitleFormat::Srt));
+        assert_eq!(player.subtitles_generation, first);
+        let _ = player.update(Message::PickSubtitleFile(SubtitleFormat::Ass));
+        assert_eq!(player.subtitles_generation, first + 1);
+        // The older load lands late: dropped.
+        let late = loaded(&player, first, Some(SubtitleFormat::Srt));
+        let _ = player.update(late);
+        assert_eq!(
+            player.subtitle_shown(),
+            Some(SubtitleFormat::Srt),
+            "unchanged"
+        );
+        let newer = loaded(&player, first + 1, Some(SubtitleFormat::Ass));
+        let _ = player.update(newer);
+        assert_eq!(player.subtitle_shown(), Some(SubtitleFormat::Ass));
+
+        // A load for another clip is dropped.
+        let _ = player.update(Message::SubtitlesLoaded {
+            video_path: dir.join("other.mp4"),
+            generation: player.subtitles_generation,
+            subtitles: None,
+            files: Vec::new(),
+            shown: None,
+        });
+        assert_eq!(player.subtitle_shown(), Some(SubtitleFormat::Ass));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Issue #242: the picker is for a clip with more than one subtitle file.
+    #[test]
+    fn the_subtitle_file_picker_shows_only_for_several_files() {
+        let file = |format| SubtitleFile {
+            format,
+            path: PathBuf::from("clip"),
+            readable: true,
+        };
+        let picker = super::super::view::subtitle_file_picker;
+        let mut state = VideoPlayerState {
+            current_path: Some(PathBuf::from("clip.mp4")),
+            ..VideoPlayerState::default()
+        };
+        assert!(picker(&state).is_none(), "no file");
+        state.subtitle_files = vec![file(SubtitleFormat::Srt)];
+        assert!(picker(&state).is_none(), "one file");
+        state.subtitle_files = vec![file(SubtitleFormat::Ass), file(SubtitleFormat::Srt)];
+        assert!(picker(&state).is_some(), "two files");
     }
 
     /// A clip path no other test keeps a playback position for, in the test database.

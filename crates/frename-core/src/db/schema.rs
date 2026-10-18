@@ -224,3 +224,14 @@ LIMIT 10;
 pub const M23_SUBTITLE_SIZE: &str = "
 ALTER TABLE app_settings ADD COLUMN subtitle_size TEXT NOT NULL DEFAULT 'medium';
 ";
+
+/// Migration 24: which subtitle file the editor picked to show for a clip (#242), by its folder
+/// and file name, as the extension of the file (`SubtitleFormat::extension`).
+pub const M24_SUBTITLE_CHOICE: &str = "
+CREATE TABLE IF NOT EXISTS subtitle_choice (
+    folder TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    format TEXT NOT NULL,
+    PRIMARY KEY (folder, file_name)
+);
+";

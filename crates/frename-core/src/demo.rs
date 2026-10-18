@@ -29,6 +29,10 @@ pub struct DemoScenario {
     /// before, with the note that says so, instead of seeking to `seek`.
     #[serde(default)]
     pub resume: Option<f32>,
+    /// The subtitle file the open clip shows, picked as an editor would (#242): the extension
+    /// of the file (`ass`, `ssa`, `premiere.json`, `srt`).
+    #[serde(default)]
+    pub subtitle_choice: Option<String>,
     /// Window size in logical pixels: width, height.
     pub window: [u32; 2],
     /// Widths of the video panel and the file list panel.
@@ -207,6 +211,13 @@ impl DemoScenario {
                 )));
             }
         }
+        if let Some(choice) = &self.subtitle_choice {
+            if crate::SubtitleFormat::from_name(choice).is_none() {
+                return Err(DemoError(format!(
+                    "subtitle_choice = {choice:?} is not ass, ssa, premiere.json or srt"
+                )));
+            }
+        }
         if !names.clone().any(|n| n == self.open) {
             return Err(DemoError(format!(
                 "open = {:?} is not one of the staged files",
@@ -377,6 +388,13 @@ pub fn seed(
     store.set_last_folder_and_file(&FolderAndFile::new(folder, Some(file)));
     if let Some(resume) = scenario.resume {
         store.set_playback_position(file, std::time::Duration::from_secs_f32(resume.max(0.0)));
+    }
+    if let Some(format) = scenario
+        .subtitle_choice
+        .as_deref()
+        .and_then(crate::SubtitleFormat::from_name)
+    {
+        store.set_subtitle_choice(file, format);
     }
 }
 
@@ -601,6 +619,7 @@ markers = ["0:00.100 — Start — first frames"]
         settings: Mutex<Option<AppSettings>>,
         session: Mutex<Option<FolderAndFile>>,
         playback: Mutex<Option<(std::path::PathBuf, std::time::Duration)>>,
+        subtitle_choice: Mutex<Option<(std::path::PathBuf, crate::SubtitleFormat)>>,
     }
 
     impl AppStateStore for Recorder {
@@ -618,6 +637,9 @@ markers = ["0:00.100 — Start — first frames"]
         }
         fn set_playback_position(&self, clip: &Path, position: std::time::Duration) {
             *self.playback.lock().unwrap() = Some((clip.to_path_buf(), position));
+        }
+        fn set_subtitle_choice(&self, clip: &Path, choice: crate::SubtitleFormat) {
+            *self.subtitle_choice.lock().unwrap() = Some((clip.to_path_buf(), choice));
         }
     }
 
@@ -681,6 +703,34 @@ markers = ["0:00.100 — Start — first frames"]
                 std::time::Duration::from_millis(41_500)
             ))
         );
+    }
+
+    #[test]
+    fn a_scenario_can_pick_the_subtitle_file_the_open_clip_shows() {
+        let text = MINIMAL.replace(
+            "[[files]]",
+            "subtitle_choice = \"srt\"
+[[files]]",
+        );
+        let scenario = DemoScenario::parse(&text).unwrap();
+        let store = Recorder::default();
+        seed(
+            &store,
+            &scenario,
+            Path::new("/f"),
+            Path::new("/f/pick.a.mp4"),
+            false,
+            "en",
+        );
+        assert_eq!(
+            *store.subtitle_choice.lock().unwrap(),
+            Some((
+                Path::new("/f/pick.a.mp4").to_path_buf(),
+                crate::SubtitleFormat::Srt
+            ))
+        );
+        let bad = MINIMAL.replace("[[files]]", "subtitle_choice = \"vtt\"\n[[files]]");
+        assert!(DemoScenario::parse(&bad).is_err());
     }
 
     #[test]

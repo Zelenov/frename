@@ -416,7 +416,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
     // -----------------------------------------------------------------------
 
     /// Update both the path and snapshot of the file identified by `id`. O(1). Where playback
-    /// stopped in it goes along to the new path.
+    /// stopped in it and the subtitle file picked for it go along to the new path.
     /// Returns true if the file was found.
     pub fn rename_file(&mut self, id: FileId, new_path: &Path, snapshot: &FileSnapshot) -> bool {
         match self.files_by_id.get_mut(&id) {
@@ -426,6 +426,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
                 file.set_file_snapshot(snapshot);
                 if old_path != new_path {
                     self.store.move_playback_position(&old_path, new_path);
+                    self.store.move_subtitle_choice(&old_path, new_path);
                     log::info!(
                         "Directory: renamed {} → {} ({} tag(s))",
                         old_path.display(),
@@ -604,6 +605,24 @@ mod tests {
             db.get_playback_position(&renamed),
             Some(std::time::Duration::from_secs(40))
         );
+    }
+
+    /// Issue #242: a rename done in frename carries the picked subtitle file along.
+    #[test]
+    fn a_rename_carries_the_subtitle_choice_along() {
+        use crate::{AppStateStore, SubtitleFormat};
+        let (db, folder) = database_and_folder("dir-subtitle-rename");
+        let clip = folder.join("MVI_0410.mp4");
+        db.set_subtitle_choice(&clip, SubtitleFormat::Srt);
+        let file = File::from_path(&clip, SystemTime::UNIX_EPOCH);
+        let id = file.id();
+        let mut dir = Directory::with_files(&folder, vec![file], db.clone());
+        let mut snapshot = dir.file_by_id(id).expect("file").snapshot().clone();
+        snapshot.set_tags(["pick"]);
+        let renamed = folder.join(snapshot.file_name());
+        dir.rename_file(id, &renamed, &snapshot);
+        assert_eq!(db.get_subtitle_choice(&clip), None);
+        assert_eq!(db.get_subtitle_choice(&renamed), Some(SubtitleFormat::Srt));
     }
 
     /// Issue #161: opening a folder forgets positions of its gone files and follows a rename done
