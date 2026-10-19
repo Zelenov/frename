@@ -13,4 +13,5 @@ pub type Directory =
     frename_core::Directory<frename_core::LoggingAppStateStore<frename_core::AppDatabase>>;
 
 pub use messages::{GlobalSearchKey, Message};
+pub(crate) use state::open_in_default_app;
 pub use state::FolderWorkspace;

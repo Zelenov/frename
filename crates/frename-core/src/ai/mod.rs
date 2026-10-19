@@ -9,7 +9,7 @@ pub use block::has_editor_comment;
 use clipscribe::{Model, MODELS};
 pub use clipscribe::{MomentsMode, SummaryLanguage};
 
-/// The models frename offers: all of clipscribe's, Anthropic's first, then OpenAI's. A model is
+/// The models frename offers: all of clipscribe's, Anthropic's first, then OpenAI's and Gemini's. A model is
 /// paid with the key of its own provider ([`key::ApiKey::of_provider`]).
 pub fn models() -> Vec<Model> {
     MODELS.into_iter().collect()
@@ -52,7 +52,7 @@ mod tests {
     use clipscribe::Provider;
 
     #[test]
-    fn both_providers_models_are_offered_each_with_its_own_key() {
+    fn every_providers_models_are_offered_each_with_its_own_key() {
         let models = models();
         assert_eq!(
             models[0].provider,
@@ -60,6 +60,12 @@ mod tests {
             "the default is Claude's"
         );
         assert!(models.iter().any(|m| m.provider == Provider::OpenAi));
+        assert!(models.iter().any(|m| m.provider == Provider::Gemini));
+        assert_eq!(model_from_id("gemini-3.5-flash").id, "gemini-3.5-flash");
+        assert_eq!(
+            key_of(model_from_id("gemini-3.5-flash")),
+            key::ApiKey::Gemini
+        );
         assert_eq!(model_from_id("claude-haiku-4-5").id, "claude-haiku-4-5");
         assert_eq!(model_from_id("gpt-4.1").id, "gpt-4.1");
         assert_eq!(model_from_id("nonsense").id, models[0].id);

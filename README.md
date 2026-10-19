@@ -29,8 +29,9 @@ frename is free and open source (MIT license).
   Premiere Pro shows it in the Description column and finds it by search.
 - **Let AI describe your footage.** Describe with AI writes a short summary of each clip and marks
   what happens when, even in clips with no speech. It can also suggest an in and out point and
-  name a single marker, or every unnamed marker in one click. You use your own Anthropic or
-  OpenAI API key (Claude or ChatGPT), and Haiku costs about $10 per 1,000 one-minute clips. One
+  name a single marker, or every unnamed marker in one click. You use your own Anthropic,
+  OpenAI or Google API key (Claude, ChatGPT or Gemini), each with a Get a key button in Settings;
+  Haiku costs about $10 per 1,000 one-minute clips and Gemini Flash-Lite about $3. One
   button in the corner of the comment box describes the clip you have open, with no batch panel, and
   waits its turn behind a running job; press it again while it waits to take it back.
 - **Prepare a whole folder in one run.** Prepare clips makes the subtitles, then the description (with its markers, comment and tag
@@ -156,7 +157,7 @@ Settings.
   them, so for those frename keeps the comment and the in and out points in the text file, and
   markers are not available.
 - frename sends your footage nowhere unless you ask. Describe with AI sends frames and
-  subtitles to Anthropic or OpenAI, depending on the model you chose, and Generate subtitles sends the audio to Soniox, both with your own API
+  subtitles to Anthropic, OpenAI or Google, depending on the model you chose, and Generate subtitles sends the audio to Soniox, both with your own API
   key. Your keys are kept in the system's password store. On Windows that is Credential Manager.
 - On Windows, frename checks GitHub once a day for a new version. You can turn that off in
   Settings, and nothing is downloaded until you click **Update and restart**. The Linux AppImage

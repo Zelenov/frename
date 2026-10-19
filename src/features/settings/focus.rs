@@ -19,11 +19,13 @@ use crate::features::updates;
 pub const FIELD_IDS: &[&str] = &[
     ANTHROPIC_KEY_FIELD,
     OPENAI_KEY_FIELD,
+    GEMINI_KEY_FIELD,
     SONIOX_KEY_FIELD,
     COMMENTED_TAG_FIELD,
 ];
 pub const ANTHROPIC_KEY_FIELD: &str = "settings-key-anthropic";
 pub const OPENAI_KEY_FIELD: &str = "settings-key-openai";
+pub const GEMINI_KEY_FIELD: &str = "settings-key-gemini";
 pub const SONIOX_KEY_FIELD: &str = "settings-key-soniox";
 pub const COMMENTED_TAG_FIELD: &str = "settings-commented-tag";
 
@@ -64,6 +66,10 @@ pub enum Control {
 pub enum KeyControl {
     Field,
     Show,
+    /// "Get a key": opens the service's page where a key is made.
+    GetKey,
+    /// "Add credit": opens the service's billing page.
+    Billing,
     Save,
     Cancel,
     Replace,
@@ -85,6 +91,7 @@ impl Control {
         match self {
             Control::Key(ApiKey::Anthropic, KeyControl::Field) => Some(ANTHROPIC_KEY_FIELD),
             Control::Key(ApiKey::OpenAi, KeyControl::Field) => Some(OPENAI_KEY_FIELD),
+            Control::Key(ApiKey::Gemini, KeyControl::Field) => Some(GEMINI_KEY_FIELD),
             Control::Key(ApiKey::Soniox, KeyControl::Field) => Some(SONIOX_KEY_FIELD),
             Control::CommentedTagName => Some(COMMENTED_TAG_FIELD),
             _ => None,
@@ -115,6 +122,7 @@ pub fn key_field_id(which: ApiKey) -> &'static str {
     match which {
         ApiKey::Anthropic => ANTHROPIC_KEY_FIELD,
         ApiKey::OpenAi => OPENAI_KEY_FIELD,
+        ApiKey::Gemini => GEMINI_KEY_FIELD,
         ApiKey::Soniox => SONIOX_KEY_FIELD,
     }
 }
@@ -132,6 +140,7 @@ pub fn control_of_field(id: &str) -> Option<Control> {
     match id {
         ANTHROPIC_KEY_FIELD => Some(Control::Key(ApiKey::Anthropic, KeyControl::Field)),
         OPENAI_KEY_FIELD => Some(Control::Key(ApiKey::OpenAi, KeyControl::Field)),
+        GEMINI_KEY_FIELD => Some(Control::Key(ApiKey::Gemini, KeyControl::Field)),
         SONIOX_KEY_FIELD => Some(Control::Key(ApiKey::Soniox, KeyControl::Field)),
         COMMENTED_TAG_FIELD => Some(Control::CommentedTagName),
         _ => None,
@@ -211,6 +220,7 @@ pub fn controls(state: &SettingsState, batch_running: bool) -> Vec<Control> {
         Page::Ai => {
             controls.extend(key_controls(state, ApiKey::Anthropic));
             controls.extend(key_controls(state, ApiKey::OpenAi));
+            controls.extend(key_controls(state, ApiKey::Gemini));
             controls.extend([
                 Control::AiModel,
                 Control::SummaryLanguage,
@@ -254,10 +264,15 @@ pub fn key_controls(state: &SettingsState, which: ApiKey) -> Vec<Control> {
     let controls = match key_row(state.key(which)) {
         KeyRow::Unavailable => vec![],
         KeyRow::ConfirmRemove => vec![KeyControl::Remove, KeyControl::Keep],
-        KeyRow::Saved => vec![KeyControl::Replace, KeyControl::AskRemove],
+        KeyRow::Saved => vec![
+            KeyControl::Replace,
+            KeyControl::AskRemove,
+            KeyControl::Billing,
+        ],
         KeyRow::Typing { can_save, cancel } => [
             Some(KeyControl::Field),
             Some(KeyControl::Show),
+            Some(KeyControl::GetKey),
             can_save.then_some(KeyControl::Save),
             cancel.then_some(KeyControl::Cancel),
         ]
@@ -344,6 +359,8 @@ pub fn press(state: &SettingsState, control: &Control, press: Press) -> Option<M
             let message = match key {
                 KeyControl::Field => return None,
                 KeyControl::Show => KeyMessage::ToggleShow,
+                KeyControl::GetKey => KeyMessage::GetKey,
+                KeyControl::Billing => KeyMessage::OpenBilling,
                 KeyControl::Save => KeyMessage::Save,
                 KeyControl::Cancel => KeyMessage::CancelReplace,
                 KeyControl::Replace => KeyMessage::Replace,
@@ -397,7 +414,11 @@ pub fn after_press(pressed: &Control) -> Option<Control> {
                 KeyControl::Replace => KeyControl::Field,
                 KeyControl::Cancel => KeyControl::Replace,
                 KeyControl::Remove => KeyControl::AskRemove,
-                KeyControl::Field | KeyControl::Show | KeyControl::Save => return None,
+                KeyControl::Field
+                | KeyControl::Show
+                | KeyControl::GetKey
+                | KeyControl::Billing
+                | KeyControl::Save => return None,
             };
             Some(Control::Key(*which, next))
         }

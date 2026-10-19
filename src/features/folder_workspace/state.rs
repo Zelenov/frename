@@ -3585,7 +3585,7 @@ fn check_new_file_name(
 
 /// Open `target` with the app the system uses for it (a text editor for the log, the browser
 /// for a web address).
-fn open_in_default_app(target: impl AsRef<std::ffi::OsStr>) {
+pub(crate) fn open_in_default_app(target: impl AsRef<std::ffi::OsStr>) {
     let target = target.as_ref();
     #[cfg(windows)]
     let result = std::process::Command::new("explorer").arg(target).spawn();

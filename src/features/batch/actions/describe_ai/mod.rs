@@ -98,6 +98,7 @@ pub struct Options {
     /// unlock a keyring). The model chosen decides which one counts ([`Self::key`]).
     anthropic_key: Option<KeyState>,
     openai_key: Option<KeyState>,
+    gemini_key: Option<KeyState>,
     /// The key's state has been asked for; the answer is on its way.
     key_requested: bool,
     /// Suggest tags from the folder's tags too (Settings).
@@ -121,6 +122,7 @@ impl Options {
             Message::KeyState(which, state) => match which {
                 key::ApiKey::Anthropic => self.anthropic_key = Some(state),
                 key::ApiKey::OpenAi => self.openai_key = Some(state),
+                key::ApiKey::Gemini => self.gemini_key = Some(state),
                 key::ApiKey::Soniox => {}
             },
             Message::SetLanguage(language) => self.language = language,
@@ -183,8 +185,10 @@ impl Options {
 
     /// Whether the key's state still has to be read; marks it as asked for.
     pub(in crate::features::batch) fn request_key_state(&mut self) -> bool {
-        let needed =
-            (self.anthropic_key.is_none() || self.openai_key.is_none()) && !self.key_requested;
+        let needed = (self.anthropic_key.is_none()
+            || self.openai_key.is_none()
+            || self.gemini_key.is_none())
+            && !self.key_requested;
         self.key_requested = true;
         needed
     }
@@ -288,6 +292,7 @@ impl Options {
     fn key(&self) -> Option<KeyState> {
         match frename_core::ai::key_of(self.model) {
             key::ApiKey::OpenAi => self.openai_key,
+            key::ApiKey::Gemini => self.gemini_key,
             _ => self.anthropic_key,
         }
     }

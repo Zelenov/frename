@@ -92,6 +92,10 @@ pub enum KeyMessage {
     Input(String),
     /// Show or hide the typed key.
     ToggleShow,
+    /// Open the page where the service makes a key. Handled by the app.
+    GetKey,
+    /// Open the page where credit is added. Handled by the app.
+    OpenBilling,
     /// Save the typed key in the credential store. Handled by the app, on a worker thread.
     Save,
     /// Show the key field again to type a new key over the saved one.
@@ -123,7 +127,11 @@ impl KeyMessage {
             | KeyMessage::CancelReplace
             | KeyMessage::AskRemove
             | KeyMessage::CancelRemove => true,
-            KeyMessage::Save | KeyMessage::Remove | KeyMessage::State { .. } => false,
+            KeyMessage::Save
+            | KeyMessage::Remove
+            | KeyMessage::GetKey
+            | KeyMessage::OpenBilling
+            | KeyMessage::State { .. } => false,
         }
     }
 }

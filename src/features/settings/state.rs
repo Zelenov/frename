@@ -65,6 +65,7 @@ pub enum LanguageList {
 pub struct Keys {
     anthropic: KeySection,
     openai: KeySection,
+    gemini: KeySection,
     soniox: KeySection,
 }
 
@@ -196,7 +197,7 @@ impl SettingsState {
     /// button would. `false` when there was none, and Esc closes the window instead.
     pub fn escape(&mut self) -> bool {
         let keys: &[ApiKey] = match self.page {
-            Page::Ai => &[ApiKey::Anthropic, ApiKey::OpenAi],
+            Page::Ai => &[ApiKey::Anthropic, ApiKey::OpenAi, ApiKey::Gemini],
             Page::Subtitles => &[ApiKey::Soniox],
             _ => return false,
         };
@@ -361,6 +362,7 @@ impl SettingsState {
         match which {
             ApiKey::Anthropic => &self.keys.anthropic,
             ApiKey::OpenAi => &self.keys.openai,
+            ApiKey::Gemini => &self.keys.gemini,
             ApiKey::Soniox => &self.keys.soniox,
         }
     }
@@ -369,6 +371,7 @@ impl SettingsState {
         match which {
             ApiKey::Anthropic => &mut self.keys.anthropic,
             ApiKey::OpenAi => &mut self.keys.openai,
+            ApiKey::Gemini => &mut self.keys.gemini,
             ApiKey::Soniox => &mut self.keys.soniox,
         }
     }
@@ -451,6 +454,8 @@ impl SettingsState {
             }
             // Done by the app on a worker thread; the answer comes back as `KeyState`.
             KeyMessage::Save => key.error = None,
+            // Opening a page: done by the app, nothing changes here.
+            KeyMessage::GetKey | KeyMessage::OpenBilling => {}
             KeyMessage::AskRemove => key.confirm_remove = true,
             KeyMessage::CancelRemove => key.confirm_remove = false,
             KeyMessage::Remove => {
@@ -1122,6 +1127,7 @@ mod tests {
         let mut state = test_state();
         key_answer(&mut state, ApiKey::Anthropic, KeyState::Saved);
         key_answer(&mut state, ApiKey::OpenAi, KeyState::Missing);
+        key_answer(&mut state, ApiKey::Gemini, KeyState::Missing);
         let models = frename_core::ai::models();
         state.apply(Message::SetAiModel(
             *models
@@ -1137,8 +1143,63 @@ mod tests {
         assert_eq!(
             next.provider,
             clipscribe::Provider::Anthropic,
-            "from the last Claude model it goes round to the first, not to ChatGPT"
+            "from the last Claude model it goes round to the first, not to ChatGPT or Gemini"
         );
+    }
+
+    #[test]
+    fn the_gemini_key_has_its_own_section_and_a_gemini_model_needs_it() {
+        let mut state = test_state();
+        let gemini = frename_core::ai::model_from_id("gemini-3.1-flash-lite");
+        assert_eq!(gemini.provider, clipscribe::Provider::Gemini);
+        key_answer(&mut state, ApiKey::Anthropic, KeyState::Saved);
+        key_answer(&mut state, ApiKey::Gemini, KeyState::Missing);
+        assert_eq!(state.key(ApiKey::Gemini).state, Some(KeyState::Missing));
+        assert_eq!(state.key(ApiKey::OpenAi).state, None, "another section");
+        assert!(!state.model_usable(gemini));
+        state.apply(Message::SetAiModel(gemini));
+        assert_ne!(state.settings().ai_model, gemini.id, "the pick is ignored");
+
+        state.apply(Message::Key(
+            ApiKey::Gemini,
+            KeyMessage::Input(" AIza-test ".to_string()),
+        ));
+        assert_eq!(
+            state.typed_key(ApiKey::Gemini).as_deref(),
+            Some("AIza-test")
+        );
+        assert_eq!(state.typed_key(ApiKey::OpenAi), None);
+        key_answer(&mut state, ApiKey::Gemini, KeyState::Saved);
+        assert!(state.model_usable(gemini));
+        state.apply(Message::SetAiModel(gemini));
+        assert_eq!(state.settings().ai_model, gemini.id);
+    }
+
+    #[test]
+    fn get_a_key_and_add_credit_are_controls_that_press_into_messages() {
+        let mut state = test_state();
+        state.page = Page::Ai;
+        for which in [ApiKey::Anthropic, ApiKey::OpenAi, ApiKey::Gemini] {
+            let get = Control::Key(which, KeyControl::GetKey);
+            assert!(focus::controls(&state, false).contains(&get), "{which:?}");
+            assert!(matches!(
+                focus::press(&state, &get, Press::Enter),
+                Some(Message::Key(w, KeyMessage::GetKey)) if w == which
+            ));
+        }
+        saved_key(&mut state, ApiKey::Gemini);
+        let controls = focus::controls(&state, false);
+        let billing = Control::Key(ApiKey::Gemini, KeyControl::Billing);
+        assert!(
+            controls.contains(&billing),
+            "a saved key offers its billing page"
+        );
+        assert!(!controls.contains(&Control::Key(ApiKey::Gemini, KeyControl::GetKey)));
+        assert!(matches!(
+            focus::press(&state, &billing, Press::Space),
+            Some(Message::Key(ApiKey::Gemini, KeyMessage::OpenBilling))
+        ));
+        assert!(!KeyMessage::GetKey.is_local() && !KeyMessage::OpenBilling.is_local());
     }
 
     #[test]
