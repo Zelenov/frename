@@ -765,11 +765,19 @@ impl FrenameApp {
                                             batch::generate_subtitles::Message::KeySaved,
                                         )),
                                     ]),
-                                    ApiKey::Anthropic | ApiKey::OpenAi => saved,
+                                    ApiKey::Anthropic | ApiKey::OpenAi | ApiKey::Gemini => saved,
                                 }
                             }
                             None => Task::none(),
                         }
+                    }
+                    settings::Message::Key(which, settings::KeyMessage::GetKey) => {
+                        folder_workspace::open_in_default_app(which.key_url());
+                        Task::none()
+                    }
+                    settings::Message::Key(which, settings::KeyMessage::OpenBilling) => {
+                        folder_workspace::open_in_default_app(which.billing_url());
+                        Task::none()
                     }
                     settings::Message::Key(which, settings::KeyMessage::Remove) => {
                         key_task(which, self.settings.begin_key_request(which), move || {
@@ -784,7 +792,7 @@ impl FrenameApp {
                     // Passed on as the settings took it (a stale answer changed nothing).
                     settings::Message::Key(which, settings::KeyMessage::State { .. }) => {
                         match (which, self.settings.key(which).state) {
-                            (ApiKey::Anthropic | ApiKey::OpenAi, Some(state)) => {
+                            (ApiKey::Anthropic | ApiKey::OpenAi | ApiKey::Gemini, Some(state)) => {
                                 Task::done(describe_ai_message(
                                     batch::describe_ai::Message::KeyState(which, state),
                                 ))
@@ -841,11 +849,11 @@ impl FrenameApp {
             // One reader of a key's state: the settings, which pass it on to the batch panel.
             Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
                 batch::ActionMessage::ReadKeyState,
-            ))) => {
-                Task::batch([ApiKey::Anthropic, ApiKey::OpenAi].map(|which| {
+            ))) => Task::batch(
+                [ApiKey::Anthropic, ApiKey::OpenAi, ApiKey::Gemini].map(|which| {
                     key_task(which, self.settings.begin_key_request(which), || Ok(()))
-                }))
-            }
+                }),
+            ),
             Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
                 batch::ActionMessage::ReadSonioxKeyState,
             ))) => key_task(
@@ -1094,7 +1102,7 @@ impl FrenameApp {
             }))
         } else {
             Task::batch(
-                [ApiKey::Anthropic, ApiKey::OpenAi, ApiKey::Soniox].map(|which| {
+                ApiKey::ALL.map(|which| {
                     key_task(which, self.settings.begin_key_request(which), || Ok(()))
                 }),
             )

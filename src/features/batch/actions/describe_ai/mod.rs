@@ -98,6 +98,7 @@ pub struct Options {
     /// unlock a keyring). The model chosen decides which one counts ([`Self::key`]).
     anthropic_key: Option<KeyState>,
     openai_key: Option<KeyState>,
+    gemini_key: Option<KeyState>,
     /// The key's state has been asked for; the answer is on its way.
     key_requested: bool,
     /// Suggest tags from the folder's tags too (Settings).
@@ -121,6 +122,7 @@ impl Options {
             Message::KeyState(which, state) => match which {
                 key::ApiKey::Anthropic => self.anthropic_key = Some(state),
                 key::ApiKey::OpenAi => self.openai_key = Some(state),
+                key::ApiKey::Gemini => self.gemini_key = Some(state),
                 key::ApiKey::Soniox => {}
             },
             Message::SetLanguage(language) => self.language = language,
@@ -183,8 +185,10 @@ impl Options {
 
     /// Whether the key's state still has to be read; marks it as asked for.
     pub(in crate::features::batch) fn request_key_state(&mut self) -> bool {
-        let needed =
-            (self.anthropic_key.is_none() || self.openai_key.is_none()) && !self.key_requested;
+        let needed = (self.anthropic_key.is_none()
+            || self.openai_key.is_none()
+            || self.gemini_key.is_none())
+            && !self.key_requested;
         self.key_requested = true;
         needed
     }
@@ -288,6 +292,7 @@ impl Options {
     fn key(&self) -> Option<KeyState> {
         match frename_core::ai::key_of(self.model) {
             key::ApiKey::OpenAi => self.openai_key,
+            key::ApiKey::Gemini => self.gemini_key,
             _ => self.anthropic_key,
         }
     }
@@ -985,6 +990,7 @@ fn ai_failed(error: AiError, provider: clipscribe::Provider) -> ItemResult {
         // A request that timed out may have been answered and billed after all.
         usage_unknown: error == AiError::Timeout,
         out_of_credit: matches!(error, AiError::OutOfCredit(_)),
+        key_rejected: matches!(error, AiError::KeyRejected(_)),
         stop_job: error.stops_job(),
         stop_if_repeated: offline
             .then(|| fl!("batch-ai-stop-offline", provider = provider.label())),
@@ -1050,6 +1056,21 @@ pub fn failure_reason(error: &describe::Error, path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_providers_key_and_credit_errors_each_get_their_own_fix() {
+        use clipscribe::Provider;
+        for provider in [Provider::Anthropic, Provider::OpenAi, Provider::Gemini] {
+            let label = provider.label().to_string();
+            let rejected = super::ai_failed(AiError::KeyRejected(label.clone()), provider);
+            assert!(rejected.key_rejected && !rejected.out_of_credit, "{label}");
+            assert!(rejected.stop_job.is_some(), "a rejected key stops the job");
+            let broke = super::ai_failed(AiError::OutOfCredit(label.clone()), provider);
+            assert!(broke.out_of_credit && !broke.key_rejected, "{label}");
+            let busy = super::ai_failed(AiError::Network("x".into()), provider);
+            assert!(!busy.out_of_credit && !busy.key_rejected, "{label}");
+        }
+    }
+
     use super::*;
     use std::time::SystemTime;
 

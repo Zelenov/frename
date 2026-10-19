@@ -33,6 +33,8 @@ pub const CONFIRM_ABOVE: usize = 10;
 /// Frames one marker request carries: the moment and a window's length each side of it
 /// (`Clip::sample_moment`).
 const MOMENT_FRAMES: u64 = 3;
+/// A clip length clipscribe samples at [`MOMENT_FRAMES`] frames.
+const MOMENT_CLIP_S: f64 = 5.0;
 
 /// Whether "Describe N unnamed" asks first for `count` markers.
 pub fn needs_confirmation(count: usize) -> bool {
@@ -40,20 +42,14 @@ pub fn needs_confirmation(count: usize) -> bool {
 }
 
 /// The tokens one marker request is expected to use with `model`: clipscribe's estimate for a
-/// clip (its instructions and a typical answer, plus the frames of a clip of this length), with
-/// the frames replaced by the [`MOMENT_FRAMES`] a moment request sends. Nearby subtitles are
-/// not counted: they add a few lines at most. The answer is clipscribe's typical answer for a
-/// whole clip (thinking included), longer than a name and a sentence or two: the price runs
-/// high, an upper-ish estimate.
+/// clip of [`MOMENT_CLIP_S`] seconds, which it samples at exactly the [`MOMENT_FRAMES`] a
+/// moment request sends (its frames are counted the way `model`'s provider bills them).
+/// Nearby subtitles are not counted: they add a few lines at most. The answer is clipscribe's
+/// typical answer for a whole clip (thinking included), longer than a name and a sentence or
+/// two: the price runs high, an upper-ish estimate.
 pub fn moment_usage(model: Model) -> clipscribe::AiUsage {
-    let base = describe::estimate_usage(model, 0.0, 0);
-    let (w, h) = describe::frame_size(1920, 1080);
-    let frame = describe::frame_tokens(w, h);
-    let base_frames = describe::frame_count(0.0) as u64;
-    clipscribe::AiUsage {
-        input_tokens: base.input_tokens - base_frames * frame + MOMENT_FRAMES * frame,
-        output_tokens: base.output_tokens,
-    }
+    debug_assert_eq!(describe::frame_count(MOMENT_CLIP_S) as u64, MOMENT_FRAMES);
+    describe::estimate_usage(model, MOMENT_CLIP_S, 0)
 }
 
 /// What one marker request is expected to cost with `model`, in US dollars; `None` when the

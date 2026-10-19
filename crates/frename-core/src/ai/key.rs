@@ -1,4 +1,4 @@
-//! The API keys (Anthropic and OpenAI for AI descriptions, Soniox for subtitles), kept in the
+//! The API keys (Anthropic, OpenAI and Gemini for AI descriptions, Soniox for subtitles), kept in the
 //! operating system's credential store (Windows Credential Manager, macOS Keychain, Secret Service on
 //! Linux). Never in the database, logs or files.
 
@@ -13,6 +13,8 @@ pub enum ApiKey {
     Anthropic,
     /// AI descriptions by ChatGPT.
     OpenAi,
+    /// AI descriptions by Gemini.
+    Gemini,
     /// Subtitles from speech.
     Soniox,
 }
@@ -23,6 +25,7 @@ impl ApiKey {
         match self {
             Self::Anthropic => "anthropic-api-key",
             Self::OpenAi => "openai-api-key",
+            Self::Gemini => "gemini-api-key",
             Self::Soniox => "soniox-api-key",
         }
     }
@@ -32,6 +35,7 @@ impl ApiKey {
         match provider {
             Provider::Anthropic => Self::Anthropic,
             Provider::OpenAi => Self::OpenAi,
+            Provider::Gemini => Self::Gemini,
         }
     }
 
@@ -41,9 +45,23 @@ impl ApiKey {
         match self {
             Self::Anthropic => "https://console.anthropic.com/settings/billing",
             Self::OpenAi => "https://platform.openai.com/settings/organization/billing/overview",
+            Self::Gemini => "https://aistudio.google.com/apikey",
             Self::Soniox => "https://console.soniox.com/org/billing/overview",
         }
     }
+
+    /// The page where a key for this service is created: the "Get a key" button of its key field.
+    pub fn key_url(self) -> &'static str {
+        match self {
+            Self::Anthropic => "https://console.anthropic.com/settings/keys",
+            Self::OpenAi => "https://platform.openai.com/api-keys",
+            Self::Gemini => "https://aistudio.google.com/apikey",
+            Self::Soniox => "https://console.soniox.com",
+        }
+    }
+
+    /// Every service a key can be saved for.
+    pub const ALL: [ApiKey; 4] = [Self::Anthropic, Self::OpenAi, Self::Gemini, Self::Soniox];
 }
 
 /// Whether a key is saved, or that the store cannot be used on this system.
@@ -126,6 +144,35 @@ fn delete_key_of(user: &str) -> Result<(), KeyError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// "Get a key" and "Add credit" open these pages; a typo here would send the editor to a
+    /// dead page, so they are written out.
+    #[test]
+    fn every_service_has_its_own_get_a_key_and_billing_page() {
+        let urls = |f: fn(ApiKey) -> &'static str| ApiKey::ALL.map(f);
+        assert_eq!(
+            urls(ApiKey::key_url),
+            [
+                "https://console.anthropic.com/settings/keys",
+                "https://platform.openai.com/api-keys",
+                "https://aistudio.google.com/apikey",
+                "https://console.soniox.com",
+            ]
+        );
+        // Gemini's key page is also where its billing is set up; each service has its own pages.
+        for f in [ApiKey::key_url, ApiKey::billing_url] {
+            for url in urls(f) {
+                assert!(url.starts_with("https://"), "{url}");
+            }
+        }
+        assert_ne!(ApiKey::Anthropic.key_url(), ApiKey::OpenAi.key_url());
+    }
+
+    #[test]
+    fn a_models_key_is_its_providers() {
+        assert_eq!(ApiKey::of_provider(Provider::Gemini), ApiKey::Gemini);
+        assert_ne!(ApiKey::Gemini.user(), ApiKey::OpenAi.user());
+    }
 
     /// The key goes to the store and back under a test entry of its own; where no store works
     /// (CI's Linux runner has no Secret Service), it says so instead of pretending to save

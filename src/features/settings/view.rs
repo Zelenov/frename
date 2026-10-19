@@ -315,6 +315,16 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
         },
         state.focus(),
     );
+    let gemini_key = key_block(
+        ApiKey::Gemini,
+        state.key(ApiKey::Gemini),
+        KeyTexts {
+            placeholder: fl!("settings-ai-gemini-key-placeholder"),
+            get_one: fl!("settings-ai-gemini-key-get"),
+            remove_question: fl!("settings-ai-gemini-key-remove-confirm"),
+        },
+        state.focus(),
+    );
     // Every model is listed; one whose company has no key says so and cannot be picked.
     let option = |model: Model| ModelOption {
         model,
@@ -332,6 +342,11 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
                 fl!("settings-ai-openai-key-label"),
                 key_help(state.key(ApiKey::OpenAi), fl!("settings-ai-openai-used-by")),
                 openai_key,
+            ),
+            layout::setting_row_with_info(
+                fl!("settings-ai-gemini-key-label"),
+                key_help(state.key(ApiKey::Gemini), fl!("settings-ai-gemini-used-by")),
+                gemini_key,
             ),
             layout::setting_row(
                 fl!("settings-ai-model-label"),
@@ -607,6 +622,11 @@ fn key_block<'a>(
                         .on_press(message(KeyMessage::AskRemove)),
                     ringed(KeyControl::AskRemove),
                 ),
+                ring(
+                    button::secondary(fl!("settings-key-billing"))
+                        .on_press(message(KeyMessage::OpenBilling)),
+                    ringed(KeyControl::Billing),
+                ),
             ]),
         ],
         KeyRow::Typing { can_save, cancel } => {
@@ -644,6 +664,11 @@ fn key_block<'a>(
                         button::primary(fl!("settings-key-save")).on_press_maybe(save),
                         ringed(KeyControl::Save),
                     ))
+                    .chain(std::iter::once(ring(
+                        button::secondary(fl!("settings-key-get"))
+                            .on_press(message(KeyMessage::GetKey)),
+                        ringed(KeyControl::GetKey),
+                    )))
                     .chain(cancel),
                 ),
                 text::secondary(texts.get_one).into(),

@@ -89,6 +89,7 @@ impl DemoRun {
         [
             (ApiKey::Anthropic, KeyState::Saved),
             (ApiKey::OpenAi, KeyState::Missing),
+            (ApiKey::Gemini, KeyState::Missing),
             (ApiKey::Soniox, KeyState::Missing),
         ]
         .into_iter()

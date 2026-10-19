@@ -526,6 +526,7 @@ fn merge(total: &mut ItemResult, step: ItemResult) {
     total.stop_job = total.stop_job.take().or(step.stop_job);
     total.stop_if_repeated = total.stop_if_repeated.take().or(step.stop_if_repeated);
     total.out_of_credit |= step.out_of_credit;
+    total.key_rejected |= step.key_rejected;
 }
 
 impl PipelineJob {
