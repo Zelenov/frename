@@ -990,6 +990,7 @@ fn ai_failed(error: AiError, provider: clipscribe::Provider) -> ItemResult {
         // A request that timed out may have been answered and billed after all.
         usage_unknown: error == AiError::Timeout,
         out_of_credit: matches!(error, AiError::OutOfCredit(_)),
+        key_rejected: matches!(error, AiError::KeyRejected(_)),
         stop_job: error.stops_job(),
         stop_if_repeated: offline
             .then(|| fl!("batch-ai-stop-offline", provider = provider.label())),
@@ -1055,6 +1056,21 @@ pub fn failure_reason(error: &describe::Error, path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_providers_key_and_credit_errors_each_get_their_own_fix() {
+        use clipscribe::Provider;
+        for provider in [Provider::Anthropic, Provider::OpenAi, Provider::Gemini] {
+            let label = provider.label().to_string();
+            let rejected = super::ai_failed(AiError::KeyRejected(label.clone()), provider);
+            assert!(rejected.key_rejected && !rejected.out_of_credit, "{label}");
+            assert!(rejected.stop_job.is_some(), "a rejected key stops the job");
+            let broke = super::ai_failed(AiError::OutOfCredit(label.clone()), provider);
+            assert!(broke.out_of_credit && !broke.key_rejected, "{label}");
+            let busy = super::ai_failed(AiError::Network("x".into()), provider);
+            assert!(!busy.out_of_credit && !busy.key_rejected, "{label}");
+        }
+    }
+
     use super::*;
     use std::time::SystemTime;
 

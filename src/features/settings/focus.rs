@@ -272,8 +272,8 @@ pub fn key_controls(state: &SettingsState, which: ApiKey) -> Vec<Control> {
         KeyRow::Typing { can_save, cancel } => [
             Some(KeyControl::Field),
             Some(KeyControl::Show),
-            Some(KeyControl::GetKey),
             can_save.then_some(KeyControl::Save),
+            Some(KeyControl::GetKey),
             cancel.then_some(KeyControl::Cancel),
         ]
         .into_iter()

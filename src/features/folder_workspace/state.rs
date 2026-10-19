@@ -1547,6 +1547,10 @@ impl FolderWorkspace {
             open_in_default_app(service.billing_url());
             return Task::none();
         }
+        if let batch::Message::OpenKeyPage(service) = msg {
+            open_in_default_app(service.key_url());
+            return Task::none();
+        }
         self.handle_batch_many([msg])
     }
 

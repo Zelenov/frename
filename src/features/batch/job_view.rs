@@ -336,19 +336,26 @@ fn notice<'a>(state: &BatchState, outcome: &Outcome, progress: &Progress) -> Ele
             None,
         ),
     };
-    let fix = state
-        .out_of_credit()
-        .then(|| match state.job_action().unwrap_or(state.action()) {
-            // Credit is added where the job's model is billed.
-            Action::DescribeAi => Some(frename_core::ai::key_of(state.job_ai_model())),
-            action => action.service(),
-        })
-        .flatten()
-        .map(|service| {
+    // Credit is added, and a key made, where the job's model is billed.
+    let service = || match state.job_action().unwrap_or(state.action()) {
+        Action::DescribeAi => Some(frename_core::ai::key_of(state.job_ai_model())),
+        action => action.service(),
+    };
+    let fix = if state.out_of_credit() {
+        service().map(|service| {
             button::secondary(fl!("batch-add-credit"))
                 .on_press(Message::OpenBilling(service))
                 .into()
-        });
+        })
+    } else if state.key_rejected() {
+        service().map(|service| {
+            button::secondary(fl!("settings-key-get"))
+                .on_press(Message::OpenKeyPage(service))
+                .into()
+        })
+    } else {
+        None
+    };
     layout::notice(outcome.kind(), headline, detail, fix)
 }
 

@@ -1187,6 +1187,24 @@ mod tests {
                 Some(Message::Key(w, KeyMessage::GetKey)) if w == which
             ));
         }
+        // The order is the order the row draws them: Show, Save, Get a key.
+        state.apply(Message::Key(ApiKey::Gemini, KeyMessage::Input("k".into())));
+        let row: Vec<_> = focus::controls(&state, false)
+            .into_iter()
+            .filter_map(|c| match c {
+                Control::Key(ApiKey::Gemini, key) => Some(key),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            row,
+            [
+                KeyControl::Field,
+                KeyControl::Show,
+                KeyControl::Save,
+                KeyControl::GetKey
+            ]
+        );
         saved_key(&mut state, ApiKey::Gemini);
         let controls = focus::controls(&state, false);
         let billing = Control::Key(ApiKey::Gemini, KeyControl::Billing);

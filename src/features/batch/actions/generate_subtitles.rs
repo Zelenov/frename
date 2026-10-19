@@ -1136,6 +1136,7 @@ fn item_result(path: &Path, result: anyhow::Result<Outcome>, cancelled: bool) ->
         let key_rejected = matches!(api.status, Some(401))
             || api.error_type == "unauthenticated"
             || api.error_type == "permission_denied";
+        result.key_rejected = key_rejected;
         result.stop_job = Some(match api.error_type.as_str() {
             _ if key_rejected => fl!("batch-subtitles-stop-key-rejected"),
             "organization_balance_exhausted" => fl!("batch-subtitles-stop-balance-empty"),

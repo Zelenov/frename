@@ -1,10 +1,7 @@
 # 0.166
 ## Added
-- Describe with AI works with Google Gemini too: pick Gemini 3.1 Flash-Lite (the cheapest model of all, about a third of Haiku's price) or Gemini 3.5 Flash in Settings → Describe with AI, and paste a Google API key.
-- Settings → Describe with AI has a Get a key button under each key field (Anthropic, OpenAI, Google; Soniox under Subtitles) that opens the page where the key is made, and a saved key has an Add credit button that opens the billing page.
-
-## Changed
-- A model that lacks its key says "add the Gemini key first" (it said "an Gemini" for the new provider).
+- Describe with AI works with Google Gemini too: pick Gemini 3.1 Flash-Lite (one of the cheapest models) or Gemini 3.5 Flash in Settings → Describe with AI, and paste a Google API key.
+- Settings → Describe with AI has a Get a key button under each key field (Anthropic, OpenAI, Google; Soniox under Subtitles) that opens the page where the key is made, and a saved key has an Add credit button that opens the billing page. A report that says the key was rejected offers Get a key too.
 
 # 0.165
 ## Added

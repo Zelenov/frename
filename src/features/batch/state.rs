@@ -137,6 +137,8 @@ pub struct ItemResult {
     pub stop_if_repeated: Option<String>,
     /// The service's account has no credit left: the report offers to add some.
     pub out_of_credit: bool,
+    /// The service rejected the API key: the report offers the page where a key is made.
+    pub key_rejected: bool,
 }
 
 /// How many files in a row may fail the same way before the job stops.
@@ -153,6 +155,7 @@ impl ItemResult {
             stop_job: None,
             stop_if_repeated: None,
             out_of_credit: false,
+            key_rejected: false,
         }
     }
 
@@ -191,6 +194,8 @@ struct Job {
     repeated: Option<(String, usize)>,
     /// A file failed because the AI account has no credit left.
     out_of_credit: bool,
+    /// A file failed because the service rejected the API key.
+    key_rejected: bool,
     /// False once the job has finished or stopped; the report stays until it is closed.
     running: bool,
     /// When it started, and when it ended: the time it took and the time left.
@@ -360,7 +365,8 @@ impl BatchState {
             | Message::Retry
             | Message::Withdraw(..)
             | Message::OpenLog
-            | Message::OpenBilling(_) => {}
+            | Message::OpenBilling(_)
+            | Message::OpenKeyPage(_) => {}
         }
     }
 
@@ -397,6 +403,7 @@ impl BatchState {
             usage_unknown: false,
             stopped: None,
             out_of_credit: false,
+            key_rejected: false,
             repeated: None,
             running: true,
             started: Instant::now(),
@@ -503,6 +510,7 @@ impl BatchState {
             job.stopped = Some(stop);
         }
         job.out_of_credit |= result.out_of_credit;
+        job.key_rejected |= result.key_rejected;
         job.repeated = match (job.repeated.take(), result.stop_if_repeated.clone()) {
             (Some((last, n)), Some(stop)) if last == stop => Some((stop, n + 1)),
             (_, Some(stop)) => Some((stop, 1)),
@@ -563,6 +571,11 @@ impl BatchState {
     /// Whether a file of the current job failed because the AI account has no credit left.
     pub fn out_of_credit(&self) -> bool {
         self.job.as_ref().is_some_and(|job| job.out_of_credit)
+    }
+
+    /// Whether a file of the current job failed because the service rejected the API key.
+    pub fn key_rejected(&self) -> bool {
+        self.job.as_ref().is_some_and(|job| job.key_rejected)
     }
 
     /// Show the check boxes of `ids` again instead of their outcome in the finished job.
@@ -1142,6 +1155,26 @@ mod tests {
         assert!(batch.begin_next().is_none());
         batch.update(Message::CloseReport);
         assert!(!batch.out_of_credit(), "gone with the report");
+    }
+
+    #[test]
+    fn a_rejected_key_makes_the_report_offer_the_page_to_make_one() {
+        let mut batch = state();
+        batch.start(ids(1));
+        let (id, _, _) = batch.begin_next().expect("first");
+        assert!(!batch.key_rejected());
+        batch.finish(
+            id,
+            &ItemResult {
+                key_rejected: true,
+                ..ItemResult::failed("Gemini rejected the key")
+            },
+        );
+        assert!(batch.key_rejected());
+        assert!(!batch.out_of_credit(), "a different fix");
+        assert!(batch.begin_next().is_none());
+        batch.update(Message::CloseReport);
+        assert!(!batch.key_rejected(), "gone with the report");
     }
 
     #[test]

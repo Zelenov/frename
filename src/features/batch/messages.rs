@@ -52,4 +52,7 @@ pub enum Message {
     OpenLog,
     /// Open the billing page of a paid service to add credit. Handled by the workspace.
     OpenBilling(ApiKey),
+    /// Open the page where a service's key is made, from a report that says it was rejected.
+    /// Handled by the workspace.
+    OpenKeyPage(ApiKey),
 }

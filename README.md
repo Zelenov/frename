@@ -31,7 +31,7 @@ frename is free and open source (MIT license).
   what happens when, even in clips with no speech. It can also suggest an in and out point and
   name a single marker, or every unnamed marker in one click. You use your own Anthropic,
   OpenAI or Google API key (Claude, ChatGPT or Gemini), each with a Get a key button in Settings;
-  Haiku costs about $10 per 1,000 one-minute clips and Gemini Flash-Lite about $3. One
+  Haiku costs about $10 per 1,000 one-minute clips. One
   button in the corner of the comment box describes the clip you have open, with no batch panel, and
   waits its turn behind a running job; press it again while it waits to take it back.
 - **Prepare a whole folder in one run.** Prepare clips makes the subtitles, then the description (with its markers, comment and tag
