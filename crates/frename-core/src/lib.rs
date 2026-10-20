@@ -16,6 +16,7 @@ mod ordered;
 pub mod playback;
 pub mod recent_folders;
 pub mod recovery;
+pub mod timecode;
 mod search;
 mod subtitles;
 mod tags;
