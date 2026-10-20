@@ -1,0 +1,20 @@
+# Time display (#309), the `premiere` style: the time under the video, the marker list and the In / Out
+# chips. Not a README image; for looking at the feature (`frename --demo`).
+source = "../../tests/folder"
+open = "pick.wide.MVI_0901.mp4"
+seek = 4.25
+window = [1440, 720]
+panels = [790, 300]
+marker_list = true
+timecode_style = "premiere"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_0901.mp4"
+comment = """Harbour at dawn
+In/Out: 00:00:01.500 – 00:00:09.000"""
+markers = [
+  "0:01 — Wide shot of the harbour",
+  "0:03 [red] — Boat leaves the dock",
+  "0:05–0:08 [blue] — Gulls over the quay",
+]

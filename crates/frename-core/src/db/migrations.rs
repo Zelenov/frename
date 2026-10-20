@@ -107,6 +107,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 24,
         sql: schema::M24_SUBTITLE_CHOICE,
     },
+    Migration {
+        version: 25,
+        sql: schema::M25_TIMECODE_STYLE,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
@@ -193,7 +197,7 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 24);
+        assert_eq!(current_version(&conn).expect("version"), 25);
     }
 
     #[test]

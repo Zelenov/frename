@@ -9,7 +9,7 @@ use crate::ai::{MomentsMode, SummaryLanguage};
 use crate::recent_folders::RecentFolder;
 use crate::{
     CommentStorage, CueLength, FolderAndFile, InOutStorage, MarkerStorage, StoredTag,
-    SubtitleFormat, SubtitleSize, TagColorMapping,
+    SubtitleFormat, SubtitleSize, TagColorMapping, TimecodeStyle,
 };
 
 /// Saved window position and size (logical pixels).
@@ -83,6 +83,8 @@ pub struct AppSettings {
     pub subtitle_cue_length: CueLength,
     /// How large subtitles are drawn on the video. Defaults to medium.
     pub subtitle_size: SubtitleSize,
+    /// How times are written in the player and the lists. Defaults to `mm:ss`.
+    pub timecode_style: TimecodeStyle,
     /// UI language code (`en`, `ru`); empty follows the OS language. Defaults to empty. Core
     /// only stores it; the UI owns the supported languages.
     pub ui_language: String,
@@ -109,6 +111,7 @@ impl Default for AppSettings {
                 .collect(),
             subtitle_cue_length: CueLength::default(),
             subtitle_size: SubtitleSize::default(),
+            timecode_style: TimecodeStyle::default(),
             ui_language: String::new(),
         }
     }

@@ -1,7 +1,7 @@
 //! Messages for the video player sub-feature.
 
 use frename_core::{
-    Rotation, RotationError, SubtitleFile, SubtitleFormat, SubtitleSize, Subtitles,
+    Rotation, RotationError, SubtitleFile, SubtitleFormat, SubtitleSize, Subtitles, TimecodeStyle,
 };
 use iced_video_player::Video;
 use std::path::PathBuf;
@@ -25,6 +25,8 @@ pub enum Message {
         video: LoadedVideo,
         /// The rotation it was opened with, or why it has none; `None` when it was not read.
         rotation: Option<Result<Rotation, RotationError>>,
+        /// The source has no steady frame rate (see `VideoPlayerState::variable_framerate`).
+        variable_framerate: bool,
         /// Which load this is; see `VideoPlayerState::load_generation`.
         generation: u64,
     },
@@ -105,6 +107,8 @@ pub enum Message {
     SetAutoplay(bool),
     /// Subtitle size setting changed.
     SetSubtitleSize(SubtitleSize),
+    /// How times are written (Settings → Time display).
+    SetTimecodeStyle(TimecodeStyle),
     /// Open or close **More**, the menu of the controls a narrow pane has no room for.
     ToggleMore,
     /// Close More: a click outside it.

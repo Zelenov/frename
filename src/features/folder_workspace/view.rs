@@ -144,6 +144,7 @@ pub fn view(
             file_workspace::view::Status {
                 save_status: state.save_status(),
                 clip_actions: state.clip_actions(),
+                time_format: state.media_viewer().time_format(),
             },
         )
         .map(|m| match m {

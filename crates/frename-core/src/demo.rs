@@ -53,6 +53,9 @@ pub struct DemoScenario {
     /// Open the time field of the player with this text typed in (#308).
     #[serde(default)]
     pub time_edit: Option<String>,
+    /// How times are written (#309): `default`, `premiere` or `resolve`.
+    #[serde(default)]
+    pub timecode_style: Option<String>,
     /// Show the time field as an `Enter` the text did not pass leaves it (red edge).
     #[serde(default)]
     pub time_edit_invalid: bool,

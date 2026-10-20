@@ -53,6 +53,8 @@ pub const VOLUME_WIDTH: f32 = 72.0;
 /// The time readout: a fixed width so it never moves. Fits the longest it shows, a clip of hours
 /// paused (`9:59:59.500 / 9:59:59`): 21 mono characters, 151.2 px. A clip of 10 h or more overflows.
 pub const TIME_READOUT_WIDTH: f32 = 152.0;
+/// The time readout in a timecode style (#309): `00:10:05:12 / 01:30:00:00`, 25 mono characters.
+pub const TIME_READOUT_FRAMES_WIDTH: f32 = 180.0;
 /// The notices' slot in the controls bar needs this much, otherwise they float over the picture.
 pub const NOTICE_SLOT_MIN_WIDTH: f32 = 120.0;
 /// A marker row's color dot.

@@ -22,7 +22,7 @@ use frename_core::playback::{self, OpenAt};
 use frename_core::FileId;
 use frename_core::{
     open_subtitles, AppDatabase, AppStateStore, FileTagger, Rotation, RotationError, SubtitleFile,
-    SubtitleFormat, SubtitleSize, Subtitles,
+    SubtitleFormat, SubtitleSize, Subtitles, TimeFormat, TimecodeStyle,
 };
 
 /// How long a note over the picture stays.
@@ -144,6 +144,10 @@ pub struct VideoPlayerState {
     autoplay: bool,
     /// How large the subtitles are drawn.
     subtitle_size: SubtitleSize,
+    /// How times are written (#309).
+    timecode_style: TimecodeStyle,
+    /// The open clip has no steady frame rate (the player counted it as 30 only to open it).
+    variable_framerate: bool,
     /// Whether playback is paused, as last requested. Kept here because
     /// `Video::paused` reads the pipeline's current state, which a flushing seek drops
     /// to `Paused` until preroll completes: sampled then, it switched the playback tick
@@ -257,6 +261,8 @@ impl Default for VideoPlayerState {
             controls: VideoControlsState::default(),
             autoplay,
             subtitle_size: settings.subtitle_size,
+            timecode_style: settings.timecode_style,
+            variable_framerate: false,
             paused: !autoplay,
             current_path: None,
             subtitles: None,
@@ -546,33 +552,34 @@ impl VideoPlayerState {
             let opened = tokio::task::spawn_blocking(move || {
                 let Ok(url) = url::Url::from_file_path(&path) else {
                     log::warn!("Failed to create URL from path: {}", path.display());
-                    return (None, None);
+                    return (None, None, false);
                 };
                 log::debug!("File URL created: {url}");
                 // Read by frename rather than left to GStreamer's tag, so a debug build shows
                 // a turn it keeps in memory.
                 let rotation = FileTagger::video_rotation(&path);
                 match open_video(&url, rotation.as_ref().ok().copied()) {
-                    Ok(mut video) => {
+                    Ok((mut video, variable)) => {
                         log::info!("Video loaded successfully");
                         // Paused here, before the update thread sees it, so no audio slips out.
                         if paused {
                             video.set_paused(true);
                         }
-                        (Some(video), Some(rotation))
+                        (Some(video), Some(rotation), variable)
                     }
                     Err(e) => {
                         log::error!("Failed to load video: {e}");
-                        (None, Some(rotation))
+                        (None, Some(rotation), false)
                     }
                 }
             })
             .await
-            .unwrap_or((None, None));
+            .unwrap_or((None, None, false));
 
             Message::VideoLoaded {
                 video: Arc::new(Mutex::new(opened.0)),
                 rotation: opened.1,
+                variable_framerate: opened.2,
                 generation,
             }
         });
@@ -622,6 +629,7 @@ impl VideoPlayerState {
             Message::VideoLoaded {
                 video: slot,
                 rotation,
+                variable_framerate,
                 generation,
             } => {
                 // This load has landed: whatever file handle GStreamer held open for it is
@@ -659,6 +667,7 @@ impl VideoPlayerState {
                     return unloaded;
                 };
                 self.load_failed = false;
+                self.variable_framerate = variable_framerate;
                 let duration = video.duration();
                 let duration_secs = duration.as_secs_f32();
                 self.current_video = Some(video);
@@ -826,7 +835,7 @@ impl VideoPlayerState {
                             return Task::none();
                         }
                         self.controls
-                            .start_time_edit(frename_core::timecode::format(self.position_ms()));
+                            .start_time_edit(self.time_format().copied(self.position_ms()));
                         iced::widget::operation::focus(iced::widget::Id::new(TIME_EDIT_ID))
                             .map(|_: ()| Message::NewFrame)
                     }
@@ -835,7 +844,7 @@ impl VideoPlayerState {
                         if self.current_video.is_none() {
                             return Task::none();
                         }
-                        let time = frename_core::timecode::format(self.position_ms());
+                        let time = self.time_format().copied(self.position_ms());
                         Task::batch([
                             iced::clipboard::write(time.clone()),
                             Task::done(Message::ShowNotice(fl!(
@@ -1049,6 +1058,10 @@ impl VideoPlayerState {
                 self.subtitle_size = size;
                 Task::none()
             }
+            Message::SetTimecodeStyle(style) => {
+                self.timecode_style = style;
+                Task::none()
+            }
             Message::ToggleMore => {
                 self.more_open = !self.more_open;
                 Task::none()
@@ -1097,6 +1110,16 @@ impl VideoPlayerState {
     pub fn subtitle_shown(&self) -> Option<SubtitleFormat> {
         self.subtitle_shown
     }
+    /// How the open clip's times are written: the setting's style at the clip's frame rate.
+    pub fn time_format(&self) -> TimeFormat {
+        let fps = self
+            .current_video
+            .as_ref()
+            .filter(|_| !self.variable_framerate)
+            .map(|video| video.framerate());
+        TimeFormat::new(self.timecode_style, fps)
+    }
+
     /// How large the subtitles are drawn.
     pub fn subtitle_size(&self) -> SubtitleSize {
         self.subtitle_size
@@ -1627,8 +1650,8 @@ const VFR_NOMINAL_FRAMERATE: &str = "30/1";
 /// takes the first path, which builds exactly the graph `Video::new` builds.
 ///
 /// `rotation` is how the file says the picture is turned; the player shows it turned.
-fn open_video(uri: &url::Url, rotation: Option<Rotation>) -> Result<Video, VideoError> {
-    open_video_with(uri, None, flip_direction(rotation)).map_err(|failure| {
+fn open_video(uri: &url::Url, rotation: Option<Rotation>) -> Result<(Video, bool), VideoError> {
+    open_video_flagged(uri, None, flip_direction(rotation)).map_err(|failure| {
         for problem in &failure.problems {
             log::warn!("GStreamer: {problem}");
         }
@@ -1671,6 +1694,16 @@ fn open_video_with(
     audio_sink: Option<&str>,
     flip: Option<&str>,
 ) -> Result<Video, OpenFailure> {
+    open_video_flagged(uri, audio_sink, flip).map(|(video, _)| video)
+}
+
+/// [`open_video_with`], and whether the source has a variable frame rate (its video then
+/// carries the nominal one, which is no frame rate to count frames in).
+fn open_video_flagged(
+    uri: &url::Url,
+    audio_sink: Option<&str>,
+    flip: Option<&str>,
+) -> Result<(Video, bool), OpenFailure> {
     gst::init().map_err(VideoError::from)?;
 
     match open_pipeline(uri, false, audio_sink, flip) {
@@ -1681,9 +1714,9 @@ fn open_video_with(
             log::info!(
                 "Source reports framerate {rate} (variable); retrying as {VFR_NOMINAL_FRAMERATE}"
             );
-            open_pipeline(uri, true, audio_sink, flip)
+            open_pipeline(uri, true, audio_sink, flip).map(|video| (video, true))
         }
-        other => other,
+        other => other.map(|video| (video, false)),
     }
 }
 
@@ -1715,6 +1748,7 @@ pub(crate) fn video_loaded(video: Video, generation: u64) -> Message {
     Message::VideoLoaded {
         video: Arc::new(Mutex::new(Some(video))),
         rotation: None,
+        variable_framerate: false,
         generation,
     }
 }
@@ -2140,6 +2174,7 @@ mod tests {
         let stale = Message::VideoLoaded {
             video: Arc::new(Mutex::new(None)),
             rotation: None,
+            variable_framerate: false,
             generation: player.load_generation - 1,
         };
         let _ = player.update(stale);
@@ -2196,6 +2231,7 @@ mod tests {
         let stale = Message::VideoLoaded {
             video: Arc::new(Mutex::new(None)),
             rotation: None,
+            variable_framerate: false,
             generation: 3,
         };
         let _ = player.update(stale);
@@ -2225,6 +2261,7 @@ mod tests {
         let stale = |generation| Message::VideoLoaded {
             video: Arc::new(Mutex::new(None)),
             rotation: None,
+            variable_framerate: false,
             generation,
         };
         let _ = player.update(stale(4));
@@ -2248,6 +2285,7 @@ mod tests {
         Message::VideoLoaded {
             video: Arc::new(Mutex::new(None)),
             rotation: None,
+            variable_framerate: false,
             generation,
         }
     }
@@ -2830,6 +2868,47 @@ mod tests {
         let _ = player.resume_playback(duration);
         assert_eq!(player.notice(), None, "the seek did not happen");
         assert_eq!(player.continued, None);
+    }
+
+    /// #309: the style is the setting's, the frame rate the clip's, and a clip the player only
+    /// opened by relabelling its frame rate has none.
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn times_are_written_in_the_style_at_the_clips_frame_rate() {
+        let (video, _) = real_clip();
+        let fps = video.framerate();
+        let mut player = VideoPlayerState::default();
+        let _ = player.update(Message::SetTimecodeStyle(TimecodeStyle::Premiere));
+        assert_eq!(
+            player.time_format().effective_style(),
+            TimecodeStyle::Default,
+            "no clip, no frame rate"
+        );
+
+        let _ = player.load_video(
+            PathBuf::from("a.mp4"),
+            PathBuf::from("a.mp4"),
+            FileId::new(),
+            None,
+        );
+        let generation = player.loads_started();
+        let _ = player.update(video_loaded(video, generation));
+        assert_eq!(
+            player.time_format(),
+            TimeFormat::new(TimecodeStyle::Premiere, Some(fps))
+        );
+
+        let _ = player.update(Message::SetTimecodeStyle(TimecodeStyle::Resolve));
+        assert_eq!(
+            player.time_format().effective_style(),
+            TimecodeStyle::Resolve
+        );
+
+        player.variable_framerate = true;
+        assert_eq!(
+            player.time_format().effective_style(),
+            TimecodeStyle::Default
+        );
     }
 
     /// Issue #161 end to end on a real clip: opened through `load_video` and its `VideoLoaded`,

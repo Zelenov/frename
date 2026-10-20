@@ -60,6 +60,8 @@ pub struct Status {
     pub save_status: Option<file_name_panel::SaveStatus>,
     /// The paid actions of the clip, for the buttons of the comment's corner.
     pub clip_actions: ClipActions,
+    /// How the In and Out chips write their times (Settings → Time display).
+    pub time_format: frename_core::TimeFormat,
 }
 
 /// Render the tags area.
@@ -118,6 +120,7 @@ where
         tag_list,
         tag_palette,
         status.save_status,
+        status.time_format,
     )
     .map(Message::FileNamePanel);
     // Dragging the handle up makes the comment box taller.

@@ -492,6 +492,7 @@ impl SettingsState {
             Message::SetUiLanguage(language) => self.settings.ui_language = language,
             Message::SetAutoplayVideo(autoplay) => self.settings.autoplay_video = autoplay,
             Message::SetSubtitleSize(size) => self.settings.subtitle_size = size,
+            Message::SetTimecodeStyle(style) => self.settings.timecode_style = style,
             Message::SetMonochromeTags(monochrome) => self.settings.monochrome_tags = monochrome,
             Message::SetSpaceAfterTags(space) => {
                 self.tag_spacing_changed |= self.settings.space_after_tags != space;

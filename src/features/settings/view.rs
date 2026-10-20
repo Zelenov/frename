@@ -4,7 +4,9 @@
 use clipscribe::Model;
 use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::ai::{MomentsMode, SummaryLanguage};
-use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage, SubtitleSize};
+use frename_core::{
+    CommentStorage, CueLength, InOutStorage, MarkerStorage, SubtitleSize, TimecodeStyle,
+};
 use std::borrow::Borrow;
 
 use iced::widget::{column, row, PickList, Row};
@@ -120,6 +122,19 @@ fn interface(state: &SettingsState) -> Element<'_, Message> {
                     )
                     .width(FIELD_WIDTH_M),
                     focused(state, Control::SubtitleSize),
+                ),
+            ),
+            layout::setting_row_with_info(
+                fl!("settings-timecode"),
+                fl!("settings-timecode-hint"),
+                focusable_dropdown(
+                    form::dropdown(
+                        TimecodeStyle::ALL.map(TimecodeStyleOption),
+                        Some(TimecodeStyleOption(settings.timecode_style)),
+                        |option| Message::SetTimecodeStyle(option.0),
+                    )
+                    .width(FIELD_WIDTH_M),
+                    focused(state, Control::TimecodeStyle),
                 ),
             ),
         ],
@@ -792,6 +807,21 @@ impl std::fmt::Display for SubtitleSizeOption {
             SubtitleSize::Medium => fl!("settings-subtitle-size-medium"),
             SubtitleSize::Large => fl!("settings-subtitle-size-large"),
             SubtitleSize::ExtraLarge => fl!("settings-subtitle-size-extra-large"),
+        };
+        write!(f, "{name}")
+    }
+}
+
+/// One item of the timecode style pick list, by its translated name.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct TimecodeStyleOption(TimecodeStyle);
+
+impl std::fmt::Display for TimecodeStyleOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self.0 {
+            TimecodeStyle::Default => fl!("settings-timecode-default"),
+            TimecodeStyle::Premiere => fl!("settings-timecode-premiere"),
+            TimecodeStyle::Resolve => fl!("settings-timecode-resolve"),
         };
         write!(f, "{name}")
     }

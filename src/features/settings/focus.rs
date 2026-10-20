@@ -8,7 +8,9 @@
 
 use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::ai::{MomentsMode, SummaryLanguage};
-use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage, SubtitleSize};
+use frename_core::{
+    CommentStorage, CueLength, InOutStorage, MarkerStorage, SubtitleSize, TimecodeStyle,
+};
 
 use super::state::{KeySection, SettingsState};
 use super::{KeyMessage, Message, Page};
@@ -36,6 +38,7 @@ pub enum Control {
     MonochromeTags,
     AutoplayVideo,
     SubtitleSize,
+    TimecodeStyle,
     SpaceAfterTags,
     /// The offer to rename the files to the tag spacing just chosen.
     RespaceTags,
@@ -185,6 +188,7 @@ pub fn controls(state: &SettingsState, batch_running: bool) -> Vec<Control> {
             Control::MonochromeTags,
             Control::AutoplayVideo,
             Control::SubtitleSize,
+            Control::TimecodeStyle,
         ]),
         Page::Saving => {
             controls.push(Control::SpaceAfterTags);
@@ -339,6 +343,9 @@ pub fn press(state: &SettingsState, control: &Control, press: Press) -> Option<M
         Control::SubtitleSize => {
             Message::SetSubtitleSize(*next_of(&SubtitleSize::ALL, &settings.subtitle_size))
         }
+        Control::TimecodeStyle => {
+            Message::SetTimecodeStyle(*next_of(&TimecodeStyle::ALL, &settings.timecode_style))
+        }
         Control::SpaceAfterTags => Message::SetSpaceAfterTags(!settings.space_after_tags),
         Control::RespaceTags => Message::OpenBatchAction(Operation::RespaceTags),
         Control::CommentStorage(storage) => Message::SetCommentStorage(*storage),
@@ -462,6 +469,7 @@ mod tests {
                 Control::MonochromeTags,
                 Control::AutoplayVideo,
                 Control::SubtitleSize,
+                Control::TimecodeStyle,
                 Control::Close
             ]
         );

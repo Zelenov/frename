@@ -81,7 +81,13 @@ impl Fold {
 
     /// The bar's width with this fold, `list_buttons` being how many list buttons the clip has
     /// (the subtitle list only with subtitles).
+    #[cfg(test)]
     fn width(self, list_buttons: usize) -> f32 {
+        self.width_with(list_buttons, TIME_READOUT_WIDTH)
+    }
+
+    /// [`Fold::width`] with a time readout `time_width` wide (a timecode style needs more).
+    fn width_with(self, list_buttons: usize, time_width: f32) -> f32 {
         let buttons = |n: usize| n as f32 * BAR_HEIGHT;
         let volume = if self.volume_slider {
             ICON_M + SPACE_S + VOLUME_WIDTH
@@ -95,7 +101,7 @@ impl Fold {
             Some(buttons(2)),
             self.mark.then(|| buttons(2)),
             self.rotate.then(|| buttons(2)),
-            self.time.then_some(TIME_READOUT_WIDTH),
+            self.time.then_some(time_width),
             Some(volume),
             Some(views),
         ];
@@ -105,15 +111,22 @@ impl Fold {
     }
 
     /// The most the bar can show in a pane `width` wide; the last step when nothing fits.
+    #[cfg(test)]
     pub fn for_width(width: f32, list_buttons: usize) -> Fold {
+        Fold::for_width_with(width, list_buttons, TIME_READOUT_WIDTH)
+    }
+
+    /// [`Fold::for_width`] with a time readout `time_width` wide.
+    pub fn for_width_with(width: f32, list_buttons: usize, time_width: f32) -> Fold {
         let steps = Fold::steps();
         let fitting = steps
             .iter()
-            .find(|fold| fold.width(list_buttons) <= width)
+            .find(|fold| fold.width_with(list_buttons, time_width) <= width)
             .copied();
         let fold = fitting.unwrap_or(steps[steps.len() - 1]);
         Fold {
-            notice_in_bar: width - fold.width(list_buttons) >= NOTICE_SLOT_MIN_WIDTH,
+            notice_in_bar: width - fold.width_with(list_buttons, time_width)
+                >= NOTICE_SLOT_MIN_WIDTH,
             ..fold
         }
     }
@@ -128,6 +141,18 @@ mod tests {
         let fold = Fold::for_width(2000.0, 2);
         assert_eq!(fold, Fold::ALL);
         assert!(!fold.has_more());
+    }
+
+    #[test]
+    fn a_timecode_readout_is_wider_so_the_bar_folds_earlier() {
+        let full = Fold::ALL.width(2);
+        let wider = TIME_READOUT_FRAMES_WIDTH - TIME_READOUT_WIDTH;
+        // Room for the default readout but not for the wider one.
+        let at = full + wider / 2.0;
+        assert!(Fold::for_width_with(at, 2, TIME_READOUT_WIDTH).time);
+        let folded = Fold::for_width_with(at, 2, TIME_READOUT_FRAMES_WIDTH);
+        assert_ne!(folded, Fold::ALL);
+        assert!(Fold::for_width_with(full + wider, 2, TIME_READOUT_FRAMES_WIDTH).time);
     }
 
     #[test]
