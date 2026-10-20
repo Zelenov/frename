@@ -169,9 +169,13 @@ pub fn parse(text: &str, fps: f64) -> Option<u64> {
     }
 }
 
-/// A whole number of digits (no sign, no point).
+/// The most digits a field may have: more than any clip lasts, and few enough that the
+/// arithmetic on the fields below cannot overflow a `u64`.
+const MAX_DIGITS: usize = 12;
+
+/// A whole number of digits (no sign, no point), at most [`MAX_DIGITS`].
 fn number(text: &str) -> Option<u64> {
-    (!text.is_empty() && text.bytes().all(|b| b.is_ascii_digit()))
+    (!text.is_empty() && text.len() <= MAX_DIGITS && text.bytes().all(|b| b.is_ascii_digit()))
         .then(|| text.parse().ok())
         .flatten()
 }
@@ -191,7 +195,8 @@ fn millis(fraction: &str) -> Option<u64> {
     if fraction.is_empty() {
         return Some(0);
     }
-    number(fraction)?;
+    // Digits only, any number of them: only the first three count.
+    fraction.bytes().all(|b| b.is_ascii_digit()).then_some(())?;
     format!("{fraction:0<3}")[..3].parse().ok()
 }
 
@@ -217,7 +222,7 @@ fn frames(h: u64, m: u64, s: u64, f: u64, drop: bool, fps: f64) -> Option<u64> {
         60 if (fps - 59.94).abs() < 0.01 => 4,
         _ => 0,
     };
-    let mut count = ((h * 60 + m) * 60 + s) * nominal + f;
+    let mut count = (((h * 60 + m) * 60 + s).checked_mul(nominal)?).checked_add(f)?;
     if drop && drop_frames > 0 {
         // Frames 0..drop of every minute not divisible by ten do not exist.
         if s == 0 && f < drop_frames && !m.is_multiple_of(10) {
@@ -289,10 +294,19 @@ mod tests {
             ":30",
             "1;2",
             "00:01:05.25:12",
+            // Fields too long to be a time: refused rather than overflowing.
+            "99999999999999999999:00:00:00",
+            "18446744073709551615:00",
+            "1000000000000:00:00",
+            "00:00:00:1000000000000",
+            "18446744073709551615",
         ] {
             assert_eq!(parse(text, 25.0), None, "{text:?}");
         }
         assert_eq!(parse("1:05", 0.0), None);
+        // A long fraction is read to the millisecond; a huge frame rate cannot overflow.
+        assert_eq!(parse("1:05.250000000000000000", 25.0), Some(65_250));
+        assert_eq!(parse("99:59:59:00", 1e30), None);
     }
 
     #[test]
