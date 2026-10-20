@@ -120,7 +120,7 @@ single clip.
 | `F3` | Forward 10 seconds |
 | `Alt+←` / `Alt+→` | One frame back / forward (pauses; hold to keep stepping) |
 | Click the time | Type a time and press `Enter` to go there (`1:05`, `00:01:05.250`, `65.25`, or with frames `00:01:05:12`, `;` for drop-frame); `Esc` leaves |
-| Right-click the time, `Ctrl+Shift+C` | Copy the playhead's timecode (`00:01:05.250`) |
+| Right-click the time, `Ctrl+Shift+C` | Copy the playhead's timecode (`00:01:05.250`, or in the style Settings → Time display picks) |
 | `Ctrl+Shift+V` | Go to the timecode on the clipboard |
 | `Home` | Go to the start of the clip |
 | `[` | Set the in point |

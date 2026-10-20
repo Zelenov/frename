@@ -4,6 +4,8 @@
 
 use std::time::Duration;
 
+use frename_core::{TimeFormat, TimecodeStyle};
+
 use iced::widget::{button as iced_button, container, mouse_area, row, stack, Row};
 use iced::{mouse, Alignment, Element, Length, Padding};
 
@@ -282,35 +284,40 @@ pub fn rotate(cannot_rotate: Option<String>) -> [Command<Message>; 2] {
 }
 
 /// `00:10 / 00:30`, fixed wide so it never moves. Paused, the playhead shows its milliseconds
-/// (`00:10.250 / 00:30`): the exact time of a frame stepped to.
+/// (`00:10.250 / 00:30`): the exact time of a frame stepped to. In a timecode style (#309) it is
+/// `00:00:10:06 / 00:00:30:00`, frames playing or paused.
 ///
 /// `slow`: a frame step has waited long (#196); the readout dims to `text.disabled` while it does.
 pub fn time_readout<'a>(
     state: &VideoControlsState,
     position: Duration,
     slow: bool,
+    format: TimeFormat,
 ) -> Element<'a, Message> {
+    let width = readout_width(format);
     if let Some(edit) = state.time_edit() {
-        return time_field(edit);
+        return time_field(edit, width, format);
     }
-    let position = if state.is_playing() {
-        clock(position.as_secs_f32())
-    } else {
-        precise_clock(position)
-    };
-    let readout = format!("{position} / {}", clock(state.duration_secs()));
+    let playing = state.is_playing();
+    let millis = |at: Duration| u64::try_from(at.as_millis()).unwrap_or(u64::MAX);
+    let position = format.format_with(millis(position), |_| {
+        if playing {
+            clock(position.as_secs_f32())
+        } else {
+            precise_clock(position)
+        }
+    });
+    let duration = Duration::from_secs_f32(state.duration_secs().max(0.0));
+    let duration = format.format_with(millis(duration), |_| clock(state.duration_secs()));
+    let readout = format!("{position} / {duration}");
     let readout = text::mono(readout).wrapping(iced::widget::text::Wrapping::None);
     let readout = readout.color(time_readout_color(slow));
     // A click types a time, a right click copies it (#308).
-    mouse_area(
-        container(readout)
-            .width(TIME_READOUT_WIDTH)
-            .align_right(TIME_READOUT_WIDTH),
-    )
-    .on_press(Message::EditTime)
-    .on_right_press(Message::CopyTimecode)
-    .interaction(mouse::Interaction::Text)
-    .into()
+    mouse_area(container(readout).width(width).align_right(width))
+        .on_press(Message::EditTime)
+        .on_right_press(Message::CopyTimecode)
+        .interaction(mouse::Interaction::Text)
+        .into()
 }
 
 /// The id of the time field, to give it the keys when it opens.
@@ -318,18 +325,30 @@ pub const TIME_EDIT_ID: &str = "time_edit";
 
 /// The readout's place while the editor types a time: `Enter` seeks, `Esc` leaves; the edge is
 /// red after an `Enter` the text did not pass.
-fn time_field<'a>(edit: &TimeEdit) -> Element<'a, Message> {
+fn time_field<'a>(edit: &TimeEdit, width: f32, format: TimeFormat) -> Element<'a, Message> {
+    let hint = match format.effective_style() {
+        TimecodeStyle::Default => "00:00:00.000",
+        _ => "00:00:00:00",
+    };
     let field = if edit.invalid {
-        form::invalid_text_field("00:00:00.000", &edit.text)
+        form::invalid_text_field(hint, &edit.text)
     } else {
-        form::text_field("00:00:00.000", &edit.text)
+        form::text_field(hint, &edit.text)
     };
     field
         .id(TIME_EDIT_ID)
         .on_input(Message::TimeEdited)
         .on_submit(Message::SubmitTime)
-        .width(TIME_READOUT_WIDTH)
+        .width(width)
         .into()
+}
+
+/// The readout's width: the timecode styles are longer than `mm:ss`.
+pub fn readout_width(format: TimeFormat) -> f32 {
+    match format.effective_style() {
+        TimecodeStyle::Default => TIME_READOUT_WIDTH,
+        _ => TIME_READOUT_FRAMES_WIDTH,
+    }
 }
 
 /// `mm:ss`, or `h:mm:ss` from an hour on.
@@ -621,6 +640,21 @@ mod tests {
             width <= TIME_READOUT_WIDTH,
             "{width} > {TIME_READOUT_WIDTH}"
         );
+    }
+
+    #[test]
+    fn the_longest_timecode_readout_fits_its_width() {
+        let longest = "00:00:10:06 / 00:00:30:00";
+        let width = longest.chars().count() as f32 * MONO_CHAR_WIDTH;
+        assert!(
+            width <= TIME_READOUT_FRAMES_WIDTH,
+            "{width} > {TIME_READOUT_FRAMES_WIDTH}"
+        );
+        let steady = TimeFormat::new(TimecodeStyle::Premiere, Some(25.0));
+        assert_eq!(readout_width(steady), TIME_READOUT_FRAMES_WIDTH);
+        // Without a steady frame rate the readout keeps its default width.
+        let variable = TimeFormat::new(TimecodeStyle::Premiere, None);
+        assert_eq!(readout_width(variable), TIME_READOUT_WIDTH);
     }
 
     #[test]

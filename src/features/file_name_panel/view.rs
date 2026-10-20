@@ -4,7 +4,7 @@ use iced::widget::text::Wrapping;
 use iced::widget::{column, container, mouse_area, row, Row};
 use iced::{Alignment, Element, Length};
 
-use frename_core::{StoredTagStore, TagList};
+use frename_core::{StoredTagStore, TagList, TimeFormat};
 
 use crate::ui::badge;
 use crate::ui::icons::{icon, Icon};
@@ -32,6 +32,7 @@ pub fn view<'a, S>(
     tag_list: &'a TagList<S>,
     tag_palette: TagPalette,
     save_status: Option<SaveStatus>,
+    time_format: TimeFormat,
 ) -> Element<'a, Message>
 where
     S: StoredTagStore + Clone,
@@ -55,14 +56,14 @@ where
     if let Some(s) = seg_start {
         bottom_items.push(badge::timecode(
             "IN",
-            file_name_line::fmt_timecode(s),
+            file_name_line::fmt_timecode(s, time_format),
             Some((Message::ClearSegmentStart, fl!("file-name-panel-clear-in"))),
         ));
     }
     if let Some(e) = seg_end {
         bottom_items.push(badge::timecode(
             "OUT",
-            file_name_line::fmt_timecode(e),
+            file_name_line::fmt_timecode(e, time_format),
             Some((Message::ClearSegmentEnd, fl!("file-name-panel-clear-out"))),
         ));
     }
@@ -73,11 +74,11 @@ where
                 "{} – {}",
                 suggested
                     .start
-                    .map(file_name_line::fmt_timecode)
+                    .map(|secs| file_name_line::fmt_timecode(secs, time_format))
                     .unwrap_or_default(),
                 suggested
                     .end
-                    .map(file_name_line::fmt_timecode)
+                    .map(|secs| file_name_line::fmt_timecode(secs, time_format))
                     .unwrap_or_default(),
             ),
             Message::ApplySuggestedInOut,

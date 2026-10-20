@@ -4,7 +4,9 @@
 
 use std::borrow::Cow;
 
-use frename_core::{format_marker_time, Marker, MarkerColor, AI_MARKER_COLOR, MARKER_SNAP_MS};
+use frename_core::{
+    format_marker_time, Marker, MarkerColor, TimeFormat, AI_MARKER_COLOR, MARKER_SNAP_MS,
+};
 use iced::widget::{
     button, column, container, hover, mouse_area, row, space, stack, text_editor, Column,
 };
@@ -145,17 +147,31 @@ pub fn passed_index(markers: &[Marker], position_ms: u64) -> Option<usize> {
     markers.iter().rposition(|m| m.start_ms <= position_ms)
 }
 
+/// The open clip's playhead and how its times are written.
+#[derive(Debug, Clone, Copy)]
+pub struct Clock {
+    pub position_ms: u64,
+    pub format: TimeFormat,
+}
+
 /// The marker list for the side overlay. `markers` is `None` when the file cannot hold them.
 pub fn view<'a>(
     markers: Option<&'a [Marker]>,
     state: &'a MarkersState,
-    position_ms: u64,
+    clock: Clock,
     in_out: Option<(u64, u64)>,
     spinner_frame: usize,
     unnamed: usize,
     price_usd: Option<f64>,
 ) -> Element<'a, Message> {
-    let list = marker_list(markers, state, position_ms, spinner_frame);
+    let time_format = clock.format;
+    let list = marker_list(
+        markers,
+        state,
+        clock.position_ms,
+        spinner_frame,
+        time_format,
+    );
     let describe_all =
         markers.and_then(|_| describe_all_bar(state, spinner_frame, unnamed, price_usd));
     // The list keeps its place in the column whatever shows above it: a child that is missing
@@ -164,7 +180,7 @@ pub fn view<'a>(
     // typed into the only unnamed marker).
     let share = markers.and_then(|markers| share_bar(!markers.is_empty()));
     column![
-        slot(in_out.map(in_out_line)),
+        slot(in_out.map(|span| in_out_line(span, time_format))),
         slot(share),
         slot(describe_all),
         list
@@ -327,8 +343,12 @@ fn confirm_bar<'a>(unnamed: usize, price_usd: Option<f64>) -> Element<'a, Messag
 
 /// The in/out points, above the markers: not a marker (it has no name to change and is set
 /// with `[` `]`), but a span of the clip like one. A click jumps to the in point.
-fn in_out_line<'a>((start, end): (u64, u64)) -> Element<'a, Message> {
-    let times = format!("{}–{}", format_marker_time(start), format_marker_time(end));
+fn in_out_line<'a>((start, end): (u64, u64), time_format: TimeFormat) -> Element<'a, Message> {
+    let times = format!(
+        "{}–{}",
+        time_format.format_with(start, format_marker_time),
+        time_format.format_with(end, format_marker_time)
+    );
     let content = row![
         container(space())
             .width(MARKER_DOT)
@@ -359,6 +379,7 @@ fn marker_list<'a>(
     state: &'a MarkersState,
     position_ms: u64,
     spinner_frame: usize,
+    time_format: TimeFormat,
 ) -> Element<'a, Message> {
     let Some(markers) = markers else {
         return cannot_hold();
@@ -369,7 +390,13 @@ fn marker_list<'a>(
     let lit = lit_index(markers, position_ms);
     // Each row reports its height, which is what the list is scrolled to a row by.
     let rows = markers.iter().enumerate().map(|(index, marker)| {
-        let row = marker_row(marker, state, lit == Some(index), spinner_frame);
+        let row = marker_row(
+            marker,
+            state,
+            lit == Some(index),
+            spinner_frame,
+            time_format,
+        );
         stack![
             row,
             BoundsReporter::new(move |bounds| Message::RowHeight(index, bounds.height)).passive()
@@ -421,13 +448,15 @@ fn empty_list<'a>() -> Element<'a, Message> {
     empty::small(fl!("markers-empty"), Some(add)).into()
 }
 
-/// `m:ss` or `m:ss–m:ss` (a ranged marker read from the file).
-fn time_label(marker: &Marker) -> String {
-    let start = format_marker_time(marker.start_ms);
+/// `m:ss` or `m:ss–m:ss` (a ranged marker read from the file), or the same in the timecode
+/// style (`00:00:41:12–00:00:47:00`).
+fn time_label(marker: &Marker, time_format: TimeFormat) -> String {
+    let start = time_format.format_with(marker.start_ms, format_marker_time);
     if marker.duration_ms == 0 {
         start
     } else {
-        format!("{start}–{}", format_marker_time(marker.end_ms()))
+        let end = time_format.format_with(marker.end_ms(), format_marker_time);
+        format!("{start}–{end}")
     }
 }
 
@@ -535,10 +564,11 @@ fn marker_row<'a>(
     state: &'a MarkersState,
     lit: bool,
     spinner_frame: usize,
+    time_format: TimeFormat,
 ) -> Element<'a, Message> {
     let guid = marker.guid.as_deref();
     let open = state.edit().filter(|edit| guid == Some(edit.guid.as_str()));
-    let time = button(text::mono(time_label(marker)))
+    let time = button(text::mono(time_label(marker, time_format)))
         .on_press(Message::JumpTo(marker.start_ms))
         .padding(Padding {
             left: SPACE_XS,
@@ -791,10 +821,21 @@ mod tests {
         let markers = [marker];
         let state = MarkersState::default();
         let children = |in_out, unnamed| {
-            view(Some(&markers), &state, 0, in_out, 0, unnamed, None)
-                .as_widget()
-                .children()
-                .len()
+            view(
+                Some(&markers),
+                &state,
+                Clock {
+                    position_ms: 0,
+                    format: TimeFormat::default(),
+                },
+                in_out,
+                0,
+                unnamed,
+                None,
+            )
+            .as_widget()
+            .children()
+            .len()
         };
         let all = children(Some((0, 1_000)), 1);
         assert_eq!(all, 4);
@@ -802,7 +843,18 @@ mod tests {
         assert_eq!(children(None, 0), all, "nothing unnamed to describe");
         assert_eq!(children(Some((0, 1_000)), 0), all);
         let none: [Marker; 0] = [];
-        let without = view(Some(&none), &state, 0, None, 0, 0, None);
+        let without = view(
+            Some(&none),
+            &state,
+            Clock {
+                position_ms: 0,
+                format: TimeFormat::default(),
+            },
+            None,
+            0,
+            0,
+            None,
+        );
         assert_eq!(
             without.as_widget().children().len(),
             all,
@@ -826,9 +878,11 @@ mod tests {
     #[test]
     fn ranged_markers_show_both_ends() {
         let mut marker = Marker::new(41_000);
-        assert_eq!(time_label(&marker), "0:41");
+        assert_eq!(time_label(&marker, TimeFormat::default()), "0:41");
         marker.duration_ms = 6_000;
-        assert_eq!(time_label(&marker), "0:41–0:47");
+        assert_eq!(time_label(&marker, TimeFormat::default()), "0:41–0:47");
+        let resolve = TimeFormat::new(frename_core::TimecodeStyle::Resolve, Some(25.0));
+        assert_eq!(time_label(&marker, resolve), "00:00:41:00–00:00:47:00");
     }
 
     #[test]

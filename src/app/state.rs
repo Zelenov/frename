@@ -743,6 +743,13 @@ impl FrenameApp {
                             )),
                         ))
                     }
+                    settings::Message::SetTimecodeStyle(style) => {
+                        Task::done(Message::FolderWorkspace(
+                            folder_workspace::Message::MediaViewer(media_viewer::Message::Video(
+                                media_viewer_video::Message::SetTimecodeStyle(style),
+                            )),
+                        ))
+                    }
                     settings::Message::SetSpaceAfterTags(space) => {
                         frename_core::set_space_after_tags(space);
                         Task::none()

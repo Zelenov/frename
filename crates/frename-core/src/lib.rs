@@ -66,6 +66,7 @@ pub use tags::{
     LoggingFileTagger, ProductionFileTagger, SaveAndReparse, Screenshot, StoredTag, Tag,
     TagColorMapping, TagId, TagList, TagOrderState, DEFAULT_TAGS,
 };
+pub use timecode::{TimeFormat, TimecodeStyle};
 pub use undo::{
     AddMarkerCommand, CheckTagsCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand,
     History, NavigateFileCommand, PasteTagsCommand, RenameFileCommand, ReorderTagCommand,

@@ -337,7 +337,13 @@ pages:
 - **Interface:** the UI language (follows your system by default, or pick English, Russian, German or French;
   more languages are on the way), monochrome tags (a tag you added shows darker, one that is not
   in your list stays the lighter gray it always was), playing videos as soon as they open, and
-  the subtitle size (Small, Medium, Large or Extra large).
+  the subtitle size (Small, Medium, Large or Extra large), and **Time display**: how times are
+  written under the video, in the marker and subtitle lists, on the In / Out chips and by
+  `Ctrl+Shift+C`. **Default** is `01:05` (`00:01:05.250` when paused); **Premiere Pro** and
+  **DaVinci Resolve** write `00:01:05:12`, hours, minutes, seconds and frames at the clip's
+  frame rate. At 29.97 and 59.94 fps they count drop-frame, as the editors do: Premiere Pro
+  writes `00;01;00;02`, DaVinci Resolve `00:01:00;02`. A clip without a steady frame rate keeps
+  the default style. Markers, comments and subtitle files keep their own formats.
 - **Saving:** a space after each tag in file names (`Food. Goat. clip.mp4`), and where comments,
   markers and in/out points are kept: inside the video, or in a text file (comments) or the
   comment (markers; in/out points as one line, `In/Out: 00:01:05.250 – 00:02:10.000`). While

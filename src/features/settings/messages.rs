@@ -5,7 +5,9 @@ use std::path::PathBuf;
 use clipscribe::Model;
 use frename_core::ai::key::{ApiKey, KeyState};
 use frename_core::ai::{MomentsMode, SummaryLanguage};
-use frename_core::{CommentStorage, CueLength, InOutStorage, MarkerStorage, SubtitleSize};
+use frename_core::{
+    CommentStorage, CueLength, InOutStorage, MarkerStorage, SubtitleSize, TimecodeStyle,
+};
 
 use super::focus::Press;
 use super::Page;
@@ -42,6 +44,8 @@ pub enum Message {
     SetAutoplayVideo(bool),
     /// How large subtitles are drawn on the video.
     SetSubtitleSize(SubtitleSize),
+    /// How times are written in the player and the lists.
+    SetTimecodeStyle(TimecodeStyle),
     /// Draw every tag in one neutral color.
     SetMonochromeTags(bool),
     /// Put a space after each tag in file names (`Food. clip.mp4`).

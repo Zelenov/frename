@@ -1,3 +1,7 @@
+# 0.168
+## Added
+- Settings → Time display writes times the way your editor does: **Default** (`01:05`, `00:01:05.250` when paused), **Premiere Pro** (`00:01:05:12`, drop-frame `00;01;00;02`) or **DaVinci Resolve** (`00:01:05:12`, drop-frame `00:01:00;02`). It applies to the time under the video, the marker and subtitle lists, the In / Out chips and Copy; frames follow the clip's frame rate (29.97 and 59.94 fps are drop-frame). A clip without a steady frame rate keeps the default style. Files keep their own formats.
+
 # 0.167
 ## Added
 - Click the time next to the player to type a time and press `Enter` to go there: `1:05`, `00:01:05.250`, `65.25`, or a Premiere Pro / DaVinci Resolve timecode with frames (`00:01:05:12`, `00:01:05;12` for drop-frame). Right-click the time or press `Ctrl+Shift+C` to copy the playhead's timecode, `Ctrl+Shift+V` to go to the one on the clipboard.

@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 
-use frename_core::{Marker, SubtitleFormat, SubtitleSize, Subtitles};
+use frename_core::{Marker, SubtitleFormat, SubtitleSize, Subtitles, TimeFormat};
 use iced::widget::{column, container, mouse_area, row, space, stack, Column, Row};
 use iced::{Alignment, Element, Length, Padding};
 use iced_video_player::VideoPlayer;
@@ -121,7 +121,11 @@ pub fn view<'a>(
         markers.pane_width
     };
     let list_buttons = usize::from(subtitles.is_some()) + 1;
-    let fold = Fold::for_width(pane_width, list_buttons);
+    let fold = Fold::for_width_with(
+        pane_width,
+        list_buttons,
+        controls::readout_width(state.time_format()),
+    );
 
     let mut layers: Vec<Element<'a, Message>> = vec![picture.into()];
     if let Some(side) = side_overlay(
@@ -344,6 +348,7 @@ fn controls_bar<'a>(
                 controls_state,
                 position,
                 state.slow_step_spinner().is_some(),
+                state.time_format(),
             )
             .map(Message::Controls),
         );
@@ -564,13 +569,18 @@ fn side_overlay<'a>(
         return (!caption.is_empty()).then(|| caption_area.width(Length::Fill).into());
     };
     let list: Element<'a, Message> = match (shown, subtitles) {
-        (Overlay::Subtitles, Some(subs)) => {
-            cue_list(subs, subs.last_started_index(state.display_position()))
-        }
+        (Overlay::Subtitles, Some(subs)) => cue_list(
+            subs,
+            subs.last_started_index(state.display_position()),
+            state.time_format(),
+        ),
         _ => markers::view::view(
             markers.markers,
             markers.state,
-            state.position_ms(),
+            markers::view::Clock {
+                position_ms: state.position_ms(),
+                format: state.time_format(),
+            },
             in_out,
             markers.spinner_frame,
             markers.unnamed,
@@ -734,11 +744,19 @@ fn side_list_header<'a>(
 }
 
 /// A scrollable list of every cue; the one last started is lit.
-fn cue_list<'a>(subtitles: &'a Subtitles, list_cue: Option<usize>) -> Element<'a, Message> {
+fn cue_list<'a>(
+    subtitles: &'a Subtitles,
+    list_cue: Option<usize>,
+    time_format: TimeFormat,
+) -> Element<'a, Message> {
     let rows = subtitles.cues().iter().enumerate().map(|(index, cue)| {
         let lit = list_cue == Some(index);
         let cue_text = text::body(cue.text.as_str()).color(if lit { TEXT } else { TEXT_SECONDARY });
-        let body = column![text::mono(format_cue_time(cue.start)), cue_text].padding(Padding {
+        let body = column![
+            text::mono(format_cue_time(cue.start, time_format)),
+            cue_text
+        ]
+        .padding(Padding {
             top: SPACE_TIGHT,
             bottom: SPACE_TIGHT,
             ..Padding::ZERO
@@ -765,7 +783,13 @@ fn cue_list<'a>(subtitles: &'a Subtitles, list_cue: Option<usize>) -> Element<'a
 }
 
 /// `m:ss` below an hour, `h:mm:ss` above.
-fn format_cue_time(at: std::time::Duration) -> String {
+fn format_cue_time(at: std::time::Duration, time_format: TimeFormat) -> String {
+    let millis = u64::try_from(at.as_millis()).unwrap_or(u64::MAX);
+    time_format.format_with(millis, |_| cue_clock(at))
+}
+
+/// `m:ss`, or `h:mm:ss` from an hour on.
+fn cue_clock(at: std::time::Duration) -> String {
     let total = at.as_secs();
     let (hours, minutes, seconds) = (total / 3600, total / 60 % 60, total % 60);
     if hours > 0 {

@@ -132,6 +132,11 @@ impl MediaViewerState {
         matches!(self.active, ActiveMedia::Video).then(|| self.video.position_ms())
     }
 
+    /// How times are written for the open clip (Settings → Time display).
+    pub fn time_format(&self) -> frename_core::TimeFormat {
+        self.video.time_format()
+    }
+
     /// Where the subtitle list is scrolled to.
     pub fn cue_scroll_y(&self) -> f32 {
         self.video.cue_scroll_y()

@@ -176,6 +176,11 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
     } else {
         vec![video(video::Message::Seek(scenario.seek))]
     };
+    if let Some(name) = &scenario.timecode_style {
+        steps.push(video(video::Message::SetTimecodeStyle(
+            frename_core::TimecodeStyle::from_name(name),
+        )));
+    }
     if scenario.subtitle_list {
         steps.push(video(video::Message::ToggleCueList));
     }

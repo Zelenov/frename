@@ -235,3 +235,8 @@ CREATE TABLE IF NOT EXISTS subtitle_choice (
     PRIMARY KEY (folder, file_name)
 );
 ";
+
+/// Migration 25: how times are written (#309), as `TimecodeStyle::as_str`.
+pub const M25_TIMECODE_STYLE: &str = "
+ALTER TABLE app_settings ADD COLUMN timecode_style TEXT NOT NULL DEFAULT 'default';
+";
