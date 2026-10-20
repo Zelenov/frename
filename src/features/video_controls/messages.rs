@@ -55,6 +55,20 @@ pub enum Message {
     NextMarker,
     /// The label over the progress bar was clicked: rename the marker with this GUID.
     EditMarker(String),
+    /// A click on the time readout: type a time in its place (#308).
+    EditTime,
+    /// The time field's text changed.
+    TimeEdited(String),
+    /// `Enter` in the time field: seek there.
+    SubmitTime,
+    /// `Esc` in the time field, or a new clip: leave it as it was.
+    CancelTimeEdit,
+    /// The typed time could not be read (internal).
+    TimeRejected,
+    /// A right click on the readout, or `Ctrl+Shift+C`: copy the playhead's timecode.
+    CopyTimecode,
+    /// `Ctrl+Shift+V`: seek to the timecode on the clipboard.
+    PasteTimecode,
     /// `↺` / `↻`: turn the video by this many quarter turns clockwise (-1: counter-clockwise).
     /// Bubbles up to FolderWorkspace, which changes the file.
     Rotate(i32),

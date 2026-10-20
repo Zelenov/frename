@@ -55,7 +55,7 @@ fn seconds(text: &str) -> Option<u64> {
         return None;
     }
     let whole = if whole.is_empty() { 0 } else { number(whole)? };
-    Some(whole.checked_mul(1000)?.checked_add(millis(fraction)?)?)
+    whole.checked_mul(1000)?.checked_add(millis(fraction)?)
 }
 
 /// The digits after the point as milliseconds (`5` is 500, `2501` is 250).
@@ -69,9 +69,7 @@ fn millis(fraction: &str) -> Option<u64> {
 
 /// `h`, `m` and the `ss[.mmm]` field.
 fn clock(hours: u64, minutes: u64, seconds_field: &str) -> Option<u64> {
-    let (s, fraction) = seconds_field
-        .split_once('.')
-        .unwrap_or((seconds_field, ""));
+    let (s, fraction) = seconds_field.split_once('.').unwrap_or((seconds_field, ""));
     let s = number(s)?;
     if s >= 60 {
         return None;
@@ -94,7 +92,7 @@ fn frames(h: u64, m: u64, s: u64, f: u64, drop: bool, fps: f64) -> Option<u64> {
     let mut count = ((h * 60 + m) * 60 + s) * nominal + f;
     if drop && drop_frames > 0 {
         // Frames 0..drop of every minute not divisible by ten do not exist.
-        if s == 0 && f < drop_frames && m % 10 != 0 {
+        if s == 0 && f < drop_frames && !m.is_multiple_of(10) {
             return None;
         }
         let minutes = h * 60 + m;
@@ -150,8 +148,19 @@ mod tests {
     #[test]
     fn out_of_range_and_junk_are_refused() {
         for text in [
-            "", "  ", "abc", "1:60", "1:75:00", "00:00:60", "-5", "1.2.3", "1::2", "12:", ":30",
-            "1;2", "00:01:05.25:12",
+            "",
+            "  ",
+            "abc",
+            "1:60",
+            "1:75:00",
+            "00:00:60",
+            "-5",
+            "1.2.3",
+            "1::2",
+            "12:",
+            ":30",
+            "1;2",
+            "00:01:05.25:12",
         ] {
             assert_eq!(parse(text, 25.0), None, "{text:?}");
         }

@@ -16,12 +16,12 @@ mod ordered;
 pub mod playback;
 pub mod recent_folders;
 pub mod recovery;
-pub mod timecode;
 mod search;
 mod subtitles;
 mod tags;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
+pub mod timecode;
 pub(crate) mod transliteration;
 pub mod undo;
 

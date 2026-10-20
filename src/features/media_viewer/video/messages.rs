@@ -73,6 +73,8 @@ pub enum Message {
     ShowOverlay(Overlay),
     /// Seek exactly to this time (ms), e.g. a marker.
     SeekExact(u64),
+    /// The clipboard was read for `Ctrl+Shift+V`: the text on it, if any.
+    TimecodePasted(Option<String>),
     /// Show a short note over the picture (e.g. `Frame saved`) for a moment.
     ShowNotice(String),
     /// A note that must be read, not glanced at (what a crash left): it stays long.

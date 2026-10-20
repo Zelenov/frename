@@ -1,3 +1,7 @@
+# 0.167
+## Added
+- Click the time next to the player to type a time and press `Enter` to go there: `1:05`, `00:01:05.250`, `65.25`, or a Premiere Pro / DaVinci Resolve timecode with frames (`00:01:05:12`, `00:01:05;12` for drop-frame). Right-click the time or press `Ctrl+Shift+C` to copy the playhead's timecode, `Ctrl+Shift+V` to go to the one on the clipboard.
+
 # 0.166
 ## Added
 - Describe with AI works with Google Gemini too: pick Gemini 3.1 Flash-Lite (one of the cheapest models) or Gemini 3.5 Flash in Settings → Describe with AI, and paste a Google API key.
