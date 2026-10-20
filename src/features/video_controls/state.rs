@@ -65,7 +65,6 @@ impl VideoControlsState {
                 self.is_playing = true;
                 self.seeking = false;
                 self.seek_position = 0.0;
-                self.time_edit = None;
             }
             Message::TimeEdited(text) => {
                 self.time_edit = Some(TimeEdit {
@@ -293,16 +292,6 @@ mod tests {
         state.update(&Message::TimeEdited("1:05".into()));
         assert!(state.time_edit().is_some_and(|e| !e.invalid));
         state.update(&Message::CancelTimeEdit);
-        assert!(state.time_edit().is_none());
-    }
-
-    #[test]
-    fn a_new_clip_closes_the_time_field() {
-        let mut state = VideoControlsState::with_volume(0.5);
-        state.start_time_edit("00:00:10.000".into());
-        state.update(&Message::VideoReady {
-            duration_secs: 30.0,
-        });
         assert!(state.time_edit().is_none());
     }
 }

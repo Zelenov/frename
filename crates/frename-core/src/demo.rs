@@ -50,6 +50,12 @@ pub struct DemoScenario {
     /// Show the time readout as it looks while a frame step is slow (#196).
     #[serde(default)]
     pub slow_step: bool,
+    /// Open the time field of the player with this text typed in (#308).
+    #[serde(default)]
+    pub time_edit: Option<String>,
+    /// Show the time field as an `Enter` the text did not pass leaves it (red edge).
+    #[serde(default)]
+    pub time_edit_invalid: bool,
     /// Show the open clip's marker with this name as being described with AI (its row's turning
     /// loader and stop button), without sending a request.
     #[serde(default)]
@@ -428,6 +434,18 @@ name = "pick.a.mp4"
         assert!(!DemoScenario::parse(MINIMAL).unwrap().slow_step);
         let text = MINIMAL.replace("[[files]]", "slow_step = true\n[[files]]");
         assert!(DemoScenario::parse(&text).unwrap().slow_step);
+    }
+
+    #[test]
+    fn a_scenario_can_type_a_time() {
+        assert_eq!(DemoScenario::parse(MINIMAL).unwrap().time_edit, None);
+        let text = MINIMAL.replace(
+            "[[files]]",
+            "time_edit = \"1:xx\"\ntime_edit_invalid = true\n[[files]]",
+        );
+        let scenario = DemoScenario::parse(&text).unwrap();
+        assert_eq!(scenario.time_edit.as_deref(), Some("1:xx"));
+        assert!(scenario.time_edit_invalid);
     }
 
     #[test]

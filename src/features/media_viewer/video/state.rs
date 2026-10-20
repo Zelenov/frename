@@ -1000,6 +1000,7 @@ impl VideoPlayerState {
                 Task::none()
             }
             Message::Unload => {
+                self.cancel_time_edit();
                 // A load still under way belongs to the video being closed: drop it when it
                 // lands (`VideoLoaded` above). Until then GStreamer's open on the blocking
                 // thread may still hold the file open, so `VideoUnloaded` — the caller's signal

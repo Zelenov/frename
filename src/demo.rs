@@ -13,7 +13,7 @@ use frename_core::demo::DemoScenario;
 use iced::{window, Task};
 
 use crate::features::{
-    batch, folder, folder_workspace, media_viewer, media_viewer::video, settings,
+    batch, folder, folder_workspace, media_viewer, media_viewer::video, settings, video_controls,
 };
 
 /// Time from the video being ready to the screenshot: covers the seek, the subtitles, and the
@@ -190,6 +190,16 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
     }
     if scenario.slow_step {
         steps.push(video(video::Message::ShowSlowStep));
+    }
+    if let Some(text) = &scenario.time_edit {
+        steps.push(video(video::Message::Controls(
+            video_controls::Message::TimeEdited(text.clone()),
+        )));
+        if scenario.time_edit_invalid {
+            steps.push(video(video::Message::Controls(
+                video_controls::Message::TimeRejected,
+            )));
+        }
     }
     if scenario.toolbar_more {
         steps.push(folder_workspace::Message::Folder(

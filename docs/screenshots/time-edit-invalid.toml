@@ -1,0 +1,17 @@
+# The time field (#308): the editor clicked the time and typed text that is no time, then pressed Enter. Not a README image; for
+# looking at the feature (`frename --demo`).
+source = "../../tests/folder"
+open = "pick.wide.MVI_1601.mp4"
+seek = 10.25
+time_edit = "1:xx"
+time_edit_invalid = true
+window = [1440, 720]
+panels = [790, 300]
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_1601.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "review.people.MVI_1602.mov"
