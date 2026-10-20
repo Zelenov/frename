@@ -307,7 +307,7 @@ pub fn time_readout<'a>(
             precise_clock(position)
         }
     });
-    let duration = Duration::from_secs_f32(state.duration_secs().max(0.0));
+    let duration = Duration::try_from_secs_f32(state.duration_secs().max(0.0)).unwrap_or_default();
     let duration = format.format_with(millis(duration), |_| clock(state.duration_secs()));
     let readout = format!("{position} / {duration}");
     let readout = text::mono(readout).wrapping(iced::widget::text::Wrapping::None);

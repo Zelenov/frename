@@ -1,6 +1,6 @@
 # 0.168
 ## Added
-- Settings → Time display writes times the way your editor does: **Default** (`01:05`, `00:01:05.250` when paused), **Premiere Pro** (`00:01:05:12`, drop-frame `00;01;00;02`) or **DaVinci Resolve** (`00:01:05:12`, drop-frame `00:01:00;02`). It applies to the time under the video, the marker and subtitle lists, the In / Out chips and Copy; frames follow the clip's frame rate (29.97 and 59.94 fps are drop-frame). A clip without a steady frame rate keeps the default style. Files keep their own formats.
+- Settings → Time display writes times the way your editor does: **Default** (`01:05`, `00:01:05.250` when paused), **Premiere Pro** (`00:01:05:12`, drop-frame `00;01;00;02`) or **DaVinci Resolve** (`00:01:05:12`, drop-frame `00:01:00;02`). It applies to the time under the video, the marker and subtitle lists, the In / Out chips and the playhead time Copy puts on the clipboard; frames follow the clip's frame rate (29.97 and 59.94 fps are drop-frame). A clip without a steady frame rate keeps the default style. Files, comments and the markers' Copy and Export keep their own formats.
 
 # 0.167
 ## Added

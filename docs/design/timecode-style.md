@@ -15,8 +15,9 @@ what the time field starts with (typing a time already reads every style, see `t
 | Subtitle list | `0:41` | `00:00:41:00` |
 | In / Out chips | `01:05` | `00:01:05:12` |
 
-Unchanged on purpose, because other programs and old files read them back without the clip's
-frame rate: the In / Out line in comments, markers saved in files, the markers text export and
+Unchanged on purpose, because they are read back without the clip's frame rate (the line reader
+of Markers ⇄ comment takes `m:ss` only; the marker list's Copy and Export… write that format, so
+pasting them into a comment still makes markers; #306's batch export is the same): the In / Out line in comments, markers saved in files, the markers text export and
 Copy as text, subtitle files, file names. The notice "stopped at …" keeps its short form.
 
 ## Formats

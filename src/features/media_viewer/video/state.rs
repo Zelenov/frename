@@ -1110,7 +1110,6 @@ impl VideoPlayerState {
     pub fn subtitle_shown(&self) -> Option<SubtitleFormat> {
         self.subtitle_shown
     }
-    /// How large the subtitles are drawn.
     /// How the open clip's times are written: the setting's style at the clip's frame rate.
     pub fn time_format(&self) -> TimeFormat {
         let fps = self
@@ -1121,6 +1120,7 @@ impl VideoPlayerState {
         TimeFormat::new(self.timecode_style, fps)
     }
 
+    /// How large the subtitles are drawn.
     pub fn subtitle_size(&self) -> SubtitleSize {
         self.subtitle_size
     }
@@ -2870,13 +2870,9 @@ mod tests {
         assert_eq!(player.continued, None);
     }
 
-    /// Issue #161 end to end on a real clip: opened through `load_video` and its `VideoLoaded`,
-    /// it lands two seconds before where playback stopped, with a note that says so; left again
-    /// without moving, where it stopped is kept; `Home` goes to the start, takes the note
-    /// away, and a clip left there has nothing to continue.
-    #[cfg(any(target_os = "linux", windows))]
     /// #309: the style is the setting's, the frame rate the clip's, and a clip the player only
     /// opened by relabelling its frame rate has none.
+    #[cfg(any(target_os = "linux", windows))]
     #[test]
     fn times_are_written_in_the_style_at_the_clips_frame_rate() {
         let (video, _) = real_clip();
@@ -2915,6 +2911,11 @@ mod tests {
         );
     }
 
+    /// Issue #161 end to end on a real clip: opened through `load_video` and its `VideoLoaded`,
+    /// it lands two seconds before where playback stopped, with a note that says so; left again
+    /// without moving, where it stopped is kept; `Home` goes to the start, takes the note
+    /// away, and a clip left there has nothing to continue.
+    #[cfg(any(target_os = "linux", windows))]
     #[test]
     fn a_clip_continues_where_playback_stopped_and_home_starts_it_over() {
         let (video, duration) = real_clip();

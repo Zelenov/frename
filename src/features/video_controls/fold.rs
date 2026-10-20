@@ -144,6 +144,18 @@ mod tests {
     }
 
     #[test]
+    fn a_timecode_readout_is_wider_so_the_bar_folds_earlier() {
+        let full = Fold::ALL.width(2);
+        let wider = TIME_READOUT_FRAMES_WIDTH - TIME_READOUT_WIDTH;
+        // Room for the default readout but not for the wider one.
+        let at = full + wider / 2.0;
+        assert!(Fold::for_width_with(at, 2, TIME_READOUT_WIDTH).time);
+        let folded = Fold::for_width_with(at, 2, TIME_READOUT_FRAMES_WIDTH);
+        assert_ne!(folded, Fold::ALL);
+        assert!(Fold::for_width_with(full + wider, 2, TIME_READOUT_FRAMES_WIDTH).time);
+    }
+
+    #[test]
     fn groups_give_way_least_used_first() {
         let full = Fold::ALL.width(2);
         let fold = Fold::for_width(full - 1.0, 2);
