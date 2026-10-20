@@ -148,6 +148,11 @@ impl MediaViewerState {
         matches!(self.active, ActiveMedia::Video) && self.video.is_active()
     }
 
+    /// Close the video's time field; true when it was open.
+    pub fn cancel_time_edit(&mut self) -> bool {
+        self.video.cancel_time_edit()
+    }
+
     /// Handle media viewer messages.
     /// Note: FolderWorkspace intercepts `Message::Unloaded` before calling this.
     pub fn update(&mut self, msg: Message) -> Task<Message> {

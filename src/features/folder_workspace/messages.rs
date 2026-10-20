@@ -131,6 +131,10 @@ pub enum Message {
     RestoreListScrolls { markers_y: f32, cues_y: f32 },
     /// Toggle fullscreen mode for the media viewer (F5).
     ToggleMediaFullscreen,
+    /// `Ctrl+Shift+C`: copy the playhead's timecode.
+    CopyTimecode,
+    /// `Ctrl+Shift+V`: seek to the timecode on the clipboard.
+    PasteTimecode,
     /// Escape pressed globally: exits fullscreen if active, otherwise clears the search bar filter.
     EscapePressed,
     /// Set segment start marker at the current video position ([ key).

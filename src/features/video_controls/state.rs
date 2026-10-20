@@ -17,6 +17,16 @@ pub struct VideoControlsState {
     seek_position: f32,
     /// Volume level 0.0..=1.0
     volume: f32,
+    /// The time field that replaces the readout while the editor types a time.
+    time_edit: Option<TimeEdit>,
+}
+
+/// What the editor has typed in the time field.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimeEdit {
+    pub text: String,
+    /// The last `Enter` was refused: the field is drawn red until the text changes.
+    pub invalid: bool,
 }
 
 impl Default for VideoControlsState {
@@ -38,6 +48,7 @@ impl VideoControlsState {
             seeking: false,
             seek_position: 0.0,
             volume: volume.clamp(0.0, 1.0),
+            time_edit: None,
         }
     }
 }
@@ -54,6 +65,24 @@ impl VideoControlsState {
                 self.is_playing = true;
                 self.seeking = false;
                 self.seek_position = 0.0;
+            }
+            Message::TimeEdited(text) => {
+                self.time_edit = Some(TimeEdit {
+                    text: text.clone(),
+                    invalid: false,
+                });
+            }
+            Message::CancelTimeEdit => self.time_edit = None,
+            Message::TimeRejected => {
+                if let Some(edit) = self.time_edit.as_mut() {
+                    edit.invalid = true;
+                }
+            }
+            Message::EditTime
+            | Message::SubmitTime
+            | Message::CopyTimecode
+            | Message::PasteTimecode => {
+                // Handled by the video player (needs the playhead and the frame rate).
             }
             Message::SetPlaying(playing) => {
                 if self.is_playing != *playing {
@@ -96,6 +125,19 @@ impl VideoControlsState {
                 // Bubbles up to FolderWorkspace, which changes the file. No local state change.
             }
         }
+    }
+
+    /// Open the time field with this text.
+    pub fn start_time_edit(&mut self, text: String) {
+        self.time_edit = Some(TimeEdit {
+            text,
+            invalid: false,
+        });
+    }
+
+    /// The time field, while the editor types a time.
+    pub fn time_edit(&self) -> Option<&TimeEdit> {
+        self.time_edit.as_ref()
     }
 
     /// Whether the video is currently playing
@@ -236,5 +278,20 @@ mod tests {
         ));
         assert!(matches!(released(&f2), Some(Message::MarkerKeyReleased)));
         assert!(released(&keyboard::Key::Named(Named::F3)).is_none());
+    }
+
+    #[test]
+    fn the_time_field_keeps_what_is_typed_and_goes_red_until_the_next_key() {
+        let mut state = VideoControlsState::with_volume(0.5);
+        assert!(state.time_edit().is_none());
+        state.start_time_edit("00:00:10.000".into());
+        state.update(&Message::TimeEdited("1:5x".into()));
+        assert_eq!(state.time_edit().map(|e| e.text.as_str()), Some("1:5x"));
+        state.update(&Message::TimeRejected);
+        assert!(state.time_edit().is_some_and(|e| e.invalid));
+        state.update(&Message::TimeEdited("1:05".into()));
+        assert!(state.time_edit().is_some_and(|e| !e.invalid));
+        state.update(&Message::CancelTimeEdit);
+        assert!(state.time_edit().is_none());
     }
 }

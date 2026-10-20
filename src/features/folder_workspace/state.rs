@@ -726,7 +726,21 @@ impl FolderWorkspace {
                 frename_core::FileTagger::save_screenshot(&file_path, position_ms, &jpeg);
                 Self::notice(&fl!("folder-frame-saved"))
             }
+            Message::CopyTimecode | Message::PasteTimecode
+                if !self.media_viewer.is_previewable() =>
+            {
+                Task::none()
+            }
+            Message::CopyTimecode => {
+                self.video_controls_message(video_controls::Message::CopyTimecode)
+            }
+            Message::PasteTimecode => {
+                self.video_controls_message(video_controls::Message::PasteTimecode)
+            }
             Message::EscapePressed => {
+                if self.media_viewer.cancel_time_edit() {
+                    return Task::none();
+                }
                 if self.toolbar_more_open {
                     self.toolbar_more_open = false;
                     return Task::none();
@@ -1284,6 +1298,13 @@ impl FolderWorkspace {
     /// the text (the search fields hold nothing the keys would do, so there they still act). In
     /// batch mode the comment box is not shown, and asking about its focus would get no answer
     /// at all.
+    /// A message to the video controls, as if its button had been pressed.
+    fn video_controls_message(&self, message: video_controls::Message) -> Task<Message> {
+        Task::done(Message::MediaViewer(media_viewer::Message::Video(
+            media_viewer_video::Message::Controls(message),
+        )))
+    }
+
     fn unless_writing(&self, message: Message) -> Task<Message> {
         if self.batch.is_active() {
             return Task::done(message);

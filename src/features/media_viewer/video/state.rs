@@ -14,6 +14,7 @@ use super::frame_step::{self, ShownFrame, StepTarget};
 use super::view::{cue_offset, CUE_LIST_SCROLLABLE_ID};
 use super::Message;
 use crate::features::markers;
+use crate::features::video_controls::view::TIME_EDIT_ID;
 use crate::features::video_controls::{self, VideoControlsState};
 use crate::ui::scroll::FollowedRow;
 use crate::ui::tokens::{SPACE_XXS, SPINNER_TICK};
@@ -820,6 +821,32 @@ impl VideoPlayerState {
                     video_controls::Message::EditMarker(guid) => {
                         Task::done(Message::Markers(markers::Message::Open(guid)))
                     }
+                    video_controls::Message::EditTime => {
+                        if self.current_video.is_none() {
+                            return Task::none();
+                        }
+                        self.controls
+                            .start_time_edit(frename_core::timecode::format(self.position_ms()));
+                        iced::widget::operation::focus(iced::widget::Id::new(TIME_EDIT_ID))
+                            .map(|_: ()| Message::NewFrame)
+                    }
+                    video_controls::Message::SubmitTime => self.submit_time_edit(),
+                    video_controls::Message::CopyTimecode => {
+                        if self.current_video.is_none() {
+                            return Task::none();
+                        }
+                        let time = frename_core::timecode::format(self.position_ms());
+                        Task::batch([
+                            iced::clipboard::write(time.clone()),
+                            Task::done(Message::ShowNotice(fl!(
+                                "video-timecode-copied",
+                                time = time
+                            ))),
+                        ])
+                    }
+                    video_controls::Message::PasteTimecode => {
+                        iced::clipboard::read().map(Message::TimecodePasted)
+                    }
                     video_controls::Message::SetVolume(v) => {
                         if let Some(video) = &mut self.current_video {
                             video.set_volume(v as f64);
@@ -897,6 +924,19 @@ impl VideoPlayerState {
                 self.continued = None;
                 self.seek_to(Duration::from_millis(ms), true)
             }
+            Message::TimecodePasted(text) => {
+                let text = text.unwrap_or_default();
+                match self.parse_timecode(&text) {
+                    Some(ms) => Task::done(Message::SeekExact(ms)),
+                    None => {
+                        let shown: String = text.trim().chars().take(24).collect();
+                        self.show_notice(
+                            fl!("video-timecode-unreadable", text = shown),
+                            NOTICE_DURATION,
+                        )
+                    }
+                }
+            }
             Message::ShowNotice(text) => self.show_notice(text, NOTICE_DURATION),
             Message::ShowLongNotice(text) => self.show_notice(text, LONG_NOTICE_DURATION),
             Message::ClearNotice(number) => {
@@ -960,6 +1000,7 @@ impl VideoPlayerState {
                 Task::none()
             }
             Message::Unload => {
+                self.cancel_time_edit();
                 // A load still under way belongs to the video being closed: drop it when it
                 // lands (`VideoLoaded` above). Until then GStreamer's open on the blocking
                 // thread may still hold the file open, so `VideoUnloaded` — the caller's signal
@@ -1128,6 +1169,47 @@ impl VideoPlayerState {
         self.notice
             .as_ref()
             .is_some_and(|notice| notice.starts_over)
+    }
+
+    /// The time field's text as milliseconds in this clip: `None` when it is no timecode or
+    /// lies past the clip's end.
+    fn parse_timecode(&self, text: &str) -> Option<u64> {
+        let video = self.current_video.as_ref()?;
+        let ms = frename_core::timecode::parse(text, video.framerate())?;
+        (ms <= video.duration().as_millis() as u64).then_some(ms)
+    }
+
+    /// `Enter` in the time field: seek there, or mark the field red.
+    fn submit_time_edit(&mut self) -> Task<Message> {
+        let text = self
+            .controls
+            .time_edit()
+            .map(|edit| edit.text.clone())
+            .unwrap_or_default();
+        match self.parse_timecode(&text) {
+            Some(ms) => {
+                self.controls
+                    .update(&video_controls::Message::CancelTimeEdit);
+                Task::done(Message::SeekExact(ms))
+            }
+            None => {
+                self.controls.update(&video_controls::Message::TimeRejected);
+                Task::none()
+            }
+        }
+    }
+
+    /// Whether the time field is open.
+    pub fn is_editing_time(&self) -> bool {
+        self.controls.time_edit().is_some()
+    }
+
+    /// Close the time field; true when it was open.
+    pub fn cancel_time_edit(&mut self) -> bool {
+        let was = self.is_editing_time();
+        self.controls
+            .update(&video_controls::Message::CancelTimeEdit);
+        was
     }
 
     /// The playhead in milliseconds, as the view shows it.

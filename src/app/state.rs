@@ -34,7 +34,7 @@ fn ctrl_v_paste_tags_handler(
         ..
     }) = ev
     {
-        if latin_key(&key, physical_key) == Some('v') && modifiers.command() {
+        if latin_key(&key, physical_key) == Some('v') && modifiers.command() && !modifiers.shift() {
             return Some(Message::FolderWorkspace(
                 folder_workspace::Message::PasteTags,
             ));
@@ -353,6 +353,28 @@ fn main_window_event(
             } else {
                 Some(Message::Noop)
             }
+        }
+        // Ctrl+Shift+C copies the playhead's timecode, Ctrl+Shift+V seeks to the one on the
+        // clipboard (#308).
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key,
+            physical_key,
+            modifiers,
+            repeat: false,
+            ..
+        }) if matches!(status, event::Status::Ignored)
+            && modifiers.command()
+            && modifiers.shift()
+            && !modifiers.alt()
+            && matches!(latin_key(&key, physical_key), Some('c' | 'v')) =>
+        {
+            Some(Message::FolderWorkspace(
+                if latin_key(&key, physical_key) == Some('c') {
+                    folder_workspace::Message::CopyTimecode
+                } else {
+                    folder_workspace::Message::PasteTimecode
+                },
+            ))
         }
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
             key,
@@ -1370,6 +1392,40 @@ mod tests {
         assert!(matches!(
             shortcut("z", Code::KeyZ, false),
             Some(folder_workspace::Message::Undo)
+        ));
+    }
+
+    #[test]
+    fn ctrl_shift_c_and_v_copy_and_paste_a_timecode() {
+        use keyboard::key::{Code, Physical};
+        let mods = keyboard::Modifiers::CTRL | keyboard::Modifiers::SHIFT;
+        let press = |ch: &str, code: Code| {
+            let key = keyboard::Key::Character(ch.into());
+            main_window_event(
+                iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: key.clone(),
+                    modified_key: key,
+                    physical_key: Physical::Code(code),
+                    location: keyboard::Location::Standard,
+                    modifiers: mods,
+                    text: None,
+                    repeat: false,
+                }),
+                event::Status::Ignored,
+                window::Id::unique(),
+            )
+        };
+        assert!(matches!(
+            press("C", Code::KeyC),
+            Some(Message::FolderWorkspace(
+                folder_workspace::Message::CopyTimecode
+            ))
+        ));
+        assert!(matches!(
+            press("V", Code::KeyV),
+            Some(Message::FolderWorkspace(
+                folder_workspace::Message::PasteTimecode
+            ))
         ));
     }
 

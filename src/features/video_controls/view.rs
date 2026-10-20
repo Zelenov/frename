@@ -8,7 +8,8 @@ use iced::widget::{button as iced_button, container, mouse_area, row, stack, Row
 use iced::{mouse, Alignment, Element, Length, Padding};
 
 use super::progress_bar::{BarMarker, ProgressBar};
-use super::{FrameStep, Message, VideoControlsState};
+use super::{FrameStep, Message, TimeEdit, VideoControlsState};
+use crate::ui::form;
 use crate::ui::icon_button::IconButton;
 use crate::ui::icons::{icon, Icon};
 use crate::ui::menu::MenuItem;
@@ -289,6 +290,9 @@ pub fn time_readout<'a>(
     position: Duration,
     slow: bool,
 ) -> Element<'a, Message> {
+    if let Some(edit) = state.time_edit() {
+        return time_field(edit);
+    }
     let position = if state.is_playing() {
         clock(position.as_secs_f32())
     } else {
@@ -297,9 +301,34 @@ pub fn time_readout<'a>(
     let readout = format!("{position} / {}", clock(state.duration_secs()));
     let readout = text::mono(readout).wrapping(iced::widget::text::Wrapping::None);
     let readout = readout.color(time_readout_color(slow));
-    container(readout)
+    // A click types a time, a right click copies it (#308).
+    mouse_area(
+        container(readout)
+            .width(TIME_READOUT_WIDTH)
+            .align_right(TIME_READOUT_WIDTH),
+    )
+    .on_press(Message::EditTime)
+    .on_right_press(Message::CopyTimecode)
+    .interaction(mouse::Interaction::Text)
+    .into()
+}
+
+/// The id of the time field, to give it the keys when it opens.
+pub const TIME_EDIT_ID: &str = "time_edit";
+
+/// The readout's place while the editor types a time: `Enter` seeks, `Esc` leaves; the edge is
+/// red after an `Enter` the text did not pass.
+fn time_field<'a>(edit: &TimeEdit) -> Element<'a, Message> {
+    let field = if edit.invalid {
+        form::invalid_text_field("00:00:00.000", &edit.text)
+    } else {
+        form::text_field("00:00:00.000", &edit.text)
+    };
+    field
+        .id(TIME_EDIT_ID)
+        .on_input(Message::TimeEdited)
+        .on_submit(Message::SubmitTime)
         .width(TIME_READOUT_WIDTH)
-        .align_right(TIME_READOUT_WIDTH)
         .into()
 }
 
