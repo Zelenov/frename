@@ -5,9 +5,9 @@
 //! [`fl!`](crate::fl): the same pattern as the settings core keeps globally. English is the
 //! source language and the fallback for any message a translation lacks.
 //!
-//! `LANGUAGES` is deliberately short today (English, Russian, German, French and Spanish): each
-//! further language is its own small PR that adds one `.ftl` file and one entry here, reviewed on
-//! its own. CJK languages wait for a bundled font that covers them (issue #57).
+//! `LANGUAGES` is deliberately short today (English, Russian, German, French, Spanish and
+//! Italian): each further language is its own small PR that adds one `.ftl` file and one entry
+//! here, reviewed on its own. CJK languages wait for a bundled font that covers them (issue #57).
 
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
@@ -22,7 +22,7 @@ use rust_embed::RustEmbed;
 struct Localizations;
 
 /// Language codes the UI is translated into, in the order Settings lists them.
-pub const LANGUAGES: [&str; 5] = ["en", "ru", "de", "fr", "es"];
+pub const LANGUAGES: [&str; 6] = ["en", "ru", "de", "fr", "es", "it"];
 
 /// The source language, used when nothing else matches.
 const FALLBACK: &str = "en";
@@ -166,6 +166,7 @@ pub fn language_name(language: &str) -> String {
         "de" => crate::fl!("language-name-de"),
         "fr" => crate::fl!("language-name-fr"),
         "es" => crate::fl!("language-name-es"),
+        "it" => crate::fl!("language-name-it"),
         _ => crate::fl!("language-name-en"),
     }
 }
@@ -194,7 +195,8 @@ mod tests {
         assert_eq!(resolve("", &os(&["de-DE"])), "de");
         assert_eq!(resolve("", &os(&["fr-FR"])), "fr");
         assert_eq!(resolve("", &os(&["es-ES"])), "es");
-        assert_eq!(resolve("", &os(&["it-IT"])), "en");
+        assert_eq!(resolve("", &os(&["it-IT"])), "it");
+        assert_eq!(resolve("", &os(&["pt-BR"])), "en");
         assert_eq!(
             resolve("", &os(&["uk-UA"])),
             "en",
