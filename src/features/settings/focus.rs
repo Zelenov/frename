@@ -658,6 +658,11 @@ mod tests {
         state.apply_for_tests(Message::SetUiLanguage("it".to_string()));
         assert!(matches!(
             press(&state, &Control::UiLanguage, Press::Space),
+            Some(Message::SetUiLanguage(language)) if language == "pt-BR"
+        ));
+        state.apply_for_tests(Message::SetUiLanguage("pt-BR".to_string()));
+        assert!(matches!(
+            press(&state, &Control::UiLanguage, Press::Space),
             Some(Message::SetUiLanguage(language)) if language.is_empty()
         ));
         state.apply_for_tests(Message::SetSubtitleSize(SubtitleSize::ExtraLarge));

@@ -5,8 +5,8 @@
 //! [`fl!`](crate::fl): the same pattern as the settings core keeps globally. English is the
 //! source language and the fallback for any message a translation lacks.
 //!
-//! `LANGUAGES` is deliberately short today (English, Russian, German, French, Spanish and
-//! Italian): each further language is its own small PR that adds one `.ftl` file and one entry
+//! `LANGUAGES` is deliberately short today (English, Russian, German, French, Spanish,
+//! Italian and Brazilian Portuguese): each further language is its own small PR that adds one `.ftl` file and one entry
 //! here, reviewed on its own. CJK languages wait for a bundled font that covers them (issue #57).
 
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
@@ -22,7 +22,7 @@ use rust_embed::RustEmbed;
 struct Localizations;
 
 /// Language codes the UI is translated into, in the order Settings lists them.
-pub const LANGUAGES: [&str; 6] = ["en", "ru", "de", "fr", "es", "it"];
+pub const LANGUAGES: [&str; 7] = ["en", "ru", "de", "fr", "es", "it", "pt-BR"];
 
 /// The source language, used when nothing else matches.
 const FALLBACK: &str = "en";
@@ -147,8 +147,21 @@ pub fn resolve(stored: &str, os_languages: &[String]) -> &'static str {
     }
     os_languages
         .iter()
-        .find_map(|tag| supported(tag.split(['-', '_']).next().unwrap_or_default()))
+        .find_map(|tag| supported(&tag.replace('_', "-")).or_else(|| by_language(tag)))
         .unwrap_or(FALLBACK)
+}
+
+/// The first of [`LANGUAGES`] with the same language subtag as the OS tag (`pt-PT` → `pt-BR`).
+fn by_language(tag: &str) -> Option<&'static str> {
+    let language = tag.split(['-', '_']).next().unwrap_or_default();
+    LANGUAGES
+        .iter()
+        .find(|l| {
+            l.split('-')
+                .next()
+                .is_some_and(|s| s.eq_ignore_ascii_case(language))
+        })
+        .copied()
 }
 
 /// `code` as one of [`LANGUAGES`], ignoring case.
@@ -167,6 +180,7 @@ pub fn language_name(language: &str) -> String {
         "fr" => crate::fl!("language-name-fr"),
         "es" => crate::fl!("language-name-es"),
         "it" => crate::fl!("language-name-it"),
+        "pt-BR" => crate::fl!("language-name-pt-BR"),
         _ => crate::fl!("language-name-en"),
     }
 }
@@ -196,7 +210,10 @@ mod tests {
         assert_eq!(resolve("", &os(&["fr-FR"])), "fr");
         assert_eq!(resolve("", &os(&["es-ES"])), "es");
         assert_eq!(resolve("", &os(&["it-IT"])), "it");
-        assert_eq!(resolve("", &os(&["pt-BR"])), "en");
+        assert_eq!(resolve("", &os(&["pt-BR"])), "pt-BR");
+        assert_eq!(resolve("", &os(&["pt_PT"])), "pt-BR");
+        assert_eq!(resolve("pt-br", &os(&["de-DE"])), "pt-BR");
+        assert_eq!(resolve("", &os(&["ja-JP"])), "en");
         assert_eq!(
             resolve("", &os(&["uk-UA"])),
             "en",

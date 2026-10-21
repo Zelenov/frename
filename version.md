@@ -1,3 +1,7 @@
+# 0.172
+## Added
+- The interface in Brazilian Portuguese (Português do Brasil): follows the system language, or pick it in Settings → Language.
+
 # 0.171
 ## Added
 - The interface in Italian (Italiano): follows the system language, or pick it in Settings → Language.
