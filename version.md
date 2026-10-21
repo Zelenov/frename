@@ -1,3 +1,7 @@
+# 0.170
+## Added
+- The interface in Spanish (Español): follows the system language, or pick it in Settings → Language.
+
 # 0.169
 ## Fixed
 - Typing or pasting a time with a very long number (such as `18446744073709551615:00`) in the time field is now refused instead of seeking to a wrong place.
