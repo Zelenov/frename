@@ -2,12 +2,12 @@
 # i18n/en/frename.ftl, in the same order (checked by the tests in src/i18n.rs).
 #
 # Glossary (docs/design/localization.md): every string uses these terms; the reader is addressed
-# impersonally (infinitives or noun phrases for actions and labels, «se» constructions or the
-# impersonal third person in sentences), never with «tu», and with «você» only where a sentence
+# impersonally (the infinitive or the imperative for actions and labels, «se» constructions or
+# the impersonal third person in sentences), never with «tu», and with «você» only where a sentence
 # cannot do without a subject. Spelling and terms follow Brazil (arquivo, vídeo, pasta,
 # configurações), as Premiere Pro in pt-BR does.
 # Typography: no space before «:», «;», «!», «?»; a space before «%» is not used (50%); quotes are
-# “…”; decimal comma (0,01 $, 29,97 fps).
+# “…”; decimal comma and dollars as «US$» (US$ 0,01, 29,97 fps).
 # Keys: Ctrl stays Ctrl, Shift stays Shift, Home stays Home, Enter stays Enter (as on Brazilian
 # keyboards and in Premiere Pro pt-BR).
 #   tag / tags                        tag / tags, feminine (never «rótulo»: that is Premiere's Label)
@@ -18,7 +18,7 @@
 #   marker (Premiere)                 marcador
 #   range (a marker with a duration)  intervalo
 #   subclip (Premiere)                subclipe
-#   Description column (Premiere)     coluna «Descrição»
+#   Description column (Premiere)     coluna “Descrição”
 #   checked (files)                   selecionado (not «marcado»: too close to «marcador»)
 #   All / Invert (check boxes)        Todos / Inverter
 #   video / clip / file               vídeo / clipe / arquivo (all masculine)
@@ -92,7 +92,7 @@ settings-tags-space-add = Adicionar o espaço aos nomes de arquivo…
 settings-tags-space-remove = Remover o espaço dos nomes de arquivo…
 settings-comments = Comentários
 settings-comments-in-video = Dentro do arquivo de vídeo
-settings-comments-in-video-hint = XMP, a coluna «Descrição» do Premiere Pro
+settings-comments-in-video-hint = XMP, a coluna “Descrição” do Premiere Pro
 settings-comments-text-file = Em um arquivo de texto ao lado do vídeo
 settings-comments-text-file-example = clip.comment.txt
 settings-comments-note = Os arquivos mantêm os comentários onde estão até serem movidos.
@@ -150,7 +150,7 @@ settings-ai-hint = Haiku, GPT-4.1 mini e Gemini Flash-Lite são os mais baratos;
 settings-ai-moments-label = Momentos
 settings-ai-moments-important = Só o que se destaca
 settings-ai-moments-full = Cobrir o clipe inteiro
-settings-ai-moments-important-hint = Também sugere onde definir In e Out (a etiqueta IA ao lado de IN e OUT)
+settings-ai-moments-important-hint = Também sugere onde definir In e Out (o selo IA ao lado de IN e OUT)
 settings-ai-moments-full-hint = Um momento para cada trecho, inclusive os calmos; sem sugestão de In e Out
 settings-ai-tag-suggestions = Sugerir também tags a partir das tags da pasta
 settings-ai-tag-suggestions-hint = Na mesma solicitação, a IA diz quais tags da pasta combinam com cada clipe. Uma tag sugerida só é adicionada quando você clica nela.
@@ -171,7 +171,7 @@ settings-subtitles-cue-sentence = Uma frase
 settings-subtitles-hint = Usado por Gerar legendas no modo em lote. O tamanho das legendas vale para as legendas novas.
 settings-key-store-windows = Gerenciador de Credenciais do Windows
 settings-key-store-macos = Chaveiro do macOS
-settings-key-store-other = o chaveiro do sistema
+settings-key-store-other = Chaveiro do sistema
 settings-key-unavailable = Não foi possível abrir o chaveiro do sistema
 settings-key-unavailable-hint = Ele pode estar bloqueado, ou não existir (como o GNOME Keyring ou o KWallet). As Configurações verificam de novo a cada abertura.
 settings-key-remove-confirm-hint = Será preciso colá-la de novo.
@@ -185,8 +185,8 @@ settings-key-save = Salvar chave
 settings-key-get = Obter uma chave
 settings-key-billing = Adicionar crédito
 settings-key-cancel = Cancelar
-settings-key-saved-in = Salva em { $store } neste computador
-settings-key-save-into = Salvar chave a guarda em { $store } neste computador.
+settings-key-saved-in = Salva neste computador ({ $store })
+settings-key-save-into = “Salvar chave” a guarda neste computador ({ $store }).
 
 ## Batch mode
 
@@ -230,25 +230,25 @@ batch-prepare-cap = Parar de gastar em
 batch-prepare-cap-none = Sem limite (dólares americanos)
 batch-prepare-cap-invalid = O limite é um número de dólares, como 5
 batch-prepare-left = A última execução parou com { $count ->
-    [one] 1 clipe
-   *[other] { $count } clipes
-} restantes
+    [one] { $count } clipe restante
+   *[other] { $count } clipes restantes
+}
 batch-prepare-check-left = Selecioná-los
 batch-prepare-estimating = Calculando o que cada etapa vai fazer…
 batch-prepare-plan-subtitles = Legendas
 batch-prepare-plan-description = Descrição
 batch-prepare-plan-none = nada a fazer
 batch-prepare-plan-subtitles-line = { $videos ->
-    [one] 1 vídeo
+    [one] { $videos } vídeo
    *[other] { $videos } vídeos
 } para transcrever, { $duration } de áudio
 batch-prepare-plan-description-line = { $videos ->
-    [one] 1 vídeo
+    [one] { $videos } vídeo
    *[other] { $videos } vídeos
 } para descrever
 batch-prepare-resume-note = Cada etapa pula o que já existe, então uma execução interrompida é retomada executando-a de novo: nada é pago duas vezes.
 batch-prepare-run = Preparar { $clips ->
-    [one] 1 clipe
+    [one] { $clips } clipe
    *[other] { $clips } clipes
 } · cerca de { $dollars }
 batch-service-prepare = Soniox + { $provider }
@@ -263,7 +263,7 @@ batch-solo-gave-up = Não foi possível se preparar
 batch-solo-withdrawn = Retirado: { $action }
 batch-solo-in-work = { $action } está em andamento. Cancele pela faixa ou pela página da tarefa
 batch-waiting-title = { $count ->
-    [one] 1 execução na espera
+    [one] { $count } execução na espera
    *[other] { $count } execuções na espera
 }
 batch-waiting-remove = Remover
@@ -285,11 +285,11 @@ batch-result-done = Concluído: { $total ->
     [one] { $total } arquivo
    *[other] { $total } arquivos
 }
-batch-result-done-detail = { $changed } alterados, { $unchanged } sem nada a alterar
+batch-result-done-detail = Alterados: { $changed }, sem alterações: { $unchanged }
 batch-result-problems = Concluído com problemas: { $failed } de { $total ->
-    [one] { $total } arquivo
-   *[other] { $total } arquivos
-} não concluídos
+    [one] { $total } arquivo não concluído
+   *[other] { $total } arquivos não concluídos
+}
 batch-figure-unchanged = sem alterações
 batch-figure-not-done = não concluídos
 batch-figure-not-reached = não alcançados
@@ -434,7 +434,7 @@ batch-ai-change = Alterar
 batch-ai-tag-suggestions-off = Desativadas
 batch-ai-tag-suggestions-no-tags = Ativadas, mas esta pasta ainda não tem tags
 batch-ai-tag-suggestions-on = { $tags ->
-    [one] A partir da { $tags } tag da pasta
+    [one] A partir da única tag da pasta
    *[other] A partir das { $tags } tags da pasta
 }
 batch-ai-key-missing = Defina uma chave de API de { $provider } nas Configurações
@@ -457,7 +457,7 @@ batch-ai-minutes-under = < 1 min
 batch-ai-duration-under-minute = menos de um minuto
 batch-ai-duration-hours = { $h } h
 batch-ai-duration-hours-minutes = { $h } h { $m } min
-batch-ai-dollars-under = menos de $0,01
+batch-ai-dollars-under = menos de US$ 0,01
 batch-ai-skip-described = já descritos
 batch-ai-skip-too-long = mais de 30 min
 batch-ai-skip-unreadable = ilegíveis
@@ -499,8 +499,8 @@ batch-subtitles-already = { $n ->
     [one] { $n } já tem legendas
    *[other] { $n } já têm legendas
 }
-batch-subtitles-rebuilt-free = { $n } recriados de graça a partir de uma transcrição salva
-batch-subtitles-no-speech-before = { $n } sem fala da última vez
+batch-subtitles-rebuilt-free = Recriados de graça a partir de uma transcrição salva: { $n }
+batch-subtitles-no-speech-before = Sem fala da última vez: { $n }
 batch-subtitles-no-audio = { $n ->
     [one] { $n } não tem áudio
    *[other] { $n } não têm áudio
@@ -509,7 +509,7 @@ batch-subtitles-shared-name = { $n ->
     [one] { $n } compartilha o nome da legenda com outro vídeo
    *[other] { $n } compartilham o nome da legenda com outro vídeo
 }
-batch-subtitles-unreadable = { $n } não podem ser lidos ({ $how_to })
+batch-subtitles-unreadable = Ilegíveis: { $n } ({ $how_to })
 batch-subtitles-shared-name-reason = compartilha o nome da legenda com outro vídeo
 batch-subtitles-unsupported-reason = formato de áudio não suportado
 batch-subtitles-progress-transcribing = transcrevendo…
@@ -531,9 +531,9 @@ batch-subtitles-stop-other = Interrompido: a Soniox se recusou a continuar ({ $e
 batch-subtitles-stop-unreachable = Interrompido: não foi possível acessar a Soniox. Verifique a conexão com a internet.
 batch-subtitles-report-spend = Soniox: no mínimo { $duration } · { $usd }
 batch-subtitles-report-failed-deletes = { $n ->
-    [one] { $n } envio
-   *[other] { $n } envios
-} não puderam ser apagados na Soniox (veja o registro)
+    [one] { $n } envio não pôde ser apagado na Soniox (veja o registro)
+   *[other] { $n } envios não puderam ser apagados na Soniox (veja o registro)
+}
 batch-subtitles-languages-need-key = Salve uma chave da Soniox para escolher entre todos os idiomas dela.
 batch-subtitles-languages-rejected = A Soniox rejeitou a chave.
 batch-subtitles-languages-failed = Não foi possível obter os idiomas da Soniox.
@@ -542,8 +542,8 @@ batch-subtitles-count = { $n ->
    *[other] { $n } legendas
 }
 batch-subtitles-duration-seconds = { $s } s
-batch-subtitles-usd-under = menos de $0,01
-batch-subtitles-usd-about = cerca de ${ $amount }
+batch-subtitles-usd-under = menos de US$ 0,01
+batch-subtitles-usd-about = cerca de US$ { $amount }
 
 ## File list
 folder-has-subtitles = Tem legendas
@@ -551,11 +551,14 @@ folder-closed-by-job = Fechado enquanto uma ação em lote o altera
 folder-filter-tip = Mostrar só…
 
 folder-search-placeholder = Buscar um arquivo ou um comentário
-folder-search-comments-loading = Buscando nos comentários… faltam { $n }
+folder-search-comments-loading = Buscando nos comentários… restantes: { $n }
 folder-search-clear = Limpar
 folder-all = Todos
 folder-invert = Inverter
-folder-checked = { $count } selecionados
+folder-checked = { $count ->
+    [one] { $count } selecionado
+   *[other] { $count } selecionados
+}
 folder-outcome-changed = Alterado
 folder-outcome-unchanged = Nada a alterar
 folder-outcome-failed = Falhou, veja o registro
@@ -572,9 +575,15 @@ folder-open-another = Abrir outra pasta…
 folder-no-match = Nenhum arquivo corresponde
 folder-show-all = Mostrar todos
 folder-locked = As seleções ficam bloqueadas enquanto { $action } é executada
-folder-checked-hidden = { $count } selecionados · { $hidden } ocultos
+folder-checked-hidden = { $count ->
+    [one] { $count } selecionado
+   *[other] { $count } selecionados
+} · { $hidden ->
+    [one] { $hidden } oculto
+   *[other] { $hidden } ocultos
+}
 folder-checked-hidden-tip = { $hidden ->
-    [one] 1 arquivo selecionado está oculto pela busca ou por um filtro; a ação também é executada nele
+    [one] { $hidden } arquivo selecionado está oculto pela busca ou por um filtro; a ação também é executada nele
    *[other] { $hidden } arquivos selecionados estão ocultos pela busca ou por um filtro; a ação também é executada neles
 }
 folder-outcome-working = Em andamento
