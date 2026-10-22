@@ -581,7 +581,7 @@ folder-empty-line = frename показує файли MP4, MOV, MKV та інш�
 folder-open-another = Відкрити іншу папку…
 folder-no-match = Немає відповідних файлів
 folder-show-all = Показати все
-folder-locked = Позначки заблоковано, поки виконується: { $action }
+folder-locked = Вибір файлів заблоковано, поки виконується: { $action }
 folder-checked-hidden = Позначено: { $count } · приховано: { $hidden }
 folder-checked-hidden-tip = { $hidden ->
     [one] { $hidden } позначений файл приховано пошуком або фільтром; дія виконається і для нього
@@ -592,7 +592,7 @@ folder-checked-hidden-tip = { $hidden ->
 folder-outcome-working = Виконується
 folder-outcome-not-reached = Не дійшли
 folder-window-empty-title = Відкрийте папку з кліпами
-folder-window-empty-line = Або перетягніть папку у вікно. Клацання правою кнопкою на кнопці відкриває один файл.
+folder-window-empty-line = Або перетягніть папку у вікно. Клацніть правою кнопкою на кнопці, щоб відкрити один файл.
 folder-window-open = Відкрити папку…
 
 ## Recent folders (the arrow next to the open button, and the empty screen)
@@ -746,13 +746,13 @@ markers-ai-describe-unnamed-hint = Дати назву й описати за д
 markers-ai-price-about = близько { $dollars }
 markers-ai-describe-unnamed-cost = По одному запиту на кожну: { $each } за позначку, { $total } за всі.
 markers-ai-confirm = { $count ->
-    [one] Описати { $count } позначку? Один запит: { $total }.
+    [one] Описати { $count } позначку? Запит на кожну: усього { $total }.
     [few] Описати { $count } позначки? По запиту на кожну: усього { $total }.
     [many] Описати { $count } позначок? По запиту на кожну: усього { $total }.
    *[other] Описати { $count } позначок? По запиту на кожну: усього { $total }.
 }
 markers-ai-confirm-unpriced = { $count ->
-    [one] Описати { $count } позначку? Один платний запит.
+    [one] Описати { $count } позначку? Платний запит на кожну.
     [few] Описати { $count } позначки? По одному платному запиту на кожну.
     [many] Описати { $count } позначок? По одному платному запиту на кожну.
    *[other] Описати { $count } позначок? По одному платному запиту на кожну.
@@ -816,7 +816,7 @@ file-name-panel-clear-out = Прибрати точку виходу
 file-name-panel-suggested-in-out = ШІ
 file-name-panel-apply-suggested-in-out = Поставити In і Out за підказкою ШІ (округлено до цілих секунд)
 file-name-panel-suggested-tags = Теги ШІ
-file-name-panel-add-suggested-tag = Додати тег «{ $tag }» (упевненість { $percent }%)
+file-name-panel-add-suggested-tag = Додати тег «{ $tag }» (упевненість { $percent } %)
 file-name-panel-add-suggested-tag-unsure = Додати тег «{ $tag }»
 file-name-panel-add-all-suggested-tags = Додати всі
 file-name-panel-add-all-suggested-tags-tip = Додати кожен тег, який пропонує ШІ
@@ -833,8 +833,8 @@ updates-from-store = Оновлення надходять із Microsoft Store
 updates-from-releases = Нові версії: завантажуйте їх зі сторінки випусків
 updates-open-releases = Відкрити сторінку випусків
 updates-checking = Перевіряємо…
-updates-downloading-named = Завантажуємо { $version }… { $percent }%
-updates-downloading = Завантажуємо… { $percent }%
+updates-downloading-named = Завантажуємо { $version }… { $percent } %
+updates-downloading = Завантажуємо… { $percent } %
 updates-restarting = Перезапускаємо…
 updates-check-failed = Не вдалося перевірити оновлення: { $reason }
 updates-update-failed = Не вдалося оновити: { $reason }
