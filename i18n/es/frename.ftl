@@ -54,6 +54,7 @@ language-name-fr = Français
 language-name-es = Español
 language-name-it = Italiano
 language-name-pt-BR = Português (Brasil)
+language-name-uk = Українська
 
 ## Settings window
 

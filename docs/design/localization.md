@@ -9,7 +9,7 @@ languages as are ready, agent translations included, no owner check before relea
 - **Owner's language list:** the languages Premiere Pro's own UI ships in (English, Russian,
   German, French, Spanish, Italian, Portuguese (Brazil), Japanese, Korean, Chinese Simplified,
   Chinese Traditional), plus Serbian (`sr-Cyrl` and `sr-Latn`) and Ukrainian if cheap.
-- **Shipped:** English (source), Russian, German, French, Spanish, Italian and Brazilian Portuguese; each further language is its own PR. The infrastructure and the full string
+- **Shipped:** English (source), Russian, German, French, Spanish, Italian, Brazilian Portuguese and Ukrainian; each further language is its own PR. The infrastructure and the full string
   extraction were the hard, correctness-critical part (every literal in `src/features/*/view.rs`,
   `src/widgets/*.rs`, `src/features/batch/actions/*.rs` and `src/features/folder_controls/*.rs`
   moved to `i18n/en/frename.ftl`), so they get the deepest review round; each further language is

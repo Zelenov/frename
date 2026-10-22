@@ -6,7 +6,7 @@
 //! source language and the fallback for any message a translation lacks.
 //!
 //! `LANGUAGES` is deliberately short today (English, Russian, German, French, Spanish,
-//! Italian and Brazilian Portuguese): each further language is its own small PR that adds one `.ftl` file and one entry
+//! Italian, Brazilian Portuguese and Ukrainian): each further language is its own small PR that adds one `.ftl` file and one entry
 //! here, reviewed on its own. CJK languages wait for a bundled font that covers them (issue #57).
 
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
@@ -22,7 +22,7 @@ use rust_embed::RustEmbed;
 struct Localizations;
 
 /// Language codes the UI is translated into, in the order Settings lists them.
-pub const LANGUAGES: [&str; 7] = ["en", "ru", "de", "fr", "es", "it", "pt-BR"];
+pub const LANGUAGES: [&str; 8] = ["en", "ru", "de", "fr", "es", "it", "pt-BR", "uk"];
 
 /// The source language, used when nothing else matches.
 const FALLBACK: &str = "en";
@@ -181,6 +181,7 @@ pub fn language_name(language: &str) -> String {
         "es" => crate::fl!("language-name-es"),
         "it" => crate::fl!("language-name-it"),
         "pt-BR" => crate::fl!("language-name-pt-BR"),
+        "uk" => crate::fl!("language-name-uk"),
         _ => crate::fl!("language-name-en"),
     }
 }
@@ -202,7 +203,7 @@ mod tests {
     fn the_language_follows_the_setting_then_the_os_then_english() {
         assert_eq!(resolve("", &os(&["ru-RU"])), "ru");
         assert_eq!(
-            resolve("", &os(&["uk-UA", "ru-RU"])),
+            resolve("", &os(&["ja-JP", "ru-RU"])),
             "ru",
             "second preference"
         );
@@ -216,8 +217,8 @@ mod tests {
         assert_eq!(resolve("", &os(&["ja-JP"])), "en");
         assert_eq!(
             resolve("", &os(&["uk-UA"])),
-            "en",
-            "never mapped to Russian"
+            "uk",
+            "Ukrainian is its own language, not Russian"
         );
         assert_eq!(resolve("", &os(&[])), "en");
         assert_eq!(
@@ -371,6 +372,7 @@ mod tests {
     fn plural_categories(language: &str) -> &'static [&'static str] {
         match language {
             "ru" => &["one", "few", "many"],
+            "uk" => &["one", "few", "many", "other"],
             _ => &["one", "other"],
         }
     }
@@ -555,6 +557,38 @@ mod tests {
                 assert!(errors.is_empty(), "{id} {n}: {errors:?}");
                 assert!(text.starts_with(&format!("Описать {n} {noun}? ")), "{text}");
                 assert!(text.contains("на каждый"), "{n}: {text}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_ukrainian_describe_all_question_is_per_marker_for_every_count() {
+        use fluent_bundle::{FluentArgs, FluentBundle, FluentResource};
+        let source = include_str!("../i18n/uk/frename.ftl").to_string();
+        let mut bundle = FluentBundle::new(vec!["uk".parse().unwrap()]);
+        bundle
+            .add_resource(FluentResource::try_new(source).unwrap())
+            .unwrap();
+        bundle.set_use_isolating(false);
+        for id in ["markers-ai-confirm", "markers-ai-confirm-unpriced"] {
+            for (n, noun) in [
+                (11, "позначок"),
+                (21, "позначку"),
+                (22, "позначки"),
+                (25, "позначок"),
+                (31, "позначку"),
+            ] {
+                let mut args = FluentArgs::new();
+                args.set("count", n);
+                args.set("total", "близько $0.09");
+                let message = bundle.get_message(id).unwrap();
+                let mut errors = vec![];
+                let text = bundle
+                    .format_pattern(message.value().unwrap(), Some(&args), &mut errors)
+                    .to_string();
+                assert!(errors.is_empty(), "{id} {n}: {errors:?}");
+                assert!(text.starts_with(&format!("Описати {n} {noun}? ")), "{text}");
+                assert!(text.contains("на кожну"), "{n}: {text}");
             }
         }
     }
