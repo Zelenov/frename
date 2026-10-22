@@ -561,6 +561,38 @@ mod tests {
         }
     }
 
+    #[test]
+    fn the_ukrainian_describe_all_question_is_per_marker_for_every_count() {
+        use fluent_bundle::{FluentArgs, FluentBundle, FluentResource};
+        let source = include_str!("../i18n/uk/frename.ftl").to_string();
+        let mut bundle = FluentBundle::new(vec!["uk".parse().unwrap()]);
+        bundle
+            .add_resource(FluentResource::try_new(source).unwrap())
+            .unwrap();
+        bundle.set_use_isolating(false);
+        for id in ["markers-ai-confirm", "markers-ai-confirm-unpriced"] {
+            for (n, noun) in [
+                (11, "позначок"),
+                (21, "позначку"),
+                (22, "позначки"),
+                (25, "позначок"),
+                (31, "позначку"),
+            ] {
+                let mut args = FluentArgs::new();
+                args.set("count", n);
+                args.set("total", "близько $0.09");
+                let message = bundle.get_message(id).unwrap();
+                let mut errors = vec![];
+                let text = bundle
+                    .format_pattern(message.value().unwrap(), Some(&args), &mut errors)
+                    .to_string();
+                assert!(errors.is_empty(), "{id} {n}: {errors:?}");
+                assert!(text.starts_with(&format!("Описати {n} {noun}? ")), "{text}");
+                assert!(text.contains("на кожну"), "{n}: {text}");
+            }
+        }
+    }
+
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
     const NOT_UI_TEXT: [(&str, &str); 102] = [
         ("explorer", "program name"),

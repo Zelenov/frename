@@ -184,7 +184,7 @@ batch-prepare-report-cap = Витрачено { $spent } із ліміту { $ca
 batch-option-steps = Кроки
 batch-prepare-step-subtitles = Спершу створити субтитри (Soniox)
 batch-prepare-step-description = Описати кліпи за допомогою ШІ
-batch-prepare-cap = Зупинитися на витратах
+batch-prepare-cap = Зупинитися, коли витрати сягнуть
 batch-prepare-cap-none = Без ліміту (в доларах США)
 batch-prepare-cap-invalid = Ліміт — це сума в доларах, наприклад 5
 batch-prepare-left = Останній запуск зупинився, ще не оброблено: { $count ->
@@ -238,12 +238,12 @@ batch-waiting-remove = Прибрати
 batch-indicator-waiting = Очікує: { $count }
 file-workspace-describe-clip = Описати цей кліп за допомогою ШІ
 file-workspace-subtitles-clip = Створити субтитри для цього кліпу
-file-workspace-describe-clip-queued = Опис за допомогою ШІ: чекає на чергу. Клацніть, щоб скасувати
+file-workspace-describe-clip-queued = Опис за допомогою ШІ: очікує в черзі. Клацніть, щоб скасувати
 file-workspace-describe-clip-running = Опис за допомогою ШІ: виконується
 file-workspace-suggest-tags-clip = Запропонувати теги для цього кліпу за допомогою ШІ (Ctrl+F6)
-file-workspace-suggest-tags-clip-queued = Пропозиція тегів: чекає на чергу. Клацніть, щоб скасувати
+file-workspace-suggest-tags-clip-queued = Пропозиція тегів: очікує в черзі. Клацніть, щоб скасувати
 file-workspace-suggest-tags-clip-running = Пропозиція тегів: виконується
-file-workspace-subtitles-clip-queued = Створення субтитрів: чекає на чергу. Клацніть, щоб скасувати
+file-workspace-subtitles-clip-queued = Створення субтитрів: очікує в черзі. Клацніть, щоб скасувати
 file-workspace-subtitles-clip-running = Створення субтитрів: виконується
 batch-run-again = Запустити знову для { $count ->
     [one] { $count } файлу
@@ -590,7 +590,7 @@ folder-checked-hidden-tip = { $hidden ->
    *[other] { $hidden } позначених файлів приховано пошуком або фільтром; дія виконається і для них
 }
 folder-outcome-working = Виконується
-folder-outcome-not-reached = Не дійшли
+folder-outcome-not-reached = Не опрацьовано
 folder-window-empty-title = Відкрийте папку з кліпами
 folder-window-empty-line = Або перетягніть папку у вікно. Клацніть правою кнопкою на кнопці, щоб відкрити один файл.
 folder-window-open = Відкрити папку…
@@ -759,7 +759,7 @@ markers-ai-confirm-unpriced = { $count ->
 }
 markers-ai-confirm-yes = Описати
 markers-ai-confirm-no = Скасувати
-markers-ai-waiting = Чекає на чергу…
+markers-ai-waiting = Очікує в черзі…
 markers-ai-run = Описуємо: { $describing } · очікують: { $waiting }
 markers-ai-run-last = Описуємо: { $describing }
 markers-ai-stop-all = Зупинити все
@@ -795,7 +795,7 @@ tag-grid-no-tags = Тегів ще немає
 tag-grid-no-tags-hint = Введіть назву й натисніть Enter, щоб створити перший.
 tag-grid-group-unsaved = Не в тегах папки
 tag-grid-group-folder = Теги папки
-tag-grid-more = ще +{ $count }
+tag-grid-more = +{ $count } ще
 
 ## Order strip
 
