@@ -6,7 +6,7 @@
 //! source language and the fallback for any message a translation lacks.
 //!
 //! `LANGUAGES` is deliberately short today (English, Russian, German, French, Spanish,
-//! Italian, Brazilian Portuguese and Ukrainian): each further language is its own small PR that adds one `.ftl` file and one entry
+//! Italian, Brazilian Portuguese, Ukrainian and Serbian in both scripts): each further language is its own small PR that adds one `.ftl` file and one entry
 //! here, reviewed on its own. CJK languages wait for a bundled font that covers them (issue #57).
 
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
@@ -22,7 +22,9 @@ use rust_embed::RustEmbed;
 struct Localizations;
 
 /// Language codes the UI is translated into, in the order Settings lists them.
-pub const LANGUAGES: [&str; 8] = ["en", "ru", "de", "fr", "es", "it", "pt-BR", "uk"];
+pub const LANGUAGES: [&str; 10] = [
+    "en", "ru", "de", "fr", "es", "it", "pt-BR", "uk", "sr-Cyrl", "sr-Latn",
+];
 
 /// The source language, used when nothing else matches.
 const FALLBACK: &str = "en";
@@ -152,16 +154,31 @@ pub fn resolve(stored: &str, os_languages: &[String]) -> &'static str {
 }
 
 /// The first of [`LANGUAGES`] with the same language subtag as the OS tag (`pt-PT` → `pt-BR`).
+/// When the tag names a script (`sr-Latn-RS`), a language written in that script wins over an
+/// earlier one in another script; a tag without a script (`sr`, `sr-RS`) takes the first.
 fn by_language(tag: &str) -> Option<&'static str> {
-    let language = tag.split(['-', '_']).next().unwrap_or_default();
-    LANGUAGES
-        .iter()
-        .find(|l| {
-            l.split('-')
-                .next()
-                .is_some_and(|s| s.eq_ignore_ascii_case(language))
-        })
-        .copied()
+    let mut parts = tag.split(['-', '_']);
+    let language = parts.next().unwrap_or_default();
+    let script = parts.find(|p| p.len() == 4 && p.chars().all(|c| c.is_ascii_alphabetic()));
+    let same_language = |l: &&&str| {
+        l.split('-')
+            .next()
+            .is_some_and(|s| s.eq_ignore_ascii_case(language))
+    };
+    let mut candidates = LANGUAGES.iter().filter(same_language);
+    let first = candidates.next().copied();
+    let by_script = script.and_then(|script| {
+        LANGUAGES
+            .iter()
+            .filter(same_language)
+            .find(|l| {
+                l.split('-')
+                    .nth(1)
+                    .is_some_and(|s| s.eq_ignore_ascii_case(script))
+            })
+            .copied()
+    });
+    by_script.or(first)
 }
 
 /// `code` as one of [`LANGUAGES`], ignoring case.
@@ -182,6 +199,8 @@ pub fn language_name(language: &str) -> String {
         "it" => crate::fl!("language-name-it"),
         "pt-BR" => crate::fl!("language-name-pt-BR"),
         "uk" => crate::fl!("language-name-uk"),
+        "sr-Cyrl" => crate::fl!("language-name-sr-Cyrl"),
+        "sr-Latn" => crate::fl!("language-name-sr-Latn"),
         _ => crate::fl!("language-name-en"),
     }
 }
@@ -221,6 +240,21 @@ mod tests {
             "Ukrainian is its own language, not Russian"
         );
         assert_eq!(resolve("", &os(&[])), "en");
+        assert_eq!(resolve("", &os(&["sr"])), "sr-Cyrl", "bare Serbian");
+        assert_eq!(resolve("", &os(&["sr-RS"])), "sr-Cyrl");
+        assert_eq!(resolve("", &os(&["sr_RS"])), "sr-Cyrl");
+        assert_eq!(resolve("", &os(&["sr-ME"])), "sr-Cyrl");
+        assert_eq!(resolve("", &os(&["sr-BA"])), "sr-Cyrl");
+        assert_eq!(resolve("", &os(&["sr-Cyrl-RS"])), "sr-Cyrl");
+        assert_eq!(resolve("", &os(&["sr-Cyrl-BA"])), "sr-Cyrl");
+        assert_eq!(resolve("", &os(&["sr-Latn"])), "sr-Latn");
+        assert_eq!(resolve("", &os(&["sr-Latn-RS"])), "sr-Latn");
+        assert_eq!(resolve("", &os(&["sr_Latn_ME"])), "sr-Latn");
+        assert_eq!(resolve("", &os(&["sr-latn-ba"])), "sr-Latn", "case");
+        assert_eq!(resolve("sr-latn", &os(&["de-DE"])), "sr-Latn");
+        assert_eq!(resolve("sr-Cyrl", &os(&["sr-Latn-RS"])), "sr-Cyrl");
+        assert_eq!(resolve("", &os(&["ja-JP", "sr-Latn-RS"])), "sr-Latn");
+        assert_eq!(resolve("", &os(&["pt-Latn-PT"])), "pt-BR", "one script");
         assert_eq!(
             resolve("xx", &os(&["ru-RU"])),
             "ru",
@@ -373,6 +407,7 @@ mod tests {
         match language {
             "ru" => &["one", "few", "many"],
             "uk" => &["one", "few", "many", "other"],
+            "sr-Cyrl" | "sr-Latn" => &["one", "few", "other"],
             _ => &["one", "other"],
         }
     }

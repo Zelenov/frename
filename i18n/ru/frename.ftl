@@ -42,6 +42,8 @@ language-name-es = Español
 language-name-it = Italiano
 language-name-pt-BR = Português (Brasil)
 language-name-uk = Українська
+language-name-sr-Cyrl = Српски (ћирилица)
+language-name-sr-Latn = Srpski (latinica)
 
 ## Settings window
 
