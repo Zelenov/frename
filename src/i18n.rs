@@ -531,6 +531,25 @@ mod tests {
             .starts_with("Rename"));
     }
 
+    /// Both Serbian codes load their own file, even though they share a language subtag.
+    #[test]
+    fn the_two_serbian_scripts_read_their_own_text() {
+        let languages = Languages::new();
+        languages.show("sr-Cyrl");
+        assert!(languages
+            .shown()
+            .get("batch-run-rename")
+            .starts_with("Преименуј"));
+        languages.show("sr-Latn");
+        assert!(languages
+            .shown()
+            .get("batch-run-rename")
+            .starts_with("Preimenuj"));
+        assert_eq!(language_name("sr-Cyrl"), "Српски (ћирилица)");
+        assert_eq!(language_name("sr-Latn"), "Srpski (latinica)");
+        languages.show("en");
+    }
+
     #[test]
     fn russian_plural_categories_follow_cldr() {
         use fluent_bundle::{FluentArgs, FluentBundle, FluentResource};
@@ -624,6 +643,221 @@ mod tests {
                 assert!(errors.is_empty(), "{id} {n}: {errors:?}");
                 assert!(text.starts_with(&format!("Описати {n} {noun}? ")), "{text}");
                 assert!(text.contains("на кожну"), "{n}: {text}");
+            }
+        }
+    }
+
+    /// One message of a Serbian file rendered with a count (and a total), through `fluent_bundle`.
+    fn serbian_text(language: &str, id: &str, n: i64) -> String {
+        use fluent_bundle::{FluentArgs, FluentBundle, FluentResource};
+        let path = i18n_dir().join(language).join("frename.ftl");
+        let source = std::fs::read_to_string(path).unwrap();
+        let mut bundle = FluentBundle::new(vec![language.parse().unwrap()]);
+        bundle
+            .add_resource(FluentResource::try_new(source).unwrap())
+            .unwrap();
+        bundle.set_use_isolating(false);
+        let mut args = FluentArgs::new();
+        args.set("count", n);
+        args.set("total", "око $0.09");
+        let message = bundle.get_message(id).unwrap();
+        let mut errors = vec![];
+        let text = bundle
+            .format_pattern(message.value().unwrap(), Some(&args), &mut errors)
+            .to_string();
+        assert!(errors.is_empty(), "{language} {id} {n}: {errors:?}");
+        text
+    }
+
+    /// Serbian plurals (CLDR): one for 1, 21, 31 (not 11); few for 2-4, 22-24 (not 12-14).
+    #[test]
+    fn serbian_plural_categories_follow_cldr() {
+        let cases = [
+            (1, "Означена је 1 датотека"),
+            (2, "Означене су 2 датотеке"),
+            (4, "Означене су 4 датотеке"),
+            (5, "Означено је 5 датотека"),
+            (11, "Означено је 11 датотека"),
+            (12, "Означено је 12 датотека"),
+            (21, "Означена је 21 датотека"),
+            (22, "Означене су 22 датотеке"),
+            (25, "Означено је 25 датотека"),
+            (101, "Означена је 101 датотека"),
+        ];
+        for (n, cyrillic) in cases {
+            assert_eq!(serbian_text("sr-Cyrl", "batch-checked-count", n), cyrillic);
+            assert_eq!(
+                serbian_text("sr-Latn", "batch-checked-count", n),
+                transliterate(cyrillic)
+            );
+        }
+    }
+
+    #[test]
+    fn the_serbian_describe_all_question_is_per_marker_for_every_count() {
+        for language in ["sr-Cyrl", "sr-Latn"] {
+            for id in ["markers-ai-confirm", "markers-ai-confirm-unpriced"] {
+                for (n, noun) in [
+                    (11, "маркера"),
+                    (21, "маркер"),
+                    (22, "маркера"),
+                    (25, "маркера"),
+                    (31, "маркер"),
+                ] {
+                    let text = serbian_text(language, id, n);
+                    let (noun, each) = if language == "sr-Cyrl" {
+                        (noun.to_string(), "за сваки")
+                    } else {
+                        (transliterate(noun), "za svaki")
+                    };
+                    assert!(text.contains(&format!("{n} {noun}? ")), "{text}");
+                    assert!(text.contains(each), "{n}: {text}");
+                }
+            }
+        }
+    }
+
+    /// Serbian Cyrillic to Latin, letter by letter (`љ њ џ` as `lj nj dž`, upper case `LJ` next to
+    /// other capitals): the rule `i18n/sr-Latn` is made by.
+    fn transliterate(text: &str) -> String {
+        let chars: Vec<char> = text.chars().collect();
+        let mut out = String::new();
+        for (i, &c) in chars.iter().enumerate() {
+            let loud =
+                |other: Option<&char>| other.is_some_and(|o| o.is_alphabetic() && o.is_uppercase());
+            let upper_context =
+                loud(i.checked_sub(1).and_then(|j| chars.get(j))) || loud(chars.get(i + 1));
+            let latin = match c {
+                'а' => "a",
+                'б' => "b",
+                'в' => "v",
+                'г' => "g",
+                'д' => "d",
+                'ђ' => "đ",
+                'е' => "e",
+                'ж' => "ž",
+                'з' => "z",
+                'и' => "i",
+                'ј' => "j",
+                'к' => "k",
+                'л' => "l",
+                'љ' => "lj",
+                'м' => "m",
+                'н' => "n",
+                'њ' => "nj",
+                'о' => "o",
+                'п' => "p",
+                'р' => "r",
+                'с' => "s",
+                'т' => "t",
+                'ћ' => "ć",
+                'у' => "u",
+                'ф' => "f",
+                'х' => "h",
+                'ц' => "c",
+                'ч' => "č",
+                'ш' => "š",
+                'џ' => "dž",
+                'А' => "A",
+                'Б' => "B",
+                'В' => "V",
+                'Г' => "G",
+                'Д' => "D",
+                'Ђ' => "Đ",
+                'Е' => "E",
+                'Ж' => "Ž",
+                'З' => "Z",
+                'И' => "I",
+                'Ј' => "J",
+                'К' => "K",
+                'Л' => "L",
+                'М' => "M",
+                'Н' => "N",
+                'О' => "O",
+                'П' => "P",
+                'Р' => "R",
+                'С' => "S",
+                'Т' => "T",
+                'Ћ' => "Ć",
+                'У' => "U",
+                'Ф' => "F",
+                'Х' => "H",
+                'Ц' => "C",
+                'Ч' => "Č",
+                'Ш' => "Š",
+                'Љ' => {
+                    if upper_context {
+                        "LJ"
+                    } else {
+                        "Lj"
+                    }
+                }
+                'Њ' => {
+                    if upper_context {
+                        "NJ"
+                    } else {
+                        "Nj"
+                    }
+                }
+                'Џ' => {
+                    if upper_context {
+                        "DŽ"
+                    } else {
+                        "Dž"
+                    }
+                }
+                other => {
+                    assert!(
+                        !('\u{400}'..='\u{4FF}').contains(&other),
+                        "unmapped Cyrillic {other:?}"
+                    );
+                    out.push(other);
+                    continue;
+                }
+            };
+            out.push_str(latin);
+        }
+        out
+    }
+
+    #[test]
+    fn transliteration_handles_digraphs_and_capitals() {
+        assert_eq!(transliterate("Љубав и њива, џем"), "Ljubav i njiva, džem");
+        assert_eq!(transliterate("Њујорк, Џон"), "Njujork, Džon");
+        assert_eq!(transliterate("ЉУБАВ"), "LJUBAV");
+        assert_eq!(transliterate("ОЊ ЏЕМ"), "ONJ DŽEM");
+        assert_eq!(transliterate("Ћирилица ђак Шума"), "Ćirilica đak Šuma");
+        assert_eq!(
+            transliterate("{ $count } Tab, Ctrl+Z"),
+            "{ $count } Tab, Ctrl+Z"
+        );
+    }
+
+    /// `sr-Latn` is `sr-Cyrl` transliterated: same lines, same order, only Cyrillic letters differ.
+    /// The language names (each written in its own script) and the four header lines differ.
+    #[test]
+    fn serbian_latin_is_the_transliterated_cyrillic() {
+        let cyrillic = std::fs::read_to_string(i18n_dir().join("sr-Cyrl/frename.ftl")).unwrap();
+        let latin = std::fs::read_to_string(i18n_dir().join("sr-Latn/frename.ftl")).unwrap();
+        let (cyrillic, latin): (Vec<&str>, Vec<&str>) =
+            (cyrillic.lines().collect(), latin.lines().collect());
+        assert_eq!(cyrillic.len(), latin.len());
+        for (number, (c, l)) in cyrillic.iter().zip(&latin).enumerate().skip(4) {
+            let expected = if c.starts_with("language-name-") {
+                c.to_string()
+            } else {
+                transliterate(c)
+            };
+            assert_eq!(*l, expected, "line {}", number + 1);
+        }
+        // No Cyrillic outside the language names, and no Latin-script-only change to keys.
+        for (number, line) in latin.iter().enumerate() {
+            if !line.starts_with("language-name-") {
+                assert!(
+                    !line.chars().any(|c| ('\u{400}'..='\u{4FF}').contains(&c)),
+                    "Cyrillic left on line {}",
+                    number + 1
+                );
             }
         }
     }
