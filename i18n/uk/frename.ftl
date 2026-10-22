@@ -121,8 +121,8 @@ settings-subtitles-cue-short = Коротка
 settings-subtitles-cue-short-hint = Один рядок, до 8 с
 settings-subtitles-cue-sentence = Одне речення
 settings-subtitles-hint = Використовується дією «Створити субтитри» в пакетному режимі. Довжина репліки діє для нових субтитрів.
-settings-key-store-windows = Диспетчері облікових даних Windows
-settings-key-store-macos = в в’язці ключів macOS
+settings-key-store-windows = у Диспетчері облікових даних Windows
+settings-key-store-macos = у в’язці ключів macOS
 settings-key-store-other = у системній в’язці ключів
 settings-key-unavailable = Не вдалося відкрити системну в’язку ключів
 settings-key-unavailable-hint = Вона може бути заблокована або відсутня (наприклад, GNOME Keyring чи KWallet). Налаштування перевіряють це щоразу, коли відкриваються.
@@ -210,7 +210,7 @@ batch-prepare-plan-description-line = { $videos ->
     [many] { $videos } відео
    *[other] { $videos } відео
 } для опису
-batch-prepare-resume-note = Кожен крок пропускає те, що вже є, тож зупинений запуск продовжується повторним запуском: за нічого не платять двічі.
+batch-prepare-resume-note = Кожен крок пропускає те, що вже є, тож зупинений запуск продовжується повторним запуском: ні за що не платите двічі.
 batch-prepare-run = Підготувати { $clips ->
     [one] { $clips } кліп
     [few] { $clips } кліпи
@@ -425,7 +425,7 @@ batch-action-describe-ai-none = Немає відео для опису.
 batch-action-describe-ai-hint = { batch-runs-in-background }. Скасування зберігає вже описані відео; повторний запуск їх пропускає.
 batch-action-describe-ai-no-subtitles = Без субтитрів (описується лише зображення): { $videos }.
 batch-action-describe-ai-redo = Повторити для відео, які вже мають опис ШІ
-batch-action-describe-ai-hint-panel = Описує, що і коли відбувається в кожному позначеному відео: короткий зміст і сегменти з часом потрапляють в опис ШІ в його коментарі; ваш власний текст зберігається. Кадри й субтитри надсилаються до { $provider } — компанії обраної моделі.
+batch-action-describe-ai-hint-panel = Описує, що і коли відбувається в кожному позначеному відео: короткий зміст і сегменти з часом потрапляють у коментар як опис ШІ; ваш власний текст зберігається. Кадри й субтитри надсилаються до { $provider } — компанії обраної моделі.
 batch-ai-change = Змінити
 batch-ai-tag-suggestions-off = Вимкнено
 batch-ai-tag-suggestions-no-tags = Увімкнено, але в цій папці ще немає тегів
@@ -737,7 +737,7 @@ markers-color-cyan = Бірюзовий
 markers-color-lavender = Лавандовий
 markers-color-magenta = Пурпуровий
 markers-color-other = Інший колір
-markers-read-only = лише читання
+markers-read-only = лише для читання
 markers-name-placeholder = Назва
 markers-ai-describe = Описати за допомогою ШІ: дати назву позначці й додати, що відбувається
 markers-ai-stop = Зупинити опис
@@ -799,8 +799,8 @@ tag-grid-more = ще +{ $count }
 
 ## Order strip
 
-sync-panel-locked = Зміна порядку нижче змінює порядок у папці
-sync-panel-unlocked = Зміна порядку нижче стосується лише цього кліпу
+sync-panel-locked = Порядок нижче — для всієї папки
+sync-panel-unlocked = Порядок нижче — лише для цього кліпу
 sync-panel-unlock = Розблокувати
 sync-panel-lock = Заблокувати
 sync-panel-differs = Порядок відрізняється від порядку в папці

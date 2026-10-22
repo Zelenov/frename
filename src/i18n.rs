@@ -218,7 +218,7 @@ mod tests {
         assert_eq!(
             resolve("", &os(&["uk-UA"])),
             "uk",
-            "never mapped to Russian"
+            "Ukrainian is its own language, not Russian"
         );
         assert_eq!(resolve("", &os(&[])), "en");
         assert_eq!(
