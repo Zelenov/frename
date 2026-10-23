@@ -1,6 +1,6 @@
 # 0.175
 ## Changed
-- Fullscreen (F5, double-click the picture) now takes the whole monitor: no title bar, frame or taskbar. Leaving it (Esc, F5, double-click) brings the window back as it was, maximized or not.
+- Fullscreen (F5, double-click the picture) now takes the whole monitor: no title bar, frame or taskbar. Leaving it (Esc, F5, double-click) brings the window back.
 
 # 0.174
 ## Added

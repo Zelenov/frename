@@ -1047,9 +1047,11 @@ impl FrenameApp {
 
     /// Put the main window into the OS fullscreen or back to the mode it had, whichever the
     /// workspace's fullscreen (F5, double click) calls for. Fullscreen is only a flag in the
-    /// workspace, so this runs after every message it handles.
+    /// workspace, so this runs after every message it handles (a new arm that calls
+    /// `folder_workspace.update` must sync too).
     fn sync_window_mode(&mut self) -> Task<Message> {
-        let wanted = self.folder_workspace.media_fullscreen();
+        // A demo captures the window at the scenario's size: it keeps the in-window view.
+        let wanted = self.folder_workspace.media_fullscreen() && self.demo.is_none();
         if wanted == self.os_fullscreen {
             return Task::none();
         }
@@ -1357,6 +1359,17 @@ mod tests {
             (1000.0, 700.0),
             "tracked again after leaving"
         );
+    }
+
+    #[test]
+    fn escape_leaves_the_os_fullscreen() {
+        let (mut app, ..) = app_with_loading_video();
+        toggle_fullscreen(&mut app);
+        assert!(app.os_fullscreen);
+        let _ = app.update(Message::FolderWorkspace(
+            folder_workspace::Message::EscapePressed,
+        ));
+        assert!(!app.os_fullscreen);
     }
 
     #[test]
