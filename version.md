@@ -1,3 +1,7 @@
+# 0.174
+## Added
+- The interface in Serbian, in Cyrillic (Српски) and Latin (Srpski) script: follows the system language, or pick it in Settings → Language.
+
 # 0.173
 ## Added
 - The interface in Ukrainian (Українська): follows the system language, or pick it in Settings → Language.
