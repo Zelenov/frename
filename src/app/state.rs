@@ -526,6 +526,10 @@ pub struct FrenameApp {
     window_size: (f32, f32),
     /// Whether the window is currently maximized.
     is_maximized: bool,
+    /// Whether the main window is in the OS fullscreen (the video takes the whole monitor).
+    /// While it is, size, position and maximized state are not the window's own, so they are
+    /// neither tracked nor saved: leaving restores the previous mode, size and position.
+    os_fullscreen: bool,
     /// Last known monitor size (logical px); 0×0 if not yet fetched.
     monitor_size: (f32, f32),
     /// The demo being run (`--demo`), if any.
@@ -577,6 +581,7 @@ impl FrenameApp {
                 crate::ui::tokens::WINDOW_HEIGHT,
             )),
             is_maximized: saved.map(|g| g.is_maximized).unwrap_or(false),
+            os_fullscreen: false,
             monitor_size: saved
                 .map(|g| (g.monitor_width, g.monitor_height))
                 .unwrap_or((0.0, 0.0)),
@@ -930,6 +935,13 @@ impl FrenameApp {
                     )),
                 ])
             }
+            Message::WindowMoved(..)
+            | Message::WindowResized(..)
+            | Message::WindowMaximizedFetched(_)
+                if self.os_fullscreen =>
+            {
+                Task::none()
+            }
             Message::WindowMoved(x, y) => {
                 if !self.is_maximized {
                     self.window_pos = (x, y);
@@ -1003,6 +1015,7 @@ impl FrenameApp {
                     .folder_workspace
                     .update(msg)
                     .map(Message::FolderWorkspace);
+                let task = Task::batch([task, self.sync_window_mode()]);
                 let demo_steps = match self.demo.as_mut() {
                     Some(demo) if video_ready => demo.video_ready(),
                     _ => None,
@@ -1030,6 +1043,27 @@ impl FrenameApp {
                 Task::batch([task, window::close(id)])
             }
         }
+    }
+
+    /// Put the main window into the OS fullscreen or back to the mode it had, whichever the
+    /// workspace's fullscreen (F5, double click) calls for. Fullscreen is only a flag in the
+    /// workspace, so this runs after every message it handles (a new arm that calls
+    /// `folder_workspace.update` must sync too).
+    fn sync_window_mode(&mut self) -> Task<Message> {
+        // A demo captures the window at the scenario's size: it keeps the in-window view.
+        let wanted = self.folder_workspace.media_fullscreen() && self.demo.is_none();
+        if wanted == self.os_fullscreen {
+            return Task::none();
+        }
+        self.os_fullscreen = wanted;
+        window::set_mode(
+            self.main_window,
+            if wanted {
+                window::Mode::Fullscreen
+            } else {
+                window::Mode::Windowed
+            },
+        )
     }
 
     /// Close the window waiting to close, unloading a video first (it closes on `Unloaded`).
@@ -1295,6 +1329,54 @@ mod tests {
             .pretend_video_loading(true);
         assert!(app.folder_workspace.needs_media_unload());
         (app, main, settings)
+    }
+
+    fn toggle_fullscreen(app: &mut FrenameApp) {
+        let _ = app.update(Message::FolderWorkspace(
+            folder_workspace::Message::ToggleMediaFullscreen,
+        ));
+    }
+
+    /// Issue #305: the video's fullscreen takes the whole monitor, and leaving it puts the window
+    /// back; the size the fullscreen window reports is not the window's own and is not saved.
+    #[test]
+    fn fullscreen_follows_the_workspace_into_the_os_fullscreen_and_back() {
+        let (mut app, ..) = app_with_loading_video();
+        let size = app.window_size;
+        toggle_fullscreen(&mut app);
+        assert!(app.os_fullscreen);
+        let _ = app.update(Message::WindowResized(2560.0, 1440.0));
+        let _ = app.update(Message::WindowMoved(0.0, 0.0));
+        assert_eq!(
+            app.window_size, size,
+            "the fullscreen size is not remembered"
+        );
+        toggle_fullscreen(&mut app);
+        assert!(!app.os_fullscreen);
+        let _ = app.update(Message::WindowResized(1000.0, 700.0));
+        assert_eq!(
+            app.window_size,
+            (1000.0, 700.0),
+            "tracked again after leaving"
+        );
+    }
+
+    #[test]
+    fn escape_leaves_the_os_fullscreen() {
+        let (mut app, ..) = app_with_loading_video();
+        toggle_fullscreen(&mut app);
+        assert!(app.os_fullscreen);
+        let _ = app.update(Message::FolderWorkspace(
+            folder_workspace::Message::EscapePressed,
+        ));
+        assert!(!app.os_fullscreen);
+    }
+
+    #[test]
+    fn fullscreen_without_a_video_stays_a_window() {
+        let mut app = FrenameApp::new(window::Id::unique(), None);
+        toggle_fullscreen(&mut app);
+        assert!(!app.os_fullscreen);
     }
 
     fn unload(app: &mut FrenameApp) {

@@ -133,7 +133,7 @@ single clip.
 | `Shift` + drag the progress bar | Snap to the nearest marker |
 | `Alt` + drag the progress bar (paused) | Mark a range |
 | `F12` | Save the current frame as a JPEG next to the video |
-| `F5` | Fullscreen on / off (or double-click the picture) |
+| `F5` | Fullscreen on / off (or double-click the picture): the video takes the whole monitor |
 | `Ctrl+Alt+←` / `Ctrl+Alt+→` | Rotate the clip 90° left / right |
 | `Escape` | Leave fullscreen |
 
