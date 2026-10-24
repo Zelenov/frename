@@ -8,14 +8,14 @@ use iced::keyboard::key::Named;
 use iced::widget::{
     column, container, responsive, row, stack, text_editor as text_editor_widget, Id,
 };
-use iced::{Element, Length, Padding};
+use iced::{Alignment, Element, Length, Padding};
 
 use crate::ui::icon_button::IconButton;
-use crate::ui::icons::Icon;
+use crate::ui::icons::{icon, Icon};
 use crate::ui::palette::TagPalette;
 use crate::ui::tokens::*;
 use crate::ui::tooltip::Position;
-use crate::ui::{scroll, style};
+use crate::ui::{scroll, style, text, tooltip};
 use crate::widgets::height_handle::HeightHandle;
 use crate::widgets::search_bar::{self, SearchBar};
 use crate::widgets::starred_tags_panel;
@@ -55,13 +55,16 @@ const TOGGLE_PADDING: Padding = Padding {
 };
 
 /// What the tags area says about the open clip besides its tags.
-pub struct Status {
+pub struct Status<'a> {
     /// Whether the clip's edits are in its file.
     pub save_status: Option<file_name_panel::SaveStatus>,
     /// The paid actions of the clip, for the buttons of the comment's corner.
     pub clip_actions: ClipActions,
     /// How the In and Out chips write their times (Settings → Time display).
     pub time_format: frename_core::TimeFormat,
+    /// The folder's notes for the AI (#310); empty when it has none. A mark next to the AI
+    /// buttons says they are on.
+    pub ai_notes: &'a str,
 }
 
 /// Render the tags area.
@@ -93,7 +96,7 @@ where
         return column![search, container(grid).padding(AREA_PADDING)].into();
     }
 
-    let comment_box = comment(file_workspace, status.clip_actions);
+    let comment_box = comment(file_workspace, status.clip_actions, status.ai_notes);
     // Expanded, the comment box is the whole area.
     if file_workspace.comment_expanded() {
         return container(comment_box)
@@ -204,6 +207,7 @@ where
 fn comment<'a, S>(
     file_workspace: &'a FileWorkspace<S>,
     clip_actions: ClipActions,
+    ai_notes: &str,
 ) -> Element<'a, Message>
 where
     S: frename_core::StoredTagStore + Clone,
@@ -279,7 +283,22 @@ where
         fl!("file-workspace-suggest-tags-clip-running"),
         Message::SuggestTagsClip,
     );
-    let corner = row![suggest_tags, describe, subtitles, toggle].spacing(SPACE_XXS);
+    // The folder's notes go with every AI request: a mark says so, with the notes as its tip.
+    let notes_on = (!ai_notes.trim().is_empty()).then(|| {
+        tooltip::tip_text(
+            row![
+                icon(Icon::FileText, ICON_S, ACCENT_TEXT),
+                text::caption(fl!("file-workspace-ai-notes-on")).color(ACCENT_TEXT)
+            ]
+            .spacing(SPACE_XXS)
+            .align_y(Alignment::Center),
+            fl!("file-workspace-ai-notes-tip", notes = ai_notes.trim()),
+            Position::Left,
+        )
+    });
+    let corner = row![notes_on, suggest_tags, describe, subtitles, toggle]
+        .spacing(SPACE_XXS)
+        .align_y(Alignment::Center);
     // The box draws the field's fill and edge (and the focus ring) outside the scroll area, so
     // the edge stays put while the text scrolls, and the scrollbar sits inside the box. It keeps
     // the ring's width free inside, so the ring never covers the text.

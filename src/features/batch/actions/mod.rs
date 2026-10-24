@@ -394,6 +394,11 @@ impl Actions {
         self.describe_ai.set_folder_tags(tags);
     }
 
+    /// The folder's notes for the AI (#310), which every request of an AI action carries.
+    pub fn ai_notes(&self) -> String {
+        self.describe_ai.folder_notes()
+    }
+
     /// The next "Describe with AI" run is a "Suggest tags" of the open clip (#250).
     pub fn request_tags(&mut self, on: bool) {
         self.describe_ai.request_tags(on);

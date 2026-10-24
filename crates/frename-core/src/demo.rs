@@ -130,6 +130,9 @@ pub struct DemoScenario {
     /// Open the toolbar's More menu (demo only: the screenshot of a narrow file list, #228).
     #[serde(default)]
     pub toolbar_more: bool,
+    /// The folder's notes for the AI (#310), written to its `.frename` when staged.
+    #[serde(default)]
+    pub ai_notes: Option<String>,
     /// The staged files, oldest first: the file list shows them in this order.
     pub files: Vec<DemoFile>,
 }
@@ -338,6 +341,9 @@ pub fn stage(
             crate::metadata::save_markers(&target, &markers, &Default::default())
                 .map_err(|e| std::io::Error::other(format!("{}: {e}", file.name)))?;
         }
+    }
+    if let Some(notes) = &scenario.ai_notes {
+        crate::FolderTagStore::set_ai_notes(into, notes);
     }
     // The folders opened before: empty ones, except those that are meant to be gone.
     for recent in scenario.recent.iter().filter(|r| !r.missing) {

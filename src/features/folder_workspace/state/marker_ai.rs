@@ -68,17 +68,26 @@ impl FolderWorkspace {
         self.marker_readers.insert((guid.clone(), request));
         let (model, language) = self.batch.actions().ai_model_and_language();
         let at_s = describe::moment_s(&marker);
+        let notes = Some(self.batch.actions().ai_notes()).filter(|notes| !notes.is_empty());
         let stream = iced::stream::channel(4, async move |mut output| {
             let mut released = output.clone();
             let released_guid = guid.clone();
             let outcome = tokio::task::spawn_blocking(move || {
-                describe::describe_moment(&path, at_s, model, language, &cancel, || {
-                    // Awaited by nobody: the answer follows, and marks the clip released too.
-                    let _ = released.try_send(Message::MarkerRequestReleased {
-                        guid: released_guid.clone(),
-                        request,
-                    });
-                })
+                describe::describe_moment(
+                    &path,
+                    at_s,
+                    model,
+                    language,
+                    notes.as_deref(),
+                    &cancel,
+                    || {
+                        // Awaited by nobody: the answer follows, and marks the clip released too.
+                        let _ = released.try_send(Message::MarkerRequestReleased {
+                            guid: released_guid.clone(),
+                            request,
+                        });
+                    },
+                )
             })
             .await
             .unwrap_or_else(|e| {
@@ -139,7 +148,10 @@ impl FolderWorkspace {
     /// What one marker request is expected to cost with the model set for Describe with AI, in
     /// US dollars; `None` when that model has no price.
     pub fn marker_price_usd(&self) -> Option<f64> {
-        markers::describe::moment_price_usd(self.batch.actions().ai_model_and_language().0)
+        markers::describe::moment_price_usd(
+            self.batch.actions().ai_model_and_language().0,
+            self.batch.actions().ai_notes().len(),
+        )
     }
 
     /// The markers "Describe N unnamed" would send now (see `MarkersState::unnamed_guids`).

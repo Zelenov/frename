@@ -886,3 +886,14 @@ markers-export = Izvezi…
 markers-export-tip = Sačuvaj markere kao tekstualnu datoteku
 markers-exported = Markeri su sačuvani u: { $name }
 markers-not-exported = Markeri nisu sačuvani: datoteka nije mogla da se zapiše
+
+batch-option-notes = Beleške za veštačku inteligenciju
+batch-ai-notes-info = Vaše beleške o snimcima u ovoj fascikli. Šalju se uz svaki zahtev ka veštačkoj inteligenciji ovde: opisi, predlozi tegova i opisi markera. Čuvaju se u datoteci .frename fascikle.
+batch-ai-notes-placeholder = npr. Čovek koji se najčešće pojavljuje je Evgenije. Označavaj reklamne bilborde. Predloži teg čaj gde god vidiš čaj.
+batch-ai-notes-hint = Šalju se dobavljaču { $provider } zajedno sa kadrovima. Imena dolaze samo iz ovih beleški; frename ne prepoznaje lica.
+batch-ai-notes-too-long = Beleške imaju { $chars } znakova, ograničenje je { $max }. Skratite ih da biste pokrenuli.
+batch-ai-notes-too-long-reason = Beleške za veštačku inteligenciju su predugačke
+batch-option-notes-once = Dodatni red za ovo pokretanje
+batch-ai-notes-once-placeholder = npr. U ovom klipu: žena u crvenom je Ana
+file-workspace-ai-notes-on = Beleške su uključene
+file-workspace-ai-notes-tip = Beleške za veštačku inteligenciju idu uz svaki zahtev u ovoj fascikli: { $notes }

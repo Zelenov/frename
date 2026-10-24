@@ -99,6 +99,23 @@ pub fn text_field<'a, M: Clone + 'a>(placeholder: &str, value: &str) -> TextInpu
         .style(style::text_input)
 }
 
+/// Lines a notes editor shows before it scrolls.
+const NOTES_MIN_HEIGHT: f32 = 4.0 * LINE_BODY + 2.0 * CONTROL_PADDING_Y;
+
+/// A multi-line field for free text (the notes for the AI): a few lines high, in the text
+/// field's look. The caller adds `on_action`.
+pub fn text_area<'a, M: Clone + 'a>(
+    content: &'a iced::widget::text_editor::Content,
+    placeholder: &str,
+) -> iced::widget::TextEditor<'a, iced::advanced::text::highlighter::PlainText, M> {
+    iced::widget::text_editor(content)
+        .placeholder(placeholder.to_string())
+        .size(TEXT_BODY)
+        .padding(FIELD_PADDING)
+        .min_height(NOTES_MIN_HEIGHT)
+        .style(style::text_editor)
+}
+
 /// A text field whose edge is red: its value was refused, the reason is under it (§8.6).
 pub fn invalid_text_field<'a, M: Clone + 'a>(placeholder: &str, value: &str) -> TextInput<'a, M> {
     text_field(placeholder, value).style(style::field(true))

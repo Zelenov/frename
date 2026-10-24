@@ -285,6 +285,21 @@ while its run waits to take it back out of the line; a run in work is cancelled 
 job page. The running job's page lists the runs that wait, each with
 **Remove**, and the strip says how many wait.
 
+**Notes for the AI.** Tell the AI what only you know about the footage: who is who ("the man who
+appears most often is Eugene"), what to mark ("mark advertising billboards", "mark the moon"), which
+tags to suggest ("suggest the tag `tea` wherever you see tea"). Type them in the **Notes for the AI**
+box of the Describe with AI panel. They belong to the folder: they are saved in its `.frename` file
+and travel with the footage. They go with every AI request in that folder: batch runs, the buttons in
+the comment box, Suggest tags, and describing a marker. While the folder has notes, **Notes on**
+shows next to those buttons, with the notes as its tooltip, so it is never a surprise why the AI said
+"Eugene". Empty notes send nothing extra. **Extra line for this run** adds one line to the next run
+only and is not saved ("this clip: the woman in red is Ana"). The notes are at most 2,000 characters,
+add to the price the panel shows, and are sent to the AI company with the frames; names come only
+from your notes, frename does not recognise faces. A tag you ask for that the folder does not have
+comes back as an idea, never added; a thing you ask to mark can become an AI marker. Clips already
+described are skipped unless you tick Redo, so after changing the notes tick Redo to describe them
+again.
+
 The tag button before them (`Ctrl+F6`) asks for tag suggestions for the open clip. It sends the same
 request as the sparkles button, with the folder's tags, whatever Settings → Describe with AI says
 about suggesting tags, so it costs the same as a description. A clip that has no suggestions yet is

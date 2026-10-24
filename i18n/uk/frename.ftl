@@ -896,3 +896,14 @@ markers-export = Експортувати…
 markers-export-tip = Зберегти позначки в текстовий файл
 markers-exported = Позначки збережено в { $name }
 markers-not-exported = Позначки не збережено: не вдалося записати файл
+
+batch-option-notes = Нотатки для ШІ
+batch-ai-notes-info = Ваші нотатки про матеріал у цій теці. Вони надсилаються з кожним запитом до ШІ тут: описи, підказки тегів та описи позначок. Зберігаються у файлі .frename теки.
+batch-ai-notes-placeholder = наприклад: Чоловік, що з’являється найчастіше, — Євген. Позначай рекламні щити. Пропонуй тег чай, коли бачиш чай.
+batch-ai-notes-hint = Надсилаються до { $provider } разом із кадрами. Імена беруться лише з цих нотаток; frename не розпізнає обличчя.
+batch-ai-notes-too-long = У нотатках { $chars } симв., ліміт — { $max }. Скоротіть їх, щоб запустити.
+batch-ai-notes-too-long-reason = Нотатки для ШІ задовгі
+batch-option-notes-once = Додатковий рядок для цього запуску
+batch-ai-notes-once-placeholder = наприклад: У цьому кліпі жінка в червоному — Ана
+file-workspace-ai-notes-on = Нотатки ввімкнено
+file-workspace-ai-notes-tip = Нотатки для ШІ йдуть з кожним запитом до ШІ в цій теці: { $notes }

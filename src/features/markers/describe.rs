@@ -46,16 +46,17 @@ pub fn needs_confirmation(count: usize) -> bool {
 /// moment request sends (its frames are counted the way `model`'s provider bills them).
 /// Nearby subtitles are not counted: they add a few lines at most. The answer is clipscribe's
 /// typical answer for a whole clip (thinking included), longer than a name and a sentence or
-/// two: the price runs high, an upper-ish estimate.
-pub fn moment_usage(model: Model) -> clipscribe::AiUsage {
+/// two: the price runs high, an upper-ish estimate. `notes_bytes` is the length of the folder's
+/// notes for the AI, which ride along in every request.
+pub fn moment_usage(model: Model, notes_bytes: usize) -> clipscribe::AiUsage {
     debug_assert_eq!(describe::frame_count(MOMENT_CLIP_S) as u64, MOMENT_FRAMES);
-    describe::estimate_usage(model, MOMENT_CLIP_S, 0)
+    describe::estimate_usage(model, MOMENT_CLIP_S, notes_bytes)
 }
 
 /// What one marker request is expected to cost with `model`, in US dollars; `None` when the
 /// model has no usable price (nothing is better than a wrong number).
-pub fn moment_price_usd(model: Model) -> Option<f64> {
-    let usd = model.cost_usd(moment_usage(model));
+pub fn moment_price_usd(model: Model, notes_bytes: usize) -> Option<f64> {
+    let usd = model.cost_usd(moment_usage(model, notes_bytes));
     (usd.is_finite() && usd > 0.0).then_some(usd)
 }
 
@@ -70,7 +71,8 @@ pub fn moment_s(marker: &Marker) -> f64 {
     (marker.start_ms + marker.duration_ms / 2) as f64 / 1000.0
 }
 
-/// Name and describe the moment at `at_s` of the clip at `path`. Blocking. `on_released` is
+/// Name and describe the moment at `at_s` of the clip at `path`, with the folder's `notes` for
+/// the AI. Blocking. `on_released` is
 /// called once the frames are read and the clip is let go of, before the request is sent (never,
 /// when the request ends before that).
 pub fn describe_moment(
@@ -78,13 +80,18 @@ pub fn describe_moment(
     at_s: f64,
     model: Model,
     language: SummaryLanguage,
+    notes: Option<&str>,
     cancel: &AtomicBool,
     mut on_released: impl FnMut(),
 ) -> MomentOutcome {
     // One moment: clipscribe's `describe_moment` does not use the moments mode.
-    let Some(request) =
-        describe_ai::Request::for_clip(path, model, language, describe::MomentsMode::default())
-    else {
+    let Some(request) = describe_ai::Request::for_clip(
+        path,
+        model,
+        language,
+        describe::MomentsMode::default(),
+        notes,
+    ) else {
         return MomentOutcome::NoKey;
     };
     match describe::describe_moment_notifying(
@@ -158,7 +165,7 @@ mod tests {
     fn a_marker_request_is_priced_by_three_frames_and_the_models_prices() {
         let (w, h) = describe::frame_size(1920, 1080);
         for model in clipscribe::MODELS {
-            let usage = moment_usage(model);
+            let usage = moment_usage(model, 0);
             let frames = 3 * describe::frame_tokens(w, h);
             assert!(
                 usage.input_tokens > frames,
@@ -170,7 +177,7 @@ mod tests {
             assert_eq!(describe::frame_count(5.0), 3);
             let clip = describe::estimate_usage(model, 5.0, 0);
             assert_eq!(usage.input_tokens, clip.input_tokens, "{}", model.id);
-            let price = moment_price_usd(model).expect("every model is priced");
+            let price = moment_price_usd(model, 0).expect("every model is priced");
             assert!(price > 0.0 && price < 1.0, "{}: {price}", model.id);
         }
     }
@@ -178,13 +185,13 @@ mod tests {
     #[test]
     fn a_haiku_marker_request_costs_about_four_tenths_of_a_cent() {
         let haiku = Model::from_id("claude-haiku-4-5");
-        let usage = moment_usage(haiku);
+        let usage = moment_usage(haiku, 0);
         // 3 frames of 19 x 11 tokens, and 600 tokens of instructions; a typical 600-token answer.
         assert_eq!(
             (usage.input_tokens, usage.output_tokens),
             (3 * 209 + 600, 600)
         );
-        let price = moment_price_usd(haiku).expect("priced");
+        let price = moment_price_usd(haiku, 0).expect("priced");
         assert!((price - 0.004227).abs() < 1e-9, "{price}");
     }
 
@@ -193,8 +200,8 @@ mod tests {
         let mut model = clipscribe::MODELS[0];
         model.input_usd_per_mtok = 0.0;
         model.output_usd_per_mtok = 0.0;
-        assert_eq!(moment_price_usd(model), None);
+        assert_eq!(moment_price_usd(model, 0), None);
         model.input_usd_per_mtok = f64::NAN;
-        assert_eq!(moment_price_usd(model), None);
+        assert_eq!(moment_price_usd(model, 0), None);
     }
 }

@@ -1,0 +1,19 @@
+# PR screenshots for #310: the folder has notes for the AI, so the Describe with AI panel shows
+# them in its editor (`--batch --ai`), and the open clip's comment box shows the "Notes on" mark
+# beside the AI buttons (without `--batch`). Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.night.city.MVI_0410.mp4"
+seek = 10.0
+window = [1440, 720]
+panels = [640, 360]
+ai_notes = """The man who appears most often, a white man, is Eugene; call him Eugene.
+Mark advertising billboards separately.
+Suggest the tag tea wherever you see tea."""
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.drone.landscape.MVI_0404.mp4"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.MVI_0410.mp4"

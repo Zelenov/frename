@@ -822,3 +822,14 @@ markers-export = Export…
 markers-export-tip = Save the markers as a text file
 markers-exported = Markers saved to { $name }
 markers-not-exported = Markers not saved: the file could not be written
+
+batch-option-notes = Notes for the AI
+batch-ai-notes-info = Your own notes about this folder's footage, sent with every AI request here: descriptions, tag suggestions and marker descriptions. Saved in the folder's .frename file.
+batch-ai-notes-placeholder = e.g. The man who appears most often is Eugene. Mark advertising billboards. Suggest the tag tea wherever you see tea.
+batch-ai-notes-hint = Sent to { $provider } with the frames. Names come only from these notes; frename does not recognise faces.
+batch-ai-notes-too-long = The notes are { $chars } characters; the limit is { $max }. Shorten them to run.
+batch-ai-notes-too-long-reason = The notes for the AI are too long
+batch-option-notes-once = Extra line for this run
+batch-ai-notes-once-placeholder = e.g. This clip: the woman in red is Ana
+file-workspace-ai-notes-on = Notes on
+file-workspace-ai-notes-tip = Notes for the AI go with every AI request in this folder: { $notes }

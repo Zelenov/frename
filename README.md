@@ -33,7 +33,8 @@ frename is free and open source (MIT license).
   OpenAI or Google API key (Claude, ChatGPT or Gemini), each with a Get a key button in Settings;
   Haiku costs about $10 per 1,000 one-minute clips. One
   button in the corner of the comment box describes the clip you have open, with no batch panel, and
-  waits its turn behind a running job; press it again while it waits to take it back.
+  waits its turn behind a running job; press it again while it waits to take it back. Notes for
+  the AI, kept per folder, tell it what only you know: who is who, what to mark, which tags to suggest.
 - **Prepare a whole folder in one run.** Prepare clips makes the subtitles, then the description (with its markers, comment and tag
   suggestions), of every clip you check, under a spending cap you set, skips what is already done so a stopped
   run is resumed by running it again, and then groups clips that look like the same shot.
@@ -160,7 +161,7 @@ Settings.
   them, so for those frename keeps the comment and the in and out points in the text file, and
   markers are not available.
 - frename sends your footage nowhere unless you ask. Describe with AI sends frames and
-  subtitles to Anthropic, OpenAI or Google, depending on the model you chose, and Generate subtitles sends the audio to Soniox, both with your own API
+  subtitles to Anthropic, OpenAI or Google, depending on the model you chose (with your notes for the AI, if the folder has any), and Generate subtitles sends the audio to Soniox, both with your own API
   key. Your keys are kept in the system's password store. On Windows that is Credential Manager.
 - On Windows, frename checks GitHub once a day for a new version. You can turn that off in
   Settings, and nothing is downloaded until you click **Update and restart**. Settings → Updates

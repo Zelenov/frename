@@ -860,3 +860,14 @@ markers-export = Exportieren…
 markers-export-tip = Die Marker als Textdatei speichern
 markers-exported = Marker in { $name } gespeichert
 markers-not-exported = Marker nicht gespeichert: Die Datei konnte nicht geschrieben werden
+
+batch-option-notes = Notizen für die KI
+batch-ai-notes-info = Ihre eigenen Notizen zum Material dieses Ordners. Sie gehen mit jeder KI-Anfrage hier mit: Beschreibungen, Tag-Vorschläge und Marker-Beschreibungen. Gespeichert in der .frename-Datei des Ordners.
+batch-ai-notes-placeholder = z. B. Der Mann, der am häufigsten vorkommt, ist Eugen. Markiere Werbetafeln. Schlage den Tag Tee vor, wo Tee zu sehen ist.
+batch-ai-notes-hint = Wird zusammen mit den Bildern an { $provider } gesendet. Namen stammen nur aus diesen Notizen; frename erkennt keine Gesichter.
+batch-ai-notes-too-long = Die Notizen haben { $chars } Zeichen, erlaubt sind { $max }. Kürzen Sie sie, um zu starten.
+batch-ai-notes-too-long-reason = Die Notizen für die KI sind zu lang
+batch-option-notes-once = Zusätzliche Zeile für diesen Lauf
+batch-ai-notes-once-placeholder = z. B. In diesem Clip: Die Frau in Rot ist Ana
+file-workspace-ai-notes-on = Notizen an
+file-workspace-ai-notes-tip = Die Notizen für die KI gehen mit jeder KI-Anfrage in diesem Ordner mit: { $notes }

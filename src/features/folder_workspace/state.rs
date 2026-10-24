@@ -57,6 +57,9 @@ mod solo;
 /// How many actions undo/redo keeps. Reset per folder, since tags are per folder.
 const HISTORY_DEPTH: usize = 50;
 
+/// How long typing in the notes for the AI must pause before they are written to the folder.
+const AI_NOTES_SAVE_DELAY: std::time::Duration = std::time::Duration::from_millis(700);
+
 /// Concrete history type for this workspace: Directory uses LoggingAppStateStore<AppDatabase>,
 /// TagList uses the tag store of the open folder.
 type WorkspaceHistory = History<LoggingAppStateStore<AppDatabase>, FolderTagStore>;
@@ -695,6 +698,10 @@ impl FolderWorkspace {
                 self.file_workspace.set_comment_focused(focused);
                 Task::none()
             }
+            Message::SaveAiNotes { folder, notes } => {
+                FolderTagStore::set_ai_notes(&folder, &notes);
+                Task::none()
+            }
             Message::CommentAction(action) => {
                 // Anything done in the box (a click, typing) means it has the keys.
                 self.file_workspace.set_comment_focused(true);
@@ -1064,6 +1071,9 @@ impl FolderWorkspace {
             .expect("just set")
             .path()
             .to_path_buf();
+        // The notes for the AI belong to the folder, like its tags (#310).
+        self.batch
+            .set_ai_notes(&FolderTagStore::get_ai_notes(&folder));
         // Tags belong to the folder, so the workspace starts over on a new one. The history goes
         // with them: undoing "create tag" from the previous folder would delete it from this one.
         self.file_workspace = FileWorkspace::new(FolderTagStore::for_folder(&folder));
@@ -1519,9 +1529,34 @@ impl FolderWorkspace {
         })
     }
 
+    /// Write the folder's notes for the AI to its `.frename` once typing has paused for a
+    /// moment: a keystroke does not rewrite a file on a slow drive. The writes come in the order
+    /// of the edits, so the last text wins.
+    fn save_ai_notes_later(&self) -> Task<Message> {
+        let Some(directory) = self.directory.as_ref() else {
+            return Task::none();
+        };
+        let folder = directory.path().to_path_buf();
+        let notes = self.batch.actions().ai_notes();
+        Task::perform(
+            async {
+                tokio::time::sleep(AI_NOTES_SAVE_DELAY).await;
+            },
+            move |()| Message::SaveAiNotes { folder, notes },
+        )
+    }
+
     fn handle_batch(&mut self, msg: batch::Message) -> Task<Message> {
         if let batch::Message::Run = msg {
             return self.start_batch();
+        }
+        // Typing in the folder's notes for the AI: written once the typing pauses (#310).
+        if let batch::Message::Action(batch::ActionMessage::DescribeAi(
+            batch::describe_ai::Message::NotesAction(iced::widget::text_editor::Action::Edit(_)),
+        )) = &msg
+        {
+            let handled = self.handle_batch_many([msg]);
+            return Task::batch([handled, self.save_ai_notes_later()]);
         }
         if let batch::Message::Cancel = msg {
             self.cancel_solo();
@@ -1706,8 +1741,13 @@ impl FolderWorkspace {
             return Task::none();
         }
         self.share_folder_tags();
+        let one_off_used = self.batch.action() == batch::Action::DescribeAi;
         if !self.batch.start(files) {
             return Task::none();
+        }
+        // The line for one run is spent once the run has it.
+        if one_off_used {
+            self.batch.clear_ai_one_off();
         }
         let action = self.batch.action();
         self.batch.forget_prepare_groups();
@@ -8555,6 +8595,52 @@ mod tests {
         let _ = workspace.flush_open_file();
         let _ = workspace.on_media_unloaded();
         assert_eq!(journal_files(&test_dir), 0);
+    }
+
+    /// #310: the folder's notes for the AI come from its `.frename` when it opens, typing writes
+    /// them back, and the next folder starts with its own.
+    #[test]
+    fn the_notes_for_the_ai_follow_the_folder_and_typing_saves_them() {
+        use crate::features::batch::describe_ai::Message as AiMessage;
+        use iced::widget::text_editor::{Action, Edit};
+        let test_dir = TestDirectory::new(1);
+        FolderTagStore::set_ai_notes(test_dir.path(), "The man is Eugene.");
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        assert_eq!(workspace.ai_notes(), "The man is Eugene.");
+
+        // Typing changes the notes at once; the file is written when the delayed message comes.
+        let _ = workspace.update(Message::Batch(batch::Message::Action(
+            batch::ActionMessage::DescribeAi(AiMessage::NotesAction(Action::Edit(Edit::Paste(
+                std::sync::Arc::new("Mark the moon.\n".to_string()),
+            )))),
+        )));
+        assert_eq!(workspace.ai_notes(), "Mark the moon.\nThe man is Eugene.");
+        assert_eq!(
+            FolderTagStore::get_ai_notes(test_dir.path()),
+            "The man is Eugene."
+        );
+        let _ = workspace.update(Message::SaveAiNotes {
+            folder: test_dir.path().to_path_buf(),
+            notes: workspace.ai_notes(),
+        });
+        assert_eq!(
+            FolderTagStore::get_ai_notes(test_dir.path()),
+            "Mark the moon.\nThe man is Eugene."
+        );
+
+        // Another folder has its own notes (none here).
+        let other = TestDirectory::new(1);
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: other.directory(),
+            target_file: Some(other.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        assert_eq!(workspace.ai_notes(), "");
     }
 
     #[test]

@@ -203,6 +203,11 @@ impl FolderWorkspace {
         ClipAction::Idle
     }
 
+    /// The folder's notes for the AI (#310), for the mark beside the AI buttons.
+    pub fn ai_notes(&self) -> String {
+        self.batch.actions().ai_notes()
+    }
+
     /// Where the open clip's paid actions stand, for the buttons of the comment's corner.
     pub fn clip_actions(&self) -> ClipActions {
         let Some(id) = self.file_workspace.file().map(|f| f.id()) else {

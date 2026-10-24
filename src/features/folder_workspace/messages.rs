@@ -141,6 +141,10 @@ pub enum Message {
     SetSegmentStart,
     /// Set segment end marker at the current video position (] key).
     SetSegmentEnd,
+    /// The notes for the AI typed a moment ago are written to the folder's `.frename` (#310).
+    /// Carries the folder and the text as they were when typed, so a folder change on the way
+    /// loses nothing.
+    SaveAiNotes { folder: PathBuf, notes: String },
     /// User interacted with the multiline comment editor.
     CommentAction(text_editor::Action),
     /// A click or a focus key somewhere: ask whether the comment box has the keys now.

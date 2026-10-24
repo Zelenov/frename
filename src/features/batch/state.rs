@@ -651,6 +651,16 @@ impl BatchState {
         self.action
     }
 
+    /// The notes for the AI of the folder just opened, from its `.frename` (#310).
+    pub fn set_ai_notes(&mut self, notes: &str) {
+        self.actions.describe_ai_mut().set_folder_notes(notes);
+    }
+
+    /// A run took the one-off line of "Describe with AI": it is spent.
+    pub fn clear_ai_one_off(&mut self) {
+        self.actions.describe_ai_mut().clear_one_off();
+    }
+
     /// The options of every action, for the selected action's panel.
     pub fn actions(&self) -> &Actions {
         &self.actions

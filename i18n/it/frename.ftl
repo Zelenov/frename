@@ -883,3 +883,14 @@ markers-export = Esportare…
 markers-export-tip = Salvare i marcatori in un file di testo
 markers-exported = Marcatori salvati in { $name }
 markers-not-exported = Marcatori non salvati: impossibile scrivere il file
+
+batch-option-notes = Note per l’IA
+batch-ai-notes-info = Le tue note sul girato di questa cartella, inviate con ogni richiesta all’IA qui: descrizioni, suggerimenti di tag e descrizioni dei marcatori. Salvate nel file .frename della cartella.
+batch-ai-notes-placeholder = es. L’uomo che compare più spesso è Eugenio. Segna i cartelloni pubblicitari. Suggerisci il tag tè dove vedi del tè.
+batch-ai-notes-hint = Inviate a { $provider } insieme ai fotogrammi. I nomi vengono solo da queste note; frename non riconosce i volti.
+batch-ai-notes-too-long = Le note sono di { $chars } caratteri; il limite è { $max }. Accorciale per avviare.
+batch-ai-notes-too-long-reason = Le note per l’IA sono troppo lunghe
+batch-option-notes-once = Riga in più per questa esecuzione
+batch-ai-notes-once-placeholder = es. In questa clip: la donna in rosso è Ana
+file-workspace-ai-notes-on = Note attive
+file-workspace-ai-notes-tip = Le note per l’IA accompagnano ogni richiesta all’IA in questa cartella: { $notes }
