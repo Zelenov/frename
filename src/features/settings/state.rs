@@ -187,10 +187,16 @@ impl SettingsState {
     pub fn show_page(&mut self, page: Page) -> Task<Message> {
         self.page = page;
         self.focus = None;
-        iced::widget::operation::snap_to(
+        let snap = iced::widget::operation::snap_to(
             iced::widget::Id::new(SETTINGS_SCROLLABLE_ID),
             iced::widget::scrollable::RelativeOffset::START,
-        )
+        );
+        // Seeing the Updates page is seeing what is new in the version just installed.
+        if page == Page::Updates {
+            let seen = self.updates.update(updates::Message::SeeWhatsNew);
+            return Task::batch([snap, seen.map(Message::Updates)]);
+        }
+        snap
     }
 
     /// Esc: cancel a pending key removal or replacement on the page shown, as its Keep or Cancel
@@ -345,6 +351,11 @@ impl SettingsState {
                 .map(|c| (c.clone(), c.clone()))
                 .collect(),
         }
+    }
+
+    /// A demo that shows a found update: counts as an installed package.
+    pub fn stage_installed(&mut self) {
+        self.updates.stage_installed();
     }
 
     /// The Updates section.

@@ -240,3 +240,9 @@ CREATE TABLE IF NOT EXISTS subtitle_choice (
 pub const M25_TIMECODE_STYLE: &str = "
 ALTER TABLE app_settings ADD COLUMN timecode_style TEXT NOT NULL DEFAULT 'default';
 ";
+
+/// Migration 26: the version whose release notes the editor has been offered (#252), so the first
+/// start of a newer version can say "What's new". Empty until the first start that records it.
+pub const M26_SEEN_VERSION: &str = "
+ALTER TABLE update_check ADD COLUMN seen_version TEXT NOT NULL DEFAULT '';
+";

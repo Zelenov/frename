@@ -451,13 +451,14 @@ impl AppStateStore for AppDatabase {
         let conn = self.conn().ok()?;
         let conn = lock_connection(&conn);
         conn.query_row(
-            "SELECT check_on_start, last_check, newest_version FROM update_check WHERE id = 1",
+            "SELECT check_on_start, last_check, newest_version, seen_version FROM update_check WHERE id = 1",
             [],
             |row| {
                 Ok(UpdateCheckState {
                     check_on_start: row.get::<_, i64>(0)? != 0,
                     last_check: u64::try_from(row.get::<_, i64>(1)?).unwrap_or(0),
                     newest_version: row.get(2)?,
+                    seen_version: row.get(3)?,
                 })
             },
         )
@@ -468,16 +469,18 @@ impl AppStateStore for AppDatabase {
         if let Ok(conn) = self.conn() {
             let conn = lock_connection(&conn);
             let _ = conn.execute(
-                "INSERT INTO update_check (id, check_on_start, last_check, newest_version)
-                 VALUES (1, ?1, ?2, ?3)
+                "INSERT INTO update_check (id, check_on_start, last_check, newest_version, seen_version)
+                 VALUES (1, ?1, ?2, ?3, ?4)
                  ON CONFLICT(id) DO UPDATE SET
                      check_on_start = excluded.check_on_start,
                      last_check = excluded.last_check,
-                     newest_version = excluded.newest_version",
+                     newest_version = excluded.newest_version,
+                     seen_version = excluded.seen_version",
                 rusqlite::params![
                     state.check_on_start,
                     i64::try_from(state.last_check).unwrap_or(i64::MAX),
                     state.newest_version,
+                    state.seen_version,
                 ],
             );
         }
@@ -779,6 +782,7 @@ mod tests {
             check_on_start: false,
             last_check: 1_790_000_000,
             newest_version: "0.68.0".to_string(),
+            seen_version: "0.67.0".to_string(),
         };
         db.set_update_check(state.clone());
         assert_eq!(db.get_update_check(), Some(state));

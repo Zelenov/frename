@@ -10,8 +10,14 @@ use frename_core::{AppDatabase, AppStateStore, UpdateCheckState};
 use iced::futures::SinkExt;
 use iced::Task;
 
+use semver::Version;
+
+use super::notes::{self, VersionNotes};
 use super::{source, Message, Release};
 use crate::package::{self, short_version};
+
+/// Versions of release notes the page shows before **Show more**, and each press of it adds.
+const NOTES_PAGE: usize = 10;
 
 /// Seconds between background checks: GitHub allows 60 unauthenticated requests an hour.
 const CHECK_INTERVAL_SECS: u64 = 24 * 60 * 60;
@@ -86,6 +92,31 @@ fn is_download_build() -> bool {
     cfg!(target_os = "macos") || frename_core::is_appimage()
 }
 
+/// What the release notes block of the Updates page is about.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Heading {
+    /// Every version, newest first (**Release notes**).
+    History,
+    /// What changed between the installed version and this newer one (`0.68`).
+    Update(String),
+    /// What is new in the version just installed (`0.68`).
+    WhatsNew(String),
+}
+
+/// The release notes the Updates page shows now.
+#[derive(Debug)]
+pub struct Shown<'a> {
+    pub heading: Heading,
+    /// Newest first; at most as many as asked for.
+    pub versions: Vec<&'a VersionNotes>,
+    /// Whether older versions wait behind **Show more**.
+    pub more: bool,
+    /// The notes of a newer version are being fetched.
+    pub loading: bool,
+    /// They could not be fetched: the bundled ones are all there is.
+    pub failed: bool,
+}
+
 /// What `apply` asks `update` to run.
 #[derive(Debug)]
 enum Effect {
@@ -111,11 +142,26 @@ pub struct UpdatesState {
     status: Status,
     /// The newer release the last check found, needed to download it.
     found: Option<Release>,
+    /// The release notes known: the ones bundled in this build, and the newest release's.
+    notes: Vec<VersionNotes>,
+    /// The version whose `version.md` is being fetched.
+    fetching: Option<String>,
+    /// Fetching the notes failed; a new check tries again.
+    fetch_failed: bool,
+    /// **Release notes** is on: the whole history instead of the notes of the update.
+    history_open: bool,
+    /// How many versions the notes show.
+    notes_limit: usize,
+    /// The version this one replaced, when this start is the first one after an update.
+    updated_from: Option<Version>,
+    /// The notes of the update were on screen.
+    update_seen: bool,
 }
 
 impl Default for UpdatesState {
     fn default() -> Self {
         let package = package::current();
+        let saved = AppDatabase::new().get_update_check().unwrap_or_default();
         let mut state = Self::new(
             package.is_some(),
             package::STORE_BUILD,
@@ -123,9 +169,13 @@ impl Default for UpdatesState {
                 || option_env!("APP_VERSION").unwrap_or("dev").to_string(),
                 |p| p.version.clone(),
             ),
-            AppDatabase::new().get_update_check().unwrap_or_default(),
+            saved.clone(),
         );
         state.download_build = is_download_build();
+        // The first start that knows its version records it, so the next update can tell.
+        if state.saved != saved {
+            AppDatabase::new().set_update_check(state.saved.clone());
+        }
         state
     }
 }
@@ -139,6 +189,18 @@ impl UpdatesState {
         current_version: String,
         saved: UpdateCheckState,
     ) -> Self {
+        let mut saved = saved;
+        let running = Version::parse(&current_version).ok();
+        let mut updated_from = None;
+        if let Some(running) = &running {
+            match Version::parse(&saved.seen_version) {
+                Ok(seen) if seen < *running => updated_from = Some(seen),
+                Ok(seen) if seen > *running => saved.seen_version = current_version.clone(),
+                Ok(_) => {}
+                // Never recorded: nothing to say about a first start.
+                Err(_) => saved.seen_version = current_version.clone(),
+            }
+        }
         Self {
             installed: installed && !from_store,
             from_store,
@@ -147,6 +209,13 @@ impl UpdatesState {
             saved,
             status: Status::Idle,
             found: None,
+            notes: notes::parse(notes::BUNDLED),
+            fetching: None,
+            fetch_failed: false,
+            history_open: false,
+            notes_limit: NOTES_PAGE,
+            updated_from,
+            update_seen: false,
         }
     }
 
@@ -156,7 +225,8 @@ impl UpdatesState {
         if self.saved != saved {
             AppDatabase::new().set_update_check(self.saved.clone());
         }
-        match effect {
+        let fetch = self.notes_request().map(fetch_notes);
+        let task = match effect {
             Effect::None => Task::none(),
             Effect::Check { silent } => Task::perform(
                 async {
@@ -172,6 +242,10 @@ impl UpdatesState {
                 open_releases_page();
                 Task::none()
             }
+        };
+        match fetch {
+            Some(fetch) => Task::batch([task, fetch]),
+            None => task,
         }
     }
 
@@ -217,15 +291,78 @@ impl UpdatesState {
                 self.saved.check_on_start = on;
                 Effect::None
             }
+            Message::ToggleHistory => {
+                self.history_open = !self.history_open;
+                self.notes_limit = NOTES_PAGE;
+                self.see_whats_new();
+                Effect::None
+            }
+            Message::ShowMore => {
+                self.notes_limit += NOTES_PAGE;
+                Effect::None
+            }
+            Message::NotesFetched(result) => {
+                self.fetching = None;
+                match result {
+                    Ok(markdown) => {
+                        let fetched = notes::parse(&markdown);
+                        // A file without the block of the release is not asked for again
+                        // until the next check.
+                        let target = Version::parse(&self.saved.newest_version).ok();
+                        if target.is_some_and(|t| !fetched.iter().any(|n| n.version == t)) {
+                            self.fetch_failed = true;
+                        }
+                        self.notes = notes::merge(std::mem::take(&mut self.notes), fetched);
+                    }
+                    Err(reason) => {
+                        log::warn!("release notes not fetched: {reason}");
+                        self.fetch_failed = true;
+                    }
+                }
+                Effect::None
+            }
+            Message::SeeWhatsNew => {
+                self.see_whats_new();
+                Effect::None
+            }
             // Handled by the app.
             Message::ApplyAndRestart(_) => Effect::None,
         }
+    }
+
+    /// A demo that shows a found update counts as an installed package.
+    pub fn stage_installed(&mut self) {
+        self.installed = true;
+    }
+
+    /// The notes of the update just installed are on screen: it is not new any more.
+    fn see_whats_new(&mut self) {
+        if self.updated_from.is_some() && !self.update_seen && self.available_version().is_none() {
+            self.update_seen = true;
+            self.saved.seen_version = self.current_version.clone();
+        }
+    }
+
+    /// The version whose `version.md` is to be fetched now: a newer release is known and its
+    /// notes are not. Marks the fetch as running.
+    fn notes_request(&mut self) -> Option<String> {
+        if self.fetching.is_some() || self.fetch_failed {
+            return None;
+        }
+        let target = Version::parse(&self.saved.newest_version).ok()?;
+        self.available_version()?;
+        if self.notes.iter().any(|n| n.version == target) {
+            return None;
+        }
+        self.fetching = Some(self.saved.newest_version.clone());
+        self.fetching.clone()
     }
 
     fn start_check(&mut self, silent: bool, then_update: bool) -> Effect {
         if !self.installed || self.is_busy() {
             return Effect::None;
         }
+        self.fetch_failed = false;
         self.status = Status::Checking {
             silent,
             then_update,
@@ -348,22 +485,73 @@ impl UpdatesState {
     /// The controls of the Version row that take a click now, in page order: the ones Tab
     /// reaches in Settings (#167). `batch_running` holds **Update and restart** back.
     pub fn controls(&self, batch_running: bool) -> Vec<Control> {
-        match self.section() {
-            Section::Store => return Vec::new(),
-            Section::ReleasesPage => return vec![Control::OpenReleases],
-            Section::Updater => {}
+        let mut controls = match self.section() {
+            Section::Store => Vec::new(),
+            Section::ReleasesPage => vec![Control::OpenReleases],
+            Section::Updater => [
+                (Control::Check, self.check_enabled()),
+                (
+                    Control::UpdateAndRestart,
+                    self.available_version().is_some() && self.update_enabled(batch_running),
+                ),
+                (Control::CheckOnStart, self.installed),
+            ]
+            .into_iter()
+            .filter_map(|(control, enabled)| enabled.then_some(control))
+            .collect(),
+        };
+        controls.push(Control::ReleaseNotes);
+        if self.section() != Section::ReleasesPage {
+            controls.push(Control::AllReleases);
         }
-        [
-            (Control::Check, self.check_enabled()),
+        if self.shown().is_some_and(|shown| shown.more) {
+            controls.push(Control::ShowMore);
+        }
+        controls
+    }
+
+    /// Whether this start is the first one since an update, and the notes of it were not on
+    /// screen yet: the version, `0.68`, for the quiet note on the settings button.
+    pub fn whats_new(&self) -> Option<String> {
+        (self.updated_from.is_some() && !self.update_seen).then(|| self.current_version())
+    }
+
+    /// The release notes the Updates page shows: the history when asked for, else what changed up
+    /// to a newer version that is ready, else what is new in the version just installed; `None`
+    /// when there is nothing to say.
+    pub fn shown(&self) -> Option<Shown<'_>> {
+        let current = Version::parse(&self.current_version).ok();
+        let target = self
+            .available_version()
+            .and_then(|_| Version::parse(&self.saved.newest_version).ok());
+        let (heading, versions): (Heading, Vec<&VersionNotes>) = if self.history_open {
+            (Heading::History, self.notes.iter().collect())
+        } else if let (Some(current), Some(target)) = (&current, &target) {
             (
-                Control::UpdateAndRestart,
-                self.available_version().is_some() && self.update_enabled(batch_running),
-            ),
-            (Control::CheckOnStart, self.installed),
-        ]
-        .into_iter()
-        .filter_map(|(control, enabled)| enabled.then_some(control))
-        .collect()
+                Heading::Update(short_version(&self.saved.newest_version)),
+                notes::between(&self.notes, current, target),
+            )
+        } else if let (Some(from), Some(current)) = (&self.updated_from, &current) {
+            (
+                Heading::WhatsNew(self.current_version()),
+                notes::between(&self.notes, from, current),
+            )
+        } else {
+            return None;
+        };
+        let more = versions.len() > self.notes_limit;
+        Some(Shown {
+            heading,
+            versions: versions.into_iter().take(self.notes_limit).collect(),
+            more,
+            loading: target.is_some() && self.fetching.is_some() && !self.history_open,
+            failed: target.is_some() && self.fetch_failed && !self.history_open,
+        })
+    }
+
+    /// Whether the notes block is the history, for the label of its button.
+    pub fn history_open(&self) -> bool {
+        self.history_open
     }
 
     /// Whether **Check for updates** takes a click: in a package, while nothing runs.
@@ -383,7 +571,9 @@ impl UpdatesState {
             Control::Check => Message::CheckNow,
             Control::UpdateAndRestart => Message::UpdateAndRestart,
             Control::CheckOnStart => Message::SetCheckOnStart(!self.check_on_start()),
-            Control::OpenReleases => Message::OpenReleases,
+            Control::OpenReleases | Control::AllReleases => Message::OpenReleases,
+            Control::ReleaseNotes => Message::ToggleHistory,
+            Control::ShowMore => Message::ShowMore,
         }
     }
 }
@@ -396,6 +586,12 @@ pub enum Control {
     CheckOnStart,
     /// The link to the releases page of a build that is updated by hand.
     OpenReleases,
+    /// The **Release notes** button.
+    ReleaseNotes,
+    /// The link to all releases on GitHub, under the notes.
+    AllReleases,
+    /// **Show more** under the notes.
+    ShowMore,
 }
 
 /// Open the releases page in the browser.
@@ -415,6 +611,18 @@ fn open_releases_page() {
     if let Err(e) = result {
         log::warn!("could not open {}: {e}", source::RELEASES_PAGE);
     }
+}
+
+/// Fetch the `version.md` of the release `version` in the background.
+fn fetch_notes(version: String) -> Task<Message> {
+    Task::perform(
+        async move {
+            tokio::task::spawn_blocking(move || source::fetch_notes(&version))
+                .await
+                .unwrap_or_else(|e| Err(e.to_string()))
+        },
+        Message::NotesFetched,
+    )
 }
 
 /// Download `release`, forwarding Velopack's progress as messages. Velopack reports on a
@@ -473,6 +681,7 @@ mod tests {
                 check_on_start: true,
                 last_check,
                 newest_version: String::new(),
+                seen_version: String::new(),
             },
         )
     }
@@ -487,9 +696,14 @@ mod tests {
                 check_on_start: true,
                 last_check: 0,
                 newest_version: String::new(),
+                seen_version: String::new(),
             },
         );
-        assert!(store.controls(false).is_empty());
+        assert_eq!(
+            store.controls(false),
+            [Control::ReleaseNotes, Control::AllReleases],
+            "only the release notes"
+        );
         assert!(store.shows_import());
         assert!(installed(0).shows_import());
     }
@@ -706,6 +920,7 @@ mod tests {
                 check_on_start: true,
                 last_check: 0,
                 newest_version: "0.68.0".to_string(),
+                seen_version: String::new(),
             },
         );
         assert!(state.is_store_build());
@@ -716,5 +931,209 @@ mod tests {
             Effect::None
         ));
         assert_eq!(state.available_version(), None);
+    }
+
+    const NOTES: &str = "# 0.69\n## Fixed\n- Sixty-nine.\n\n# 0.68\n## Added\n- Sixty-eight.\n\n# 0.67\n## Added\n- Sixty-seven.\n\n# 0.66\n## Added\n- Sixty-six.\n";
+
+    fn labels(state: &UpdatesState) -> Vec<String> {
+        state
+            .shown()
+            .map(|shown| shown.versions.iter().map(|v| v.label()).collect())
+            .unwrap_or_default()
+    }
+
+    /// An installed 0.67 whose last start was `seen`, knowing `NOTES` up to 0.67.
+    fn started_after(seen: &str) -> UpdatesState {
+        let mut state = UpdatesState::new(
+            true,
+            false,
+            "0.67.0".to_string(),
+            UpdateCheckState {
+                seen_version: seen.to_string(),
+                ..UpdateCheckState::default()
+            },
+        );
+        state.notes = notes::parse(NOTES)
+            .into_iter()
+            .filter(|n| n.label() != "0.69" && n.label() != "0.68")
+            .collect();
+        state
+    }
+
+    #[test]
+    fn the_first_start_that_knows_its_version_says_nothing_and_records_it() {
+        let state = started_after("");
+        assert_eq!(state.whats_new(), None);
+        assert!(state.shown().is_none());
+        assert_eq!(state.saved.seen_version, "0.67.0");
+    }
+
+    #[test]
+    fn the_first_start_after_an_update_offers_what_is_new_until_it_is_seen() {
+        let mut state = started_after("0.65.0");
+        assert_eq!(state.whats_new(), Some("0.67".to_string()));
+        assert_eq!(
+            labels(&state),
+            ["0.67", "0.66"],
+            "after the old one, up to the new one"
+        );
+        assert_eq!(
+            state.shown().map(|s| s.heading),
+            Some(Heading::WhatsNew("0.67".to_string()))
+        );
+        assert_eq!(
+            state.saved.seen_version, "0.65.0",
+            "kept until the notes are seen"
+        );
+
+        state.apply(Message::SeeWhatsNew, 10);
+        assert_eq!(state.whats_new(), None, "the dot goes");
+        assert_eq!(state.saved.seen_version, "0.67.0");
+        assert_eq!(
+            labels(&state),
+            ["0.67", "0.66"],
+            "the notes stay on the page"
+        );
+
+        // Another start: nothing new.
+        let again = started_after("0.67.0");
+        assert_eq!(again.whats_new(), None);
+        assert!(again.shown().is_none());
+    }
+
+    #[test]
+    fn a_build_without_a_version_has_no_notes_to_offer() {
+        let state = UpdatesState::new(false, false, "dev".to_string(), UpdateCheckState::default());
+        assert_eq!(state.whats_new(), None);
+        assert!(state.shown().is_none());
+    }
+
+    #[test]
+    fn a_found_update_fetches_the_notes_once_and_shows_every_version_up_to_it() {
+        let mut state = started_after("0.67.0");
+        state.apply(
+            Message::Checked {
+                silent: false,
+                result: Ok(Some(release("0.69.0"))),
+            },
+            10,
+        );
+        assert_eq!(state.notes_request(), Some("0.69.0".to_string()));
+        assert_eq!(state.notes_request(), None, "not twice at once");
+        let shown = state.shown().expect("the update's notes");
+        assert_eq!(shown.heading, Heading::Update("0.69".to_string()));
+        assert!(
+            shown.versions.is_empty() && shown.loading,
+            "while they load"
+        );
+
+        state.apply(Message::NotesFetched(Ok(NOTES.to_string())), 11);
+        assert_eq!(labels(&state), ["0.69", "0.68"], "not the installed one");
+        assert!(!state.shown().expect("shown").loading);
+        assert_eq!(state.notes_request(), None, "they are known now");
+    }
+
+    #[test]
+    fn notes_that_could_not_be_fetched_are_asked_for_again_only_by_a_new_check() {
+        let mut state = started_after("0.67.0");
+        state.apply(
+            Message::Checked {
+                silent: false,
+                result: Ok(Some(release("0.69.0"))),
+            },
+            10,
+        );
+        state.notes_request();
+        state.apply(Message::NotesFetched(Err("no connection".to_string())), 11);
+        let shown = state.shown().expect("shown");
+        assert!(shown.failed && !shown.loading);
+        assert_eq!(state.notes_request(), None);
+        state.apply(Message::CheckNow, 12);
+        assert_eq!(state.notes_request(), Some("0.69.0".to_string()));
+    }
+
+    #[test]
+    fn the_history_is_every_known_version_ten_at_a_time_and_toggles_back() {
+        let mut state = started_after("0.67.0");
+        state.notes = (1..=25)
+            .rev()
+            .map(|minor| notes::parse(&format!("# 0.{minor}\n- v{minor}\n")).remove(0))
+            .collect();
+        assert!(state.shown().is_none());
+
+        state.apply(Message::ToggleHistory, 10);
+        let shown = state.shown().expect("history");
+        assert_eq!(shown.heading, Heading::History);
+        assert_eq!((shown.versions.len(), shown.more), (10, true));
+        assert_eq!(shown.versions[0].label(), "0.25", "newest first");
+        assert!(state.controls(false).contains(&Control::ShowMore));
+
+        state.apply(Message::ShowMore, 11);
+        state.apply(Message::ShowMore, 11);
+        let shown = state.shown().expect("history");
+        assert_eq!((shown.versions.len(), shown.more), (25, false));
+        assert!(!state.controls(false).contains(&Control::ShowMore));
+
+        state.apply(Message::ToggleHistory, 12);
+        assert!(state.shown().is_none(), "back to nothing to say");
+    }
+
+    #[test]
+    fn a_fetched_file_without_the_releases_block_is_not_asked_for_again() {
+        let mut state = started_after("0.67.0");
+        state.apply(
+            Message::Checked {
+                silent: false,
+                result: Ok(Some(release("0.70.0"))),
+            },
+            10,
+        );
+        assert!(state.notes_request().is_some());
+        state.apply(Message::NotesFetched(Ok(NOTES.to_string())), 11);
+        assert_eq!(state.notes_request(), None, "no endless fetching");
+        assert!(state.shown().expect("shown").failed);
+    }
+
+    #[test]
+    fn after_a_downgrade_the_next_update_is_still_offered_its_notes() {
+        let state = started_after("0.80.0");
+        assert_eq!(
+            state.saved.seen_version, "0.67.0",
+            "the running version is recorded"
+        );
+        assert_eq!(state.whats_new(), None);
+    }
+
+    #[test]
+    fn whats_new_waits_while_a_newer_update_is_ready() {
+        let mut state = started_after("0.65.0");
+        state.apply(
+            Message::Checked {
+                silent: false,
+                result: Ok(Some(release("0.69.0"))),
+            },
+            10,
+        );
+        state.apply(Message::SeeWhatsNew, 11);
+        assert_eq!(
+            state.whats_new(),
+            Some("0.67".to_string()),
+            "not shown yet, so not seen"
+        );
+    }
+
+    #[test]
+    fn a_build_updated_by_hand_has_no_second_link_to_the_releases_page() {
+        let mut state = UpdatesState::new(
+            false,
+            false,
+            "0.67.0".to_string(),
+            UpdateCheckState::default(),
+        );
+        state.download_build = true;
+        assert_eq!(
+            state.controls(false),
+            [Control::OpenReleases, Control::ReleaseNotes]
+        );
     }
 }

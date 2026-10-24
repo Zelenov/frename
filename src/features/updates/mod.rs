@@ -3,6 +3,7 @@
 //! Velopack does the checking, downloading and applying (`source`).
 
 mod messages;
+pub mod notes;
 mod source;
 mod state;
 pub mod view;

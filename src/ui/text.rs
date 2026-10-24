@@ -127,6 +127,32 @@ pub fn fit(line: &str, width: f32, char_width: f32) -> Cow<'_, str> {
     Cow::Owned(format!("{}…", kept.trim_end()))
 }
 
+/// How a run of a [`body_runs`] line is drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Run {
+    Plain,
+    Strong,
+    Mono,
+}
+
+/// A line of body text that wraps, made of runs in the body, strong and mono styles: release notes.
+pub fn body_runs<'a, M: 'a>(runs: impl IntoIterator<Item = (Run, String)>) -> Element<'a, M> {
+    let spans: Vec<iced::widget::text::Span<'a, (), Font>> = runs
+        .into_iter()
+        .map(|(run, content)| match run {
+            Run::Plain => span(content),
+            Run::Strong => span(content).font(FONT_STRONG),
+            Run::Mono => span(content).font(FONT_MONO).size(TEXT_MONO),
+        })
+        .collect();
+    rich_text(spans)
+        .size(TEXT_BODY)
+        .line_height(LineHeight::Absolute(Pixels(LINE_BODY)))
+        .font(FONT)
+        .color(TEXT)
+        .into()
+}
+
 /// A caption `line` with the byte `ranges` of it marked (a search's hits): the marked parts in the
 /// accent color on its tint. Cut with "…" to `width` like [`fit`]; a mark that runs past the cut
 /// is cut with it. One line, like every comment line of the list.

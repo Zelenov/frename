@@ -112,7 +112,10 @@ impl Control {
             | Control::Updates(
                 updates::Control::Check
                 | updates::Control::UpdateAndRestart
-                | updates::Control::OpenReleases,
+                | updates::Control::OpenReleases
+                | updates::Control::ReleaseNotes
+                | updates::Control::AllReleases
+                | updates::Control::ShowMore,
             ) => true,
             Control::Key(_, key) => *key != KeyControl::Field,
             _ => false,

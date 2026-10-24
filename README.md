@@ -163,8 +163,9 @@ Settings.
   subtitles to Anthropic, OpenAI or Google, depending on the model you chose, and Generate subtitles sends the audio to Soniox, both with your own API
   key. Your keys are kept in the system's password store. On Windows that is Credential Manager.
 - On Windows, frename checks GitHub once a day for a new version. You can turn that off in
-  Settings, and nothing is downloaded until you click **Update and restart**. The Linux AppImage
-  does not update itself.
+  Settings, and nothing is downloaded until you click **Update and restart**. Settings → Updates
+  lists what changed in each version, before and after you update. The Linux AppImage does not
+  update itself.
 
 ## Install
 

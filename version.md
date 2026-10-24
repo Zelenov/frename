@@ -1,3 +1,7 @@
+# 0.176
+## Added
+- Settings → Updates shows what changed: before updating, every version between yours and the new one; after updating, what is new (the Settings button carries a dot); and **Release notes** for the history of all versions, offline too.
+
 # 0.175
 ## Changed
 - Fullscreen (F5, double-click the picture) now takes the whole monitor: no title bar, frame or taskbar. Leaving it (Esc, F5, double-click) brings the window back.

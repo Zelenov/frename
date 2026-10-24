@@ -111,6 +111,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 25,
         sql: schema::M25_TIMECODE_STYLE,
     },
+    Migration {
+        version: 26,
+        sql: schema::M26_SEEN_VERSION,
+    },
 ];
 
 /// Returns the current schema version, bootstrapping schema_version if needed.
@@ -197,7 +201,7 @@ mod tests {
         let conn = database_at_version_1();
         run(&conn).expect("first run");
         run(&conn).expect("second run");
-        assert_eq!(current_version(&conn).expect("version"), 25);
+        assert_eq!(current_version(&conn).expect("version"), 26);
     }
 
     #[test]
@@ -395,5 +399,27 @@ mod tests {
         assert_eq!(in_out_storage(&conn), "file_name", "precondition");
         run(&conn).expect("migrate");
         assert_eq!(in_out_storage(&conn), "xmp");
+    }
+
+    #[test]
+    fn an_update_check_saved_before_migration_26_has_no_seen_version() {
+        let conn = Connection::open_in_memory().expect("open");
+        run(&conn).expect("migrate");
+        conn.execute("UPDATE schema_version SET version = 25", [])
+            .expect("set version");
+        conn.execute("ALTER TABLE update_check DROP COLUMN seen_version", [])
+            .expect("back to migration 25");
+        conn.execute(
+            "INSERT INTO update_check (id, newest_version) VALUES (1, '0.9.0')",
+            [],
+        )
+        .expect("row");
+        run(&conn).expect("migrate");
+        let seen: String = conn
+            .query_row("SELECT seen_version FROM update_check", [], |row| {
+                row.get(0)
+            })
+            .expect("seen_version");
+        assert_eq!(seen, "");
     }
 }

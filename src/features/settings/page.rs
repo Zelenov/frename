@@ -22,8 +22,9 @@ impl Page {
         Page::Updates,
     ];
 
-    /// The page Settings opens on: the one asked for, else Updates when an update is ready (the
-    /// dot on the settings button leads there); `None` keeps the page shown last.
+    /// The page Settings opens on: the one asked for, else Updates when an update is ready or a
+    /// new version's notes wait (the dot on the settings button leads there); `None` keeps the
+    /// page shown last.
     pub fn to_open(requested: Option<Page>, update_ready: bool) -> Option<Page> {
         requested.or(update_ready.then_some(Page::Updates))
     }

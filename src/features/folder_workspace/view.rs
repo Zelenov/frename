@@ -21,11 +21,13 @@ use crate::widgets::splitter::Splitter;
 use super::{FolderWorkspace, Message};
 
 /// Workspace layout: one big drop panel when no folder is open; otherwise regions and splitters.
-/// `update_available` is the newer frename version found by the update check, if any.
+/// `update_available` is the newer frename version found by the update check, if any;
+/// `whats_new` the version just installed, until its release notes were seen.
 pub fn view(
     state: &FolderWorkspace,
     tag_palette: TagPalette,
     update_available: Option<String>,
+    whats_new: Option<String>,
 ) -> Element<'_, Message> {
     let seg_start = state.file_workspace().segment_start_secs();
     let seg_end = state.file_workspace().segment_end_secs();
@@ -73,6 +75,7 @@ pub fn view(
         batch_running: state.batch().is_running(),
         recent_open: state.recent_folders().is_open(),
         update_available,
+        whats_new,
         width: state.folder_width(),
         more_open: state.toolbar_more_open(),
     };
