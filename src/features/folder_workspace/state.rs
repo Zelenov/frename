@@ -1095,6 +1095,10 @@ impl FolderWorkspace {
         }
         // Notes typed in the folder being left are written before the next one is shown.
         self.flush_ai_notes();
+        let same_folder = self
+            .directory
+            .as_ref()
+            .is_some_and(|previous| previous.path() == directory.path());
         self.directory = Some(directory); // replace previous directory only on success
         self.batch.reset_files();
         self.forget_solo();
@@ -1105,8 +1109,11 @@ impl FolderWorkspace {
             .path()
             .to_path_buf();
         // The notes for the AI belong to the folder, like its tags (#310).
-        self.batch
-            .set_ai_notes(&FolderTagStore::get_ai_notes(&folder));
+        // A reload of the same folder keeps what the editor holds.
+        if !same_folder {
+            self.batch
+                .set_ai_notes(&FolderTagStore::get_ai_notes(&folder));
+        }
         // Tags belong to the folder, so the workspace starts over on a new one. The history goes
         // with them: undoing "create tag" from the previous folder would delete it from this one.
         self.file_workspace = FileWorkspace::new(FolderTagStore::for_folder(&folder));
@@ -1592,6 +1599,10 @@ impl FolderWorkspace {
     fn handle_batch(&mut self, msg: batch::Message) -> Task<Message> {
         if let batch::Message::Run = msg {
             return self.start_batch();
+        }
+        // The panel opening or closing: its notes editor has not got the keys.
+        if let batch::Message::SetActive(_) = msg {
+            self.notes_focused = false;
         }
         // Typing in the folder's notes for the AI: written once the typing pauses (#310).
         if let batch::Message::Action(batch::ActionMessage::DescribeAi(

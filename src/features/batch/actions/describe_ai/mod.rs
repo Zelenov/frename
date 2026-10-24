@@ -290,10 +290,11 @@ impl Options {
 
     /// What a run on `checked` would send, skip and cost.
     fn plan(&self, checked: &[&File]) -> Plan {
-        self.plan_with(checked, self.redo)
+        let notes_bytes = self.instructions().map_or(0, |notes| notes.len());
+        self.plan_with(checked, self.redo, notes_bytes)
     }
 
-    fn plan_with(&self, checked: &[&File], redo: bool) -> Plan {
+    fn plan_with(&self, checked: &[&File], redo: bool, notes_bytes: usize) -> Plan {
         let mut plan = Plan {
             checked_videos: checked
                 .iter()
@@ -303,7 +304,6 @@ impl Options {
         };
         let vocabulary = vocabulary(self.tags_to_suggest());
         // The notes ride along in every request, like subtitles.
-        let notes_bytes = self.instructions().map_or(0, |notes| notes.len());
         for file in checked {
             // The file list only lists videos, so nothing else is ever checked; a file of another
             // kind is left out quietly (it has no length to read, so the estimate would wait
@@ -402,7 +402,15 @@ impl Options {
             Some(KeyState::Unavailable) => return blocked(fl!("batch-ai-key-unavailable")),
             Some(KeyState::Saved) => {}
         }
-        let plan = self.plan_with(checked, redo);
+        // A run of another action (Prepare clips) sends the folder's notes only.
+        let folder_notes = self.folder_notes();
+        if folder_notes.chars().count() > describe::MAX_INSTRUCTIONS_CHARS {
+            return Step::Blocked {
+                note: fl!("batch-ai-notes-too-long-reason"),
+                fix: None,
+            };
+        }
+        let plan = self.plan_with(checked, redo, folder_notes.len());
         if plan.estimating {
             return Step::Wait;
         }
@@ -418,7 +426,7 @@ impl Options {
     /// What a run on `checked` would send and cost, for a page that adds up several steps:
     /// videos, seconds of footage, dollars, seconds it takes. `None` while it is estimated.
     pub fn totals(&self, checked: &[&File]) -> Option<(usize, f64, f64, f64)> {
-        let plan = self.plan_with(checked, false);
+        let plan = self.plan_with(checked, false, self.folder_notes().len());
         (!plan.estimating).then(|| {
             (
                 plan.send.len(),
@@ -1702,5 +1710,33 @@ mod tests {
             Some(describe::MAX_INSTRUCTIONS_CHARS + 1)
         );
         assert!(!run_button(&options, &checked).1);
+    }
+
+    #[test]
+    fn prepare_clips_is_blocked_by_notes_over_the_cap_and_ignores_the_one_off_line() {
+        let files = [file("a.mp4", "")];
+        let checked: Vec<&File> = files.iter().collect();
+        let mut options = Options::default();
+        options.update(Message::Probed(vec![(files[0].id(), probe(Some(10.0)))]));
+        options.update(Message::KeyState(key::ApiKey::Anthropic, KeyState::Saved));
+        assert!(matches!(
+            options.step_with(&checked, false),
+            super::super::Step::Ready(_)
+        ));
+        let plain = options.totals(&checked).expect("estimated").1;
+        options.update(Message::SetOneOff("x".repeat(1500)));
+        assert_eq!(
+            options.totals(&checked).expect("estimated").1,
+            plain,
+            "the line for one run is not in a Prepare clips price"
+        );
+        type_notes(
+            &mut options,
+            &"x".repeat(describe::MAX_INSTRUCTIONS_CHARS + 1),
+        );
+        assert!(matches!(
+            options.step_with(&checked, false),
+            super::super::Step::Blocked { .. }
+        ));
     }
 }
