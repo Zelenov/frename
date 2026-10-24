@@ -362,6 +362,12 @@ pages:
 - **Updates:** **Check for updates**, then **Update and restart** when a newer version is out.
   frename also checks once a day by itself (you can turn that off) and puts a dot on the Settings button
   when an update is ready; it then opens this page. Nothing is downloaded until you click.
+  Under the version, the page lists what changed in every version between yours and the new one.
+  The first start after an update puts the dot on the Settings button again, with "What's new in
+  0.X"; opening Settings shows what changed since the version before. **Release notes** shows the
+  history of all versions, newest first, **Show more** adds older ones, and **All releases on GitHub**
+  opens the full list. The notes are in English and need no connection, except for the versions
+  newer than yours.
 
 **From the keyboard:** `Tab` and `Shift+Tab` move a blue ring through the options and buttons of the
 page (the page list on the left is reached with `Ctrl+Tab`), then **Close**. `Space` checks or picks

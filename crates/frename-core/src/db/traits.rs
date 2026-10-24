@@ -138,6 +138,9 @@ pub struct UpdateCheckState {
     pub last_check: u64,
     /// The newest version the last check found (`0.68.0`); empty when none was found.
     pub newest_version: String,
+    /// The version (`0.68.0`) frename last started as, to tell the first start of a newer one;
+    /// empty before any start recorded it.
+    pub seen_version: String,
 }
 
 impl Default for UpdateCheckState {
@@ -146,6 +149,7 @@ impl Default for UpdateCheckState {
             check_on_start: true,
             last_check: 0,
             newest_version: String::new(),
+            seen_version: String::new(),
         }
     }
 }

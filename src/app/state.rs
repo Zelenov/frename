@@ -1096,8 +1096,14 @@ impl FrenameApp {
         }
         let tag_palette = TagPalette::from_monochrome(self.settings.settings().monochrome_tags);
         let update_available = self.settings.updates().available_version();
-        folder_workspace::view::view(&self.folder_workspace, tag_palette, update_available)
-            .map(Message::FolderWorkspace)
+        let whats_new = self.settings.updates().whats_new();
+        folder_workspace::view::view(
+            &self.folder_workspace,
+            tag_palette,
+            update_available,
+            whats_new,
+        )
+        .map(Message::FolderWorkspace)
     }
 
     /// Tell the subtitle action the settings it uses: the languages and the cue length.
@@ -1145,7 +1151,8 @@ impl FrenameApp {
     /// shows the page it showed last, or Updates when an update is ready (the dot on the
     /// settings button leads there).
     fn open_settings_on(&mut self, page: Option<settings::Page>) -> Task<Message> {
-        let update_ready = self.settings.updates().available_version().is_some();
+        let update_ready = self.settings.updates().available_version().is_some()
+            || self.settings.updates().whats_new().is_some();
         let page = settings::Page::to_open(page, update_ready);
         let show = page.map_or_else(Task::none, |page| {
             self.settings.show_page(page).map(Message::Settings)

@@ -387,6 +387,9 @@ pub struct DemoArgs {
     /// With `--settings`: keys to press in the settings window before the shot, to show the
     /// keyboard focus (`--keys tab,tab,space`; also `shift+tab`, `enter`).
     pub keys: Vec<SettingsKey>,
+    /// Start as the first run after an update from this version (`--updated-from 0.172.0`): the
+    /// release notes since it are offered. Needs a build whose version is known (`APP_VERSION`).
+    pub updated_from: Option<String>,
 }
 
 /// The demo the command line asks for; `None` for a normal start.
@@ -403,6 +406,7 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
     let lang_at = args.iter().position(|a| a == "--lang");
     let settings_at = args.iter().position(|a| a == "--settings");
     let keys_at = args.iter().position(|a| a == "--keys");
+    let updated_at = args.iter().position(|a| a == "--updated-from");
     Some(value("--demo", Some(at)).and_then(|scenario| {
         let out =
             value("--out", out_at).map_err(|_| "--demo needs --out <file.png>".to_string())?;
@@ -438,6 +442,14 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
                 })
                 .collect::<Result<_, _>>()?,
         };
+        let updated_from = match updated_at {
+            None => None,
+            Some(_) => Some(
+                value("--updated-from", updated_at)?
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+        };
         Ok(DemoArgs {
             scenario,
             out,
@@ -447,6 +459,7 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
             settings,
             lang,
             keys,
+            updated_from,
         })
     }))
 }
@@ -486,6 +499,13 @@ pub fn prepare(args: &DemoArgs, work: &Path) -> Result<DemoRun, String> {
         .map_err(|e| format!("cannot stage the demo folder: {e}"))?;
     let db = frename_core::AppDatabase::new();
     frename_core::demo::seed(&db, &scenario, &folder, &file, args.mono, &args.lang);
+    if let Some(version) = &args.updated_from {
+        use frename_core::AppStateStore;
+        db.set_update_check(frename_core::UpdateCheckState {
+            seen_version: version.clone(),
+            ..Default::default()
+        });
+    }
     Ok(DemoRun::new(
         scenario,
         args.out.clone(),
@@ -520,6 +540,7 @@ mod tests {
                 settings: None,
                 lang: "en".to_string(),
                 keys: vec![],
+                updated_from: None,
             }))
         );
         assert_eq!(
@@ -536,6 +557,7 @@ mod tests {
                 settings: None,
                 lang: "ru".to_string(),
                 keys: vec![],
+                updated_from: None,
             }))
         );
     }
@@ -741,6 +763,7 @@ mod tests {
             settings: None,
             lang: "en".to_string(),
             keys: vec![],
+            updated_from: None,
         };
         let mut run = DemoRun::new(scenario(), "o.png".into(), "w".into(), &args);
         assert!(run.video_ready().is_some());

@@ -1,12 +1,14 @@
 //! The Version row of the settings window's Updates page.
 
-use iced::widget::row;
-use iced::Element;
+use iced::widget::{column, row};
+use iced::{Element, Length};
 
-use super::state::{Section, Status};
+use super::notes::{self, Style};
+use super::state::{Heading, Section, Shown, Status};
 use super::{Control, Message, UpdatesState};
 use crate::ui::layout;
-use crate::ui::tokens::SPACE_S;
+use crate::ui::text::Run;
+use crate::ui::tokens::{CHOICE_INDENT, SPACE_M, SPACE_S, SPACE_XS};
 use crate::ui::tooltip::{self, Position};
 use crate::ui::{button, form, text};
 use crate::widgets::focus_ring::ring;
@@ -117,5 +119,91 @@ pub fn view(
                 ),
             ]),
     )
+    .into()
+}
+
+/// The Release notes row of the Updates page: the button for the whole history, the link to all
+/// releases, and the notes block under them (the update's, what is new, or the history).
+pub fn notes(state: &UpdatesState, focus: Option<Control>) -> Element<'_, Message> {
+    let focused = |control| focus == Some(control);
+    let toggle = if state.history_open() {
+        fl!("updates-notes-hide")
+    } else {
+        fl!("updates-notes-show")
+    };
+    let buttons = layout::buttons([
+        ring(
+            button::secondary(toggle).on_press(Message::ToggleHistory),
+            focused(Control::ReleaseNotes),
+        ),
+        ring(
+            button::link(fl!("updates-notes-all-releases")).on_press(Message::OpenReleases),
+            focused(Control::AllReleases),
+        ),
+    ]);
+    let mut parts: Vec<Element<'_, Message>> = vec![buttons];
+    if let Some(shown) = state.shown() {
+        parts.push(block(&shown, focused(Control::ShowMore)));
+    }
+    layout::aligned(parts).into()
+}
+
+/// The heading, what is wrong with the notes (still loading, not fetched), then one block per
+/// version.
+fn block<'a>(shown: &Shown<'a>, show_more_focused: bool) -> Element<'a, Message> {
+    let heading = match &shown.heading {
+        Heading::History => fl!("updates-notes-history"),
+        Heading::Update(version) => fl!("updates-notes-update", version = version.clone()),
+        Heading::WhatsNew(version) => fl!("updates-notes-whats-new", version = version.clone()),
+    };
+    let mut blocks: Vec<Element<'a, Message>> = vec![text::strong(heading).into()];
+    if shown.versions.is_empty() {
+        if shown.loading {
+            blocks.push(text::secondary(fl!("updates-notes-loading")).into());
+        } else if shown.failed {
+            blocks.push(text::secondary(fl!("updates-notes-unavailable")).into());
+        }
+    } else if shown.failed {
+        // Some of the versions are missing: say so above them.
+        blocks.push(text::secondary(fl!("updates-notes-unavailable")).into());
+    }
+    blocks.extend(shown.versions.iter().map(|version| {
+        let mut lines: Vec<Element<'a, Message>> = vec![text::strong(version.label()).into()];
+        for group in &version.groups {
+            if !group.title.is_empty() {
+                lines.push(text::secondary(group.title.clone()).into());
+            }
+            lines.extend(group.items.iter().map(bullet));
+        }
+        column(lines).spacing(SPACE_XS).width(Length::Fill).into()
+    }));
+    if shown.more {
+        blocks.push(ring(
+            button::secondary(fl!("updates-notes-more")).on_press(Message::ShowMore),
+            show_more_focused,
+        ));
+    }
+    column(blocks).spacing(SPACE_M).width(Length::Fill).into()
+}
+
+/// One bullet: a dot, then its text with bold and code drawn.
+fn bullet<'a>(item: &notes::Item) -> Element<'a, Message> {
+    let runs = notes::inline(&item.text)
+        .into_iter()
+        .map(|(style, content)| {
+            let run = match style {
+                Style::Plain => Run::Plain,
+                Style::Bold => Run::Strong,
+                Style::Code => Run::Mono,
+            };
+            (run, content)
+        });
+    let indent = if item.nested { CHOICE_INDENT } else { 0.0 };
+    row![
+        iced::widget::Space::new().width(indent),
+        text::secondary("•"),
+        text::body_runs(runs),
+    ]
+    .spacing(SPACE_S)
     .into()
 }

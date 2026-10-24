@@ -536,6 +536,10 @@ fn updates_page(state: &SettingsState, batch_running: bool) -> Element<'_, Messa
         fl!("settings-version"),
         updates::view::view(state.updates(), batch_running, updates_focus).map(Message::Updates),
     )];
+    rows.push(layout::setting_row(
+        fl!("settings-release-notes"),
+        updates::view::notes(state.updates(), updates_focus).map(Message::Updates),
+    ));
     // Only a package or the Store build keeps its settings away from the exe; elsewhere they are
     // next to it.
     if state.updates().shows_import() {

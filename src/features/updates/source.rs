@@ -28,6 +28,33 @@ pub fn check() -> Result<Option<Release>, String> {
     }
 }
 
+/// Where a release's `version.md` is kept: the file at its tag holds the notes of every version up
+/// to that release, so one request covers the versions between the installed one and it.
+const RAW_NOTES: &str = "https://raw.githubusercontent.com/Zelenov/frename";
+
+/// The `version.md` of the release `version` (`0.176.0`). The newest releases are tagged `v0.176`,
+/// and the branch is the fallback for a tag that is not there (yet).
+pub fn fetch_notes(version: &str) -> Result<String, String> {
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(std::time::Duration::from_secs(20)))
+        .build()
+        .into();
+    let tag = format!("v{}", crate::package::short_version(version));
+    let mut last = String::new();
+    for reference in [tag.as_str(), "main"] {
+        let url = format!("{RAW_NOTES}/{reference}/version.md");
+        match agent
+            .get(&url)
+            .call()
+            .and_then(|mut response| response.body_mut().read_to_string())
+        {
+            Ok(text) => return Ok(text),
+            Err(e) => last = e.to_string(),
+        }
+    }
+    Err(last)
+}
+
 /// Download `release` into the package, reporting progress in percent.
 pub fn download(release: &Release, progress: Sender<i16>) -> Result<(), String> {
     let manager = manager().map_err(|e| describe(&e))?;

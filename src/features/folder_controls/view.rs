@@ -29,6 +29,8 @@ pub struct ToolbarProps {
     pub recent_open: bool,
     /// A newer frename version, when the update check found one: the dot on Settings.
     pub update_available: Option<String>,
+    /// The version just installed, until its release notes were seen: the dot on Settings too.
+    pub whats_new: Option<String>,
     /// The file list's width, which says what folds into More (§13.9).
     pub width: f32,
     /// The More menu is open: its button is latched.
@@ -81,15 +83,16 @@ pub fn view(props: ToolbarProps) -> Element<'static, folder::Message> {
         )
         .on_press_maybe((!props.batch_running).then_some(M::ToggleRecentFolders));
 
-    let settings_tip = match &props.update_available {
-        Some(version) => fl!(
+    let settings_tip = match (&props.update_available, &props.whats_new) {
+        (Some(version), _) => fl!(
             "folder-controls-update-available",
             version = version.clone()
         ),
-        None => fl!("settings-window-title"),
+        (None, Some(version)) => fl!("folder-controls-whats-new", version = version.clone()),
+        (None, None) => fl!("settings-window-title"),
     };
     let settings = IconButton::new(Icon::Settings)
-        .dot(props.update_available.is_some())
+        .dot(props.update_available.is_some() || props.whats_new.is_some())
         .tip(settings_tip, Position::Top)
         .on_press(M::OpenSettings);
     // Esc leaves batch mode (`EscapePressed`); a running job goes on without the panel.

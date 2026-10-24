@@ -41,6 +41,14 @@ pub enum Message {
     Downloaded(Result<(), String>),
     /// The **Check for updates when frename starts** check box.
     SetCheckOnStart(bool),
+    /// The **Release notes** button: the whole history, or back to the notes of the update.
+    ToggleHistory,
+    /// **Show more** under the notes: ten more versions.
+    ShowMore,
+    /// The `version.md` of the newest release was fetched, or why it was not.
+    NotesFetched(Result<String, String>),
+    /// The Updates page is on screen: the notes of the version just installed are seen.
+    SeeWhatsNew,
     /// The release is downloaded: the app saves the open file, exits, and Velopack applies the
     /// update and starts the new version. Handled by the app.
     ApplyAndRestart(Release),

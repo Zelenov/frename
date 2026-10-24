@@ -863,7 +863,11 @@ mod tests {
     }
 
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
-    const NOT_UI_TEXT: [(&str, &str); 102] = [
+    const NOT_UI_TEXT: [(&str, &str); 106] = [
+        ("https://raw.githubusercontent.com/Zelenov/frename", "address"),
+        ("main", "branch name"),
+        ("{RAW_NOTES}/{reference}/version.md", "address"),
+        ("../../../version.md", "path of a file embedded at build time"),
         ("explorer", "program name"),
         ("open", "program name (macOS)"),
         ("xdg-open", "program name"),
