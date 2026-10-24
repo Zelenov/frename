@@ -131,16 +131,18 @@ pub fn notes(state: &UpdatesState, focus: Option<Control>) -> Element<'_, Messag
     } else {
         fl!("updates-notes-show")
     };
-    let buttons = layout::buttons([
-        ring(
-            button::secondary(toggle).on_press(Message::ToggleHistory),
-            focused(Control::ReleaseNotes),
-        ),
+    let toggle = ring(
+        button::secondary(toggle).on_press(Message::ToggleHistory),
+        focused(Control::ReleaseNotes),
+    );
+    // The builds updated by hand already show the link in the Version row.
+    let all_releases = (state.section() != Section::ReleasesPage).then(|| {
         ring(
             button::link(fl!("updates-notes-all-releases")).on_press(Message::OpenReleases),
             focused(Control::AllReleases),
-        ),
-    ]);
+        )
+    });
+    let buttons = layout::buttons(std::iter::once(toggle).chain(all_releases));
     let mut parts: Vec<Element<'_, Message>> = vec![buttons];
     if let Some(shown) = state.shown() {
         parts.push(block(&shown, focused(Control::ShowMore)));

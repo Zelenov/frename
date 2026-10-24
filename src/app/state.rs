@@ -593,6 +593,9 @@ impl FrenameApp {
 
     /// Run `demo` instead of a normal session.
     pub fn with_demo(mut self, demo: Option<crate::demo::DemoRun>) -> Self {
+        if demo.as_ref().is_some_and(|d| d.update_ready()) {
+            self.settings.stage_installed();
+        }
         self.demo = demo;
         self
     }

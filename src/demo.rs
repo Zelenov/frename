@@ -52,6 +52,8 @@ pub struct DemoRun {
     /// Keys pressed in the settings window before its shot.
     keys: Vec<SettingsKey>,
     video_ready: bool,
+    /// A newer version is staged as found by the update check.
+    update_ready: bool,
 }
 
 impl DemoRun {
@@ -66,7 +68,13 @@ impl DemoRun {
             settings: args.settings,
             keys: args.keys.clone(),
             video_ready: false,
+            update_ready: args.update_ready.is_some(),
         }
+    }
+
+    /// Whether the demo stages a found update: the app then counts as installed.
+    pub fn update_ready(&self) -> bool {
+        self.update_ready
     }
 
     /// The settings page the demo captures, when it captures the settings window (the app opens
@@ -390,6 +398,9 @@ pub struct DemoArgs {
     /// Start as the first run after an update from this version (`--updated-from 0.172.0`): the
     /// release notes since it are offered. Needs a build whose version is known (`APP_VERSION`).
     pub updated_from: Option<String>,
+    /// Show a newer version as found by the update check (`--update-ready 0.176.0`), in a build
+    /// that counts as installed, so the Updates page lists the notes up to it.
+    pub update_ready: Option<String>,
 }
 
 /// The demo the command line asks for; `None` for a normal start.
@@ -407,6 +418,7 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
     let settings_at = args.iter().position(|a| a == "--settings");
     let keys_at = args.iter().position(|a| a == "--keys");
     let updated_at = args.iter().position(|a| a == "--updated-from");
+    let ready_at = args.iter().position(|a| a == "--update-ready");
     Some(value("--demo", Some(at)).and_then(|scenario| {
         let out =
             value("--out", out_at).map_err(|_| "--demo needs --out <file.png>".to_string())?;
@@ -450,6 +462,14 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
                     .into_owned(),
             ),
         };
+        let update_ready = match ready_at {
+            None => None,
+            Some(_) => Some(
+                value("--update-ready", ready_at)?
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+        };
         Ok(DemoArgs {
             scenario,
             out,
@@ -460,6 +480,7 @@ pub fn demo_args(args: &[String]) -> Option<Result<DemoArgs, String>> {
             lang,
             keys,
             updated_from,
+            update_ready,
         })
     }))
 }
@@ -499,10 +520,11 @@ pub fn prepare(args: &DemoArgs, work: &Path) -> Result<DemoRun, String> {
         .map_err(|e| format!("cannot stage the demo folder: {e}"))?;
     let db = frename_core::AppDatabase::new();
     frename_core::demo::seed(&db, &scenario, &folder, &file, args.mono, &args.lang);
-    if let Some(version) = &args.updated_from {
+    if args.updated_from.is_some() || args.update_ready.is_some() {
         use frename_core::AppStateStore;
         db.set_update_check(frename_core::UpdateCheckState {
-            seen_version: version.clone(),
+            seen_version: args.updated_from.clone().unwrap_or_default(),
+            newest_version: args.update_ready.clone().unwrap_or_default(),
             ..Default::default()
         });
     }
@@ -541,6 +563,7 @@ mod tests {
                 lang: "en".to_string(),
                 keys: vec![],
                 updated_from: None,
+                update_ready: None,
             }))
         );
         assert_eq!(
@@ -558,6 +581,7 @@ mod tests {
                 lang: "ru".to_string(),
                 keys: vec![],
                 updated_from: None,
+                update_ready: None,
             }))
         );
     }
@@ -764,6 +788,7 @@ mod tests {
             lang: "en".to_string(),
             keys: vec![],
             updated_from: None,
+            update_ready: None,
         };
         let mut run = DemoRun::new(scenario(), "o.png".into(), "w".into(), &args);
         assert!(run.video_ready().is_some());

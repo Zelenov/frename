@@ -195,6 +195,7 @@ impl UpdatesState {
         if let Some(running) = &running {
             match Version::parse(&saved.seen_version) {
                 Ok(seen) if seen < *running => updated_from = Some(seen),
+                Ok(seen) if seen > *running => saved.seen_version = current_version.clone(),
                 Ok(_) => {}
                 // Never recorded: nothing to say about a first start.
                 Err(_) => saved.seen_version = current_version.clone(),
@@ -305,6 +306,12 @@ impl UpdatesState {
                 match result {
                     Ok(markdown) => {
                         let fetched = notes::parse(&markdown);
+                        // A file without the block of the release is not asked for again
+                        // until the next check.
+                        let target = Version::parse(&self.saved.newest_version).ok();
+                        if target.is_some_and(|t| !fetched.iter().any(|n| n.version == t)) {
+                            self.fetch_failed = true;
+                        }
                         self.notes = notes::merge(std::mem::take(&mut self.notes), fetched);
                     }
                     Err(reason) => {
@@ -323,9 +330,14 @@ impl UpdatesState {
         }
     }
 
+    /// A demo that shows a found update counts as an installed package.
+    pub fn stage_installed(&mut self) {
+        self.installed = true;
+    }
+
     /// The notes of the update just installed are on screen: it is not new any more.
     fn see_whats_new(&mut self) {
-        if self.updated_from.is_some() && !self.update_seen {
+        if self.updated_from.is_some() && !self.update_seen && self.available_version().is_none() {
             self.update_seen = true;
             self.saved.seen_version = self.current_version.clone();
         }
@@ -489,7 +501,9 @@ impl UpdatesState {
             .collect(),
         };
         controls.push(Control::ReleaseNotes);
-        controls.push(Control::AllReleases);
+        if self.section() != Section::ReleasesPage {
+            controls.push(Control::AllReleases);
+        }
         if self.shown().is_some_and(|shown| shown.more) {
             controls.push(Control::ShowMore);
         }
@@ -1062,5 +1076,64 @@ mod tests {
 
         state.apply(Message::ToggleHistory, 12);
         assert!(state.shown().is_none(), "back to nothing to say");
+    }
+
+    #[test]
+    fn a_fetched_file_without_the_releases_block_is_not_asked_for_again() {
+        let mut state = started_after("0.67.0");
+        state.apply(
+            Message::Checked {
+                silent: false,
+                result: Ok(Some(release("0.70.0"))),
+            },
+            10,
+        );
+        assert!(state.notes_request().is_some());
+        state.apply(Message::NotesFetched(Ok(NOTES.to_string())), 11);
+        assert_eq!(state.notes_request(), None, "no endless fetching");
+        assert!(state.shown().expect("shown").failed);
+    }
+
+    #[test]
+    fn after_a_downgrade_the_next_update_is_still_offered_its_notes() {
+        let state = started_after("0.80.0");
+        assert_eq!(
+            state.saved.seen_version, "0.67.0",
+            "the running version is recorded"
+        );
+        assert_eq!(state.whats_new(), None);
+    }
+
+    #[test]
+    fn whats_new_waits_while_a_newer_update_is_ready() {
+        let mut state = started_after("0.65.0");
+        state.apply(
+            Message::Checked {
+                silent: false,
+                result: Ok(Some(release("0.69.0"))),
+            },
+            10,
+        );
+        state.apply(Message::SeeWhatsNew, 11);
+        assert_eq!(
+            state.whats_new(),
+            Some("0.67".to_string()),
+            "not shown yet, so not seen"
+        );
+    }
+
+    #[test]
+    fn a_build_updated_by_hand_has_no_second_link_to_the_releases_page() {
+        let mut state = UpdatesState::new(
+            false,
+            false,
+            "0.67.0".to_string(),
+            UpdateCheckState::default(),
+        );
+        state.download_build = true;
+        assert_eq!(
+            state.controls(false),
+            [Control::OpenReleases, Control::ReleaseNotes]
+        );
     }
 }

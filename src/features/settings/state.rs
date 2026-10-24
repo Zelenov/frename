@@ -353,6 +353,11 @@ impl SettingsState {
         }
     }
 
+    /// A demo that shows a found update: counts as an installed package.
+    pub fn stage_installed(&mut self) {
+        self.updates.stage_installed();
+    }
+
     /// The Updates section.
     pub fn updates(&self) -> &updates::UpdatesState {
         &self.updates

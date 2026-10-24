@@ -25,9 +25,10 @@ blocks replace the bundled block of the same version.
 
 - **Update ready** (the last check found a newer version): the Release notes row on the Updates page
   lists the versions after the installed one up to the new one, newest first. The fetch starts
-  when the check finds the release, or at start-up and every hour for a version known from an
-  earlier run. While it runs the block says so; if it fails the block says the notes could not be
-  loaded, and a new check tries again.
+  after a check finds the release, and at start-up and on the hourly tick for a version known
+  from an earlier run. While it runs the block says so; if it fails the block says the notes could not be
+  loaded, and a new check tries again. A fetched file without the release's block counts as a failure, so
+  it is not asked for in a loop.
 - **After an update**: the database keeps `seen_version` (migration 26). At start-up, a running
   version newer than `seen_version` puts a dot on the Settings button (tooltip "What's new in
   0.X") and opens Settings on Updates. Showing the Updates page records the running version, so
@@ -43,5 +44,7 @@ blocks replace the bundled block of the same version.
 
 - The first start after the version that brings this feature shows no "What's new" (nothing
   recorded the previous version); later updates do.
+- While an update is ready its notes win over "What's new", and the dot stays until the update is
+  applied (the next start then offers what changed since the version seen).
 - The update's notes win over "What's new" when both apply; the history button wins over both.
 - Bullets that wrap in `version.md` are joined into one bullet.
