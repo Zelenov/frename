@@ -1563,8 +1563,8 @@ impl FolderWorkspace {
     }
 
     /// Write the folder's notes for the AI to its `.frename` once typing has paused for a
-    /// moment: a keystroke does not rewrite a file on a slow drive. The writes come in the order
-    /// of the edits, so the last text wins.
+    /// moment: a keystroke does not rewrite a file. The write blocks the UI for the moment it takes,
+    /// like `set_last_viewed`; only the last edit's wait writes.
     fn save_ai_notes_later(&mut self) -> Task<Message> {
         let Some(directory) = self.directory.as_ref() else {
             return Task::none();

@@ -868,7 +868,7 @@ mod tests {
         ("main", "branch name"),
         ("ai-notes-editor", "widget id"),
         (
-            "take line said says speak speech repeat words",
+            "take takes line lines said says speak speaks speech repeat repeats repeated words",
             "words looked for in the user's notes, not shown",
         ),
         (

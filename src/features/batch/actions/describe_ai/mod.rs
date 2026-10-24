@@ -631,15 +631,17 @@ impl Options {
 }
 
 /// Words in notes about what is said.
-const SPEECH_WORDS: &str = "take line said says speak speech repeat words";
+const SPEECH_WORDS: &str =
+    "take takes line lines said says speak speaks speech repeat repeats repeated words";
 
 /// Whether the notes seem to be about what is said (takes, lines, repeats): they need the clip's
 /// subtitles. A rough test of English words; another language's notes simply get no hint.
 fn talks_about_speech(notes: &str) -> bool {
     let notes = notes.to_lowercase();
-    SPEECH_WORDS
-        .split_whitespace()
-        .any(|word| notes.contains(word))
+    // Whole words: "timeline" is not "line".
+    notes
+        .split(|c: char| !c.is_alphabetic())
+        .any(|word| SPEECH_WORDS.split_whitespace().any(|w| w == word))
 }
 
 /// The folder's notes and the line for one run as the one text a request carries.

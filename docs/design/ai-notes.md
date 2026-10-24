@@ -8,8 +8,8 @@ suggest. A free-text note is added to every AI request of a folder.
 - **Folder notes** live in the folder's `.frename` file (`ai_notes`, a TOML string, omitted when
   empty), so they travel with the footage like its tags. They are read when the folder opens and
   edited in the Describe with AI panel ("Notes for the AI"). Typing is written to the file once it
-  pauses for 700 ms, from the UI thread, in the order typed, so a keystroke never rewrites a file
-  on a slow drive.
+  pauses for 700 ms (only the last edit's wait writes), and at once when the folder is left or the
+  window closes. The write runs on the UI thread, as `set_last_viewed` does.
 - **One-off line** ("Extra line for this run"): kept in memory, joined to the notes
   (`For this clip or run only: …`) for the next run, and dropped when a run takes it.
 - **Where they apply** — every request frename sends through clipscribe's `Options.instructions`:
@@ -35,6 +35,8 @@ suggest. A free-text note is added to every AI request of a folder.
 - The mark sits in the clip's comment corner and the Describe panel; the marker ✨ buttons do not
   get their own mark (they share the folder's notes).
 - The first/last-take example of the issue's second comment needs the clip's subtitles in the
-  request, which Describe with AI already sends; the wording of such a note is the editor's. No
-  special code path, and no "generate subtitles first" prompt in this step.
+  request, which Describe with AI already sends; the wording of such a note is the editor's. There
+  is no special code path. As the owner's comment asks, when the notes contain a word about speech
+  (take, line, said, repeat…; whole English words) and checked clips have no subtitles, the panel
+  says to generate them first.
 - Machine translations in all ten shipped languages.
