@@ -325,7 +325,19 @@ impl FolderTagStore {
         let _lock = TAG_FILE_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let mut file = read_file(folder).unwrap_or_else(Self::fresh_file);
+        // A file that exists but cannot be read (a typo in a hand edit) is left as it is: writing
+        // would replace the user's tags with the built-in ones.
+        let mut file = match read_file(folder) {
+            Some(file) => file,
+            None if folder.join(TAG_FILE_NAME).exists() => {
+                log::warn!(
+                    "the tag file in {} cannot be read; the AI notes are not saved",
+                    folder.display()
+                );
+                return;
+            }
+            None => Self::fresh_file(),
+        };
         if file.ai_notes == notes {
             return;
         }
@@ -946,6 +958,20 @@ out = 3.0
         // Saving a tag or the last viewed file keeps the notes.
         FolderTagStore::set_last_viewed(&folder.0, "review.clip.mp4");
         assert_eq!(FolderTagStore::get_ai_notes(&folder.0), notes);
+        folder
+            .store()
+            .save_tag(
+                StoredTag::with_all(Uuid::new_v4(), "tea", ORDER_GAP, false),
+                7,
+            )
+            .expect("save tag");
+        assert_eq!(FolderTagStore::get_ai_notes(&folder.0), notes);
+
+        // A tag file that cannot be parsed is not overwritten.
+        let broken = TempFolder::new("ai-notes-broken");
+        broken.write_tag_file("tags = [ oops");
+        FolderTagStore::set_ai_notes(&broken.0, "x");
+        assert_eq!(broken.tag_file(), "tags = [ oops");
 
         FolderTagStore::set_ai_notes(&folder.0, "");
         assert_eq!(FolderTagStore::get_ai_notes(&folder.0), "");

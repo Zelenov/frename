@@ -161,8 +161,8 @@ Settings.
   them, so for those frename keeps the comment and the in and out points in the text file, and
   markers are not available.
 - frename sends your footage nowhere unless you ask. Describe with AI sends frames and
-  subtitles to Anthropic, OpenAI or Google, depending on the model you chose (with your notes for the AI, if the folder has any), and Generate subtitles sends the audio to Soniox, both with your own API
-  key. Your keys are kept in the system's password store. On Windows that is Credential Manager.
+  subtitles to Anthropic, OpenAI or Google, depending on the model you chose, and Generate subtitles sends the audio to Soniox, both with your own API
+  key. Your notes for the AI go with them, if the folder has any. Your keys are kept in the system's password store. On Windows that is Credential Manager.
 - On Windows, frename checks GitHub once a day for a new version. You can turn that off in
   Settings, and nothing is downloaded until you click **Update and restart**. Settings → Updates
   lists what changed in each version, before and after you update. The Linux AppImage does not

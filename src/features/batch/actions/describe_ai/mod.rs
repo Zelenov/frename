@@ -32,6 +32,9 @@ use crate::ui::layout::{self, NoticeKind};
 use crate::ui::tokens::SPACE_S;
 use crate::ui::{button, form, text};
 
+/// Id of the folder notes' editor, to ask whether it has the keys.
+pub const NOTES_EDITOR_ID: &str = "ai-notes-editor";
+
 pub fn label() -> String {
     fl!("batch-action-describe-ai")
 }
@@ -213,7 +216,10 @@ impl Options {
 
     /// The run these options make.
     pub fn run(&self) -> Run {
-        self.run_with(self.redo)
+        Run {
+            instructions: self.instructions(),
+            ..self.run_with(self.redo)
+        }
     }
 
     /// The run these options make, with Redo set by the caller: Prepare clips never redoes, whatever
@@ -226,7 +232,8 @@ impl Options {
             moments: self.moments,
             tags: self.tags_to_suggest().to_vec(),
             tags_requested: self.tags_requested,
-            instructions: self.instructions(),
+            // The line for one run belongs to the Describe with AI panel's own run.
+            instructions: instructions_of(&self.folder_notes(), ""),
         }
     }
 
@@ -491,7 +498,7 @@ impl Options {
                         .into(),
                 ]),
             ),
-            self.notes_row(),
+            self.notes_row(plan),
             page::option_row(
                 fl!("batch-option-notes-once"),
                 form::text_field(&fl!("batch-ai-notes-once-placeholder"), &self.one_off)
@@ -514,8 +521,9 @@ impl Options {
     }
 
     /// The folder's notes for the AI: the editor, and what it costs to send them.
-    fn notes_row(&self) -> Element<'_, ActionMessage> {
+    fn notes_row(&self, plan: &Plan) -> Element<'_, ActionMessage> {
         let editor = form::text_area(&self.notes.0, &fl!("batch-ai-notes-placeholder"))
+            .id(iced::widget::Id::new(NOTES_EDITOR_ID))
             .on_action(|action| ActionMessage::DescribeAi(Message::NotesAction(action)));
         let hint = match self.notes_too_long() {
             Some(chars) => text::error(fl!(
@@ -525,10 +533,19 @@ impl Options {
             )),
             None => text::secondary(fl!("batch-ai-notes-hint", provider = self.provider_label())),
         };
+        // Notes about what is said need the words: say so for clips without subtitles.
+        let no_subtitles = (talks_about_speech(&self.instructions().unwrap_or_default())
+            && plan.no_subtitles > 0)
+            .then(|| {
+                text::secondary(fl!(
+                    "batch-ai-notes-no-subtitles",
+                    videos = videos(plan.no_subtitles)
+                ))
+            });
         page::option_row_with_info(
             fl!("batch-option-notes"),
             fl!("batch-ai-notes-info"),
-            column![editor, hint].spacing(SPACE_S),
+            column![editor, hint].push(no_subtitles).spacing(SPACE_S),
         )
     }
 
@@ -611,6 +628,18 @@ impl Options {
                 .into()],
         ))
     }
+}
+
+/// Words in notes about what is said.
+const SPEECH_WORDS: &str = "take line said says speak speech repeat words";
+
+/// Whether the notes seem to be about what is said (takes, lines, repeats): they need the clip's
+/// subtitles. A rough test of English words; another language's notes simply get no hint.
+fn talks_about_speech(notes: &str) -> bool {
+    let notes = notes.to_lowercase();
+    SPEECH_WORDS
+        .split_whitespace()
+        .any(|word| notes.contains(word))
 }
 
 /// The folder's notes and the line for one run as the one text a request carries.
@@ -1605,13 +1634,12 @@ mod tests {
             Some("The man is Eugene."),
             "trimmed"
         );
-        // Prepare clips builds its run from the same options.
+        options.update(Message::SetOneOff("the woman in red is Ana".into()));
+        // Prepare clips carries the folder's notes, never the line for one run.
         assert_eq!(
             options.run_with(false).instructions.as_deref(),
             Some("The man is Eugene.")
         );
-
-        options.update(Message::SetOneOff("the woman in red is Ana".into()));
         let text = run_of(&options).instructions.expect("both");
         assert!(text.starts_with("The man is Eugene.\n"), "{text}");
         assert!(text.ends_with("the woman in red is Ana"), "{text}");
