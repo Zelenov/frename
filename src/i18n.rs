@@ -863,9 +863,18 @@ mod tests {
     }
 
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
-    const NOT_UI_TEXT: [(&str, &str); 106] = [
+    const NOT_UI_TEXT: [(&str, &str); 109] = [
         ("https://raw.githubusercontent.com/Zelenov/frename", "address"),
         ("main", "branch name"),
+        ("ai-notes-editor", "widget id"),
+        (
+            "take takes line lines said says speak speaks speech repeat repeats repeated words",
+            "words looked for in the user's notes, not shown",
+        ),
+        (
+            "{notes}\\nFor this clip or run only: {line}",
+            "the line for one run in the text sent to the AI, not shown",
+        ),
         ("{RAW_NOTES}/{reference}/version.md", "address"),
         ("../../../version.md", "path of a file embedded at build time"),
         ("explorer", "program name"),

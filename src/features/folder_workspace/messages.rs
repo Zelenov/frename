@@ -141,6 +141,11 @@ pub enum Message {
     SetSegmentStart,
     /// Set segment end marker at the current video position (] key).
     SetSegmentEnd,
+    /// The wait after edit number N of the notes for the AI is over: they are written to the
+    /// folder's `.frename` unless a later edit is waiting (#310).
+    SaveAiNotes(u64),
+    /// Whether the notes editor of the batch panel has the keys (asked after a click or Tab).
+    NotesFocused(bool),
     /// User interacted with the multiline comment editor.
     CommentAction(text_editor::Action),
     /// A click or a focus key somewhere: ask whether the comment box has the keys now.

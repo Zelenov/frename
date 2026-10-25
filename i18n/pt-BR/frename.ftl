@@ -878,3 +878,15 @@ markers-export = Exportar…
 markers-export-tip = Salvar os marcadores como um arquivo de texto
 markers-exported = Marcadores salvos em { $name }
 markers-not-exported = Marcadores não salvos: não foi possível gravar o arquivo
+
+batch-option-notes = Notas para a IA
+batch-ai-notes-info = Suas próprias notas sobre o material desta pasta, enviadas com cada solicitação à IA aqui: descrições, sugestões de tags e descrições de marcadores. Salvas no arquivo .frename da pasta.
+batch-ai-notes-placeholder = p. ex. O homem que mais aparece é o Eugênio. Marque os outdoors. Sugira a tag chá onde houver chá.
+batch-ai-notes-hint = Enviadas a { $provider } junto com os quadros. Os nomes vêm apenas destas notas; o frename não reconhece rostos. Vídeos já descritos são ignorados: marque Refazer para descrevê-los de novo com as novas notas.
+batch-ai-notes-too-long = As notas têm { $chars } caracteres; o limite é { $max }. Encurte-as para executar.
+batch-ai-notes-too-long-reason = As notas para a IA são longas demais
+batch-option-notes-once = Linha extra para esta execução
+batch-ai-notes-once-placeholder = p. ex. Neste clipe: a mulher de vermelho é a Ana
+file-workspace-ai-notes-on = Notas ativas
+file-workspace-ai-notes-tip = As notas para a IA acompanham cada solicitação à IA nesta pasta. Edite-as em Descrever com IA (ações em lote): { $notes }
+batch-ai-notes-no-subtitles = Suas notas parecem tratar do que é dito, e { $videos } não têm legendas: gere-as primeiro (Gerar legendas) para que a IA possa ler as palavras.

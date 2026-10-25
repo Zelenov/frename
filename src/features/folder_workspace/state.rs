@@ -57,6 +57,9 @@ mod solo;
 /// How many actions undo/redo keeps. Reset per folder, since tags are per folder.
 const HISTORY_DEPTH: usize = 50;
 
+/// How long typing in the notes for the AI must pause before they are written to the folder.
+const AI_NOTES_SAVE_DELAY: std::time::Duration = std::time::Duration::from_millis(700);
+
 /// Concrete history type for this workspace: Directory uses LoggingAppStateStore<AppDatabase>,
 /// TagList uses the tag store of the open folder.
 type WorkspaceHistory = History<LoggingAppStateStore<AppDatabase>, FolderTagStore>;
@@ -124,6 +127,13 @@ pub struct FolderWorkspace {
     batch_item_waits_for_unload: Option<BatchItem>,
     /// Marker "Describe with AI" requests whose answer has not come back yet, stopped ones too.
     marker_requests: usize,
+    /// Notes for the AI typed and not yet written: the folder and the text (#310). Written when
+    /// typing pauses, at once on a folder change or when the window closes.
+    pending_ai_notes: Option<(PathBuf, String)>,
+    /// Edits of the notes so far: only the wait of the last one writes.
+    ai_notes_edits: u64,
+    /// The notes editor has the keys: undo and redo are its own, not the open clip's.
+    notes_focused: bool,
     /// Of those, the ones (guid, request number) that have not yet let go of the clip: one may
     /// still be reading its frames, which holds the file open. A request leaves this on
     /// `Stage::Released` or when it ends, whichever comes first.
@@ -294,6 +304,9 @@ impl FolderWorkspace {
             batch_item_waits_for_unload: None,
             batch_end_pending: false,
             marker_requests: 0,
+            pending_ai_notes: None,
+            ai_notes_edits: 0,
+            notes_focused: false,
             marker_readers: std::collections::HashSet::new(),
             inline_rename: None,
             filter_menu_open: false,
@@ -589,7 +602,12 @@ impl FolderWorkspace {
             Message::CopyTags => self.copy_tags(),
             Message::PasteTags => self.paste_tags(),
             // The comment box has the keys while it is focused: its text is not the app's to undo.
-            Message::Undo | Message::Redo if self.file_workspace.comment_focused() => Task::none(),
+            Message::Undo | Message::Redo
+                if self.file_workspace.comment_focused()
+                    || (self.notes_focused && self.batch.is_active()) =>
+            {
+                Task::none()
+            }
             // What was typed or named is a step first, so it is the one undone.
             Message::Undo => {
                 self.close_marker_row();
@@ -681,7 +699,16 @@ impl FolderWorkspace {
                 if self.batch.is_active() || self.file_workspace.file().is_none() {
                     self.end_comment_session();
                     self.file_workspace.set_comment_focused(false);
-                    return Task::none();
+                    // The notes editor of the batch panel, when it is on screen; until it
+                    // answers, it has not got the keys.
+                    self.notes_focused = false;
+                    if !self.batch.is_active() {
+                        return Task::none();
+                    }
+                    return iced::widget::operation::is_focused(iced::widget::Id::new(
+                        batch::describe_ai::NOTES_EDITOR_ID,
+                    ))
+                    .map(Message::NotesFocused);
                 }
                 iced::widget::operation::is_focused(iced::widget::Id::new(
                     crate::features::file_workspace::view::COMMENT_EDITOR_ID,
@@ -693,6 +720,17 @@ impl FolderWorkspace {
                     self.end_comment_session();
                 }
                 self.file_workspace.set_comment_focused(focused);
+                Task::none()
+            }
+            Message::NotesFocused(focused) => {
+                self.notes_focused = focused;
+                Task::none()
+            }
+            Message::SaveAiNotes(edit) => {
+                // A later edit has its own wait; this one is out of date.
+                if edit == self.ai_notes_edits {
+                    self.flush_ai_notes();
+                }
                 Task::none()
             }
             Message::CommentAction(action) => {
@@ -1055,6 +1093,12 @@ impl FolderWorkspace {
             directory.set_commented_only(previous.commented_only());
             directory.set_marked_only(previous.marked_only());
         }
+        // Notes typed in the folder being left are written before the next one is shown.
+        self.flush_ai_notes();
+        let same_folder = self
+            .directory
+            .as_ref()
+            .is_some_and(|previous| previous.path() == directory.path());
         self.directory = Some(directory); // replace previous directory only on success
         self.batch.reset_files();
         self.forget_solo();
@@ -1064,6 +1108,12 @@ impl FolderWorkspace {
             .expect("just set")
             .path()
             .to_path_buf();
+        // The notes for the AI belong to the folder, like its tags (#310).
+        // A reload of the same folder keeps what the editor holds.
+        if !same_folder {
+            self.batch
+                .set_ai_notes(&FolderTagStore::get_ai_notes(&folder));
+        }
         // Tags belong to the folder, so the workspace starts over on a new one. The history goes
         // with them: undoing "create tag" from the previous folder would delete it from this one.
         self.file_workspace = FileWorkspace::new(FolderTagStore::for_folder(&folder));
@@ -1519,9 +1569,50 @@ impl FolderWorkspace {
         })
     }
 
+    /// Write the folder's notes for the AI to its `.frename` once typing has paused for a
+    /// moment: a keystroke does not rewrite a file. The write blocks the UI for the moment it takes,
+    /// like `set_last_viewed`; only the last edit's wait writes.
+    fn save_ai_notes_later(&mut self) -> Task<Message> {
+        let Some(directory) = self.directory.as_ref() else {
+            return Task::none();
+        };
+        let folder = directory.path().to_path_buf();
+        let notes = self.batch.actions().ai_notes();
+        self.ai_notes_edits += 1;
+        let edit = self.ai_notes_edits;
+        self.pending_ai_notes = Some((folder, notes));
+        Task::perform(
+            async {
+                tokio::time::sleep(AI_NOTES_SAVE_DELAY).await;
+            },
+            move |()| Message::SaveAiNotes(edit),
+        )
+    }
+
+    /// Write the notes typed and not yet written, now.
+    fn flush_ai_notes(&mut self) {
+        if let Some((folder, notes)) = self.pending_ai_notes.take() {
+            FolderTagStore::set_ai_notes(&folder, &notes);
+        }
+    }
+
     fn handle_batch(&mut self, msg: batch::Message) -> Task<Message> {
         if let batch::Message::Run = msg {
             return self.start_batch();
+        }
+        // The panel opening or closing: its notes editor has not got the keys.
+        if let batch::Message::SetActive(_) = msg {
+            self.notes_focused = false;
+        }
+        // Typing in the folder's notes for the AI: written once the typing pauses (#310).
+        if let batch::Message::Action(batch::ActionMessage::DescribeAi(
+            batch::describe_ai::Message::NotesAction(iced::widget::text_editor::Action::Edit(_)),
+        )) = &msg
+        {
+            self.notes_focused = true;
+            let handled = self.handle_batch_many([msg]);
+            let save = self.save_ai_notes_later();
+            return Task::batch([handled, save]);
         }
         if let batch::Message::Cancel = msg {
             self.cancel_solo();
@@ -1706,8 +1797,13 @@ impl FolderWorkspace {
             return Task::none();
         }
         self.share_folder_tags();
+        let one_off_used = self.batch.action() == batch::Action::DescribeAi;
         if !self.batch.start(files) {
             return Task::none();
+        }
+        // The line for one run is spent once the run has it.
+        if one_off_used {
+            self.batch.clear_ai_one_off();
         }
         let action = self.batch.action();
         self.batch.forget_prepare_groups();
@@ -3512,6 +3608,7 @@ impl FolderWorkspace {
         // save (from a file switch that hasn't unloaded yet) must not reopen the video once
         // `on_media_unloaded` runs — the window is closing.
         self.closing = true;
+        self.flush_ai_notes();
         let Some((id, snap)) = self.file_workspace.get_snapshot() else {
             return Task::none();
         };
@@ -8555,6 +8652,76 @@ mod tests {
         let _ = workspace.flush_open_file();
         let _ = workspace.on_media_unloaded();
         assert_eq!(journal_files(&test_dir), 0);
+    }
+
+    /// #310: the folder's notes for the AI come from its `.frename` when it opens, typing writes
+    /// them back, and the next folder starts with its own.
+    #[test]
+    fn the_notes_for_the_ai_follow_the_folder_and_typing_saves_them() {
+        use crate::features::batch::describe_ai::Message as AiMessage;
+        use iced::widget::text_editor::{Action, Edit};
+        let test_dir = TestDirectory::new(1);
+        FolderTagStore::set_ai_notes(test_dir.path(), "The man is Eugene.");
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        assert_eq!(workspace.ai_notes(), "The man is Eugene.");
+
+        // Typing changes the notes at once; the file is written when the delayed message comes.
+        let _ = workspace.update(Message::Batch(batch::Message::Action(
+            batch::ActionMessage::DescribeAi(AiMessage::NotesAction(Action::Edit(Edit::Paste(
+                std::sync::Arc::new("Mark the moon.\n".to_string()),
+            )))),
+        )));
+        assert_eq!(workspace.ai_notes(), "Mark the moon.\nThe man is Eugene.");
+        assert_eq!(
+            FolderTagStore::get_ai_notes(test_dir.path()),
+            "The man is Eugene."
+        );
+        let _ = workspace.update(Message::SaveAiNotes(1));
+        assert_eq!(
+            FolderTagStore::get_ai_notes(test_dir.path()),
+            "Mark the moon.\nThe man is Eugene."
+        );
+
+        // Two quick edits write once, when the last one's wait is over; a folder change writes
+        // what is waiting at once.
+        let edit = |text: &str| {
+            Message::Batch(batch::Message::Action(batch::ActionMessage::DescribeAi(
+                AiMessage::NotesAction(Action::Edit(Edit::Paste(std::sync::Arc::new(
+                    text.to_string(),
+                )))),
+            )))
+        };
+        let _ = workspace.update(edit("a"));
+        let _ = workspace.update(edit("b"));
+        let _ = workspace.update(Message::SaveAiNotes(2));
+        assert_eq!(
+            FolderTagStore::get_ai_notes(test_dir.path()),
+            "Mark the moon.\nThe man is Eugene.",
+            "the wait of the first edit is out of date"
+        );
+        let _ = workspace.update(Message::SaveAiNotes(3));
+        let written = FolderTagStore::get_ai_notes(test_dir.path());
+        assert_eq!(written, "Mark the moon.\nabThe man is Eugene.");
+        let _ = workspace.update(edit("c"));
+
+        // Another folder has its own notes (none here).
+        let other = TestDirectory::new(1);
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: other.directory(),
+            target_file: Some(other.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        assert_eq!(workspace.ai_notes(), "");
+        assert_eq!(
+            FolderTagStore::get_ai_notes(test_dir.path()),
+            "Mark the moon.\nabcThe man is Eugene.",
+            "written when the folder was left"
+        );
     }
 
     #[test]

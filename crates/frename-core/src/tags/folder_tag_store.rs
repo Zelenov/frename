@@ -38,6 +38,10 @@
 //! reopening the folder returns to it. It is updated with a rename and omitted when nothing is
 //! remembered yet.
 //!
+//! `ai_notes` (#310) is the editor's own text for the AI, added to every description, tag
+//! suggestion and marker description request in this folder (names, what to mark, tags to
+//! suggest). It travels with the footage like the tags and is omitted when empty.
+//!
 //! The `[[files]]` blocks list the folder's videos with the comment, in/out points and number
 //! of clip markers stored inside each video. Comments are multi-line, so they are written as `"""` strings: the text
 //! between the quotes is the comment, line breaks and all.
@@ -95,6 +99,9 @@ struct TagFile {
     /// frename, or switching to another folder); empty when none is remembered yet (#98).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     last_viewed: String,
+    /// The editor's notes for the AI about this folder's footage (#310); empty when none.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    ai_notes: String,
     tags: Vec<TagEntry>,
     #[serde(default)]
     files: Vec<CachedFile>,
@@ -236,6 +243,7 @@ impl FolderTagStore {
         TagFile {
             version: FORMAT_VERSION,
             last_viewed: String::new(),
+            ai_notes: String::new(),
             tags: Self::default_entries(),
             files: Vec::new(),
         }
@@ -304,6 +312,41 @@ impl FolderTagStore {
         }
     }
 
+    /// The notes for the AI the folder carries (#310), or empty when there are none.
+    pub fn get_ai_notes(folder: &Path) -> String {
+        read_file(folder).map(|f| f.ai_notes).unwrap_or_default()
+    }
+
+    /// Saves the folder's notes for the AI (#310), keeping the tags and file list; empty notes
+    /// remove the field. A folder without a tag file gets one with the built-in tags. A folder
+    /// whose tag file cannot be written (read-only media) keeps working; the failure is only
+    /// logged.
+    pub fn set_ai_notes(folder: &Path, notes: &str) {
+        let _lock = TAG_FILE_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        // A file that exists but cannot be read (a typo in a hand edit) is left as it is: writing
+        // would replace the user's tags with the built-in ones.
+        let mut file = match read_file(folder) {
+            Some(file) => file,
+            None if folder.join(TAG_FILE_NAME).exists() => {
+                log::warn!(
+                    "the tag file in {} cannot be read; the AI notes are not saved",
+                    folder.display()
+                );
+                return;
+            }
+            None => Self::fresh_file(),
+        };
+        if file.ai_notes == notes {
+            return;
+        }
+        file.ai_notes = notes.to_string();
+        if let Err(e) = write_file(folder, &file) {
+            log::warn!("could not save the AI notes in {}: {e}", folder.display());
+        }
+    }
+
     /// Reads the tags paired with the order key each one currently has.
     fn read_ordered(
         &self,
@@ -365,6 +408,9 @@ fn render(file: &TagFile) -> Result<String, Box<dyn std::error::Error + Send + S
             "last_viewed = {}\n",
             basic_string(&file.last_viewed)
         ));
+    }
+    if !file.ai_notes.is_empty() {
+        out.push_str(&format!("ai_notes = {}\n", text_string(&file.ai_notes)));
     }
     out.push_str("\ntags = [\n");
     for tag in &file.tags {
@@ -891,6 +937,47 @@ out = 3.0
         assert!(
             !folder.tag_file().contains("last_viewed"),
             "omitted once empty: {}",
+            folder.tag_file()
+        );
+    }
+
+    #[test]
+    fn the_notes_for_the_ai_round_trip_keep_everything_else_and_vanish_when_emptied() {
+        let folder = TempFolder::new("ai-notes");
+        assert_eq!(FolderTagStore::get_ai_notes(&folder.0), "", "none yet");
+        let _ = folder.store().get_stored_tags();
+        FolderTagStore::set_last_viewed(&folder.0, "pick.clip.mp4");
+
+        let notes =
+            "The man who appears most often is \"Eugene\".\nMark the moon.\\ Suggest `tea`.";
+        FolderTagStore::set_ai_notes(&folder.0, notes);
+        assert_eq!(FolderTagStore::get_ai_notes(&folder.0), notes);
+        assert_eq!(FolderTagStore::get_last_viewed(&folder.0), "pick.clip.mp4");
+        assert_eq!(names(&folder.store()).len(), DEFAULT_TAGS.len());
+
+        // Saving a tag or the last viewed file keeps the notes.
+        FolderTagStore::set_last_viewed(&folder.0, "review.clip.mp4");
+        assert_eq!(FolderTagStore::get_ai_notes(&folder.0), notes);
+        folder
+            .store()
+            .save_tag(
+                StoredTag::with_all(Uuid::new_v4(), "tea", ORDER_GAP, false),
+                7,
+            )
+            .expect("save tag");
+        assert_eq!(FolderTagStore::get_ai_notes(&folder.0), notes);
+
+        // A tag file that cannot be parsed is not overwritten.
+        let broken = TempFolder::new("ai-notes-broken");
+        broken.write_tag_file("tags = [ oops");
+        FolderTagStore::set_ai_notes(&broken.0, "x");
+        assert_eq!(broken.tag_file(), "tags = [ oops");
+
+        FolderTagStore::set_ai_notes(&folder.0, "");
+        assert_eq!(FolderTagStore::get_ai_notes(&folder.0), "");
+        assert!(
+            !folder.tag_file().contains("ai_notes"),
+            "{}",
             folder.tag_file()
         );
     }

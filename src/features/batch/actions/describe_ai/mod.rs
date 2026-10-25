@@ -22,7 +22,7 @@ use frename_core::ai::key::{self, KeyState};
 use frename_core::{
     AppDatabase, AppStateStore, File, FileId, FileKind, FileTagger, FolderInfo, MarkerStorage,
 };
-use iced::widget::column;
+use iced::widget::{column, text_editor};
 use iced::Element;
 
 use super::super::page::{self, Change};
@@ -31,6 +31,9 @@ use super::{ActionMessage, Panel};
 use crate::ui::layout::{self, NoticeKind};
 use crate::ui::tokens::SPACE_S;
 use crate::ui::{button, form, text};
+
+/// Id of the folder notes' editor, to ask whether it has the keys.
+pub const NOTES_EDITOR_ID: &str = "ai-notes-editor";
 
 pub fn label() -> String {
     fl!("batch-action-describe-ai")
@@ -60,6 +63,10 @@ pub enum Message {
     SetMoments(MomentsMode),
     /// Whether to suggest tags from the folder's tags too, from the settings.
     SetTagSuggestions(bool),
+    /// The editor typed in the folder's notes for the AI (#310).
+    NotesAction(text_editor::Action),
+    /// The one-off line for the next run was edited (#310).
+    SetOneOff(String),
 }
 
 /// What the job does to each file: the options it started with.
@@ -76,6 +83,9 @@ pub struct Run {
     /// The tags were asked for on their own (Suggest tags on the open clip), whatever Settings
     /// say: a clip already described, but without suggestions, is described again to get them.
     pub tags_requested: bool,
+    /// The editor's notes for the AI, the folder's and the line for this run (#310); sent in
+    /// every request of the run. `None` when there are none.
+    pub instructions: Option<String>,
 }
 
 impl Run {
@@ -107,6 +117,21 @@ pub struct Options {
     tags_requested: bool,
     /// The open folder's own tags, kept up to date by the folder workspace.
     folder_tags: Vec<String>,
+    /// The folder's notes for the AI (#310), edited in the panel and kept in its `.frename`.
+    notes: Notes,
+    /// An extra line for the next run only; never saved.
+    one_off: String,
+}
+
+/// The folder's notes in their editor. The editor's content cannot be cloned, so a clone is a
+/// new editor with the same text.
+#[derive(Debug, Default)]
+struct Notes(text_editor::Content);
+
+impl Clone for Notes {
+    fn clone(&self) -> Self {
+        Self(text_editor::Content::with_text(&self.0.text()))
+    }
 }
 
 impl Options {
@@ -129,7 +154,41 @@ impl Options {
             Message::SetModel(model) => self.model = model,
             Message::SetMoments(moments) => self.moments = moments,
             Message::SetTagSuggestions(on) => self.suggest_tags = on,
+            Message::NotesAction(action) => {
+                // The cap is the library's: a longer text is typed but refused, so a run
+                // cannot be started with it (the panel says so).
+                self.notes.0.perform(action);
+            }
+            Message::SetOneOff(line) => self.one_off = line,
         }
+    }
+
+    /// The open folder's notes for the AI, as saved in its `.frename`: replaces what the editor
+    /// holds when a folder opens.
+    pub fn set_folder_notes(&mut self, notes: &str) {
+        self.notes = Notes(text_editor::Content::with_text(notes));
+    }
+
+    /// The folder's notes as typed, without the blank lines at the ends.
+    pub fn folder_notes(&self) -> String {
+        self.notes.0.text().trim().to_string()
+    }
+
+    /// Forget the one-off line once a run has taken it.
+    pub fn clear_one_off(&mut self) {
+        self.one_off.clear();
+    }
+
+    /// What every request of the next run carries (#310): the folder's notes, then the line for
+    /// this run. `None` when both are empty.
+    fn instructions(&self) -> Option<String> {
+        instructions_of(&self.folder_notes(), &self.one_off)
+    }
+
+    /// Why the notes cannot be sent: they are longer than the library takes.
+    fn notes_too_long(&self) -> Option<usize> {
+        let chars = self.instructions()?.chars().count();
+        (chars > describe::MAX_INSTRUCTIONS_CHARS).then_some(chars)
     }
 
     /// The open folder's own tags: what a run may suggest from.
@@ -157,7 +216,10 @@ impl Options {
 
     /// The run these options make.
     pub fn run(&self) -> Run {
-        self.run_with(self.redo)
+        Run {
+            instructions: self.instructions(),
+            ..self.run_with(self.redo)
+        }
     }
 
     /// The run these options make, with Redo set by the caller: Prepare clips never redoes, whatever
@@ -170,6 +232,8 @@ impl Options {
             moments: self.moments,
             tags: self.tags_to_suggest().to_vec(),
             tags_requested: self.tags_requested,
+            // The line for one run belongs to the Describe with AI panel's own run.
+            instructions: instructions_of(&self.folder_notes(), ""),
         }
     }
 
@@ -226,10 +290,11 @@ impl Options {
 
     /// What a run on `checked` would send, skip and cost.
     fn plan(&self, checked: &[&File]) -> Plan {
-        self.plan_with(checked, self.redo)
+        let notes_bytes = self.instructions().map_or(0, |notes| notes.len());
+        self.plan_with(checked, self.redo, notes_bytes)
     }
 
-    fn plan_with(&self, checked: &[&File], redo: bool) -> Plan {
+    fn plan_with(&self, checked: &[&File], redo: bool, notes_bytes: usize) -> Plan {
         let mut plan = Plan {
             checked_videos: checked
                 .iter()
@@ -238,6 +303,7 @@ impl Options {
             ..Plan::default()
         };
         let vocabulary = vocabulary(self.tags_to_suggest());
+        // The notes ride along in every request, like subtitles.
         for file in checked {
             // The file list only lists videos, so nothing else is ever checked; a file of another
             // kind is left out quietly (it has no length to read, so the estimate would wait
@@ -267,12 +333,12 @@ impl Options {
                     plan.send.push(file.id());
                     plan.seconds += d;
                     plan.usage += if vocabulary.is_empty() {
-                        describe::estimate_usage(self.model, d, probe.subtitle_bytes)
+                        describe::estimate_usage(self.model, d, probe.subtitle_bytes + notes_bytes)
                     } else {
                         describe::estimate_tags_usage(
                             self.model,
                             d,
-                            probe.subtitle_bytes,
+                            probe.subtitle_bytes + notes_bytes,
                             &vocabulary,
                             None,
                         )
@@ -336,7 +402,15 @@ impl Options {
             Some(KeyState::Unavailable) => return blocked(fl!("batch-ai-key-unavailable")),
             Some(KeyState::Saved) => {}
         }
-        let plan = self.plan_with(checked, redo);
+        // A run of another action (Prepare clips) sends the folder's notes only.
+        let folder_notes = self.folder_notes();
+        if folder_notes.chars().count() > describe::MAX_INSTRUCTIONS_CHARS {
+            return Step::Blocked {
+                note: fl!("batch-ai-notes-too-long-reason"),
+                fix: None,
+            };
+        }
+        let plan = self.plan_with(checked, redo, folder_notes.len());
         if plan.estimating {
             return Step::Wait;
         }
@@ -352,7 +426,7 @@ impl Options {
     /// What a run on `checked` would send and cost, for a page that adds up several steps:
     /// videos, seconds of footage, dollars, seconds it takes. `None` while it is estimated.
     pub fn totals(&self, checked: &[&File]) -> Option<(usize, f64, f64, f64)> {
-        let plan = self.plan_with(checked, false);
+        let plan = self.plan_with(checked, false, self.folder_notes().len());
         (!plan.estimating).then(|| {
             (
                 plan.send.len(),
@@ -367,9 +441,14 @@ impl Options {
     /// estimate and the key are known). The plan is made once.
     pub fn panel(&self, checked: &[&File]) -> Panel<'_> {
         let plan = self.plan(checked);
-        let ready =
-            !plan.estimating && !plan.send.is_empty() && self.key() == Some(KeyState::Saved);
-        let reason = if plan.estimating {
+        let too_long = self.notes_too_long();
+        let ready = !plan.estimating
+            && !plan.send.is_empty()
+            && self.key() == Some(KeyState::Saved)
+            && too_long.is_none();
+        let reason = if too_long.is_some() {
+            Some(fl!("batch-ai-notes-too-long-reason"))
+        } else if plan.estimating {
             Some(fl!("batch-reason-estimate"))
         } else if plan.send.is_empty() && !checked.is_empty() {
             Some(fl!("batch-action-describe-ai-none"))
@@ -427,6 +506,13 @@ impl Options {
                         .into(),
                 ]),
             ),
+            self.notes_row(plan),
+            page::option_row(
+                fl!("batch-option-notes-once"),
+                form::text_field(&fl!("batch-ai-notes-once-placeholder"), &self.one_off)
+                    .on_input(|line| ActionMessage::DescribeAi(Message::SetOneOff(line)))
+                    .width(iced::Length::Fill),
+            ),
         ];
         page::page(
             label(),
@@ -439,6 +525,35 @@ impl Options {
                 .into_iter()
                 .chain(std::iter::once(self.estimate(plan)))
                 .chain(self.key_notice()),
+        )
+    }
+
+    /// The folder's notes for the AI: the editor, and what it costs to send them.
+    fn notes_row(&self, plan: &Plan) -> Element<'_, ActionMessage> {
+        let editor = form::text_area(&self.notes.0, &fl!("batch-ai-notes-placeholder"))
+            .id(iced::widget::Id::new(NOTES_EDITOR_ID))
+            .on_action(|action| ActionMessage::DescribeAi(Message::NotesAction(action)));
+        let hint = match self.notes_too_long() {
+            Some(chars) => text::error(fl!(
+                "batch-ai-notes-too-long",
+                chars = (chars as i64),
+                max = (describe::MAX_INSTRUCTIONS_CHARS as i64)
+            )),
+            None => text::secondary(fl!("batch-ai-notes-hint", provider = self.provider_label())),
+        };
+        // Notes about what is said need the words: say so for clips without subtitles.
+        let no_subtitles = (talks_about_speech(&self.instructions().unwrap_or_default())
+            && plan.no_subtitles > 0)
+            .then(|| {
+                text::secondary(fl!(
+                    "batch-ai-notes-no-subtitles",
+                    videos = videos(plan.no_subtitles)
+                ))
+            });
+        page::option_row_with_info(
+            fl!("batch-option-notes"),
+            fl!("batch-ai-notes-info"),
+            column![editor, hint].push(no_subtitles).spacing(SPACE_S),
         )
     }
 
@@ -520,6 +635,31 @@ impl Options {
                 .on_press(ActionMessage::OpenAiSettings)
                 .into()],
         ))
+    }
+}
+
+/// Words in notes about what is said.
+const SPEECH_WORDS: &str =
+    "take takes line lines said says speak speaks speech repeat repeats repeated words";
+
+/// Whether the notes seem to be about what is said (takes, lines, repeats): they need the clip's
+/// subtitles. A rough test of English words; another language's notes simply get no hint.
+fn talks_about_speech(notes: &str) -> bool {
+    let notes = notes.to_lowercase();
+    // Whole words: "timeline" is not "line".
+    notes
+        .split(|c: char| !c.is_alphabetic())
+        .any(|word| SPEECH_WORDS.split_whitespace().any(|w| w == word))
+}
+
+/// The folder's notes and the line for one run as the one text a request carries.
+fn instructions_of(folder_notes: &str, one_off: &str) -> Option<String> {
+    let (notes, line) = (folder_notes.trim(), one_off.trim());
+    match (notes.is_empty(), line.is_empty()) {
+        (true, true) => None,
+        (false, true) => Some(notes.to_string()),
+        (true, false) => Some(line.to_string()),
+        (false, false) => Some(format!("{notes}\nFor this clip or run only: {line}")),
     }
 }
 
@@ -726,8 +866,13 @@ pub fn run_clip(
         return ItemResult::new(ItemStatus::Skipped, None);
     }
     // Removed in the settings while the job runs: every later video would fail the same way.
-    let Some(request) = Request::for_clip(path, options.model(), options.language, options.moments)
-    else {
+    let Some(request) = Request::for_clip(
+        path,
+        options.model(),
+        options.language,
+        options.moments,
+        options.instructions.as_deref(),
+    ) else {
         return ItemResult {
             stop_job: Some(fl!(
                 "batch-ai-stop-no-key",
@@ -817,7 +962,8 @@ pub fn run_clip(
                 ..ItemResult::failed(reason)
             }
         }
-        // frename sends no instructions, so this cannot happen; fail the item with the library's text.
+        // The panel keeps a run with notes over the cap from starting; fail the item with the
+        // library's text if one gets here anyway.
         Err(e @ describe::Error::InstructionsTooLong { .. }) => {
             return ItemResult::failed(e.to_string());
         }
@@ -930,7 +1076,13 @@ pub fn cached_clip(
     cache: &describe::Cache,
     path: &Path,
 ) -> Option<describe::DescribedClip> {
-    let request = Request::for_clip(path, options.model(), options.language, options.moments)?;
+    let request = Request::for_clip(
+        path,
+        options.model(),
+        options.language,
+        options.moments,
+        options.instructions.as_deref(),
+    )?;
     let vocabulary = vocabulary(&options.tags);
     cached_in(
         cache,
@@ -1017,6 +1169,7 @@ impl Request {
         model: Model,
         language: SummaryLanguage,
         moments: MomentsMode,
+        instructions: Option<&str>,
     ) -> Option<Self> {
         let api_key = key::read_key(frename_core::ai::key_of(model))?;
         let on_disk = FileTagger::disk_path(path);
@@ -1031,7 +1184,7 @@ impl Request {
                 language,
                 frame_sampling: FrameSampling::KeyFrames,
                 moments,
-                instructions: None,
+                instructions: instructions.map(str::to_string),
             },
         })
     }
@@ -1442,6 +1595,7 @@ mod tests {
                 moments: MomentsMode::default(),
                 tags: Vec::new(),
                 tags_requested: false,
+                instructions: None,
             },
             Path::new("C:/clips/photo.jpg"),
             &AtomicBool::new(false),
@@ -1460,5 +1614,129 @@ mod tests {
         assert_eq!(moments(&options), MomentsMode::Important, "the default");
         options.update(Message::SetMoments(MomentsMode::Full));
         assert_eq!(moments(&options), MomentsMode::Full);
+    }
+
+    fn type_notes(options: &mut Options, text: &str) {
+        options.update(Message::NotesAction(text_editor::Action::Edit(
+            text_editor::Edit::Paste(std::sync::Arc::new(text.to_string())),
+        )));
+    }
+
+    fn run_of(options: &Options) -> Run {
+        match options.operation() {
+            super::super::Operation::DescribeAi(run) => run,
+            other => panic!("not a Describe with AI run: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_notes_and_the_one_off_line_make_one_text_for_every_request_of_the_run() {
+        let mut options = Options::default();
+        assert_eq!(
+            run_of(&options).instructions,
+            None,
+            "no notes, nothing extra"
+        );
+
+        type_notes(&mut options, "The man is Eugene.\n");
+        assert_eq!(
+            run_of(&options).instructions.as_deref(),
+            Some("The man is Eugene."),
+            "trimmed"
+        );
+        options.update(Message::SetOneOff("the woman in red is Ana".into()));
+        // Prepare clips carries the folder's notes, never the line for one run.
+        assert_eq!(
+            options.run_with(false).instructions.as_deref(),
+            Some("The man is Eugene.")
+        );
+        let text = run_of(&options).instructions.expect("both");
+        assert!(text.starts_with("The man is Eugene.\n"), "{text}");
+        assert!(text.ends_with("the woman in red is Ana"), "{text}");
+
+        options.clear_one_off();
+        assert_eq!(
+            run_of(&options).instructions.as_deref(),
+            Some("The man is Eugene.")
+        );
+        options.update(Message::SetOneOff("only this".into()));
+        options.set_folder_notes("");
+        assert_eq!(run_of(&options).instructions.as_deref(), Some("only this"));
+    }
+
+    #[test]
+    fn a_folder_opened_replaces_the_notes_in_the_editor() {
+        let mut options = Options::default();
+        options.set_folder_notes("Mark the moon.");
+        assert_eq!(options.folder_notes(), "Mark the moon.");
+        options.set_folder_notes("");
+        assert_eq!(options.folder_notes(), "");
+        // A clone is an editor with the same text.
+        type_notes(&mut options, "Suggest tea.");
+        assert_eq!(options.clone().folder_notes(), "Suggest tea.");
+    }
+
+    #[test]
+    fn the_notes_are_counted_in_the_price() {
+        let files = [file("a.mp4", "")];
+        let checked: Vec<&File> = files.iter().collect();
+        let mut options = Options::default();
+        options.update(Message::Probed(vec![(files[0].id(), probe(Some(60.0)))]));
+        let without = options.plan(&checked).usage;
+        type_notes(&mut options, &"Mark the moon. ".repeat(100));
+        let with = options.plan(&checked).usage;
+        assert!(
+            with.input_tokens > without.input_tokens,
+            "{with:?} {without:?}"
+        );
+        assert_eq!(with.output_tokens, without.output_tokens);
+    }
+
+    #[test]
+    fn notes_over_the_library_cap_keep_the_run_off() {
+        let files = [file("a.mp4", "")];
+        let checked: Vec<&File> = files.iter().collect();
+        let mut options = Options::default();
+        options.update(Message::Probed(vec![(files[0].id(), probe(Some(10.0)))]));
+        options.update(Message::KeyState(key::ApiKey::Anthropic, KeyState::Saved));
+        assert!(run_button(&options, &checked).1);
+
+        type_notes(&mut options, &"x".repeat(describe::MAX_INSTRUCTIONS_CHARS));
+        assert_eq!(options.notes_too_long(), None, "exactly the cap is fine");
+        assert!(run_button(&options, &checked).1);
+        type_notes(&mut options, "y");
+        assert_eq!(
+            options.notes_too_long(),
+            Some(describe::MAX_INSTRUCTIONS_CHARS + 1)
+        );
+        assert!(!run_button(&options, &checked).1);
+    }
+
+    #[test]
+    fn prepare_clips_is_blocked_by_notes_over_the_cap_and_ignores_the_one_off_line() {
+        let files = [file("a.mp4", "")];
+        let checked: Vec<&File> = files.iter().collect();
+        let mut options = Options::default();
+        options.update(Message::Probed(vec![(files[0].id(), probe(Some(10.0)))]));
+        options.update(Message::KeyState(key::ApiKey::Anthropic, KeyState::Saved));
+        assert!(matches!(
+            options.step_with(&checked, false),
+            super::super::Step::Ready(_)
+        ));
+        let plain = options.totals(&checked).expect("estimated").1;
+        options.update(Message::SetOneOff("x".repeat(1500)));
+        assert_eq!(
+            options.totals(&checked).expect("estimated").1,
+            plain,
+            "the line for one run is not in a Prepare clips price"
+        );
+        type_notes(
+            &mut options,
+            &"x".repeat(describe::MAX_INSTRUCTIONS_CHARS + 1),
+        );
+        assert!(matches!(
+            options.step_with(&checked, false),
+            super::super::Step::Blocked { .. }
+        ));
     }
 }
