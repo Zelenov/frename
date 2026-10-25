@@ -258,7 +258,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .theme(FrenameApp::theme)
     .title(FrenameApp::title)
     .settings(iced::Settings {
-        default_font: ui::tokens::FONT,
+        default_font: iced::Font::with_name("Inter"),
         default_text_size: ui::tokens::TEXT_BODY.into(),
         antialiasing: false,
         ..iced::Settings::default()
@@ -267,6 +267,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The design system's fonts, drawn the same on every OS.
     let daemon = ui::tokens::FONT_FILES
         .into_iter()
+        .chain(ui::tokens::cjk_font_files())
         .fold(daemon, |daemon, font| daemon.font(font));
     daemon.run()?;
 

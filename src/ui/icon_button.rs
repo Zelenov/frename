@@ -154,7 +154,7 @@ impl<'a, M: Clone + 'a> From<IconButton<M>> for Element<'a, M> {
             Face::Icon(glyph) => icon(glyph, b.icon_size, color).into(),
             Face::Glyph(word) => text(word)
                 .size(TEXT_BODY)
-                .font(FONT_STRONG)
+                .font(font_strong())
                 .color(color)
                 .into(),
         };

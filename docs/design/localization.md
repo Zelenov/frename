@@ -15,7 +15,7 @@ languages as are ready, agent translations included, no owner check before relea
   moved to `i18n/en/frename.ftl`), so they get the deepest review round; each further language is
   now just one `.ftl` file plus one entry in `crate::i18n::LANGUAGES`, and ships as its own small
   PR once translated, per "ship each language as soon as it is complete".
-- **CJK:** drawn in a bundled Noto Sans CJK subset per language (`assets/fonts/NotoSansCJK-<lang>-*.otf`, SIL OFL 1.1), chosen by the UI language. Japanese is shipped; Korean and both Chinese scripts follow, one PR each.
+- **CJK:** drawn in a bundled Noto Sans CJK subset per language (`assets/fonts/NotoSansCJK-<JP|KR|SC|TC>-*.otf`, SIL OFL 1.1, made by `scripts/subset-cjk.py`). `ui::tokens::set_language` (called from `i18n::apply`) makes the text styles use that family instead of Inter; glyph fallback is not relied on, because cosmic-text prefers a system Chinese face for Han text. Japanese is shipped; Korean and both Chinese scripts follow, one PR each.
 
 ## Architecture
 

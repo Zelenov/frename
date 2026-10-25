@@ -652,7 +652,7 @@ fn marker_row<'a>(
                 }
             })
             .size(TEXT_BODY)
-            .font(FONT)
+            .font(font())
             .padding(FIELD_INSET)
             .style(style::text_editor)
             .into(),

@@ -1,5 +1,5 @@
-# frename の UI テキスト（原文）。i18n/ 内の他のファイルはすべて、ここと同じ id、
-# 属性、$引数を持ちます（src/i18n.rs のテストで確認）。
+# frename の UI テキスト（日本語）。原文は i18n/en/frename.ftl で、すべてのファイルが
+# 同じ id、属性、$引数を持ちます（src/i18n.rs のテストで確認）。
 # キー: <機能>-<要素>[-<詳細>]。機能は src/features/ 内のフォルダー名です。
 
 ## 言語名: どのファイルでも同じ。各言語の表記で書きます。
@@ -108,7 +108,7 @@ settings-ai-hint = Haiku、GPT-4.1 mini、Gemini Flash-Lite が最も低コス�
 settings-ai-moments-label = 瞬間
 settings-ai-moments-important = 目立つ部分のみ
 settings-ai-moments-full = クリップ全体
-settings-ai-moments-important-hint = イン点とアウト点を設定する位置も提案します（IN と OUT の隣の AI ピル）
+settings-ai-moments-important-hint = イン点とアウト点を設定する位置も提案します（IN と OUT の隣の AI ボタン）
 settings-ai-moments-full-hint = 静かな部分も含め、すべての部分に 1 つずつ瞬間を付けます。イン点／アウト点の提案はありません
 settings-ai-tag-suggestions = フォルダーのタグからもタグを提案する
 settings-ai-tag-suggestions-hint = 同じリクエストで、フォルダーのどのタグが各クリップに合うかを AI が答えます。提案されたタグは、クリックしたときだけ追加されます。
@@ -212,7 +212,7 @@ batch-suggest-in-job = このクリップの説明は、タグの提案なしで
 batch-suggest-no-tags = このフォルダーには提案元のタグがまだありません。先にいくつか追加してください
 batch-solo-gave-up = 準備できませんでした
 batch-solo-withdrawn = 取り下げました: { $action }
-batch-solo-in-work = { $action } を実行中です。ストリップまたはジョブのページからキャンセルしてください
+batch-solo-in-work = { $action } を実行中です。インジケーターまたはジョブのページからキャンセルしてください
 batch-waiting-title = { $count ->
    *[other] { $count } 件の実行が待機中
 }
@@ -632,12 +632,12 @@ markers-keep-color = 色を保持
 markers-done = 完了
 markers-delete = マーカーを削除
 markers-cannot-hold-hint = Premiere は MP4 と MOV ファイルからマーカーを読み込みます。
-markers-color-green = 緑
-markers-color-red = 赤
+markers-color-green = グリーン
+markers-color-red = レッド
 markers-color-orange = オレンジ
-markers-color-yellow = 黄
-markers-color-white = 白
-markers-color-blue = 青
+markers-color-yellow = イエロー
+markers-color-white = ホワイト
+markers-color-blue = ブルー
 markers-color-cyan = シアン
 markers-color-lavender = ラベンダー
 markers-color-magenta = マゼンタ
@@ -789,7 +789,7 @@ markers-not-exported = マーカーを保存できませんでした: ファイ�
 batch-option-notes = AI へのメモ
 batch-ai-notes-info = このフォルダーの映像についての自分用のメモです。説明、タグの提案、マーカーの説明など、ここでのすべての AI リクエストに添えて送信されます。フォルダーの .frename ファイルに保存されます。
 batch-ai-notes-placeholder = 例: 一番よく映る男性はユージーンです。広告看板にマーカーを付けてください。お茶が映ったらタグ tea を提案してください。
-batch-ai-notes-hint = フレームとともに { $provider } に送信されます。名前はこのメモからのみ付けられ、frename は顔を認識しません。説明済みのビデオはスキップされます。新しいメモでやり直すには「やり直す」にチェックを入れてください。
+batch-ai-notes-hint = フレームとともに { $provider } に送信されます。名前はこのメモからのみ付けられ、frename は顔を認識しません。説明済みのビデオはスキップされます。新しいメモでやり直すには「AI の説明がすでにあるビデオもやり直す」にチェックを入れてください。
 batch-ai-notes-too-long = メモが { $chars } 文字あり、上限は { $max } 文字です。実行するには短くしてください。
 batch-ai-notes-too-long-reason = AI へのメモが長すぎます
 batch-option-notes-once = 今回のみの追記

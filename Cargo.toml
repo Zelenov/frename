@@ -78,6 +78,8 @@ frename-core = { path = "crates/frename-core", features = ["test-support"] }
 # Parse the .ftl files in the translation tests
 fluent-syntax = "0.12"
 fluent-bundle = "0.16"
+# Read the glyph coverage of the bundled CJK fonts in a test
+ttf-parser = "0.25"
 proc-macro2 = "1"
 
 [profile.dev.package."*"]

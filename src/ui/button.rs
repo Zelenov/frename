@@ -28,15 +28,15 @@ fn padding(kind: ButtonKind) -> Padding {
     }
 }
 
-fn font(kind: ButtonKind) -> Font {
+fn kind_font(kind: ButtonKind) -> Font {
     match kind {
-        ButtonKind::Primary | ButtonKind::Danger => FONT_STRONG,
-        _ => FONT,
+        ButtonKind::Primary | ButtonKind::Danger => font_strong(),
+        _ => font(),
     }
 }
 
 fn make<'a, M>(label: impl IntoFragment<'a>, kind: ButtonKind) -> Button<'a, M> {
-    button(text::label(label, font(kind)))
+    button(text::label(label, kind_font(kind)))
         .padding(padding(kind))
         .style(style::button(kind))
 }
@@ -97,7 +97,7 @@ pub fn with_icon<'a, M: 'a>(
 ) -> Button<'a, M> {
     let content = row![
         icon(glyph, ICON_M, icon_color(kind, enabled)),
-        text::label(label, font(kind)),
+        text::label(label, kind_font(kind)),
     ]
     .spacing(SPACE_TIGHT)
     .align_y(Alignment::Center);

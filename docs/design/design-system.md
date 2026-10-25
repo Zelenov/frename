@@ -200,7 +200,9 @@ Why these values:
 | UI | **Inter** 4.1, Regular and SemiBold | `Inter-Regular.ttf`, `Inter-SemiBold.ttf` (≈ 830 KB) | Drawn for screens at 11–16 px; full Latin and Cyrillic; neutral, like the Segoe UI users know. |
 | File names, timecodes, keys in values | **JetBrains Mono NL** 2.304 Regular | `JetBrainsMonoNL-Regular.ttf` (≈ 210 KB) | 0/O and 1/l/I differ (DI p. 273); fixed width keeps timecodes still; the NL build has no ligatures, so `->` or `==` in a file name is shown as typed. |
 
-Both are SIL OFL 1.1 and are bundled into the binary (`include_bytes!`), so Windows, Linux and
+| UI in a CJK language | **Noto Sans CJK** (JP; KR, SC, TC follow), Regular and Bold, cut down to the glyphs the interface uses | `NotoSansCJK-JP-Regular.otf`, `NotoSansCJK-JP-Bold.otf` (≈ 200 KB each) | Replaces Inter for the whole UI while that language is shown (`ui::tokens::font()`), by family name: glyph fallback would pick a system Chinese face for Han text. Made by `scripts/subset-cjk.py`; a test fails when a text needs a glyph the subset lacks. File names, tags and comments in CJK are drawn by the system's fonts, as before. |
+
+All are SIL OFL 1.1 and are bundled into the binary (`include_bytes!`), so Windows, Linux and
 the CI screenshots draw the same letters. The licence files go next to the fonts
 (`assets/fonts/`). Static files, not the variable font: the family name is then just "Inter", and
 two weights are all the system uses (PUI: "regular and bold font weights only").
@@ -2555,7 +2557,7 @@ main window does not change in #57 and the README has no Settings screenshot.
 - Илья Бирман. *Пользовательский интерфейс*. Бюро Горбунова, 2017 — «Привычка», «Модальность»,
   «Взгляд новичка», «Обратная связь», «Прицеливание», «Близость», «Формы», «Сетка», «Язык».
 - WCAG 2.2: contrast (1.4.3, 1.4.11), target size (2.5.8).
-- Inter 4.1 (rsms/inter, OFL 1.1); JetBrains Mono 2.304 (JetBrains/JetBrainsMono, OFL 1.1);
+- Inter 4.1 (rsms/inter, OFL 1.1); JetBrains Mono 2.304 (JetBrains/JetBrainsMono, OFL 1.1); Noto Sans CJK (Adobe / Google, OFL 1.1);
   Lucide (lucide-icons/lucide, ISC).
 - Mockup method: the `frontend-design` skill (anthropics/skills) for the design pass and its
   self-critique, and the `ui-ux-pro-max` skill (nextlevelbuilder/ui-ux-pro-max-skill) checklists

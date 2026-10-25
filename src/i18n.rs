@@ -120,7 +120,9 @@ pub fn apply(stored: &str) {
     if let Ok(mut current) = SYSTEM_LANGUAGE.lock() {
         *current = system;
     }
-    languages().show(resolve(stored, &os));
+    let shown = resolve(stored, &os);
+    crate::ui::tokens::set_language(shown);
+    languages().show(shown);
 }
 
 /// The OS's preferred languages. Tests see none: they read English, and a machine whose
