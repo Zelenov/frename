@@ -32,32 +32,32 @@ pub fn label<'a>(content: impl IntoFragment<'a>, font: Font) -> Text<'a> {
 
 /// A page title; a panel's title; the title of a whole-window empty state.
 pub fn heading<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
-    styled(content, TEXT_HEADING, LINE_HEADING, FONT_STRONG, TEXT)
+    styled(content, TEXT_HEADING, LINE_HEADING, font_strong(), TEXT)
 }
 
 /// A section title; a dialog's title; the title of an empty pane.
 pub fn title<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
-    styled(content, TEXT_TITLE, LINE_TITLE, FONT_STRONG, TEXT)
+    styled(content, TEXT_TITLE, LINE_TITLE, font_strong(), TEXT)
 }
 
 /// Everything else: labels, values, lines of text.
 pub fn body<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
-    styled(content, TEXT_BODY, LINE_BODY, FONT, TEXT)
+    styled(content, TEXT_BODY, LINE_BODY, font(), TEXT)
 }
 
 /// The value that matters in a line.
 pub fn strong<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
-    styled(content, TEXT_BODY, LINE_BODY, FONT_STRONG, TEXT)
+    styled(content, TEXT_BODY, LINE_BODY, font_strong(), TEXT)
 }
 
 /// Help, descriptions, meta.
 pub fn secondary<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
-    styled(content, TEXT_BODY, LINE_BODY, FONT, TEXT_SECONDARY)
+    styled(content, TEXT_BODY, LINE_BODY, font(), TEXT_SECONDARY)
 }
 
 /// What went wrong, next to where it did.
 pub fn error<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
-    styled(content, TEXT_BODY, LINE_BODY, FONT, ERROR)
+    styled(content, TEXT_BODY, LINE_BODY, font(), ERROR)
 }
 
 /// File names, paths, timecodes, examples of names; in `TEXT_SECONDARY` (a file name in a list
@@ -68,7 +68,7 @@ pub fn mono<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
 
 /// Badges, counters, key caps, the second line of a dense row.
 pub fn caption<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
-    styled(content, TEXT_CAPTION, LINE_CAPTION, FONT, TEXT_SECONDARY)
+    styled(content, TEXT_CAPTION, LINE_CAPTION, font(), TEXT_SECONDARY)
 }
 
 /// A caption that is a fact to notice: a badge.
@@ -77,14 +77,14 @@ pub fn caption_strong<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
         content,
         TEXT_CAPTION,
         LINE_CAPTION,
-        FONT_STRONG,
+        font_strong(),
         TEXT_SECONDARY,
     )
 }
 
 /// The label of a mini chip in a file list row.
 pub fn chip_mini<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
-    styled(content, TEXT_CHIP_MINI, LINE_CHIP_MINI, FONT, TAG_TEXT)
+    styled(content, TEXT_CHIP_MINI, LINE_CHIP_MINI, font(), TAG_TEXT)
 }
 
 /// The cue under the windowed video, `scale` times its medium size.
@@ -93,7 +93,7 @@ pub fn subtitle<'a>(content: impl IntoFragment<'a>, scale: f32) -> Text<'a> {
         content,
         TEXT_SUBTITLE * scale,
         LINE_SUBTITLE * scale,
-        FONT,
+        font(),
         TEXT,
     )
 }
@@ -104,7 +104,7 @@ pub fn video_caption<'a>(content: impl IntoFragment<'a>, scale: f32) -> Text<'a>
         content,
         TEXT_VIDEO_CAPTION * scale,
         LINE_VIDEO_CAPTION * scale,
-        FONT,
+        font(),
         TEXT,
     )
 }
@@ -112,7 +112,7 @@ pub fn video_caption<'a>(content: impl IntoFragment<'a>, scale: f32) -> Text<'a>
 /// The text of a tooltip. It breaks between words, and inside a word longer than the line (a file
 /// name has no spaces): otherwise it runs past the tooltip's box, which stops at its widest.
 pub fn tooltip<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
-    styled(content, TEXT_TOOLTIP, LINE_TOOLTIP, FONT, TEXT).wrapping(Wrapping::WordOrGlyph)
+    styled(content, TEXT_TOOLTIP, LINE_TOOLTIP, font(), TEXT).wrapping(Wrapping::WordOrGlyph)
 }
 
 /// `line` cut with "…" at the end to at most `width` px, at `char_width` px a character: exact for
@@ -141,14 +141,14 @@ pub fn body_runs<'a, M: 'a>(runs: impl IntoIterator<Item = (Run, String)>) -> El
         .into_iter()
         .map(|(run, content)| match run {
             Run::Plain => span(content),
-            Run::Strong => span(content).font(FONT_STRONG),
+            Run::Strong => span(content).font(font_strong()),
             Run::Mono => span(content).font(FONT_MONO).size(TEXT_MONO),
         })
         .collect();
     rich_text(spans)
         .size(TEXT_BODY)
         .line_height(LineHeight::Absolute(Pixels(LINE_BODY)))
-        .font(FONT)
+        .font(font())
         .color(TEXT)
         .into()
 }
@@ -198,7 +198,7 @@ pub fn caption_marked<'a, M: 'a>(
     rich_text(spans)
         .size(TEXT_CAPTION)
         .line_height(LineHeight::Absolute(Pixels(LINE_CAPTION)))
-        .font(FONT)
+        .font(font())
         .color(TEXT_SECONDARY)
         .wrapping(Wrapping::None)
         .into()

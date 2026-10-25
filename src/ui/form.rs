@@ -36,7 +36,7 @@ pub fn checkbox<'a, M>(label: impl IntoFragment<'a>, checked: bool) -> Checkbox<
         .spacing(SPACE_S)
         .text_size(TEXT_BODY)
         .text_line_height(LINE)
-        .font(FONT)
+        .font(font())
         .style(style::checkbox)
 }
 
@@ -67,7 +67,7 @@ where
         .spacing(SPACE_S)
         .text_size(TEXT_BODY)
         .text_line_height(LINE)
-        .font(FONT)
+        .font(font())
         .style(style::radio);
     let Some(description) = description else {
         return choice.into();
@@ -95,7 +95,7 @@ pub fn text_field<'a, M: Clone + 'a>(placeholder: &str, value: &str) -> TextInpu
         .size(TEXT_BODY)
         .line_height(LINE)
         .padding(FIELD_PADDING)
-        .font(FONT)
+        .font(font())
         .style(style::text_input)
 }
 
@@ -182,7 +182,7 @@ where
         .text_size(TEXT_BODY)
         .text_line_height(LINE)
         .padding(FIELD_PADDING)
-        .font(FONT)
+        .font(font())
         .style(style::pick_list)
         .menu_style(style::menu)
 }

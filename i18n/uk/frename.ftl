@@ -12,6 +12,7 @@ language-name-pt-BR = Português (Brasil)
 language-name-uk = Українська
 language-name-sr-Cyrl = Српски (ћирилица)
 language-name-sr-Latn = Srpski (latinica)
+language-name-ja = 日本語
 
 ## Settings window
 

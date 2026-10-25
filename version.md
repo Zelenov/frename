@@ -1,3 +1,7 @@
+# 0.178
+## Added
+- The interface in Japanese (日本語): follows the system language, or pick it in Settings → Language.
+
 # 0.177
 ## Added
 - Notes for the AI: a text box in the Describe with AI panel for what only you know about the footage ("the man who appears most often is Eugene", "mark advertising billboards", "suggest the tag tea"). The notes are kept in the folder's `.frename` file and go with every AI request in it: batch descriptions, the clip buttons, tag suggestions and marker descriptions; the price counts them. **Notes on** next to the AI buttons shows when the folder has notes. An extra line for one run is not saved.
