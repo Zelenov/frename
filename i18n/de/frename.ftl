@@ -47,6 +47,7 @@ language-name-uk = Українська
 language-name-sr-Cyrl = Српски (ћирилица)
 language-name-sr-Latn = Srpski (latinica)
 language-name-ja = 日本語
+language-name-ko = 한국어
 
 ## Settings window
 

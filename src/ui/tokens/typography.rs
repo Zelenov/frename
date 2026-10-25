@@ -49,14 +49,24 @@ pub const FONT_FILES: [&[u8]; 3] = [
 /// The family is named by the text styles, not left to glyph fallback: cosmic-text picks a
 /// system "Noto Sans CJK SC" for Han text by the OS locale before it looks at any other font, so
 /// Japanese kanji would come out in Chinese forms.
-const CJK_FONTS: [(&str, &str, [&[u8]; 2]); 1] = [(
-    "ja",
-    "Noto Sans CJK JP",
-    [
-        include_bytes!("../../../assets/fonts/NotoSansCJK-JP-Regular.otf"),
-        include_bytes!("../../../assets/fonts/NotoSansCJK-JP-Bold.otf"),
-    ],
-)];
+const CJK_FONTS: [(&str, &str, [&[u8]; 2]); 2] = [
+    (
+        "ja",
+        "Noto Sans CJK JP",
+        [
+            include_bytes!("../../../assets/fonts/NotoSansCJK-JP-Regular.otf"),
+            include_bytes!("../../../assets/fonts/NotoSansCJK-JP-Bold.otf"),
+        ],
+    ),
+    (
+        "ko",
+        "Noto Sans CJK KR",
+        [
+            include_bytes!("../../../assets/fonts/NotoSansCJK-KR-Regular.otf"),
+            include_bytes!("../../../assets/fonts/NotoSansCJK-KR-Bold.otf"),
+        ],
+    ),
+];
 
 /// Every CJK font file, loaded at start-up next to [`FONT_FILES`].
 pub fn cjk_font_files() -> impl Iterator<Item = &'static [u8]> {
