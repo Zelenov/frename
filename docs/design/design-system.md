@@ -199,7 +199,7 @@ Why these values:
 |---|---|---|---|
 | UI | **Inter** 4.1, Regular and SemiBold | `Inter-Regular.ttf`, `Inter-SemiBold.ttf` (≈ 830 KB) | Drawn for screens at 11–16 px; full Latin and Cyrillic; neutral, like the Segoe UI users know. |
 | File names, timecodes, keys in values | **JetBrains Mono NL** 2.304 Regular | `JetBrainsMonoNL-Regular.ttf` (≈ 210 KB) | 0/O and 1/l/I differ (DI p. 273); fixed width keeps timecodes still; the NL build has no ligatures, so `->` or `==` in a file name is shown as typed. |
-| UI in a CJK language | **Noto Sans CJK** (JP; KR, SC, TC follow), Regular and Bold, cut down to the glyphs the interface uses | `NotoSansCJK-JP-Regular.otf`, `NotoSansCJK-JP-Bold.otf` (≈ 200 KB each) | Replaces Inter for the whole UI while that language is shown (`ui::tokens::font()`), by family name: glyph fallback would pick a system Chinese face for Han text. Made by `scripts/subset-cjk.py`; a test fails when a text needs a glyph the subset lacks. File names, tags and comments in CJK are drawn by the system's fonts, as before. |
+| UI in a CJK language | **Noto Sans CJK** (JP, KR; SC, TC follow), Regular and Bold, cut down to the glyphs the interface uses | `NotoSansCJK-JP-Regular.otf`, `NotoSansCJK-JP-Bold.otf` (≈ 200 KB each) | Replaces Inter for the whole UI while that language is shown (`ui::tokens::font()`), by family name: glyph fallback would pick a system Chinese face for Han text. Made by `scripts/subset-cjk.py`; a test fails when a text needs a glyph the subset lacks. File names, tags and comments in CJK are drawn by the system's fonts, as before. |
 
 All are SIL OFL 1.1 and are bundled into the binary (`include_bytes!`), so Windows, Linux and
 the CI screenshots draw the same letters. The licence files go next to the fonts
