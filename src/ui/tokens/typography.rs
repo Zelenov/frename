@@ -181,6 +181,9 @@ mod tests {
     #[test]
     fn the_ui_font_follows_the_language() {
         assert_eq!(cjk_family("ja"), Some("Noto Sans CJK JP"));
+        assert_eq!(cjk_family("ko"), Some("Noto Sans CJK KR"));
+        assert_eq!(cjk_family("zh-Hans"), Some("Noto Sans CJK SC"));
+        assert_eq!(cjk_family("zh-Hant"), Some("Noto Sans CJK TC"));
         assert_eq!(cjk_family("de"), None);
         assert_eq!(
             regular_of(cjk_family("ja")),
