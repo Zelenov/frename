@@ -144,7 +144,7 @@ mod tests {
     /// shows in a CJK language must be in that language's font: an edit to `i18n/<lang>/frename.ftl` that adds one needs `scripts/subset-cjk.py` run again.
     #[test]
     fn cjk_fonts_cover_their_texts() {
-        for (language, _, files) in CJK_FONTS {
+        for (language, family, files) in CJK_FONTS {
             let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("i18n")
                 .join(language)
@@ -152,6 +152,11 @@ mod tests {
             let text = std::fs::read_to_string(&path).expect("the language file");
             for (weight, data) in ["Regular", "Bold"].iter().zip(files) {
                 let face = ttf_parser::Face::parse(data, 0).expect("a font file");
+                let named = face.names().into_iter().any(|name| {
+                    name.name_id == ttf_parser::name_id::FAMILY
+                        && name.to_string().as_deref() == Some(family)
+                });
+                assert!(named, "{language} {weight} is not named {family:?}");
                 let missing: String = text
                     .chars()
                     .filter(|c| *c >= '\u{2E80}' && face.glyph_index(*c).is_none())
