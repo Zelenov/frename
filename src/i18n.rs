@@ -6,7 +6,7 @@
 //! source language and the fallback for any message a translation lacks.
 //!
 //! `LANGUAGES` is deliberately short today (English, Russian, German, French, Spanish,
-//! Italian, Brazilian Portuguese, Ukrainian, Serbian in both scripts, Japanese, Korean and Simplified Chinese): each further language is its own small PR that adds one `.ftl` file and one entry
+//! Italian, Brazilian Portuguese, Ukrainian, Serbian in both scripts, Japanese, Korean and Chinese in both scripts): each further language is its own small PR that adds one `.ftl` file and one entry
 //! here, reviewed on its own. CJK languages are drawn in a bundled Noto Sans CJK subset (`assets/fonts`).
 
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
@@ -22,8 +22,9 @@ use rust_embed::RustEmbed;
 struct Localizations;
 
 /// Language codes the UI is translated into, in the order Settings lists them.
-pub const LANGUAGES: [&str; 13] = [
+pub const LANGUAGES: [&str; 14] = [
     "en", "ru", "de", "fr", "es", "it", "pt-BR", "uk", "sr-Cyrl", "sr-Latn", "ja", "ko", "zh-Hans",
+    "zh-Hant",
 ];
 
 /// The source language, used when nothing else matches.
@@ -168,8 +169,8 @@ fn by_language(tag: &str) -> Option<&'static str> {
         .find(|p| p.len() == 4 && p.chars().all(|c| c.is_ascii_alphabetic()))
         .copied();
     // Chinese tags rarely name the script: `zh-TW`, `zh-HK` and `zh-MO` are Traditional, every
-    // other region (`zh-CN`, `zh-SG`, bare `zh`) Simplified. A Chinese script the build lacks is
-    // not swapped for the other one.
+    // other region (`zh-CN`, `zh-SG`, bare `zh`) Simplified. The script is never swapped for the
+    // other one.
     let chinese_by_region = (language.eq_ignore_ascii_case("zh") && script.is_none()).then(|| {
         let traditional = rest
             .iter()
@@ -228,6 +229,7 @@ pub fn language_name(language: &str) -> String {
         "ja" => crate::fl!("language-name-ja"),
         "ko" => crate::fl!("language-name-ko"),
         "zh-Hans" => crate::fl!("language-name-zh-Hans"),
+        "zh-Hant" => crate::fl!("language-name-zh-Hant"),
         _ => crate::fl!("language-name-en"),
     }
 }
@@ -267,12 +269,21 @@ mod tests {
         assert_eq!(resolve("", &os(&["zh"])), "zh-Hans");
         assert_eq!(resolve("", &os(&["zh-Hans-CN"])), "zh-Hans");
         assert_eq!(resolve("zh-hans", &os(&["de-DE"])), "zh-Hans");
+        assert_eq!(resolve("", &os(&["zh-TW"])), "zh-Hant");
+        assert_eq!(resolve("", &os(&["zh_HK"])), "zh-Hant");
+        assert_eq!(resolve("", &os(&["zh-MO"])), "zh-Hant");
+        assert_eq!(resolve("", &os(&["zh-Hant"])), "zh-Hant");
         assert_eq!(
-            resolve("", &os(&["zh-TW"])),
-            "en",
-            "Traditional Chinese is not swapped for Simplified"
+            resolve("", &os(&["zh-Hant-CN"])),
+            "zh-Hant",
+            "the script wins"
         );
-        assert_eq!(resolve("", &os(&["zh-Hant-HK", "de-DE"])), "de");
+        assert_eq!(
+            resolve("", &os(&["zh-Hans-TW"])),
+            "zh-Hans",
+            "the script wins"
+        );
+        assert_eq!(resolve("zh-hant", &os(&["de-DE"])), "zh-Hant");
         assert_eq!(resolve("", &os(&["ja-JP"])), "ja");
         assert_eq!(resolve("", &os(&["ja"])), "ja");
         assert_eq!(
@@ -449,7 +460,7 @@ mod tests {
             "ru" => &["one", "few", "many"],
             "uk" => &["one", "few", "many", "other"],
             "sr-Cyrl" | "sr-Latn" => &["one", "few", "other"],
-            "ja" | "ko" | "zh-Hans" => &["other"],
+            "ja" | "ko" | "zh-Hans" | "zh-Hant" => &["other"],
             _ => &["one", "other"],
         }
     }

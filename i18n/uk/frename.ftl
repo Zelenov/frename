@@ -15,6 +15,7 @@ language-name-sr-Latn = Srpski (latinica)
 language-name-ja = 日本語
 language-name-ko = 한국어
 language-name-zh-Hans = 简体中文
+language-name-zh-Hant = 繁體中文
 
 ## Settings window
 

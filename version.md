@@ -1,3 +1,7 @@
+# 0.181
+## Added
+- The interface in Traditional Chinese (繁體中文): follows the system language (Taiwan, Hong Kong and Macao), or pick it in Settings → Language.
+
 # 0.180
 ## Added
 - The interface in Simplified Chinese (简体中文): follows the system language, or pick it in Settings → Language.
