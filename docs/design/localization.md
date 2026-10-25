@@ -9,14 +9,13 @@ languages as are ready, agent translations included, no owner check before relea
 - **Owner's language list:** the languages Premiere Pro's own UI ships in (English, Russian,
   German, French, Spanish, Italian, Portuguese (Brazil), Japanese, Korean, Chinese Simplified,
   Chinese Traditional), plus Serbian (`sr-Cyrl` and `sr-Latn`) and Ukrainian if cheap.
-- **Shipped:** English (source), Russian, German, French, Spanish, Italian, Brazilian Portuguese, Ukrainian and Serbian (Cyrillic and Latin); each further language is its own PR. The infrastructure and the full string
+- **Shipped:** English (source), Russian, German, French, Spanish, Italian, Brazilian Portuguese, Ukrainian, Serbian (Cyrillic and Latin) and Japanese; each further language is its own PR. The infrastructure and the full string
   extraction were the hard, correctness-critical part (every literal in `src/features/*/view.rs`,
   `src/widgets/*.rs`, `src/features/batch/actions/*.rs` and `src/features/folder_controls/*.rs`
   moved to `i18n/en/frename.ftl`), so they get the deepest review round; each further language is
   now just one `.ftl` file plus one entry in `crate::i18n::LANGUAGES`, and ships as its own small
   PR once translated, per "ship each language as soon as it is complete".
-- **CJK deferred:** Japanese, Korean and both Chinese scripts wait for a bundled font that covers
-  them (issue #57); the fixed-width UI font today falls back to boxes for CJK glyphs.
+- **CJK:** drawn in a bundled Noto Sans CJK subset per language (`assets/fonts/NotoSansCJK-<lang>-*.otf`, SIL OFL 1.1), chosen by the UI language. Japanese is shipped; Korean and both Chinese scripts follow, one PR each.
 
 ## Architecture
 

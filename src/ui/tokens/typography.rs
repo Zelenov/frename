@@ -41,8 +41,10 @@ pub const FONT_STRONG: Font = Font {
 };
 pub const FONT_MONO: Font = Font::with_name("JetBrains Mono NL");
 /// The font files, loaded once at start-up.
-pub const FONT_FILES: [&[u8]; 3] = [
+pub const FONT_FILES: [&[u8]; 5] = [
     include_bytes!("../../../assets/fonts/Inter-Regular.ttf"),
     include_bytes!("../../../assets/fonts/Inter-SemiBold.ttf"),
     include_bytes!("../../../assets/fonts/JetBrainsMonoNL-Regular.ttf"),
+    include_bytes!("../../../assets/fonts/NotoSansCJK-ja-Regular.otf"),
+    include_bytes!("../../../assets/fonts/NotoSansCJK-ja-Bold.otf"),
 ];

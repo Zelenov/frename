@@ -6,8 +6,8 @@
 //! source language and the fallback for any message a translation lacks.
 //!
 //! `LANGUAGES` is deliberately short today (English, Russian, German, French, Spanish,
-//! Italian, Brazilian Portuguese, Ukrainian and Serbian in both scripts): each further language is its own small PR that adds one `.ftl` file and one entry
-//! here, reviewed on its own. CJK languages wait for a bundled font that covers them (issue #57).
+//! Italian, Brazilian Portuguese, Ukrainian, Serbian in both scripts and Japanese): each further language is its own small PR that adds one `.ftl` file and one entry
+//! here, reviewed on its own. CJK languages are drawn in a bundled Noto Sans CJK subset (`assets/fonts`).
 
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
@@ -22,8 +22,8 @@ use rust_embed::RustEmbed;
 struct Localizations;
 
 /// Language codes the UI is translated into, in the order Settings lists them.
-pub const LANGUAGES: [&str; 10] = [
-    "en", "ru", "de", "fr", "es", "it", "pt-BR", "uk", "sr-Cyrl", "sr-Latn",
+pub const LANGUAGES: [&str; 11] = [
+    "en", "ru", "de", "fr", "es", "it", "pt-BR", "uk", "sr-Cyrl", "sr-Latn", "ja",
 ];
 
 /// The source language, used when nothing else matches.
@@ -201,6 +201,7 @@ pub fn language_name(language: &str) -> String {
         "uk" => crate::fl!("language-name-uk"),
         "sr-Cyrl" => crate::fl!("language-name-sr-Cyrl"),
         "sr-Latn" => crate::fl!("language-name-sr-Latn"),
+        "ja" => crate::fl!("language-name-ja"),
         _ => crate::fl!("language-name-en"),
     }
 }
@@ -222,7 +223,7 @@ mod tests {
     fn the_language_follows_the_setting_then_the_os_then_english() {
         assert_eq!(resolve("", &os(&["ru-RU"])), "ru");
         assert_eq!(
-            resolve("", &os(&["ja-JP", "ru-RU"])),
+            resolve("", &os(&["ko-KR", "ru-RU"])),
             "ru",
             "second preference"
         );
@@ -233,7 +234,9 @@ mod tests {
         assert_eq!(resolve("", &os(&["pt-BR"])), "pt-BR");
         assert_eq!(resolve("", &os(&["pt_PT"])), "pt-BR");
         assert_eq!(resolve("pt-br", &os(&["de-DE"])), "pt-BR");
-        assert_eq!(resolve("", &os(&["ja-JP"])), "en");
+        assert_eq!(resolve("", &os(&["ko-KR"])), "en");
+        assert_eq!(resolve("", &os(&["ja-JP"])), "ja");
+        assert_eq!(resolve("", &os(&["ja"])), "ja");
         assert_eq!(
             resolve("", &os(&["uk-UA"])),
             "uk",
@@ -253,7 +256,7 @@ mod tests {
         assert_eq!(resolve("", &os(&["sr-latn-ba"])), "sr-Latn", "case");
         assert_eq!(resolve("sr-latn", &os(&["de-DE"])), "sr-Latn");
         assert_eq!(resolve("sr-Cyrl", &os(&["sr-Latn-RS"])), "sr-Cyrl");
-        assert_eq!(resolve("", &os(&["ja-JP", "sr-Latn-RS"])), "sr-Latn");
+        assert_eq!(resolve("", &os(&["ko-KR", "sr-Latn-RS"])), "sr-Latn");
         assert_eq!(resolve("", &os(&["pt-Latn-PT"])), "pt-BR", "one script");
         assert_eq!(
             resolve("xx", &os(&["ru-RU"])),
@@ -408,6 +411,7 @@ mod tests {
             "ru" => &["one", "few", "many"],
             "uk" => &["one", "few", "many", "other"],
             "sr-Cyrl" | "sr-Latn" => &["one", "few", "other"],
+            "ja" => &["other"],
             _ => &["one", "other"],
         }
     }
