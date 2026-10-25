@@ -104,7 +104,7 @@ settings-ai-gemini-used-by = Gemini モデルを選んだとき、一括処理�
 settings-ai-model-needs-key = { $model } — 先に { $provider } のキーを追加してください
 settings-ai-model-label = モデル
 settings-ai-language-label = 説明の言語
-settings-ai-hint = Haiku、GPT-4.1 mini、Gemini Flash-Lite が最も低コストです。Sonnet、Opus、GPT-4.1、Gemini Flash はより細かく気づきます。モデルには、その提供元のキーが必要です。
+settings-ai-hint = Haiku、GPT-4.1 mini、Gemini Flash-Lite が最も低コストです。Sonnet、Opus、GPT-4.1、Gemini Flash はより細かい点まで拾います。モデルには、その提供元のキーが必要です。
 settings-ai-moments-label = 瞬間
 settings-ai-moments-important = 目立つ部分のみ
 settings-ai-moments-full = クリップ全体
@@ -237,7 +237,7 @@ batch-result-done-detail = { $changed } 件を変更、{ $unchanged } 件は変�
 batch-result-problems = 問題ありで完了: { $total ->
    *[other] { $total } 個のファイル
 }のうち { $failed } 個が未処理
-batch-figure-unchanged = 変更なし
+batch-figure-unchanged = 変更不要
 batch-figure-not-done = 未処理
 batch-figure-not-reached = 未到達
 batch-files-not-done = 未処理のファイル
@@ -433,7 +433,7 @@ batch-subtitles-already = { $n ->
    *[other] { $n } 件はすでに字幕あり
 }
 batch-subtitles-rebuilt-free = { $n } 件は保存済みの文字起こしから無料で再作成
-batch-subtitles-no-speech-before = { $n } 件は前回、音声に発話なし
+batch-subtitles-no-speech-before = { $n } 件は前回、発話が検出されませんでした
 batch-subtitles-no-audio = { $n ->
    *[other] { $n } 件は音声なし
 }
@@ -492,7 +492,7 @@ folder-rename-error-empty = 名前が空です
 folder-rename-error-bad-character = 使用できない文字: \ / : * ? " < > |
 folder-rename-error-trailing = 末尾にピリオドやスペースは使えません
 folder-rename-error-exists = 同じ名前のファイルがあります
-folder-markers-not-saved = マーカーを保存できませんでした: ファイルが読み取り専用か使用中です（Premiere で閉じてから、このファイルを開き直してください）
+folder-markers-not-saved = マーカーを保存できませんでした: ファイルが読み取り専用か使用中です（Premiere で閉じてから、このファイルを開いてから別のファイルへ移動してください）
 drag-out-not-saved = ドラッグできませんでした: ファイルを保存できません（読み取り専用、または Premiere で開いています）
 folder-opening = フォルダーを開いています…
 folder-empty-title = このフォルダーにビデオはありません
@@ -753,7 +753,7 @@ updates-notes-show = リリースノート
 updates-notes-hide = リリースノートを隠す
 updates-notes-all-releases = GitHub のすべてのリリース
 updates-notes-history = すべてのバージョン（新しい順）
-updates-notes-update = { $version } で得られるもの
+updates-notes-update = { $version } の変更点
 updates-notes-whats-new = { $version } の新機能
 updates-notes-loading = リリースノートを読み込み中…
 updates-notes-unavailable = 最新バージョンのノートを読み込めませんでした。

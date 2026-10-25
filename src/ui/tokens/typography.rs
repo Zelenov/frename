@@ -36,7 +36,7 @@ pub const TEXT_VIDEO_CAPTION: f32 = 28.0;
 pub const LINE_VIDEO_CAPTION: f32 = 36.0;
 
 // Fonts, bundled (assets/fonts, SIL OFL 1.1).
-const INTER: Font = Font::with_name("Inter");
+pub const FONT_DEFAULT: Font = Font::with_name("Inter");
 pub const FONT_MONO: Font = Font::with_name("JetBrains Mono NL");
 /// The font files, loaded once at start-up.
 pub const FONT_FILES: [&[u8]; 3] = [
@@ -68,13 +68,18 @@ pub fn cjk_font_files() -> impl Iterator<Item = &'static [u8]> {
 /// The family of the UI language when it is a CJK one; the text styles use it instead of Inter.
 static CJK_FAMILY: RwLock<Option<&'static str>> = RwLock::new(None);
 
-/// Draw the UI in the font of `language` (a code of `i18n::LANGUAGES`). Called with the language
-/// being shown.
-pub fn set_language(language: &str) {
-    let family = CJK_FONTS
+/// The CJK family the UI of `language` is drawn in, `None` for the languages Inter covers.
+fn cjk_family(language: &str) -> Option<&'static str> {
+    CJK_FONTS
         .iter()
         .find(|(code, _, _)| *code == language)
-        .map(|(_, family, _)| *family);
+        .map(|(_, family, _)| *family)
+}
+
+/// Draw the UI in the font of `language` (a code of `i18n::LANGUAGES`). Only `i18n::apply` calls
+/// it, with the language being shown, next to switching the text.
+pub fn set_language(language: &str) {
+    let family = cjk_family(language);
     match CJK_FAMILY.write() {
         Ok(mut current) => *current = family,
         Err(poisoned) => *poisoned.into_inner() = family,
@@ -88,28 +93,36 @@ fn family() -> Option<&'static str> {
     }
 }
 
-/// The UI text font: Inter, or the CJK family of the UI language.
-pub fn font() -> Font {
-    family().map_or(INTER, Font::with_name)
+fn regular_of(family: Option<&'static str>) -> Font {
+    family.map_or(FONT_DEFAULT, Font::with_name)
 }
 
-/// The UI font for emphasis: Inter Semibold, or the CJK Bold.
-pub fn font_strong() -> Font {
+fn strong_of(family: Option<&'static str>) -> Font {
     Font {
-        weight: if family().is_some() {
+        weight: if family.is_some() {
             font::Weight::Bold
         } else {
             font::Weight::Semibold
         },
-        ..font()
+        ..regular_of(family)
     }
+}
+
+/// The UI text font: Inter, or the CJK family of the UI language.
+pub fn font() -> Font {
+    regular_of(family())
+}
+
+/// The UI font for emphasis: Inter Semibold, or the CJK Bold.
+pub fn font_strong() -> Font {
+    strong_of(family())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// A CJK character (U+2E80 and up; letters of other scripts fall back to Inter) the interface
+    /// A CJK character (U+2E80 and up; the test is limited to those on purpose: letters of other scripts fall back to Inter) the interface
     /// shows in a CJK language must be in that language's font: an edit to `i18n/<lang>/frename.ftl` that adds one needs `scripts/subset-cjk.py` run again.
     #[test]
     fn cjk_fonts_cover_their_texts() {
@@ -133,13 +146,17 @@ mod tests {
         }
     }
 
+    /// Pure on purpose: the global is written by every test that builds the app.
     #[test]
     fn the_ui_font_follows_the_language() {
-        set_language("ja");
-        assert_eq!(font(), Font::with_name("Noto Sans CJK JP"));
-        assert_eq!(font_strong().weight, font::Weight::Bold);
-        set_language("en");
-        assert_eq!(font(), INTER);
-        assert_eq!(font_strong().weight, font::Weight::Semibold);
+        assert_eq!(cjk_family("ja"), Some("Noto Sans CJK JP"));
+        assert_eq!(cjk_family("de"), None);
+        assert_eq!(
+            regular_of(cjk_family("ja")),
+            Font::with_name("Noto Sans CJK JP")
+        );
+        assert_eq!(strong_of(cjk_family("ja")).weight, font::Weight::Bold);
+        assert_eq!(regular_of(None), FONT_DEFAULT);
+        assert_eq!(strong_of(None).weight, font::Weight::Semibold);
     }
 }

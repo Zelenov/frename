@@ -258,7 +258,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .theme(FrenameApp::theme)
     .title(FrenameApp::title)
     .settings(iced::Settings {
-        default_font: iced::Font::with_name("Inter"),
+        default_font: ui::tokens::FONT_DEFAULT,
         default_text_size: ui::tokens::TEXT_BODY.into(),
         antialiasing: false,
         ..iced::Settings::default()
