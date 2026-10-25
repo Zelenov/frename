@@ -6,7 +6,7 @@
 //! source language and the fallback for any message a translation lacks.
 //!
 //! `LANGUAGES` is deliberately short today (English, Russian, German, French, Spanish,
-//! Italian, Brazilian Portuguese, Ukrainian, Serbian in both scripts, Japanese and Korean): each further language is its own small PR that adds one `.ftl` file and one entry
+//! Italian, Brazilian Portuguese, Ukrainian, Serbian in both scripts, Japanese, Korean and Simplified Chinese): each further language is its own small PR that adds one `.ftl` file and one entry
 //! here, reviewed on its own. CJK languages are drawn in a bundled Noto Sans CJK subset (`assets/fonts`).
 
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
@@ -22,8 +22,8 @@ use rust_embed::RustEmbed;
 struct Localizations;
 
 /// Language codes the UI is translated into, in the order Settings lists them.
-pub const LANGUAGES: [&str; 12] = [
-    "en", "ru", "de", "fr", "es", "it", "pt-BR", "uk", "sr-Cyrl", "sr-Latn", "ja", "ko",
+pub const LANGUAGES: [&str; 13] = [
+    "en", "ru", "de", "fr", "es", "it", "pt-BR", "uk", "sr-Cyrl", "sr-Latn", "ja", "ko", "zh-Hans",
 ];
 
 /// The source language, used when nothing else matches.
@@ -157,11 +157,30 @@ pub fn resolve(stored: &str, os_languages: &[String]) -> &'static str {
 
 /// The first of [`LANGUAGES`] with the same language subtag as the OS tag (`pt-PT` → `pt-BR`).
 /// When the tag names a script (`sr-Latn-RS`), a language written in that script wins over an
-/// earlier one in another script; a tag without a script (`sr`, `sr-RS`) takes the first.
+/// earlier one in another script; a tag without a script (`sr`, `sr-RS`) takes the first. Chinese
+/// is the exception: its script follows the region.
 fn by_language(tag: &str) -> Option<&'static str> {
     let mut parts = tag.split(['-', '_']);
     let language = parts.next().unwrap_or_default();
-    let script = parts.find(|p| p.len() == 4 && p.chars().all(|c| c.is_ascii_alphabetic()));
+    let rest: Vec<&str> = parts.collect();
+    let script = rest
+        .iter()
+        .find(|p| p.len() == 4 && p.chars().all(|c| c.is_ascii_alphabetic()))
+        .copied();
+    // Chinese tags rarely name the script: `zh-TW`, `zh-HK` and `zh-MO` are Traditional, every
+    // other region (`zh-CN`, `zh-SG`, bare `zh`) Simplified. A Chinese script the build lacks is
+    // not swapped for the other one.
+    let chinese_by_region = (language.eq_ignore_ascii_case("zh") && script.is_none()).then(|| {
+        let traditional = rest
+            .iter()
+            .any(|r| ["TW", "HK", "MO"].iter().any(|t| r.eq_ignore_ascii_case(t)));
+        if traditional {
+            "Hant"
+        } else {
+            "Hans"
+        }
+    });
+    let script = script.or(chinese_by_region);
     let same_language = |l: &&&str| {
         l.split('-')
             .next()
@@ -180,6 +199,9 @@ fn by_language(tag: &str) -> Option<&'static str> {
             })
             .copied()
     });
+    if language.eq_ignore_ascii_case("zh") {
+        return by_script;
+    }
     by_script.or(first)
 }
 
@@ -205,6 +227,7 @@ pub fn language_name(language: &str) -> String {
         "sr-Latn" => crate::fl!("language-name-sr-Latn"),
         "ja" => crate::fl!("language-name-ja"),
         "ko" => crate::fl!("language-name-ko"),
+        "zh-Hans" => crate::fl!("language-name-zh-Hans"),
         _ => crate::fl!("language-name-en"),
     }
 }
@@ -239,6 +262,17 @@ mod tests {
         assert_eq!(resolve("pt-br", &os(&["de-DE"])), "pt-BR");
         assert_eq!(resolve("", &os(&["hi-IN"])), "en");
         assert_eq!(resolve("", &os(&["ko-KR"])), "ko");
+        assert_eq!(resolve("", &os(&["zh-CN"])), "zh-Hans");
+        assert_eq!(resolve("", &os(&["zh_SG"])), "zh-Hans");
+        assert_eq!(resolve("", &os(&["zh"])), "zh-Hans");
+        assert_eq!(resolve("", &os(&["zh-Hans-CN"])), "zh-Hans");
+        assert_eq!(resolve("zh-hans", &os(&["de-DE"])), "zh-Hans");
+        assert_eq!(
+            resolve("", &os(&["zh-TW"])),
+            "en",
+            "Traditional Chinese is not swapped for Simplified"
+        );
+        assert_eq!(resolve("", &os(&["zh-Hant-HK", "de-DE"])), "de");
         assert_eq!(resolve("", &os(&["ja-JP"])), "ja");
         assert_eq!(resolve("", &os(&["ja"])), "ja");
         assert_eq!(
@@ -415,7 +449,7 @@ mod tests {
             "ru" => &["one", "few", "many"],
             "uk" => &["one", "few", "many", "other"],
             "sr-Cyrl" | "sr-Latn" => &["one", "few", "other"],
-            "ja" | "ko" => &["other"],
+            "ja" | "ko" | "zh-Hans" => &["other"],
             _ => &["one", "other"],
         }
     }
