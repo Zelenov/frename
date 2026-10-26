@@ -49,7 +49,7 @@ pub const FONT_FILES: [&[u8]; 3] = [
 /// The family is named by the text styles, not left to glyph fallback: cosmic-text picks a
 /// system "Noto Sans CJK SC" for Han text by the OS locale before it looks at any other font, so
 /// Japanese kanji would come out in Chinese forms.
-const CJK_FONTS: [(&str, &str, [&[u8]; 2]); 3] = [
+const CJK_FONTS: [(&str, &str, [&[u8]; 2]); 4] = [
     (
         "ja",
         "Noto Sans CJK JP",
@@ -72,6 +72,14 @@ const CJK_FONTS: [(&str, &str, [&[u8]; 2]); 3] = [
         [
             include_bytes!("../../../assets/fonts/NotoSansCJK-SC-Regular.otf"),
             include_bytes!("../../../assets/fonts/NotoSansCJK-SC-Bold.otf"),
+        ],
+    ),
+    (
+        "zh-Hant",
+        "Noto Sans CJK TC",
+        [
+            include_bytes!("../../../assets/fonts/NotoSansCJK-TC-Regular.otf"),
+            include_bytes!("../../../assets/fonts/NotoSansCJK-TC-Bold.otf"),
         ],
     ),
 ];
@@ -173,6 +181,9 @@ mod tests {
     #[test]
     fn the_ui_font_follows_the_language() {
         assert_eq!(cjk_family("ja"), Some("Noto Sans CJK JP"));
+        assert_eq!(cjk_family("ko"), Some("Noto Sans CJK KR"));
+        assert_eq!(cjk_family("zh-Hans"), Some("Noto Sans CJK SC"));
+        assert_eq!(cjk_family("zh-Hant"), Some("Noto Sans CJK TC"));
         assert_eq!(cjk_family("de"), None);
         assert_eq!(
             regular_of(cjk_family("ja")),

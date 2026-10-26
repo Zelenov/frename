@@ -349,7 +349,7 @@ run another batch action on one group.
 The **Settings** button (under the file list) opens Settings. Changes apply right away; **Close** or `Esc` closes it. It has five
 pages:
 
-- **Interface:** the UI language (follows your system by default, or pick English, Russian, German, French, Spanish, Italian, Brazilian Portuguese, Ukrainian, Serbian (Cyrillic or Latin), Japanese, Korean or Simplified Chinese;
+- **Interface:** the UI language (follows your system by default, or pick English, Russian, German, French, Spanish, Italian, Brazilian Portuguese, Ukrainian, Serbian (Cyrillic or Latin), Japanese, Korean or Chinese (Simplified or Traditional);
   more languages are on the way), monochrome tags (a tag you added shows darker, one that is not
   in your list stays the lighter gray it always was), playing videos as soon as they open, and
   the subtitle size (Small, Medium, Large or Extra large), and **Time display**: how times are
