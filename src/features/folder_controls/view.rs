@@ -119,9 +119,7 @@ pub fn app_bar(props: AppBarProps) -> Element<'static, folder::Message> {
             count: None,
             selected: !props.batch_mode,
             on_press: M::SetBatchMode(false),
-            tip: props
-                .batch_mode
-                .then(|| format!("{} (Esc)", fl!("folder-controls-batch-back"))),
+            tip: props.batch_mode.then(|| fl!("folder-controls-batch-back")),
         },
         Segment {
             icon: Some(Icon::ListChecks),
