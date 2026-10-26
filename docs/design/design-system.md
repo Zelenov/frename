@@ -339,7 +339,7 @@ destructive (BIR: "separate dangerous buttons with extra distance").
 | ⊙ | `locate-fixed` | | ▶ ⏸ | `play` `pause` |
 | 📂 | `folder-open` | | 📷 | `camera` |
 | ⚙ | `settings` | | 📍 | `map-pin` |
-| ☑ (batch) | `list-checks` (segmented control in #64) | | 🔊 | `volume-2` |
+| ☑ (batch) | `list-checks` (segmented control, built in #64) | | 🔊 | `volume-2` |
 | ⛶ ⊡ | `maximize-2` `minimize-2` | | ◆ (marker list) | `map-pin` (one symbol for markers everywhere) |
 | ✎ | `pencil` | | ✕ × (close, delete) | `x` |
 | ✓ | `check` | | ○ (save tag) | `plus` |
@@ -2051,8 +2051,8 @@ Never hidden: play/pause, back/forward 10 s, `[` `]`, fullscreen, the timeline.
 | 200–259 | the first chip only if the name still gets 80 px, otherwise only `+N`; the marker count stays | the Filter button keeps its icon and badge; the toolbar folds as below |
 | > 720 | the column stops growing; the splitter stops | – |
 
-The toolbar (§13.4.3) is padding 16 + files 96 (◀ ▶ locate) + open 64 (📂 ▾) + two gaps of 12 =
-**200**, the list's minimum, so every button is always in the bar (since #64 moved Settings and the
+The toolbar (§13.4.3) is padding 16 + files 96 (◀ ▶ locate) + open 64 (📂 ▾) + one gap of 12 =
+**188**, under the list's minimum of 200, so every button is always in the bar (since #64 moved Settings and the
 batch switch to the app bar there is nothing to fold).
 
 ![File list sizes](design-system/sizes-file-list.png)

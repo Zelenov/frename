@@ -119,7 +119,9 @@ pub fn app_bar(props: AppBarProps) -> Element<'static, folder::Message> {
             count: None,
             selected: !props.batch_mode,
             on_press: M::SetBatchMode(false),
-            tip: props.batch_mode.then(|| fl!("folder-controls-batch-back")),
+            tip: props
+                .batch_mode
+                .then(|| format!("{} (Esc)", fl!("folder-controls-batch-back"))),
         },
         Segment {
             icon: Some(Icon::ListChecks),
@@ -156,4 +158,16 @@ pub fn app_bar(props: AppBarProps) -> Element<'static, folder::Message> {
             .style(style::divider),
     ]
     .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The toolbar's five buttons and its padding fit the narrowest file list.
+    #[test]
+    fn the_toolbar_fits_the_narrowest_list() {
+        let width = PADDING.left + PADDING.right + 5.0 * BAR_HEIGHT + SPACE_M;
+        assert!(width <= FILE_LIST_MIN_WIDTH, "{width}");
+    }
 }
