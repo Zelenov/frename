@@ -94,6 +94,10 @@ pub const MARKER_ROW_HEIGHT: f32 = ICON_BUTTON_SMALL + SPACE_XXS + LINE_BODY + 2
 /// button, with the room the text keeps clear of them.
 pub const COMMENT_CORNER_WIDTH: f32 = 3.0 * ICON_BUTTON_SMALL + 2.0 * SPACE_XXS + SPACE_XS;
 
+// App bar (#64, §13.12 version B).
+/// The bar under the OS title bar: the 28 px mode switch with 4 px above and below.
+pub const APP_BAR_HEIGHT: f32 = CONTROL_HEIGHT + 2.0 * SPACE_XS;
+
 // File list (§13.4).
 /// The search bar over a list: a 28 px field with 6 px around it.
 pub const SEARCH_BAR_HEIGHT: f32 = CONTROL_HEIGHT + 2.0 * SPACE_TIGHT;

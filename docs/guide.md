@@ -192,9 +192,9 @@ existing subtitles**.
 
 ![Batch mode](frename-screenshot-batch.jpg)
 
-Click **Batch actions** (the right end of the bar under the file list) to check files in the list (All / Invert) and run one action on all of them, with progress
+Click **Batch** (the switch at the top left of the window) to check files in the list (All / Invert) and run one action on all of them, with progress
 and Cancel. Each file then shows an icon for what happened to it (changed, nothing to change, not done). Drag a checked file to drag all checked
-files (an unchecked one drags only itself). Esc leaves batch mode, the same as clicking **Batch actions** again.
+files (an unchecked one drags only itself). Esc leaves batch mode, the same as clicking **Single file** in the switch.
 Batch mode opens with the action you last ran selected, and its own options (e.g. which way
 in/out points move, or "Replace existing subtitles") as they were then, even across restarts.
 

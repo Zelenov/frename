@@ -661,11 +661,12 @@ folder-controls-scroll = Показати відкритий файл у спи�
 folder-controls-open = Відкрити папку
 folder-controls-batch = Пакетні дії над позначеними файлами
 folder-controls-batch-back = Назад до відкритого файлу
+app-bar-single = Один файл
+app-bar-batch = Пакет
 folder-controls-update-available = Доступне оновлення: { $version }
 folder-controls-whats-new = Що нового у версії { $version }
 folder-controls-previous = Попередній файл
 folder-controls-next = Наступний файл
-folder-controls-more = Ще
 folder-controls-open-file = Права кнопка: відкрити один файл
 
 ## Video

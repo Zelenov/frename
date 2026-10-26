@@ -21,9 +21,9 @@
     <text x="1330" y="140" text-anchor="middle">Batch actions</text>
     <text x="1590" y="368">Pick an action</text>
     <text x="1480" y="1028">Run it</text>
-    <text x="980" y="1028">Batch mode on / off</text>
+    <text x="100" y="60">Batch mode on / off</text>
   </g>
   <use xlink:href="#arrow" href="#arrow" transform="translate(1525,276) rotate(-164.3) scale(1,-1)"/>
   <use xlink:href="#arrow" href="#arrow" transform="translate(1470,925) rotate(-148.2) scale(1,-1)"/>
-  <use xlink:href="#arrow" href="#arrow" transform="translate(980,927) rotate(-148.2) scale(1,-1)"/>
+  <use xlink:href="#arrow" href="#arrow" transform="translate(215,200) rotate(31.8) scale(1,-1)"/>
 </svg>

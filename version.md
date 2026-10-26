@@ -1,3 +1,7 @@
+# 0.182
+## Changed
+- Settings and the Single file / Batch switch moved from the file list's toolbar to a bar of their own under the window's title bar. The switch is now two clearly labelled choices instead of a lone icon, and in batch mode shows how many files are checked. The toolbar under the list keeps only the file buttons.
+
 # 0.181
 ## Added
 - The interface in Traditional Chinese (繁體中文): follows the system language (Taiwan, Hong Kong and Macao), or pick it in Settings → Language.

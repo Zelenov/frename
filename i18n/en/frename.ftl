@@ -595,11 +595,12 @@ folder-controls-scroll = Show the open file in the list
 folder-controls-open = Open a folder
 folder-controls-batch = Batch actions on checked files
 folder-controls-batch-back = Back to the open file
+app-bar-single = Single file
+app-bar-batch = Batch
 folder-controls-update-available = Update available: { $version }
 folder-controls-whats-new = What's new in { $version }
 folder-controls-previous = Previous file
 folder-controls-next = Next file
-folder-controls-more = More
 folder-controls-open-file = Right-click: open one file
 
 ## Video

@@ -655,11 +655,12 @@ folder-controls-scroll = Prikaži otvorenu datoteku na spisku
 folder-controls-open = Otvori fasciklu
 folder-controls-batch = Grupne radnje nad označenim datotekama
 folder-controls-batch-back = Nazad na otvorenu datoteku
+app-bar-single = Jedna datoteka
+app-bar-batch = Grupa
 folder-controls-update-available = Ažuriranje je dostupno: { $version }
 folder-controls-whats-new = Šta je novo u verziji { $version }
 folder-controls-previous = Prethodna datoteka
 folder-controls-next = Sledeća datoteka
-folder-controls-more = Još
 folder-controls-open-file = Desni klik: otvori jednu datoteku
 
 ## Video
