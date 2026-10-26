@@ -651,11 +651,12 @@ folder-controls-scroll = Mostrar o arquivo aberto na lista
 folder-controls-open = Abrir uma pasta
 folder-controls-batch = Ações em lote nos arquivos selecionados
 folder-controls-batch-back = Voltar ao arquivo aberto
+app-bar-single = Arquivo único
+app-bar-batch = Lote
 folder-controls-update-available = Atualização disponível: { $version }
 folder-controls-whats-new = Novidades da versão { $version }
 folder-controls-previous = Arquivo anterior
 folder-controls-next = Próximo arquivo
-folder-controls-more = Mais
 folder-controls-open-file = Botão direito: abrir um arquivo
 
 ## Video

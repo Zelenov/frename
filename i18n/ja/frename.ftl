@@ -561,11 +561,12 @@ folder-controls-scroll = 開いているファイルをリストに表示
 folder-controls-open = フォルダーを開く
 folder-controls-batch = 選択したファイルの一括処理
 folder-controls-batch-back = 開いているファイルに戻る
+app-bar-single = 単一ファイル
+app-bar-batch = 一括
 folder-controls-update-available = アップデートあり: { $version }
 folder-controls-whats-new = { $version } の新機能
 folder-controls-previous = 前のファイル
 folder-controls-next = 次のファイル
-folder-controls-more = その他
 folder-controls-open-file = 右クリック: 1 つのファイルを開く
 
 ## ビデオ

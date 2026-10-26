@@ -192,14 +192,14 @@ existing subtitles**.
 
 ![Batch mode](frename-screenshot-batch.jpg)
 
-Click **Batch actions** (the right end of the bar under the file list) to check files in the list (All / Invert) and run one action on all of them, with progress
+Click **Batch** (the switch at the top left of the window) to check files in the list (All / Invert) and run one action on all of them, with progress
 and Cancel. Each file then shows an icon for what happened to it (changed, nothing to change, not done). Drag a checked file to drag all checked
-files (an unchecked one drags only itself). Esc leaves batch mode, the same as clicking **Batch actions** again.
+files (an unchecked one drags only itself). Esc leaves batch mode, the same as clicking **Single file** in the switch.
 Batch mode opens with the action you last ran selected, and its own options (e.g. which way
 in/out points move, or "Replace existing subtitles") as they were then, even across restarts.
 
 **A running action does not stop your work.** While it runs you can close the batch panel (the
-✕ in its corner, Esc, or **Batch actions** again) and go on: open other clips, play them, tag,
+✕ in its corner, Esc, or **Single file** in the switch) and go on: open other clips, play them, tag,
 rename, comment and mark them. A strip above the bar under the file list shows the action, how
 far it is, what it cost so far and the clip in work; click it to see the panel and Cancel. Only
 the clip the action is working on is held back: it closes while its turn lasts, cannot be opened
@@ -346,7 +346,7 @@ run another batch action on one group.
 
 ## Settings
 
-The **Settings** button (under the file list) opens Settings. Changes apply right away; **Close** or `Esc` closes it. It has five
+The **Settings** button (top right of the window) opens Settings. Changes apply right away; **Close** or `Esc` closes it. It has five
 pages:
 
 - **Interface:** the UI language (follows your system by default, or pick English, Russian, German, French, Spanish, Italian, Brazilian Portuguese, Ukrainian, Serbian (Cyrillic or Latin), Japanese, Korean or Chinese (Simplified or Traditional);

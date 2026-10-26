@@ -633,11 +633,12 @@ folder-controls-scroll = Die geöffnete Datei in der Liste zeigen
 folder-controls-open = Ordner öffnen
 folder-controls-batch = Stapelaktionen für ausgewählte Dateien
 folder-controls-batch-back = Zurück zur geöffneten Datei
+app-bar-single = Einzeldatei
+app-bar-batch = Stapel
 folder-controls-update-available = Update verfügbar: { $version }
 folder-controls-whats-new = Neu in { $version }
 folder-controls-previous = Vorherige Datei
 folder-controls-next = Nächste Datei
-folder-controls-more = Mehr
 folder-controls-open-file = Rechtsklick: einzelne Datei öffnen
 
 ## Video

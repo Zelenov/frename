@@ -561,11 +561,12 @@ folder-controls-scroll = 열린 파일을 목록에서 보기
 folder-controls-open = 폴더 열기
 folder-controls-batch = 선택한 파일에 일괄 작업
 folder-controls-batch-back = 열린 파일로 돌아가기
+app-bar-single = 파일 하나
+app-bar-batch = 일괄
 folder-controls-update-available = 업데이트 가능: { $version }
 folder-controls-whats-new = { $version }의 새로운 기능
 folder-controls-previous = 이전 파일
 folder-controls-next = 다음 파일
-folder-controls-more = 더 보기
 folder-controls-open-file = 오른쪽 클릭: 파일 하나 열기
 
 ## 비디오

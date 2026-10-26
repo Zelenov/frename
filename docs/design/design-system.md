@@ -339,7 +339,7 @@ destructive (BIR: "separate dangerous buttons with extra distance").
 | ⊙ | `locate-fixed` | | ▶ ⏸ | `play` `pause` |
 | 📂 | `folder-open` | | 📷 | `camera` |
 | ⚙ | `settings` | | 📍 | `map-pin` |
-| ☑ (batch) | `list-checks` (segmented control in #64) | | 🔊 | `volume-2` |
+| ☑ (batch) | `list-checks` (segmented control, built in #64) | | 🔊 | `volume-2` |
 | ⛶ ⊡ | `maximize-2` `minimize-2` | | ◆ (marker list) | `map-pin` (one symbol for markers everywhere) |
 | ✎ | `pencil` | | ✕ × (close, delete) | `x` |
 | ✓ | `check` | | ○ (save tag) | `plus` |
@@ -1497,8 +1497,7 @@ The list is sorted by date modified, oldest first (unchanged); there is no sort 
 32 px under the list, `bg.panel` with a 1 px `border.subtle` line on top; icon buttons:
 `chevron-left` "Previous file `PgUp`", `chevron-right` "Next file `PgDn`", `locate-fixed` "Show the
 open file in the list" — then 12 px — `folder-open` "Open a folder" (`Ctrl`+`O` is proposed for #62; today it has no key) with the
-recent-folders `chevron-down` "Recent folders `Ctrl` `R`" (§13.4.5), latched while its list is open — and at the right end, until #64 moves them to the app bar, `settings` "Settings" with the
-update dot and the batch toggle `list-checks` "Batch actions" (latched in batch mode). At narrow widths the gaps become 4 px and the least used buttons go into **More** (§13.9).
+recent-folders `chevron-down` "Recent folders `Ctrl` `R`" (§13.4.5), latched while its list is open (Settings and the batch switch are in the app bar, §13.12; all five buttons fit the narrowest list, so the toolbar has no **More**.)
 Disabled buttons are truly disabled (today ◀ ▶ ⊙ look disabled but still take clicks).
 
 #### 13.4.4 Drag and drop
@@ -2052,19 +2051,9 @@ Never hidden: play/pause, back/forward 10 s, `[` `]`, fullscreen, the timeline.
 | 200–259 | the first chip only if the name still gets 80 px, otherwise only `+N`; the marker count stays | the Filter button keeps its icon and badge; the toolbar folds as below |
 | > 720 | the column stops growing; the splitter stops | – |
 
-The toolbar (§13.4.3, `folder_controls/fold.rs`, whose test pins these numbers) is padding 16 +
-files 96 (◀ ▶ locate) + open 64 (📂 ▾) + settings and batch 64 + three gaps of 12 (the free space
-counts as one more item of the row) = **276** with everything shown. It never wraps and never
-shrinks a button; each step below takes away what the previous width no longer fits, and every
-button is then in the bar or in **More** (`ellipsis`, at the right end, which opens a menu over the
-toolbar with each folded button's icon, name and keys):
-
-| List width | Toolbar | Needs |
-|---|---|---|
-| ≥ 276 | all seven buttons, gaps 12 | 276 |
-| 252–275 | gaps become 4 | 276 − 3 × 8 = 252 |
-| 220–251 | also `locate-fixed` and the batch toggle move into **More** | 252 − 64 + 32 = 220 |
-| 188–219 (list minimum 200) | also the recent folders `chevron-down` moves into **More** (`Ctrl` `R` still opens the list); ◀ ▶ 📂 and Settings stay | 220 − 32 = 188 |
+The toolbar (§13.4.3) is padding 16 + files 96 (◀ ▶ locate) + open 64 (📂 ▾) + one gap of 12 =
+**188**, under the list's minimum of 200, so every button is always in the bar (since #64 moved Settings and the
+batch switch to the app bar there is nothing to fold).
 
 ![File list sizes](design-system/sizes-file-list.png)
 
@@ -2137,6 +2126,11 @@ These are directions, not specs: each issue writes its own details and may chang
 these rules.
 
 ### 13.12 App bar (#64): two versions
+
+> **Built (#64): version B**, without the Keyboard button (#62 has not landed) and without the
+> OS title bar's folder name. Version A needs a Windows-only hook for snap layouts that could not be
+> proven in an agent session; moving to it later only replaces the OS title bar. In batch mode the
+> Batch segment shows the number of checked files after its label.
 
 ⚙ and the mode switch leave the file list's toolbar for a bar of their own (§18 item 3). There are
 two versions: **A** is the one to build; **B** is what is built if A cannot keep every native

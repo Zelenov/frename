@@ -651,11 +651,12 @@ folder-controls-scroll = Afficher le fichier ouvert dans la liste
 folder-controls-open = Ouvrir un dossier
 folder-controls-batch = Actions par lot sur les fichiers cochés
 folder-controls-batch-back = Retour au fichier ouvert
+app-bar-single = Un fichier
+app-bar-batch = Lot
 folder-controls-update-available = Mise à jour disponible : { $version }
 folder-controls-whats-new = Nouveautés de la version { $version }
 folder-controls-previous = Fichier précédent
 folder-controls-next = Fichier suivant
-folder-controls-more = Plus
 folder-controls-open-file = Clic droit : ouvrir un seul fichier
 
 ## Video

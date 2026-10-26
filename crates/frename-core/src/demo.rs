@@ -127,9 +127,6 @@ pub struct DemoScenario {
     /// picture, #307).
     #[serde(default)]
     pub fullscreen: bool,
-    /// Open the toolbar's More menu (demo only: the screenshot of a narrow file list, #228).
-    #[serde(default)]
-    pub toolbar_more: bool,
     /// The folder's notes for the AI (#310), written to its `.frename` when staged.
     #[serde(default)]
     pub ai_notes: Option<String>,

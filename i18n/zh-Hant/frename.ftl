@@ -561,11 +561,12 @@ folder-controls-scroll = 在清單中顯示已開啟的檔案
 folder-controls-open = 開啟資料夾
 folder-controls-batch = 對勾選的檔案執行批次動作
 folder-controls-batch-back = 回到已開啟的檔案
+app-bar-single = 單一檔案
+app-bar-batch = 批次
 folder-controls-update-available = 有可用更新：{ $version }
 folder-controls-whats-new = { $version } 的新功能
 folder-controls-previous = 上一個檔案
 folder-controls-next = 下一個檔案
-folder-controls-more = 更多
 folder-controls-open-file = 按右鍵：開啟單一檔案
 
 ## 影片

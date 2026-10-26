@@ -7,7 +7,7 @@ use iced::widget::{column, container, mouse_area, row, stack, Column};
 use iced::{Alignment, Element, Length};
 
 use crate::features::folder::view::ListProps;
-use crate::features::folder_controls::view::ToolbarProps;
+use crate::features::folder_controls::view::{AppBarProps, ToolbarProps};
 use crate::features::{
     batch, file_menu, file_workspace, folder, folder_controls, media_viewer, recent_folders,
 };
@@ -71,18 +71,17 @@ pub fn view(
         has_previous,
         has_next,
         has_selected,
-        batch_mode: state.batch().is_active(),
         batch_running: state.batch().is_running(),
         recent_open: state.recent_folders().is_open(),
+    };
+    // The bar under the OS title bar: the mode switch and Settings (#64).
+    let app_bar = folder_controls::view::app_bar(AppBarProps {
+        batch_mode: state.batch().is_active(),
+        checked: state.batch().checked_count(),
         update_available,
         whats_new,
-        width: state.folder_width(),
-        more_open: state.toolbar_more_open(),
-    };
-    // The More menu over the toolbar, while it is open.
-    let toolbar_more =
-        folder_controls::view::more_menu(&toolbar, state.left_width(), state.folder_width())
-            .map(Message::Folder);
+    })
+    .map(Message::Folder);
 
     // Bound to a local so the folder list can borrow it instead of taking a clone per frame.
     let tag_color_mapping = state.file_workspace().tag_color_mapping();
@@ -168,12 +167,17 @@ pub fn view(
     };
 
     let normal_layout = container(
-        row![
-            video,
-            left_splitter,
-            folder_list,
-            right_splitter,
-            right_panel
+        column![
+            app_bar,
+            row![
+                video,
+                left_splitter,
+                folder_list,
+                right_splitter,
+                right_panel
+            ]
+            .width(Length::Fill)
+            .height(Length::Fill),
         ]
         .width(Length::Fill)
         .height(Length::Fill),
@@ -209,7 +213,7 @@ pub fn view(
     // The right button's position is taken here, over the whole window: a row inside the
     // scrolled file list does not know where it is on screen.
     RightPressReporter::new(
-        stack![normal_layout, overlay, file_menu, recent, toolbar_more]
+        stack![normal_layout, overlay, file_menu, recent]
             .width(Length::Fill)
             .height(Length::Fill),
         |position| Message::FileMenu(file_menu::Message::RightPressed(position)),
