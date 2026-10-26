@@ -49,7 +49,7 @@ pub const FONT_FILES: [&[u8]; 3] = [
 /// The family is named by the text styles, not left to glyph fallback: cosmic-text picks a
 /// system "Noto Sans CJK SC" for Han text by the OS locale before it looks at any other font, so
 /// Japanese kanji would come out in Chinese forms.
-const CJK_FONTS: [(&str, &str, [&[u8]; 2]); 2] = [
+const CJK_FONTS: [(&str, &str, [&[u8]; 2]); 3] = [
     (
         "ja",
         "Noto Sans CJK JP",
@@ -64,6 +64,14 @@ const CJK_FONTS: [(&str, &str, [&[u8]; 2]); 2] = [
         [
             include_bytes!("../../../assets/fonts/NotoSansCJK-KR-Regular.otf"),
             include_bytes!("../../../assets/fonts/NotoSansCJK-KR-Bold.otf"),
+        ],
+    ),
+    (
+        "zh-Hans",
+        "Noto Sans CJK SC",
+        [
+            include_bytes!("../../../assets/fonts/NotoSansCJK-SC-Regular.otf"),
+            include_bytes!("../../../assets/fonts/NotoSansCJK-SC-Bold.otf"),
         ],
     ),
 ];
@@ -136,7 +144,7 @@ mod tests {
     /// shows in a CJK language must be in that language's font: an edit to `i18n/<lang>/frename.ftl` that adds one needs `scripts/subset-cjk.py` run again.
     #[test]
     fn cjk_fonts_cover_their_texts() {
-        for (language, _, files) in CJK_FONTS {
+        for (language, family, files) in CJK_FONTS {
             let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("i18n")
                 .join(language)
@@ -144,6 +152,11 @@ mod tests {
             let text = std::fs::read_to_string(&path).expect("the language file");
             for (weight, data) in ["Regular", "Bold"].iter().zip(files) {
                 let face = ttf_parser::Face::parse(data, 0).expect("a font file");
+                let named = face.names().into_iter().any(|name| {
+                    name.name_id == ttf_parser::name_id::FAMILY
+                        && name.to_string().as_deref() == Some(family)
+                });
+                assert!(named, "{language} {weight} is not named {family:?}");
                 let missing: String = text
                     .chars()
                     .filter(|c| *c >= '\u{2E80}' && face.glyph_index(*c).is_none())

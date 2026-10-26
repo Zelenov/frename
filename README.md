@@ -195,7 +195,7 @@ it executable with `chmod +x frename-*.AppImage`, and run it. Video playback is 
 don't need to install anything else. If it says FUSE is missing, run it with
 `--appimage-extract-and-run`. frename keeps its settings in `~/.local/share/frename`.
 
-The interface is in English, Russian, German, French, Spanish, Italian, Brazilian Portuguese, Ukrainian, Serbian (Cyrillic or Latin), Japanese and Korean.
+The interface is in English, Russian, German, French, Spanish, Italian, Brazilian Portuguese, Ukrainian, Serbian (Cyrillic or Latin), Japanese, Korean and Simplified Chinese.
 
 ## Building from source
 
