@@ -1,0 +1,27 @@
+# Search in the side lists (#170): the subtitle list narrowed to the cues with "boats", the
+# matched word marked, the tab counts showing "1 of 4". Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.night.MVI_0510.mp4"
+seek = 4.0
+window = [1440, 720]
+panels = [790, 300]
+subtitle_list = true
+side_search = "boats"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.MVI_0510.mp4"
+subtitles_ass = """[Script Info]
+ScriptType: v4.00+
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize
+Style: Default,Arial,20
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:03.50,Default,,0,0,0,,Evening at the harbour
+Dialogue: 0,0:00:03.80,0:00:06.20,Default,,0,0,0,,The boats come in\\Nbefore the light goes
+Dialogue: 0,0:00:06.50,0:00:09.00,Default,,0,0,0,,Gulls, hundreds of them
+Dialogue: 0,0:00:09.50,0:00:11.00,Default,,0,0,0,,All the boats are tied up
+"""

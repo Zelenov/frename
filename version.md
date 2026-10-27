@@ -1,3 +1,7 @@
+# 0.183
+## Added
+- Search the lists over the video. Press `Ctrl+F` (or the magnifier in the list's header) to find a moment by its words: the Subtitles tab searches the text of the cues, the Markers tab searches names, comments and times (type `1:03` to find the marker at that time). Only the matching rows stay, with the words marked, and the tabs show how many match ("Markers 2 of 14"). `Enter` or the arrows beside the field go to the next or previous match and the video jumps to it; `Esc` clears the text, then closes the bar. The text is matched like the file search: every word, any case. Opening another clip starts with an empty search.
+
 # 0.182
 ## Changed
 - Settings and the Single file / Batch switch moved from the file list's toolbar to a bar of their own under the window's title bar. The switch is now two clearly labelled choices instead of a lone icon, and in batch mode shows how many files are checked. The toolbar under the list keeps only the file buttons.

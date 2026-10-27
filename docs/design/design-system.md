@@ -1289,6 +1289,16 @@ left to right, with the widths §13.9 folds by:
 - **Rows** are list rows (§8.9) on the overlay: `text.primary` / `text.secondary` keep their
   contrast on it (it is at least as dark as `bg.panel`). The gutter rule of §13.2 applies.
 
+- **Search** (#170): a `search` 24 px `overlay` icon button right of the tabs, before the narrow
+  pane's `x`, "Search `Ctrl` `F`", latched while the bar is open. The bar sits under the header, the
+  file search's bar (§13.4.1: 40 px, a 28 px field, `search` inside, `x` "Clear") with `arrow-up` /
+  `arrow-down` 24 px `overlay` buttons after the field ("Previous match" / "Next match"); the
+  placeholder follows the tab ("Find in subtitles" / "Find in markers"). The rows narrow to the
+  matches, the words marked (`accent.text` on its tint); the tab counts read "2 of 14" while a
+  search has words; no match: "Nothing found for “…”" and a **Clear the search** button. The picker,
+  the bar and the list keep their places in the column when one is missing, so the bar's focus
+  survives. `Enter` / `Shift+Enter` step, `Esc` clears the text, then closes the bar.
+
 **Subtitle rows**
 - Time in `mono` `text.secondary` on the first line, the cue text in `body` under it, up to 3 lines
   then "…"; the full text in a tooltip.

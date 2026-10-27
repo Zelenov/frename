@@ -162,6 +162,16 @@ pub fn passed_index(markers: &[Marker], position_ms: u64) -> Option<usize> {
 pub struct Clock {
     pub position_ms: u64,
     pub format: TimeFormat,
+    /// The in and out points, when both are set.
+    pub in_out: Option<(u64, u64)>,
+}
+
+/// What a search over the list leaves of it: the indices of the markers that match (`None`: all
+/// of them) and the search, for the words to mark.
+#[derive(Clone, Copy)]
+pub struct Narrowed<'a> {
+    pub shown: Option<&'a [usize]>,
+    pub search: &'a SideSearch,
 }
 
 /// The marker list for the side overlay. `markers` is `None` when the file cannot hold them.
@@ -169,22 +179,21 @@ pub fn view<'a>(
     markers: Option<&'a [Marker]>,
     state: &'a MarkersState,
     clock: Clock,
-    in_out: Option<(u64, u64)>,
     spinner_frame: usize,
     unnamed: usize,
     price_usd: Option<f64>,
-    shown: Option<&[usize]>,
-    search: &SideSearch,
+    narrowed: Narrowed<'_>,
 ) -> Element<'a, Message> {
     let time_format = clock.format;
+    let in_out = clock.in_out;
     let list = marker_list(
         markers,
         state,
         clock.position_ms,
         spinner_frame,
         time_format,
-        shown,
-        search,
+        narrowed.shown,
+        narrowed.search,
     );
     let describe_all =
         markers.and_then(|_| describe_all_bar(state, spinner_frame, unnamed, price_usd));
@@ -858,13 +867,15 @@ mod tests {
                 Clock {
                     position_ms: 0,
                     format: TimeFormat::default(),
+                    in_out,
                 },
-                in_out,
                 0,
                 unnamed,
                 None,
-                None,
-                &SideSearch::default(),
+                Narrowed {
+                    shown: None,
+                    search: &SideSearch::default(),
+                },
             )
             .as_widget()
             .children()
@@ -876,19 +887,22 @@ mod tests {
         assert_eq!(children(None, 0), all, "nothing unnamed to describe");
         assert_eq!(children(Some((0, 1_000)), 0), all);
         let none: [Marker; 0] = [];
+        let no_search = SideSearch::default();
         let without = view(
             Some(&none),
             &state,
             Clock {
                 position_ms: 0,
                 format: TimeFormat::default(),
+                in_out: None,
             },
-            None,
             0,
             0,
             None,
-            None,
-            &SideSearch::default(),
+            Narrowed {
+                shown: None,
+                search: &no_search,
+            },
         );
         assert_eq!(
             without.as_widget().children().len(),

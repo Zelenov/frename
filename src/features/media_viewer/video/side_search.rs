@@ -144,7 +144,7 @@ mod tests {
         assert!(!search.is_filtering());
         assert!(search.marks("a goat").is_empty());
         search.open();
-        assert_eq!(search.marks("a Goat"), [2..6]);
+        assert_eq!(search.marks("a Goat"), vec![2..6]);
         search.close();
         assert_eq!(search.query(), "");
     }

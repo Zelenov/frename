@@ -611,13 +611,15 @@ fn side_overlay<'a>(
                     markers::view::Clock {
                         position_ms: state.position_ms(),
                         format: state.time_format(),
+                        in_out,
                     },
-                    in_out,
                     markers.spinner_frame,
                     markers.unnamed,
                     markers.marker_price_usd,
-                    matches.as_deref(),
-                    search,
+                    markers::view::Narrowed {
+                        shown: matches.as_deref(),
+                        search,
+                    },
                 )
                 .map(Message::Markers)
             }
@@ -858,7 +860,7 @@ fn tab_count(
     total: usize,
     matching: impl FnOnce() -> usize,
 ) -> Option<String> {
-    if search.is_filtering() {
+    if search.is_filtering() && total > 0 {
         return Some(fl!("side-search-count", shown = matching(), total = total));
     }
     (total > 0).then(|| total.to_string())

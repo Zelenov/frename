@@ -43,6 +43,9 @@ pub struct DemoScenario {
     /// Open the marker list over the picture (the ◆ button).
     #[serde(default)]
     pub marker_list: bool,
+    /// Open the search bar over the side list with this text typed (#170).
+    #[serde(default)]
+    pub side_search: Option<String>,
     /// Open **More** (the `⋯` button of the video controls), to show what a narrow pane folds
     /// into it.
     #[serde(default)]
