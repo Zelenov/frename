@@ -3,13 +3,15 @@
 //! state are [`SideSearch`]; this module is what the workspace does with them, since the markers
 //! it goes through live here.
 
-use frename_core::{matching_cues, matching_markers};
+use frename_core::matching_cues;
 use iced::widget::operation;
 use iced::Task;
 
 use super::FolderWorkspace;
 use crate::features::folder_workspace::Message;
-use crate::features::markers::view::{filtered_row_offset, MARKER_LIST_SCROLLABLE_ID};
+use crate::features::markers::view::{
+    filtered_row_offset, shown_markers, MARKER_LIST_SCROLLABLE_ID,
+};
 use crate::features::media_viewer;
 use crate::features::media_viewer::video::{
     self, step, step_cue, Overlay, SearchMessage, SIDE_SEARCH_INPUT_ID,
@@ -51,9 +53,17 @@ impl FolderWorkspace {
         Task::batch([task, self.sync_list_filter(was_filtering)])
     }
 
-    /// `Esc` in the search: the text first, then the bar. `false` when the bar is not open.
+    /// Whether the bar is on screen: open, over a side list of the open clip's video.
+    fn side_search_visible(&self) -> bool {
+        self.side_search.is_open()
+            && self.media_viewer.video_position_ms().is_some()
+            && self.media_viewer.shown_overlay() != Overlay::Closed
+    }
+
+    /// `Esc` in the search: the text first, then the bar. `None` when the bar is not on screen,
+    /// so the Esc goes on to what it would cancel without it (a rename, fullscreen, the batch).
     pub(super) fn escape_side_search(&mut self) -> Option<Task<Message>> {
-        if !self.side_search.is_open() {
+        if !self.side_search_visible() {
             return None;
         }
         let msg = if self.side_search.query().is_empty() {
@@ -65,12 +75,10 @@ impl FolderWorkspace {
     }
 
     /// Another clip was opened: its list starts unfiltered. The bar stays open or closed as it was.
-    pub(super) fn reset_side_search(&mut self) {
+    pub(super) fn reset_side_search(&mut self) -> Task<Message> {
         let was_filtering = self.side_search.is_filtering();
         self.side_search.set_query(String::new());
-        if was_filtering {
-            let _ = self.sync_list_filter(true);
-        }
+        self.sync_list_filter(was_filtering)
     }
 
     /// Show the subtitle list if the clip has subtitles, the marker list otherwise.
@@ -114,11 +122,17 @@ impl FolderWorkspace {
         }
         let position_ms = self.media_viewer.video_position_ms()?;
         let words = self.side_search.words();
-        match self.media_viewer.shown_overlay() {
+        let current = self.side_search.current();
+        let overlay = match self.media_viewer.shown_overlay() {
+            // The tab of a list the clip does not have shows the markers.
+            Overlay::Subtitles if self.media_viewer.subtitles().is_none() => Overlay::Markers,
+            overlay => overlay,
+        };
+        match overlay {
             Overlay::Subtitles => {
                 let subtitles = self.media_viewer.subtitles()?;
                 let shown = matching_cues(subtitles, words);
-                let index = step_cue(subtitles.cues(), &shown, position_ms, forward)?;
+                let index = step_cue(subtitles.cues(), &shown, position_ms, forward, current)?;
                 let start = subtitles.cues()[index].start;
                 Some(SearchMatch {
                     overlay: Overlay::Subtitles,
@@ -129,10 +143,10 @@ impl FolderWorkspace {
             }
             Overlay::Markers => {
                 let markers = self.file_workspace.markers()?;
-                let shown = matching_markers(markers, words);
+                let shown = shown_markers(markers, &self.markers, words);
                 let starts: Vec<(usize, u64)> =
                     shown.iter().map(|&i| (i, markers[i].start_ms)).collect();
-                let index = step(&starts, position_ms, forward)?;
+                let index = step(&starts, position_ms, forward, current)?;
                 Some(SearchMatch {
                     overlay: Overlay::Markers,
                     index,
@@ -150,16 +164,18 @@ impl FolderWorkspace {
         let Some(found) = self.search_match(forward) else {
             return Task::none();
         };
-        let cue_y = self.media_viewer.subtitles().map_or(0.0, |subtitles| {
-            video::view::filtered_cue_offset(subtitles, &found.shown, found.index)
+        self.side_search.set_current(Some(found.index));
+        let cue_y = (found.overlay == Overlay::Subtitles).then(|| {
+            self.media_viewer.subtitles().map_or(0.0, |subtitles| {
+                video::view::filtered_cue_offset(subtitles, &found.shown, found.index)
+            })
         });
         let mut video = |message| {
             self.media_viewer
                 .update(media_viewer::Message::Video(message))
                 .map(Message::MediaViewer)
         };
-        if found.overlay == Overlay::Subtitles {
-            let y = cue_y;
+        if let Some(y) = cue_y {
             return Task::batch([
                 video(video::Message::SeekToCue(found.index)),
                 video(video::Message::ScrollCueListTo(y)),

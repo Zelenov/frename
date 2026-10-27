@@ -32,6 +32,9 @@ pub struct SideSearch {
     open: bool,
     query: String,
     words: Vec<String>,
+    /// The match the last step went to (its index in the whole list), so that matches that
+    /// start at the same time can be stepped through one by one.
+    current: Option<usize>,
 }
 
 impl SideSearch {
@@ -54,8 +57,18 @@ impl SideSearch {
     }
 
     pub fn set_query(&mut self, query: String) {
+        self.current = None;
         self.words = search_words(&query);
         self.query = query;
+    }
+
+    /// The match the last step went to.
+    pub fn current(&self) -> Option<usize> {
+        self.current
+    }
+
+    pub fn set_current(&mut self, current: Option<usize>) {
+        self.current = current;
     }
 
     /// The words of the text, lowercased; none when it is empty.
@@ -85,6 +98,7 @@ pub fn step_cue(
     matches: &[usize],
     position_ms: u64,
     forward: bool,
+    current: Option<usize>,
 ) -> Option<usize> {
     let starts: Vec<(usize, u64)> = matches
         .iter()
@@ -95,11 +109,33 @@ pub fn step_cue(
             )
         })
         .collect();
-    step(&starts, position_ms, forward)
+    step(&starts, position_ms, forward, current)
 }
 
 /// Like [`step_cue`], over `(index, start in ms)` pairs in time order.
-pub fn step(starts: &[(usize, u64)], position_ms: u64, forward: bool) -> Option<usize> {
+///
+/// With the `current` match still under the playhead the step goes to its neighbour in the list,
+/// so matches that start together are reached one after the other.
+pub fn step(
+    starts: &[(usize, u64)],
+    position_ms: u64,
+    forward: bool,
+    current: Option<usize>,
+) -> Option<usize> {
+    let here = current.and_then(|c| {
+        starts
+            .iter()
+            .position(|&(index, start)| index == c && start == position_ms)
+    });
+    if let Some(at) = here {
+        let len = starts.len();
+        let next = if forward {
+            (at + 1) % len
+        } else {
+            (at + len - 1) % len
+        };
+        return Some(starts[next].0);
+    }
     if forward {
         starts
             .iter()
@@ -121,20 +157,36 @@ mod tests {
     #[test]
     fn stepping_goes_to_the_next_match_and_wraps_round_the_ends() {
         let starts = [(1, 1_000), (4, 4_000), (7, 7_000)];
-        assert_eq!(step(&starts, 0, true), Some(1));
-        assert_eq!(step(&starts, 1_000, true), Some(4));
+        assert_eq!(step(&starts, 0, true, None), Some(1));
+        assert_eq!(step(&starts, 1_000, true, None), Some(4));
         assert_eq!(
-            step(&starts, 7_000, true),
+            step(&starts, 7_000, true, None),
             Some(1),
             "after the last: the first"
         );
-        assert_eq!(step(&starts, 4_000, false), Some(1));
+        assert_eq!(step(&starts, 4_000, false, None), Some(1));
         assert_eq!(
-            step(&starts, 1_000, false),
+            step(&starts, 1_000, false, None),
             Some(7),
             "before the first: the last"
         );
-        assert_eq!(step(&[], 0, true), None);
+        assert_eq!(step(&[], 0, true, None), None);
+    }
+
+    #[test]
+    fn matches_that_start_together_are_stepped_one_by_one() {
+        let starts = [(2, 5_000), (3, 5_000), (6, 9_000)];
+        assert_eq!(step(&starts, 4_000, true, None), Some(2));
+        assert_eq!(step(&starts, 5_000, true, Some(2)), Some(3));
+        assert_eq!(step(&starts, 5_000, true, Some(3)), Some(6));
+        assert_eq!(step(&starts, 5_000, false, Some(3)), Some(2));
+        assert_eq!(
+            step(&starts, 5_000, false, Some(2)),
+            Some(6),
+            "round the end"
+        );
+        // The playhead moved away from the last step: by time again.
+        assert_eq!(step(&starts, 6_000, true, Some(2)), Some(6));
     }
 
     #[test]

@@ -252,10 +252,8 @@ impl<S: AppStateStore + Clone> Directory<S> {
     fn matches_name_filter(&self, file: &File) -> bool {
         let name = file.file_path().file_name().and_then(|n| n.to_str());
         let comment = (!file.snapshot().comment_loading()).then(|| file.comment());
-        self.name_filter_words.iter().all(|word| {
-            name.is_some_and(|n| search::contains_ignore_case(n, word))
-                || comment.is_some_and(|c| search::contains_ignore_case(c, word))
-        })
+        let texts: Vec<&str> = name.into_iter().chain(comment).collect();
+        search::matches_all_of(&texts, &self.name_filter_words)
     }
 
     /// Why a file matches the search when its name alone does not: the line of its comment with
@@ -266,11 +264,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
             return None;
         }
         let name = file.file_path().file_name().and_then(|n| n.to_str())?;
-        let by_name = self
-            .name_filter_words
-            .iter()
-            .all(|word| search::contains_ignore_case(name, word));
-        if by_name {
+        if search::matches_all(name, &self.name_filter_words) {
             return None;
         }
         search::fragment(file.comment(), &self.name_filter_words, lead_chars)
@@ -548,6 +542,7 @@ fn is_listed_kind(path: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use crate::search;
     use std::path::{Path, PathBuf};
     use std::time::SystemTime;
 
@@ -746,6 +741,33 @@ mod tests {
         let mut dir = directory_with(&["holiday.mp4", "work.mp4", "Holiday_2.mp4"]);
         dir.set_name_filter("holiday".to_string());
         assert_eq!(listed_names(&dir), vec!["holiday.mp4", "Holiday_2.mp4"]);
+    }
+
+    /// The side lists (#170) match with the same rule: the file list and `matches_all` agree on
+    /// the same texts and queries (Cyrillic folded by case, `ё` and diacritics not folded).
+    #[test]
+    fn the_file_list_and_the_side_lists_match_alike() {
+        let names = ["Коза на лугу.mp4", "cafe.mp4", "Козёл.mp4", "A Goat.mp4"];
+        for query in [
+            "ЛУГУ коза",
+            "café",
+            "cafe",
+            "козел",
+            "козёл",
+            "goat a",
+            "mp4",
+        ] {
+            let mut dir = directory_with(&names);
+            dir.set_name_filter(query.to_string());
+            let listed = listed_names(&dir);
+            let words = search::words(query);
+            let by_rule: Vec<&str> = names
+                .iter()
+                .copied()
+                .filter(|name| search::matches_all(name, &words))
+                .collect();
+            assert_eq!(listed, by_rule, "query {query:?}");
+        }
     }
 
     #[test]

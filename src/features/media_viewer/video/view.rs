@@ -601,7 +601,7 @@ fn side_overlay<'a>(
             let matches = markers
                 .markers
                 .filter(|_| search.is_filtering())
-                .map(|list| frename_core::matching_markers(list, search.words()));
+                .map(|list| markers::view::shown_markers(list, markers.state, search.words()));
             if matches.as_ref().is_some_and(Vec::is_empty) {
                 nothing_found(search)
             } else {
@@ -750,13 +750,36 @@ fn side_list_header<'a>(
                 icon: Some(Icon::MapPin),
                 label: fl!("media-viewer-video-tab-markers"),
                 count: tab_count(markers.search, list.len(), || {
-                    frename_core::matching_markers(list, markers.search.words()).len()
+                    markers::view::shown_markers(list, markers.state, markers.search.words()).len()
                 }),
                 selected: shown == Overlay::Markers,
                 on_press: Message::ShowOverlay(Overlay::Markers),
                 tip: None,
             },
         ]),
+        // A single list: its name, with the count of matches while the search is on.
+        (Some(subs), None) if shown == Overlay::Subtitles => titled(
+            fl!("settings-subtitles"),
+            markers.search.is_filtering().then(|| {
+                fl!(
+                    "side-search-count",
+                    shown = frename_core::matching_cues(subs, markers.search.words()).len(),
+                    total = subs.cues().len()
+                )
+            }),
+        ),
+        (_, Some(list)) if shown != Overlay::Subtitles => titled(
+            fl!("media-viewer-video-tab-markers"),
+            markers.search.is_filtering().then(|| {
+                fl!(
+                    "side-search-count",
+                    shown =
+                        markers::view::shown_markers(list, markers.state, markers.search.words())
+                            .len(),
+                    total = list.len()
+                )
+            }),
+        ),
         _ if shown == Overlay::Subtitles => text::title(fl!("settings-subtitles")).into(),
         _ => text::title(fl!("media-viewer-video-tab-markers")).into(),
     };
@@ -864,6 +887,15 @@ fn tab_count(
         return Some(fl!("side-search-count", shown = matching(), total = total));
     }
     (total > 0).then(|| total.to_string())
+}
+
+/// A list's name with, after it, how many rows match the search.
+fn titled<'a>(name: String, count: Option<String>) -> Element<'a, Message> {
+    row![text::title(name)]
+        .push(count.map(text::caption))
+        .spacing(SPACE_S)
+        .align_y(Alignment::Center)
+        .into()
 }
 
 /// Under the header: the search bar when it is open, the same height of nothing otherwise.

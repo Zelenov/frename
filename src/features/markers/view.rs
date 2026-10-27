@@ -174,6 +174,28 @@ pub struct Narrowed<'a> {
     pub search: &'a SideSearch,
 }
 
+/// The indices of the markers the narrowed list shows: those that match `words`, and always the
+/// marker whose row is open or whose `F2` is still held, so an edit that no longer matches (or a
+/// new, nameless marker) does not vanish under the cursor.
+pub fn shown_markers(markers: &[Marker], state: &MarkersState, words: &[String]) -> Vec<usize> {
+    let mut shown = frename_core::matching_markers(markers, words);
+    let keep = [
+        state.edit().map(|edit| edit.guid.as_str()),
+        state.recording().map(|recording| recording.guid.as_str()),
+    ];
+    for (index, marker) in markers.iter().enumerate() {
+        let kept = marker
+            .guid
+            .as_deref()
+            .is_some_and(|guid| keep.contains(&Some(guid)));
+        if kept && !shown.contains(&index) {
+            shown.push(index);
+        }
+    }
+    shown.sort_unstable();
+    shown
+}
+
 /// The marker list for the side overlay. `markers` is `None` when the file cannot hold them.
 pub fn view<'a>(
     markers: Option<&'a [Marker]>,

@@ -12,7 +12,11 @@ pub fn words(query: &str) -> Vec<String> {
 /// The byte range of the first place in `haystack` at or after byte `from` where `needle_lower`
 /// (already lowercase) occurs, ignoring case; without allocating a lowercased copy of the
 /// haystack, since it runs for every file on every keystroke. An empty needle finds nothing.
-pub fn find_ignore_case(haystack: &str, needle_lower: &str, from: usize) -> Option<Range<usize>> {
+pub(crate) fn find_ignore_case(
+    haystack: &str,
+    needle_lower: &str,
+    from: usize,
+) -> Option<Range<usize>> {
     if needle_lower.is_empty() {
         return None;
     }
@@ -116,7 +120,15 @@ pub fn hits(line: &str, words: &[String]) -> Vec<Range<usize>> {
 /// Whether `text` has every one of `words` (already lowercase, from [`words`]), ignoring case.
 /// No words match everything. The one rule of the file list and of the side lists.
 pub fn matches_all(text: &str, words: &[String]) -> bool {
-    words.iter().all(|word| contains_ignore_case(text, word))
+    matches_all_of(&[text], words)
+}
+
+/// Whether every one of `words` is in at least one of `texts` (a file's name or its comment),
+/// ignoring case. No words match everything.
+pub fn matches_all_of(texts: &[&str], words: &[String]) -> bool {
+    words
+        .iter()
+        .all(|word| texts.iter().any(|text| contains_ignore_case(text, word)))
 }
 
 /// The indices of the cues whose text has every word.
@@ -138,8 +150,7 @@ pub fn matching_markers(markers: &[crate::Marker], words: &[String]) -> Vec<usiz
         .enumerate()
         .filter(|(_, marker)| {
             words.iter().all(|word| {
-                contains_ignore_case(&marker.name, word)
-                    || contains_ignore_case(&marker.comment, word)
+                matches_all_of(&[&marker.name, &marker.comment], std::slice::from_ref(word))
                     || typed_time_ms(word).is_some_and(|ms| marker.start_ms / 1000 == ms / 1000)
             })
         })
@@ -157,8 +168,12 @@ fn typed_time_ms(word: &str) -> Option<u64> {
     {
         return None;
     }
-    let seconds = parts.iter().try_fold(0u64, |total, part| {
-        Some(total * 60 + part.parse::<u64>().ok()?)
+    let mut values = parts.iter().map(|p| p.parse::<u64>().ok());
+    // Only the first part (minutes, or hours) may reach 60.
+    let first = values.next()??;
+    let seconds = values.try_fold(first, |total, part| {
+        let part = part?;
+        (part < 60).then_some(total * 60 + part)
     })?;
     Some(seconds * 1000)
 }
@@ -230,19 +245,6 @@ mod tests {
     }
 
     #[test]
-    fn the_side_lists_match_the_way_the_file_list_does() {
-        for (text, query) in [
-            ("Коза на лугу", "ЛУГУ коза"),
-            ("café", "cafe"),
-            ("A Goat", "goat a"),
-        ] {
-            let words = words(query);
-            let by_file_list = words.iter().all(|w| contains_ignore_case(text, w));
-            assert_eq!(matches_all(text, &words), by_file_list);
-        }
-    }
-
-    #[test]
     fn markers_match_by_name_comment_and_typed_time() {
         let mut a = crate::Marker::new(63_400);
         a.name = "Козёл".into();
@@ -259,5 +261,9 @@ mod tests {
         assert_eq!(matching_markers(&markers, &words("0:05 goat")), [1]);
         assert_eq!(typed_time_ms("1:02:03"), Some(3_723_000));
         assert_eq!(typed_time_ms("12"), None);
+        assert_eq!(typed_time_ms("90:05"), Some(5_405_000));
+        assert_eq!(typed_time_ms("0:60"), None, "seconds stop at 59");
+        assert_eq!(typed_time_ms("1:99"), None);
+        assert_eq!(typed_time_ms("1:02:60"), None);
     }
 }

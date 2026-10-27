@@ -1261,6 +1261,20 @@ impl FolderWorkspace {
     }
 
     fn apply_file_opened(&mut self, file: frename_core::File) -> Task<Message> {
+        let same_file = self
+            .file_workspace
+            .file()
+            .is_some_and(|f| f.id() == file.id());
+        let reset = if same_file || self.busy_clip() == Some(file.id()) {
+            Task::none()
+        } else {
+            self.reset_side_search()
+        };
+        Task::batch([reset, self.open_file_now(file)])
+    }
+
+    /// The part of [`Self::apply_file_opened`] that follows the side search's reset.
+    fn open_file_now(&mut self, file: frename_core::File) -> Task<Message> {
         // The click that selected it came before the job reached it: the job is writing it now.
         if self.busy_clip() == Some(file.id()) {
             self.pending_to_file_id = None;
@@ -1316,7 +1330,6 @@ impl FolderWorkspace {
             self.file_workspace.take_markers(markers);
         }
         if !same_file {
-            self.reset_side_search();
             self.markers_loaded(file.id());
             self.journal_reset_baseline();
         }
@@ -10116,5 +10129,46 @@ mod tests {
         flush_file_opened(&mut workspace);
         assert!(workspace.side_search().is_open());
         assert_eq!(workspace.side_search().query(), "");
+    }
+
+    #[test]
+    fn escape_goes_on_to_fullscreen_when_the_bar_is_not_on_screen() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = searchable_workspace(&test_dir);
+        side_search(&mut workspace, media_viewer_video::SearchMessage::Open);
+        assert!(workspace.media_viewer().marker_list_shown());
+        // The list is closed: the bar is open but hidden.
+        let _ = workspace.update(Message::MediaViewer(media_viewer::Message::Video(
+            media_viewer_video::Message::ToggleMarkerList,
+        )));
+        assert!(!workspace.media_viewer().marker_list_shown());
+        workspace.media_fullscreen = true;
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(!workspace.media_fullscreen, "the Esc left fullscreen");
+        assert!(workspace.side_search().is_open(), "and left the hidden bar");
+    }
+
+    #[test]
+    fn the_marker_being_edited_stays_listed_whatever_the_search_says() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = searchable_workspace(&test_dir);
+        side_search(&mut workspace, media_viewer_video::SearchMessage::Open);
+        type_search(&mut workspace, "goat");
+        let markers = workspace
+            .file_workspace()
+            .markers()
+            .expect("markers")
+            .to_vec();
+        let words = workspace.side_search().words().to_vec();
+        let shown = |workspace: &FolderWorkspace| {
+            crate::features::markers::view::shown_markers(&markers, workspace.markers(), &words)
+        };
+        assert_eq!(shown(&workspace), [0, 2]);
+        // The row of "sheep" is open, as after F2 on a new marker: it is listed too.
+        let guid = markers[1].guid.clone().expect("a guid");
+        send_marker(&mut workspace, M::Open(guid), 5_000);
+        assert!(workspace.markers().is_editing());
+        assert_eq!(shown(&workspace), [0, 1, 2]);
     }
 }
