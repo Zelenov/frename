@@ -622,6 +622,15 @@ media-viewer-video-markers-hint = Shift+F1 / Shift+F3 在标记间跳转；Shift
 media-viewer-video-tab-markers = 标记
 media-viewer-video-fullscreen = 全屏
 media-viewer-video-close-list = 关闭列表
+side-search-tip = 搜索
+side-search-placeholder-subtitles = 在字幕中查找
+side-search-placeholder-markers = 在标记中查找
+side-search-clear = 清除
+side-search-next = 下一个匹配
+side-search-previous = 上一个匹配
+side-search-count = { $shown } / { $total }
+side-search-nothing = 未找到“{ $query }”
+side-search-nothing-clear = 清除搜索
 media-viewer-video-subtitle-file-unreadable = 无法读取此文件
 # 素材在上次播放停止的位置打开时，显示在画面上；按 Home 或点击回到开头。
 media-viewer-video-resumed = 已从 { $time } 继续 · Home：从头开始

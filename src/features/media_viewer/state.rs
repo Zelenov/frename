@@ -78,6 +78,12 @@ impl MediaViewerState {
         self.video.pretend_shown_at(position);
     }
 
+    /// For tests: the clip has these subtitles.
+    #[cfg(test)]
+    pub fn pretend_subtitles(&mut self, subtitles: frename_core::Subtitles) {
+        self.video.pretend_subtitles(subtitles);
+    }
+
     /// For tests without a real video: a video is still loading (`true`), or has unloaded.
     #[cfg(test)]
     pub fn pretend_video_loading(&mut self, loading: bool) {
@@ -140,6 +146,25 @@ impl MediaViewerState {
     /// Where the subtitle list is scrolled to.
     pub fn cue_scroll_y(&self) -> f32 {
         self.video.cue_scroll_y()
+    }
+
+    /// Which list is open over the video.
+    pub fn shown_overlay(&self) -> video::Overlay {
+        if matches!(self.active, ActiveMedia::Video) {
+            self.video.overlay()
+        } else {
+            video::Overlay::Closed
+        }
+    }
+
+    /// Whether the open clip has subtitles.
+    pub fn has_subtitles(&self) -> bool {
+        matches!(self.active, ActiveMedia::Video) && self.video.subtitles().is_some()
+    }
+
+    /// The open clip's subtitles.
+    pub fn subtitles(&self) -> Option<&frename_core::Subtitles> {
+        self.video.subtitles()
     }
 
     /// Whether the marker list is open over the video.

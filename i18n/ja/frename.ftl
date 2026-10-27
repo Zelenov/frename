@@ -622,6 +622,15 @@ media-viewer-video-markers-hint = Shift+F1 / Shift+F3 でマーカー間を移�
 media-viewer-video-tab-markers = マーカー
 media-viewer-video-fullscreen = フルスクリーン
 media-viewer-video-close-list = リストを閉じる
+side-search-tip = 検索
+side-search-placeholder-subtitles = 字幕を検索
+side-search-placeholder-markers = マーカーを検索
+side-search-clear = クリア
+side-search-next = 次の一致
+side-search-previous = 前の一致
+side-search-count = { $shown } / { $total }
+side-search-nothing = 「{ $query }」は見つかりませんでした
+side-search-nothing-clear = 検索をクリア
 media-viewer-video-subtitle-file-unreadable = このファイルを読み取れませんでした
 # クリップを開いたとき、前回再生が止まった位置から再開すると映像の上に表示されます。Home またはクリックで先頭に移動します。
 media-viewer-video-resumed = { $time } から再開 · Home: 最初から

@@ -181,6 +181,8 @@ pub struct VideoPlayerState {
     followed_cue: FollowedRow,
     /// Where the subtitle list is scrolled to; put back when fullscreen rebuilds the list.
     cue_scroll_y: f32,
+    /// A search narrows the side list (#170): the playhead does not scroll it.
+    list_filtered: bool,
     /// Set when the list was just put back at this offset; see `CueListScrolled`.
     cue_restore: crate::ui::scroll::ScrollRestore,
     /// A clicked range is playing: pause when playback reaches its end. Any seek or pause by
@@ -275,6 +277,7 @@ impl Default for VideoPlayerState {
             position: Duration::ZERO,
             followed_cue: FollowedRow::default(),
             cue_scroll_y: 0.0,
+            list_filtered: false,
             cue_restore: Default::default(),
             play_until: None,
             resume_at: None,
@@ -491,6 +494,12 @@ impl VideoPlayerState {
     pub fn pretend_shown_at(&mut self, position: Duration) {
         self.loading = false;
         self.position = position;
+    }
+
+    /// For tests: the clip has these subtitles.
+    #[cfg(test)]
+    pub fn pretend_subtitles(&mut self, subtitles: Subtitles) {
+        self.subtitles = Some(Arc::new(subtitles));
     }
 
     /// For tests without a real video: the clip is (or is no longer) loading.
@@ -928,6 +937,14 @@ impl VideoPlayerState {
             }
             // Bubbles up via media_viewer, which adds the playhead.
             Message::Markers(_) => Task::none(),
+            // Handled by FolderWorkspace, which owns the markers the search goes through.
+            Message::SideSearch(_) => Task::none(),
+            Message::SetListFiltered(filtered) => {
+                self.list_filtered = filtered;
+                // The list is back to every cue: bring the current one into view again.
+                self.follow_cue(true)
+            }
+            Message::ScrollCueListTo(y) => Self::scroll_cue_list_to(y),
             Message::SeekExact(ms) => {
                 self.play_until = None;
                 self.continued = None;
@@ -960,7 +977,7 @@ impl VideoPlayerState {
             }
             Message::CueListScrolled(y, viewport) => {
                 self.cue_scroll_y = y;
-                if !self.cue_restore.report(y) {
+                if !self.cue_restore.report(y) || self.list_filtered {
                     return Task::none();
                 }
                 // The list was just put back here: if the lit cue is out of the new viewport,
@@ -1127,6 +1144,11 @@ impl VideoPlayerState {
     /// Where the subtitle list is scrolled to.
     pub fn cue_scroll_y(&self) -> f32 {
         self.cue_scroll_y
+    }
+
+    /// Which list is open over the picture.
+    pub fn overlay(&self) -> Overlay {
+        self.overlay
     }
 
     /// Whether the subtitle list is open.
@@ -1461,6 +1483,9 @@ impl VideoPlayerState {
         let Some(subtitles) = self.subtitles.as_ref() else {
             return Task::none();
         };
+        if self.list_filtered {
+            return Task::none();
+        }
         let cue = subtitles.last_started_index(self.display_position());
         if force {
             self.followed_cue.set(cue);

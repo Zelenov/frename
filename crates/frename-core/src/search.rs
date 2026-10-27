@@ -5,18 +5,14 @@
 use std::ops::Range;
 
 /// The words of a query, lowercased: what [`find_ignore_case`] takes.
-pub(crate) fn words(query: &str) -> Vec<String> {
+pub fn words(query: &str) -> Vec<String> {
     query.split_whitespace().map(str::to_lowercase).collect()
 }
 
 /// The byte range of the first place in `haystack` at or after byte `from` where `needle_lower`
 /// (already lowercase) occurs, ignoring case; without allocating a lowercased copy of the
 /// haystack, since it runs for every file on every keystroke. An empty needle finds nothing.
-pub(crate) fn find_ignore_case(
-    haystack: &str,
-    needle_lower: &str,
-    from: usize,
-) -> Option<Range<usize>> {
+pub fn find_ignore_case(haystack: &str, needle_lower: &str, from: usize) -> Option<Range<usize>> {
     if needle_lower.is_empty() {
         return None;
     }
@@ -45,7 +41,7 @@ pub(crate) fn find_ignore_case(
 }
 
 /// Whether `haystack` has `needle_lower` somewhere, ignoring case; an empty needle matches.
-pub(crate) fn contains_ignore_case(haystack: &str, needle_lower: &str) -> bool {
+pub fn contains_ignore_case(haystack: &str, needle_lower: &str) -> bool {
     needle_lower.is_empty() || find_ignore_case(haystack, needle_lower, 0).is_some()
 }
 
@@ -93,8 +89,8 @@ pub(crate) fn fragment(
     })
 }
 
-/// Every place in `line` where a word occurs, in order, overlaps merged.
-fn hits(line: &str, words: &[String]) -> Vec<Range<usize>> {
+/// Every place in `line` where a word occurs, in order, overlaps merged: what a list marks.
+pub fn hits(line: &str, words: &[String]) -> Vec<Range<usize>> {
     let mut hits: Vec<Range<usize>> = Vec::new();
     for word in words {
         let mut from = 0;
@@ -115,6 +111,56 @@ fn hits(line: &str, words: &[String]) -> Vec<Range<usize>> {
         }
     }
     merged
+}
+
+/// Whether `text` has every one of `words` (already lowercase, from [`words`]), ignoring case.
+/// No words match everything. The one rule of the file list and of the side lists.
+pub fn matches_all(text: &str, words: &[String]) -> bool {
+    words.iter().all(|word| contains_ignore_case(text, word))
+}
+
+/// The indices of the cues whose text has every word.
+pub fn matching_cues(subtitles: &crate::Subtitles, words: &[String]) -> Vec<usize> {
+    subtitles
+        .cues()
+        .iter()
+        .enumerate()
+        .filter(|(_, cue)| matches_all(&cue.text, words))
+        .map(|(index, _)| index)
+        .collect()
+}
+
+/// The indices of the markers that have every word in their name or comment. A word that is a
+/// typed time (`1:03`, `1:02:03`) also matches a marker that starts in that second.
+pub fn matching_markers(markers: &[crate::Marker], words: &[String]) -> Vec<usize> {
+    markers
+        .iter()
+        .enumerate()
+        .filter(|(_, marker)| {
+            words.iter().all(|word| {
+                contains_ignore_case(&marker.name, word)
+                    || contains_ignore_case(&marker.comment, word)
+                    || typed_time_ms(word).is_some_and(|ms| marker.start_ms / 1000 == ms / 1000)
+            })
+        })
+        .map(|(index, _)| index)
+        .collect()
+}
+
+/// `m:ss` or `h:mm:ss` as milliseconds; `None` for anything else.
+fn typed_time_ms(word: &str) -> Option<u64> {
+    let parts: Vec<&str> = word.split(':').collect();
+    if !(2..=3).contains(&parts.len())
+        || parts
+            .iter()
+            .any(|p| p.is_empty() || p.len() > 3 || !p.bytes().all(|b| b.is_ascii_digit()))
+    {
+        return None;
+    }
+    let seconds = parts.iter().try_fold(0u64, |total, part| {
+        Some(total * 60 + part.parse::<u64>().ok()?)
+    })?;
+    Some(seconds * 1000)
 }
 
 #[cfg(test)]
@@ -172,5 +218,46 @@ mod tests {
         let words = words("goat oat");
         let f = fragment("goat", &words, 10).expect("a fragment");
         assert_eq!(f.highlights, vec![0..4]);
+    }
+
+    #[test]
+    fn every_word_must_be_found_in_a_cue_whatever_the_case() {
+        let subs = crate::Subtitles::parse("1\n00:00:01,000 --> 00:00:02,000\nКоза на лугу\n\n2\n00:00:03,000 --> 00:00:04,000\nA goat\n");
+        assert_eq!(matching_cues(&subs, &words("КОЗА лугу")), [0]);
+        assert_eq!(matching_cues(&subs, &words("goat")), [1]);
+        assert!(matching_cues(&subs, &words("goat коза")).is_empty());
+        assert_eq!(matching_cues(&subs, &words("")), [0, 1]);
+    }
+
+    #[test]
+    fn the_side_lists_match_the_way_the_file_list_does() {
+        for (text, query) in [
+            ("Коза на лугу", "ЛУГУ коза"),
+            ("café", "cafe"),
+            ("A Goat", "goat a"),
+        ] {
+            let words = words(query);
+            let by_file_list = words.iter().all(|w| contains_ignore_case(text, w));
+            assert_eq!(matches_all(text, &words), by_file_list);
+        }
+    }
+
+    #[test]
+    fn markers_match_by_name_comment_and_typed_time() {
+        let mut a = crate::Marker::new(63_400);
+        a.name = "Козёл".into();
+        let mut b = crate::Marker::new(5_000);
+        b.comment = "wide shot\nof a goat".into();
+        let markers = [a, b];
+        assert_eq!(matching_markers(&markers, &words("козёл")), [0]);
+        assert_eq!(matching_markers(&markers, &words("GOAT shot")), [1]);
+        assert_eq!(matching_markers(&markers, &words("1:03")), [0]);
+        assert_eq!(
+            matching_markers(&markers, &words("1:04")),
+            Vec::<usize>::new()
+        );
+        assert_eq!(matching_markers(&markers, &words("0:05 goat")), [1]);
+        assert_eq!(typed_time_ms("1:02:03"), Some(3_723_000));
+        assert_eq!(typed_time_ms("12"), None);
     }
 }

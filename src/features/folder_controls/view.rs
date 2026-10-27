@@ -124,7 +124,7 @@ pub fn app_bar(props: AppBarProps) -> Element<'static, folder::Message> {
         Segment {
             icon: Some(Icon::ListChecks),
             label: fl!("app-bar-batch"),
-            count: props.batch_mode.then_some(props.checked),
+            count: props.batch_mode.then(|| props.checked.to_string()),
             selected: props.batch_mode,
             on_press: M::SetBatchMode(true),
             tip: (!props.batch_mode).then(|| fl!("folder-controls-batch")),

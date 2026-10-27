@@ -724,6 +724,15 @@ media-viewer-video-markers-hint = Shift+F1 / Shift+F3 — переход меж�
 media-viewer-video-tab-markers = Маркеры
 media-viewer-video-fullscreen = Во весь экран
 media-viewer-video-close-list = Закрыть список
+side-search-tip = Поиск
+side-search-placeholder-subtitles = Найти в субтитрах
+side-search-placeholder-markers = Найти в маркерах
+side-search-clear = Очистить
+side-search-next = Следующее совпадение
+side-search-previous = Предыдущее совпадение
+side-search-count = { $shown } из { $total }
+side-search-nothing = Ничего не найдено по запросу «{ $query }»
+side-search-nothing-clear = Очистить поиск
 media-viewer-video-subtitle-file-unreadable = Не удалось прочитать этот файл
 media-viewer-video-resumed = Продолжено с { $time } · Home: с начала
 

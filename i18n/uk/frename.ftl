@@ -722,6 +722,15 @@ media-viewer-video-markers-hint = Shift+F1 / Shift+F3 — перехід між 
 media-viewer-video-tab-markers = Позначки
 media-viewer-video-fullscreen = На весь екран
 media-viewer-video-close-list = Закрити список
+side-search-tip = Пошук
+side-search-placeholder-subtitles = Знайти в субтитрах
+side-search-placeholder-markers = Знайти в маркерах
+side-search-clear = Очистити
+side-search-next = Наступний збіг
+side-search-previous = Попередній збіг
+side-search-count = { $shown } з { $total }
+side-search-nothing = Нічого не знайдено за запитом «{ $query }»
+side-search-nothing-clear = Очистити пошук
 media-viewer-video-subtitle-file-unreadable = Не вдалося прочитати цей файл
 # Shown over the picture when a clip opens where playback stopped last time; Home or a click goes to the start.
 media-viewer-video-resumed = Продовжено з { $time } · Home: з початку

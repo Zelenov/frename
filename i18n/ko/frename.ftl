@@ -622,6 +622,15 @@ media-viewer-video-markers-hint = Shift+F1 / Shift+F3으로 마커 사이 이동
 media-viewer-video-tab-markers = 마커
 media-viewer-video-fullscreen = 전체 화면
 media-viewer-video-close-list = 목록 닫기
+side-search-tip = 검색
+side-search-placeholder-subtitles = 자막에서 찾기
+side-search-placeholder-markers = 마커에서 찾기
+side-search-clear = 지우기
+side-search-next = 다음 결과
+side-search-previous = 이전 결과
+side-search-count = { $shown } / { $total }
+side-search-nothing = “{ $query }” 검색 결과가 없습니다
+side-search-nothing-clear = 검색 지우기
 media-viewer-video-subtitle-file-unreadable = 이 파일을 읽을 수 없습니다
 # Shown over the picture when a clip opens where playback stopped last time; Home or a click goes to the start.
 media-viewer-video-resumed = { $time }부터 이어서 재생 · Home: 처음부터

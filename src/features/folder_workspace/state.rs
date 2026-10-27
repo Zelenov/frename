@@ -52,6 +52,7 @@ mod marker_actions;
 mod marker_ai;
 mod recent_list;
 mod rotation;
+mod side_search;
 mod solo;
 
 /// How many actions undo/redo keeps. Reset per folder, since tags are per folder.
@@ -177,6 +178,8 @@ pub struct FolderWorkspace {
     media_fullscreen: bool,
     /// The marker list's own state: the row being edited and what `F2` did last.
     markers: MarkersState,
+    /// The search over the side list (#170).
+    side_search: crate::features::media_viewer::video::SideSearch,
     /// Every marker GUID read from or written to a file this session. A save deletes a file
     /// marker whose GUID is here but no longer in the list: the user deleted it. Other markers
     /// frename never saw (added by Premiere while the file was open) are kept. GUIDs are unique
@@ -325,6 +328,7 @@ impl FolderWorkspace {
             comment_session: None,
             media_fullscreen: false,
             markers: MarkersState::default(),
+            side_search: Default::default(),
             known_marker_guids: HashSet::new(),
             unsaved_markers: HashMap::new(),
             markers_in_video: HashMap::new(),
@@ -537,6 +541,9 @@ impl FolderWorkspace {
                 // Straight to the markers in this update, not re-sent with `Task::done`: a
                 // view built in between would hand the name field its old text, and fast
                 // typing lost letters.
+                media_viewer::Message::Video(media_viewer_video::Message::SideSearch(msg)) => {
+                    self.handle_side_search(msg)
+                }
                 media_viewer::Message::Video(media_viewer_video::Message::Markers(msg)) => {
                     let position_ms = self.media_viewer.video_position_ms().unwrap_or(0);
                     self.handle_marker(msg, position_ms)
@@ -784,6 +791,9 @@ impl FolderWorkspace {
                 if self.markers.is_editing() {
                     self.close_marker_row();
                     return Task::none();
+                }
+                if let Some(task) = self.escape_side_search() {
+                    return task;
                 }
                 if self.inline_rename.take().is_some() {
                     return Task::none();
@@ -1306,6 +1316,7 @@ impl FolderWorkspace {
             self.file_workspace.take_markers(markers);
         }
         if !same_file {
+            self.reset_side_search();
             self.markers_loaded(file.id());
             self.journal_reset_baseline();
         }
@@ -3610,6 +3621,11 @@ impl FolderWorkspace {
     #[cfg(test)]
     pub fn media_viewer_mut(&mut self) -> &mut MediaViewerState {
         &mut self.media_viewer
+    }
+
+    /// The search over the side list: its text and whether its bar is open.
+    pub fn side_search(&self) -> &crate::features::media_viewer::video::SideSearch {
+        &self.side_search
     }
 
     /// State of the marker list (open row, color picker).
@@ -9962,5 +9978,143 @@ mod tests {
         let global = AppDatabase::new();
         assert_eq!(widths_of(&global), widths_before);
         assert_eq!(global.get_batch_run(), run_before);
+    }
+
+    // ---- Search in the side lists (#170) ----
+
+    use crate::features::media_viewer::{self, video as media_viewer_video};
+    use std::time::Duration;
+
+    fn side_search(workspace: &mut FolderWorkspace, msg: media_viewer_video::SearchMessage) {
+        let _ = workspace.update(Message::MediaViewer(media_viewer::Message::Video(
+            media_viewer_video::Message::SideSearch(msg),
+        )));
+    }
+
+    fn type_search(workspace: &mut FolderWorkspace, text: &str) {
+        side_search(
+            workspace,
+            media_viewer_video::SearchMessage::Input(text.to_string()),
+        );
+    }
+
+    /// A workspace whose clip has three markers (1 s "goat", 5 s "sheep", 9 s "Goat herd").
+    fn searchable_workspace(test_dir: &TestDirectory) -> FolderWorkspace {
+        let mut workspace = marker_workspace(test_dir, 2);
+        let named = |ms, name: &str| {
+            let mut marker = frename_core::Marker::new(ms);
+            marker.name = name.to_string();
+            marker
+        };
+        workspace
+            .file_workspace
+            .tag_list_mut()
+            .set_markers(Some(vec![
+                named(1_000, "goat"),
+                named(5_000, "sheep"),
+                named(9_000, "Goat herd"),
+            ]));
+        workspace
+            .media_viewer_mut()
+            .pretend_video_shown_at(Duration::ZERO);
+        workspace
+    }
+
+    #[test]
+    fn ctrl_f_opens_the_bar_and_the_list_it_searches() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = searchable_workspace(&test_dir);
+        assert!(!workspace.media_viewer().marker_list_shown());
+        side_search(&mut workspace, media_viewer_video::SearchMessage::Open);
+        assert!(workspace.side_search().is_open());
+        assert!(workspace.media_viewer().marker_list_shown());
+    }
+
+    #[test]
+    fn typing_narrows_the_markers_and_enter_goes_from_match_to_match() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = searchable_workspace(&test_dir);
+        side_search(&mut workspace, media_viewer_video::SearchMessage::Open);
+        type_search(&mut workspace, "GOAT");
+        assert!(workspace.side_search().is_filtering());
+        let next = |workspace: &FolderWorkspace, forward| {
+            workspace
+                .search_match(forward)
+                .map(|m| (m.index, m.start_ms, m.shown))
+        };
+        assert_eq!(next(&workspace, true), Some((0, 1_000, vec![0, 2])));
+        workspace
+            .media_viewer_mut()
+            .pretend_video_shown_at(Duration::from_secs(1));
+        assert_eq!(next(&workspace, true).map(|m| m.1), Some(9_000));
+        assert_eq!(
+            next(&workspace, false).map(|m| m.1),
+            Some(9_000),
+            "before the first: the last"
+        );
+        workspace
+            .media_viewer_mut()
+            .pretend_video_shown_at(Duration::from_secs(9));
+        assert_eq!(
+            next(&workspace, true).map(|m| m.1),
+            Some(1_000),
+            "after the last: the first"
+        );
+        type_search(&mut workspace, "sheep goat");
+        assert_eq!(next(&workspace, true), None, "every word must be found");
+    }
+
+    #[test]
+    fn a_typed_time_finds_the_marker_at_that_time() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = searchable_workspace(&test_dir);
+        side_search(&mut workspace, media_viewer_video::SearchMessage::Open);
+        type_search(&mut workspace, "0:05");
+        assert_eq!(workspace.search_match(true).map(|m| m.index), Some(1));
+    }
+
+    #[test]
+    fn the_subtitle_tab_is_searched_by_the_cue_text() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = searchable_workspace(&test_dir);
+        workspace.media_viewer_mut().pretend_subtitles(frename_core::Subtitles::parse(
+            "1\n00:00:02,000 --> 00:00:03,000\nКоза на лугу\n\n2\n00:00:06,000 --> 00:00:07,000\nA sheep\n",
+        ));
+        side_search(&mut workspace, media_viewer_video::SearchMessage::Open);
+        assert_eq!(
+            workspace.media_viewer().shown_overlay(),
+            media_viewer_video::Overlay::Subtitles,
+            "a clip with subtitles opens their list"
+        );
+        type_search(&mut workspace, "КОЗА");
+        let found = workspace.search_match(true).expect("a cue");
+        assert_eq!((found.index, found.start_ms), (0, 2_000));
+        type_search(&mut workspace, "sheep");
+        assert_eq!(workspace.search_match(true).map(|m| m.index), Some(1));
+    }
+
+    #[test]
+    fn escape_clears_the_text_then_closes_the_bar() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = searchable_workspace(&test_dir);
+        side_search(&mut workspace, media_viewer_video::SearchMessage::Open);
+        type_search(&mut workspace, "goat");
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(workspace.side_search().is_open());
+        assert_eq!(workspace.side_search().query(), "");
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(!workspace.side_search().is_open());
+    }
+
+    #[test]
+    fn another_clip_starts_with_an_empty_search_and_the_bar_as_it_was() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = searchable_workspace(&test_dir);
+        side_search(&mut workspace, media_viewer_video::SearchMessage::Open);
+        type_search(&mut workspace, "goat");
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        assert!(workspace.side_search().is_open());
+        assert_eq!(workspace.side_search().query(), "");
     }
 }

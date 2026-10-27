@@ -16,7 +16,7 @@ use super::tooltip::{self, Position};
 pub struct Segment<M> {
     pub icon: Option<Icon>,
     pub label: String,
-    pub count: Option<usize>,
+    pub count: Option<String>,
     pub selected: bool,
     pub on_press: M,
     pub tip: Option<String>,
@@ -56,7 +56,7 @@ fn segment<'a, M: Clone + 'a>(s: Segment<M>, first: bool, last: bool) -> Element
     let words = row![]
         .push(s.icon.map(|glyph| icon(glyph, ICON_M, color)))
         .push(label)
-        .push(s.count.map(|n| text::caption(n.to_string())))
+        .push(s.count.map(text::caption))
         .spacing(SPACE_TIGHT)
         .align_y(Alignment::Center);
     let underline = container(space())

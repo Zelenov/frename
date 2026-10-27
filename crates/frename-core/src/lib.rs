@@ -53,7 +53,10 @@ pub use metadata::{
     MoveOutcome, Rotation, RotationError, Segment, StorageGuard, DEFAULT_COMMENTED_TAG,
 };
 pub use ordered::{OrderKey, OrderableEntry, OrderedCollection, OrderedThing};
-pub use search::CommentFragment;
+pub use search::{
+    contains_ignore_case, hits as search_hits, matches_all, matching_cues, matching_markers,
+    words as search_words, CommentFragment,
+};
 pub use subtitles::{
     cue_length, existing_subtitle_path, open_subtitles, set_cue_length, subtitle_bytes,
     subtitle_candidates, subtitle_cues, subtitle_path, transcript_path, CueLength, SubtitleCue,

@@ -354,6 +354,26 @@ fn main_window_event(
                 Some(Message::Noop)
             }
         }
+        // Ctrl+F searches the side list of the open clip (#170): always, also from a field.
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key,
+            physical_key,
+            modifiers,
+            repeat: false,
+            ..
+        }) if modifiers.command()
+            && !modifiers.shift()
+            && !modifiers.alt()
+            && latin_key(&key, physical_key) == Some('f') =>
+        {
+            Some(Message::FolderWorkspace(
+                folder_workspace::Message::MediaViewer(media_viewer::Message::Video(
+                    media_viewer_video::Message::SideSearch(
+                        media_viewer_video::SearchMessage::Open,
+                    ),
+                )),
+            ))
+        }
         // Ctrl+Shift+C copies the playhead's timecode, Ctrl+Shift+V seeks to the one on the
         // clipboard (#308).
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
