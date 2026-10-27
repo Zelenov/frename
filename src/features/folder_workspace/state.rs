@@ -792,11 +792,11 @@ impl FolderWorkspace {
                     self.close_marker_row();
                     return Task::none();
                 }
-                if let Some(task) = self.escape_side_search() {
-                    return task;
-                }
                 if self.inline_rename.take().is_some() {
                     return Task::none();
+                }
+                if let Some(task) = self.escape_side_search() {
+                    return task;
                 }
                 if self.media_fullscreen {
                     return self.set_fullscreen(false);
@@ -10170,5 +10170,45 @@ mod tests {
         send_marker(&mut workspace, M::Open(guid), 5_000);
         assert!(workspace.markers().is_editing());
         assert_eq!(shown(&workspace), [0, 1, 2]);
+    }
+
+    #[test]
+    fn a_marker_just_added_while_the_search_filters_stays_listed() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = searchable_workspace(&test_dir);
+        side_search(&mut workspace, media_viewer_video::SearchMessage::Open);
+        type_search(&mut workspace, "goat");
+        send_marker(&mut workspace, M::Add, 3_000);
+        let markers = workspace
+            .file_workspace()
+            .markers()
+            .expect("markers")
+            .to_vec();
+        let words = workspace.side_search().words().to_vec();
+        let new = markers
+            .iter()
+            .position(|m| m.start_ms == 3_000)
+            .expect("the new marker");
+        let shown =
+            crate::features::markers::view::shown_markers(&markers, workspace.markers(), &words);
+        assert!(shown.contains(&new), "the nameless new marker is listed");
+    }
+
+    #[test]
+    fn escape_cancels_a_rename_before_it_touches_the_search() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = searchable_workspace(&test_dir);
+        side_search(&mut workspace, media_viewer_video::SearchMessage::Open);
+        type_search(&mut workspace, "goat");
+        let id = file_id_at(&workspace, 0);
+        workspace.inline_rename = Some(folder::InlineRename {
+            id,
+            text: "x.mp4".to_string(),
+            error: None,
+        });
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(workspace.inline_rename.is_none(), "the rename is cancelled");
+        assert_eq!(workspace.side_search().query(), "goat", "the search stays");
     }
 }

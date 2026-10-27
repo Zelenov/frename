@@ -175,13 +175,14 @@ pub struct Narrowed<'a> {
 }
 
 /// The indices of the markers the narrowed list shows: those that match `words`, and always the
-/// marker whose row is open or whose `F2` is still held, so an edit that no longer matches (or a
+/// marker whose row is open, whose `F2` is still held or that was just added, so an edit that no longer matches (or a
 /// new, nameless marker) does not vanish under the cursor.
 pub fn shown_markers(markers: &[Marker], state: &MarkersState, words: &[String]) -> Vec<usize> {
     let mut shown = frename_core::matching_markers(markers, words);
     let keep = [
         state.edit().map(|edit| edit.guid.as_str()),
         state.recording().map(|recording| recording.guid.as_str()),
+        state.last_added_guid(),
     ];
     for (index, marker) in markers.iter().enumerate() {
         let kept = marker

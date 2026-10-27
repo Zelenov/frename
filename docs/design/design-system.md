@@ -2118,6 +2118,7 @@ fails. The keys are today's (#62 owns the list).
 | Comment | click the comment box, type | comment editor | saved on leave; comment line in the list row; "Commented" tag checked if Settings says so | – |
 | Mark in / out | `[` `]` | video controls, file name panel | IN/OUT timecodes appear; segment on the bar | – |
 | Markers | F2 (F2 F2 to name, hold for a range), Shift+F1/F3, Shift+F2, Ctrl+F2 to describe with AI (§13.3.4, §13.3.6) | timeline, marker list | pin appears with its label | not saved: `circle-alert` at the row's right end and an error notice |
+| Search the side lists | Ctrl+F, type, Enter / Shift+Enter or the arrows, Esc (§13.3.6) | side list over the picture | list narrowed, matches marked, tab counts "2 of 14" | no match: "Nothing found" with Clear |
 | Run a batch action | batch mode, pick an action, primary button | batch panel | progress with n of total, time left, Cancel | stopped or failed: one notice with the reason and a fix button; files not done listed once |
 | Change a setting | ⚙, Ctrl+Tab between pages | Settings window | applies at once | key save failed: error line under the key row |
 | Update | the dot on ⚙ | Settings → Updates | status line; *Update and restart* | check failed: error line with the reason |

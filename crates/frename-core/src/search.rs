@@ -45,7 +45,7 @@ pub(crate) fn find_ignore_case(
 }
 
 /// Whether `haystack` has `needle_lower` somewhere, ignoring case; an empty needle matches.
-pub fn contains_ignore_case(haystack: &str, needle_lower: &str) -> bool {
+pub(crate) fn contains_ignore_case(haystack: &str, needle_lower: &str) -> bool {
     needle_lower.is_empty() || find_ignore_case(haystack, needle_lower, 0).is_some()
 }
 

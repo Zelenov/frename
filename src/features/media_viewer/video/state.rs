@@ -181,7 +181,8 @@ pub struct VideoPlayerState {
     followed_cue: FollowedRow,
     /// Where the subtitle list is scrolled to; put back when fullscreen rebuilds the list.
     cue_scroll_y: f32,
-    /// A search narrows the side list (#170): the playhead does not scroll it.
+    /// A search narrows the side list (#170): the playhead does not scroll it. Written only by
+    /// `Message::SetListFiltered`, which `FolderWorkspace::sync_list_filter` sends.
     list_filtered: bool,
     /// Set when the list was just put back at this offset; see `CueListScrolled`.
     cue_restore: crate::ui::scroll::ScrollRestore,

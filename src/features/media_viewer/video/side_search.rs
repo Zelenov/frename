@@ -91,6 +91,11 @@ impl SideSearch {
     }
 }
 
+/// How far the playhead may be from the start of the match a step went to and still count as
+/// being on it: after a seek the first frame shown has its own timestamp (up to a few frames off,
+/// more while the clip plays on), so an exact comparison would take the same match again.
+const HERE_SLACK_MS: u64 = 250;
+
 /// The cue to go to from `position_ms` among the `matches` (indices of `cues`): the first one
 /// that starts after it, the last one that starts before it going back; round the ends.
 pub fn step_cue(
@@ -125,7 +130,7 @@ pub fn step(
     let here = current.and_then(|c| {
         starts
             .iter()
-            .position(|&(index, start)| index == c && start == position_ms)
+            .position(|&(index, start)| index == c && start.abs_diff(position_ms) <= HERE_SLACK_MS)
     });
     if let Some(at) = here {
         let len = starts.len();
@@ -187,6 +192,32 @@ mod tests {
         );
         // The playhead moved away from the last step: by time again.
         assert_eq!(step(&starts, 6_000, true, Some(2)), Some(6));
+    }
+
+    #[test]
+    fn a_playhead_a_few_frames_off_the_match_is_still_on_it() {
+        let starts = [(1, 1_000), (4, 5_000), (7, 9_000)];
+        // After a seek to 5 000 the frame is stamped 5 005 or 4 967.
+        assert_eq!(step(&starts, 5_005, false, Some(4)), Some(1));
+        assert_eq!(step(&starts, 4_967, false, Some(4)), Some(1));
+        assert_eq!(step(&starts, 5_005, true, Some(4)), Some(7));
+        assert_eq!(step(&starts, 4_967, true, Some(4)), Some(7));
+        // Far away: by time.
+        assert_eq!(step(&starts, 5_400, false, Some(4)), Some(4));
+    }
+
+    #[test]
+    fn cues_are_stepped_from_a_playhead_off_their_start() {
+        use std::time::Duration;
+        let cue = |ms: u64| SubtitleCue {
+            start: Duration::from_millis(ms),
+            end: Duration::from_millis(ms + 500),
+            text: String::new(),
+        };
+        let cues = [cue(1_000), cue(5_000), cue(9_000)];
+        let matches = [0, 1, 2];
+        assert_eq!(step_cue(&cues, &matches, 5_007, false, Some(1)), Some(0));
+        assert_eq!(step_cue(&cues, &matches, 4_960, true, Some(1)), Some(2));
     }
 
     #[test]

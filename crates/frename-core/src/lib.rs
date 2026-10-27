@@ -54,8 +54,8 @@ pub use metadata::{
 };
 pub use ordered::{OrderKey, OrderableEntry, OrderedCollection, OrderedThing};
 pub use search::{
-    contains_ignore_case, hits as search_hits, matches_all, matching_cues, matching_markers,
-    words as search_words, CommentFragment,
+    hits as search_hits, matches_all, matching_cues, matching_markers, words as search_words,
+    CommentFragment,
 };
 pub use subtitles::{
     cue_length, existing_subtitle_path, open_subtitles, set_cue_length, subtitle_bytes,

@@ -129,7 +129,7 @@ single clip.
 | `Home` | Go to the start of the clip |
 | `[` | Set the in point |
 | `]` | Set the out point |
-| `Ctrl+F` | Search the subtitle and marker lists over the video: `Enter` next match, `Shift+Enter` previous, `Esc` clears, then closes |
+| `Ctrl+F` | Search the subtitle and marker lists over the video: `Enter` or the arrows beside the field: next match, `Shift+Enter` previous, `Esc` clears, then closes |
 | `F2` | Add a marker; `F2` again within a second and a half, or on a marker, names it |
 | Hold `F2` | Mark a range: from where you pressed to where you let go |
 | `Shift+F2` | Delete the marker under the playhead |
