@@ -9,20 +9,22 @@ use iced::widget::{column, container, mouse_area, row, space, stack, Column, Row
 use iced::{Alignment, Element, Length, Padding};
 use iced_video_player::VideoPlayer;
 
-use super::{Message, Overlay, VideoPlayerState};
+use super::{Message, Overlay, SearchMessage, SideSearch, VideoPlayerState, SIDE_SEARCH_INPUT_ID};
 use crate::features::markers::{self, MarkersState};
 use crate::features::media_viewer::placeholder;
 use crate::features::video_controls::view::{self as controls, Command};
 use crate::features::video_controls::{self, BarMarker, Fold};
+use crate::ui::button as ui_button;
 use crate::ui::icon_button::IconButton;
 use crate::ui::icons::{spinner, Icon};
 use crate::ui::menu::{self, MenuItem};
 use crate::ui::palette::marker_color;
 use crate::ui::segmented::{segmented, Segment};
-use crate::ui::style;
+use crate::ui::style::{self, ButtonKind};
 use crate::ui::tokens::*;
 use crate::ui::tooltip::{self, Position, Tip};
-use crate::ui::{list, scroll, text};
+use crate::ui::{empty, list, scroll, text};
+use crate::widgets::search_bar::{self, SearchBar};
 
 /// The in/out points in milliseconds, when both are set and in comes first.
 fn in_out_ms(start: Option<f32>, end: Option<f32>) -> Option<(u64, u64)> {
@@ -55,6 +57,14 @@ pub fn cue_offset(subtitles: &Subtitles, index: usize) -> f32 {
         .map(|cue| cue_row_height(&cue.text) + SPACE_XXS)
         .sum()
 }
+/// Distance from the top of a cue list that shows only the cues `shown` to the row of cue `index`.
+pub fn filtered_cue_offset(subtitles: &Subtitles, shown: &[usize], index: usize) -> f32 {
+    shown
+        .iter()
+        .take_while(|&&i| i < index)
+        .map(|&i| cue_row_height(&subtitles.cues()[i].text) + SPACE_XXS)
+        .sum()
+}
 pub const CUE_LIST_SCROLLABLE_ID: &str = "subtitle_cue_list";
 /// The share of a wide pane the side list takes (at most `SIDE_LIST_MAX_WIDTH`).
 const LIST_SHARE_OF_PANE: f32 = 0.4;
@@ -74,6 +84,8 @@ pub struct MarkersView<'a> {
     pub unnamed: usize,
     /// What one marker request is expected to cost, in US dollars; `None` when not known.
     pub marker_price_usd: Option<f64>,
+    /// The search over the side list: its text, and whether its bar is open.
+    pub search: &'a SideSearch,
 }
 
 /// Render the video player with its strip, timeline and controls below.
@@ -568,35 +580,65 @@ fn side_overlay<'a>(
     let Some(shown) = shown else {
         return (!caption.is_empty()).then(|| caption_area.width(Length::Fill).into());
     };
+    let search = markers.search;
     let list: Element<'a, Message> = match (shown, subtitles) {
-        (Overlay::Subtitles, Some(subs)) => cue_list(
-            subs,
-            subs.last_started_index(state.display_position()),
-            state.time_format(),
-        ),
-        _ => markers::view::view(
-            markers.markers,
-            markers.state,
-            markers::view::Clock {
-                position_ms: state.position_ms(),
-                format: state.time_format(),
-            },
-            in_out,
-            markers.spinner_frame,
-            markers.unnamed,
-            markers.marker_price_usd,
-        )
-        .map(Message::Markers),
+        (Overlay::Subtitles, Some(subs)) => {
+            let matches = search
+                .is_filtering()
+                .then(|| frename_core::matching_cues(subs, search.words()));
+            match matches.as_deref() {
+                Some([]) => nothing_found(search),
+                _ => cue_list(
+                    subs,
+                    subs.last_started_index(state.display_position()),
+                    state.time_format(),
+                    matches.as_deref(),
+                    search,
+                ),
+            }
+        }
+        _ => {
+            let matches = markers
+                .markers
+                .filter(|_| search.is_filtering())
+                .map(|list| markers::view::shown_markers(list, markers.state, search.words()));
+            if matches.as_ref().is_some_and(Vec::is_empty) {
+                nothing_found(search)
+            } else {
+                markers::view::view(
+                    markers.markers,
+                    markers.state,
+                    markers::view::Clock {
+                        position_ms: state.position_ms(),
+                        format: state.time_format(),
+                        in_out,
+                    },
+                    markers.spinner_frame,
+                    markers.unnamed,
+                    markers.marker_price_usd,
+                    markers::view::Narrowed {
+                        shown: matches.as_deref(),
+                        search,
+                    },
+                )
+                .map(Message::Markers)
+            }
+        }
     };
     let (width, covers) = side_list_width(pane_width);
     let picker = (shown == Overlay::Subtitles)
         .then(|| subtitle_file_picker(state))
         .flatten();
     let panel = container(
-        column![side_list_header(state, markers, shown, covers)]
-            .push(picker)
-            .push(list)
-            .height(Length::Fill),
+        // The picker and the bar keep their places in the column when they are not shown: a
+        // child that is missing moves the ones after it, and a widget that moved starts over.
+        column![
+            side_list_header(state, markers, shown, covers),
+            picker.unwrap_or_else(|| space().into()),
+            search_bar(search, shown),
+            list
+        ]
+        .height(Length::Fill),
     )
     .width(if covers {
         Length::Fill
@@ -692,13 +734,14 @@ fn side_list_header<'a>(
     close: bool,
 ) -> Element<'a, Message> {
     let subtitles = state.subtitles();
-    let count = |n: usize| (n > 0).then_some(n);
     let title: Element<'a, Message> = match (subtitles, markers.markers) {
         (Some(subs), Some(list)) => segmented([
             Segment {
                 icon: Some(Icon::Captions),
                 label: fl!("settings-subtitles"),
-                count: count(subs.cues().len()),
+                count: tab_count(markers.search, subs.cues().len(), || {
+                    frename_core::matching_cues(subs, markers.search.words()).len()
+                }),
                 selected: shown == Overlay::Subtitles,
                 on_press: Message::ShowOverlay(Overlay::Subtitles),
                 tip: None,
@@ -706,12 +749,37 @@ fn side_list_header<'a>(
             Segment {
                 icon: Some(Icon::MapPin),
                 label: fl!("media-viewer-video-tab-markers"),
-                count: count(list.len()),
+                count: tab_count(markers.search, list.len(), || {
+                    markers::view::shown_markers(list, markers.state, markers.search.words()).len()
+                }),
                 selected: shown == Overlay::Markers,
                 on_press: Message::ShowOverlay(Overlay::Markers),
                 tip: None,
             },
         ]),
+        // A single list: its name, with the count of matches while the search is on.
+        (Some(subs), None) if shown == Overlay::Subtitles => titled(
+            fl!("settings-subtitles"),
+            markers.search.is_filtering().then(|| {
+                fl!(
+                    "side-search-count",
+                    shown = frename_core::matching_cues(subs, markers.search.words()).len(),
+                    total = subs.cues().len()
+                )
+            }),
+        ),
+        (_, Some(list)) if shown != Overlay::Subtitles => titled(
+            fl!("media-viewer-video-tab-markers"),
+            markers.search.is_filtering().then(|| {
+                fl!(
+                    "side-search-count",
+                    shown =
+                        markers::view::shown_markers(list, markers.state, markers.search.words())
+                            .len(),
+                    total = list.len()
+                )
+            }),
+        ),
         _ if shown == Overlay::Subtitles => text::title(fl!("settings-subtitles")).into(),
         _ => text::title(fl!("media-viewer-video-tab-markers")).into(),
     };
@@ -729,8 +797,22 @@ fn side_list_header<'a>(
             )
             .on_press(toggle)
     });
+    let search_open = markers.search.is_open();
+    let find = IconButton::new(Icon::Search)
+        .small()
+        .overlay()
+        .latched(search_open)
+        .tip(
+            Tip::new(fl!("side-search-tip")).keys(&["Ctrl", "F"]),
+            Position::Left,
+        )
+        .on_press(Message::SideSearch(if search_open {
+            SearchMessage::Close
+        } else {
+            SearchMessage::Open
+        }));
     container(
-        row![title, space::horizontal()]
+        row![title, space::horizontal(), find]
             .push(close)
             .align_y(Alignment::Center),
     )
@@ -748,10 +830,23 @@ fn cue_list<'a>(
     subtitles: &'a Subtitles,
     list_cue: Option<usize>,
     time_format: TimeFormat,
+    shown: Option<&[usize]>,
+    search: &SideSearch,
 ) -> Element<'a, Message> {
-    let rows = subtitles.cues().iter().enumerate().map(|(index, cue)| {
+    let cues = subtitles.cues();
+    let indices: Vec<usize> = match shown {
+        Some(shown) => shown.to_vec(),
+        None => (0..cues.len()).collect(),
+    };
+    let rows = indices.into_iter().map(|index| {
+        let cue = &cues[index];
         let lit = list_cue == Some(index);
-        let cue_text = text::body(cue.text.as_str()).color(if lit { TEXT } else { TEXT_SECONDARY });
+        let color = if lit { TEXT } else { TEXT_SECONDARY };
+        let cue_text: Element<'a, Message> = if search.is_filtering() {
+            text::body_marked(&cue.text, &search.marks(&cue.text), color)
+        } else {
+            text::body(cue.text.as_str()).color(color).into()
+        };
         let body = column![
             text::mono(format_cue_time(cue.start, time_format)),
             cue_text
@@ -779,6 +874,80 @@ fn cue_list<'a>(
     .on_scroll(|viewport| {
         Message::CueListScrolled(viewport.absolute_offset().y, viewport.bounds().height)
     })
+    .into()
+}
+
+/// The tab's count: the number of rows, or with a search "matching of all".
+fn tab_count(
+    search: &SideSearch,
+    total: usize,
+    matching: impl FnOnce() -> usize,
+) -> Option<String> {
+    if search.is_filtering() && total > 0 {
+        return Some(fl!("side-search-count", shown = matching(), total = total));
+    }
+    (total > 0).then(|| total.to_string())
+}
+
+/// A list's name with, after it, how many rows match the search.
+fn titled<'a>(name: String, count: Option<String>) -> Element<'a, Message> {
+    row![text::title(name)]
+        .push(count.map(text::caption))
+        .spacing(SPACE_S)
+        .align_y(Alignment::Center)
+        .into()
+}
+
+/// Under the header: the search bar when it is open, the same height of nothing otherwise.
+fn search_bar<'a>(search: &'a SideSearch, shown: Overlay) -> Element<'a, Message> {
+    if !search.is_open() {
+        return space().into();
+    }
+    let step = |glyph, tip: String, forward| {
+        IconButton::new(glyph)
+            .small()
+            .overlay()
+            .tip(Tip::new(tip), Position::Bottom)
+            .on_press(Message::SideSearch(SearchMessage::Step(forward)))
+    };
+    let placeholder = if shown == Overlay::Subtitles {
+        fl!("side-search-placeholder-subtitles")
+    } else {
+        fl!("side-search-placeholder-markers")
+    };
+    search_bar::view(
+        SearchBar {
+            input_id: SIDE_SEARCH_INPUT_ID,
+            placeholder,
+            value: search.query(),
+            clear_tip: fl!("side-search-clear"),
+            on_clear: Message::SideSearch(SearchMessage::Clear),
+            on_submit: Message::SideSearch(SearchMessage::Submit),
+            trailing: Some(
+                row![
+                    step(Icon::ArrowUp, fl!("side-search-previous"), false),
+                    step(Icon::ArrowDown, fl!("side-search-next"), true),
+                ]
+                .into(),
+            ),
+        },
+        |text| Message::SideSearch(SearchMessage::Input(text)),
+    )
+}
+
+/// A search that matches nothing: say so, with the way back.
+fn nothing_found<'a>(search: &SideSearch) -> Element<'a, Message> {
+    let clear = ui_button::with_icon(
+        ButtonKind::Secondary,
+        Icon::SearchX,
+        fl!("side-search-nothing-clear"),
+        true,
+    )
+    .on_press(Message::SideSearch(SearchMessage::Clear));
+    empty::small(
+        fl!("side-search-nothing", query = search.query().trim()),
+        Some(clear.into()),
+    )
     .into()
 }
 

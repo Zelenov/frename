@@ -204,6 +204,41 @@ pub fn caption_marked<'a, M: 'a>(
         .into()
 }
 
+/// A body-size `content` that wraps, with the byte `ranges` of it marked (a search's hits) in the
+/// accent color on its tint; the rest in `color`. Like [`caption_marked`], for a list's rows.
+pub fn body_marked<'a, M: 'a>(
+    content: &str,
+    ranges: &[std::ops::Range<usize>],
+    color: Color,
+) -> Element<'a, M> {
+    let mut spans: Vec<iced::widget::text::Span<'a, (), Font>> = Vec::new();
+    let mut at = 0;
+    for range in ranges {
+        let (start, stop) = (range.start.min(content.len()), range.end.min(content.len()));
+        if start >= stop || start < at {
+            continue;
+        }
+        if start > at {
+            spans.push(span(content[at..start].to_string()));
+        }
+        spans.push(
+            span(content[start..stop].to_string())
+                .color(ACCENT_TEXT)
+                .background(ACCENT_TINT),
+        );
+        at = stop;
+    }
+    if at < content.len() {
+        spans.push(span(content[at..].to_string()));
+    }
+    rich_text(spans)
+        .size(TEXT_BODY)
+        .line_height(LineHeight::Absolute(Pixels(LINE_BODY)))
+        .font(font())
+        .color(color)
+        .into()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

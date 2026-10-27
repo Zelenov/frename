@@ -502,7 +502,7 @@ impl FolderWorkspace {
             self.markers.follow(None);
             return Task::none();
         }
-        if self.markers.is_editing() {
+        if self.markers.is_editing() || self.side_search.is_filtering() {
             return Task::none();
         }
         let (Some(markers), Some(position_ms)) = (

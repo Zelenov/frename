@@ -60,6 +60,9 @@ In the middle is the list of files in the folder. On the right are the tag searc
 tags, all the folder's tags, the new file name (drag its tags to reorder them) and the clip's
 comment.
 
+To find a moment in a long clip by its words, press `Ctrl+F` over the video: the subtitle list and
+the marker list narrow to what matches, and `Enter` jumps from match to match.
+
 ## How a session goes
 
 1. Open a folder with the **Open a folder** button under the file list, or drag a folder onto the
@@ -126,6 +129,7 @@ single clip.
 | `Home` | Go to the start of the clip |
 | `[` | Set the in point |
 | `]` | Set the out point |
+| `Ctrl+F` | Search the subtitle and marker lists over the video: `Enter` or the arrows beside the field: next match, `Shift+Enter` previous, `Esc` clears, then closes |
 | `F2` | Add a marker; `F2` again within a second and a half, or on a marker, names it |
 | Hold `F2` | Mark a range: from where you pressed to where you let go |
 | `Shift+F2` | Delete the marker under the playhead |

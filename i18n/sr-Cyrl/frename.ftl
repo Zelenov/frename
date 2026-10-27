@@ -716,6 +716,15 @@ media-viewer-video-markers-hint = Shift+F1 / Shift+F3 скачу између м
 media-viewer-video-tab-markers = Маркери
 media-viewer-video-fullscreen = Цео екран
 media-viewer-video-close-list = Затвори списак
+side-search-tip = Претрага
+side-search-placeholder-subtitles = Пронађи у титловима
+side-search-placeholder-markers = Пронађи у маркерима
+side-search-clear = Обриши
+side-search-next = Следеће поклапање
+side-search-previous = Претходно поклапање
+side-search-count = { $shown } од { $total }
+side-search-nothing = Ништа није пронађено за „{ $query }“
+side-search-nothing-clear = Обриши претрагу
 media-viewer-video-subtitle-file-unreadable = Ова датотека није могла да се прочита
 # Shown over the picture when a clip opens where playback stopped last time; Home or a click goes to the start.
 media-viewer-video-resumed = Настављено од { $time } · Home: од почетка

@@ -7,7 +7,7 @@ use iced_video_player::Video;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use super::Overlay;
+use super::{Overlay, SearchMessage};
 use crate::features::{markers, video_controls};
 
 /// A video handed from the loading thread to the update thread.
@@ -71,6 +71,13 @@ pub enum Message {
     ShowMarkerList,
     /// Demo mode: show the time readout as it looks while a frame step is slow.
     ShowSlowStep,
+    /// The search over the side list (`Ctrl+F`, its bar, its arrows). Bubbles up to FolderWorkspace,
+    /// which owns the markers it searches.
+    SideSearch(SearchMessage),
+    /// The side list shows only what a search matches: the playhead no longer scrolls it.
+    SetListFiltered(bool),
+    /// Scroll the subtitle list to this offset.
+    ScrollCueListTo(f32),
     /// A tab of the side list was picked.
     ShowOverlay(Overlay),
     /// Seek exactly to this time (ms), e.g. a marker.

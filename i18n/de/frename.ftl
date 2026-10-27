@@ -694,6 +694,15 @@ media-viewer-video-markers-hint = Umschalt+F1 / Umschalt+F3 springen zwischen Ma
 media-viewer-video-tab-markers = Marker
 media-viewer-video-fullscreen = Vollbild
 media-viewer-video-close-list = Liste schließen
+side-search-tip = Suchen
+side-search-placeholder-subtitles = In Untertiteln suchen
+side-search-placeholder-markers = In Markern suchen
+side-search-clear = Leeren
+side-search-next = Nächster Treffer
+side-search-previous = Vorheriger Treffer
+side-search-count = { $shown } von { $total }
+side-search-nothing = Nichts gefunden für „{ $query }“
+side-search-nothing-clear = Suche leeren
 media-viewer-video-subtitle-file-unreadable = Diese Datei konnte nicht gelesen werden
 # Shown over the picture when a clip opens where playback stopped last time; Home or a click goes to the start.
 media-viewer-video-resumed = Fortgesetzt bei { $time } · Pos1: von vorn

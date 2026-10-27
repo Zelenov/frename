@@ -14,6 +14,7 @@ use iced::{Alignment, Background, Border, Element, Length, Padding};
 
 use super::{describe, MarkersState, Message};
 use crate::features::batch::describe_ai;
+use crate::features::media_viewer::video::SideSearch;
 use crate::ui::button::{self as ui_button};
 use crate::ui::icon_button::IconButton;
 use crate::ui::icons::{icon, spinner, Icon};
@@ -93,6 +94,15 @@ pub fn row_offset(heights: &[f32], index: usize) -> f32 {
         .sum()
 }
 
+/// Distance from the top of a list that shows only the markers `shown` to the row of `index`.
+pub fn filtered_row_offset(heights: &[f32], shown: &[usize], index: usize) -> f32 {
+    shown
+        .iter()
+        .take_while(|&&i| i < index)
+        .map(|&i| heights.get(i).copied().unwrap_or(MARKER_ROW_HEIGHT) + SPACE_XXS)
+        .sum()
+}
+
 /// The offset to scroll the list to once it was put back at `offset` in a viewport `viewport`
 /// tall: `offset`, unless the lit marker (the last one the playhead passed) is out of view, then
 /// the offset the follow uses for it. `None` when the list is right as it is.
@@ -152,6 +162,39 @@ pub fn passed_index(markers: &[Marker], position_ms: u64) -> Option<usize> {
 pub struct Clock {
     pub position_ms: u64,
     pub format: TimeFormat,
+    /// The in and out points, when both are set.
+    pub in_out: Option<(u64, u64)>,
+}
+
+/// What a search over the list leaves of it: the indices of the markers that match (`None`: all
+/// of them) and the search, for the words to mark.
+#[derive(Clone, Copy)]
+pub struct Narrowed<'a> {
+    pub shown: Option<&'a [usize]>,
+    pub search: &'a SideSearch,
+}
+
+/// The indices of the markers the narrowed list shows: those that match `words`, and always the
+/// marker whose row is open, whose `F2` is still held or that was just added, so an edit that no longer matches (or a
+/// new, nameless marker) does not vanish under the cursor.
+pub fn shown_markers(markers: &[Marker], state: &MarkersState, words: &[String]) -> Vec<usize> {
+    let mut shown = frename_core::matching_markers(markers, words);
+    let keep = [
+        state.edit().map(|edit| edit.guid.as_str()),
+        state.recording().map(|recording| recording.guid.as_str()),
+        state.last_added_guid(),
+    ];
+    for (index, marker) in markers.iter().enumerate() {
+        let kept = marker
+            .guid
+            .as_deref()
+            .is_some_and(|guid| keep.contains(&Some(guid)));
+        if kept && !shown.contains(&index) {
+            shown.push(index);
+        }
+    }
+    shown.sort_unstable();
+    shown
 }
 
 /// The marker list for the side overlay. `markers` is `None` when the file cannot hold them.
@@ -159,18 +202,21 @@ pub fn view<'a>(
     markers: Option<&'a [Marker]>,
     state: &'a MarkersState,
     clock: Clock,
-    in_out: Option<(u64, u64)>,
     spinner_frame: usize,
     unnamed: usize,
     price_usd: Option<f64>,
+    narrowed: Narrowed<'_>,
 ) -> Element<'a, Message> {
     let time_format = clock.format;
+    let in_out = clock.in_out;
     let list = marker_list(
         markers,
         state,
         clock.position_ms,
         spinner_frame,
         time_format,
+        narrowed.shown,
+        narrowed.search,
     );
     let describe_all =
         markers.and_then(|_| describe_all_bar(state, spinner_frame, unnamed, price_usd));
@@ -380,6 +426,8 @@ fn marker_list<'a>(
     position_ms: u64,
     spinner_frame: usize,
     time_format: TimeFormat,
+    shown: Option<&[usize]>,
+    search: &SideSearch,
 ) -> Element<'a, Message> {
     let Some(markers) = markers else {
         return cannot_hold();
@@ -389,13 +437,21 @@ fn marker_list<'a>(
     }
     let lit = lit_index(markers, position_ms);
     // Each row reports its height, which is what the list is scrolled to a row by.
-    let rows = markers.iter().enumerate().map(|(index, marker)| {
+    // Rows keep their index in the whole list when a search hides the others: that is what
+    // their heights and the scroll are reported by.
+    let indices: Vec<usize> = match shown {
+        Some(shown) => shown.to_vec(),
+        None => (0..markers.len()).collect(),
+    };
+    let rows = indices.into_iter().map(|index| {
+        let marker = &markers[index];
         let row = marker_row(
             marker,
             state,
             lit == Some(index),
             spinner_frame,
             time_format,
+            search,
         );
         stack![
             row,
@@ -565,6 +621,7 @@ fn marker_row<'a>(
     lit: bool,
     spinner_frame: usize,
     time_format: TimeFormat,
+    search: &SideSearch,
 ) -> Element<'a, Message> {
     let guid = marker.guid.as_deref();
     let open = state.edit().filter(|edit| guid == Some(edit.guid.as_str()));
@@ -657,16 +714,22 @@ fn marker_row<'a>(
             .style(style::text_editor)
             .into(),
         None if marker.name.is_empty() => text::body("—").color(TEXT_SECONDARY).into(),
+        None if search.is_filtering() => {
+            text::body_marked(&marker.name, &search.marks(&marker.name), TEXT)
+        }
         None => text::body(marker.name.as_str()).into(),
     };
     // The comment (an AI's description, or Premiere's comment) under the name, read-only: a few
     // lines, the whole of it while the row is open.
-    let comment = (!marker.comment.trim().is_empty()).then(|| {
+    let comment = (!marker.comment.trim().is_empty()).then(|| -> Element<'a, Message> {
         let comment = marker.comment.trim();
         if open.is_some() {
-            text::secondary(comment)
+            text::secondary(comment).into()
+        } else if search.is_filtering() {
+            let shown = clamped_comment(comment);
+            text::body_marked(&shown, &search.marks(&shown), TEXT_SECONDARY)
         } else {
-            text::secondary(clamped_comment(comment).into_owned())
+            text::secondary(clamped_comment(comment).into_owned()).into()
         }
     });
     // A request on its way, under the name and its comment: shown whether or not the actions
@@ -827,11 +890,15 @@ mod tests {
                 Clock {
                     position_ms: 0,
                     format: TimeFormat::default(),
+                    in_out,
                 },
-                in_out,
                 0,
                 unnamed,
                 None,
+                Narrowed {
+                    shown: None,
+                    search: &SideSearch::default(),
+                },
             )
             .as_widget()
             .children()
@@ -843,17 +910,22 @@ mod tests {
         assert_eq!(children(None, 0), all, "nothing unnamed to describe");
         assert_eq!(children(Some((0, 1_000)), 0), all);
         let none: [Marker; 0] = [];
+        let no_search = SideSearch::default();
         let without = view(
             Some(&none),
             &state,
             Clock {
                 position_ms: 0,
                 format: TimeFormat::default(),
+                in_out: None,
             },
-            None,
             0,
             0,
             None,
+            Narrowed {
+                shown: None,
+                search: &no_search,
+            },
         );
         assert_eq!(
             without.as_widget().children().len(),

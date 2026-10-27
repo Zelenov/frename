@@ -38,6 +38,7 @@ pub fn view(
         spinner_frame: state.spinner_frame(),
         unnamed: state.unnamed_marker_guids().len(),
         marker_price_usd: state.marker_price_usd(),
+        search: state.side_search(),
     };
 
     if state.directory().is_none() && !state.media_fullscreen() {

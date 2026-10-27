@@ -159,6 +159,11 @@ impl MarkersState {
         (at.elapsed() < NAME_WINDOW).then_some(guid)
     }
 
+    /// The marker `F2` added last, until something else happens (not limited by [`NAME_WINDOW`]).
+    pub fn last_added_guid(&self) -> Option<&str> {
+        self.last_added.as_ref().map(|(guid, _)| guid.as_str())
+    }
+
     /// Something other than `F2` happened: a second `F2` adds again.
     pub fn forget_added(&mut self) {
         self.last_added = None;

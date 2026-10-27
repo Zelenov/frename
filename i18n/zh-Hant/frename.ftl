@@ -622,6 +622,15 @@ media-viewer-video-markers-hint = Shift+F1 / Shift+F3 在標記之間跳轉；Sh
 media-viewer-video-tab-markers = 標記
 media-viewer-video-fullscreen = 全螢幕
 media-viewer-video-close-list = 關閉清單
+side-search-tip = 搜尋
+side-search-placeholder-subtitles = 在字幕中尋找
+side-search-placeholder-markers = 在標記中尋找
+side-search-clear = 清除
+side-search-next = 下一個符合項
+side-search-previous = 上一個符合項
+side-search-count = { $shown } / { $total }
+side-search-nothing = 找不到「{ $query }」
+side-search-nothing-clear = 清除搜尋
 media-viewer-video-subtitle-file-unreadable = 無法讀取此檔案
 # 片段開啟時，若從上次停止的位置繼續播放，會顯示在畫面上方；按 Home 或點一下可回到開頭。
 media-viewer-video-resumed = 已從 { $time } 繼續 · Home：從頭開始

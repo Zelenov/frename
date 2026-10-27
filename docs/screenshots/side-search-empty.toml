@@ -1,0 +1,21 @@
+# Search in the side lists (#170): the marker list with a search that finds nothing, the
+# matched word marked, the tab count "2 of 6". Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.MVI_0801.mp4"
+seek = 5.0
+window = [1280, 720]
+panels = [460, 320]
+marker_list = true
+side_search = "whale"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_0801.mp4"
+markers = [
+  "0:01 — Wide shot of the harbour",
+  "0:03 [red] — Boat leaves the dock",
+  "0:05 — Gulls over the water",
+  "0:07 [blue] — Sunset through the crane",
+  "0:08 — Vendor arranges the fish",
+  "0:09 — Gull on the crates",
+]

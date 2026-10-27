@@ -1289,6 +1289,16 @@ left to right, with the widths §13.9 folds by:
 - **Rows** are list rows (§8.9) on the overlay: `text.primary` / `text.secondary` keep their
   contrast on it (it is at least as dark as `bg.panel`). The gutter rule of §13.2 applies.
 
+- **Search** (#170): a `search` 24 px `overlay` icon button right of the tabs, before the narrow
+  pane's `x`, "Search `Ctrl` `F`", latched while the bar is open. The bar sits under the header, the
+  file search's bar (§13.4.1: 40 px, a 28 px field, `search` inside, `x` "Clear") with `arrow-up` /
+  `arrow-down` 24 px `overlay` buttons after the field ("Previous match" / "Next match"); the
+  placeholder follows the tab ("Find in subtitles" / "Find in markers"). The rows narrow to the
+  matches, the words marked (`accent.text` on its tint); the tab counts read "2 of 14" while a
+  search has words; no match: "Nothing found for “…”" and a **Clear the search** button. The picker,
+  the bar and the list keep their places in the column when one is missing, so the bar's focus
+  survives. `Enter` / `Shift+Enter` step, `Esc` clears the text, then closes the bar.
+
 **Subtitle rows**
 - Time in `mono` `text.secondary` on the first line, the cue text in `body` under it, up to 3 lines
   then "…"; the full text in a tooltip.
@@ -2108,6 +2118,7 @@ fails. The keys are today's (#62 owns the list).
 | Comment | click the comment box, type | comment editor | saved on leave; comment line in the list row; "Commented" tag checked if Settings says so | – |
 | Mark in / out | `[` `]` | video controls, file name panel | IN/OUT timecodes appear; segment on the bar | – |
 | Markers | F2 (F2 F2 to name, hold for a range), Shift+F1/F3, Shift+F2, Ctrl+F2 to describe with AI (§13.3.4, §13.3.6) | timeline, marker list | pin appears with its label | not saved: `circle-alert` at the row's right end and an error notice |
+| Search the side lists | Ctrl+F, type, Enter / Shift+Enter or the arrows, Esc (§13.3.6) | side list over the picture | list narrowed, matches marked, tab counts "2 of 14" | no match: "Nothing found" with Clear |
 | Run a batch action | batch mode, pick an action, primary button | batch panel | progress with n of total, time left, Cancel | stopped or failed: one notice with the reason and a fix button; files not done listed once |
 | Change a setting | ⚙, Ctrl+Tab between pages | Settings window | applies at once | key save failed: error line under the key row |
 | Update | the dot on ⚙ | Settings → Updates | status line; *Update and restart* | check failed: error line with the reason |
