@@ -656,9 +656,9 @@ dependencies = [
 
 [[package]]
 name = "captions"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec3a8e814e141f99893cd7ad721d3fcb8b0421ed8c4dca78f869f22061a49ace"
+checksum = "a46c782a96d2c8ba8e9bf3389496829e2913b3804ada197a5ccbe900e67c6b07"
 dependencies = [
  "serde",
  "serde_json",
@@ -5587,9 +5587,9 @@ dependencies = [
 
 [[package]]
 name = "sonisub"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "843d86e8e8724b122914384d92cf0d530f52dae72965cb479ad04281ebec2404"
+checksum = "bc8cd6c65f7641ef5c567f32da93fc88e1fc202e9dbedc107bdc73ac21124674"
 dependencies = [
  "anyhow",
  "captions",
