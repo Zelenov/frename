@@ -524,8 +524,8 @@ pub fn comment_holds_markers(comment: &str, markers: &[Marker]) -> bool {
 }
 
 /// The `saved` comment has exactly the markers of the `written` one, both as read back from a
-/// comment (so what the line format cannot hold counts on neither side). Whether a write of the
-/// markers took: a saved comment that lacks a marker lost it, and one that still has a marker the
+/// comment (so what the line format cannot hold counts on neither side). This tells whether a write of
+/// the markers took: a saved comment that lacks a marker lost it, and one that still has a marker the
 /// written one lacks kept a deleted one, so the write did not reach the file. A line typed into
 /// the comment box is in the written comment too, so it is on both sides.
 pub fn comment_kept_markers(written: &str, saved: &str) -> bool {
@@ -1019,18 +1019,13 @@ mod tests {
         m
     }
 
-    /// Markers written into a comment, checked the way a save is checked.
-    fn written(comment: &str, markers: &[Marker]) -> String {
-        markers_into_comment(comment, markers)
-    }
-
     #[test]
     fn plain_markers_are_held_exactly_and_kept() {
         let markers = [
             marker(1_000, 0, "Lion", ""),
             marker(5_000, 3_000, "Run", ""),
         ];
-        let comment = written("A note", &markers);
+        let comment = markers_into_comment("A note", &markers);
         assert!(comment_holds_markers(&comment, &markers));
         assert!(comment_kept_markers(&comment, &comment));
         assert!(
@@ -1038,20 +1033,11 @@ mod tests {
             "the save lost them"
         );
         // A line the saved comment has more is not what was written.
-        let more = format!(
-            "{comment}
-0:41 — Typed"
-        );
+        let more = format!("{comment}\n0:41 — Typed");
         assert!(!comment_kept_markers(&comment, &more));
         // A marker comment with a line break goes through as well.
-        let markers = [marker(
-            65_000,
-            0,
-            "Lion",
-            "two
-lines",
-        )];
-        let comment = written("", &markers);
+        let markers = [marker(65_000, 0, "Lion", "two\nlines")];
+        let comment = markers_into_comment("", &markers);
         assert!(comment_holds_markers(&comment, &markers));
         assert!(comment_kept_markers(&comment, &comment));
     }
@@ -1064,10 +1050,10 @@ lines",
             marker(1_000, 0, "Lion", ""),
             marker(5_000, 3_000, "Run", ""),
         ];
-        let before = written("A note", &both);
-        let after_delete = written("A note", &both[..1]);
+        let before = markers_into_comment("A note", &both);
+        let after_delete = markers_into_comment("A note", &both[..1]);
         assert!(!comment_kept_markers(&after_delete, &before));
-        let none = written("A note", &[]);
+        let none = markers_into_comment("A note", &[]);
         assert!(!comment_kept_markers(&none, &before));
         assert!(comment_kept_markers(&none, &none));
     }
@@ -1081,7 +1067,7 @@ lines",
             vec![marker(65_000, 0, "— dash first", "")],
         ];
         for markers in cases {
-            let comment = written("", &markers);
+            let comment = markers_into_comment("", &markers);
             assert!(comment_kept_markers(&comment, &comment), "{markers:?}");
             assert!(!comment_holds_markers(&comment, &markers), "{markers:?}");
         }
@@ -1104,7 +1090,7 @@ lines",
             ("", same_time.to_vec()),
             (ai_block, vec![ai]),
         ] {
-            let comment = written(comment, &markers);
+            let comment = markers_into_comment(comment, &markers);
             assert!(!comment_holds_markers(&comment, &markers), "{markers:?}");
         }
     }
