@@ -553,7 +553,20 @@ impl FolderWorkspace {
         path: &Path,
         markers: &[Marker],
     ) -> Task<Message> {
-        match FileTagger::save_markers(path, markers, &self.known_marker_guids) {
+        let result = FileTagger::save_markers(path, markers, &self.known_marker_guids);
+        self.markers_written(id, path, markers, result)
+    }
+
+    /// What a write of the markers of the file `id` came to. A failed one says so once, not at
+    /// every save.
+    pub(super) fn markers_written(
+        &mut self,
+        id: FileId,
+        path: &Path,
+        markers: &[Marker],
+        result: Result<(), MarkersError>,
+    ) -> Task<Message> {
+        match result {
             Ok(()) => {
                 self.known_marker_guids
                     .extend(markers.iter().filter_map(|m| m.guid.clone()));
@@ -566,8 +579,7 @@ impl FolderWorkspace {
             }
             Err(MarkersError::WriteFailed(reason)) => {
                 log::warn!("markers of {path:?} not saved, kept for the next save: {reason}");
-                self.unsaved_markers.insert(id, markers.to_vec());
-                Self::notice(&markers_not_saved())
+                self.keep_unsaved_markers(id, markers.to_vec(), &markers_not_saved())
             }
         }
     }

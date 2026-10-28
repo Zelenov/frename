@@ -1,3 +1,7 @@
+# 0.184
+## Fixed
+- A video that is read-only or open in another program no longer shows "Markers not saved" at every save: with the markers stored in the video it says so once, like markers kept in a comment.
+
 # 0.183
 ## Added
 - Search the lists over the video. Press `Ctrl+F` (or the magnifier in the list's header) to find a moment by its words: the Subtitles tab searches the text of the cues, the Markers tab searches names, comments and times (type `1:03` to find the marker at that time). Only the matching rows stay, with the words marked, and the tabs show how many match ("Markers 2 of 14"). `Enter` or the arrows beside the field go to the next or previous match and the video jumps to it; `Esc` clears the text, then closes the bar. The text is matched like the file search: every word, any case. Opening another clip starts with an empty search.

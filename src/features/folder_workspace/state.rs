@@ -8231,6 +8231,30 @@ mod tests {
         assert!(workspace.unsaved_markers().contains_key(&id));
     }
 
+    /// Markers stored in the video that it refuses are said once, like those of a comment inside it.
+    #[test]
+    fn markers_a_video_refuses_are_said_once() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let id = file_id_at(&workspace, 0);
+        let path = test_dir.target_file();
+        let markers = [frename_core::Marker::new(1_000)];
+        let failed = || Err(frename_core::MarkersError::WriteFailed("in use".into()));
+        assert_eq!(
+            workspace
+                .markers_written(id, &path, &markers, failed())
+                .units(),
+            1
+        );
+        assert_eq!(
+            workspace
+                .markers_written(id, &path, &markers, failed())
+                .units(),
+            0
+        );
+        assert!(workspace.unsaved_markers().contains_key(&id));
+    }
+
     /// With the comment in a text file, the batch move after an edit has nothing left to do.
     #[test]
     fn the_batch_move_after_a_marker_edit_is_a_no_op() {
