@@ -5577,9 +5577,9 @@ dependencies = [
 
 [[package]]
 name = "sonisub"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b64c78d8eb24ff33b77ea5269e630a7cd0f38918c6d7653160ffcf734beb945"
+checksum = "f067b040b43c9c706e9da60dfdce862da475913f17498d056ba765567d20d941"
 dependencies = [
  "anyhow",
  "flacenc",
