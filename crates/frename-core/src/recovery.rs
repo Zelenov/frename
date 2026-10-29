@@ -783,6 +783,70 @@ mod tests {
         assert!(!journal.join("x.json.tmp").exists());
     }
 
+    /// Where the child of the kill test finds its clip and journal folder (set by the parent).
+    const KILL_DIR: &str = "FRENAME_RECOVERY_KILL_TEST_DIR";
+
+    /// The child of `a_process_killed_while_editing_loses_nothing_the_journal_held`: it journals
+    /// two states of a clip, starts a third write and dies with `abort` in the middle of it, as
+    /// a kill or a crash would. Without the variable (a normal test run) it does nothing.
+    #[test]
+    fn kill_test_child() {
+        let Some(dir) = std::env::var_os(KILL_DIR).map(PathBuf::from) else {
+            return;
+        };
+        let path = dir.join("clip.mp4");
+        let journal = dir.join("recovery");
+        write_in(&journal, &entry_for(&path)).expect("first write");
+        let mut snapshot = FileSnapshot::parse("clip.mp4");
+        snapshot.set_tags(["pick", "wide", "late"]);
+        write_in(&journal, &Entry::new(&path, &snapshot).expect("entry")).expect("second write");
+        // The third write is cut short: only its temporary file exists.
+        std::fs::write(
+            entry_file(&journal, &path).with_extension("json.tmp"),
+            b"{\"ver",
+        )
+        .expect("temporary");
+        std::process::abort();
+    }
+
+    #[test]
+    fn a_process_killed_while_editing_loses_nothing_the_journal_held() {
+        let dir = temp_dir("killed");
+        let path = clip(&dir);
+        let journal = dir.join("recovery");
+        let status = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args([
+                "--exact",
+                "recovery::tests::kill_test_child",
+                "--test-threads=1",
+            ])
+            .env(KILL_DIR, &dir)
+            .status()
+            .expect("the child starts");
+        assert!(
+            !status.success(),
+            "the child died instead of ending: {status:?}"
+        );
+        assert!(
+            entry_file(&journal, &path).exists(),
+            "the entry written before the kill is on disk"
+        );
+        match restore_all_in(&journal).as_slice() {
+            [Restored::Applied { summary, .. }] => {
+                assert_eq!(summary.tags, 3, "the last whole entry, not the first");
+            }
+            other => panic!("{other:?}"),
+        }
+        assert!(
+            std::fs::read_dir(&journal).expect("journal").all(|e| e
+                .expect("entry")
+                .path()
+                .extension()
+                .is_none_or(|x| x != "tmp")),
+            "the cut-short write left nothing behind"
+        );
+    }
+
     fn rand_suffix() -> u128 {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
