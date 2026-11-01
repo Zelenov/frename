@@ -9740,6 +9740,8 @@ mod tests {
             .expect("second file")
             .file_path()
             .to_path_buf();
+        // `open_path` only accepts a path that exists.
+        std::fs::write(&second_path, b"").expect("second clip on disk");
         let (id0, snap0) = workspace.file_workspace().get_snapshot().expect("open");
         assert_eq!(id0, first);
 
