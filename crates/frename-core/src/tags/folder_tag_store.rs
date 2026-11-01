@@ -249,6 +249,23 @@ impl FolderTagStore {
         }
     }
 
+    /// The file to read-modify-write: the one on disk, or the built-in tags when there is none.
+    /// `None` when a file exists but cannot be read (a typo in a hand edit): it is left as it is,
+    /// because writing would replace the user's tags with the built-in ones.
+    fn file_to_modify(folder: &Path, what: &str) -> Option<TagFile> {
+        match read_file(folder) {
+            Some(file) => Some(file),
+            None if folder.join(TAG_FILE_NAME).exists() => {
+                log::warn!(
+                    "the tag file in {} cannot be read; {what} is not saved",
+                    folder.display()
+                );
+                None
+            }
+            None => Some(Self::fresh_file()),
+        }
+    }
+
     /// Writes the tags, replacing them in the file and keeping its file list and last viewed
     /// file. Does nothing when no folder is open.
     fn write_entries(
@@ -261,7 +278,9 @@ impl FolderTagStore {
         let _lock = TAG_FILE_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let mut file = read_file(folder).unwrap_or_else(Self::fresh_file);
+        let Some(mut file) = Self::file_to_modify(folder, "the tags") else {
+            return Ok(());
+        };
         file.tags = entries.to_vec();
         write_file(folder, &file)
     }
@@ -279,14 +298,21 @@ impl FolderTagStore {
         let _lock = TAG_FILE_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let mut file = read_file(folder).unwrap_or_else(Self::fresh_file);
+        let Some(mut file) = Self::file_to_modify(folder, "the file list") else {
+            return;
+        };
         let replaced: std::collections::HashSet<&str> =
             upsert.iter().map(|f| f.name.as_str()).collect();
         file.files
             .retain(|f| !remove.contains(&f.name) && !replaced.contains(f.name.as_str()));
         file.files.extend(upsert);
         file.files.sort_by(|a, b| a.name.cmp(&b.name));
-        let _ = write_file(folder, &file);
+        if let Err(e) = write_file(folder, &file) {
+            log::warn!(
+                "could not update the file list in {}: {e}",
+                folder.display()
+            );
+        }
     }
 
     /// The name of the file this folder last had open (#98), or empty when none is remembered.
@@ -302,7 +328,9 @@ impl FolderTagStore {
         let _lock = TAG_FILE_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let mut file = read_file(folder).unwrap_or_else(Self::fresh_file);
+        let Some(mut file) = Self::file_to_modify(folder, "the last viewed file") else {
+            return;
+        };
         file.last_viewed = name.to_string();
         if let Err(e) = write_file(folder, &file) {
             log::warn!(
@@ -325,18 +353,8 @@ impl FolderTagStore {
         let _lock = TAG_FILE_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        // A file that exists but cannot be read (a typo in a hand edit) is left as it is: writing
-        // would replace the user's tags with the built-in ones.
-        let mut file = match read_file(folder) {
-            Some(file) => file,
-            None if folder.join(TAG_FILE_NAME).exists() => {
-                log::warn!(
-                    "the tag file in {} cannot be read; the AI notes are not saved",
-                    folder.display()
-                );
-                return;
-            }
-            None => Self::fresh_file(),
+        let Some(mut file) = Self::file_to_modify(folder, "the AI notes") else {
+            return;
         };
         if file.ai_notes == notes {
             return;
@@ -1009,5 +1027,31 @@ tags = [{ id = "00000000-0000-0000-0000-000000000001", name = "nairobi" }]
             .expect("save tag");
 
         assert_eq!(FolderTagStore::get_last_viewed(&folder.0), "pick.clip.mp4");
+    }
+
+    #[test]
+    fn a_tag_file_that_does_not_parse_is_left_untouched() {
+        let folder = TempFolder::new("broken-tag-file");
+        let path = folder.0.join(TAG_FILE_NAME);
+        let broken = "version = 1\ntags = [ this is not toml\n";
+        std::fs::write(&path, broken).unwrap();
+
+        FolderTagStore::update_file_cache(
+            &folder.0,
+            &[],
+            vec![CachedFile {
+                name: "clip.mp4".into(),
+                size: 1,
+                modified_ms: 2,
+                comment: String::new(),
+                start: None,
+                end: None,
+                markers: None,
+            }],
+        );
+        FolderTagStore::set_last_viewed(&folder.0, "clip.mp4");
+        FolderTagStore::set_ai_notes(&folder.0, "notes");
+
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), broken);
     }
 }

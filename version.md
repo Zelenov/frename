@@ -1,3 +1,7 @@
+# 0.185
+## Fixed
+- A folder's `.frename` that cannot be read (a typo from editing it by hand) is no longer replaced by the default tags when the folder is opened: it stays as it is, and the log says why nothing was saved.
+
 # 0.184
 ## Fixed
 - A video that is read-only or open in another program no longer shows "Markers not saved" at every save: with the markers stored in the video it says so once, like markers kept in a comment.
