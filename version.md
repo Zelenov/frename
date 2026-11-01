@@ -1,3 +1,7 @@
+# 0.186
+## Fixed
+- Opening another clip of the folder by its path (the file picker, dropping a file, "Open with") is now one undo step, like clicking it in the list: Ctrl+Z goes back to the clip you left instead of undoing that clip's edits on the clip you just opened.
+
 # 0.185
 ## Fixed
 - A folder's `.frename` that cannot be read (a typo from editing it by hand) is no longer replaced by the default tags when the folder is opened: it stays as it is, and the log says why nothing was saved.

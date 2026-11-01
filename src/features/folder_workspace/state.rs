@@ -1007,6 +1007,8 @@ impl FolderWorkspace {
             let pair = FolderAndFile::new(path.parent().unwrap_or(&path), Some(path.clone()));
             return self.save_then_scan(pending, pair);
         };
+        // Leaving the open clip is one undo step with the selection change, like a click (#357).
+        self.pending_to_file_id = Some(file.id());
         Task::done(Message::FileOpened(file))
     }
 
@@ -9721,6 +9723,41 @@ mod tests {
         assert_eq!(workspace.directory().unwrap().selected_index(), Some(1));
         let _ = workspace.update(Message::Undo);
         assert_eq!(workspace.directory().unwrap().selected_index(), Some(0));
+    }
+
+    /// #357: opening another clip of the folder by path (picker, drop, "Open with") leaves the
+    /// clip like a click does, so Ctrl+Z goes back to it instead of running its commands on the
+    /// clip just opened.
+    #[test]
+    fn opening_a_clip_by_path_is_an_undo_step() {
+        let (_test_dir, mut workspace) = open_folder(2);
+        let first = file_id_at(&workspace, 0);
+        let second_path = workspace
+            .directory()
+            .unwrap()
+            .files_in_order()
+            .nth(1)
+            .expect("second file")
+            .file_path()
+            .to_path_buf();
+        // `open_path` only accepts a path that exists.
+        std::fs::write(&second_path, b"").expect("second clip on disk");
+        let (id0, snap0) = workspace.file_workspace().get_snapshot().expect("open");
+        assert_eq!(id0, first);
+
+        let _ = workspace.update(Message::OpenPath(second_path));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::FileUpdated {
+            id: id0,
+            snapshot: snap0,
+        });
+        assert_eq!(workspace.directory().unwrap().selected_index(), Some(1));
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(
+            workspace.directory().unwrap().selected_index(),
+            Some(0),
+            "undo goes back to the clip that was left"
+        );
     }
 
     /// Shift+F2 on a marker without a GUID (written by another tool) says it is read-only.
