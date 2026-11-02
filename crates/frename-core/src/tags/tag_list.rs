@@ -690,11 +690,18 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     }
 
     /// Capture all data needed to undo a delete for the tag with the given id.
-    /// Returns (name, color_index, was_stored, was_starred, was_checked, sort_order).
+    /// Returns (name, color_index, was_stored, was_starred, was_checked, sort_order,
+    /// selected_order): `sort_order` is the key in the grid order, `selected_order` the key in the
+    /// file name order (the two differ once the name's tag order differs from the grid's).
     /// Returns None if the tag is not found.
-    pub fn capture_delete_data(&self, id: TagId) -> Option<(String, u8, bool, bool, bool, i64)> {
+    #[allow(clippy::type_complexity)]
+    pub fn capture_delete_data(
+        &self,
+        id: TagId,
+    ) -> Option<(String, u8, bool, bool, bool, i64, i64)> {
         let tag = self.tags_by_id.get(&id)?;
         let sort_order = self.display_tag_ids.get_order(&id).unwrap_or(0);
+        let selected_order = self.selected_tag_ids.get_order(&id).unwrap_or(sort_order);
         Some((
             tag.tag().to_string(),
             tag.color_index(),
@@ -702,11 +709,13 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             tag.is_starred(),
             tag.is_checked(),
             sort_order,
+            selected_order,
         ))
     }
 
     /// Restore a tag that was previously deleted. Inserts back into the store (if stored) and
-    /// both ordered collections using the original sort_order.
+    /// both ordered collections, each with the key it had (`sort_order` in the grid order,
+    /// `selected_order` in the file name order).
     #[allow(clippy::too_many_arguments)]
     pub fn restore_deleted_tag(
         &mut self,
@@ -717,6 +726,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         was_starred: bool,
         was_checked: bool,
         sort_order: i64,
+        selected_order: i64,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if was_stored {
             let st = StoredTag::with_all(tag_id.0, tag_name, sort_order, was_starred);
@@ -733,7 +743,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         tag.set_starred(was_starred);
         self.tags_by_id.insert(tag_id, tag);
         self.display_tag_ids.insert(tag_id, (), sort_order);
-        self.selected_tag_ids.insert(tag_id, (), sort_order);
+        self.selected_tag_ids.insert(tag_id, (), selected_order);
         self.rebuild_filtered_display_tag_ids();
         self.update_is_selected_match_display_order();
         Ok(())

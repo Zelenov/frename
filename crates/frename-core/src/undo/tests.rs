@@ -693,7 +693,7 @@ mod tests {
 
         let id = tag_list.checked_tag_id_at(0).unwrap();
         // Capture before deleting
-        let (name, color_index, was_stored, was_starred, was_checked, sort_order) =
+        let (name, color_index, was_stored, was_starred, was_checked, sort_order, selected_order) =
             tag_list.capture_delete_data(id).unwrap();
         tag_list.remove_stored_tag_by_id(id).unwrap();
         assert!(tag_list.get_tag(id).is_none());
@@ -707,6 +707,7 @@ mod tests {
             was_starred,
             was_checked,
             sort_order,
+            selected_order,
         }));
 
         {
@@ -720,6 +721,41 @@ mod tests {
     }
 
     #[test]
+    fn undo_delete_tag_restores_the_place_in_the_file_name() {
+        // Grid order C, A, B; the file name reads A.C.
+        let store = make_store_with_tags(&["C", "A", "B"]);
+        let snapshot = snapshot_with_tags(&["A", "C"]);
+        let mut tag_list = TagList::new(store, snapshot);
+        let mut dir = empty_directory();
+        let names = |t: &TagList<FakeAppStorage>| t.file_snapshot().tags().to_vec();
+        assert_eq!(names(&tag_list), ["A", "C"]);
+
+        let id = tag_list.checked_tag_id_at(1).unwrap();
+        let (name, color_index, was_stored, was_starred, was_checked, sort_order, selected_order) =
+            tag_list.capture_delete_data(id).unwrap();
+        tag_list.remove_stored_tag_by_id(id).unwrap();
+        assert_eq!(names(&tag_list), ["A"]);
+
+        let mut history = History::new(50);
+        history.push(Box::new(DeleteTagCommand {
+            tag_id: id,
+            tag_name: name,
+            color_index,
+            was_stored,
+            was_starred,
+            was_checked,
+            sort_order,
+            selected_order,
+        }));
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).unwrap();
+        assert_eq!(names(&tag_list), ["A", "C"]);
+    }
+
+    #[test]
     fn redo_delete_tag_removes_tag_again() {
         let store = make_store_with_tags(&["Action"]);
         let snapshot = snapshot_with_tags(&["Action"]);
@@ -727,7 +763,7 @@ mod tests {
         let mut dir = empty_directory();
 
         let id = tag_list.checked_tag_id_at(0).unwrap();
-        let (name, color_index, was_stored, was_starred, was_checked, sort_order) =
+        let (name, color_index, was_stored, was_starred, was_checked, sort_order, selected_order) =
             tag_list.capture_delete_data(id).unwrap();
         tag_list.remove_stored_tag_by_id(id).unwrap();
 
@@ -740,6 +776,7 @@ mod tests {
             was_starred,
             was_checked,
             sort_order,
+            selected_order,
         }));
 
         {

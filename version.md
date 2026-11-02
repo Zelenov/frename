@@ -1,3 +1,7 @@
+# 0.187
+## Fixed
+- Undoing the delete of a tag puts it back in the file name where it stood, not where it sits in the tag grid: with the name `A.C` and the grid order C, A, deleting C and pressing Ctrl+Z no longer turns the name into `C.A`.
+
 # 0.186
 ## Fixed
 - Opening another clip of the folder by its path (the file picker, dropping a file, "Open with") is now one undo step, like clicking it in the list: Ctrl+Z goes back to the clip you left instead of undoing that clip's edits on the clip you just opened.
