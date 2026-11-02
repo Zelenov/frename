@@ -759,10 +759,9 @@ impl FolderWorkspace {
             }
             // Save the frame next to the video, like VLC's snapshot, and forget it.
             Message::ScreenshotTaken(position_ms, jpeg) => {
-                let Some(file) = self.file_workspace.file() else {
+                let Some(file_path) = self.open_clip_path() else {
                     return Task::none();
                 };
-                let file_path = file.file_path().to_path_buf();
                 frename_core::FileTagger::save_screenshot(&file_path, position_ms, &jpeg);
                 Self::notice(&fl!("folder-frame-saved"))
             }
@@ -9417,6 +9416,30 @@ mod tests {
                 .trim_end_matches('\n')
                 .to_string(),
         )
+    }
+
+    /// F12, rotate and the marker actions read the open clip's path through
+    /// `open_clip_path`: after an in-place rename the open file's own path is the old one until it
+    /// is opened again, but the directory knows the new one at once.
+    #[test]
+    fn after_an_inline_rename_the_open_clip_path_is_the_new_one() {
+        let (_test_dir, mut workspace) = open_folder(1);
+        let _ = workspace.update(Message::Folder(folder::Message::StartRename(0)));
+        let _ = workspace.update(Message::Folder(folder::Message::RenameInput(
+            "renamed.mp4".to_string(),
+        )));
+        let _ = workspace.update(Message::Folder(folder::Message::SubmitRename));
+        flush_file_opened(&mut workspace);
+        // The runtime's save of the new name reaches the directory with `FileUpdated`.
+        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        let name = |path: Option<std::path::PathBuf>| {
+            path.and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+        };
+        assert_eq!(
+            name(workspace.open_clip_path()).as_deref(),
+            Some("renamed.mp4")
+        );
     }
 
     #[test]

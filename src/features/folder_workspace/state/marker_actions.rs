@@ -55,12 +55,13 @@ impl FolderWorkspace {
         if frename_core::marker_storage() != frename_core::MarkerStorage::Comment {
             return Task::none();
         }
-        let (Some(file), Some(markers)) =
-            (self.file_workspace.file(), self.file_workspace.markers())
-        else {
+        let (Some(id), Some(path), Some(markers)) = (
+            self.file_workspace.file().map(|f| f.id()),
+            self.open_clip_path(),
+            self.file_workspace.markers(),
+        ) else {
             return Task::none();
         };
-        let (id, path) = (file.id(), file.file_path().to_path_buf());
         let untouched = self
             .markers_in_video
             .get(&id)
@@ -604,8 +605,7 @@ impl FolderWorkspace {
     /// Ask where to save the open clip's markers as text (`clip.markers.txt` next to the video
     /// to begin with), then write them there.
     fn export_markers_text(&mut self) -> Task<Message> {
-        let (Some(file), Some(markers)) =
-            (self.file_workspace.file(), self.file_workspace.markers())
+        let (Some(path), Some(markers)) = (self.open_clip_path(), self.file_workspace.markers())
         else {
             return Task::none();
         };
@@ -613,7 +613,7 @@ impl FolderWorkspace {
             return Task::none();
         }
         let markers = markers.to_vec();
-        let suggested = frename_core::markers_text_path(file.file_path());
+        let suggested = frename_core::markers_text_path(&path);
         Task::perform(
             async move {
                 let mut dialog = rfd::AsyncFileDialog::new()

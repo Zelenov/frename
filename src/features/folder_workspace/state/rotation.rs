@@ -17,10 +17,12 @@ impl FolderWorkspace {
         if !self.media_viewer.is_previewable() || !self.pending_file_updates.is_empty() {
             return Task::none();
         }
-        let Some(file) = self.file_workspace.file() else {
+        let (Some(id), Some(path)) = (
+            self.file_workspace.file().map(|f| f.id()),
+            self.open_clip_path(),
+        ) else {
             return Task::none();
         };
-        let (id, path) = (file.id(), file.file_path().to_path_buf());
         match FileTagger::rotate_video(&path, quarter_turns) {
             Ok(rotation) => {
                 self.history.push(Box::new(RotateVideoCommand {
@@ -49,9 +51,8 @@ impl FolderWorkspace {
             return Task::none();
         }
         let note = self
-            .file_workspace
-            .file()
-            .and_then(|file| FileTagger::video_rotation(file.file_path()).ok())
+            .open_clip_path()
+            .and_then(|path| FileTagger::video_rotation(&path).ok())
             .map_or_else(Task::none, |rotation| Self::notice(&rotated(rotation)));
         Task::batch([
             self.media_viewer.reload_video().map(Message::MediaViewer),

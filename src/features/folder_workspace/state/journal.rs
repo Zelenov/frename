@@ -22,7 +22,7 @@ impl FolderWorkspace {
 
     /// Where the open clip is on disk now: an in-place rename reaches the open file's own path
     /// only with its next open, but the directory knows at once.
-    fn open_clip_path(&self) -> Option<std::path::PathBuf> {
+    pub(super) fn open_clip_path(&self) -> Option<std::path::PathBuf> {
         let id = self.file_workspace.file()?.id();
         self.directory
             .as_ref()
