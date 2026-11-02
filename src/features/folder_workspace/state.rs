@@ -3049,7 +3049,7 @@ impl FolderWorkspace {
                         .count();
                     let from_index = self.file_workspace.tag_list().checked_index_of(did);
                     self.file_workspace.reorder_tag_to_index(did, checked_idx);
-                    if let Some(fi) = from_index {
+                    if let Some(fi) = from_index.filter(|&fi| fi != checked_idx) {
                         self.history.push(Box::new(ReorderTagCommand {
                             moved_id: did,
                             from_index: fi,
@@ -3143,7 +3143,8 @@ impl FolderWorkspace {
         } else if let (Some(did), Some(idx)) = (dragged_id, drop_index) {
             let from_index = self.file_workspace.tag_list().checked_index_of(did);
             self.file_workspace.reorder_tag_to_index(did, idx);
-            if let Some(fi) = from_index {
+            // A click without a move is not a change: no undo step, and Redo stays.
+            if let Some(fi) = from_index.filter(|&fi| fi != idx) {
                 self.history.push(Box::new(ReorderTagCommand {
                     moved_id: did,
                     from_index: fi,
@@ -9670,6 +9671,35 @@ mod tests {
         assert!(!locked(&workspace));
         let _ = workspace.update(Message::Redo);
         assert!(locked(&workspace), "redo of Sync up locks again");
+    }
+
+    #[test]
+    fn a_click_on_a_chip_without_a_move_leaves_redo_alone() {
+        use crate::features::file_name_panel::Message as P;
+        let (_test_dir, mut workspace) = open_folder(1);
+        let tag_list = workspace.file_workspace().tag_list();
+        let ids = tag_list.filtered_display_tag_ids().to_vec();
+        let (tag_id, other) = (ids[0], ids[1]);
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(other)));
+        let _ = workspace.update(Message::Undo);
+        assert!(workspace.history.can_redo());
+
+        let _ = workspace.update(Message::FileNamePanel(P::DragStarted {
+            tag_id,
+            initial_index: 0,
+        }));
+        let _ = workspace.update(Message::FileNamePanel(P::DragEnded));
+        assert!(
+            workspace.history.can_redo(),
+            "a press and release in place records nothing"
+        );
+        let _ = workspace.update(Message::Redo);
+        assert!(workspace
+            .file_workspace()
+            .tag_list()
+            .get_tag(other)
+            .is_some_and(|t| t.is_checked()));
     }
 
     #[test]
