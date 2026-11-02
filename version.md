@@ -1,3 +1,7 @@
+# 0.189
+## Fixed
+- After renaming the open clip in its row, F12, Rotate and describing a marker with AI work on the clip under its new name, not the old one: F12 no longer leaves a picture named after a file that is gone, and Rotate no longer says the file is not there. Saving markers and exporting them as text use the new name too.
+
 # 0.188
 ## Fixed
 - Clicking a tag chip in the file name without moving it no longer records an undo step: Redo stays available after a click, and one Ctrl+Z undoes the last real change instead of the click.

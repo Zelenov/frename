@@ -759,10 +759,9 @@ impl FolderWorkspace {
             }
             // Save the frame next to the video, like VLC's snapshot, and forget it.
             Message::ScreenshotTaken(position_ms, jpeg) => {
-                let Some(file) = self.file_workspace.file() else {
+                let Some(file_path) = self.open_clip_path() else {
                     return Task::none();
                 };
-                let file_path = file.file_path().to_path_buf();
                 frename_core::FileTagger::save_screenshot(&file_path, position_ms, &jpeg);
                 Self::notice(&fl!("folder-frame-saved"))
             }
@@ -6040,6 +6039,40 @@ mod tests {
         flush_file_opened(&mut workspace);
         assert_eq!(workspace.file_workspace().markers(), Some(&[][..]));
         workspace
+    }
+
+    /// After an in-place rename the open file's own path is the old one until it is opened
+    /// again, while the directory knows the new one at once. F12, Rotate, follow-up of undo and
+    /// redo of a turn, marker AI, saving markers and exporting them read the clip's path through
+    /// `open_clip_path` (#361). (The in-memory file backend keeps a renamed file under its old
+    /// name on disk, so the effect of a wrong path cannot be seen through rotation here.)
+    #[test]
+    fn after_an_inline_rename_the_open_clip_path_is_the_new_name_not_the_files_own() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let _ = workspace.update(Message::Folder(folder::Message::StartRename(0)));
+        let _ = workspace.update(Message::Folder(folder::Message::RenameInput(
+            "renamed.mp4".to_string(),
+        )));
+        let _ = workspace.update(Message::Folder(folder::Message::SubmitRename));
+        flush_file_opened(&mut workspace);
+        // The player lets go of the file, the runtime renames it and reports `FileUpdated`.
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        let name = |path: &std::path::Path| {
+            path.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        };
+        let own = workspace.file_workspace().file().expect("open");
+        assert_eq!(name(own.file_path()), "file_0.mp4", "the stale path");
+        assert_eq!(
+            name(&workspace.open_clip_path().expect("open")),
+            "renamed.mp4"
+        );
     }
 
     /// Ctrl+Alt+→ / ← turn the open video, each press one undo step; a file that has no

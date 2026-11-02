@@ -59,11 +59,14 @@ impl FolderWorkspace {
         cancel: Arc<AtomicBool>,
     ) -> Task<Message> {
         let marker = self.file_workspace.tag_list().marker(&guid).cloned();
-        let (Some(file), Some(marker)) = (self.file_workspace.file(), marker) else {
+        let (Some(id), Some(path), Some(marker)) = (
+            self.file_workspace.file().map(|f| f.id()),
+            self.open_clip_path(),
+            marker,
+        ) else {
             self.markers.finish_describing(&guid, request);
             return Task::none();
         };
-        let (id, path) = (file.id(), file.file_path().to_path_buf());
         self.marker_requests += 1;
         self.marker_readers.insert((guid.clone(), request));
         let (model, language) = self.batch.actions().ai_model_and_language();
