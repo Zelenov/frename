@@ -2958,6 +2958,7 @@ impl FolderWorkspace {
                     was_starred,
                     was_checked,
                     sort_order,
+                    selected_order,
                 )) = delete_data
                 {
                     self.history.push(Box::new(DeleteTagCommand {
@@ -2968,6 +2969,7 @@ impl FolderWorkspace {
                         was_starred,
                         was_checked,
                         sort_order,
+                        selected_order,
                     }));
                 }
 

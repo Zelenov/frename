@@ -14,6 +14,9 @@ pub struct DeleteTagCommand {
     pub was_checked: bool,
     /// Display sort_order at deletion time (used to re-insert at the same position).
     pub sort_order: i64,
+    /// Key in the file name order at deletion time (it differs from `sort_order` when the name's
+    /// tag order differs from the grid's).
+    pub selected_order: i64,
 }
 
 impl<SD, ST> Undoable<SD, ST> for DeleteTagCommand
@@ -31,6 +34,7 @@ where
                 self.was_starred,
                 self.was_checked,
                 self.sort_order,
+                self.selected_order,
             )
             .map_err(|_| UndoError::TagNotFound(self.tag_id))
     }
