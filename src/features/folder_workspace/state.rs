@@ -3049,11 +3049,12 @@ impl FolderWorkspace {
                         .count();
                     let from_index = self.file_workspace.tag_list().checked_index_of(did);
                     self.file_workspace.reorder_tag_to_index(did, checked_idx);
-                    if let Some(fi) = from_index {
+                    let to_index = self.file_workspace.tag_list().checked_index_of(did);
+                    if let Some((fi, ti)) = from_index.zip(to_index).filter(|(f, t)| f != t) {
                         self.history.push(Box::new(ReorderTagCommand {
                             moved_id: did,
                             from_index: fi,
-                            to_index: checked_idx,
+                            to_index: ti,
                         }));
                     }
                 }
@@ -3143,11 +3144,14 @@ impl FolderWorkspace {
         } else if let (Some(did), Some(idx)) = (dragged_id, drop_index) {
             let from_index = self.file_workspace.tag_list().checked_index_of(did);
             self.file_workspace.reorder_tag_to_index(did, idx);
-            if let Some(fi) = from_index {
+            // A click, or a drop past the end of the last chip, moves nothing: no undo step,
+            // and Redo stays. The step records where the chip really ended up.
+            let to_index = self.file_workspace.tag_list().checked_index_of(did);
+            if let Some((fi, ti)) = from_index.zip(to_index).filter(|(f, t)| f != t) {
                 self.history.push(Box::new(ReorderTagCommand {
                     moved_id: did,
                     from_index: fi,
-                    to_index: idx,
+                    to_index: ti,
                 }));
             }
         }
@@ -9670,6 +9674,72 @@ mod tests {
         assert!(!locked(&workspace));
         let _ = workspace.update(Message::Redo);
         assert!(locked(&workspace), "redo of Sync up locks again");
+    }
+
+    #[test]
+    fn a_click_on_a_chip_without_a_move_leaves_redo_alone() {
+        use crate::features::file_name_panel::Message as P;
+        let (_test_dir, mut workspace) = open_folder(1);
+        let tag_list = workspace.file_workspace().tag_list();
+        let ids = tag_list.filtered_display_tag_ids().to_vec();
+        let (tag_id, other) = (ids[0], ids[1]);
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(other)));
+        let _ = workspace.update(Message::Undo);
+        assert!(workspace.history.can_redo());
+
+        let _ = workspace.update(Message::FileNamePanel(P::DragStarted {
+            tag_id,
+            initial_index: 0,
+        }));
+        let _ = workspace.update(Message::FileNamePanel(P::DragEnded));
+        assert!(
+            workspace.history.can_redo(),
+            "a press and release in place records nothing"
+        );
+        let _ = workspace.update(Message::Redo);
+        assert!(workspace
+            .file_workspace()
+            .tag_list()
+            .get_tag(other)
+            .is_some_and(|t| t.is_checked()));
+    }
+
+    #[test]
+    fn dropping_the_last_chip_past_the_end_leaves_redo_alone() {
+        use crate::features::file_name_panel::Message as P;
+        let (_test_dir, mut workspace) = open_folder(1);
+        let ids = workspace
+            .file_workspace()
+            .tag_list()
+            .filtered_display_tag_ids()
+            .to_vec();
+        for id in &ids[..3] {
+            let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(*id)));
+        }
+        let _ = workspace.update(Message::Undo);
+        let last = ids[1];
+        assert_eq!(
+            workspace.file_workspace().tag_list().checked_index_of(last),
+            Some(1)
+        );
+        let _ = workspace.update(Message::FileNamePanel(P::DragStarted {
+            tag_id: last,
+            initial_index: 1,
+        }));
+        // Released in the empty space after the last chip: the drop index is the count.
+        let _ = workspace.update(Message::FileNamePanel(P::PanelBounds(
+            iced::Rectangle::new(iced::Point::ORIGIN, iced::Size::new(1000.0, 100.0)),
+        )));
+        let _ = workspace.update(Message::FileNamePanel(P::DragHoverCursor {
+            x: 900.0,
+            y: 5.0,
+        }));
+        let _ = workspace.update(Message::FileNamePanel(P::DragEnded));
+        assert!(
+            workspace.history.can_redo(),
+            "nothing moved, nothing recorded"
+        );
     }
 
     #[test]

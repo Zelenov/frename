@@ -1,3 +1,7 @@
+# 0.188
+## Fixed
+- Clicking a tag chip in the file name without moving it no longer records an undo step: Redo stays available after a click, and one Ctrl+Z undoes the last real change instead of the click.
+
 # 0.187
 ## Fixed
 - Undoing the delete of a tag puts it back in the file name where it stood, not where it sits in the tag grid: with the name `A.C` and the grid order C, A, deleting C and pressing Ctrl+Z no longer turns the name into `C.A`.
