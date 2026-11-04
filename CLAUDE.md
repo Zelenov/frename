@@ -78,10 +78,10 @@ own PR (`nightly` → "Bugs the agent finds"); every nightly session also hunts 
 | `P1` `P2` `P3` | owner/agent | Priority (lower number first). |
 | `regression` | owner | A release broke something; picked before everything else. |
 | `feature`, `process` | owner/agent | Kind of work. |
-| `bug` | owner/agent | A defect. One the agent filed (body `🤖 agent:`) is work without `approved`; `hold`/`rejected` stop it. |
+| `bug` | owner/agent | A defect, including leaks and flaky tests (`bug-hunt` → "What counts as a bug"). One the agent filed (body `🤖 agent:`) is work without `approved`; `hold`/`rejected` stop it. |
 | `needs-design` | owner/agent | The agent writes its own design notes in `docs/design/` on the feature branch before coding. Not a gate; the owner does not approve designs. |
 | `approved` | owner | Makes an `idea` or a non-owner issue implementable. An owner comment starting with "Approve" counts as this label (the agent adds it). |
-| `idea` | agent | Agent's own proposal; not implemented until `approved`. |
+| `idea` | agent | Agent's own proposal for something new (feature, behaviour change, refactor); not implemented until `approved`. Never used for a defect. |
 | `in-progress` | agent | An agent session is working on it (see heartbeat lock). |
 | `awaiting-owner` | agent | Legacy, no longer set: the pipeline never waits for design answers. |
 | `needs-owner` | agent | On an issue: agent cannot proceed at all (guarded file, failed release); owner answers and removes it to let the agent retry. |
