@@ -143,6 +143,13 @@ pub fn transcript_path(video_path: &Path) -> PathBuf {
     video_path.with_extension("soniox.json")
 }
 
+/// Path of the CAPT file sonisub writes next to a video (`clip.mp4` → `clip.capt`): the whole
+/// transcript as small text, which every subtitle format can be made from without Soniox. The
+/// editor's source of truth for the clip's speech; it travels with the clip like its subtitles.
+pub fn capt_path(video_path: &Path) -> PathBuf {
+    video_path.with_extension("capt")
+}
+
 /// The extension of a Premiere Pro transcript written next to a video.
 const PREMIERE_EXTENSION: &str = "premiere.json";
 
@@ -388,7 +395,7 @@ pub fn subtitle_bytes(video_path: &Path, chosen: Option<SubtitleFormat>) -> usiz
     std::fs::metadata(path).map_or(0, |m| m.len() as usize)
 }
 
-/// Move the subtitle file and the saved transcript along when their video is renamed, so they
+/// Move the subtitle file, the saved transcript and the CAPT file along when their video is renamed, so they
 /// keep matching. Does nothing for a file that is not there; never overwrites an existing one.
 pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
     for (old, new) in subtitle_candidates(old_video_path)
@@ -401,6 +408,7 @@ pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
         &transcript_path(old_video_path),
         &transcript_path(new_video_path),
     );
+    rename_companion(&capt_path(old_video_path), &capt_path(new_video_path));
 }
 
 fn rename_companion(old_path: &Path, new_path: &Path) {
@@ -522,6 +530,21 @@ mod tests {
             Some("old")
         );
         assert!(subtitle_path(&old_video).exists());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rename_moves_the_capt_file_with_the_video() {
+        let dir = crate::test_support::fresh_dir("capt");
+        let old_video = dir.join("clip.MP4");
+        let new_video = dir.join("tag.clip.MP4");
+        std::fs::write(capt_path(&old_video), "capt").expect("write capt");
+
+        rename_subtitle_file(&old_video, &new_video);
+        assert!(!capt_path(&old_video).exists());
+        assert_eq!(capt_path(&new_video), dir.join("tag.clip.capt"));
+        assert!(capt_path(&new_video).is_file());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

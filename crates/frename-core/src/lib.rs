@@ -58,7 +58,7 @@ pub use search::{
     CommentFragment,
 };
 pub use subtitles::{
-    cue_length, existing_subtitle_path, open_subtitles, set_cue_length, subtitle_bytes,
+    capt_path, cue_length, existing_subtitle_path, open_subtitles, set_cue_length, subtitle_bytes,
     subtitle_candidates, subtitle_cues, subtitle_path, transcript_path, CueLength, SubtitleCue,
     SubtitleFile, SubtitleFormat, SubtitleSize, SubtitleView, Subtitles,
     DEFAULT_SUBTITLE_LANGUAGES,

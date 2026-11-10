@@ -1,3 +1,7 @@
+# 0.190
+## Added
+- Generate subtitles also saves `clip.capt` next to the video: the whole transcript as small text (every word with its time, speakers, languages), from which any other subtitle format can be made later without Soniox. It is written together with the subtitles of a transcription or a free rebuild; a clip whose subtitles already exist is left alone and gets no `.capt`. The file moves with the clip when it is renamed, and a rename is refused when a `.capt` already stands at the new name, like for the other files that belong to a clip.
+
 # 0.189
 ## Fixed
 - After renaming the open clip in its row, F12, Rotate and describing a marker with AI work on the clip under its new name, not the old one: F12 no longer leaves a picture named after a file that is gone, and Rotate no longer says the file is not there. Saving markers and exporting them as text use the new name too.
