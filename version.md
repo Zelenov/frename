@@ -1,6 +1,6 @@
 # 0.190
 ## Added
-- Generate subtitles also saves `clip.capt` next to the video: the whole transcript as plain text, with every word timed. frename does not read it yet; it is kept so other subtitle formats can be made from it later without paying again. A clip whose subtitles already exist gets no `.capt`. It moves with the clip when you rename it.
+- Generate subtitles also saves `clip.capt` next to the video: the whole transcript as plain text. frename does not use it yet; it moves with the clip when you rename it. Replace overwrites it.
 
 # 0.189
 ## Fixed

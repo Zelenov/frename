@@ -147,7 +147,7 @@ pub fn transcript_path(video_path: &Path) -> PathBuf {
 /// transcript as small text, which every subtitle format can be made from without Soniox. The
 /// editor's source of truth for the clip's speech; it travels with the clip like its subtitles.
 pub fn capt_path(video_path: &Path) -> PathBuf {
-    video_path.with_extension("capt")
+    sonisub::job::Format::Capt.path(video_path)
 }
 
 /// The extension of a Premiere Pro transcript written next to a video.
