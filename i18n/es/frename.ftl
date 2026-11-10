@@ -532,6 +532,7 @@ batch-subtitles-progress-saving = guardando
 batch-subtitles-reason-already = ya tenía subtítulos
 batch-subtitles-reason-no-audio = sin audio
 batch-subtitles-reason-no-speech = sin habla
+batch-subtitles-reason-capt = { $name } no es un archivo CAPT legible
 batch-subtitles-reason-soniox = Soniox: { $message }
 batch-subtitles-reason-unreachable = no se puede conectar con Soniox
 batch-subtitles-stop-key-rejected = Detenido: Soniox rechazó la clave. Comprobarla en Configuración → Subtítulos.

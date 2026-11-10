@@ -6,7 +6,6 @@
 //! key lives in the credential store (Settings → Subtitles); the languages and cue length come
 //! from the settings too (see [`Config`]).
 
-use anyhow::Context as _;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -1122,19 +1121,25 @@ fn rebuild_from_capt(
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let text = std::fs::read_to_string(capt).with_context(|| format!("cannot read {name}"))?;
+    // The list says only that the file is unusable; the log has why.
+    let unusable = |why: String| {
+        log::warn!("subtitles: {}: {why}", capt.display());
+        anyhow::anyhow!(fl!("batch-subtitles-reason-capt", name = name.clone()))
+    };
+    let text = std::fs::read_to_string(capt).map_err(|e| unusable(e.to_string()))?;
     let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
     let doc = Doc::parse(text).map_err(|errors| {
-        let first = errors
-            .0
-            .first()
-            .map(ToString::to_string)
-            .unwrap_or_default();
-        anyhow::anyhow!("{name} is not a valid CAPT file: {first}")
+        unusable(
+            errors
+                .0
+                .first()
+                .map(ToString::to_string)
+                .unwrap_or_default(),
+        )
     })?;
     let words = doc.to_words();
     if words.is_empty() {
-        anyhow::bail!("{name} has no words");
+        return Err(unusable(String::new()));
     }
     let mut layout = srt::Layout {
         by_speaker: options.diarization,
@@ -1147,7 +1152,7 @@ fn rebuild_from_capt(
         .iter()
         .filter_map(|s| Some((s.id.clone(), s.name.clone()?)))
         .collect();
-    let seed = doc.id.clone().unwrap_or_else(|| name.clone());
+    let seed = doc.id.clone().unwrap_or(name);
     let (files, cues) = job::write_outputs(
         &targets,
         &words,
@@ -1835,7 +1840,12 @@ mod tests {
         let capt = folder.file("clip.capt", &edited);
         // Both are there: the CAPT, which the editor may have changed, is what is used.
         folder.file("clip.soniox.json", TRANSCRIPT);
-        let plan = plan_with(&[video.clone()], false, Formats::default(), false);
+        let plan = plan_with(
+            std::slice::from_ref(&video),
+            false,
+            Formats::default(),
+            false,
+        );
         assert_eq!((plan.rebuilt_free, plan.transcribe), (1, 0));
         assert!(plan.has_work());
 
@@ -1848,7 +1858,12 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&capt).expect("capt"), edited);
 
         // Everything it makes exists: nothing left to do.
-        let plan = plan_with(&[video.clone()], false, Formats::default(), false);
+        let plan = plan_with(
+            std::slice::from_ref(&video),
+            false,
+            Formats::default(),
+            false,
+        );
         assert_eq!((plan.rebuilt_free, plan.already_subtitled), (0, 1));
         assert_eq!(run_now(&job, &video).status, ItemStatus::Skipped);
     }
@@ -1858,7 +1873,12 @@ mod tests {
         let folder = Folder::new("capt-only");
         let video = folder.file("only.mp4", "x");
         folder.file("only.capt", &capt_of(&[("Hello", 1000)]));
-        let plan = plan_with(&[video.clone()], false, Formats::default(), false);
+        let plan = plan_with(
+            std::slice::from_ref(&video),
+            false,
+            Formats::default(),
+            false,
+        );
         assert_eq!((plan.rebuilt_free, plan.transcribe), (1, 0));
         let result = run_now(&job(HashMap::new(), false), &video);
         assert_eq!(result.status, ItemStatus::Done, "{:?}", result.reason);
@@ -1870,7 +1890,7 @@ mod tests {
         let folder = Folder::new("capt-replace");
         let video = folder.file("clip.mp4", "x");
         folder.file("clip.capt", &capt_of(&[("Hello", 1000)]));
-        let plan = plan_with(&[video.clone()], true, Formats::default(), true);
+        let plan = plan_with(std::slice::from_ref(&video), true, Formats::default(), true);
         assert_eq!((plan.rebuilt_free, plan.transcribe), (0, 1));
 
         let broken = folder.file("broken.mp4", "x");

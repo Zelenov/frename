@@ -456,6 +456,7 @@ batch-subtitles-progress-saving = 저장 중
 batch-subtitles-reason-already = 이미 자막이 있음
 batch-subtitles-reason-no-audio = 오디오 없음
 batch-subtitles-reason-no-speech = 음성 없음
+batch-subtitles-reason-capt = { $name }은(는) 읽을 수 있는 CAPT 파일이 아닙니다
 batch-subtitles-reason-soniox = Soniox: { $message }
 batch-subtitles-reason-unreachable = Soniox에 연결할 수 없음
 batch-subtitles-stop-key-rejected = 중지됨: Soniox가 키를 거부했습니다. 설정 → 자막에서 확인하세요.
