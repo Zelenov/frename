@@ -41,8 +41,9 @@ frename is free and open source (MIT license).
 - **Get subtitles from speech.** Generate subtitles sends the audio to Soniox, a paid
   speech-to-text service, and saves an `.srt` file, a Premiere Pro transcript, or both next to
   the video. It also saves a `.capt` file next to the video: the whole transcript as plain text.
-  frename does not use it yet. A button in the corner of the comment box does it for the clip you
-  have open.
+  When a clip has a `.capt`, the other formats are made from it for free, without Soniox, so a
+  cut point or a speaker name you fixed in it reaches every subtitle file; Replace transcribes
+  again. A button in the corner of the comment box generates subtitles for the clip you have open.
 - **Find any clip later.** Search the list by name, tag or comment, and filter it to untagged clips
   or clips with subtitles, comments or markers.
 - **Work on many clips at once.** Batch mode runs one action on all the clips you check, for

@@ -536,6 +536,7 @@ batch-subtitles-progress-saving = čuvanje
 batch-subtitles-reason-already = već ima titlove
 batch-subtitles-reason-no-audio = nema zvuka
 batch-subtitles-reason-no-speech = nema govora
+batch-subtitles-reason-capt = { $name } nije čitljiva CAPT datoteka
 batch-subtitles-reason-soniox = Soniox: { $message }
 batch-subtitles-reason-unreachable = Soniox nije dostupan
 batch-subtitles-stop-key-rejected = Zaustavljeno: Soniox je odbio ključ. Proverite ga u Podešavanja → Titlovi.

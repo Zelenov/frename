@@ -456,6 +456,7 @@ batch-subtitles-progress-saving = 儲存中
 batch-subtitles-reason-already = 已有字幕
 batch-subtitles-reason-no-audio = 沒有音訊
 batch-subtitles-reason-no-speech = 沒有語音
+batch-subtitles-reason-capt = { $name } 不是可讀的 CAPT 檔案
 batch-subtitles-reason-soniox = Soniox：{ $message }
 batch-subtitles-reason-unreachable = 無法連線到 Soniox
 batch-subtitles-stop-key-rejected = 已停止：Soniox 拒絕了此金鑰。請到「設定」→「字幕」檢查。

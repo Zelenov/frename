@@ -530,6 +530,7 @@ batch-subtitles-progress-saving = salvando
 batch-subtitles-reason-already = já tinha legendas
 batch-subtitles-reason-no-audio = sem áudio
 batch-subtitles-reason-no-speech = sem fala
+batch-subtitles-reason-capt = { $name } não é um arquivo CAPT legível
 batch-subtitles-reason-soniox = Soniox: { $message }
 batch-subtitles-reason-unreachable = não foi possível acessar a Soniox
 batch-subtitles-stop-key-rejected = Interrompido: a Soniox rejeitou a chave. Verifique em Configurações → Legendas.

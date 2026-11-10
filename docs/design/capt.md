@@ -20,8 +20,8 @@ step 1. Every question of the issue is decided here by the agent (nothing waits 
    from the saved transcript). Folders of old `.srt` files stay "already have subtitles", free.
 4. **A hand-edited `.srt` is never overwritten** (unchanged rule: only missing outputs are written;
    Replace means transcribe again). A hand-edited `.capt` is overwritten only by Replace, as the
-   word says. A `.capt` with neither `.srt` nor `.soniox.json` still means a new transcription for the
-   `.srt` (the edited `.capt` is kept); step 2 closes this.
+   word says. A `.capt` with neither `.srt` nor `.soniox.json` meant a new transcription in step 1; step 2 (done)
+   makes the `.srt` from the `.capt` instead, and the `.capt` wins over a saved `.soniox.json`.
 5. **The result list does not name the CAPT file** (it goes with every run, not news).
 6. **Older files stay readable**: nothing is read back from an `.srt` into CAPT (no word timing, so
    a coarse CAPT would look like a real one). The way from an old `.srt` to a CAPT is to
@@ -31,7 +31,7 @@ step 1. Every question of the issue is decided here by the agent (nothing waits 
 
 1. *(this PR)* `clip.capt` written next to new subtitles; sidecar handling in core (rename, name
    taken, undo); tests.
-2. A saved `.capt` is a transcript source: "rebuilt free" also when only `clip.capt` is there (no
+2. *(done, 0.191)* A saved `.capt` is a transcript source: "rebuilt free" also when only `clip.capt` is there (no
    `.soniox.json`), so a hand-edited CAPT (cut points, speaker names) is what other formats are
    made from. Needs a library call that lays out a `Doc` (`job::write_outputs`).
 3. More formats in the Generate subtitles panel: WebVTT, ASS, TTML, SBV, LRC, transcript, YTT as

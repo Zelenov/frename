@@ -535,6 +535,7 @@ batch-subtitles-progress-saving = зберігаємо
 batch-subtitles-reason-already = субтитри вже були
 batch-subtitles-reason-no-audio = немає аудіо
 batch-subtitles-reason-no-speech = немає мовлення
+batch-subtitles-reason-capt = { $name } — нечитабельний файл CAPT
 batch-subtitles-reason-soniox = Soniox: { $message }
 batch-subtitles-reason-unreachable = Soniox недоступний
 batch-subtitles-stop-key-rejected = Зупинено: Soniox відхилив ключ. Перевірте його в Налаштування → Субтитри.
