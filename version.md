@@ -1,3 +1,7 @@
+# 0.191
+## Added
+- Generate subtitles makes the subtitles of a clip that has a `.capt` file from it, free and without Soniox, even when the clip has no saved transcript. A change you made in the `.capt` (a cut point, a speaker name) is in every file it makes. The `.capt` is never overwritten, except by Replace, which transcribes again.
+
 # 0.190
 ## Added
 - Generate subtitles also saves `clip.capt` next to the video: the whole transcript as plain text. frename does not use it yet; it moves with the clip when you rename it. Replace overwrites it.

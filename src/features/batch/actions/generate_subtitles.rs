@@ -6,6 +6,7 @@
 //! key lives in the credential store (Settings → Subtitles); the languages and cue length come
 //! from the settings too (see [`Config`]).
 
+use anyhow::Context as _;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -685,6 +686,14 @@ fn plan_with(files: &[PathBuf], replace: bool, formats: Formats, ffmpeg: bool) -
             continue;
         }
         names.extend(taken);
+        // A saved CAPT is the source (#353): its outputs are made from it, free, whatever else
+        // is saved next to the video.
+        if capt_source(file, replace).is_some()
+            && !job::missing_outputs(&output, &formats.list(), false).is_empty()
+        {
+            plan.rebuilt_free += 1;
+            continue;
+        }
         items.push(plan_batch::Item {
             input: file.clone(),
             output,
@@ -716,7 +725,7 @@ fn plan_with(files: &[PathBuf], replace: bool, formats: Formats, ffmpeg: bool) -
     plan.audio_s = totals.audio_s;
     plan.unknown_length = totals.unknown_length;
     plan.already_subtitled += totals.skip;
-    plan.rebuilt_free = totals.cached + totals.from_transcript;
+    plan.rebuilt_free += totals.cached + totals.from_transcript;
     plan.no_speech_before = totals.cached_silent;
     plan.no_audio = totals.no_audio;
     plan
@@ -1081,6 +1090,83 @@ fn stage_label(stage: Stage, fraction: Option<f32>, remaining: Option<Duration>)
     }
 }
 
+/// The `clip.capt` next to a video when it is to be the source of its subtitles: always, except
+/// with Replace (transcribe again). It wins over a saved `.soniox.json`, so what the editor
+/// changed in it (cut points, speaker names) is what the other formats are made from (#353).
+fn capt_source(video: &Path, replace: bool) -> Option<PathBuf> {
+    let capt = frename_core::capt_path(video);
+    (!replace && capt.is_file()).then_some(capt)
+}
+
+/// The missing outputs of a video made from its saved `clip.capt`, like `sonisub render`: no
+/// Soniox, no key, no cost. `clip.capt` itself is never written over.
+fn rebuild_from_capt(
+    capt: &Path,
+    output: &Path,
+    options: &job::Options,
+) -> anyhow::Result<Outcome> {
+    use sonisub::captions::capt::Doc;
+    let formats: Vec<job::Format> = options
+        .formats
+        .iter()
+        .copied()
+        .filter(|f| *f != job::Format::Capt)
+        .collect();
+    let targets = job::missing_outputs(output, &formats, false);
+    if targets.is_empty() {
+        return Ok(Outcome::Skipped {
+            files: formats.iter().map(|f| f.path(output)).collect(),
+        });
+    }
+    let name = capt
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let text = std::fs::read_to_string(capt).with_context(|| format!("cannot read {name}"))?;
+    let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+    let doc = Doc::parse(text).map_err(|errors| {
+        let first = errors
+            .0
+            .first()
+            .map(ToString::to_string)
+            .unwrap_or_default();
+        anyhow::anyhow!("{name} is not a valid CAPT file: {first}")
+    })?;
+    let words = doc.to_words();
+    if words.is_empty() {
+        anyhow::bail!("{name} has no words");
+    }
+    let mut layout = srt::Layout {
+        by_speaker: options.diarization,
+        ..options.layout.clone()
+    };
+    layout.speaker_names = job::speaker_names(&doc);
+    let mut outputs = options.outputs.clone();
+    outputs.ass.names = doc
+        .speakers
+        .iter()
+        .filter_map(|s| Some((s.id.clone(), s.name.clone()?)))
+        .collect();
+    let seed = doc.id.clone().unwrap_or_else(|| name.clone());
+    let (files, cues) = job::write_outputs(
+        &targets,
+        &words,
+        &words,
+        &doc,
+        &layout,
+        &outputs,
+        doc.lang.as_deref(),
+        &seed,
+    )?;
+    Ok(Outcome::Written {
+        files,
+        cues,
+        json: None,
+        cached: true,
+        uploaded_s: None,
+    })
+}
+
 /// One file through sonisub. A saved transcript next to it needs no key.
 fn transcribe(
     job: &SubtitleJob,
@@ -1089,6 +1175,9 @@ fn transcribe(
     token: &CancelToken,
 ) -> anyhow::Result<Outcome> {
     let output = subtitle_path(path);
+    if let Some(capt) = capt_source(path, options.force) {
+        return rebuild_from_capt(&capt, &output, options);
+    }
     let options = &with_capt(options, &output);
     let (base, key) = match &job.soniox {
         Some(soniox) => soniox.clone(),
@@ -1723,6 +1812,81 @@ mod tests {
         folder.file("old.srt", "1\n00:00:01,000 --> 00:00:02,000\nHi\n");
         assert!(run_now(&job, &old).status == ItemStatus::Skipped);
         assert!(!frename_core::capt_path(&old).exists());
+    }
+
+    fn capt_of(words: &[(&str, u64)]) -> String {
+        let words: Vec<sonisub::captions::Word> = words
+            .iter()
+            .map(|(text, start)| sonisub::captions::Word {
+                text: format!(" {text}"),
+                start_ms: *start,
+                end_ms: start + 400,
+                ..Default::default()
+            })
+            .collect();
+        sonisub::captions::capt::Doc::from_words(&words, None).write()
+    }
+
+    #[test]
+    fn a_saved_capt_is_the_free_source_and_wins_over_a_saved_transcript() {
+        let folder = Folder::new("capt-source");
+        let video = folder.file("clip.mp4", "x");
+        let edited = capt_of(&[("Edited", 1000), ("words", 1500)]);
+        let capt = folder.file("clip.capt", &edited);
+        // Both are there: the CAPT, which the editor may have changed, is what is used.
+        folder.file("clip.soniox.json", TRANSCRIPT);
+        let plan = plan_with(&[video.clone()], false, Formats::default(), false);
+        assert_eq!((plan.rebuilt_free, plan.transcribe), (1, 0));
+        assert!(plan.has_work());
+
+        let job = job(HashMap::new(), false);
+        let result = run_now(&job, &video);
+        assert_eq!(result.status, ItemStatus::Done, "{:?}", result.reason);
+        let srt = std::fs::read_to_string(subtitle_path(&video)).expect("srt");
+        assert!(srt.contains("Edited words"), "{srt}");
+        assert_eq!(uploaded(&job), 0, "nothing was sent");
+        assert_eq!(std::fs::read_to_string(&capt).expect("capt"), edited);
+
+        // Everything it makes exists: nothing left to do.
+        let plan = plan_with(&[video.clone()], false, Formats::default(), false);
+        assert_eq!((plan.rebuilt_free, plan.already_subtitled), (0, 1));
+        assert_eq!(run_now(&job, &video).status, ItemStatus::Skipped);
+    }
+
+    #[test]
+    fn a_capt_alone_without_a_transcript_needs_no_key() {
+        let folder = Folder::new("capt-only");
+        let video = folder.file("only.mp4", "x");
+        folder.file("only.capt", &capt_of(&[("Hello", 1000)]));
+        let plan = plan_with(&[video.clone()], false, Formats::default(), false);
+        assert_eq!((plan.rebuilt_free, plan.transcribe), (1, 0));
+        let result = run_now(&job(HashMap::new(), false), &video);
+        assert_eq!(result.status, ItemStatus::Done, "{:?}", result.reason);
+        assert!(subtitle_path(&video).is_file());
+    }
+
+    #[test]
+    fn replace_transcribes_again_and_a_broken_capt_fails_the_file() {
+        let folder = Folder::new("capt-replace");
+        let video = folder.file("clip.mp4", "x");
+        folder.file("clip.capt", &capt_of(&[("Hello", 1000)]));
+        let plan = plan_with(&[video.clone()], true, Formats::default(), true);
+        assert_eq!((plan.rebuilt_free, plan.transcribe), (0, 1));
+
+        let broken = folder.file("broken.mp4", "x");
+        folder.file("broken.capt", "this is not a CAPT file");
+        let result = run_now(&job(HashMap::new(), false), &broken);
+        assert_eq!(result.status, ItemStatus::Failed);
+        assert!(
+            result
+                .reason
+                .as_deref()
+                .unwrap_or("")
+                .contains("broken.capt"),
+            "{:?}",
+            result.reason
+        );
+        assert!(!subtitle_path(&broken).exists());
     }
 
     fn uploaded(job: &Run) -> u64 {
