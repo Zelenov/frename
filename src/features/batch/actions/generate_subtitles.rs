@@ -1089,6 +1089,7 @@ fn transcribe(
     token: &CancelToken,
 ) -> anyhow::Result<Outcome> {
     let output = subtitle_path(path);
+    let options = &with_capt(options, &output);
     let (base, key) = match &job.soniox {
         Some(soniox) => soniox.clone(),
         None => match soniox_key() {
@@ -1101,6 +1102,20 @@ fn transcribe(
     job.failed_deletes
         .fetch_add(client.failed_deletes(), Ordering::Relaxed);
     result
+}
+
+/// `options` with `clip.capt` added to what is written when the file gets any output at all
+/// (#353): the whole transcript as small text, so a format wanted later is made from it without
+/// paying again. A file whose outputs all exist is left alone, so a folder of old subtitles is
+/// never sent to Soniox only for a CAPT it does not have.
+fn with_capt(options: &job::Options, output: &Path) -> job::Options {
+    let mut options = options.clone();
+    let writes_something =
+        !job::missing_outputs(output, &options.formats, options.force).is_empty();
+    if writes_something && !options.formats.contains(&job::Format::Capt) {
+        options.formats.push(job::Format::Capt);
+    }
+    options
 }
 
 /// The job's record of one file. A file whose work was cancelled is not reached, not failed.
@@ -1178,6 +1193,9 @@ fn failure_reason(e: &anyhow::Error) -> String {
 /// A written video. A Premiere transcript among the files is worth saying, so the result list
 /// names every file; SRT alone is the plain "done" it always was.
 fn written_result(srt: &Path, files: &[PathBuf]) -> ItemResult {
+    // The CAPT file goes with every transcription; it is not news.
+    let capt = job::Format::Capt.path(srt);
+    let files: Vec<PathBuf> = files.iter().filter(|f| **f != capt).cloned().collect();
     if files.iter().all(|f| f == srt) {
         return ItemResult::new(ItemStatus::Done, None);
     }
@@ -1671,6 +1689,40 @@ mod tests {
         assert_eq!(run_now(&job, &only).status, ItemStatus::Done);
         assert!(!subtitle_path(&only).exists());
         assert!(job::Format::Premiere.path(&subtitle_path(&only)).is_file());
+    }
+
+    #[test]
+    fn a_rebuilt_clip_gets_its_capt_file_but_a_finished_one_does_not() {
+        let folder = Folder::new("capt");
+        let video = folder.video("clip.mp4");
+        folder.file("clip.soniox.json", TRANSCRIPT);
+        let job = Run(Arc::new(SubtitleJob {
+            options: job::Options {
+                formats: Formats::default().list(),
+                ..job::Options::default()
+            },
+            excluded: Mutex::new(HashMap::new()),
+            usd_per_hour: 0.12,
+            uploaded_ms: AtomicU64::new(0),
+            failed_deletes: AtomicUsize::new(0),
+            soniox: None,
+        }));
+        let result = run_now(&job, &video);
+        assert_eq!(result.status, ItemStatus::Done);
+        assert_eq!(result.reason, None, "the CAPT file is not listed as news");
+        let capt = frename_core::capt_path(&video);
+        assert!(capt.is_file(), "clip.capt written next to the clip");
+        let text = std::fs::read_to_string(&capt).expect("capt");
+        assert!(
+            sonisub::captions::capt::Doc::parse(&text).is_ok(),
+            "the file is a CAPT document"
+        );
+
+        // A clip whose outputs all exist is left as it is: no CAPT is made for it.
+        let old = folder.video("old.mp4");
+        folder.file("old.srt", "1\n00:00:01,000 --> 00:00:02,000\nHi\n");
+        assert!(run_now(&job, &old).status == ItemStatus::Skipped);
+        assert!(!frename_core::capt_path(&old).exists());
     }
 
     fn uploaded(job: &Run) -> u64 {

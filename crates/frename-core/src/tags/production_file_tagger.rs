@@ -552,6 +552,7 @@ mod tests {
         crate::comment::save_comment(&path, "note");
         let mut old_sidecars = crate::subtitles::subtitle_candidates(&path);
         old_sidecars.push(crate::subtitles::transcript_path(&path));
+        old_sidecars.push(crate::subtitles::capt_path(&path));
         old_sidecars.push(crate::comment::comment_path(&path));
         old_sidecars.push(screenshot_path(&path, 10_936));
         old_sidecars.push(screenshot_path(&path, 0));
@@ -567,6 +568,7 @@ mod tests {
 
         let mut expected = crate::subtitles::subtitle_candidates(&new_path);
         expected.push(crate::subtitles::transcript_path(&new_path));
+        expected.push(crate::subtitles::capt_path(&new_path));
         expected.push(crate::comment::comment_path(&new_path));
         expected.push(screenshot_path(&new_path, 10_936));
         expected.push(screenshot_path(&new_path, 0));

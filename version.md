@@ -1,3 +1,7 @@
+# 0.190
+## Added
+- Generate subtitles also saves `clip.capt` next to the video: the whole transcript as plain text. frename does not use it yet; it moves with the clip when you rename it. Replace overwrites it.
+
 # 0.189
 ## Fixed
 - After renaming the open clip in its row, F12, Rotate and describing a marker with AI work on the clip under its new name, not the old one: F12 no longer leaves a picture named after a file that is gone, and Rotate no longer says the file is not there. Saving markers and exporting them as text use the new name too.
