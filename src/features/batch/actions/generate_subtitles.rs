@@ -1818,9 +1818,9 @@ mod tests {
         let words: Vec<sonisub::captions::Word> = words
             .iter()
             .map(|(text, start)| sonisub::captions::Word {
-                text: format!(" {text}"),
-                start_ms: *start,
-                end_ms: start + 400,
+                text: (*text).to_string(),
+                start: *start,
+                end: start + 400,
                 ..Default::default()
             })
             .collect();
