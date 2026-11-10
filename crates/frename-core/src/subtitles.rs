@@ -395,8 +395,9 @@ pub fn subtitle_bytes(video_path: &Path, chosen: Option<SubtitleFormat>) -> usiz
     std::fs::metadata(path).map_or(0, |m| m.len() as usize)
 }
 
-/// Move the subtitle file, the saved transcript and the CAPT file along when their video is renamed, so they
-/// keep matching. Does nothing for a file that is not there; never overwrites an existing one.
+/// Move the subtitle file, the saved transcript and the CAPT file along when their video is
+/// renamed, so they keep matching. Does nothing for a file that is not there; never overwrites an
+/// existing one.
 pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
     for (old, new) in subtitle_candidates(old_video_path)
         .iter()

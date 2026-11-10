@@ -1,6 +1,6 @@
 # 0.190
 ## Added
-- Generate subtitles also saves `clip.capt` next to the video: the whole transcript as small text (every word with its time, speakers, languages), from which any other subtitle format can be made later without Soniox. It is written together with the subtitles of a transcription or a free rebuild; a clip whose subtitles already exist is left alone and gets no `.capt`. The file moves with the clip when it is renamed, and a rename is refused when a `.capt` already stands at the new name, like for the other files that belong to a clip.
+- Generate subtitles also saves `clip.capt` next to the video: the whole transcript as plain text, with every word timed. frename does not read it yet; it is kept so other subtitle formats can be made from it later without paying again. A clip whose subtitles already exist gets no `.capt`. It moves with the clip when you rename it.
 
 # 0.189
 ## Fixed

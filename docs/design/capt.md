@@ -20,7 +20,8 @@ step 1. Every question of the issue is decided here by the agent (nothing waits 
    from the saved transcript). Folders of old `.srt` files stay "already have subtitles", free.
 4. **A hand-edited `.srt` is never overwritten** (unchanged rule: only missing outputs are written;
    Replace means transcribe again). A hand-edited `.capt` is overwritten only by Replace, as the
-   word says.
+   word says. A `.capt` with neither `.srt` nor `.soniox.json` still means a new transcription for the
+   `.srt` (the edited `.capt` is kept); step 2 closes this.
 5. **The result list does not name the CAPT file** (it goes with every run, not news).
 6. **Older files stay readable**: nothing is read back from an `.srt` into CAPT (no word timing, so
    a coarse CAPT would look like a real one). The way from an old `.srt` to a CAPT is to

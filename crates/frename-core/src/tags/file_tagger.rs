@@ -324,7 +324,7 @@ impl FileTagger {
 }
 
 /// Whether `new_path`, or one of the sidecars that travel with it (comment, subtitle,
-/// transcript, screenshot at a time the old clip has one), already exists — checked before any write a rename would otherwise make, since
+/// transcript, CAPT, screenshot at a time the old clip has one), already exists — checked before any write a rename would otherwise make, since
 /// renaming onto an existing file (issue #84) or its sidecar would silently replace it.
 ///
 /// A `new_path` that differs from `old_path` only by case is never "taken": on Windows' case-
@@ -400,6 +400,17 @@ mod tests {
         let old_path = dir.join("goat.mov");
         let new_path = dir.join("goat.MOV");
         assert!(!target_name_taken(&old_path, &new_path));
+    }
+
+    /// A `.capt` already standing at the new name blocks the rename, like the other sidecars.
+    #[test]
+    fn an_existing_capt_file_makes_the_new_name_taken() {
+        let dir = crate::test_support::fresh_dir("capt-taken");
+        let (old_path, new_path) = (dir.join("goat.mov"), dir.join("tag.goat.mov"));
+        assert!(!target_name_taken(&old_path, &new_path));
+        std::fs::write(crate::subtitles::capt_path(&new_path), "capt").expect("capt");
+        assert!(target_name_taken(&old_path, &new_path));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Tags follow the folder's order; a file already in order is left alone.
