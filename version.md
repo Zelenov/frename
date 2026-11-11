@@ -1,7 +1,6 @@
 # 0.193
 ## Fixed
 - On Linux and on case-sensitive Mac drives, renaming a clip to another clip's name in different capitals (`goat.mov` → `GOAT.mov`) is refused instead of replacing that clip.
-- Changing only the capitals of a name with non-Latin letters (`ёж.mov` → `ЁЖ.mov`) now works on Windows and macOS.
 
 # 0.192
 ## Fixed

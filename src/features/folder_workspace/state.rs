@@ -6023,11 +6023,10 @@ mod tests {
         let folder = frename_core::test_support::fresh_dir("rename-case-other");
         std::fs::write(folder.join("goat.mp4"), b"a").expect("write");
         std::fs::write(folder.join("GOAT.mp4"), b"b").expect("write");
-        if frename_core::is_case_change_of_same_file(
-            &folder.join("goat.mp4"),
-            &folder.join("GOAT.mp4"),
-        ) {
-            return; // A case-insensitive file system holds only one of them; ci-linux covers this.
+        // Asked of the file system itself, not of the code under test: a case-insensitive one
+        // holds one file under both names (ci-linux runs this test).
+        if std::fs::read_dir(&folder).expect("list").count() < 2 {
+            return;
         }
 
         assert_eq!(

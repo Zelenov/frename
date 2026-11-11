@@ -325,19 +325,21 @@ impl FileTagger {
 
 /// Whether renaming `old` to `new` only changes the case of its name, on a file system where both
 /// spellings are this one file (Windows, macOS, and on Linux an exFAT/FAT card or a casefold
-/// folder): same folder, names equal ignoring case (any letters, not only ASCII), `new` is found,
+/// folder): same folder, names equal ignoring ASCII case, `new` is found,
 /// and the folder has no entry spelled exactly as `new`. A case-insensitive folder lists only the
 /// name as stored; a case-sensitive one that also lists `new` holds another entry there (another
 /// clip, a hard link, a symbolic link: #379). The same path is trivially one.
 ///
-/// Names are compared with Rust's `to_lowercase`, which folds a few letters (final `Σ`, Turkish
-/// `İ`, NFC against NFD) differently from file systems: such a case fix is refused as taken,
-/// never let through wrongly.
+/// Only ASCII letters are folded, as before #379: a case fix of other letters is refused as
+/// taken, never let through wrongly.
 pub fn is_case_change_of_same_file(old: &Path, new: &Path) -> bool {
     if old == new {
         return true;
     }
-    let lowercase = |p: &Path| p.file_name().map(|n| n.to_string_lossy().to_lowercase());
+    let lowercase = |p: &Path| {
+        p.file_name()
+            .map(|n| n.to_string_lossy().to_ascii_lowercase())
+    };
     old.parent() == new.parent()
         && lowercase(old) == lowercase(new)
         && old.symlink_metadata().is_ok()
@@ -372,6 +374,8 @@ fn folder_lists(path: &Path) -> bool {
 /// file to itself, and that fix of case must still go through. On a case-sensitive one (Linux)
 /// `GOAT.mov` next to `goat.mov` is another clip, so it is taken like any other name (#379).
 pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
+    // A shortcut: when the clip only changes case on a case-insensitive file system, every
+    // sidecar pair below is the same file too.
     if is_case_change_of_same_file(old_path, new_path) {
         return false;
     }
@@ -452,18 +456,20 @@ mod tests {
         assert!(!target_name_taken(&old_path, &new_path));
     }
 
-    /// The same check on Windows, where the file system is case-insensitive: non-Latin letters
-    /// too.
+    /// The same check on Windows, where the file system is case-insensitive.
     #[cfg(windows)]
     #[test]
     fn two_spellings_of_one_name_are_the_same_file_on_windows() {
         let dir = crate::test_support::fresh_dir("same-file-windows");
-        std::fs::write(dir.join("ёж.mov"), b"clip").expect("clip");
+        std::fs::write(dir.join("Goat.mov"), b"clip").expect("clip");
         assert!(super::is_case_change_of_same_file(
-            &dir.join("ёж.mov"),
-            &dir.join("ЁЖ.MOV")
+            &dir.join("Goat.mov"),
+            &dir.join("goat.MOV")
         ));
-        assert!(!target_name_taken(&dir.join("ёж.mov"), &dir.join("ЁЖ.MOV")));
+        assert!(!target_name_taken(
+            &dir.join("Goat.mov"),
+            &dir.join("goat.MOV")
+        ));
     }
 
     /// A symbolic link is another entry: renaming a clip onto a link to it would replace the link
