@@ -8,3 +8,8 @@ tests/folder/Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm
 # stores a portrait clip; AI description frames must come out upright. Made with
 # ffmpeg -display_rotation 90 -i tests/folder/file_example_MP4_480_1_5MG.mp4 -t 6 -c copy -an tests/folder/rotated-90.mp4
 tests/folder/rotated-90.mp4
+# The README images' footage (docs/screenshots/footage, see docs/screenshots/ATTRIBUTION.md):
+# short cuts of Tears of Steel and Sintel, so the README scenarios show clips CI can decode.
+docs/screenshots/footage/tears-of-steel-thom.mp4
+docs/screenshots/footage/sintel-dragon.mp4
+docs/screenshots/footage/sintel-city.mp4

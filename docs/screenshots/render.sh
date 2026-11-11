@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Renders the README screenshots by hand, when a change makes them wrong: runs the app in demo mode
-# for each template here, then puts the window into its annotated template.
+# Renders the guide's annotated screenshots by hand, when a change makes them wrong (the README
+# images are render-readme.sh's): runs the app in demo mode for each template here, then puts the
+# window into its annotated template.
 #
 #   docs/screenshots/render.sh [frename binary]     (default: target/debug/frename)
 #

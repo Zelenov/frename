@@ -142,8 +142,17 @@ mod tests {
     fn a_folder_yields_only_its_videos() {
         let videos = videos_in(&repo().join("tests/folder")).expect("tests/folder");
         assert!(videos.iter().all(|v| is_video(v)));
-        for clip in ci_clips() {
-            assert!(videos.contains(&clip), "{} not found", clip.display());
+        // Each listed clip is found in its own folder (tests/folder, or the README footage).
+        let clips = ci_clips();
+        let folders: std::collections::BTreeSet<&Path> =
+            clips.iter().filter_map(|c| c.parent()).collect();
+        let found: Vec<PathBuf> = folders
+            .into_iter()
+            .flat_map(|folder| videos_in(folder).expect("a clip's folder"))
+            .collect();
+        assert!(found.iter().all(|v| is_video(v)));
+        for clip in clips {
+            assert!(found.contains(&clip), "{} not found", clip.display());
         }
     }
 

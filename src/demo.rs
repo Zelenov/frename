@@ -247,6 +247,11 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
             iced::widget::text_editor::Action::Edit(iced::widget::text_editor::Edit::Insert(c)),
         ));
     }
+    if scenario.comment_expanded {
+        steps.push(folder_workspace::Message::CommentLayout(
+            crate::features::file_workspace::CommentLayout::ToggleExpanded,
+        ));
+    }
     if scenario.rotate != 0 {
         steps.push(folder_workspace::Message::RotateVideo(scenario.rotate));
     }
@@ -761,6 +766,19 @@ mod tests {
             Some(folder_workspace::Message::ToggleMediaFullscreen)
         ));
         assert_eq!(super::steps(&scenario(), false, false).len(), 1);
+    }
+
+    #[test]
+    fn the_comment_is_expanded_when_the_scenario_asks() {
+        let mut expanded = scenario();
+        expanded.comment_expanded = true;
+        assert!(matches!(
+            steps(&expanded, false, false).last(),
+            Some(folder_workspace::Message::CommentLayout(
+                crate::features::file_workspace::CommentLayout::ToggleExpanded
+            ))
+        ));
+        assert_eq!(steps(&scenario(), false, false).len(), 1);
     }
 
     #[test]
