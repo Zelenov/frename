@@ -46,6 +46,18 @@ const COMMENT_PADDING: Padding = Padding {
     left: SPACE_S,
 };
 
+/// The comment's padding: below the corner's row of buttons when the notes mark is in it.
+fn comment_padding(notes_on: bool) -> Padding {
+    if notes_on {
+        Padding {
+            top: TOGGLE_PADDING.top + ICON_BUTTON_SMALL + SPACE_XXS,
+            ..COMMENT_PADDING
+        }
+    } else {
+        COMMENT_PADDING
+    }
+}
+
 /// The expand button's place in the comment's corner, clear of the scroll gutter.
 const TOGGLE_PADDING: Padding = Padding {
     top: SPACE_XXS,
@@ -213,6 +225,9 @@ where
     S: frename_core::StoredTagStore + Clone,
 {
     let expanded = file_workspace.comment_expanded();
+    // The notes mark makes the corner wider than the text's right margin, by a width that
+    // depends on the language: the text then starts below the corner instead (#370).
+    let padding = comment_padding(!ai_notes.trim().is_empty());
     // The editor grows with its text inside a scrollable, which shows the scroll bar the
     // editor itself does not draw (unbounded, it also leaves the wheel to the scrollable). It
     // is at least as tall as the box, expanded or not, so a click anywhere in it lands in the
@@ -225,9 +240,9 @@ where
             .height(Length::Shrink)
             // iced adds the padding after the minimum: without taking it off, the editor is a
             // little taller than the box, scrolls, and its top edge goes out of sight.
-            .min_height((size.height - COMMENT_PADDING.y()).max(0.0))
+            .min_height((size.height - padding.y()).max(0.0))
             .size(TEXT_BODY)
-            .padding(COMMENT_PADDING)
+            .padding(padding)
             .style(style::bare_text_editor)
             // Explicitly capture Enter so the event is not treated as Ignored by Iced,
             // which prevents Windows from playing the system beep for unhandled WM_CHAR(0x0D).
@@ -359,6 +374,17 @@ mod area_tests {
         assert_eq!(children(false, true), 4);
         assert_eq!(children(true, false), 4);
         assert_eq!(children(false, false), 4);
+    }
+
+    /// The text keeps clear of the corner's buttons (#370): to their left, and below them when
+    /// the notes mark (of no fixed width) is there too.
+    #[test]
+    fn the_comment_text_keeps_clear_of_the_corner() {
+        let buttons = 4.0 * ICON_BUTTON_SMALL + 3.0 * SPACE_XXS;
+        assert!(comment_padding(false).right >= buttons);
+        let corner_bottom = TOGGLE_PADDING.top + ICON_BUTTON_SMALL;
+        assert!(comment_padding(true).top > corner_bottom);
+        assert!(comment_padding(false).top < corner_bottom);
     }
 }
 
