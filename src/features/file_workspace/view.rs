@@ -38,13 +38,31 @@ const AREA_PADDING: Padding = Padding {
     left: SPACE_S,
 };
 
-/// The comment's text keeps clear of the expand button over its top right corner.
+/// The comment's text keeps clear of the buttons over its top right corner
+/// (`COMMENT_CORNER_WIDTH`).
 const COMMENT_PADDING: Padding = Padding {
     top: CONTROL_PADDING_Y,
     right: COMMENT_CORNER_WIDTH,
     bottom: CONTROL_PADDING_Y,
     left: SPACE_S,
 };
+
+/// The comment's padding. When the corner is a row of its own, the text starts below it and
+/// takes the whole width; otherwise it keeps clear of the corner to its right.
+fn comment_padding(own_row: bool) -> Padding {
+    if own_row {
+        Padding {
+            top: COMMENT_PADDING.top + COMMENT_CORNER_ROW,
+            right: SPACE_S,
+            ..COMMENT_PADDING
+        }
+    } else {
+        COMMENT_PADDING
+    }
+}
+
+/// The height of the corner as a row of its own: its buttons and the inset above them.
+const COMMENT_CORNER_ROW: f32 = SPACE_XXS + ICON_BUTTON_SMALL;
 
 /// The expand button's place in the comment's corner, clear of the scroll gutter.
 const TOGGLE_PADDING: Padding = Padding {
@@ -213,6 +231,12 @@ where
     S: frename_core::StoredTagStore + Clone,
 {
     let expanded = file_workspace.comment_expanded();
+    // The notes mark makes the corner wider than the text's right margin, by a width that
+    // depends on the language: the corner then gets its own row above the text (#370), as it
+    // does in the expanded box, which has the height to spare.
+    let has_notes = !ai_notes.trim().is_empty();
+    let own_row = has_notes || expanded;
+    let padding = comment_padding(own_row);
     // The editor grows with its text inside a scrollable, which shows the scroll bar the
     // editor itself does not draw (unbounded, it also leaves the wheel to the scrollable). It
     // is at least as tall as the box, expanded or not, so a click anywhere in it lands in the
@@ -225,9 +249,9 @@ where
             .height(Length::Shrink)
             // iced adds the padding after the minimum: without taking it off, the editor is a
             // little taller than the box, scrolls, and its top edge goes out of sight.
-            .min_height((size.height - COMMENT_PADDING.y()).max(0.0))
+            .min_height((size.height - padding.y()).max(0.0))
             .size(TEXT_BODY)
-            .padding(COMMENT_PADDING)
+            .padding(padding)
             .style(style::bare_text_editor)
             // Explicitly capture Enter so the event is not treated as Ignored by Iced,
             // which prevents Windows from playing the system beep for unhandled WM_CHAR(0x0D).
@@ -237,6 +261,47 @@ where
             .key_binding(comment_key_binding);
         scroll::vertical_with_id(COMMENT_SCROLLABLE_ID, comment_editor).into()
     });
+    // The corner lies over the editor, so a click anywhere in the box still lands in it. As a
+    // row of its own it is the field's colour across the width (short of the scroll gutter), so
+    // text scrolled up goes under it out of sight; the text starts below it.
+    let buttons = container(corner(clip_actions, expanded, has_notes, ai_notes))
+        .align_right(Length::Fill)
+        .padding(Padding {
+            right: SPACE_XXS,
+            ..TOGGLE_PADDING
+        });
+    let buttons = if own_row {
+        buttons.style(style::field_fill)
+    } else {
+        buttons
+    };
+    let corner = container(buttons).padding(Padding {
+        right: SCROLL_GUTTER,
+        ..Padding::ZERO
+    });
+    // The box draws the field's fill and edge (and the focus ring) outside the scroll area, so
+    // the edge stays put while the text scrolls, and the scrollbar sits inside the box. It keeps
+    // the ring's width free inside, so the ring never covers the text.
+    container(stack![comment_scroll, corner])
+        .padding(RING)
+        .style(style::field_box(file_workspace.comment_focused()))
+        .width(Length::Fill)
+        .height(if expanded {
+            Length::Fill
+        } else {
+            Length::Fixed(file_workspace.comment_height())
+        })
+        .into()
+}
+
+/// The buttons in the comment's top right corner (#370: `COMMENT_CORNER_BUTTONS` of them), and
+/// the notes mark before them while the folder has notes for the AI.
+fn corner<'a>(
+    clip_actions: ClipActions,
+    expanded: bool,
+    has_notes: bool,
+    ai_notes: &str,
+) -> iced::widget::Row<'a, Message> {
     let (glyph, tip) = if expanded {
         (Icon::Minimize, fl!("file-workspace-comment-collapse"))
     } else {
@@ -284,7 +349,7 @@ where
         Message::SuggestTagsClip,
     );
     // The folder's notes go with every AI request: a mark says so, with the notes as its tip.
-    let notes_on = (!ai_notes.trim().is_empty()).then(|| {
+    let notes_on = has_notes.then(|| {
         tooltip::tip_text(
             row![
                 icon(Icon::FileText, ICON_S, ACCENT_TEXT),
@@ -296,27 +361,9 @@ where
             Position::Left,
         )
     });
-    let corner = row![notes_on, suggest_tags, describe, subtitles, toggle]
+    row![notes_on, suggest_tags, describe, subtitles, toggle]
         .spacing(SPACE_XXS)
-        .align_y(Alignment::Center);
-    // The box draws the field's fill and edge (and the focus ring) outside the scroll area, so
-    // the edge stays put while the text scrolls, and the scrollbar sits inside the box. It keeps
-    // the ring's width free inside, so the ring never covers the text.
-    container(stack![
-        comment_scroll,
-        container(corner)
-            .align_right(Length::Fill)
-            .padding(TOGGLE_PADDING),
-    ])
-    .padding(RING)
-    .style(style::field_box(file_workspace.comment_focused()))
-    .width(Length::Fill)
-    .height(if expanded {
-        Length::Fill
-    } else {
-        Length::Fixed(file_workspace.comment_height())
-    })
-    .into()
+        .align_y(Alignment::Center)
 }
 
 /// The comment box's keys: Enter is captured only while the box has the keys (see the comment
@@ -359,6 +406,26 @@ mod area_tests {
         assert_eq!(children(false, true), 4);
         assert_eq!(children(true, false), 4);
         assert_eq!(children(false, false), 4);
+    }
+
+    /// The text keeps clear of the corner's buttons (#370): the margin counts every button the
+    /// corner has, and with notes the box still fits a line under the corner's own row.
+    #[test]
+    fn the_comment_text_keeps_clear_of_the_corner() {
+        let actions = ClipActions {
+            describe: ClipAction::Idle,
+            subtitles: ClipAction::Idle,
+            suggest_tags: ClipAction::Idle,
+        };
+        let buttons = Widget::<Message, _, _>::children(&corner(actions, false, false, "")).len();
+        assert_eq!(buttons, COMMENT_CORNER_BUTTONS);
+        // The count is what guards #370 (a button added, the margin not); the corner is inset
+        // by the gutter and its padding, the text by the gutter.
+        let corner_width = buttons as f32 * ICON_BUTTON_SMALL + (buttons - 1) as f32 * SPACE_XXS;
+        assert!(COMMENT_PADDING.right + SCROLL_GUTTER >= TOGGLE_PADDING.right + corner_width);
+        assert!(comment_padding(true).right < COMMENT_PADDING.right);
+        // The smallest box fits one line under the corner's own row.
+        assert!(COMMENT_MIN_HEIGHT >= 2.0 * RING + comment_padding(true).y() + LINE_BODY);
     }
 }
 

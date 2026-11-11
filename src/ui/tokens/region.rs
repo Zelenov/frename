@@ -90,9 +90,14 @@ pub const CUE_TEXT_WIDTH: f32 = SIDE_LIST_MAX_WIDTH - 3.0 * SPACE_S - SCROLL_GUT
 /// name adds `LINE_BODY` per line.
 pub const MARKER_ROW_HEIGHT: f32 = ICON_BUTTON_SMALL + SPACE_XXS + LINE_BODY + 2.0 * SPACE_TIGHT;
 
-/// What the corner of the comment box holds: the clip's two paid-action buttons and the expand
-/// button, with the room the text keeps clear of them.
-pub const COMMENT_CORNER_WIDTH: f32 = 3.0 * ICON_BUTTON_SMALL + 2.0 * SPACE_XXS + SPACE_XS;
+/// How many buttons the corner of the comment box holds: the clip's three actions (suggest tags,
+/// describe, subtitles) and expand. A test checks it against the corner the view builds.
+pub const COMMENT_CORNER_BUTTONS: usize = 4;
+
+/// The room the comment's text keeps clear of the buttons in its corner.
+pub const COMMENT_CORNER_WIDTH: f32 = COMMENT_CORNER_BUTTONS as f32 * ICON_BUTTON_SMALL
+    + (COMMENT_CORNER_BUTTONS - 1) as f32 * SPACE_XXS
+    + SPACE_XS;
 
 // App bar (#64, §13.12 version B).
 /// The bar under the OS title bar: the 28 px mode switch with 4 px above and below.
@@ -128,8 +133,10 @@ pub const ORDER_STRIP_HEIGHT: f32 = BAR_HEIGHT;
 pub const ORDER_STRIP_WORDS_FROM: f32 = 420.0;
 /// The trash at the end of the file name card.
 pub const TRASH_SIDE: f32 = 36.0;
-/// The comment box: its lowest height.
-pub const COMMENT_MIN_HEIGHT: f32 = 48.0;
+/// The comment box: its lowest height, one line of text under the corner's buttons when they
+/// are a row of their own (#370): the box's ring, the row, the text's padding and one line.
+pub const COMMENT_MIN_HEIGHT: f32 =
+    2.0 * RING + SPACE_XXS + ICON_BUTTON_SMALL + 2.0 * CONTROL_PADDING_Y + LINE_BODY;
 /// The comment box: its height until it is resized, and the tallest the handle makes it
 /// (taller than that, "Expand" is the way).
 pub const COMMENT_HEIGHT: f32 = 80.0;
