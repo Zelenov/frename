@@ -1,220 +1,80 @@
 # frename
 
-![frename turns camera file names like IMG_2072.MOV into names made of tags](docs/frename-poster.jpg)
+frename is a free app that gets a folder of raw video ready for the edit. You watch each clip,
+tag it, mark the moments you want and let AI describe it, and all of it is in Premiere Pro when
+you import the clips.
 
-frename is a desktop app for the hour before you start editing. You open a folder of raw video,
-watch each clip, and tag what you see. When you move to the next clip, frename renames the one you
-left with its tags, so `MVI_0410.mp4` becomes `pick.wide.night.city.MVI_0410.mp4`. Your markers,
-in and out points and comments go into the video file, where Premiere Pro reads them.
+[Download for Windows](https://github.com/Zelenov/frename/releases/latest/download/frename-win-Setup.exe)
+or get the [Linux AppImage and the Windows zip](https://github.com/Zelenov/frename/releases/latest).
+A Mac version is not available yet. The app is in English, Russian, German, French, Spanish,
+Italian, Brazilian Portuguese, Ukrainian, Serbian, Japanese, Korean and Chinese.
 
-I made frename after a trip to Africa, when I came home with 2,000 clips named `MVI_0001.MP4` to
-`MVI_2000.MP4`. With frename I watched and tagged every clip in a few seconds each, so the project
-was already organized when I opened Premiere.
+![The frename window with a tagged folder of clips, markers on the timeline and an AI description of the open clip](docs/images/main.jpg)
 
-**Download:** [Windows installer](https://github.com/Zelenov/frename/releases/latest/download/frename-win-Setup.exe),
-[all downloads (Windows zip, Linux AppImage)](https://github.com/Zelenov/frename/releases/latest).
-frename is free and open source (MIT license).
+## Describe each clip with AI
 
-## What you can do with it
+frename can write a short description of each clip and list what happens at which second, even
+in a clip with no speech. The description goes into the clip's comment, so you can search for it
+later, and Premiere Pro shows it in the Description column. AI can also suggest tags, and in and
+out points for the part worth keeping.
 
-- **Tag clips in seconds.** Click a tag, or move through the tag grid with the arrow keys and press
-  `Shift+Space`. Copy one clip's tags to the next with `Ctrl+C` and `Ctrl+V`. The tags become part
-  of the file name, so your file manager, your editing app and your backup tools all see them.
-- **Mark the moments that matter.** Press `F2` to drop a marker and name it, hold `F2` to mark a
-  range, and press `[` and `]` to set the usable part of the clip. Premiere Pro shows the markers on
-  the clip, with their names, lengths and colors, and turns the in and out points into a subclip.
-  Describe with AI can suggest in and out points: its AI pill sets them in one click, rounded to
-  whole seconds. Copy the markers as text, or export them to a `.txt` file, from the marker list.
-- **Write a comment for each clip.** By default the comment is saved inside the video, where
-  Premiere Pro shows it in the Description column and finds it by search.
-- **Let AI describe your footage.** Describe with AI writes a short summary of each clip and marks
-  what happens when, even in clips with no speech. It can also suggest an in and out point and
-  name a single marker, or every unnamed marker in one click. You use your own Anthropic,
-  OpenAI or Google API key (Claude, ChatGPT or Gemini), each with a Get a key button in Settings;
-  Haiku costs about $10 per 1,000 one-minute clips. One
-  button in the corner of the comment box describes the clip you have open, with no batch panel, and
-  waits its turn behind a running job; press it again while it waits to take it back. Notes for
-  the AI, kept per folder, tell it what only you know: who is who, what to mark, which tags to suggest.
-- **Prepare a whole folder in one run.** Prepare clips makes the subtitles, then the description (with its markers, comment and tag
-  suggestions), of every clip you check, under a spending cap you set, skips what is already done so a stopped
-  run is resumed by running it again, and then groups clips that look like the same shot.
-- **Get subtitles from speech.** Generate subtitles sends the audio to Soniox, a paid
-  speech-to-text service, and saves an `.srt` file, a Premiere Pro transcript, or both next to
-  the video. It also saves a `.capt` file next to the video: the whole transcript as plain text.
-  frename does not use it yet. A button in the corner of the comment box does it for the clip you
-  have open.
-- **Find any clip later.** Search the list by name, tag or comment, and filter it to untagged clips
-  or clips with subtitles, comments or markers.
-- **Work on many clips at once.** Batch mode runs one action on all the clips you check, for
-  example rotating them, moving comments between the video and text files, or turning comment
-  lines into markers, or writing each clip's markers to a text file. A long action runs in the
-  background while you keep working; click the strip above the toolbar under the file list to see
-  its progress or cancel it.
-- **Never lose your work.** `Ctrl+Z` undoes almost everything, and frename keeps a recovery file
-  of the open clip a second after each change, so a crash or a power cut does not cost you your
-  tags, comments or markers. A line under the file name says "All changes saved", or that they
-  wait in the recovery file until you leave the clip.
+![The comment box with an AI description of the clip, next to the video](docs/images/describe.jpg)
 
-![The frename window, with labels for each part](docs/frename-screenshot.jpg)
+You use your own key for Claude, ChatGPT or Gemini, and Settings has a button that opens the
+page where you get one. With Claude Haiku, 1,000 clips of one minute each cost about $10.
 
-The window has three columns. On the left is the video player with the subtitle and marker lists.
-In the middle is the list of files in the folder. On the right are the tag search, your starred
-tags, all the folder's tags, the new file name (drag its tags to reorder them) and the clip's
-comment.
+## Mark key moments and the part to keep
 
-To find a moment in a long clip by its words, press `Ctrl+F` over the video: the subtitle list and
-the marker list narrow to what matches, and `Enter` jumps from match to match.
+Press `F2` to put a marker at a moment you want to find again, and give it a name and a color.
+Press `[` and `]` to set the in and out points, so only the good part of the clip goes into
+the edit. Premiere Pro shows the markers on the clip, and it uses the in and out points as a
+subclip.
 
-## How a session goes
+![The marker list over the video, and the colored markers and the in and out range on the timeline](docs/images/markers.jpg)
 
-1. Open a folder with the **Open a folder** button under the file list, or drag a folder onto the
-   window. The installed Windows version also adds "Open in frename" to the right-click menu of
-   folders in Explorer. The arrow next to the button (or `Ctrl+R`) lists the last ten folders
-   you worked in, each with the clip you had open, and so does the empty start screen.
-2. The first clip starts playing.
-3. Tag what you see.
-4. Press `[` and `]` to mark the usable part, and `F2` at a moment you want to find again. Press
-   `F2` again right away to name the marker, then `Enter`.
-5. Type a comment for the clip, press `Esc` to leave the comment box, and press `PgDn` to go
-   to the next clip. frename renames the clip you left and saves its markers.
-6. On Windows, drag finished clips from the list into Premiere Pro. frename saves each clip
-   first, so it arrives with its new name and everything you marked. Nothing is moved.
+## Tag clips so the footage has a structure
 
-The next time you start frename, it opens the same folder at the same clip, two seconds before
-where you stopped watching. The [guide](docs/guide.md) has more ways to open a folder or a
-single clip.
+Click the tags that fit a clip, or pick them with the keyboard, and frename adds them to the
+file name when you move to the next clip. `MVI_0207.mp4` becomes
+`pick.medium.people.action.MVI_0207.mp4`, so your file manager, Premiere Pro and your backup
+tools all see the tags and can sort by them.
 
-## Keyboard shortcuts
+![The same folder before and after tagging, with the camera's file names on the left and the tagged names on the right](docs/images/tags.jpg)
 
-### Files
-| Key | Action |
-|---|---|
-| `PgDn` | Next file (renames the file you leave) |
-| `PgUp` | Previous file (renames the file you leave) |
-| `Ctrl+R` | Recent folders: `↑` `↓` walk the list, `Enter` opens the folder with its last clip, `Esc` closes it |
-| Double-click a file | Rename it by hand: `Enter` renames, `Esc` cancels |
-| `Ctrl+click` a file | Add it (and the open one) to a selection, or drop it if already selected |
-| `Shift+click` a file | Select every file between it and the last `Ctrl`-clicked one |
-| Right-click a file or the open file's name | Menu: show it in Explorer, copy its full path or its name (`Esc` or a click outside closes it) |
-| `F11` | Show the open file in Explorer, with the file selected (Linux: in the file manager) |
-| `Shift+F11` | Copy the open file's full path (`D:\footage\clip.mp4`) |
-| `Ctrl+F11` | Copy the open file's name (`clip.mp4`) |
-| `Escape` | Leaves a selection made with `Ctrl`/`Shift`+click (batch mode; a running action goes on); otherwise clears the file and tag searches |
+## Work on a whole folder at once
 
-### Tags
-| Key | Action |
-|---|---|
-| `↑` `↓` `←` `→` | Move the selection in the tag grid |
-| `Shift+Space` | Tag or untag the file with the selected tag |
-| Any letter, `Backspace` | Type into the tag search |
-| `Enter` | Add the typed tag, or the selected unsaved (○) tag, to the folder's tags |
-| `Delete` | Delete the selected tag from the folder's tags |
-| `Escape` | Clear the tag and file searches, or leave a `Ctrl`/`Shift`+click selection first if one is running (see Files above) |
-| `Ctrl+C` | Copy the file's tags (and its new name to the clipboard) |
-| `Ctrl+V` | Replace the file's tags with the copied ones |
-| `Ctrl+Z` | Undo |
-| `Ctrl+Y` or `Ctrl+Shift+Z` | Redo |
-| Middle-click a chip in the file name | Untag the file |
-| `F6` / `Shift+F6` | Add the tag Describe with AI suggests most, or every one it suggests |
-| `Ctrl+F6` | Ask the AI to suggest tags for the open clip (a full description request, see the guide) |
+Batch mode runs one action on every clip you check. For example, it makes subtitles from the
+speech, describes the clips with AI, suggests tags or turns the clips that were filmed on their
+side. A long action runs in the background, and you can keep working while it runs.
 
-### Video
-| Key | Action |
-|---|---|
-| `Space` | Play / pause (or click the picture) |
-| `F1` | Back 10 seconds |
-| `F3` | Forward 10 seconds |
-| `Alt+←` / `Alt+→` | One frame back / forward (pauses; hold to keep stepping) |
-| Click the time | Type a time and press `Enter` to go there (`1:05`, `00:01:05.250`, `65.25`, or with frames `00:01:05:12`, `;` for drop-frame); `Esc` leaves |
-| Right-click the time, `Ctrl+Shift+C` | Copy the playhead's timecode (`00:01:05.250`, or in the style Settings → Time display picks) |
-| `Ctrl+Shift+V` | Go to the timecode on the clipboard |
-| `Home` | Go to the start of the clip |
-| `[` | Set the in point |
-| `]` | Set the out point |
-| `Ctrl+F` | Search the subtitle and marker lists over the video: `Enter` or the arrows beside the field: next match, `Shift+Enter` previous, `Esc` clears, then closes |
-| `F2` | Add a marker; `F2` again within a second and a half, or on a marker, names it |
-| Hold `F2` | Mark a range: from where you pressed to where you let go |
-| `Shift+F2` | Delete the marker under the playhead |
-| `Ctrl+F2` | Describe the marker under the playhead with AI |
-| `Shift+F1` / `Shift+F3` | Jump to the previous / next marker |
-| `Shift` + drag the progress bar | Snap to the nearest marker |
-| `Alt` + drag the progress bar (paused) | Mark a range |
-| `F12` | Save the current frame as a JPEG next to the video |
-| `F5` | Fullscreen on / off (or double-click the picture): the video takes the whole monitor |
-| `Ctrl+Alt+←` / `Ctrl+Alt+→` | Rotate the clip 90° left / right |
-| `Escape` | Leave fullscreen |
+![Batch mode with every clip of the folder checked and the Prepare clips action selected](docs/images/batch.jpg)
 
-### Settings
+## What you get in Premiere Pro
 
-| Key | Action |
-|---|---|
-| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous page |
-| `Tab` / `Shift+Tab` | Next / previous option on the page (a blue ring shows which) |
-| `Space` | Check or pick the option with the ring, press its button, or step a list to its next choice |
-| `Enter` | Press the button with the ring |
-| `Escape` | Close Settings (while you remove or replace a key, Esc cancels that first) |
+When you import the clips into Premiere Pro, you get the following:
 
-The [guide](docs/guide.md) explains which keys a text box takes while you type, and everything
-else in detail: tags, markers, comments, search, subtitles, batch mode, Describe with AI and
-Settings.
+- the tags in each file name, so you can find and sort the clips in the Project panel;
+- the markers on each clip, with their names, colors and lengths;
+- the in and out points, which Premiere Pro uses as a subclip;
+- the comment in the Description column, where search finds it;
+- the subtitles as an `.srt` file or as a Premiere Pro transcript, if you made them.
 
-## Your files and your data
+On Windows you can drag clips from frename straight into Premiere Pro.
 
-- Tags live in the file names, and each folder's tag list lives in a `.frename` file inside that
-  folder, so both travel with the footage.
-- Markers, in and out points and comments are saved inside mp4 and mov files. Settings can keep
-  comments in a `.comment.txt` file next to the video instead. Formats such as mkv cannot hold
-  them, so for those frename keeps the comment and the in and out points in the text file, and
-  markers are not available.
-- frename sends your footage nowhere unless you ask. Describe with AI sends frames and
-  subtitles to Anthropic, OpenAI or Google, depending on the model you chose, and Generate subtitles sends the audio to Soniox, both with your own API
-  key. Your notes for the AI go with them, if the folder has any. Your keys are kept in the system's password store. On Windows that is Credential Manager.
-- On Windows, frename checks GitHub once a day for a new version. You can turn that off in
-  Settings, and nothing is downloaded until you click **Update and restart**. Settings → Updates
-  lists what changed in each version, before and after you update. The Linux AppImage does not
-  update itself.
+## Your files and your keys
 
-## Install
+- frename keeps everything in the clips and next to them, so your work goes with the footage
+  when you copy the folder.
+- frename sends nothing anywhere unless you ask. When you ask for an AI description or for
+  subtitles, the frames or the sound go to the service you chose, with your own key.
+- Your keys stay in the password store of your computer.
+- `Ctrl+Z` undoes almost everything, and frename keeps your unsaved work safe if the computer
+  stops.
+- frename is open source under the MIT license.
 
-**Windows 10 or 11 (64-bit):** download
-[frename-win-Setup.exe](https://github.com/Zelenov/frename/releases/latest/download/frename-win-Setup.exe)
-and run it. It installs without questions and starts frename. Video playback is built in, so you
-don't need to install anything else. Windows may warn about an unknown publisher the first time.
-If it does, click **More info**, then **Run anyway**. frename keeps its settings in
-`%LocalAppData%\frename`. Uninstalling removes them, but your tags and comments stay with your
-files.
+## More
 
-If you prefer not to install, use the Windows zip from the
-[latest release](https://github.com/Zelenov/frename/releases/latest). Right-click it, open
-**Properties**, tick **Unblock**, unzip it anywhere and run `frename.exe`. The zip keeps its
-settings in its own folder and updates itself too.
-
-If you used the zip of version 0.66 or older, the new frename looks for its folder in Downloads,
-Desktop and Documents on the first start and offers to import your settings and recent folders.
-If the folder was somewhere else, use **Settings → Updates → Import from an old frename
-folder…**. After that you can delete the old folder, and uninstall GStreamer if you installed it
-only for frename.
-
-**Linux (64-bit Intel/AMD, Ubuntu 24.04, Linux Mint 22, Fedora 40, Debian 13 or newer):** download
-the `.AppImage` from the [latest release](https://github.com/Zelenov/frename/releases/latest), make
-it executable with `chmod +x frename-*.AppImage`, and run it. Video playback is built in, so you
-don't need to install anything else. If it says FUSE is missing, run it with
-`--appimage-extract-and-run`. frename keeps its settings in `~/.local/share/frename`.
-
-The interface is in English, Russian, German, French, Spanish, Italian, Brazilian Portuguese, Ukrainian, Serbian (Cyrillic or Latin), Japanese, Korean and Chinese (Simplified or Traditional).
-
-## Building from source
-
-```sh
-cargo build
-cargo run
-```
-
-You need Rust and the GStreamer development files. See [GSTREAMER_SETUP.md](GSTREAMER_SETUP.md).
-
-frename is written in Rust. The interface uses [iced](https://iced.rs), and video plays through
-[GStreamer](https://gstreamer.freedesktop.org). The AI descriptions come from
-[clipscribe](https://github.com/Zelenov/clipscribe) and the subtitles from
-[sonisub](https://github.com/Zelenov/sonisub), two small libraries I wrote for frename. Every
-change is tested on Windows and Linux in GitHub Actions, and every release is built and published
-from there.
+- [The guide](docs/guide.md) explains every feature, the keyboard shortcuts, the install and
+  where frename keeps your data.
+- [Building frename from source](docs/development.md) is for developers.
+- [What changed in each version](version.md).
