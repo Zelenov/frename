@@ -3707,8 +3707,10 @@ fn check_new_file_name(
     if typed.ends_with('.') || typed.ends_with(' ') {
         return Err(folder::RenameProblem::Trailing);
     }
-    // A change of case only is the same file on Windows, not a clash.
-    if !typed.eq_ignore_ascii_case(current) && folder.join(typed).exists() {
+    // A change of case only is the same file on Windows, not a clash; on Linux the other spelling
+    // can be another clip (#379).
+    let target = folder.join(typed);
+    if target.exists() && !frename_core::is_same_file(&folder.join(current), &target) {
         return Err(folder::RenameProblem::Exists);
     }
     Ok(())
@@ -6010,6 +6012,25 @@ mod tests {
             ),
             Ok(()),
             "case-only rename"
+        );
+    }
+
+    /// Issue #379: on a case-sensitive file system `GOAT.mp4` next to `goat.mp4` is another
+    /// clip, so typing it is refused like any taken name.
+    #[test]
+    fn a_case_only_name_of_another_clip_is_taken() {
+        let folder = frename_core::test_support::fresh_dir("rename-case-other");
+        std::fs::write(folder.join("goat.mp4"), b"a").expect("write");
+        std::fs::write(folder.join("GOAT.mp4"), b"b").expect("write");
+        if frename_core::is_same_file(&folder.join("goat.mp4"), &folder.join("GOAT.mp4")) {
+            return; // A case-insensitive file system holds only one of them.
+        }
+
+        assert_eq!(
+            crate::features::folder_workspace::state::check_new_file_name(
+                &folder, "goat.mp4", "GOAT.mp4"
+            ),
+            Err(crate::features::folder::RenameProblem::Exists)
         );
     }
 

@@ -1,3 +1,7 @@
+# 0.193
+## Fixed
+- On Linux, renaming a clip to a name that differs from another clip's only by case (`goat.mov` → `GOAT.mov` next to an existing `GOAT.mov`) no longer replaces that other clip: the name is refused as taken. On Windows a change of case still renames the clip itself, now also for non-Latin letters.
+
 # 0.192
 ## Fixed
 - A crash or a full disk while frename saves a comment to a `.comment.txt` file, or writes markers to a text file, no longer leaves that file empty or cut off.

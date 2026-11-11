@@ -323,19 +323,37 @@ impl FileTagger {
     }
 }
 
+/// Whether `a` and `b` name the same existing file: the same path once resolved, which on a
+/// case-insensitive file system includes two spellings that differ only by case (any letters,
+/// not only ASCII). `false` when either does not exist.
+///
+/// Some Windows drives (RAM disks, a few network shares) cannot resolve a path; there, two
+/// existing names in one folder that differ only by case are the same file, as Windows' file
+/// systems are case-insensitive.
+pub fn is_same_file(a: &Path, b: &Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => {
+            cfg!(windows)
+                && a.exists()
+                && b.exists()
+                && a.parent() == b.parent()
+                && a.file_name().map(|n| n.to_string_lossy().to_lowercase())
+                    == b.file_name().map(|n| n.to_string_lossy().to_lowercase())
+        }
+    }
+}
+
 /// Whether `new_path`, or one of the sidecars that travel with it (comment, subtitle,
 /// transcript, CAPT, screenshot at a time the old clip has one), already exists — checked before any write a rename would otherwise make, since
 /// renaming onto an existing file (issue #84) or its sidecar would silently replace it.
 ///
-/// A `new_path` that differs from `old_path` only by case is never "taken": on Windows' case-
-/// insensitive, case-preserving filesystem it is the same file being renamed, not another one,
-/// and a rename that only fixes case (`clip.MOV` → `clip.mov`) must still go through.
+/// A `new_path` that is the same file on disk as `old_path` is never "taken": on Windows' case-
+/// insensitive, case-preserving file system `clip.MOV` → `clip.mov` renames the file to itself,
+/// and that fix of case must still go through. On a case-sensitive one (Linux) `GOAT.mov` next
+/// to `goat.mov` is another clip, so it is taken like any other name (#379).
 pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
-    let same_file_other_case = old_path
-        .file_name()
-        .zip(new_path.file_name())
-        .is_some_and(|(a, b)| a.eq_ignore_ascii_case(b));
-    if same_file_other_case {
+    if is_same_file(old_path, new_path) {
         return false;
     }
     [
@@ -692,5 +710,19 @@ AI: A walk.
         FileTagger::comment_to_markers(&file).expect("move");
         assert_eq!(FileTagger::load_markers(&file).expect("markers").len(), 1);
         let _ = std::fs::remove_dir_all(file.parent().unwrap());
+    }
+
+    #[test]
+    fn a_file_is_the_same_file_as_itself_and_not_as_another() {
+        let dir = crate::test_support::fresh_dir("same-file");
+        let a = dir.join("a.mp4");
+        let b = dir.join("b.mp4");
+        std::fs::write(&a, b"a").expect("a");
+        std::fs::write(&b, b"b").expect("b");
+
+        assert!(super::is_same_file(&a, &a));
+        assert!(super::is_same_file(&a, &dir.join(".").join("a.mp4")));
+        assert!(!super::is_same_file(&a, &b));
+        assert!(!super::is_same_file(&a, &dir.join("missing.mp4")));
     }
 }
