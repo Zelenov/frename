@@ -63,7 +63,7 @@ pub fn try_save_comment(file_path: &Path, comment: &str) -> std::io::Result<()> 
             _ => Ok(()),
         }
     } else {
-        std::fs::write(path, format!("{UTF8_BOM}{trimmed}"))
+        crate::write_atomically(&path, format!("{UTF8_BOM}{trimmed}"))
     }
 }
 

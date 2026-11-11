@@ -264,9 +264,9 @@ pub fn markers_text_path(video: &Path) -> PathBuf {
 }
 
 /// Write [`markers_text`] of `markers` to `path`: UTF-8 without a byte order mark, with the line
-/// breaks of this system.
+/// breaks of this system. The file is replaced whole, never left cut off.
 pub fn write_markers_text(path: &Path, markers: &[Marker]) -> std::io::Result<()> {
-    std::fs::write(path, native_line_breaks(&markers_text(markers)))
+    crate::write_atomically(path, native_line_breaks(&markers_text(markers)))
 }
 
 /// A comment line that starts with a time: the marker it stands for.

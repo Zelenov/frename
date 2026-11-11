@@ -406,13 +406,8 @@ fn write_file(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let path = folder.join(TAG_FILE_NAME);
     let temp_path = folder.join(TAG_FILE_TEMP_NAME);
-    std::fs::write(&temp_path, render(file)?)
-        .map_err(|e| with_path("write tag file", &temp_path, e))?;
-    std::fs::rename(&temp_path, &path).map_err(|e| {
-        // The scratch file would otherwise be left behind next to the user's footage.
-        let _ = std::fs::remove_file(&temp_path);
-        with_path("replace tag file", &path, e)
-    })?;
+    crate::atomic_write::replace_through(&path, &temp_path, render(file)?.as_bytes())
+        .map_err(|e| with_path("replace tag file", &path, e))?;
     Ok(())
 }
 
