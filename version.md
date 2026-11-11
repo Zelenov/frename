@@ -1,6 +1,6 @@
 # 0.192
 ## Fixed
-- A crash or a full disk while frename saves a comment kept in a `.comment.txt` file, or exports markers to `.markers.txt`, no longer leaves that file empty or cut off: the new text is written next to it first and then takes its place.
+- A crash or a full disk while frename saves a comment to a `.comment.txt` file, or writes markers to a text file, no longer leaves that file empty or cut off.
 
 # 0.191
 ## Fixed

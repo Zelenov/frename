@@ -407,7 +407,7 @@ fn write_file(
     let path = folder.join(TAG_FILE_NAME);
     let temp_path = folder.join(TAG_FILE_TEMP_NAME);
     crate::atomic_write::replace_through(&path, &temp_path, render(file)?.as_bytes())
-        .map_err(|e| with_path("replace tag file", &path, e))?;
+        .map_err(|e| with_path("write or replace tag file", &path, e))?;
     Ok(())
 }
 

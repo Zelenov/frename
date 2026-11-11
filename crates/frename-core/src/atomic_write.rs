@@ -8,8 +8,15 @@
 
 use std::path::{Path, PathBuf};
 
-/// Write `contents` to `path`, replacing what is there in one step.
-pub fn write_atomically(path: &Path, contents: impl AsRef<[u8]>) -> std::io::Result<()> {
+/// Write `contents` to `path`, replacing what is there in one step. A read-only file is refused,
+/// as an in-place write refuses it: a rename would replace it on macOS and Linux and drop the lock.
+pub(crate) fn write_atomically(path: &Path, contents: impl AsRef<[u8]>) -> std::io::Result<()> {
+    if std::fs::metadata(path).is_ok_and(|m| m.permissions().readonly()) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!("{} is read-only", path.display()),
+        ));
+    }
     replace_through(path, &scratch_path(path), contents.as_ref())
 }
 
@@ -25,11 +32,23 @@ pub(crate) fn replace_through(path: &Path, scratch: &Path, contents: &[u8]) -> s
     })
 }
 
-/// `.clip.mp4.comment.txt.frename-tmp` next to `clip.mp4.comment.txt`: hidden on macOS and Linux,
-/// and never a video, so a folder scan does not list it.
+/// `.frename-<hash of the file name>.tmp` next to the file. The length is fixed, so a file whose
+/// name is close to the 255-character limit still gets one; the hash keeps two files of one
+/// folder written at once (a batch job and the open clip) apart. Never a video, so a folder scan
+/// does not list it; the leading dot hides it on macOS and Linux. Not given the hidden attribute
+/// on Windows: the rename would carry it over to the file itself.
 fn scratch_path(path: &Path) -> PathBuf {
-    let name = path.file_name().unwrap_or_default().to_string_lossy();
-    path.with_file_name(format!(".{name}.frename-tmp"))
+    // FNV-1a: stable across Rust versions, so a scratch file a crash left is written over by the
+    // next save of the same file.
+    let hash = path
+        .file_name()
+        .unwrap_or_default()
+        .as_encoded_bytes()
+        .iter()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |hash, &byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+        });
+    path.with_file_name(format!(".frename-{hash:016x}.tmp"))
 }
 
 #[cfg(test)]
@@ -90,6 +109,51 @@ mod tests {
 
         assert!(target.is_dir());
         assert!(!scratch_path(&target).exists());
+    }
+
+    /// A clip name near the limit: the comment file fits, so its scratch file must fit too.
+    #[test]
+    fn a_comment_file_with_a_name_near_the_limit_is_written() {
+        let dir = crate::test_support::fresh_dir("atomic-write-long");
+        let file = dir.join(format!("{}.mp4.comment.txt", "a".repeat(238)));
+        assert_eq!(file.file_name().expect("name").len(), 254);
+
+        write_atomically(&file, "new").expect("write");
+
+        assert_eq!(std::fs::read_to_string(&file).expect("read"), "new");
+    }
+
+    /// Two files of one folder get different scratch files.
+    #[test]
+    fn each_file_has_its_own_scratch_file() {
+        let dir = Path::new("shoots");
+        assert_ne!(
+            scratch_path(&dir.join("a.mp4.comment.txt")),
+            scratch_path(&dir.join("b.mp4.comment.txt"))
+        );
+    }
+
+    /// A read-only file is refused and kept, as `std::fs::write` refused it.
+    #[test]
+    fn a_read_only_file_is_refused_and_kept() {
+        let dir = crate::test_support::fresh_dir("atomic-write-read-only");
+        let file = dir.join("clip.mp4.comment.txt");
+        std::fs::write(&file, "locked").expect("old");
+        let mut permissions = std::fs::metadata(&file).expect("meta").permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&file, permissions.clone()).expect("lock");
+
+        let result = write_atomically(&file, "new");
+
+        assert_eq!(
+            result.expect_err("refused").kind(),
+            std::io::ErrorKind::PermissionDenied
+        );
+        assert_eq!(std::fs::read_to_string(&file).expect("read"), "locked");
+        assert!(!scratch_path(&file).exists());
+        #[allow(clippy::permissions_set_readonly_false)]
+        permissions.set_readonly(false);
+        std::fs::set_permissions(&file, permissions).expect("unlock");
     }
 
     /// The file is replaced by a new one, not rewritten in place: an in-place write truncates the

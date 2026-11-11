@@ -69,15 +69,20 @@ What a crash, a kill or a full disk in the middle of each write leaves behind:
 
 | Write | How | Torn write possible? |
 |---|---|---|
-| Rename of the clip and its sidecars | `std::fs::rename` within one folder | No: the file has the old name or the new one. A crash between the clip and a sidecar leaves the sidecar under the old name; the next save moves it. |
+| Rename of the clip and its sidecars | `std::fs::rename` within one folder | Each rename is whole, but the clip is renamed first and its sidecars after it: a crash in between leaves the comment, subtitles and screenshots under the old name, and nothing re-attaches them (the journal entry, keyed by the old path, is kept aside as "clip gone"). Filed as a bug. |
 | Folder tag file `.frename` | scratch `.frename.tmp`, renamed over | No (already so). |
-| `clip.mp4.comment.txt` | was `std::fs::write` (truncate, then write) | **Was yes:** a crash after the truncate left the comment empty or cut off. Now `write_atomically`: a hidden scratch file next to it, renamed over. |
-| `clip.markers.txt` (marker export) | was `std::fs::write` | **Was yes**, same fix. |
+| `clip.mp4.comment.txt` | was `std::fs::write` (truncate, then write) | **Was yes:** a crash after the truncate left the comment empty or cut off. Now `write_atomically`: a scratch file `.frename-<hash>.tmp` next to it, renamed over. A read-only file is refused, as before. |
+| Marker text files (`clip.markers.txt`, Export… to any `.txt`) | was `std::fs::write` | **Was yes**, same fix. |
 | Rotation | in place, a few bytes per track; a failed write puts back what it wrote | A kill between two tracks of a multi-track file leaves them turned differently. Rare (one 36-byte write per track) and visible; not changed. |
-| XMP inside the video (comment, in/out, markers) | Adobe XMP Toolkit, in place | Possible: the toolkit rewrites the XMP box in the file. A safe update would copy the whole video (gigabytes) on every save, and `xmp_toolkit` 1.12 does not expose the toolkit's safe-update flag. Not changed: the journal keeps the edits until they read back from the file, so a torn XMP write is restored on the next start. |
+| XMP inside the video (comment, in/out, markers) | Adobe XMP Toolkit, in place | Possible: the toolkit rewrites the XMP box in the file. A safe update would copy the whole video (gigabytes) on every save, and `xmp_toolkit` 1.12 does not expose the toolkit's safe-update flag. Not changed. The journal does not reapply edits after a torn XMP write: the write changed the clip's time (and often its size), so the entry is kept aside in `recovery/kept/` with a readable `.txt` copy, and the video itself may need checking. |
 
 The scratch files are not flushed (`fsync`) before the rename: these writes run on the interface
 thread, a flush can take tens of milliseconds on Windows, and a power cut is what the journal
 (which does flush) covers.
+
+A scratch file a crash leaves behind is written over by the next save of the same file. On
+Windows it is visible in Explorer (a leading dot hides it only on macOS and Linux; the hidden
+attribute would pass to the file through the rename), and after the clip is renamed nothing
+removes it.
 
 Not done from part 3: writing the XMP comment and markers early while the clip plays on Windows.

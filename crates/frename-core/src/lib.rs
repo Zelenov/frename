@@ -30,7 +30,7 @@ pub use app_dir::{
     app_data_dir, appimage_gstreamer_registry, is_appimage, log_path, set_app_data_dir,
     DATA_DIR_VAR,
 };
-pub use atomic_write::write_atomically;
+pub(crate) use atomic_write::write_atomically;
 pub use db::{
     AppDatabase, AppSettings, AppStateStore, BatchRun, Initializable, LoggingAppStateStore,
     StoredTagStore, UpdateCheckState, VideoSettings, WindowGeometry,
