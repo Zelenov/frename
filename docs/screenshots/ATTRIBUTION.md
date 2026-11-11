@@ -1,9 +1,9 @@
 # Footage of the README images
 
-The clips in this folder are short cuts of two films by the Blender Foundation, used under the
+The clips in `footage/` are short cuts of two films by the Blender Foundation, used under the
 [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/) license. They
 were cut, cropped to 16:9 in the middle, scaled to 640x360 and re-encoded without sound for
-frename's README images (`docs/images/`, made by `docs/images/render.sh`).
+frename's README images (`docs/images/`, made by `docs/screenshots/render-readme.sh`).
 
 | Clips | Film | Credit |
 |---|---|---|
@@ -15,20 +15,13 @@ Source files: `videos/tears-of-steel-battle-clip-medium.mp4` and `videos/sintel-
 
 ```sh
 ffmpeg -ss <start> -i <source> -t <length> -an -vf "crop=ih*16/9:ih,scale=640:360" -c:v libx264 -preset veryslow \
-  -crf 31 -pix_fmt yuv420p -g 50 -movflags +faststart -map_metadata -1 -fflags +bitexact <clip>
+  -crf 24 -pix_fmt yuv420p -g 50 -movflags +faststart -map_metadata -1 -map_chapters -1 -fflags +bitexact <clip>
 ```
 
 | Clip | Source | Start (s) | Length (s) |
 |---|---|---|---|
-| `tears-of-steel-tower.mp4` | Tears of Steel | 3 | 5 |
 | `tears-of-steel-thom.mp4` | Tears of Steel | 14 | 12 |
-| `tears-of-steel-battle.mp4` | Tears of Steel | 37.5 | 7 |
-| `tears-of-steel-rope.mp4` | Tears of Steel | 49.5 | 6 |
-| `tears-of-steel-organ.mp4` | Tears of Steel | 60 | 6 |
-| `sintel-mountains.mp4` | Sintel | 0 | 8 |
-| `sintel-city.mp4` | Sintel | 62 | 8 |
-| `sintel-hut.mp4` | Sintel | 33 | 8 |
-| `sintel-rooftop.mp4` | Sintel | 94 | 7 |
 | `sintel-dragon.mp4` | Sintel | 103 | 8 |
+| `sintel-city.mp4` | Sintel | 62 | 8 |
 
 The clip names in the README images (`MVI_0201.MP4` and so on) are made up for the demo.

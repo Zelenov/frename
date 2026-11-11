@@ -21,8 +21,8 @@ published from there. `CLAUDE.md` lists the checks CI runs.
 ## README images
 
 The images in `docs/images/` are screenshots of the app in demo mode, made by
-`docs/images/render.sh` from the scenarios `docs/screenshots/readme-*.toml`. The footage in them
-is in `docs/screenshots/footage/`, with its license in `ATTRIBUTION.md` there. CI renders them in
-`ci-linux` on every pull request (step "README images"), so a scenario that no longer renders
-fails the check, and the rendered images can be downloaded from the run as an artifact to compare
-with the committed ones.
+`docs/screenshots/render-readme.sh` from the scenarios `docs/screenshots/readme-*.toml`. The
+footage in them is in `docs/screenshots/footage/`, with its license in
+`docs/screenshots/ATTRIBUTION.md`. CI renders them in `ci-linux` on every pull request (step
+"README images"), so a scenario that no longer renders fails the check, and the rendered images
+can be downloaded from the run as an artifact to compare with the committed ones.

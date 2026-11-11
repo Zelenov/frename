@@ -1,14 +1,14 @@
-# README image (docs/images/, made by docs/images/render.sh): the same folder before tagging, with
-# the camera's names, for the before/after picture of the file list.
+# README image (docs/screenshots/render-readme.sh): the folder of readme-main.toml before
+# tagging, with the camera's names, for the before/after picture of the file list.
+open = "MVI_0207.mp4"
 source = "footage"
 folder_name = "Day 3"
-open = "MVI_0207.mp4"
 seek = 6.0
 window = [1600, 860]
 panels = [820, 380]
 
 [[files]]
-from = "sintel-mountains.mp4"
+from = "sintel-city.mp4"
 name = "MVI_0201.mp4"
 
 [[files]]
@@ -16,11 +16,11 @@ from = "sintel-city.mp4"
 name = "MVI_0202.mp4"
 
 [[files]]
-from = "sintel-hut.mp4"
+from = "tears-of-steel-thom.mp4"
 name = "MVI_0203.mp4"
 
 [[files]]
-from = "sintel-rooftop.mp4"
+from = "sintel-dragon.mp4"
 name = "MVI_0204.mp4"
 
 [[files]]
@@ -28,7 +28,7 @@ from = "sintel-dragon.mp4"
 name = "MVI_0205.mp4"
 
 [[files]]
-from = "tears-of-steel-tower.mp4"
+from = "sintel-city.mp4"
 name = "MVI_0206.mp4"
 
 [[files]]
@@ -36,15 +36,15 @@ from = "tears-of-steel-thom.mp4"
 name = "MVI_0207.mp4"
 
 [[files]]
-from = "tears-of-steel-battle.mp4"
+from = "tears-of-steel-thom.mp4"
 name = "MVI_0208.mp4"
 
 [[files]]
-from = "tears-of-steel-rope.mp4"
+from = "sintel-dragon.mp4"
 name = "MVI_0209.mp4"
 
 [[files]]
-from = "tears-of-steel-organ.mp4"
+from = "tears-of-steel-thom.mp4"
 name = "MVI_0210.mp4"
 
 [[files]]
@@ -52,5 +52,5 @@ from = "sintel-city.mp4"
 name = "MVI_0211.mp4"
 
 [[files]]
-from = "tears-of-steel-battle.mp4"
+from = "sintel-dragon.mp4"
 name = "MVI_0212.mp4"

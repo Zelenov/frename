@@ -4,10 +4,6 @@ Everything frename does, in detail: how to install it, a session from start to e
 keyboard shortcut, each feature, and where frename keeps your data. The [README](../README.md) is
 the short overview.
 
-I made frename after a trip to Africa, when I came home with 2,000 clips named `MVI_0001.MP4` to
-`MVI_2000.MP4`. With frename I watched and tagged every clip in a few seconds each, so the project
-was already organized when I opened Premiere.
-
 ## Install
 
 **Windows 10 or 11 (64-bit):** download
@@ -38,6 +34,10 @@ don't need to install anything else. If it says FUSE is missing, run it with
 The interface is in English, Russian, German, French, Spanish, Italian, Brazilian Portuguese, Ukrainian, Serbian (Cyrillic or Latin), Japanese, Korean and Chinese (Simplified or Traditional).
 
 ## What frename does
+
+I made frename after a trip to Africa, when I came home with 2,000 clips named `MVI_0001.MP4` to
+`MVI_2000.MP4`. With frename I watched and tagged every clip in a few seconds each, so the project
+was already organized when I opened Premiere.
 
 - **Tag clips in seconds.** Click a tag, or move through the tag grid with the arrow keys and press
   `Shift+Space`. Copy one clip's tags to the next with `Ctrl+C` and `Ctrl+V`. The tags become part
@@ -76,16 +76,6 @@ The interface is in English, Russian, German, French, Spanish, Italian, Brazilia
   of the open clip a second after each change, so a crash or a power cut does not cost you your
   tags, comments or markers. A line under the file name says "All changes saved", or that they
   wait in the recovery file until you leave the clip.
-
-![The frename window, with labels for each part](frename-screenshot.jpg)
-
-The window has three columns. On the left is the video player with the subtitle and marker lists.
-In the middle is the list of files in the folder. On the right are the tag search, your starred
-tags, all the folder's tags, the new file name (drag its tags to reorder them) and the clip's
-comment.
-
-To find a moment in a long clip by its words, press `Ctrl+F` over the video: the subtitle list and
-the marker list narrow to what matches, and `Enter` jumps from match to match.
 
 ![The frename window, with labels for each part](frename-screenshot.jpg)
 
@@ -148,7 +138,7 @@ a single clip.
 | `Ctrl+Y` or `Ctrl+Shift+Z` | Redo |
 | Middle-click a chip in the file name | Untag the file |
 | `F6` / `Shift+F6` | Add the tag Describe with AI suggests most, or every one it suggests |
-| `Ctrl+F6` | Ask the AI to suggest tags for the open clip (a full description request, see the guide) |
+| `Ctrl+F6` | Ask the AI to suggest tags for the open clip (a full description request, see [Describe with AI](#describe-with-ai)) |
 
 ### Video
 | Key | Action |

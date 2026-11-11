@@ -22,8 +22,8 @@ for (getting footage ready before the edit) and what it does well. Its shape (#1
 3. One short section per main feature, each with one image and two or three plain sentences:
    describe with AI, markers and in/out, tags in file names, whole folders at once.
 4. "What you get in Premiere Pro".
-5. "Your files and your keys": short facts that are true today.
-6. "More": links to the guide, the development page and `version.md`.
+5. "Your files and your keys" and "Undo and recovery": short facts that are true today.
+6. "More": links to the guide, the development page and `version.md`, and the footage credit.
 
 Rules:
 - Nothing technical in the README: no keyboard tables, settings, file formats, install details,
@@ -32,11 +32,13 @@ Rules:
 - A new feature normally changes only the guide. It reaches the README only when it is one of
   the main things frename does, and then as a sentence in the matching feature section, or as a
   new feature section with its own image when it is that big. Keep the README under ~100 lines.
-- Every README image is made by `docs/images/render.sh` from a `docs/screenshots/readme-*.toml`
-  scenario with the footage in `docs/screenshots/footage/`. Never edit an image by hand. When a
-  change makes an image wrong, run the script, look at every image, and commit the new ones.
+- Every README image is made by `docs/screenshots/render-readme.sh` from
+  `docs/screenshots/readme-main.toml` (and `readme-before.toml`), with the footage in
+  `docs/screenshots/footage/`. Never edit an image by hand. When a change makes an image wrong,
+  run the script, look at every image, and commit the new ones.
   New footage needs a license that allows it (CC0, CC BY, Pexels, Pixabay) and a line in
-  `docs/screenshots/footage/ATTRIBUTION.md`; keep each clip short and small.
+  `docs/screenshots/ATTRIBUTION.md`; keep each clip short and small, and commit only clips an
+  image shows (they stay in the history for good).
 - Every image has alt text that says what it shows.
 
 ## docs/guide.md: everything in detail
