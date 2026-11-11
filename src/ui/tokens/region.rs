@@ -90,9 +90,14 @@ pub const CUE_TEXT_WIDTH: f32 = SIDE_LIST_MAX_WIDTH - 3.0 * SPACE_S - SCROLL_GUT
 /// name adds `LINE_BODY` per line.
 pub const MARKER_ROW_HEIGHT: f32 = ICON_BUTTON_SMALL + SPACE_XXS + LINE_BODY + 2.0 * SPACE_TIGHT;
 
-/// What the corner of the comment box holds: the clip's three action buttons (suggest tags,
-/// describe, subtitles) and the expand button, with the room the text keeps clear of them.
-pub const COMMENT_CORNER_WIDTH: f32 = 4.0 * ICON_BUTTON_SMALL + 3.0 * SPACE_XXS + SPACE_XS;
+/// How many buttons the corner of the comment box holds: the clip's three actions (suggest tags,
+/// describe, subtitles) and expand. A test checks it against the corner the view builds.
+pub const COMMENT_CORNER_BUTTONS: usize = 4;
+
+/// The room the comment's text keeps clear of the buttons in its corner.
+pub const COMMENT_CORNER_WIDTH: f32 = COMMENT_CORNER_BUTTONS as f32 * ICON_BUTTON_SMALL
+    + (COMMENT_CORNER_BUTTONS - 1) as f32 * SPACE_XXS
+    + SPACE_XS;
 
 // App bar (#64, §13.12 version B).
 /// The bar under the OS title bar: the 28 px mode switch with 4 px above and below.

@@ -38,7 +38,8 @@ const AREA_PADDING: Padding = Padding {
     left: SPACE_S,
 };
 
-/// The comment's text keeps clear of the expand button over its top right corner.
+/// The comment's text keeps clear of the buttons over its top right corner
+/// (`COMMENT_CORNER_WIDTH`).
 const COMMENT_PADDING: Padding = Padding {
     top: CONTROL_PADDING_Y,
     right: COMMENT_CORNER_WIDTH,
@@ -46,15 +47,27 @@ const COMMENT_PADDING: Padding = Padding {
     left: SPACE_S,
 };
 
-/// The comment's padding: below the corner's row of buttons when the notes mark is in it.
-fn comment_padding(notes_on: bool) -> Padding {
-    if notes_on {
+/// The comment's padding. With the notes mark the corner is a row of its own above the text,
+/// so the text takes the whole width; otherwise it keeps clear of the corner over it.
+fn comment_padding(has_notes: bool) -> Padding {
+    if has_notes {
         Padding {
-            top: TOGGLE_PADDING.top + ICON_BUTTON_SMALL + SPACE_XXS,
+            right: SPACE_S,
             ..COMMENT_PADDING
         }
     } else {
         COMMENT_PADDING
+    }
+}
+
+/// The collapsed box's height: with the corner's own row above the text, at least one line of
+/// text still fits under it.
+fn comment_box_height(height: f32, has_notes: bool) -> f32 {
+    if has_notes {
+        let corner_row = TOGGLE_PADDING.top + ICON_BUTTON_SMALL;
+        height.max(2.0 * RING + corner_row + COMMENT_PADDING.y() + LINE_BODY)
+    } else {
+        height
     }
 }
 
@@ -226,8 +239,9 @@ where
 {
     let expanded = file_workspace.comment_expanded();
     // The notes mark makes the corner wider than the text's right margin, by a width that
-    // depends on the language: the text then starts below the corner instead (#370).
-    let padding = comment_padding(!ai_notes.trim().is_empty());
+    // depends on the language: the corner then gets its own row above the text (#370).
+    let has_notes = !ai_notes.trim().is_empty();
+    let padding = comment_padding(has_notes);
     // The editor grows with its text inside a scrollable, which shows the scroll bar the
     // editor itself does not draw (unbounded, it also leaves the wheel to the scrollable). It
     // is at least as tall as the box, expanded or not, so a click anywhere in it lands in the
@@ -252,6 +266,39 @@ where
             .key_binding(comment_key_binding);
         scroll::vertical_with_id(COMMENT_SCROLLABLE_ID, comment_editor).into()
     });
+    // The box draws the field's fill and edge (and the focus ring) outside the scroll area, so
+    // the edge stays put while the text scrolls, and the scrollbar sits inside the box. It keeps
+    // the ring's width free inside, so the ring never covers the text.
+    let corner = container(corner(clip_actions, expanded, ai_notes))
+        .align_right(Length::Fill)
+        .padding(TOGGLE_PADDING);
+    let inside: Element<'a, Message> = if has_notes {
+        column![corner, comment_scroll].into()
+    } else {
+        stack![comment_scroll, corner].into()
+    };
+    container(inside)
+        .padding(RING)
+        .style(style::field_box(file_workspace.comment_focused()))
+        .width(Length::Fill)
+        .height(if expanded {
+            Length::Fill
+        } else {
+            Length::Fixed(comment_box_height(
+                file_workspace.comment_height(),
+                has_notes,
+            ))
+        })
+        .into()
+}
+
+/// The buttons in the comment's top right corner (#370: `COMMENT_CORNER_BUTTONS` of them), and
+/// the notes mark before them while the folder has notes for the AI.
+fn corner<'a>(
+    clip_actions: ClipActions,
+    expanded: bool,
+    ai_notes: &str,
+) -> iced::widget::Row<'a, Message> {
     let (glyph, tip) = if expanded {
         (Icon::Minimize, fl!("file-workspace-comment-collapse"))
     } else {
@@ -311,27 +358,9 @@ where
             Position::Left,
         )
     });
-    let corner = row![notes_on, suggest_tags, describe, subtitles, toggle]
+    row![notes_on, suggest_tags, describe, subtitles, toggle]
         .spacing(SPACE_XXS)
-        .align_y(Alignment::Center);
-    // The box draws the field's fill and edge (and the focus ring) outside the scroll area, so
-    // the edge stays put while the text scrolls, and the scrollbar sits inside the box. It keeps
-    // the ring's width free inside, so the ring never covers the text.
-    container(stack![
-        comment_scroll,
-        container(corner)
-            .align_right(Length::Fill)
-            .padding(TOGGLE_PADDING),
-    ])
-    .padding(RING)
-    .style(style::field_box(file_workspace.comment_focused()))
-    .width(Length::Fill)
-    .height(if expanded {
-        Length::Fill
-    } else {
-        Length::Fixed(file_workspace.comment_height())
-    })
-    .into()
+        .align_y(Alignment::Center)
 }
 
 /// The comment box's keys: Enter is captured only while the box has the keys (see the comment
@@ -376,15 +405,28 @@ mod area_tests {
         assert_eq!(children(false, false), 4);
     }
 
-    /// The text keeps clear of the corner's buttons (#370): to their left, and below them when
-    /// the notes mark (of no fixed width) is there too.
+    /// The text keeps clear of the corner's buttons (#370): the margin counts every button the
+    /// corner has, and with notes the box still fits a line under the corner's own row.
     #[test]
     fn the_comment_text_keeps_clear_of_the_corner() {
-        let buttons = 4.0 * ICON_BUTTON_SMALL + 3.0 * SPACE_XXS;
-        assert!(comment_padding(false).right >= buttons);
-        let corner_bottom = TOGGLE_PADDING.top + ICON_BUTTON_SMALL;
-        assert!(comment_padding(true).top > corner_bottom);
-        assert!(comment_padding(false).top < corner_bottom);
+        let actions = ClipActions {
+            describe: ClipAction::Idle,
+            subtitles: ClipAction::Idle,
+            suggest_tags: ClipAction::Idle,
+        };
+        let buttons = Widget::<Message, _, _>::children(&corner(actions, false, "")).len();
+        assert_eq!(buttons, COMMENT_CORNER_BUTTONS);
+        // The corner is inset by the gutter and its padding, the text by the gutter.
+        let corner_width = buttons as f32 * ICON_BUTTON_SMALL + (buttons - 1) as f32 * SPACE_XXS;
+        assert!(COMMENT_PADDING.right + SCROLL_GUTTER >= TOGGLE_PADDING.right + corner_width);
+        assert!(comment_padding(true).right < COMMENT_PADDING.right);
+        let tiny = comment_box_height(COMMENT_MIN_HEIGHT, true);
+        let corner_row = TOGGLE_PADDING.top + ICON_BUTTON_SMALL;
+        assert!(tiny - 2.0 * RING - corner_row >= comment_padding(true).y() + LINE_BODY);
+        assert_eq!(
+            comment_box_height(COMMENT_MIN_HEIGHT, false),
+            COMMENT_MIN_HEIGHT
+        );
     }
 }
 
