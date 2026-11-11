@@ -323,21 +323,45 @@ impl FileTagger {
     }
 }
 
-/// Whether `a` and `b` name the same existing file: the same path once resolved, which on a
-/// case-insensitive file system includes two spellings that differ only by case (any letters,
-/// not only ASCII). `false` when either does not exist.
-///
-/// Some Windows drives (RAM disks, a few network shares) cannot resolve a path; there, two
-/// existing names in one folder that differ only by case are the same file, as Windows' file
-/// systems are case-insensitive.
+/// Whether `a` and `b` are the same entry on disk: two spellings of one file name on a
+/// case-insensitive file system (Windows, macOS, and on Linux an exFAT/FAT camera card, an SMB
+/// share or a casefold folder), or the same path. `false` when either does not exist, and a
+/// symbolic link is not the file it points to.
 pub fn is_same_file(a: &Path, b: &Path) -> bool {
+    if a == b {
+        return a.symlink_metadata().is_ok();
+    }
+    let (Ok(meta_a), Ok(meta_b)) = (a.symlink_metadata(), b.symlink_metadata()) else {
+        return false;
+    };
+    same_entry(a, &meta_a, b, &meta_b)
+}
+
+/// On Unix: the same device and inode, which a case-insensitive lookup returns for both
+/// spellings.
+#[cfg(unix)]
+fn same_entry(
+    _a: &Path,
+    meta_a: &std::fs::Metadata,
+    _b: &Path,
+    meta_b: &std::fs::Metadata,
+) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    meta_a.dev() == meta_b.dev() && meta_a.ino() == meta_b.ino()
+}
+
+/// On Windows: the same path once resolved (the name as stored on disk). Some drives (RAM disks,
+/// a few network shares) cannot resolve a path; there two names in one folder that differ only
+/// by case are the same file, as Windows' file systems are case-insensitive.
+#[cfg(not(unix))]
+fn same_entry(a: &Path, meta_a: &std::fs::Metadata, b: &Path, meta_b: &std::fs::Metadata) -> bool {
+    if meta_a.file_type().is_symlink() || meta_b.file_type().is_symlink() {
+        return false;
+    }
     match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
         (Ok(a), Ok(b)) => a == b,
         _ => {
-            cfg!(windows)
-                && a.exists()
-                && b.exists()
-                && a.parent() == b.parent()
+            a.parent() == b.parent()
                 && a.file_name().map(|n| n.to_string_lossy().to_lowercase())
                     == b.file_name().map(|n| n.to_string_lossy().to_lowercase())
         }
@@ -407,17 +431,49 @@ mod tests {
     use super::*;
     use crate::{StoredTag, StoredTagStore};
 
-    /// Issue #84: a target that differs from the old path only by case must never count as
-    /// "taken" (it is the same file on Windows' case-insensitive filesystem, and a rename that
-    /// only fixes case must still go through). The check short-circuits on the name comparison
-    /// before ever consulting the filesystem, so this holds the same way on every platform,
-    /// including a case-sensitive one where the two names would otherwise be unrelated files.
+    /// Issue #84: a rename that only fixes case must still go through where the two spellings are
+    /// one file (Windows, macOS, a FAT card). Since #379 that is decided by the file system, not
+    /// by the names: here `goat.MOV` is either the same file (case-insensitive) or does not exist
+    /// (case-sensitive), and neither is "taken".
     #[test]
     fn a_same_file_case_change_is_never_taken() {
-        let dir = std::env::temp_dir().join(format!("frename-case-only-{}", std::process::id()));
+        let dir = crate::test_support::fresh_dir("case-only");
         let old_path = dir.join("goat.mov");
+        std::fs::write(&old_path, b"clip").expect("clip");
         let new_path = dir.join("goat.MOV");
         assert!(!target_name_taken(&old_path, &new_path));
+    }
+
+    /// The same check on Windows, where the file system is case-insensitive: non-Latin letters
+    /// too.
+    #[cfg(windows)]
+    #[test]
+    fn two_spellings_of_one_name_are_the_same_file_on_windows() {
+        let dir = crate::test_support::fresh_dir("same-file-windows");
+        std::fs::write(dir.join("ёж.mov"), b"clip").expect("clip");
+        assert!(super::is_same_file(
+            &dir.join("ёж.mov"),
+            &dir.join("ЁЖ.MOV")
+        ));
+        assert!(!target_name_taken(&dir.join("ёж.mov"), &dir.join("ЁЖ.MOV")));
+    }
+
+    /// A symbolic link is another entry: renaming a clip onto a link to it would replace the link
+    /// and move the clip's sidecars onto the link's.
+    #[cfg(unix)]
+    #[test]
+    fn a_link_to_a_clip_is_not_the_same_file() {
+        let dir = crate::test_support::fresh_dir("same-file-link");
+        std::fs::write(dir.join("clip.mov"), b"clip").expect("clip");
+        std::os::unix::fs::symlink(dir.join("clip.mov"), dir.join("alias.mov")).expect("link");
+        assert!(!super::is_same_file(
+            &dir.join("clip.mov"),
+            &dir.join("alias.mov")
+        ));
+        assert!(target_name_taken(
+            &dir.join("clip.mov"),
+            &dir.join("alias.mov")
+        ));
     }
 
     /// A `.capt` already standing at the new name blocks the rename, like the other sidecars.

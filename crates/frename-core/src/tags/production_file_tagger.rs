@@ -309,11 +309,9 @@ mod tests {
         (snapshot.segment_start(), snapshot.segment_end())
     }
 
-    /// HUNT probe: on a case-sensitive file system `GOAT.mov` is another clip, not `goat.mov`
-    /// in other case; renaming `goat.mov` to `GOAT.mov` must not replace it.
-    #[test]
     /// Issue #379: on a case-sensitive file system `GOAT.mov` is another clip, so renaming
     /// `goat.mov` to it is refused, not a case-only change that replaces it.
+    #[test]
     fn a_case_only_rename_onto_another_clip_is_refused() {
         let tagger = ProductionFileTagger;
         let path = clip_named("case-other-clip", "goat.mov");
