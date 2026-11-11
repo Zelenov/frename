@@ -540,10 +540,13 @@ pages:
   comments are inside the video, frename can tag the videos you comment ("Commented", or a tag
   you name). After a change here, Settings offers the batch action that updates the files
   you already have.
-- **Describe with AI:** your Anthropic and OpenAI API keys (a model uses its own company's key; a
-  model whose key is missing is listed as "… — add an OpenAI key first" and cannot be picked), kept in the system's password store (Windows
-  Credential Manager, macOS Keychain, or a keyring such as GNOME Keyring on Linux), the model
-  (Claude Haiku 4.5, Sonnet 5 or Opus 5, GPT-4.1 mini or GPT-4.1, with their prices), the language of the descriptions, and
+- **Describe with AI:** your Anthropic, OpenAI and Google (Gemini) API keys, each with a Get a key
+  button (a model uses its own company's key; a model whose key is missing is listed as
+  "… — add the OpenAI key first" or "… — add the Gemini key first" and cannot be picked), kept in
+  the system's password store (Windows Credential Manager, macOS Keychain, or a keyring such as
+  GNOME Keyring on Linux), the model (Claude Haiku 4.5, Sonnet 5 or Opus 5, GPT-4.1 mini or
+  GPT-4.1, Gemini 3.1 Flash-Lite or Gemini 3.5 Flash, with their prices), the language of the
+  descriptions, and
   **Moments**: segments only for what stands out (the default, and the only choice that suggests
   an In and Out) or segments covering the whole clip, and whether it also suggests tags from the
   folder's tags (on by default).
