@@ -17,7 +17,9 @@ mod tag_list;
 
 pub use default_tags::{DefaultTag, DEFAULT_TAGS};
 pub use file_snapshot::{set_space_after_tags, space_after_tags, FileSnapshot};
-pub use file_tagger::{install_file_tagger, is_same_file, FileTagger, SaveAndReparse};
+pub use file_tagger::{
+    install_file_tagger, is_case_change_of_same_file, FileTagger, SaveAndReparse,
+};
 pub(crate) use file_tagger::{rename_sidecars, target_name_taken};
 pub use file_tagger_backend::FileTaggerBackend;
 pub use file_tagger_logging::LoggingFileTagger;

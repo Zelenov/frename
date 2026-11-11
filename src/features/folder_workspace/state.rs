@@ -3710,7 +3710,8 @@ fn check_new_file_name(
     // A change of case only is the same file on Windows, not a clash; on Linux the other spelling
     // can be another clip (#379).
     let target = folder.join(typed);
-    if target.exists() && !frename_core::is_same_file(&folder.join(current), &target) {
+    if target.exists() && !frename_core::is_case_change_of_same_file(&folder.join(current), &target)
+    {
         return Err(folder::RenameProblem::Exists);
     }
     Ok(())
@@ -6022,8 +6023,11 @@ mod tests {
         let folder = frename_core::test_support::fresh_dir("rename-case-other");
         std::fs::write(folder.join("goat.mp4"), b"a").expect("write");
         std::fs::write(folder.join("GOAT.mp4"), b"b").expect("write");
-        if frename_core::is_same_file(&folder.join("goat.mp4"), &folder.join("GOAT.mp4")) {
-            return; // A case-insensitive file system holds only one of them.
+        if frename_core::is_case_change_of_same_file(
+            &folder.join("goat.mp4"),
+            &folder.join("GOAT.mp4"),
+        ) {
+            return; // A case-insensitive file system holds only one of them; ci-linux covers this.
         }
 
         assert_eq!(

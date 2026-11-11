@@ -317,8 +317,9 @@ mod tests {
         let path = clip_named("case-other-clip", "goat.mov");
         let other = path.with_file_name("GOAT.mov");
         std::fs::write(&other, b"another clip").expect("other clip");
-        if crate::is_same_file(&path, &other) {
-            // A case-insensitive file system: there is no second clip to protect.
+        if crate::is_case_change_of_same_file(&path, &other) {
+            // A case-insensitive file system: there is no second clip to protect (ci-linux
+            // covers this test).
             return;
         }
         let snapshot = tagger.parse_with(&path, &FolderInfo::default(), TEXT);

@@ -66,10 +66,10 @@ pub use subtitles::{
     DEFAULT_SUBTITLE_LANGUAGES,
 };
 pub use tags::{
-    install_file_tagger, is_same_file, set_space_after_tags, space_after_tags, CachedFile,
-    DefaultTag, FileSnapshot, FileTagger, FileTaggerBackend, FolderInfo, FolderTagStore,
-    InMemoryFileTagger, LoggingFileTagger, ProductionFileTagger, SaveAndReparse, Screenshot,
-    StoredTag, Tag, TagColorMapping, TagId, TagList, TagOrderState, DEFAULT_TAGS,
+    install_file_tagger, is_case_change_of_same_file, set_space_after_tags, space_after_tags,
+    CachedFile, DefaultTag, FileSnapshot, FileTagger, FileTaggerBackend, FolderInfo,
+    FolderTagStore, InMemoryFileTagger, LoggingFileTagger, ProductionFileTagger, SaveAndReparse,
+    Screenshot, StoredTag, Tag, TagColorMapping, TagId, TagList, TagOrderState, DEFAULT_TAGS,
 };
 pub use timecode::{TimeFormat, TimecodeStyle};
 pub use undo::{
