@@ -30,7 +30,10 @@ else
 fi
 # The labels' font when it is installed; ImageMagick's own default otherwise.
 font=()
-if "${im[@]}" -list font 2>/dev/null | grep -q 'Font: DejaVu-Sans$'; then font=(-font DejaVu-Sans); fi
+# (No `grep -q`: it would stop reading, and pipefail would count the writer's broken pipe.)
+if "${im[@]}" -list font 2>/dev/null | grep -E 'Font: DejaVu-Sans'$'\r''?$' >/dev/null; then
+  font=(-font DejaVu-Sans)
+fi
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -42,7 +45,13 @@ if command -v cygpath >/dev/null; then footage=$(cygpath -m "$footage"); fi
 # variant <name> <sed script>: readme-main.toml changed by the sed script, in the work folder. The
 # script adds keys before the first [[files]], or replaces a line.
 variant() {
-  sed -e "s|^source = .*|source = \"$footage\"|" -e "$2" "$here/readme-main.toml" > "$work/$1.toml"
+  sed -e "s|^source = .*|source = \"$footage\"|" "$here/readme-main.toml" > "$work/$1.base.toml"
+  sed -e "$2" "$work/$1.base.toml" > "$work/$1.toml"
+  # A substitution that no longer matches would render the main shot under another name.
+  if cmp -s "$work/$1.base.toml" "$work/$1.toml"; then
+    echo "variant $1: the sed script changed nothing in readme-main.toml" >&2
+    exit 1
+  fi
 }
 variant markers '0,/^\[\[files\]\]/s//marker_list = true\n\n[[files]]/'
 variant describe 's/^open = .*/open = "pick.close.wildlife.MVI_0205.mp4"/; s/^seek = .*/seek = 6.5/; 0,/^\[\[files\]\]/s//comment_expanded = true\n\n[[files]]/'

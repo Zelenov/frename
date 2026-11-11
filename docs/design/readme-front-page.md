@@ -81,7 +81,7 @@ script's Xvfb screen (3400x1800) puts the middle outside the window.
 
 ### CI
 
-`ci-linux` already builds the app and has Xvfb. A new step there runs `render.sh` under Xvfb and
+`ci-linux` already builds the app and has Xvfb. A new step there runs `render-readme.sh` under Xvfb and
 uploads `docs/images/` as an artifact, so every pull request shows whether the README images still
 render, and their new state can be downloaded and compared.
 

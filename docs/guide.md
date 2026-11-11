@@ -31,13 +31,9 @@ it executable with `chmod +x frename-*.AppImage`, and run it. Video playback is 
 don't need to install anything else. If it says FUSE is missing, run it with
 `--appimage-extract-and-run`. frename keeps its settings in `~/.local/share/frename`.
 
-The interface is in English, Russian, German, French, Spanish, Italian, Brazilian Portuguese, Ukrainian, Serbian (Cyrillic or Latin), Japanese, Korean and Chinese (Simplified or Traditional).
+The interface is in 12 languages; [Settings](#settings) → Interface lists them.
 
 ## What frename does
-
-I made frename after a trip to Africa, when I came home with 2,000 clips named `MVI_0001.MP4` to
-`MVI_2000.MP4`. With frename I watched and tagged every clip in a few seconds each, so the project
-was already organized when I opened Premiere.
 
 - **Tag clips in seconds.** Click a tag, or move through the tag grid with the arrow keys and press
   `Shift+Space`. Copy one clip's tags to the next with `Ctrl+C` and `Ctrl+V`. The tags become part
@@ -72,10 +68,10 @@ was already organized when I opened Premiere.
   lines into markers, or writing each clip's markers to a text file. A long action runs in the
   background while you keep working; click the strip above the toolbar under the file list to see
   its progress or cancel it.
-- **Never lose your work.** `Ctrl+Z` undoes almost everything, and frename keeps a recovery file
-  of the open clip a second after each change, so a crash or a power cut does not cost you your
-  tags, comments or markers. A line under the file name says "All changes saved", or that they
-  wait in the recovery file until you leave the clip.
+- **Never lose your work.** `Ctrl+Z` undoes almost everything, and a crash or a power cut does
+  not cost you your work on the open clip (see [Undo](#undo) and
+  [Recovery after a crash](#recovery-after-a-crash)). A line under the file name says "All
+  changes saved", or that they wait in the recovery file until you leave the clip.
 
 ![The frename window, with labels for each part](frename-screenshot.jpg)
 
@@ -86,6 +82,10 @@ comment.
 
 To find a moment in a long clip by its words, press `Ctrl+F` over the video: the subtitle list and
 the marker list narrow to what matches, and `Enter` jumps from match to match.
+
+I made frename after a trip to Africa, when I came home with 2,000 clips named `MVI_0001.MP4` to
+`MVI_2000.MP4`. With frename I watched and tagged every clip in a few seconds each, so the project
+was already organized when I opened Premiere.
 
 ## How a session goes
 
@@ -99,12 +99,10 @@ the marker list narrow to what matches, and `Enter` jumps from match to match.
    `F2` again right away to name the marker, then `Enter`.
 5. Type a comment for the clip, press `Esc` to leave the comment box, and press `PgDn` to go
    to the next clip. frename renames the clip you left and saves its markers.
-6. On Windows, drag finished clips from the list into Premiere Pro. frename saves each clip
-   first, so it arrives with its new name and everything you marked. Nothing is moved.
+6. On Windows, drag finished clips from the list into Premiere Pro.
 
-The next time you start frename, it opens the same folder at the same clip, two seconds before
-where you stopped watching. [Opening folders and resuming](#opening-folders-and-resuming) has more ways to open a folder or
-a single clip.
+[Opening folders and resuming](#opening-folders-and-resuming) explains what dragging a clip
+saves first, how frename resumes where you stopped, and more ways to open a folder or a clip.
 
 ## Keyboard shortcuts
 
@@ -166,7 +164,7 @@ a single clip.
 | `Ctrl+Alt+←` / `Ctrl+Alt+→` | Rotate the clip 90° left / right |
 | `Escape` | Leave fullscreen |
 
-### Settings
+### Settings window
 
 | Key | Action |
 |---|---|
@@ -561,10 +559,8 @@ pages:
   opens the full list. The notes are in English and need no connection, except for the versions
   newer than yours.
 
-**From the keyboard:** `Tab` and `Shift+Tab` move a blue ring through the options and buttons of the
-page (the page list on the left is reached with `Ctrl+Tab`), then **Close**. `Space` checks or picks
-the option with the ring, presses its button, or steps a list to its next choice (it goes forward and
-wraps; it does not open the list). `Enter` presses the button with the ring.
+**From the keyboard:** see the [Settings window keys](#settings-window). `Tab` reaches **Close**
+after the last option, and `Space` on a list goes forward and wraps; it does not open the list.
 
 ![Monochrome tags](frename-screenshot-mono.jpg)
 
@@ -577,9 +573,8 @@ wraps; it does not open the list). `Enter` presses the button with the ring.
   them, so for those frename keeps the comment and the in and out points in the text file, and
   markers are not available.
 - frename sends your footage nowhere unless you ask. Describe with AI sends frames and
-  subtitles to Anthropic, OpenAI or Google, depending on the model you chose, and Generate subtitles sends the audio to Soniox, both with your own API
-  key. Your notes for the AI go with them, if the folder has any. Your keys are kept in the system's password store. On Windows that is Credential Manager.
-- On Windows, frename checks GitHub once a day for a new version. You can turn that off in
-  Settings, and nothing is downloaded until you click **Update and restart**. Settings → Updates
-  lists what changed in each version, before and after you update. The Linux AppImage does not
-  update itself.
+  subtitles to Anthropic, OpenAI or Google, depending on the model you chose, and Generate
+  subtitles sends the audio to Soniox, both with your own API key. Your notes for the AI go with
+  them, if the folder has any. Where the keys are kept: [Settings](#settings).
+- On Windows, frename checks GitHub once a day for a new version (see [Settings](#settings),
+  Updates). The Linux AppImage does not update itself.

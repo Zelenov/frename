@@ -769,6 +769,19 @@ mod tests {
     }
 
     #[test]
+    fn the_comment_is_expanded_when_the_scenario_asks() {
+        let mut expanded = scenario();
+        expanded.comment_expanded = true;
+        assert!(matches!(
+            steps(&expanded, false, false).last(),
+            Some(folder_workspace::Message::CommentLayout(
+                crate::features::file_workspace::CommentLayout::ToggleExpanded
+            ))
+        ));
+        assert_eq!(steps(&scenario(), false, false).len(), 1);
+    }
+
+    #[test]
     fn ai_selects_describe_with_ai_in_batch_mode() {
         assert_eq!(
             steps(&scenario(), false, true).len(),
