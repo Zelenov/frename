@@ -3707,8 +3707,8 @@ fn check_new_file_name(
     if typed.ends_with('.') || typed.ends_with(' ') {
         return Err(folder::RenameProblem::Trailing);
     }
-    // A change of case only is the same file on Windows, not a clash; on Linux the other spelling
-    // can be another clip (#379).
+    // A change of case only is the same file on a case-insensitive file system, not a clash; on a
+    // case-sensitive one the other spelling can be another clip (#379).
     let target = folder.join(typed);
     if target.exists() && !frename_core::is_case_change_of_same_file(&folder.join(current), &target)
     {

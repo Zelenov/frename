@@ -325,43 +325,41 @@ impl FileTagger {
 
 /// Whether renaming `old` to `new` only changes the case of its name, on a file system where both
 /// spellings are this one file (Windows, macOS, and on Linux an exFAT/FAT card or a casefold
-/// folder): same folder, names equal ignoring case (any letters, not only ASCII), and the same
-/// entry on disk. On a case-sensitive file system `GOAT.mov` next to `goat.mov` is another clip
-/// (#379); a hard link under another name, or a symbolic link, is never a change of case. The
-/// same path is trivially one.
+/// folder): same folder, names equal ignoring case (any letters, not only ASCII), `new` is found,
+/// and the folder has no entry spelled exactly as `new`. A case-insensitive folder lists only the
+/// name as stored; a case-sensitive one that also lists `new` holds another entry there (another
+/// clip, a hard link, a symbolic link: #379). The same path is trivially one.
+///
+/// Names are compared with Rust's `to_lowercase`, which folds a few letters (final `Σ`, Turkish
+/// `İ`, NFC against NFD) differently from file systems: such a case fix is refused as taken,
+/// never let through wrongly.
 pub fn is_case_change_of_same_file(old: &Path, new: &Path) -> bool {
     if old == new {
         return true;
     }
     let lowercase = |p: &Path| p.file_name().map(|n| n.to_string_lossy().to_lowercase());
-    old.parent() == new.parent() && lowercase(old) == lowercase(new) && same_entry(old, new)
+    old.parent() == new.parent()
+        && lowercase(old) == lowercase(new)
+        && old.symlink_metadata().is_ok()
+        && new.symlink_metadata().is_ok()
+        && !folder_lists(new)
 }
 
-/// Whether `a` and `b` are the same entry on disk, links not followed. `false` when either does
-/// not exist or is a symbolic link.
-fn same_entry(a: &Path, b: &Path) -> bool {
-    let (Ok(meta_a), Ok(meta_b)) = (a.symlink_metadata(), b.symlink_metadata()) else {
-        return false;
+/// Whether the folder of `path` has an entry spelled exactly as its name. An unreadable folder
+/// counts as yes: a name then stays "taken" rather than risk replacing a file.
+fn folder_lists(path: &Path) -> bool {
+    let Some(name) = path.file_name() else {
+        return true;
     };
-    if meta_a.file_type().is_symlink() || meta_b.file_type().is_symlink() {
-        return false;
-    }
-    // Unix: the same device and inode, which a case-insensitive lookup returns for both
-    // spellings.
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        meta_a.dev() == meta_b.dev() && meta_a.ino() == meta_b.ino()
-    }
-    // Windows: the same path once resolved (the name as stored on disk). A drive that cannot
-    // resolve paths (RAM disks, a few network shares) is case-insensitive like every Windows file
-    // system, so the names (already equal ignoring case) are the same file.
-    #[cfg(not(unix))]
-    {
-        match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
-            (Ok(a), Ok(b)) => a == b,
-            _ => true,
-        }
+    let folder = match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p,
+        _ => Path::new("."),
+    };
+    match std::fs::read_dir(folder) {
+        Ok(entries) => entries
+            .filter_map(Result::ok)
+            .any(|entry| entry.file_name() == name),
+        Err(_) => true,
     }
 }
 
@@ -377,18 +375,31 @@ pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
     if is_case_change_of_same_file(old_path, new_path) {
         return false;
     }
-    [
-        new_path.to_path_buf(),
-        crate::comment::comment_path(new_path),
-        crate::subtitles::transcript_path(new_path),
-        crate::subtitles::capt_path(new_path),
-    ]
-    .iter()
-    .chain(crate::subtitles::subtitle_candidates(new_path).iter())
-    .any(|p| p.exists())
+    // Each name paired with the old clip's one: a sidecar named after the stem (`clip.srt`) is the
+    // clip's own when only the extension's case changes (`clip.MOV` → `clip.mov`).
+    let names = |path: &Path| {
+        let mut names = vec![
+            path.to_path_buf(),
+            crate::comment::comment_path(path),
+            crate::subtitles::transcript_path(path),
+            crate::subtitles::capt_path(path),
+        ];
+        names.extend(crate::subtitles::subtitle_candidates(path));
+        names
+    };
+    let taken = |old: &Path, new: &Path| new.exists() && !is_case_change_of_same_file(old, new);
+    names(old_path)
+        .iter()
+        .zip(names(new_path).iter())
+        .any(|(old, new)| taken(old, new))
         || super::production_file_tagger::screenshot_positions(old_path)
             .into_iter()
-            .any(|ms| super::production_file_tagger::screenshot_path(new_path, ms).exists())
+            .any(|ms| {
+                taken(
+                    &super::production_file_tagger::screenshot_path(old_path, ms),
+                    &super::production_file_tagger::screenshot_path(new_path, ms),
+                )
+            })
 }
 
 /// Move the sidecars that travel with a renamed clip (comment, subtitles, transcript,
@@ -459,18 +470,21 @@ mod tests {
     /// and move the clip's sidecars onto the link's.
     #[cfg(unix)]
     #[test]
-    fn a_link_to_a_clip_is_not_the_same_file() {
+    fn a_link_to_a_clip_is_taken() {
         let dir = crate::test_support::fresh_dir("same-file-link");
         std::fs::write(dir.join("clip.mov"), b"clip").expect("clip");
         std::os::unix::fs::symlink(dir.join("clip.mov"), dir.join("alias.mov")).expect("link");
-        assert!(!super::same_entry(
-            &dir.join("clip.mov"),
-            &dir.join("alias.mov")
-        ));
         assert!(target_name_taken(
             &dir.join("clip.mov"),
             &dir.join("alias.mov")
         ));
+        // A link spelled like the clip in other case, where the file system allows both names.
+        if std::os::unix::fs::symlink(dir.join("clip.mov"), dir.join("CLIP.mov")).is_ok() {
+            assert!(target_name_taken(
+                &dir.join("clip.mov"),
+                &dir.join("CLIP.mov")
+            ));
+        }
     }
 
     /// A `.capt` already standing at the new name blocks the rename, like the other sidecars.
@@ -780,18 +794,44 @@ AI: A walk.
         ));
     }
 
-    /// A hard link under another name is the same inode but another clip name: renaming onto it
-    /// would do nothing to the clip and move its sidecars over the link's.
+    /// A hard link spelled like the clip in other case is the same inode but another entry:
+    /// renaming onto it would do nothing to the clip and move its sidecars over the link's.
     #[cfg(unix)]
     #[test]
-    fn a_hard_link_under_another_name_is_taken() {
+    fn a_hard_link_in_other_case_is_taken() {
         let dir = crate::test_support::fresh_dir("case-change-hard-link");
-        std::fs::write(dir.join("a.mov"), b"clip").expect("clip");
-        std::fs::hard_link(dir.join("a.mov"), dir.join("b.mov")).expect("link");
+        std::fs::write(dir.join("goat.mov"), b"clip").expect("clip");
+        if std::fs::hard_link(dir.join("goat.mov"), dir.join("GOAT.mov")).is_err() {
+            return; // A case-insensitive file system: GOAT.mov is goat.mov already.
+        }
         assert!(!super::is_case_change_of_same_file(
-            &dir.join("a.mov"),
-            &dir.join("b.mov")
+            &dir.join("goat.mov"),
+            &dir.join("GOAT.mov")
         ));
-        assert!(target_name_taken(&dir.join("a.mov"), &dir.join("b.mov")));
+        assert!(target_name_taken(
+            &dir.join("goat.mov"),
+            &dir.join("GOAT.mov")
+        ));
+    }
+
+    /// Fixing only the extension's case keeps the clip's own subtitles, transcript and CAPT, named
+    /// after the stem: they are not "taken" (on a case-sensitive file system the new clip name does
+    /// not exist yet, so this reaches the sidecar check).
+    #[test]
+    fn an_extension_case_fix_is_not_blocked_by_the_clips_own_subtitles() {
+        let dir = crate::test_support::fresh_dir("case-change-subtitles");
+        std::fs::write(dir.join("clip.MOV"), b"clip").expect("clip");
+        std::fs::write(dir.join("clip.srt"), b"1").expect("srt");
+        std::fs::write(dir.join("clip.capt"), b"capt").expect("capt");
+        assert!(!target_name_taken(
+            &dir.join("clip.MOV"),
+            &dir.join("clip.mov")
+        ));
+        // Another clip's subtitles under a new stem still block a real rename.
+        std::fs::write(dir.join("other.srt"), b"1").expect("other srt");
+        assert!(target_name_taken(
+            &dir.join("clip.MOV"),
+            &dir.join("other.mov")
+        ));
     }
 }
