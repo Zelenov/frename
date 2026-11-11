@@ -247,6 +247,11 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
             iced::widget::text_editor::Action::Edit(iced::widget::text_editor::Edit::Insert(c)),
         ));
     }
+    if scenario.comment_expanded {
+        steps.push(folder_workspace::Message::CommentLayout(
+            crate::features::file_workspace::CommentLayout::ToggleExpanded,
+        ));
+    }
     if scenario.rotate != 0 {
         steps.push(folder_workspace::Message::RotateVideo(scenario.rotate));
     }

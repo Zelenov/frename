@@ -102,6 +102,22 @@ jobs:
           pkill -x frename
           tail -n 20 app.log
 
+      # The README images, made from their demo scenarios (#164): fails when a scenario no
+      # longer renders; the images are uploaded so a UI change can be compared with them.
+      - name: README images
+        run: |
+          Xvfb :98 -screen 0 3400x1800x24 &
+          sleep 2
+          DISPLAY=:98 docs/images/render.sh
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: readme-images-${{ github.sha }}
+          path: docs/images/*.jpg
+          retention-days: 14
+          if-no-files-found: warn
+
       - uses: actions/upload-artifact@v6
         if: always()
         with:

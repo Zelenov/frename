@@ -4,8 +4,8 @@ source = "footage"
 folder_name = "Day 3"
 open = "MVI_0207.mp4"
 seek = 6.0
-window = [1440, 810]
-panels = [720, 330]
+window = [1600, 860]
+panels = [820, 380]
 
 [[files]]
 from = "sintel-mountains.mp4"

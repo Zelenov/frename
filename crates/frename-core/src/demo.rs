@@ -130,6 +130,10 @@ pub struct DemoScenario {
     /// picture, #307).
     #[serde(default)]
     pub fullscreen: bool,
+    /// Let the comment box take the whole right panel (its expand button), so a long comment
+    /// shows in full (README image, #164).
+    #[serde(default)]
+    pub comment_expanded: bool,
     /// The folder's notes for the AI (#310), written to its `.frename` when staged.
     #[serde(default)]
     pub ai_notes: Option<String>,
@@ -335,6 +339,7 @@ pub fn stage(
                     marker.duration_ms = line.duration_ms;
                     marker.name = line.name;
                     marker.comment = line.comment;
+                    marker.color = line.color;
                     marker
                 })
                 .collect();
@@ -539,6 +544,13 @@ name = "pick.a.mp4"
     }
 
     #[test]
+    fn a_scenario_can_expand_the_comment() {
+        let text = MINIMAL.replace("[[files]]", "comment_expanded = true\n[[files]]");
+        assert!(DemoScenario::parse(&text).unwrap().comment_expanded);
+        assert!(!DemoScenario::parse(MINIMAL).unwrap().comment_expanded);
+    }
+
+    #[test]
     fn unknown_keys_are_refused() {
         let text = MINIMAL.replace("[[files]]", "zoom = 2\n[[files]]");
         assert!(DemoScenario::parse(&text).is_err());
@@ -607,7 +619,7 @@ from = "b.mov"
 name = "wide.b.mov"
 comment = "nice"
 subtitles = "1\n00:00:00,000 --> 00:00:02,000\nHello\n"
-markers = ["0:00.100 — Start — first frames"]
+markers = ["0:00.100 [Red] — Start — first frames", "0:01 — Plain"]
 "#;
         let scenario = DemoScenario::parse(text).unwrap();
         let into = root.join("staged");
@@ -620,11 +632,14 @@ markers = ["0:00.100 — Start — first frames"]
             .unwrap()
             .contains("Hello"));
         let markers = crate::metadata::load_markers(&open).unwrap();
-        assert_eq!(markers.len(), 1);
+        assert_eq!(markers.len(), 2);
         assert_eq!(
             (markers[0].start_ms, markers[0].name.as_str()),
             (100, "Start")
         );
+        // A color in brackets is kept (README images, #164); none means green.
+        assert_eq!(markers[0].color, crate::MarkerColor::Red);
+        assert_eq!(markers[1].color, crate::MarkerColor::Green);
         let modified = |name: &str| into.join(name).metadata().unwrap().modified().unwrap();
         assert!(modified("pick.a.mp4") < modified("wide.b.mov"));
         let mut left: Vec<_> = std::fs::read_dir(&clips)

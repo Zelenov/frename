@@ -4,8 +4,8 @@ source = "footage"
 folder_name = "Day 3"
 open = "pick.medium.people.action.MVI_0207.mp4"
 seek = 6.0
-window = [1440, 810]
-panels = [720, 330]
+window = [1600, 860]
+panels = [820, 380]
 marker_list = true
 
 [[files]]
@@ -35,7 +35,7 @@ name = "wide.city.tripod.MVI_0206.mp4"
 [[files]]
 from = "tears-of-steel-thom.mp4"
 name = "pick.medium.people.action.MVI_0207.mp4"
-comment = """Best take of the hand, use it in the trailer
+comment = """Best take, use it in the trailer
 In/Out: 00:00:01.000 – 00:00:11.000
 
 AI: A young man in a white jacket raises a robot hand and aims it across a dark, ruined hall.

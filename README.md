@@ -47,7 +47,7 @@ Batch mode runs one action on every clip you check. For example, it makes subtit
 speech, describes the clips with AI, suggests tags or turns the clips that were filmed on their
 side. A long action runs in the background, and you can keep working while it runs.
 
-![Batch mode with every clip of the folder checked and the Prepare clips action selected](docs/images/batch.jpg)
+![Batch mode with every clip of the folder checked and Describe with AI ready to describe 11 videos](docs/images/batch.jpg)
 
 ## What you get in Premiere Pro
 

@@ -2,8 +2,8 @@
 
 The clips in this folder are short cuts of two films by the Blender Foundation, used under the
 [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/) license. They
-were cut, scaled to 640 pixels wide and re-encoded without sound for frename's README images
-(`docs/images/`, made by `docs/images/render.sh`).
+were cut, cropped to 16:9 in the middle, scaled to 640x360 and re-encoded without sound for
+frename's README images (`docs/images/`, made by `docs/images/render.sh`).
 
 | Clips | Film | Credit |
 |---|---|---|
@@ -14,7 +14,7 @@ Source files: `videos/tears-of-steel-battle-clip-medium.mp4` and `videos/sintel-
 [mdn/shared-assets](https://github.com/mdn/shared-assets) at commit `f160bcf`. Each clip was made with
 
 ```sh
-ffmpeg -ss <start> -i <source> -t <length> -an -vf scale=640:-2 -c:v libx264 -preset veryslow \
+ffmpeg -ss <start> -i <source> -t <length> -an -vf "crop=ih*16/9:ih,scale=640:360" -c:v libx264 -preset veryslow \
   -crf 31 -pix_fmt yuv420p -g 50 -movflags +faststart -map_metadata -1 -fflags +bitexact <clip>
 ```
 

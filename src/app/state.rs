@@ -904,6 +904,11 @@ impl FrenameApp {
                 batch::ActionMessage::OpenSubtitleSettings,
             ))) => self.open_settings_on(Some(settings::Page::Subtitles)),
             // One reader of a key's state: the settings, which pass it on to the batch panel.
+            // A demo answers with its own key states, as the settings window does, so a batch
+            // panel's screenshot never depends on the renderer's keyring.
+            Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
+                batch::ActionMessage::ReadKeyState | batch::ActionMessage::ReadSonioxKeyState,
+            ))) if self.demo.is_some() => self.demo_key_states(),
             Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
                 batch::ActionMessage::ReadKeyState,
             ))) => Task::batch(
@@ -1142,6 +1147,16 @@ impl FrenameApp {
         ))
     }
 
+    /// The demo's key states (see [`crate::demo::DemoRun::key_states`]), passed to the settings
+    /// as a real read's answers would be.
+    fn demo_key_states(&mut self) -> Task<Message> {
+        let states =
+            crate::demo::DemoRun::key_states(|which| self.settings.begin_key_request(which));
+        Task::batch(states.into_iter().map(|(which, message)| {
+            Task::done(Message::Settings(settings::Message::Key(which, message)))
+        }))
+    }
+
     /// The demo's screenshot: of the main window, or of the settings window, opened for it.
     fn demo_capture(&mut self) -> Task<Message> {
         let settings_page = self.demo.as_ref().and_then(|d| d.settings_page());
@@ -1187,19 +1202,14 @@ impl FrenameApp {
         self.settings.clear_focus();
         // Whether a key is saved is read each time the window opens, not at start-up: reading
         // may unlock a keyring, and a keyring locked before may be open now.
-        let read_key = if self.demo.is_some() {
-            let states =
-                crate::demo::DemoRun::key_states(|which| self.settings.begin_key_request(which));
-            Task::batch(states.into_iter().map(|(which, message)| {
-                Task::done(Message::Settings(settings::Message::Key(which, message)))
-            }))
-        } else {
-            Task::batch(
-                ApiKey::ALL.map(|which| {
+        let read_key =
+            if self.demo.is_some() {
+                self.demo_key_states()
+            } else {
+                Task::batch(ApiKey::ALL.map(|which| {
                     key_task(which, self.settings.begin_key_request(which), || Ok(()))
-                }),
-            )
-        };
+                }))
+            };
         let (id, open) = window::open(window::Settings {
             size: SETTINGS_WINDOW_SIZE,
             min_size: Some(SETTINGS_MIN_SIZE),
