@@ -1,3 +1,7 @@
+# 0.191
+## Fixed
+- The buttons in the corner of the comment box no longer cover the end of a long first line: the text wraps before them.
+
 # 0.190
 ## Added
 - Generate subtitles also saves `clip.capt` next to the video: the whole transcript as plain text. frename does not use it yet; it moves with the clip when you rename it. Replace overwrites it.
