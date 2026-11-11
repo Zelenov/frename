@@ -1,3 +1,7 @@
+# 0.193
+## Fixed
+- On Linux and on case-sensitive Mac drives, renaming a clip to another clip's name in different capitals (`goat.mov` → `GOAT.mov`) is refused instead of replacing that clip.
+
 # 0.192
 ## Fixed
 - A crash or a full disk while frename saves a comment to a `.comment.txt` file, or writes markers to a text file, no longer leaves that file empty or cut off.

@@ -309,6 +309,30 @@ mod tests {
         (snapshot.segment_start(), snapshot.segment_end())
     }
 
+    /// Issue #379: on a case-sensitive file system `GOAT.mov` is another clip, so renaming
+    /// `goat.mov` to it is refused, not a case-only change that replaces it.
+    #[test]
+    fn a_case_only_rename_onto_another_clip_is_refused() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("case-other-clip", "goat.mov");
+        let other = path.with_file_name("GOAT.mov");
+        std::fs::write(&other, b"another clip").expect("other clip");
+        // Asked of the file system itself, not of the code under test: a case-insensitive one
+        // holds one file under both names (ci-linux runs this test).
+        if std::fs::read_dir(path.parent().unwrap()).unwrap().count() < 2 {
+            return;
+        }
+        let snapshot = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        let mut renamed = FileSnapshot::parse("GOAT.mov");
+        renamed.set_comment(snapshot.comment().to_string());
+
+        let new_path = tagger.save_with(&renamed, &path, TEXT);
+
+        assert_eq!(new_path, path);
+        assert_eq!(std::fs::read(&other).expect("GOAT.mov"), b"another clip");
+        assert!(path.exists());
+    }
+
     #[test]
     fn in_out_names_of_older_versions_are_kept_as_they_are() {
         let tagger = ProductionFileTagger;
