@@ -1,3 +1,7 @@
+# 0.192
+## Fixed
+- A crash or a full disk while frename saves a comment to a `.comment.txt` file, or writes markers to a text file, no longer leaves that file empty or cut off.
+
 # 0.191
 ## Fixed
 - The buttons in the corner of the comment box no longer cover the end of a long first line: the text wraps before them. While the folder has notes for the AI, or the comment fills the panel, the buttons get their own row above the text.
