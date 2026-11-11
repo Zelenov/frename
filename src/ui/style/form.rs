@@ -165,6 +165,15 @@ pub fn bare_text_editor(
 }
 
 /// The box around a scrolling editor: a field's fill and edge, the focus ring when `focused`.
+/// A field's fill without its edge: for a strip that lies over a field's text, such as the
+/// comment's corner row (#370).
+pub fn field_fill(_theme: &Theme) -> widget::container::Style {
+    widget::container::Style {
+        background: Some(Background::Color(BG_RAISED)),
+        ..widget::container::Style::default()
+    }
+}
+
 pub fn field_box(focused: bool) -> impl Fn(&Theme) -> widget::container::Style {
     move |_| widget::container::Style {
         background: Some(Background::Color(BG_RAISED)),

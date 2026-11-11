@@ -1,6 +1,6 @@
 # 0.191
 ## Fixed
-- The buttons in the corner of the comment box no longer cover the end of a long first line: the text wraps before them. While the folder has notes for the AI, the buttons and the notes mark get their own row above the text.
+- The buttons in the corner of the comment box no longer cover the end of a long first line: the text wraps before them. While the folder has notes for the AI, or the comment fills the panel, the buttons get their own row above the text.
 
 # 0.190
 ## Added

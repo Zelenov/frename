@@ -133,8 +133,10 @@ pub const ORDER_STRIP_HEIGHT: f32 = BAR_HEIGHT;
 pub const ORDER_STRIP_WORDS_FROM: f32 = 420.0;
 /// The trash at the end of the file name card.
 pub const TRASH_SIDE: f32 = 36.0;
-/// The comment box: its lowest height.
-pub const COMMENT_MIN_HEIGHT: f32 = 48.0;
+/// The comment box: its lowest height, one line of text under the corner's buttons when they
+/// are a row of their own (#370): the box's ring, the row, the text's padding and one line.
+pub const COMMENT_MIN_HEIGHT: f32 =
+    2.0 * RING + SPACE_XXS + ICON_BUTTON_SMALL + 2.0 * CONTROL_PADDING_Y + LINE_BODY;
 /// The comment box: its height until it is resized, and the tallest the handle makes it
 /// (taller than that, "Expand" is the way).
 pub const COMMENT_HEIGHT: f32 = 80.0;

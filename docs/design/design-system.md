@@ -1725,10 +1725,19 @@ Both buttons, and the lock, are undoable (#139); a press that changes nothing pu
 #### 13.5.7 Comment
 - A multi-line field (§8.6) with the placeholder "Comment", `maximize-2` "Give the comment the whole
   panel" / `minimize-2` "Back to the tags" as a 24 px icon button inside its top-right corner; the
-  field's own scrollbar keeps the gutter. Two 24 px icon buttons stand left of it, 2 px apart:
-  `sparkles` "Describe this clip with AI" and `captions` "Generate subtitles for this clip" (#249).
+  field's own scrollbar keeps the gutter. Three 24 px icon buttons stand left of it, 2 px apart:
+  `tag` "Suggest tags for this clip" (#250), `sparkles` "Describe this clip with AI" and
+  `captions` "Generate subtitles for this clip" (#249).
   Pressed, a button is latched while its action waits for its turn or runs (tooltip "…: waiting
   for its turn" / "…: running") and takes no press; without a key the settings open where it is set.
+- The text never runs under the corner (#370): it keeps a right margin as wide as the four
+  buttons (`COMMENT_CORNER_WIDTH`, from `COMMENT_CORNER_BUTTONS`). While the folder has notes for
+  the AI, the "Notes on" mark stands before the buttons; its width depends on the language, so
+  the corner then is a row of its own: the text starts below it and takes the whole width, and
+  the row has the field's fill, so text scrolled up goes under it out of sight. The expanded box
+  always has the corner as its own row. The row lies over the editor, so a click anywhere in
+  the box still places the cursor. The lowest box (`COMMENT_MIN_HEIGHT`) fits one line under
+  that row.
 - The **height handle** above it: an 8 px hit area with a 2 px `border.subtle` line, `border.control`
   and the resize cursor on hover; the height stays while the folder is open (today too) and is
   not saved.
