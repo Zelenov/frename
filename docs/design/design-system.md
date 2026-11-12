@@ -1052,8 +1052,10 @@ is closed (its media unloads) for the length of its item and comes back by itsel
 
 What a lock does when pressed: nothing but a note over the video that says why ("Busy: Describe with AI"; for the clip in work "In use: Describe with AI"). Nothing held is silent.
 
-The **lock line** is a 28 px row at the top of the file list, above the search field, `bg.raised`,
-padding 0×8: `lock` 14 and the sentence in `secondary`. It pushes the list down (the rows keep
+The **lock line** is a row at least 28 px high at the top of the file list, above the search field,
+`bg.raised`, padding 4×8 around a `secondary` line: `lock` 14 and the sentence. A sentence that
+wraps (Russian, a long action name, a narrow list) makes it taller instead of being cut off or
+covering the search (#382). It pushes the list down (the rows keep
 their scroll position) and goes when the job ends. The batch page's button bar says on its left:
 "You can keep working while it runs".
 
