@@ -1,6 +1,6 @@
 # 0.194
 ## Fixed
-- Settings → Describe with AI: the prices in the model list are now in your language.
+- Settings → Describe with AI: the model list no longer has English words in other languages; the line under it says, in your language, what the prices are.
 
 # 0.193
 ## Fixed

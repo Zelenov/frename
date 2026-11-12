@@ -375,9 +375,10 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
                             Some(option(frename_core::ai::model_from_id(&settings.ai_model))),
                             |option| Message::SetAiModel(option.model),
                         )
-                        .width(FIELD_WIDTH_XL),
+                        .width(FIELD_WIDTH_L),
                         focused(state, Control::AiModel),
                     ),
+                    text::secondary(fl!("settings-ai-model-prices")).into(),
                     text::secondary(fl!("settings-ai-hint")).into(),
                 ]),
             ),
@@ -871,8 +872,9 @@ impl std::fmt::Display for ModelOption {
     }
 }
 
-/// A model with its prices in the UI language: "Claude Haiku 4.5 ($1 / $5 per M tokens)" (#383).
-/// clipscribe's own `Display` of a model is English only.
+/// A model with its prices, "Claude Haiku 4.5 ($1 / $5)"; what the prices are (US dollars per
+/// million tokens, input / output) is the translated line under the field (#383). clipscribe's own
+/// `Display` of a model says that in English only, and is too long for the field in other languages.
 fn model_label(model: &Model) -> String {
     fl!(
         "settings-ai-model-option",
@@ -892,19 +894,17 @@ impl std::fmt::Display for SummaryLanguageOption {
 mod tests {
     use clipscribe::MODELS;
 
-    /// Issue #383: the model list is made from frename's own text (translated), and in English
-    /// it reads as before.
+    /// Issue #383: the model list shows a model's name and prices, with no English words; what
+    /// the prices are is the translated line under the field.
     #[test]
-    fn a_model_reads_its_name_and_prices_in_the_ui_language() {
+    fn a_model_reads_its_name_and_prices() {
         for model in MODELS {
             let label = super::model_label(&model);
-            assert_eq!(label, model.to_string(), "{}", model.id);
+            assert!(label.starts_with(model.label), "{label}");
+            assert!(!label.contains("tokens"), "{label}");
         }
         let haiku = clipscribe::Model::from_id("claude-haiku-4-5");
         assert_eq!(haiku.id, "claude-haiku-4-5", "Haiku is in MODELS");
-        assert_eq!(
-            super::model_label(&haiku),
-            "Claude Haiku 4.5 ($1 / $5 per M tokens)"
-        );
+        assert_eq!(super::model_label(&haiku), "Claude Haiku 4.5 ($1 / $5)");
     }
 }

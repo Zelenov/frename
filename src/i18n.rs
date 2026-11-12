@@ -1377,18 +1377,14 @@ mod tests {
         loader
     }
 
-    /// Issue #383: the model list's prices read in the UI language, not clipscribe's English.
+    /// Issue #383: what the model list's prices are reads in the UI language.
     #[test]
-    fn the_model_list_reads_its_prices_in_russian() {
+    fn the_model_prices_line_reads_in_russian() {
         let loader = loader("ru");
-        let label = i18n_embed_fl::fl!(
-            loader,
-            "settings-ai-model-option",
-            model = "Claude Haiku 4.5",
-            input = "1",
-            output = "5"
+        assert_eq!(
+            i18n_embed_fl::fl!(loader, "settings-ai-model-prices"),
+            "Цены в долларах США за 1 млн токенов: ввод / вывод."
         );
-        assert_eq!(label, "Claude Haiku 4.5 ($1 / $5 за 1 млн токенов)");
     }
 
     /// Issue #274: these toasts were English literals and stayed English in the Russian UI.
