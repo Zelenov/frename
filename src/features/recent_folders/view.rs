@@ -32,12 +32,6 @@ fn text_room(row_width: f32) -> f32 {
     row_width - 2.0 * GAP - SELECTION_BAR - ICON_BUTTON_SMALL - GAP
 }
 
-/// How many characters of caption text fit in `width`, generously (the estimate is for wide
-/// letters, so a cut line is never longer than its box).
-fn captions_in(width: f32) -> usize {
-    (width / CAPTION_CHAR_WIDTH).floor().max(0.0) as usize
-}
-
 /// The ✕ of a highlighted row, or the room it takes.
 fn remove_slot<'a>(entry: &Entry, shown: bool) -> Element<'a, Message> {
     if !shown {
@@ -81,7 +75,7 @@ fn entry_row<'a>(
     let name = text::fit_body(&folder.name(), name_room).into_owned();
     let parent = folder
         .parent()
-        .map(|parent| shorten_path(&parent, captions_in(room)))
+        .map(|parent| shorten_path(&parent, room, text::caption_advance))
         .unwrap_or_default();
     let top = row![
         container(text::body(name).color(color)).width(Length::Fill),
@@ -297,6 +291,5 @@ mod tests {
     #[test]
     fn a_row_leaves_room_for_the_cross() {
         assert!(text_room(RECENT_LIST_WIDTH) < RECENT_LIST_WIDTH - ICON_BUTTON_SMALL);
-        assert!(captions_in(text_room(RECENT_LIST_WIDTH)) > 20);
     }
 }

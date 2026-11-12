@@ -1,3 +1,8 @@
+# 0.202
+## Fixed
+- A comment line that the file search found ends in "…" when it does not fit, also in Cyrillic, Japanese, Korean or Chinese, instead of being cut off with no sign that text is missing.
+- The folder path under a recent folder's name stays on one line and starts with "…" when it does not fit, also in Cyrillic, Japanese, Korean or Chinese.
+
 # 0.201
 ## Fixed
 - Settings → Describe with AI: a model whose key is not saved yet now fits the Model list, in every language; it reads "GPT-4.1 mini — no OpenAI key".

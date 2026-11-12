@@ -168,6 +168,15 @@ pub fn fit_caption(line: &str, width: f32) -> Cow<'_, str> {
 /// One pass that stops as soon as the line is known not to fit, so a long comment costs what
 /// its row shows, not its whole length (it runs for every row on every view).
 fn fit_measured(line: &str, width: f32, size: f32) -> Cow<'_, str> {
+    match measured_cut(line, width, size) {
+        Some(end) => Cow::Owned(format!("{}…", line[..end].trim_end())),
+        None => Cow::Borrowed(line),
+    }
+}
+
+/// Where `line` in Inter at `size` px must stop to end in "…" within `width` px: the byte index
+/// the "…" goes after, or `None` when the whole line fits. One pass, stopping early.
+fn measured_cut(line: &str, width: f32, size: f32) -> Option<usize> {
     let face = inter();
     let room = width - char_width(face, '…', size);
     let mut used = 0.0;
@@ -179,11 +188,17 @@ fn fit_measured(line: &str, width: f32, size: f32) -> Cow<'_, str> {
             cut = Some(at);
         }
         if used > width {
-            let kept = &line[..cut.unwrap_or(at)];
-            return Cow::Owned(format!("{}…", kept.trim_end()));
+            return Some(cut.unwrap_or(at));
         }
     }
-    Cow::Borrowed(line)
+    None
+}
+
+/// How wide `c` is in caption text: the measured counterpart of [`text_width`] at
+/// `TEXT_CAPTION`, for cuts that are not from the end of a line (a path cut from its front,
+/// #408). Not the `CAPTION_CHAR_WIDTH` average.
+pub fn caption_advance(c: char) -> f32 {
+    char_width(inter(), c, TEXT_CAPTION)
 }
 
 /// How a run of a [`body_runs`] line is drawn.
@@ -213,23 +228,17 @@ pub fn body_runs<'a, M: 'a>(runs: impl IntoIterator<Item = (Run, String)>) -> El
 }
 
 /// A caption `line` with the byte `ranges` of it marked (a search's hits): the marked parts in the
-/// accent color on its tint. Cut with "…" to `width` like [`fit`]; a mark that runs past the cut
-/// is cut with it. One line, like every comment line of the list.
+/// accent color on its tint. Cut with "…" to `width` like [`fit_caption`]; a mark that runs past
+/// the cut is cut with it. One line, like every comment line of the list.
 pub fn caption_marked<'a, M: 'a>(
     line: &str,
     ranges: &[std::ops::Range<usize>],
     width: f32,
-    char_width: f32,
 ) -> Element<'a, M> {
-    let room = (width / char_width).floor().max(0.0) as usize;
-    let too_long = line.chars().count() > room;
-    let end = if too_long {
-        line.char_indices()
-            .nth(room.saturating_sub(1))
-            .map_or(line.len(), |(i, _)| i)
-    } else {
-        line.len()
-    };
+    // Measured like `fit_caption`, so Cyrillic or CJK keeps its "…" (#408).
+    let cut = measured_cut(line, width, TEXT_CAPTION);
+    let too_long = cut.is_some();
+    let end = cut.unwrap_or(line.len());
     let shown = &line[..end];
     let mut spans: Vec<iced::widget::text::Span<'a, (), Font>> = Vec::new();
     let mut at = 0;
@@ -348,6 +357,24 @@ mod tests {
             }
         }
         assert!(text_width("abc", TEXT_CAPTION) < text_width("abc", TEXT_BODY));
+    }
+
+    /// Issue #408: a marked caption line is cut where `fit_caption` cuts it, so Cyrillic or CJK
+    /// keeps its "…" within the room.
+    #[test]
+    fn a_marked_line_is_cut_by_its_measured_width() {
+        for line in [
+            "Съёмка на набережной: закат и огни",
+            "夕方の港の空撮。ロケ地は函館の港",
+        ] {
+            let end = measured_cut(line, 90.0, TEXT_CAPTION).expect("too long for 90 px");
+            let shown = format!("{}…", &line[..end]);
+            assert!(text_width(&shown, TEXT_CAPTION) <= 90.0, "{shown}");
+            assert_eq!(
+                fit_caption(line, 90.0),
+                format!("{}…", line[..end].trim_end())
+            );
+        }
     }
 
     #[test]

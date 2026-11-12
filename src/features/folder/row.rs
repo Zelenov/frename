@@ -303,12 +303,7 @@ fn comment_line<'a>(
         return spinner(spinner_frame, ICON_S, TEXT_SECONDARY).into();
     }
     if let Some(fragment) = fragment {
-        return text::caption_marked(
-            &fragment.text,
-            &fragment.highlights,
-            width,
-            CAPTION_CHAR_WIDTH,
-        );
+        return text::caption_marked(&fragment.text, &fragment.highlights, width);
     }
     let first = snapshot.comment().lines().next().unwrap_or_default();
     text::caption(text::fit_caption(first, width).into_owned())
