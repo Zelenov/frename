@@ -1,6 +1,10 @@
-# 0.198
+# 0.199
 ## Fixed
 - Dragging a divider no longer closes frename when the window is narrower than its usual minimum (some window managers allow that); the divider just stays where it is.
+
+# 0.198
+## Fixed
+- In a narrow file list or tags area, the search field's hint ("Find a file or a comment") ends in "…" when it does not fit, instead of stopping with no sign that text is missing.
 
 # 0.197
 ## Fixed
