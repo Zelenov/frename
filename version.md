@@ -1,3 +1,7 @@
+# 0.197
+## Fixed
+- In a narrow file list or tags area, the search field's hint ("Find a file or a comment") ends in "…" instead of being cut off in the middle of a word.
+
 # 0.196
 ## Fixed
 - Settings → Describe with AI: the model list no longer has English words in other languages; the line under it says, in your language, what the prices are.

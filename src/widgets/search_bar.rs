@@ -5,8 +5,8 @@
 use iced::widget::{container, row, Id};
 use iced::{Alignment, Element, Length, Padding};
 
-use crate::ui::form;
 use crate::ui::tokens::*;
+use crate::ui::{form, text};
 
 /// Widget id for the tag search bar text input (for focus and global key capture).
 pub const SEARCH_BAR_INPUT_ID: &str = "search-bar-input";
@@ -44,14 +44,34 @@ pub fn view<'a, M: Clone + 'a>(
     bar: SearchBar<'a, M>,
     on_input: impl Fn(String) -> M + 'a,
 ) -> Element<'a, M> {
-    let field = form::text_field(&bar.placeholder, bar.value)
-        .id(Id::from(bar.input_id))
-        .on_input(on_input)
-        .on_submit(bar.on_submit);
-    let search = form::search_field(field, !bar.value.is_empty(), bar.on_clear, bar.clear_tip);
+    let on_input = std::rc::Rc::new(on_input);
+    let SearchBar {
+        input_id,
+        placeholder,
+        value,
+        clear_tip,
+        on_clear,
+        on_submit,
+        trailing,
+    } = bar;
+    // The placeholder is cut with "…" at the room the field really has, never mid-word (#393).
+    let search = iced::widget::responsive(move |size| {
+        let room = size.width - 2.0 * (form::SEARCH_ICON_ROOM + LINE);
+        let on_input = on_input.clone();
+        let field = form::text_field(&text::fit_body(&placeholder, room), value)
+            .id(Id::from(input_id))
+            .on_input(move |typed| on_input(typed))
+            .on_submit(on_submit.clone());
+        form::search_field(
+            field,
+            !value.is_empty(),
+            on_clear.clone(),
+            clear_tip.clone(),
+        )
+    });
     container(
-        row![container(search).width(Length::Fill)]
-            .push(bar.trailing)
+        row![container(search).width(Length::Fill).height(CONTROL_HEIGHT)]
+            .push(trailing)
             .spacing(SPACE_TIGHT)
             .align_y(Alignment::Center),
     )
