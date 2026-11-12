@@ -1,3 +1,7 @@
+# 0.194
+## Fixed
+- When the tags area is narrow, the line over the tag grid ("Reordering below reorders the folder") ends in "…" instead of being cut off in the middle of a word; hover it for the whole sentence.
+
 # 0.193
 ## Fixed
 - While a batch job runs, the line over the file list that says the checks are locked no longer runs over the search field when it takes two lines (in Russian, or with a narrow list): the line grows to fit its text.

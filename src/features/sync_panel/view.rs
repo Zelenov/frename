@@ -66,13 +66,17 @@ fn strip(is_synced: bool, locked: bool, words: bool) -> Element<'static, Message
         .into()
 }
 
-/// The icon and the sentence, cut at the strip's end rather than wrapped; the whole sentence is
-/// its tooltip, for when it is cut.
+/// The icon and the sentence, cut with "…" at the room it has rather than wrapped (§13.9, #391);
+/// the whole sentence is its tooltip, for when it is cut.
 fn line(glyph: Icon, color: Color, sentence: String) -> iced::widget::Row<'static, Message> {
-    let shown = text::secondary(sentence.clone()).wrapping(iced::widget::text::Wrapping::None);
-    let sentence = container(tooltip::tip_text(shown, sentence, Position::Top))
-        .width(Length::Fill)
-        .clip(true);
+    let sentence = container(iced::widget::responsive(move |size| {
+        let shown = text::secondary(text::fit(&sentence, size.width, BODY_CHAR_WIDTH).into_owned())
+            .wrapping(iced::widget::text::Wrapping::None);
+        tooltip::tip_text(shown, sentence.clone(), Position::Top)
+    }))
+    .width(Length::Fill)
+    .height(LINE_BODY)
+    .clip(true);
     row![icon(glyph, ICON_MARK, color), sentence]
 }
 
