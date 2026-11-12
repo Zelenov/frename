@@ -1377,6 +1377,16 @@ mod tests {
         loader
     }
 
+    /// Issue #383: what the model list's prices are reads in the UI language.
+    #[test]
+    fn the_model_prices_line_reads_in_russian() {
+        let loader = loader("ru");
+        assert_eq!(
+            i18n_embed_fl::fl!(loader, "settings-ai-model-prices"),
+            "Цены в долларах США за 1 млн токенов: ввод / вывод."
+        );
+    }
+
     /// Issue #274: these toasts were English literals and stayed English in the Russian UI.
     #[test]
     fn the_toasts_of_issue_274_are_translated_and_used() {

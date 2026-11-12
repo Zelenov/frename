@@ -378,6 +378,7 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
                         .width(FIELD_WIDTH_L),
                         focused(state, Control::AiModel),
                     ),
+                    text::secondary(fl!("settings-ai-model-prices")).into(),
                     text::secondary(fl!("settings-ai-hint")).into(),
                 ]),
             ),
@@ -854,24 +855,56 @@ struct ModelOption {
 
 impl std::fmt::Display for ModelOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let model = model_label(&self.model);
         if self.needs_key {
             write!(
                 f,
                 "{}",
                 fl!(
                     "settings-ai-model-needs-key",
-                    model = self.model.to_string(),
+                    model = model,
                     provider = self.model.provider.label()
                 )
             )
         } else {
-            write!(f, "{}", self.model)
+            write!(f, "{model}")
         }
     }
+}
+
+/// A model with its prices, "Claude Haiku 4.5 ($1 / $5)"; what the prices are (US dollars per
+/// million tokens, input / output) is the translated line under the field (#383). clipscribe's own
+/// `Display` of a model says that in English only, and is too long for the field in other languages.
+fn model_label(model: &Model) -> String {
+    fl!(
+        "settings-ai-model-option",
+        model = model.label,
+        input = model.input_usd_per_mtok.to_string(),
+        output = model.output_usd_per_mtok.to_string()
+    )
 }
 
 impl std::fmt::Display for SummaryLanguageOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", describe_ai::language_name(self.0))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clipscribe::MODELS;
+
+    /// Issue #383: the model list shows a model's name and prices, with no English words; what
+    /// the prices are is the translated line under the field.
+    #[test]
+    fn a_model_reads_its_name_and_prices() {
+        for model in MODELS {
+            let label = super::model_label(&model);
+            assert!(label.starts_with(model.label), "{label}");
+            assert!(!label.contains("tokens"), "{label}");
+        }
+        let haiku = clipscribe::Model::from_id("claude-haiku-4-5");
+        assert_eq!(haiku.id, "claude-haiku-4-5", "Haiku is in MODELS");
+        assert_eq!(super::model_label(&haiku), "Claude Haiku 4.5 ($1 / $5)");
     }
 }
