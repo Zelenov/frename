@@ -1,3 +1,7 @@
+# 0.197
+## Fixed
+- Clearing an In or Out point twice in a row (a quick double click on its ×) no longer adds an undo step that does nothing, and Redo stays available.
+
 # 0.196
 ## Fixed
 - Settings → Describe with AI: the model list no longer has English words in other languages; the line under it says, in your language, what the prices are.
