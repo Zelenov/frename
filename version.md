@@ -1,6 +1,10 @@
-# 0.193
+# 0.194
 ## Fixed
 - Pressing `[` or `]` again on the frame that is already the In or Out point, or pasting the tags a clip already has, no longer adds an undo step that does nothing, and Redo stays available.
+
+# 0.193
+## Fixed
+- While a batch job runs, the line over the file list that says the checks are locked no longer runs over the search field when it takes two lines (in Russian, or with a narrow list): the line grows to fit its text.
 
 # 0.192
 ## Fixed

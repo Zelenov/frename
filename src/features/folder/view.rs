@@ -204,9 +204,14 @@ fn lock_line<'a>(batch: &BatchState) -> Element<'a, Message> {
         .spacing(SPACE_S)
         .align_y(Alignment::Center),
     )
-    .padding(STRIP_PADDING)
+    // A text that wraps (a long action name, another language, a narrow list) makes the line
+    // taller instead of drawing over the search (#382).
+    .padding(Padding {
+        top: LOCK_LINE_PADDING_Y,
+        bottom: LOCK_LINE_PADDING_Y,
+        ..STRIP_PADDING
+    })
     .width(Length::Fill)
-    .center_y(LOCK_LINE_HEIGHT)
     .style(style::raised)
     .into()
 }

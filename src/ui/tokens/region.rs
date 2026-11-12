@@ -113,8 +113,11 @@ pub const CHECK_COLUMN: f32 = 28.0;
 pub const STATUS_COLUMN: f32 = 32.0;
 /// A file name keeps at least this much beside its chips: chips give way first.
 pub const NAME_MIN_WIDTH: f32 = 80.0;
-/// The line over the list that says why it is locked.
+/// The line over the list that says why it is locked: its height with one line of text.
 pub const LOCK_LINE_HEIGHT: f32 = CONTROL_HEIGHT;
+/// The lock line's padding above and below its text, so one line is `LOCK_LINE_HEIGHT` tall and a
+/// text that wraps makes it taller (#382).
+pub const LOCK_LINE_PADDING_Y: f32 = (LOCK_LINE_HEIGHT - LINE_BODY) / 2.0;
 
 // Recent folders (#63, §13.4.3, §13.7).
 /// A recent folder's row: its name with when it was opened, and the folder it is in under it.
