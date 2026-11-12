@@ -75,7 +75,7 @@ fn entry_row<'a>(
     let name = text::fit_body(&folder.name(), name_room).into_owned();
     let parent = folder
         .parent()
-        .map(|parent| shorten_path(&parent, room, text::caption_char_width))
+        .map(|parent| shorten_path(&parent, room, text::caption_advance))
         .unwrap_or_default();
     let top = row![
         container(text::body(name).color(color)).width(Length::Fill),

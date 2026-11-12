@@ -1,6 +1,7 @@
 # 0.202
 ## Fixed
-- A comment line found by the file search, and the folder path under a recent folder's name, end in "…" when they do not fit, also in Cyrillic, Japanese, Korean or Chinese; a found word in a long Japanese or Chinese comment line now stays in view.
+- A comment line that the file search found ends in "…" when it does not fit, also in Cyrillic, Japanese, Korean or Chinese, instead of being cut off with no sign that text is missing.
+- The folder path under a recent folder's name stays on one line and starts with "…" when it does not fit, also in Cyrillic, Japanese, Korean or Chinese.
 
 # 0.201
 ## Fixed

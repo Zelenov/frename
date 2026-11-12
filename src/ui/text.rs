@@ -194,54 +194,11 @@ fn measured_cut(line: &str, width: f32, size: f32) -> Option<usize> {
     None
 }
 
-/// How wide `c` is in caption text (`TEXT_CAPTION` Inter), for cuts that are not from the end of
-/// a line (a path cut from its front, #408).
-pub fn caption_char_width(c: char) -> f32 {
+/// How wide `c` is in caption text: the measured counterpart of [`text_width`] at
+/// `TEXT_CAPTION`, for cuts that are not from the end of a line (a path cut from its front,
+/// #408). Not the `CAPTION_CHAR_WIDTH` average.
+pub fn caption_advance(c: char) -> f32 {
     char_width(inter(), c, TEXT_CAPTION)
-}
-
-/// `line` and its marks, trimmed from the front ("…" there) when the first mark would end past
-/// the room a caption `width` px wide leaves before a closing "…": the search hit is what the line
-/// is shown for. Wide text (CJK) needs this: the fragment's lead before the hit is counted in
-/// characters (#408).
-fn bring_first_mark_into_view<'s>(
-    line: &'s str,
-    ranges: &[std::ops::Range<usize>],
-    width: f32,
-) -> (Cow<'s, str>, Vec<std::ops::Range<usize>>) {
-    let unchanged = (Cow::Borrowed(line), ranges.to_vec());
-    let Some(first) = ranges.first() else {
-        return unchanged;
-    };
-    let face = inter();
-    let ellipsis = char_width(face, '…', TEXT_CAPTION);
-    let room = width - 2.0 * ellipsis;
-    let mut used: f32 = line[..first.end]
-        .chars()
-        .map(|c| char_width(face, c, TEXT_CAPTION))
-        .sum();
-    if used <= width - ellipsis {
-        return unchanged;
-    }
-    // Drop characters from the front, up to the mark's start, until the mark ends in the room.
-    let mut start = 0;
-    for (at, c) in line[..first.start].char_indices() {
-        if used <= room {
-            break;
-        }
-        used -= char_width(face, c, TEXT_CAPTION);
-        start = at + c.len_utf8();
-    }
-    if start == 0 {
-        return unchanged;
-    }
-    let text = format!("…{}", &line[start..]);
-    let shift = |i: usize| i - start + '…'.len_utf8();
-    let ranges = ranges
-        .iter()
-        .map(|r| shift(r.start)..shift(r.end))
-        .collect();
-    (Cow::Owned(text), ranges)
 }
 
 /// How a run of a [`body_runs`] line is drawn.
@@ -272,15 +229,12 @@ pub fn body_runs<'a, M: 'a>(runs: impl IntoIterator<Item = (Run, String)>) -> El
 
 /// A caption `line` with the byte `ranges` of it marked (a search's hits): the marked parts in the
 /// accent color on its tint. Cut with "…" to `width` like [`fit_caption`]; a mark that runs past
-/// the cut is cut with it, but the first mark is always brought into view (see
-/// [`bring_first_mark_into_view`]). One line, like every comment line of the list.
+/// the cut is cut with it. One line, like every comment line of the list.
 pub fn caption_marked<'a, M: 'a>(
     line: &str,
     ranges: &[std::ops::Range<usize>],
     width: f32,
 ) -> Element<'a, M> {
-    let (line, ranges) = bring_first_mark_into_view(line, ranges, width);
-    let (line, ranges) = (line.as_ref(), ranges.as_slice());
     // Measured like `fit_caption`, so Cyrillic or CJK keeps its "…" (#408).
     let cut = measured_cut(line, width, TEXT_CAPTION);
     let too_long = cut.is_some();
@@ -405,32 +359,22 @@ mod tests {
         assert!(text_width("abc", TEXT_CAPTION) < text_width("abc", TEXT_BODY));
     }
 
-    /// Issue #408: a search hit far into a line of wide characters is brought into view.
+    /// Issue #408: a marked caption line is cut where `fit_caption` cuts it, so Cyrillic or CJK
+    /// keeps its "…" within the room.
     #[test]
-    fn the_first_mark_is_brought_into_view() {
-        let line = "…いので切ること。ロケ地は函館の港で、天気は晴れ。";
-        let at = line.find("函館").unwrap();
-        let ranges = vec![std::ops::Range {
-            start: at,
-            end: at + "函館".len(),
-        }];
-        let width = 150.0;
-        let (shown, marks) = bring_first_mark_into_view(line, &ranges, width);
-        assert!(shown.starts_with('…'), "{shown}");
-        assert_eq!(&shown[marks[0].clone()], "函館");
-        let to_mark_end = text_width(&shown[..marks[0].end], TEXT_CAPTION);
-        assert!(
-            to_mark_end + text_width("…", TEXT_CAPTION) <= width,
-            "{shown}"
-        );
-
-        // A mark that already shows leaves the line alone.
-        let mark = std::ops::Range {
-            start: 2,
-            end: 2 + "函館".len(),
-        };
-        let (same, _) = bring_first_mark_into_view("a 函館 b", std::slice::from_ref(&mark), width);
-        assert_eq!(same, "a 函館 b");
+    fn a_marked_line_is_cut_by_its_measured_width() {
+        for line in [
+            "Съёмка на набережной: закат и огни",
+            "夕方の港の空撮。ロケ地は函館の港",
+        ] {
+            let end = measured_cut(line, 90.0, TEXT_CAPTION).expect("too long for 90 px");
+            let shown = format!("{}…", &line[..end]);
+            assert!(text_width(&shown, TEXT_CAPTION) <= 90.0, "{shown}");
+            assert_eq!(
+                fit_caption(line, 90.0),
+                format!("{}…", line[..end].trim_end())
+            );
+        }
     }
 
     #[test]

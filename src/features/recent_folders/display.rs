@@ -36,13 +36,20 @@ pub fn shorten_path(path: &str, room: f32, width: impl Fn(char) -> f32) -> Strin
         start = at;
     }
     let tail = &path[start..];
-    // Start at the next separator if one is near, so no folder name is cut in two.
-    let near = tail.len() / 2;
-    let at_separator = tail
-        .char_indices()
-        .find(|(_, c)| matches!(c, '/' | '\\'))
-        .filter(|(at, _)| *at < near)
-        .map_or(tail, |(at, _)| &tail[at..]);
+    // Start at the next separator if one is near (within half the room), so no folder name is
+    // cut in two.
+    let mut before = 0.0;
+    let mut at_separator = tail;
+    for (at, c) in tail.char_indices() {
+        if before >= keep / 2.0 {
+            break;
+        }
+        if matches!(c, '/' | '\\') {
+            at_separator = &tail[at..];
+            break;
+        }
+        before += width(c);
+    }
     format!("…{at_separator}")
 }
 
@@ -63,6 +70,10 @@ mod tests {
         assert!(cut.starts_with('…'), "{cut}");
         assert!(cut.chars().map(wide).sum::<f32>() <= 10.0, "{cut}");
         assert!(cut.ends_with("北海道"), "{cut}");
+
+        // The near-separator rule counts width too: a wide name is not dropped for a far one.
+        let cut = shorten_path(r"D:\Footage\北海道ロケ\ab", 16.0, wide);
+        assert_eq!(cut, r"…\北海道ロケ\ab", "{cut}");
     }
 
     #[test]
