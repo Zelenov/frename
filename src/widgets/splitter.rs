@@ -142,11 +142,11 @@ where
             }
             Event::Mouse(mouse::Event::CursorMoved { .. }) => {
                 if state.is_dragging {
-                    if let Some(pos) = cursor.position() {
-                        // Clamp so both panels respect their minimum widths
-                        let max_left = viewport.width - SPLITTER_HIT - self.min_right;
-                        let clamped = pos.x.clamp(self.min_left, max_left);
-                        shell.publish((self.on_drag)(clamped));
+                    let at = cursor.position().and_then(|pos| {
+                        drag_position(pos.x, self.min_left, self.min_right, viewport.width)
+                    });
+                    if let Some(x) = at {
+                        shell.publish((self.on_drag)(x));
                     }
                 }
             }
@@ -184,5 +184,38 @@ where
 {
     fn from(splitter: Splitter<'a, Message>) -> Self {
         Self::new(splitter)
+    }
+}
+
+/// Where a drag to `x` puts the splitter in a window `width` wide: clamped so both sides keep
+/// their minimum widths. `None` when the window is narrower than both minimums together (the OS
+/// ignored the window's minimum size): the splitter stays where it is instead of panicking in
+/// `f32::clamp` (#395).
+fn drag_position(x: f32, min_left: f32, min_right: f32, width: f32) -> Option<f32> {
+    let max_left = width - SPLITTER_HIT - min_right;
+    (min_left <= max_left).then(|| x.clamp(min_left, max_left))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::drag_position;
+    use crate::ui::tokens::SPLITTER_HIT;
+
+    #[test]
+    fn a_drag_is_clamped_to_both_minimums() {
+        let width = 1000.0;
+        assert_eq!(
+            drag_position(500.0, 320.0, 532.0, width),
+            Some(1000.0 - SPLITTER_HIT - 532.0)
+        );
+        assert_eq!(drag_position(100.0, 320.0, 300.0, width), Some(320.0));
+        assert_eq!(drag_position(400.0, 320.0, 300.0, width), Some(400.0));
+    }
+
+    /// Issue #395: a window narrower than both minimums together does not panic; the splitter
+    /// stays where it is.
+    #[test]
+    fn a_window_too_narrow_for_both_minimums_moves_nothing() {
+        assert_eq!(drag_position(400.0, 320.0, 532.0, 800.0), None);
     }
 }
