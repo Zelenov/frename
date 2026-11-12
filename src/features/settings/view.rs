@@ -375,6 +375,7 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
                             Some(option(frename_core::ai::model_from_id(&settings.ai_model))),
                             |option| Message::SetAiModel(option.model),
                         )
+                        // ModelOption's labels are cut to this width's text room (#400).
                         .width(FIELD_WIDTH_L),
                         focused(state, Control::AiModel),
                     ),
@@ -922,6 +923,7 @@ mod tests {
                 needs_key: true,
             }
             .to_string();
+            assert!(!missing.ends_with('…'), "fits whole: {missing}");
             assert!(crate::ui::text::body_width(&missing) <= room, "{missing}");
             let fine = super::ModelOption {
                 model,

@@ -1,6 +1,6 @@
 # 0.201
 ## Fixed
-- Settings → Describe with AI: a model whose key is not saved yet no longer runs past the edge of the Model list; it reads "Gemini 3.5 Flash — no Gemini key", and the line under the list says each model needs its own company's key.
+- Settings → Describe with AI: a model whose key is not saved yet now fits the Model list, in every language; it reads "GPT-4.1 mini — no OpenAI key".
 
 # 0.199
 ## Fixed
