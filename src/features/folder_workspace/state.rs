@@ -578,18 +578,10 @@ impl FolderWorkspace {
             Message::FileNamePanel(msg) => self.handle_file_name_panel(msg),
             Message::SyncPanel(msg) => self.handle_sync_panel(msg),
             Message::LeftSplitterDragged(x) => {
+                // The splitter stops where the tags area would go below its minimum (view), so
+                // the file list keeps its width.
                 self.adopt_shown_widths();
-                // The splitter can go past where the fitted video pane stops; the editor's width
-                // is the one the pane shows.
-                self.chosen_video_width = match self.window_width {
-                    Some(window) => fitted_column_widths(x, self.chosen_list_width, window).0,
-                    None => x,
-                };
-                let folder_start = self.chosen_video_width + SPLITTER_HIT;
-                let folder_end = folder_start + self.chosen_list_width;
-                let new_folder_width = folder_end - x - SPLITTER_HIT;
-                self.chosen_list_width =
-                    new_folder_width.clamp(FILE_LIST_MIN_WIDTH, FILE_LIST_MAX_WIDTH);
+                self.chosen_video_width = x;
                 self.app_db
                     .set_panel_widths(self.chosen_video_width, self.chosen_list_width);
                 Task::none()
@@ -3708,12 +3700,12 @@ impl FolderWorkspace {
         self.file_workspace.tag_list().sync_locked()
     }
 
-    /// The video pane's width as shown: fitted to the window (`set_window_width`).
+    /// The video pane's width as shown: fitted to the window (`Message::WindowWidthChanged`).
     pub fn left_width(&self) -> f32 {
         self.shown_column_widths().0
     }
 
-    /// The file list's width as shown: fitted to the window (`set_window_width`).
+    /// The file list's width as shown: fitted to the window (`Message::WindowWidthChanged`).
     pub fn folder_width(&self) -> f32 {
         self.shown_column_widths().1
     }
@@ -3896,10 +3888,12 @@ mod tests {
         assert_eq!(ws.left_width(), shown_video, "the video pane does not jump");
         assert_eq!(ws.saved_column_widths(), (shown_video, 250.0));
 
-        // The left splitter dragged past where the video pane stops: the width saved is the one
-        // shown, not the pointer's.
-        let _ = ws.update(Message::LeftSplitterDragged(900.0));
-        assert_eq!(ws.saved_column_widths().0, ws.left_width());
+        // A left drag (the view stops it at the tags area's minimum) moves only the video pane,
+        // and the pane follows the pointer.
+        let _ = ws.update(Message::LeftSplitterDragged(shown_video + 20.0));
+        assert_eq!(ws.left_width(), shown_video + 20.0);
+        assert_eq!(ws.folder_width(), 250.0, "the file list keeps its width");
+        assert_eq!(ws.saved_column_widths(), (shown_video + 20.0, 250.0));
         assert!(960.0 - ws.left_width() - ws.folder_width() - 2.0 * SPLITTER_HIT >= TAGS_MIN_WIDTH);
     }
 

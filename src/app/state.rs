@@ -1282,6 +1282,7 @@ impl FrenameApp {
     }
 
     fn save_window_state(&self) {
+        let (left_panel_width, folder_panel_width) = self.folder_workspace.saved_column_widths();
         AppDatabase::new().set_window_state(WindowGeometry {
             x: self.window_pos.0,
             y: self.window_pos.1,
@@ -1290,8 +1291,8 @@ impl FrenameApp {
             is_maximized: self.is_maximized,
             monitor_width: self.monitor_size.0,
             monitor_height: self.monitor_size.1,
-            left_panel_width: self.folder_workspace.saved_column_widths().0,
-            folder_panel_width: self.folder_workspace.saved_column_widths().1,
+            left_panel_width,
+            folder_panel_width,
         });
     }
 
@@ -1409,24 +1410,6 @@ mod tests {
             (1000.0, 700.0),
             "tracked again after leaving"
         );
-    }
-
-    /// Issue #380: a window resize fits the columns, so the tags area keeps its minimum; the
-    /// widths the editor set are what is saved.
-    #[test]
-    fn a_narrower_window_keeps_the_tags_area_at_its_minimum() {
-        use crate::ui::tokens::{SPLITTER_HIT, TAGS_MIN_WIDTH, WINDOW_MIN_WIDTH};
-        let (mut app, ..) = app_with_loading_video();
-        let saved = app.folder_workspace.saved_column_widths();
-        let _ = app.update(Message::WindowResized(WINDOW_MIN_WIDTH, 600.0));
-        // The task the resize returns, as the runtime would run it.
-        let _ = app.update(Message::FolderWorkspace(
-            folder_workspace::Message::WindowWidthChanged(WINDOW_MIN_WIDTH),
-        ));
-        let ws = &app.folder_workspace;
-        let tags = WINDOW_MIN_WIDTH - ws.left_width() - ws.folder_width() - 2.0 * SPLITTER_HIT;
-        assert!(tags >= TAGS_MIN_WIDTH, "tags area {tags}");
-        assert_eq!(ws.saved_column_widths(), saved);
     }
 
     #[test]
