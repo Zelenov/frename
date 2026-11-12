@@ -71,7 +71,7 @@ fn entry_row<'a>(
     } else {
         TEXT_SECONDARY
     };
-    let name = text::fit(&folder.name(), room * 0.6, BODY_CHAR_WIDTH).into_owned();
+    let name = text::fit_body(&folder.name(), room * 0.6).into_owned();
     let when = if missing {
         fl!("recent-folders-not-found")
     } else {
@@ -109,7 +109,7 @@ fn entry_row<'a>(
 fn question_row<'a>(entry: &'a Entry, room: f32) -> Element<'a, Message> {
     let folder = &entry.folder;
     let words = column![
-        text::body(text::fit(&folder.name(), room * 0.5, BODY_CHAR_WIDTH).into_owned()),
+        text::body(text::fit_body(&folder.name(), room * 0.5).into_owned()),
         text::caption(fl!("recent-folders-missing-line")),
     ]
     .width(Length::Fill);

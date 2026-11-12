@@ -127,38 +127,47 @@ pub fn fit(line: &str, width: f32, char_width: f32) -> Cow<'_, str> {
     Cow::Owned(format!("{}…", kept.trim_end()))
 }
 
-/// How wide `line` is in body text (`TEXT_BODY` Inter), from the font's own advances; a character
-/// Inter does not have (CJK, Hangul, kana) counts as one em, as the CJK fonts draw it.
-pub fn body_width(line: &str) -> f32 {
+/// How wide `line` is in Inter at `size` px, from the font's own advances; a character Inter
+/// does not have (CJK, Hangul, kana) counts as one em, as the CJK fonts draw it.
+pub fn text_width(line: &str, size: f32) -> f32 {
     use std::sync::OnceLock;
     static INTER: OnceLock<Option<ttf_parser::Face<'static>>> = OnceLock::new();
     let face = INTER.get_or_init(|| ttf_parser::Face::parse(FONT_FILES[0], 0).ok());
     let Some(face) = face else {
-        return line.chars().count() as f32 * TEXT_BODY;
+        return line.chars().count() as f32 * size;
     };
-    let scale = TEXT_BODY / f32::from(face.units_per_em());
+    let scale = size / f32::from(face.units_per_em());
     line.chars()
         .map(|c| {
             face.glyph_index(c)
                 .and_then(|g| face.glyph_hor_advance(g))
-                .map_or(TEXT_BODY, |advance| f32::from(advance) * scale)
+                .map_or(size, |advance| f32::from(advance) * scale)
         })
         .sum()
 }
 
 /// `line` in body text cut with "…" so it is at most `width` px wide, measured with
-/// [`body_width`] (unlike [`fit`], which takes an average width a character and can run past
+/// [`text_width`] (unlike [`fit`], which takes an average width a character and can run past
 /// its room in Cyrillic or CJK, #391).
 pub fn fit_body(line: &str, width: f32) -> Cow<'_, str> {
-    if body_width(line) <= width {
+    fit_measured(line, width, TEXT_BODY)
+}
+
+/// `line` in caption text cut with "…" so it is at most `width` px wide, as [`fit_body`] (#399).
+pub fn fit_caption(line: &str, width: f32) -> Cow<'_, str> {
+    fit_measured(line, width, TEXT_CAPTION)
+}
+
+fn fit_measured(line: &str, width: f32, size: f32) -> Cow<'_, str> {
+    if text_width(line, size) <= width {
         return Cow::Borrowed(line);
     }
-    let room = width - body_width("…");
+    let room = width - text_width("…", size);
     let mut used = 0.0;
     let mut kept = String::new();
     for c in line.chars() {
         let mut buf = [0u8; 4];
-        used += body_width(c.encode_utf8(&mut buf));
+        used += text_width(c.encode_utf8(&mut buf), size);
         if used > room {
             break;
         }
@@ -302,15 +311,33 @@ mod tests {
                 let cut = fit_body(line, room);
                 assert!(cut.ends_with('…'), "{cut}");
                 assert!(
-                    body_width(&cut) <= room,
+                    text_width(&cut, TEXT_BODY) <= room,
                     "{cut}: {} > {room}",
-                    body_width(&cut)
+                    text_width(&cut, TEXT_BODY)
                 );
             }
         }
         // CJK takes about an em a character, Latin about half.
-        assert!(body_width("下での") > 2.5 * TEXT_BODY);
-        assert!(body_width("abc") < 2.0 * TEXT_BODY);
+        assert!(text_width("下での", TEXT_BODY) > 2.5 * TEXT_BODY);
+        assert!(text_width("abc", TEXT_BODY) < 2.0 * TEXT_BODY);
+    }
+
+    /// Issue #399: a measured caption cut is never wider than its room either.
+    #[test]
+    fn a_measured_caption_cut_stays_within_its_room() {
+        for line in [
+            "Съёмка на набережной, закат",
+            "夕方の海岸で撮影した素材",
+            "Wide shot at dusk, harbour",
+        ] {
+            assert_eq!(fit_caption(line, 10_000.0), line);
+            for room in [40.0, 90.0] {
+                let cut = fit_caption(line, room);
+                assert!(cut.ends_with('…'), "{cut}");
+                assert!(text_width(&cut, TEXT_CAPTION) <= room, "{cut}");
+            }
+        }
+        assert!(text_width("abc", TEXT_CAPTION) < text_width("abc", TEXT_BODY));
     }
 
     #[test]

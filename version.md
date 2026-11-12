@@ -1,3 +1,7 @@
+# 0.199
+## Fixed
+- Folder names in the recent folders list, and the first comment line in a file's row, end in "…" when they do not fit, also in Russian, Ukrainian, Japanese, Korean and Chinese, instead of being cut off with no sign that text is missing.
+
 # 0.198
 ## Fixed
 - In a narrow file list or tags area, the search field's hint ("Find a file or a comment") ends in "…" when it does not fit, instead of stopping with no sign that text is missing.
