@@ -257,9 +257,15 @@ impl<S: AppStateStore + Clone> Directory<S> {
     }
 
     /// Why a file matches the search when its name alone does not: the line of its comment with
-    /// the words in it, cut to show the first hit within `lead_chars` characters. `None` without
-    /// a search, when the name has every word, or while the comment is loading.
-    pub fn comment_fragment(&self, file: &File, lead_chars: usize) -> Option<CommentFragment> {
+    /// the words in it, cut so the first hit starts within `lead`, each character `width(c)`
+    /// wide. `None` without a search, when the name has every word, or while the comment is
+    /// loading.
+    pub fn comment_fragment(
+        &self,
+        file: &File,
+        lead: f32,
+        width: impl Fn(char) -> f32,
+    ) -> Option<CommentFragment> {
         if self.name_filter_words.is_empty() || file.snapshot().comment_loading() {
             return None;
         }
@@ -267,7 +273,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
         if search::matches_all(name, &self.name_filter_words) {
             return None;
         }
-        search::fragment(file.comment(), &self.name_filter_words, lead_chars)
+        search::fragment(file.comment(), &self.name_filter_words, lead, width)
     }
 
     /// Whether a file is part of the listed set under the current filters.
@@ -886,13 +892,23 @@ mod tests {
         comment_file_at(&mut dir, 1, "First line\nThe goat runs");
         dir.set_name_filter("goat".to_string());
         let by_name = dir.files_in_order().next().expect("goat_a").clone();
-        assert_eq!(dir.comment_fragment(&by_name, 20), None, "its name says it");
+        assert_eq!(
+            dir.comment_fragment(&by_name, 20.0, |_| 1.0),
+            None,
+            "its name says it"
+        );
         let by_comment = dir.files_in_order().nth(1).expect("b").clone();
-        let fragment = dir.comment_fragment(&by_comment, 20).expect("a fragment");
+        let fragment = dir
+            .comment_fragment(&by_comment, 20.0, |_| 1.0)
+            .expect("a fragment");
         assert_eq!(fragment.text, "The goat runs");
         assert_eq!(&fragment.text[fragment.highlights[0].clone()], "goat");
         dir.set_name_filter(String::new());
-        assert_eq!(dir.comment_fragment(&by_comment, 20), None, "no search");
+        assert_eq!(
+            dir.comment_fragment(&by_comment, 20.0, |_| 1.0),
+            None,
+            "no search"
+        );
     }
 
     /// Typing stays instant with a big folder: a few thousand clips with real-sized comments.

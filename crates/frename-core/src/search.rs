@@ -58,32 +58,41 @@ pub struct CommentFragment {
     pub highlights: Vec<Range<usize>>,
 }
 
-/// The first line of `comment` that has any of `words`, cut so the first hit is at most
-/// `lead_chars` characters from the start (the cut is shown as "…"), with every hit of every
-/// word in it marked. `None` when no line has one.
+/// The first line of `comment` that has any of `words`, cut so the first hit starts at most
+/// `lead` from the start (the cut is shown as "…"), each character `width(c)` wide, with every
+/// hit of every word in it marked. Measuring by width keeps the hit in view in Japanese or
+/// Chinese, whose characters are about twice as wide as Latin ones (#411). `None` when no line
+/// has one.
 pub(crate) fn fragment(
     comment: &str,
     words: &[String],
-    lead_chars: usize,
+    lead: f32,
+    width: impl Fn(char) -> f32,
 ) -> Option<CommentFragment> {
     let (line, mut hits) = comment.lines().find_map(|line| {
         let hits = hits(line, words);
         (!hits.is_empty()).then_some((line, hits))
     })?;
     let first = hits[0].start;
-    let lead = line[..first].chars().count();
-    if lead <= lead_chars {
+    let before = &line[..first];
+    if before.chars().map(&width).sum::<f32>() <= lead {
         return Some(CommentFragment {
             text: line.to_string(),
             highlights: hits,
         });
     }
-    let cut = line[..first]
-        .char_indices()
-        .rev()
-        .nth(lead_chars.saturating_sub(1))
-        .map_or(0, |(i, _)| i);
     const ELLIPSIS: &str = "…";
+    // The longest tail of what comes before the hit that fits beside the "…".
+    let keep = lead - width('…');
+    let mut used = 0.0;
+    let mut cut = first;
+    for (at, c) in before.char_indices().rev() {
+        used += width(c);
+        if used > keep {
+            break;
+        }
+        cut = at;
+    }
     for hit in &mut hits {
         *hit = hit.start - cut + ELLIPSIS.len()..hit.end - cut + ELLIPSIS.len();
     }
@@ -182,6 +191,11 @@ fn typed_time_ms(word: &str) -> Option<u64> {
 mod tests {
     use super::*;
 
+    /// Every character one unit wide, so a lead counts characters.
+    fn one(_: char) -> f32 {
+        1.0
+    }
+
     #[test]
     fn finds_ignoring_case_in_every_script() {
         assert_eq!(find_ignore_case("A Goat here", "goat", 0), Some(2..6));
@@ -211,7 +225,7 @@ mod tests {
     fn the_fragment_marks_every_word_in_the_first_line_that_has_one() {
         let comment = "Nothing here\nA goat and a Goat with a sheep\nsheep";
         let words = words("goat sheep");
-        let f = fragment(comment, &words, 20).expect("a fragment");
+        let f = fragment(comment, &words, 20.0, one).expect("a fragment");
         assert_eq!(f.text, "A goat and a Goat with a sheep");
         let marked: Vec<&str> = f.highlights.iter().map(|r| &f.text[r.clone()]).collect();
         assert_eq!(marked, ["goat", "Goat", "sheep"]);
@@ -221,17 +235,35 @@ mod tests {
     fn a_hit_far_from_the_start_is_brought_into_view() {
         let comment = "0123456789 0123456789 0123456789 0123456789 goat at the end";
         let words = words("goat");
-        let f = fragment(comment, &words, 10).expect("a fragment");
+        let f = fragment(comment, &words, 10.0, one).expect("a fragment");
         assert!(f.text.starts_with('…'), "{}", f.text);
         assert_eq!(&f.text[f.highlights[0].clone()], "goat");
-        assert!(f.text.chars().take(12).count() == 12);
-        assert_eq!(fragment("no match", &words, 10), None);
+        // As much of the line before the hit as fits beside the "…", and no more.
+        let lead = f.text[..f.highlights[0].start].chars().count();
+        assert_eq!(lead, 10, "{}", f.text);
+        assert_eq!(fragment("no match", &words, 10.0, one), None);
+    }
+
+    /// Issue #411: a hit far into a line of wide characters still starts within the lead.
+    #[test]
+    fn a_hit_in_a_line_of_wide_characters_is_brought_into_view_by_width() {
+        let wide = |c: char| if c.is_ascii() { 1.0 } else { 2.0 };
+        let comment = "北海道の夏の撮影で使った長い説明文がここに続いて函館の夜景";
+        let words = words("函館");
+        let f = fragment(comment, &words, 10.0, wide).expect("a fragment");
+        let hit = f.highlights[0].clone();
+        assert_eq!(&f.text[hit.clone()], "函館");
+        let lead: f32 = f.text[..hit.start].chars().map(wide).sum();
+        assert!(lead <= 10.0, "{} is {lead} wide", &f.text[..hit.start]);
+        assert!(f.text.starts_with('…'), "{}", f.text);
+        // As much of the line before the hit as fits: one more character would not.
+        assert!(lead + 2.0 > 10.0, "{}", f.text);
     }
 
     #[test]
     fn overlapping_words_are_marked_once() {
         let words = words("goat oat");
-        let f = fragment("goat", &words, 10).expect("a fragment");
+        let f = fragment("goat", &words, 10.0, one).expect("a fragment");
         assert_eq!(f.highlights, vec![0..4]);
     }
 

@@ -25,8 +25,9 @@ const ROW_PADDING: Padding = Padding {
     right: 0.0,
 };
 
-/// How many characters of a matching comment line show before the first hit.
-const FRAGMENT_LEAD_CHARS: usize = 12;
+/// How much of a matching comment line shows before the first hit: about twelve Latin
+/// characters, measured, so a line of wide characters keeps its hit in view too (#411).
+const FRAGMENT_LEAD: f32 = 12.0 * CAPTION_CHAR_WIDTH;
 
 /// What a row needs to know about its file, besides the file itself.
 pub struct RowState<'a> {
@@ -94,7 +95,7 @@ pub fn view<'a>(
             // While searching, a file found by its comment shows the hit instead of the first line.
             let fragment = props
                 .directory
-                .and_then(|dir| dir.comment_fragment(file, FRAGMENT_LEAD_CHARS));
+                .and_then(|dir| dir.comment_fragment(file, FRAGMENT_LEAD, text::caption_advance));
             let comment_line = row![
                 space().width(lead_width),
                 comment_line(snapshot, fragment, props.spinner_frame, comment_width)
