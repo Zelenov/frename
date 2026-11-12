@@ -1,3 +1,7 @@
+# 0.193
+## Fixed
+- Pressing `[` or `]` again on the frame that is already the In or Out point, or pasting the tags a clip already has, no longer adds an undo step that does nothing, and Redo stays available.
+
 # 0.192
 ## Fixed
 - A crash or a full disk while frename saves a comment to a `.comment.txt` file, or writes markers to a text file, no longer leaves that file empty or cut off.
