@@ -1706,7 +1706,6 @@ mod tests {
         let sidecars = |video: &std::path::Path| {
             let mut all = crate::subtitles::subtitle_candidates(video);
             all.push(crate::subtitles::transcript_path(video));
-            all.push(crate::subtitles::capt_path(video));
             all
         };
         for p in sidecars(&after) {

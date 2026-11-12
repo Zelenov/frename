@@ -1,3 +1,7 @@
+# 0.204
+## Added
+- The player shows the `.capt` file that Generate subtitles saves next to a clip as its subtitles, with the speakers' names, first among the clip's subtitle files; the CAPT button switches back to it.
+
 # 0.203
 ## Fixed
 - When the file search finds a word far into a long comment line in Japanese, Korean or Chinese, the word now shows in the row instead of being hidden past its end.

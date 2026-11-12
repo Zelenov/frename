@@ -252,7 +252,7 @@ mod tests {
     }
 
     #[test]
-    fn an_ass_or_ssa_counts_as_subtitles_in_a_scan_and_on_the_disk() {
+    fn an_ass_ssa_transcript_or_capt_counts_as_subtitles_in_a_scan_and_on_the_disk() {
         let folder_info = FolderInfo::new(vec![
             "a.mp4".into(),
             "a.ass".into(),
@@ -261,17 +261,21 @@ mod tests {
             "c.mp4".into(),
             "e.mp4".into(),
             "e.premiere.json".into(),
+            "g.mp4".into(),
+            "g.capt".into(),
         ]);
         let has = |name: &str| {
             File::from_path_with_folder_info(name, SystemTime::UNIX_EPOCH, &folder_info)
                 .has_subtitles()
         };
-        assert!(has("a.mp4") && has("b.mp4") && !has("c.mp4") && has("e.mp4"));
+        assert!(has("a.mp4") && has("b.mp4") && !has("c.mp4") && has("e.mp4") && has("g.mp4"));
 
         let dir = crate::test_support::fresh_dir("file-ass");
         std::fs::write(dir.join("d.ass"), "x").expect("write ass");
         std::fs::write(dir.join("f.premiere.json"), "{}").expect("write transcript");
+        std::fs::write(dir.join("h.capt"), "x").expect("write capt");
         assert!(File::from_path(dir.join("d.mp4"), SystemTime::UNIX_EPOCH).has_subtitles());
+        assert!(File::from_path(dir.join("h.mp4"), SystemTime::UNIX_EPOCH).has_subtitles());
         assert!(File::from_path(dir.join("f.mp4"), SystemTime::UNIX_EPOCH).has_subtitles());
         assert!(!File::from_path(dir.join("e.mp4"), SystemTime::UNIX_EPOCH).has_subtitles());
         let _ = std::fs::remove_dir_all(&dir);

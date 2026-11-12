@@ -5,12 +5,13 @@
 //! `/dir/clip.srt`. This follows how transcription tools write them, unlike the
 //! `{filename}.comment.txt` sidecars frename creates itself. Parsing and the file names are
 //! clipscribe's (`clipscribe::srt`, `clipscribe::ass`), which describes clips from the same files.
-//! A Premiere Pro transcript (`clip.premiere.json`, which Generate subtitles can write) is read
-//! as subtitles too, by sonisub, laid out by the "short line" / "whole sentence" setting.
-//! When a video has several, `.ass` wins, then `.ssa`, then `.premiere.json`, then `.srt`, unless
-//! the editor picked one for that clip ([`SubtitleFormat`], kept by the app database); a file
-//! that is empty or cannot be read gives way to the next. frename writes only `.srt` (and the
-//! transcript when asked).
+//! A CAPT file (`clip.capt`, which Generate subtitles writes) and a Premiere Pro transcript
+//! (`clip.premiere.json`, which it can write) are read as subtitles too, by sonisub, laid out by
+//! the "short line" / "whole sentence" setting, with speaker names.
+//! When a video has several, `.capt` wins (it is the richest), then `.ass`, `.ssa`,
+//! `.premiere.json`, then `.srt`, unless the editor picked one for that clip ([`SubtitleFormat`],
+//! kept by the app database); a file that is empty or cannot be read gives way to the next.
+//! frename writes only `.srt`, `.capt` (Generate subtitles) and the transcript when asked.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -150,6 +151,9 @@ pub fn capt_path(video_path: &Path) -> PathBuf {
     sonisub::job::Format::Capt.path(video_path)
 }
 
+/// The extension of the CAPT file written next to a video.
+const CAPT_EXTENSION: &str = "capt";
+
 /// The extension of a Premiere Pro transcript written next to a video.
 const PREMIERE_EXTENSION: &str = "premiere.json";
 
@@ -157,8 +161,8 @@ const PREMIERE_EXTENSION: &str = "premiere.json";
 /// space after tags: subtitles are loaded far from the setting.
 static CUE_LENGTH: AtomicU8 = AtomicU8::new(0);
 
-/// Choose the layout the subtitles read from a Premiere transcript get (a `.srt` is shown as
-/// written). A clip already open keeps what it loaded.
+/// Choose the layout the subtitles read from a CAPT file or a Premiere transcript get (a `.srt`
+/// is shown as written). A clip already open keeps what it loaded.
 pub fn set_cue_length(length: CueLength) {
     CUE_LENGTH.store(u8::from(length == CueLength::Sentence), Ordering::Relaxed);
 }
@@ -175,6 +179,8 @@ pub fn cue_length() -> CueLength {
 /// The kinds of subtitle file a video may have next to it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SubtitleFormat {
+    /// The whole transcript as sonisub writes it, `clip.capt` (#387).
+    Capt,
     Ass,
     Ssa,
     /// A Premiere Pro transcript, `clip.premiere.json`.
@@ -184,11 +190,13 @@ pub enum SubtitleFormat {
 
 impl SubtitleFormat {
     /// Every format in the order they win when the editor has not picked one.
-    pub const DEFAULT_ORDER: [Self; 4] = [Self::Ass, Self::Ssa, Self::Premiere, Self::Srt];
+    pub const DEFAULT_ORDER: [Self; 5] =
+        [Self::Capt, Self::Ass, Self::Ssa, Self::Premiere, Self::Srt];
 
     /// The extension of the file (after the video's stem); also the name it is persisted under.
     pub fn extension(self) -> &'static str {
         match self {
+            Self::Capt => CAPT_EXTENSION,
             Self::Ass => "ass",
             Self::Ssa => "ssa",
             Self::Premiere => PREMIERE_EXTENSION,
@@ -209,8 +217,8 @@ impl SubtitleFormat {
     }
 }
 
-/// The names a video's subtitles may have, in the order they win: `clip.ass`, `clip.ssa`,
-/// `clip.premiere.json`, `clip.srt`.
+/// The names a video's subtitles may have, in the order they win: `clip.capt`, `clip.ass`,
+/// `clip.ssa`, `clip.premiere.json`, `clip.srt`.
 pub fn subtitle_candidates(video_path: &Path) -> Vec<PathBuf> {
     SubtitleFormat::DEFAULT_ORDER
         .iter()
@@ -218,8 +226,8 @@ pub fn subtitle_candidates(video_path: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-/// The first subtitle file next to `video_path` in the default order (`.ass`, `.ssa`, the
-/// Premiere transcript, `.srt`), whether or not it can be read. `None` when there is none.
+/// The first subtitle file next to `video_path` in the default order (`.capt`, `.ass`, `.ssa`,
+/// the Premiere transcript, `.srt`), whether or not it can be read. `None` when there is none.
 pub fn existing_subtitle_path(video_path: &Path) -> Option<PathBuf> {
     subtitle_candidates(video_path)
         .into_iter()
@@ -242,21 +250,83 @@ fn is_premiere(path: &Path) -> bool {
         .is_some_and(|name| name.to_ascii_lowercase().ends_with(".premiere.json"))
 }
 
-/// The cues of the file at `path`, by its kind. A Premiere transcript is laid out by
-/// `length`, with speaker names; one that is not a transcript (or has no words) gives none.
+/// Whether `path` is a CAPT file (`clip.capt`).
+fn is_capt(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case(CAPT_EXTENSION))
+}
+
+/// How the words of a CAPT file or a Premiere transcript are laid out into cues: by `length`,
+/// with a speaker's name where the speaker changes.
+fn layout(length: CueLength) -> sonisub::srt::Layout {
+    let layout = match length {
+        CueLength::Short => sonisub::srt::Layout::default(),
+        CueLength::Sentence => sonisub::srt::Layout::unlimited(),
+    };
+    sonisub::srt::Layout {
+        speaker_labels: true,
+        ..layout
+    }
+}
+
+/// More speakers than any recording has: a CAPT header that numbers one higher is not trusted.
+const MAX_CAPT_SPEAKER: usize = 1000;
+
+/// The names of a CAPT file's speakers by number, as the layout takes them; none when the header
+/// numbers a speaker past [`MAX_CAPT_SPEAKER`]. `Doc::speaker_names` makes a list as long as the
+/// highest number, so `speaker:99999999999` in a damaged file would take all the memory there is
+/// and stop the app (Zelenov/sonisub#45). Remove this guard and its test when the pin moves to a
+/// sonisub with that fixed.
+fn capt_speaker_names(doc: &sonisub::captions::capt::Doc) -> Vec<String> {
+    let numbered_too_high = doc.speakers.iter().any(|speaker| {
+        speaker.name.is_some()
+            && speaker
+                .id
+                .parse::<usize>()
+                .is_ok_and(|n| n > MAX_CAPT_SPEAKER)
+    });
+    if numbered_too_high {
+        log::warn!("subtitles: a CAPT file numbers a speaker past {MAX_CAPT_SPEAKER}; no names");
+        return Vec::new();
+    }
+    doc.speaker_names()
+}
+
+/// The cues of a CAPT file, laid out by `length` with its speakers' names, as plain text: the
+/// list shows no italics or places, so no `<i>` or `{\anN}` that an `.srt` made from the same
+/// file would carry.
+fn capt_cues(
+    source: &str,
+    length: CueLength,
+) -> Result<Vec<SubtitleCue>, sonisub::captions::capt::Errors> {
+    let doc = sonisub::captions::capt::Doc::parse(source)?;
+    let named = sonisub::srt::Layout {
+        speaker_names: capt_speaker_names(&doc),
+        ..layout(length)
+    };
+    Ok(sonisub::captions::cues::cues(&doc.to_words(), &named)
+        .iter()
+        .map(|cue| SubtitleCue {
+            start: Duration::from_millis(cue.start),
+            end: Duration::from_millis(cue.end),
+            text: cue.text(),
+        })
+        .collect())
+}
+
+/// The cues of the file at `path`, by its kind. A CAPT file or a Premiere transcript is laid out
+/// by `length`, with speaker names; one that does not parse (or has no words) gives none.
 fn read_cues(path: &Path, length: CueLength) -> std::io::Result<Vec<SubtitleCue>> {
     let source = String::from_utf8_lossy(&std::fs::read(path)?).into_owned();
     Ok(if is_ass(path) {
         clipscribe::ass::parse(&source)
+    } else if is_capt(path) {
+        capt_cues(&source, length).unwrap_or_else(|e| {
+            log::warn!("subtitles: {} is not a CAPT file: {e}", path.display());
+            Vec::new()
+        })
     } else if is_premiere(path) {
-        let layout = match length {
-            CueLength::Short => sonisub::srt::Layout::default(),
-            CueLength::Sentence => sonisub::srt::Layout::unlimited(),
-        };
-        let layout = sonisub::srt::Layout {
-            speaker_labels: true,
-            ..layout
-        };
+        let layout = layout(length);
         match sonisub::premiere::to_srt(&source, &layout) {
             Some((srt, _)) => clipscribe::srt::parse(&srt),
             None => {
@@ -382,22 +452,22 @@ pub fn subtitle_cues(video_path: &Path, chosen: Option<SubtitleFormat>) -> Vec<S
 }
 
 /// About how many bytes of subtitles `video_path` has: the size of the `.srt` / `.ass` / `.ssa`
-/// shown; for a Premiere transcript, whose JSON is many times the text, what the same cues would
-/// take as an `.srt`. 0 when there are none.
+/// shown; for a CAPT file or a Premiere transcript, which hold many times the text, what the same
+/// cues would take as an `.srt`. 0 when there are none.
 pub fn subtitle_bytes(video_path: &Path, chosen: Option<SubtitleFormat>) -> usize {
     let Some((format, path, cues)) = first_readable(video_path, chosen, CueLength::Short) else {
         return 0;
     };
-    if format == SubtitleFormat::Premiere {
+    if matches!(format, SubtitleFormat::Capt | SubtitleFormat::Premiere) {
         // The text, a timing line and the numbering of each cue.
         return cues.iter().map(|c| c.text.len() + 40).sum();
     }
     std::fs::metadata(path).map_or(0, |m| m.len() as usize)
 }
 
-/// Move the subtitle file, the saved transcript and the CAPT file along when their video is
-/// renamed, so they keep matching. Does nothing for a file that is not there; never overwrites an
-/// existing one.
+/// Move the subtitle files (the CAPT file among them) and the saved transcript along when their
+/// video is renamed, so they keep matching. Does nothing for a file that is not there; never
+/// overwrites an existing one.
 pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
     for (old, new) in subtitle_candidates(old_video_path)
         .iter()
@@ -409,7 +479,6 @@ pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
         &transcript_path(old_video_path),
         &transcript_path(new_video_path),
     );
-    rename_companion(&capt_path(old_video_path), &capt_path(new_video_path));
 }
 
 fn rename_companion(old_path: &Path, new_path: &Path) {
@@ -659,6 +728,28 @@ mod tests {
 
     /// A Premiere transcript as sonisub writes it: two speakers, a long first sentence.
     fn transcript() -> String {
+        let names = sonisub::srt::Layout {
+            speaker_names: vec!["Eugene".into(), "Sasha".into()],
+            ..sonisub::srt::Layout::default()
+        };
+        serde_json::to_string_pretty(
+            &sonisub::premiere::build(&soniox(), &names, Some("en")).expect("a transcript"),
+        )
+        .expect("json")
+    }
+
+    /// The same speech as a CAPT file, as Generate subtitles writes it, with the speakers named.
+    fn capt() -> String {
+        let mut doc = sonisub::soniox::capt(&soniox());
+        doc.name_speakers(
+            &["Eugene".into(), "Sasha".into()],
+            &std::collections::BTreeMap::new(),
+        );
+        doc.write()
+    }
+
+    /// Soniox's answer: two speakers, a long first sentence.
+    fn soniox() -> serde_json::Value {
         let tok = |text: &str, start: u64, speaker: &str| {
             serde_json::json!({"text": text, "start_ms": start, "end_ms": start + 400, "confidence": 0.9,
                 "language": "en", "speaker": speaker})
@@ -672,16 +763,105 @@ and the gulls follow them home across the quiet water until the lights go out."
             tokens.push(tok(&format!(" {word}"), 1_000 + i as u64 * 500, "1"));
         }
         tokens.push(tok(" Nice.", 20_000, "2"));
-        let soniox = serde_json::json!({ "tokens": tokens });
-        let layout = sonisub::srt::Layout::default();
-        let names = sonisub::srt::Layout {
-            speaker_names: vec!["Eugene".into(), "Sasha".into()],
-            ..layout.clone()
-        };
-        serde_json::to_string_pretty(
-            &sonisub::premiere::build(&soniox, &names, Some("en")).expect("a transcript"),
-        )
-        .expect("json")
+        serde_json::json!({ "tokens": tokens })
+    }
+
+    fn capt_file(name: &str) -> (PathBuf, PathBuf) {
+        let dir = temp_dir(name);
+        let video = dir.join("clip.mp4");
+        std::fs::write(capt_path(&video), capt()).expect("write capt");
+        (dir, video)
+    }
+
+    /// Issue #387: a clip with only its `clip.capt` shows its speech, laid out like a transcript.
+    #[test]
+    fn a_video_with_only_a_capt_file_shows_its_text_with_speaker_names() {
+        let (dir, video) = capt_file("capt-only");
+        assert_eq!(SubtitleFormat::Capt.path(&video), capt_path(&video));
+        assert_eq!(existing_subtitle_path(&video), Some(dir.join("clip.capt")));
+        let path = capt_path(&video);
+        let short = read_cues(&path, CueLength::Short).expect("read");
+        assert!(short.len() > 2, "{short:?}");
+        assert!(
+            short[0].text.starts_with("Eugene: Hello and welcome"),
+            "{short:?}"
+        );
+        assert!(short.iter().any(|c| c.text == "Sasha: Nice."), "{short:?}");
+        assert!(
+            short.iter().all(|c| c.text.chars().count() <= 110),
+            "{short:?}"
+        );
+        let sentence = read_cues(&path, CueLength::Sentence).expect("read");
+        assert_eq!(sentence.len(), 2, "one cue per sentence: {sentence:?}");
+        assert_eq!(short[0].start, Duration::from_millis(1_000));
+
+        let view = open_subtitles(&video, None);
+        assert_eq!(view.shown, Some(SubtitleFormat::Capt));
+        assert!(view.subtitles.is_some_and(|s| !s.is_empty()));
+        assert!(subtitle_bytes(&video, None) > 0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A CAPT file's italic words and on-screen places are not shown as `<i>` or `{\an8}`.
+    #[test]
+    fn a_capt_file_with_italics_and_places_shows_plain_text() {
+        let dir = temp_dir("capt-marks");
+        let video = dir.join("clip.mp4");
+        let capt = "CAPT 1\nlang:en\nspeaker:1 name:Ann\n\n\
+00:00:01.000 --> 00:00:04.000 id:aaaaa1 speaker:1 pos:top\n\
+{0}I{24} {30}read{50} {60}War{80} {86}and{100} {106}Peace.{140}\n\
+{60..140} style:italic\n";
+        std::fs::write(capt_path(&video), capt).expect("capt");
+        let cues = read_cues(&capt_path(&video), CueLength::Short).expect("read");
+        let texts: Vec<&str> = cues.iter().map(|c| c.text.as_str()).collect();
+        assert_eq!(texts, ["I read War and Peace."]);
+        assert_eq!(cues[0].start, Duration::from_millis(1_000));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A damaged header that numbers a speaker in the billions does not take all the memory: the
+    /// lines are shown without names.
+    #[test]
+    fn a_capt_file_numbering_a_speaker_absurdly_high_is_shown_without_names() {
+        let dir = temp_dir("capt-huge-speaker");
+        let video = dir.join("clip.mp4");
+        let capt = "CAPT 1\nlang:en\nspeaker:99999999999 name:Big\n\n\
+00:00:01.000 --> 00:00:02.000 id:aaaaa1 speaker:99999999999\n\
+{0}Hello.{40}\n";
+        std::fs::write(capt_path(&video), capt).expect("capt");
+        let cues = read_cues(&capt_path(&video), CueLength::Short).expect("read");
+        let texts: Vec<&str> = cues.iter().map(|c| c.text.as_str()).collect();
+        assert_eq!(texts, ["Hello."]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_capt_file_wins_over_an_srt_unless_the_editor_picked_the_srt() {
+        let (dir, video) = capt_file("capt-and-srt");
+        std::fs::write(subtitle_path(&video), SAMPLE).expect("srt");
+        assert_eq!(
+            open_subtitles(&video, None).shown,
+            Some(SubtitleFormat::Capt)
+        );
+        let picked = open_subtitles(&video, Some(SubtitleFormat::Srt));
+        assert_eq!(picked.shown, Some(SubtitleFormat::Srt));
+        assert_eq!(picked.subtitles, Some(Subtitles::parse(SAMPLE)));
+        assert_eq!(picked.files.len(), 2, "both are offered");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_broken_capt_file_gives_way_to_the_next() {
+        let dir = temp_dir("capt-broken");
+        let video = dir.join("clip.mp4");
+        std::fs::write(capt_path(&video), "this is not CAPT\n").expect("capt");
+        std::fs::write(subtitle_path(&video), SAMPLE).expect("srt");
+        let view = open_subtitles(&video, None);
+        assert_eq!(view.shown, Some(SubtitleFormat::Srt));
+        let capt = view.files.iter().find(|f| f.format == SubtitleFormat::Capt);
+        assert!(capt.is_some_and(|f| !f.readable), "{:?}", view.files);
+        assert_eq!(subtitle_cues(&video, None), Subtitles::parse(SAMPLE).cues());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn premiere_file(name: &str) -> (PathBuf, PathBuf) {
@@ -729,7 +909,7 @@ and the gulls follow them home across the quiet water until the lights go out."
     }
 
     #[test]
-    fn the_order_is_ass_then_ssa_then_the_transcript_then_srt() {
+    fn the_order_is_capt_then_ass_then_ssa_then_the_transcript_then_srt() {
         let (dir, video) = premiere_file("order-all");
         std::fs::write(subtitle_path(&video), SAMPLE).expect("srt");
         let shown = |video: &Path| open_subtitles(video, None).shown;
@@ -738,6 +918,8 @@ and the gulls follow them home across the quiet water until the lights go out."
         assert_eq!(shown(&video), Some(SubtitleFormat::Ssa));
         std::fs::write(dir.join("clip.ass"), ASS).expect("ass");
         assert_eq!(shown(&video), Some(SubtitleFormat::Ass));
+        std::fs::write(capt_path(&video), capt()).expect("capt");
+        assert_eq!(shown(&video), Some(SubtitleFormat::Capt));
         let formats: Vec<_> = open_subtitles(&video, None)
             .files
             .iter()

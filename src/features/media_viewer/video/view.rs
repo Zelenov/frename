@@ -689,6 +689,7 @@ pub(super) fn subtitle_file_picker<'a>(
 /// How a subtitle format is named on its segment.
 fn subtitle_format_label(format: SubtitleFormat) -> String {
     match format {
+        SubtitleFormat::Capt => "CAPT",
         SubtitleFormat::Ass => "ASS",
         SubtitleFormat::Ssa => "SSA",
         SubtitleFormat::Premiere => "Premiere",

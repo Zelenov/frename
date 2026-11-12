@@ -30,7 +30,7 @@ pub struct DemoScenario {
     #[serde(default)]
     pub resume: Option<f32>,
     /// The subtitle file the open clip shows, picked as an editor would (#242): the extension
-    /// of the file (`ass`, `ssa`, `premiere.json`, `srt`).
+    /// of the file (`capt`, `ass`, `ssa`, `premiere.json`, `srt`).
     #[serde(default)]
     pub subtitle_choice: Option<String>,
     /// Window size in logical pixels: width, height.
@@ -175,6 +175,9 @@ pub struct DemoFile {
     /// A Premiere Pro transcript (its JSON), saved as the `.premiere.json` next to the copy (#219).
     #[serde(default)]
     pub transcript: Option<String>,
+    /// A CAPT file (its text), saved as the `.capt` next to the copy (#387).
+    #[serde(default)]
+    pub capt: Option<String>,
     /// Clip markers written into the copy's XMP, one line each as a comment holds them:
     /// `0:06.120 — City lights`, `0:41-0:47 — Lion — roars twice`.
     #[serde(default)]
@@ -230,7 +233,7 @@ impl DemoScenario {
         if let Some(choice) = &self.subtitle_choice {
             if crate::SubtitleFormat::from_name(choice).is_none() {
                 return Err(DemoError(format!(
-                    "subtitle_choice = {choice:?} is not ass, ssa, premiere.json or srt"
+                    "subtitle_choice = {choice:?} is not capt, ass, ssa, premiere.json or srt"
                 )));
             }
         }
@@ -327,6 +330,9 @@ pub fn stage(
         }
         if let Some(transcript) = &file.transcript {
             std::fs::write(target.with_extension("premiere.json"), transcript)?;
+        }
+        if let Some(capt) = &file.capt {
+            std::fs::write(crate::capt_path(&target), capt)?;
         }
         if !file.markers.is_empty() {
             // Each line was checked by `DemoScenario::check`.
