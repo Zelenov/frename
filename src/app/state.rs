@@ -147,7 +147,9 @@ fn main_window_event(
     _window_id: window::Id,
 ) -> Option<Message> {
     match ev {
-        iced::Event::Window(window::Event::Opened { .. }) => Some(Message::WindowReady),
+        iced::Event::Window(window::Event::Opened { size, .. }) => {
+            Some(Message::WindowReady { width: size.width })
+        }
         iced::Event::Window(window::Event::Moved(point)) => {
             Some(Message::WindowMoved(point.x, point.y))
         }
@@ -631,7 +633,7 @@ impl FrenameApp {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             // Only the main window's events get through the subscription filter.
-            Message::WindowReady => {
+            Message::WindowReady { width } => {
                 let language = Task::done(describe_ai_message(
                     batch::describe_ai::Message::SetLanguage(
                         self.settings.settings().summary_language,
@@ -658,6 +660,9 @@ impl FrenameApp {
                     moments,
                     tag_suggestions,
                     self.subtitle_config(),
+                    Task::done(Message::FolderWorkspace(
+                        folder_workspace::Message::WindowWidthChanged(width),
+                    )),
                     Task::done(Message::FolderWorkspace(open)),
                 ]);
                 if self.demo.is_none() {
@@ -984,7 +989,12 @@ impl FrenameApp {
                 }
                 let fetch = self.fetch_window_extra();
                 self.save_window_state();
-                fetch
+                // The columns are fitted to the window (#380). Not in OS fullscreen (above): the
+                // workspace is covered then, and leaving it reports the window's size again.
+                let fit = Task::done(Message::FolderWorkspace(
+                    folder_workspace::Message::WindowWidthChanged(width),
+                ));
+                Task::batch([fetch, fit])
             }
             Message::WindowMaximizedFetched(maximized) => {
                 self.is_maximized = maximized;
@@ -1272,6 +1282,7 @@ impl FrenameApp {
     }
 
     fn save_window_state(&self) {
+        let (left_panel_width, folder_panel_width) = self.folder_workspace.saved_column_widths();
         AppDatabase::new().set_window_state(WindowGeometry {
             x: self.window_pos.0,
             y: self.window_pos.1,
@@ -1280,8 +1291,8 @@ impl FrenameApp {
             is_maximized: self.is_maximized,
             monitor_width: self.monitor_size.0,
             monitor_height: self.monitor_size.1,
-            left_panel_width: self.folder_workspace.left_width(),
-            folder_panel_width: self.folder_workspace.folder_width(),
+            left_panel_width,
+            folder_panel_width,
         });
     }
 

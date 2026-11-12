@@ -995,7 +995,8 @@ Today, for comparison (screenshots of the app):
   area 200: too narrow for the controls bar and a row of chips.
 - The **video pane** is the column that grows and shrinks with the window (center stage, DI
   p. 232). Today the video pane keeps its width and the tags area takes the change
-  (**behaviour**, #59).
+  (**behaviour**, #59), down to the tags area's minimum; past it the video pane and then the file
+  list give way (#380).
 - **Surfaces:** every column is `bg.panel`; bars inside a column (search, toolbars, timeline,
   controls) are `bg.panel` too and are separated by space, not lines, except the toolbar under the
   file list, which has a 1 px `border.subtle` line on top because the rows above it scroll.
@@ -2026,7 +2027,9 @@ raised to the minimum when the window opens.
 When the window gets narrower than the sum of the user's column widths, the **video pane** shrinks
 first (it also grows first), down to its minimum; then the tags area; the file list keeps its width
 longest (it is the one place to find the clip). A splitter never pushes a column below its
-minimum.
+minimum. Today (#59) the tags area is the column that takes a change of window width; since #380
+it stops at its minimum, and below that the video pane and then the file list give way; the
+widths the user set come back when the window is wide again.
 
 **Video pane** (min 320, no max)
 

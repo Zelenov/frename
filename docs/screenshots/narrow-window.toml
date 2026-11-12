@@ -1,0 +1,10 @@
+# A narrow window (#380): the tags area keeps its minimum width, the video pane gives way. Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.night.MVI_0510.mp4"
+seek = 4.0
+window = [960, 600]
+panels = [440, 300]
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.MVI_0510.mp4"

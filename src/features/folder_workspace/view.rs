@@ -60,7 +60,8 @@ pub fn view(
     .width(Length::Fixed(state.left_width()))
     .height(Length::Fill);
 
-    // Each splitter keeps the columns on both sides at least as wide as their minimum.
+    // Each splitter keeps the columns on both sides at least as wide as their minimum; past the
+    // tags area's minimum the left one narrows the file list (#380).
     let left_splitter = Splitter::new(Message::LeftSplitterDragged)
         .min_left(VIDEO_MIN_WIDTH)
         .min_right(FILE_LIST_MIN_WIDTH + SPLITTER_HIT + TAGS_MIN_WIDTH);

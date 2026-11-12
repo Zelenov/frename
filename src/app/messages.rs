@@ -7,8 +7,11 @@ use crate::features::{drag_drop, folder_workspace, settings};
 /// Application messages
 #[derive(Debug, Clone)]
 pub enum Message {
-    /// Main window opened (iced Window::Opened); triggers initialization (e.g. load last session).
-    WindowReady,
+    /// Main window opened (iced Window::Opened) with this width; triggers initialization (e.g.
+    /// load last session).
+    WindowReady {
+        width: f32,
+    },
     /// User requested window close (intercepted so we can unload GStreamer before exit).
     CloseRequested(window::Id),
     /// A window has closed: the main one ends the app, the settings one just goes away.
