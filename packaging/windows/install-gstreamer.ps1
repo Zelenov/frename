@@ -20,15 +20,33 @@ $ProgressPreference = "SilentlyContinue"  # Invoke-WebRequest is many times slow
 $name = "gstreamer-1.0-msvc-x86_64-$Version.exe"
 $installer = Join-Path $Download $name
 New-Item -ItemType Directory -Path $Download -Force | Out-Null
-if (!(Test-Path $installer)) {
-    $url = "https://gstreamer.freedesktop.org/data/pkg/windows/$Version/msvc/$name"
-    Write-Host "Downloading $url"
-    Invoke-WebRequest -Uri $url -OutFile $installer
+# A cached installer with the right checksum is used as it is. Otherwise it is downloaded; a
+# download that is cut off or comes out wrong is tried again (3 attempts, 10 s apart), so one
+# network hiccup does not fail a build or a release (#402).
+function Test-Installer {
+    (Test-Path $installer) -and ((Get-FileHash $installer -Algorithm SHA256).Hash -eq $Sha256)
 }
-$actual = (Get-FileHash $installer -Algorithm SHA256).Hash
-if ($actual -ne $Sha256) {
-    Remove-Item $installer
-    throw "Checksum mismatch for ${name}: expected $Sha256, got $actual"
+if (!(Test-Installer)) {
+    $url = "https://gstreamer.freedesktop.org/data/pkg/windows/$Version/msvc/$name"
+    $attempts = 3
+    for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+        Remove-Item $installer -ErrorAction SilentlyContinue
+        Write-Host "Downloading $url"
+        try {
+            Invoke-WebRequest -Uri $url -OutFile $installer
+            if (Test-Installer) { break }
+            $actual = (Get-FileHash $installer -Algorithm SHA256).Hash
+            $problem = "checksum mismatch: expected $Sha256, got $actual"
+        } catch {
+            $problem = $_.Exception.Message
+        }
+        if ($attempt -eq $attempts) {
+            Remove-Item $installer -ErrorAction SilentlyContinue
+            throw "Downloading $name failed $attempts times: $problem"
+        }
+        Write-Host "Download attempt $attempt failed ($problem); trying again in 10 s"
+        Start-Sleep -Seconds 10
+    }
 }
 
 $log = Join-Path $Download "install-$Version.log"
