@@ -855,20 +855,22 @@ struct ModelOption {
 
 impl std::fmt::Display for ModelOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let model = model_label(&self.model);
-        if self.needs_key {
-            write!(
-                f,
-                "{}",
-                fl!(
-                    "settings-ai-model-needs-key",
-                    model = model,
-                    provider = self.model.provider.label()
-                )
+        // A model whose key is missing names its company's key instead of its prices: the
+        // prices and the key do not both fit the field (#400).
+        let label = if self.needs_key {
+            fl!(
+                "settings-ai-model-needs-key",
+                model = self.model.label,
+                provider = self.model.provider.label()
             )
         } else {
-            write!(f, "{model}")
-        }
+            model_label(&self.model)
+        };
+        // The field and its menu are FIELD_WIDTH_L wide: a label longer than that (a model whose
+        // key is missing) ends in "…" instead of running past the edge (#400). What a model
+        // needs is said in full in the hint under the field.
+        let room = form::dropdown_text_room(FIELD_WIDTH_L);
+        write!(f, "{}", text::fit_body(&label, room))
     }
 }
 
@@ -906,5 +908,27 @@ mod tests {
         let haiku = clipscribe::Model::from_id("claude-haiku-4-5");
         assert_eq!(haiku.id, "claude-haiku-4-5", "Haiku is in MODELS");
         assert_eq!(super::model_label(&haiku), "Claude Haiku 4.5 ($1 / $5)");
+    }
+
+    /// Issue #400: a model whose key is missing ends in "…" inside the field and its menu,
+    /// whatever its name; one that fits is shown whole.
+    #[test]
+    fn a_model_whose_key_is_missing_fits_the_field() {
+        use crate::ui::tokens::FIELD_WIDTH_L;
+        let room = crate::ui::form::dropdown_text_room(FIELD_WIDTH_L);
+        for model in MODELS {
+            let missing = super::ModelOption {
+                model,
+                needs_key: true,
+            }
+            .to_string();
+            assert!(crate::ui::text::body_width(&missing) <= room, "{missing}");
+            let fine = super::ModelOption {
+                model,
+                needs_key: false,
+            }
+            .to_string();
+            assert_eq!(fine, super::model_label(&model));
+        }
     }
 }

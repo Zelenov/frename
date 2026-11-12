@@ -1,3 +1,7 @@
+# 0.201
+## Fixed
+- Settings → Describe with AI: a model whose key is not saved yet no longer runs past the edge of the Model list; it reads "Gemini 3.5 Flash — no Gemini key", and the line under the list says each model needs its own company's key.
+
 # 0.199
 ## Fixed
 - Dragging a divider no longer closes frename when the window is narrower than its usual minimum (some window managers allow that); the divider just stays where it is.
