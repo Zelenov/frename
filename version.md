@@ -1,3 +1,7 @@
+# 0.195
+## Fixed
+- When the tags area is narrow, the line over the tag grid ("Reordering below reorders the folder") ends in "…" instead of being cut off in the middle of a word; hover it for the whole sentence.
+
 # 0.194
 ## Fixed
 - Pressing `[` or `]` again on the frame that is already the In or Out point, or pasting the tags a clip already has, no longer adds an undo step that does nothing, and Redo stays available.
