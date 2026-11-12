@@ -1387,6 +1387,29 @@ mod tests {
         );
     }
 
+    /// Issue #400: a model whose key is missing fits the Model field whole in every shipped
+    /// language, so the key it needs is never lost to "…".
+    #[test]
+    fn a_model_whose_key_is_missing_fits_the_field_in_every_language() {
+        use crate::ui::tokens::FIELD_WIDTH_L;
+        let room = crate::ui::form::dropdown_text_room(FIELD_WIDTH_L);
+        for language in LANGUAGES {
+            let loader = loader(language);
+            for model in clipscribe::MODELS {
+                let label = i18n_embed_fl::fl!(
+                    loader,
+                    "settings-ai-model-needs-key",
+                    model = model.label,
+                    provider = model.provider.label()
+                );
+                assert!(
+                    crate::ui::text::text_width(&label, crate::ui::tokens::TEXT_BODY) <= room,
+                    "{language}: {label}"
+                );
+            }
+        }
+    }
+
     /// Issue #274: these toasts were English literals and stayed English in the Russian UI.
     #[test]
     fn the_toasts_of_issue_274_are_translated_and_used() {

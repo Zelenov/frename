@@ -166,6 +166,13 @@ pub fn search_field<'a, M: Clone + 'a>(
     layers.into()
 }
 
+/// The width an option's text has in a [`dropdown`] `width` px wide (the field and its menu):
+/// the field's padding and the arrow at its end taken off, so a label cut to it with
+/// `text::fit_body` ends in "…" before the arrow (#400).
+pub fn dropdown_text_room(width: f32) -> f32 {
+    width - FIELD_PADDING.left - FIELD_PADDING.right - TEXT_BODY - SPACE_TIGHT
+}
+
 /// A dropdown of `options` (§8.7).
 pub fn dropdown<'a, T, L, V, M>(
     options: L,

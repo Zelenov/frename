@@ -1,3 +1,7 @@
+# 0.201
+## Fixed
+- Settings → Describe with AI: a model whose key is not saved yet now fits the Model list, in every language; it reads "GPT-4.1 mini — no OpenAI key".
+
 # 0.200
 ## Fixed
 - Folder names in the recent folders list, and the first comment line in a file's row, end in "…" when they do not fit, also when they are written in Cyrillic, Japanese, Korean or Chinese, instead of being cut off with no sign that text is missing.
