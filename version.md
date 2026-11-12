@@ -1,3 +1,7 @@
+# 0.194
+## Fixed
+- Settings → Describe with AI: the model list shows its prices in your language ("per M tokens" was in English in every language).
+
 # 0.193
 ## Fixed
 - While a batch job runs, the line over the file list that says the checks are locked no longer runs over the search field when it takes two lines (in Russian, or with a narrow list): the line grows to fit its text.

@@ -104,6 +104,7 @@ settings-ai-gemini-key-placeholder = AIza…
 settings-ai-gemini-key-get = Get a key at aistudio.google.com/apikey.
 settings-ai-gemini-key-remove-confirm = Remove the saved Gemini key?
 settings-ai-gemini-used-by = Used by Describe with AI in batch mode and on markers (✨, Ctrl+F2), when a Gemini model is chosen.
+settings-ai-model-option = { $model } (${ $input } / ${ $output } per M tokens)
 settings-ai-model-needs-key = { $model } — add the { $provider } key first
 settings-ai-model-label = Model
 settings-ai-language-label = Description language

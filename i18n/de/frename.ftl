@@ -136,6 +136,7 @@ settings-ai-gemini-key-placeholder = AIza…
 settings-ai-gemini-key-get = Schlüssel unter aistudio.google.com/apikey holen.
 settings-ai-gemini-key-remove-confirm = Den gespeicherten Gemini-Schlüssel entfernen?
 settings-ai-gemini-used-by = Wird von „Mit KI beschreiben“ im Stapelmodus und bei Markern (✨, Strg+F2) verwendet, wenn ein Gemini-Modell gewählt ist.
+settings-ai-model-option = { $model } (${ $input } / ${ $output } pro 1 Mio. Tokens)
 settings-ai-model-needs-key = { $model } – zuerst einen { $provider }-Schlüssel hinzufügen
 settings-ai-model-label = Modell
 settings-ai-language-label = Sprache der Beschreibung

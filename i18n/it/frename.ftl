@@ -150,6 +150,7 @@ settings-ai-gemini-key-placeholder = AIza…
 settings-ai-gemini-key-get = Ottenere una chiave su aistudio.google.com/apikey.
 settings-ai-gemini-key-remove-confirm = Rimuovere la chiave di Gemini salvata?
 settings-ai-gemini-used-by = Usata da «Descrivere con IA» in modalità batch e sui marcatori (✨, Ctrl+F2), quando si sceglie un modello Gemini.
+settings-ai-model-option = { $model } (${ $input } / ${ $output } per 1 M di token)
 settings-ai-model-needs-key = { $model } — aggiungere prima la chiave di { $provider }
 settings-ai-model-label = Modello
 settings-ai-language-label = Lingua della descrizione

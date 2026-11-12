@@ -854,24 +854,58 @@ struct ModelOption {
 
 impl std::fmt::Display for ModelOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let model = model_label(&self.model);
         if self.needs_key {
             write!(
                 f,
                 "{}",
                 fl!(
                     "settings-ai-model-needs-key",
-                    model = self.model.to_string(),
+                    model = model,
                     provider = self.model.provider.label()
                 )
             )
         } else {
-            write!(f, "{}", self.model)
+            write!(f, "{model}")
         }
     }
+}
+
+/// A model with its prices in the UI language: "Claude Haiku 4.5 ($1 / $5 per M tokens)" (#383).
+/// clipscribe's own `Display` of a model is English only.
+fn model_label(model: &Model) -> String {
+    fl!(
+        "settings-ai-model-option",
+        model = model.label,
+        input = model.input_usd_per_mtok.to_string(),
+        output = model.output_usd_per_mtok.to_string()
+    )
 }
 
 impl std::fmt::Display for SummaryLanguageOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", describe_ai::language_name(self.0))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clipscribe::MODELS;
+
+    /// Issue #383: the model list is made from frename's own text (translated), and in English
+    /// it reads as before.
+    #[test]
+    fn a_model_reads_its_name_and_prices_in_the_ui_language() {
+        for model in MODELS {
+            let label = super::model_label(&model);
+            assert_eq!(label, model.to_string(), "{}", model.id);
+        }
+        let haiku = MODELS.iter().find(|m| m.id.contains("haiku")).copied();
+        if let Some(haiku) = haiku {
+            assert_eq!(
+                super::model_label(&haiku),
+                "Claude Haiku 4.5 ($1 / $5 per M tokens)"
+            );
+        }
     }
 }

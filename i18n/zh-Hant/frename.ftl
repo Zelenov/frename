@@ -104,6 +104,7 @@ settings-ai-gemini-key-placeholder = AIza…
 settings-ai-gemini-key-get = 前往 aistudio.google.com/apikey 取得金鑰。
 settings-ai-gemini-key-remove-confirm = 要移除已儲存的 Gemini 金鑰嗎？
 settings-ai-gemini-used-by = 選用 Gemini 模型時，批次模式與標記上的「用 AI 描述」（✨、Ctrl+F2）會使用此金鑰。
+settings-ai-model-option = { $model }（每百萬詞元 ${ $input } / ${ $output }）
 settings-ai-model-needs-key = { $model } — 請先新增 { $provider } 金鑰
 settings-ai-model-label = 模型
 settings-ai-language-label = 描述語言
