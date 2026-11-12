@@ -292,6 +292,28 @@ fn capt_speaker_names(doc: &sonisub::captions::capt::Doc) -> Vec<String> {
     doc.speaker_names()
 }
 
+/// The cues of a CAPT file, laid out by `length` with its speakers' names, as plain text: the
+/// list shows no italics or places, so no `<i>` or `{\anN}` that an `.srt` made from the same
+/// file would carry.
+fn capt_cues(
+    source: &str,
+    length: CueLength,
+) -> Result<Vec<SubtitleCue>, sonisub::captions::capt::Errors> {
+    let doc = sonisub::captions::capt::Doc::parse(source)?;
+    let named = sonisub::srt::Layout {
+        speaker_names: capt_speaker_names(&doc),
+        ..layout(length)
+    };
+    Ok(sonisub::captions::cues::cues(&doc.to_words(), &named)
+        .iter()
+        .map(|cue| SubtitleCue {
+            start: Duration::from_millis(cue.start),
+            end: Duration::from_millis(cue.end),
+            text: cue.text(),
+        })
+        .collect())
+}
+
 /// The cues of the file at `path`, by its kind. A CAPT file or a Premiere transcript is laid out
 /// by `length`, with speaker names; one that does not parse (or has no words) gives none.
 fn read_cues(path: &Path, length: CueLength) -> std::io::Result<Vec<SubtitleCue>> {
@@ -299,28 +321,10 @@ fn read_cues(path: &Path, length: CueLength) -> std::io::Result<Vec<SubtitleCue>
     Ok(if is_ass(path) {
         clipscribe::ass::parse(&source)
     } else if is_capt(path) {
-        match sonisub::captions::capt::Doc::parse(&source) {
-            Ok(doc) => {
-                let layout = sonisub::srt::Layout {
-                    speaker_names: capt_speaker_names(&doc),
-                    ..layout(length)
-                };
-                // The cues' plain text: the list shows no italics or places, so no `<i>` or
-                // `{\anN}` that an `.srt` made from the same file would carry.
-                sonisub::captions::cues::cues(&doc.to_words(), &layout)
-                    .iter()
-                    .map(|cue| SubtitleCue {
-                        start: Duration::from_millis(cue.start),
-                        end: Duration::from_millis(cue.end),
-                        text: cue.text(),
-                    })
-                    .collect()
-            }
-            Err(e) => {
-                log::warn!("subtitles: {} is not a CAPT file: {e}", path.display());
-                Vec::new()
-            }
-        }
+        capt_cues(&source, length).unwrap_or_else(|e| {
+            log::warn!("subtitles: {} is not a CAPT file: {e}", path.display());
+            Vec::new()
+        })
     } else if is_premiere(path) {
         let layout = layout(length);
         match sonisub::premiere::to_srt(&source, &layout) {

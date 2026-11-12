@@ -1,0 +1,121 @@
+# CAPT as subtitles (#387): a clip with `clip.capt` (two named speakers, an italic title, a line
+# placed at the top) and a `.srt` shows the CAPT file first, as plain text with the speakers'
+# names; the CAPT and SRT buttons switch between them. Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.night.city.MVI_0410.mp4"
+seek = 10.0
+window = [1440, 720]
+panels = [440, 220]
+subtitle_list = true
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.landscape.golden-hour.MVI_0401.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "skip.handheld.MVI_0402.mov"
+
+[[files]]
+from = "Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm"
+name = "b-roll.city.timelapse.MVI_0403.webm"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.drone.landscape.MVI_0404.mp4"
+comment = "In/Out: 00:00:02.000 – 00:00:14.000"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "review.people.close.MVI_0405.mov"
+
+[[files]]
+from = "Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm"
+name = "wide.city.night.MVI_0406.webm"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.gimbal.wildlife.MVI_0407.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "interview.medium.tripod.MVI_0408.mov"
+
+[[files]]
+from = "Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm"
+name = "MVI_0409.webm"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.MVI_0410.mp4"
+comment = "Harbour at dusk, two voices."
+capt = '''CAPT 1
+id:marks-fixture
+title:Marks
+lang:en
+speaker:1 name:Ann
+speaker:2 name:Bob
+
+00:00:01.000 --> 00:00:04.000 id:aaaaa1 speaker:1
+{0}So{12} {18}I{24} {30}read{50} {60}War{80} {86}and{100} {106}Peace{140} / {150}twice.{200}
+{0..12} conf:0.80
+{60..140} style:italic
+
+00:00:04.200 --> 00:00:05.000 id:aaaaa2 speaker:1 sound:laughter
+
+00:00:05.500 --> 00:00:09.000 id:aaaaa3 speaker:2 lang:ru
+{0}Короче,{40} {52}этот{70} / {76}deploy{98}ment{120} {126}упал{160} / {180}и{186} {192}мы{204} {210}сделали{250} {256}roll{276}back.{310}
+{76..120} lang:en
+{256..310} lang:en
+
+00:00:10.000 --> 00:00:14.000 id:aaaaa4 speaker:1 pos:top
+{0}Listen{30} {40}to{50} {56}me,{80} / {100}please{150} {156}Dr.{180} {190}Who.{240}
+{100..180} voice:whisper
+{156..180} sentence:end
+
+00:00:15.000 --> 00:00:17.000 id:aaaaa5 speaker:2 pos:0.05,0.05,0.4,0.2
+{0}This{20} {26}sits{50} {56}in{66} {70}a{76} {80}box.{120}
+
+00:00:15.500 --> 00:00:16.500 id:aaaaa6 sound:phone
+'''
+subtitles = """1
+00:00:01,000 --> 00:00:04,000
+Night falls over the Atlantic
+
+2
+00:00:04,500 --> 00:00:07,500
+The first city lights appear
+
+3
+00:00:08,000 --> 00:00:13,000
+Europe at night
+
+4
+00:00:14,000 --> 00:00:18,000
+Africa stays mostly dark
+
+5
+00:00:19,000 --> 00:00:23,000
+The night moves east
+
+6
+00:00:24,000 --> 00:00:28,000
+Dawn over Asia
+"""
+markers = ["0:06.120 — City lights", "0:14–0:18 — Africa stays dark"]
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "b-roll.close.action.MVI_0411.mov"
+
+[[files]]
+from = "Short.Travel.Health.Views.file_example_WEBM_480_900KB.webm"
+name = "review.sunset.drone.MVI_0412.webm"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "wide.overcast.landscape.MVI_0413.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "MVI_0414.mov"
