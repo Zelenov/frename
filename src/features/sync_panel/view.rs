@@ -70,7 +70,7 @@ fn strip(is_synced: bool, locked: bool, words: bool) -> Element<'static, Message
 /// the whole sentence is its tooltip, for when it is cut.
 fn line(glyph: Icon, color: Color, sentence: String) -> iced::widget::Row<'static, Message> {
     let sentence = container(iced::widget::responsive(move |size| {
-        let shown = text::secondary(text::fit(&sentence, size.width, BODY_CHAR_WIDTH).into_owned())
+        let shown = text::secondary(text::fit_body(&sentence, size.width).into_owned())
             .wrapping(iced::widget::text::Wrapping::None);
         tooltip::tip_text(shown, sentence.clone(), Position::Top)
     }))

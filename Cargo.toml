@@ -66,6 +66,9 @@ sonisub = { version = "0.9", default-features = false }
 # sonisub's errors, and its progress bars: frename hands it a hidden one and reads its progress through the callback (same version as sonisub).
 anyhow = "1"
 indicatif = "0.18"
+# Measure body text against the bundled Inter, to cut a line with "…" where it really ends (#391);
+# also reads the glyph coverage of the bundled CJK fonts in a test.
+ttf-parser = "0.25"
 
 [features]
 # The Microsoft Store build (packaging/windows/build-msix.ps1): the Store installs and updates
@@ -78,8 +81,6 @@ frename-core = { path = "crates/frename-core", features = ["test-support"] }
 # Parse the .ftl files in the translation tests
 fluent-syntax = "0.12"
 fluent-bundle = "0.16"
-# Read the glyph coverage of the bundled CJK fonts in a test
-ttf-parser = "0.25"
 proc-macro2 = "1"
 
 [profile.dev.package."*"]
