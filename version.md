@@ -1,6 +1,6 @@
 # 0.204
 ## Added
-- The player shows the `.capt` file that Generate subtitles saves next to a clip as its subtitles, with the speakers' names, laid out by the Settings → Subtitles setting. When a clip has other subtitle files too, the `.capt` file is shown first; the CAPT button in the subtitle list switches back to it.
+- The player shows the `.capt` file that Generate subtitles saves next to a clip as its subtitles, with the speakers' names, first among the clip's subtitle files; the CAPT button switches back to it.
 
 # 0.203
 ## Fixed

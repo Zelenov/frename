@@ -270,6 +270,28 @@ fn layout(length: CueLength) -> sonisub::srt::Layout {
     }
 }
 
+/// More speakers than any recording has: a CAPT header that numbers one higher is not trusted.
+const MAX_CAPT_SPEAKER: usize = 1000;
+
+/// The names of a CAPT file's speakers by number, as the layout takes them; none when the header
+/// numbers a speaker past [`MAX_CAPT_SPEAKER`]. `Doc::speaker_names` makes a list as long as the
+/// highest number, so `speaker:99999999999` in a damaged file would take all the memory there is
+/// and stop the app (Zelenov/sonisub#45).
+fn capt_speaker_names(doc: &sonisub::captions::capt::Doc) -> Vec<String> {
+    let numbered_too_high = doc.speakers.iter().any(|speaker| {
+        speaker.name.is_some()
+            && speaker
+                .id
+                .parse::<usize>()
+                .is_ok_and(|n| n > MAX_CAPT_SPEAKER)
+    });
+    if numbered_too_high {
+        log::warn!("subtitles: a CAPT file numbers a speaker past {MAX_CAPT_SPEAKER}; no names");
+        return Vec::new();
+    }
+    doc.speaker_names()
+}
+
 /// The cues of the file at `path`, by its kind. A CAPT file or a Premiere transcript is laid out
 /// by `length`, with speaker names; one that does not parse (or has no words) gives none.
 fn read_cues(path: &Path, length: CueLength) -> std::io::Result<Vec<SubtitleCue>> {
@@ -280,7 +302,7 @@ fn read_cues(path: &Path, length: CueLength) -> std::io::Result<Vec<SubtitleCue>
         match sonisub::captions::capt::Doc::parse(&source) {
             Ok(doc) => {
                 let layout = sonisub::srt::Layout {
-                    speaker_names: doc.speaker_names(),
+                    speaker_names: capt_speaker_names(&doc),
                     ..layout(length)
                 };
                 // The cues' plain text: the list shows no italics or places, so no `<i>` or
@@ -791,6 +813,22 @@ and the gulls follow them home across the quiet water until the lights go out."
         let texts: Vec<&str> = cues.iter().map(|c| c.text.as_str()).collect();
         assert_eq!(texts, ["I read War and Peace."]);
         assert_eq!(cues[0].start, Duration::from_millis(1_000));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A damaged header that numbers a speaker in the billions does not take all the memory: the
+    /// lines are shown without names.
+    #[test]
+    fn a_capt_file_numbering_a_speaker_absurdly_high_is_shown_without_names() {
+        let dir = temp_dir("capt-huge-speaker");
+        let video = dir.join("clip.mp4");
+        let capt = "CAPT 1\nlang:en\nspeaker:99999999999 name:Big\n\n\
+00:00:01.000 --> 00:00:02.000 id:aaaaa1 speaker:99999999999\n\
+{0}Hello.{40}\n";
+        std::fs::write(capt_path(&video), capt).expect("capt");
+        let cues = read_cues(&capt_path(&video), CueLength::Short).expect("read");
+        let texts: Vec<&str> = cues.iter().map(|c| c.text.as_str()).collect();
+        assert_eq!(texts, ["Hello."]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
