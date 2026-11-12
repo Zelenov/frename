@@ -855,6 +855,10 @@ impl FolderWorkspace {
             return Task::none();
         }
         let old_secs = self.file_workspace.segment_start_secs();
+        // Marking the same frame again changes nothing: no undo step, Redo stays (#381).
+        if old_secs == Some(secs) {
+            return Task::none();
+        }
         self.file_workspace.set_segment_start_secs(Some(secs));
         self.history.push(Box::new(SetSegmentStartCommand {
             old_secs,
@@ -868,6 +872,10 @@ impl FolderWorkspace {
             return Task::none();
         }
         let old_secs = self.file_workspace.segment_end_secs();
+        // Marking the same frame again changes nothing: no undo step, Redo stays (#381).
+        if old_secs == Some(secs) {
+            return Task::none();
+        }
         self.file_workspace.set_segment_end_secs(Some(secs));
         self.history.push(Box::new(SetSegmentEndCommand {
             old_secs,
@@ -949,6 +957,13 @@ impl FolderWorkspace {
         let Some((_, snapshot_before)) = self.file_workspace.get_snapshot() else {
             return Task::none();
         };
+        // The clip already has exactly these tags: nothing to paste, no undo step, Redo stays
+        // (#381). The search filter is still cleared, as below: Ctrl+V reaches the search bar too.
+        if snapshot_before.tags() == names.as_slice() {
+            self.file_workspace.set_tag_filter(String::new());
+            self.clamp_selection_to_filtered();
+            return Task::none();
+        }
         let mut snapshot_after = FileSnapshot::new(
             names,
             snapshot_before.name_without_extension(),
@@ -4308,7 +4323,22 @@ mod tests {
             crate::features::media_viewer::Message::SegmentStartMarked(3.0),
         ));
         let _ = workspace.update(Message::CopyTags);
+        // A tag ticked after the copy, so the paste really changes the tags and rebuilds the
+        // snapshot (a paste of the same tags changes nothing: #381).
+        let tag_id = workspace
+            .file_workspace()
+            .tag_list()
+            .filtered_display_tag_ids()[0];
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
         let _ = workspace.update(Message::PasteTags);
+        assert!(
+            workspace
+                .file_workspace()
+                .tag_list()
+                .get_tag(tag_id)
+                .is_some_and(|t| !t.is_checked()),
+            "the paste was a real one: the tag ticked after the copy is gone"
+        );
         assert_eq!(
             workspace.file_workspace().segment_start_secs(),
             Some(3.0),
@@ -4475,7 +4505,22 @@ mod tests {
             .tag_list_mut()
             .set_comment("keep this note".to_string());
         let _ = workspace.update(Message::CopyTags);
+        // A tag ticked after the copy, so the paste really changes the tags and rebuilds the
+        // snapshot (a paste of the same tags changes nothing: #381).
+        let tag_id = workspace
+            .file_workspace()
+            .tag_list()
+            .filtered_display_tag_ids()[0];
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
         let _ = workspace.update(Message::PasteTags);
+        assert!(
+            workspace
+                .file_workspace()
+                .tag_list()
+                .get_tag(tag_id)
+                .is_some_and(|t| !t.is_checked()),
+            "the paste was a real one: the tag ticked after the copy is gone"
+        );
         assert_eq!(
             workspace
                 .file_workspace()
@@ -9736,6 +9781,95 @@ mod tests {
             .tag_list()
             .get_tag(other)
             .is_some_and(|t| t.is_checked()));
+    }
+
+    /// Issue #381: `[` or `]` again on the frame already marked changes nothing, so it is no
+    /// undo step and Redo stays.
+    #[test]
+    fn marking_the_same_in_or_out_again_leaves_redo_alone() {
+        let (_test_dir, mut workspace) = open_folder(1);
+        let tag_id = workspace
+            .file_workspace()
+            .tag_list()
+            .filtered_display_tag_ids()[0];
+        let mark = |w: &mut FolderWorkspace, m: media_viewer::Message| {
+            let _ = w.update(Message::MediaViewer(m));
+        };
+        mark(
+            &mut workspace,
+            media_viewer::Message::SegmentStartMarked(1.5),
+        );
+        mark(&mut workspace, media_viewer::Message::SegmentEndMarked(4.0));
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
+        let _ = workspace.update(Message::Undo);
+        assert!(workspace.history.can_redo());
+
+        mark(
+            &mut workspace,
+            media_viewer::Message::SegmentStartMarked(1.5),
+        );
+        assert!(workspace.history.can_redo(), "the same In records nothing");
+        mark(&mut workspace, media_viewer::Message::SegmentEndMarked(4.0));
+        assert!(workspace.history.can_redo(), "the same Out records nothing");
+        let _ = workspace.update(Message::Redo);
+        assert!(workspace
+            .file_workspace()
+            .tag_list()
+            .get_tag(tag_id)
+            .is_some_and(|t| t.is_checked()));
+
+        // A new frame is still a step.
+        mark(
+            &mut workspace,
+            media_viewer::Message::SegmentStartMarked(2.0),
+        );
+        assert_eq!(workspace.file_workspace().segment_start_secs(), Some(2.0));
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(workspace.file_workspace().segment_start_secs(), Some(1.5));
+    }
+
+    /// Issue #381: pasting the tags the clip already has changes nothing, so it is no undo step
+    /// and Redo stays.
+    #[test]
+    fn pasting_the_same_tags_leaves_redo_alone() {
+        let (_test_dir, mut workspace) = open_folder(1);
+        let ids = workspace
+            .file_workspace()
+            .tag_list()
+            .filtered_display_tag_ids()
+            .to_vec();
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(ids[0])));
+        let _ = workspace.update(Message::CopyTags);
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(ids[1])));
+        let _ = workspace.update(Message::Undo);
+        assert!(workspace.history.can_redo());
+
+        // The search bar also takes the paste (the file name Ctrl+C put on the clipboard).
+        workspace
+            .file_workspace
+            .set_tag_filter("clip name".to_string());
+        let _ = workspace.update(Message::PasteTags);
+        assert!(workspace.history.can_redo(), "the same tags record nothing");
+        assert_eq!(
+            workspace.file_workspace().tag_list().filter_query(),
+            "",
+            "the paste still clears the search filter"
+        );
+        let _ = workspace.update(Message::Redo);
+        assert!(workspace
+            .file_workspace()
+            .tag_list()
+            .get_tag(ids[1])
+            .is_some_and(|t| t.is_checked()));
+
+        // Different tags are still pasted as a step.
+        let _ = workspace.update(Message::PasteTags);
+        assert!(!workspace.history.can_redo());
+        assert!(workspace
+            .file_workspace()
+            .tag_list()
+            .get_tag(ids[1])
+            .is_some_and(|t| !t.is_checked()));
     }
 
     #[test]
