@@ -1,3 +1,7 @@
+# 0.198
+## Fixed
+- Dragging a divider no longer closes frename when the window is narrower than its usual minimum (some window managers allow that); the divider just stays where it is.
+
 # 0.197
 ## Fixed
 - Clearing an In or Out point twice in a row (a quick double click on its ×) no longer adds an undo step that does nothing, and Redo stays available.
