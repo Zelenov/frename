@@ -4331,7 +4331,14 @@ mod tests {
             .filtered_display_tag_ids()[0];
         let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
         let _ = workspace.update(Message::PasteTags);
-        assert!(workspace.history.can_undo(), "the paste was a real one");
+        assert!(
+            workspace
+                .file_workspace()
+                .tag_list()
+                .get_tag(tag_id)
+                .is_some_and(|t| !t.is_checked()),
+            "the paste was a real one: the tag ticked after the copy is gone"
+        );
         assert_eq!(
             workspace.file_workspace().segment_start_secs(),
             Some(3.0),
@@ -4506,7 +4513,14 @@ mod tests {
             .filtered_display_tag_ids()[0];
         let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
         let _ = workspace.update(Message::PasteTags);
-        assert!(workspace.history.can_undo(), "the paste was a real one");
+        assert!(
+            workspace
+                .file_workspace()
+                .tag_list()
+                .get_tag(tag_id)
+                .is_some_and(|t| !t.is_checked()),
+            "the paste was a real one: the tag ticked after the copy is gone"
+        );
         assert_eq!(
             workspace
                 .file_workspace()
