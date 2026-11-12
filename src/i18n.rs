@@ -916,7 +916,7 @@ mod tests {
     }
 
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
-    const NOT_UI_TEXT: [(&str, &str); 109] = [
+    const NOT_UI_TEXT: [(&str, &str); 110] = [
         ("https://raw.githubusercontent.com/Zelenov/frename", "address"),
         ("main", "branch name"),
         ("ai-notes-editor", "widget id"),
@@ -958,6 +958,7 @@ mod tests {
         ("CC", "subtitle button, a symbol"),
         ("SRT", "file format name"),
         ("ASS", "file format name"),
+        ("CAPT", "file format name, sonisub's whole transcript"),
         ("SSA", "file format name"),
         ("Premiere", "file format name, Premiere Pro transcript"),
         ("AI", "marker color badge, mirrors the AI marker color name"),
