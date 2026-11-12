@@ -582,6 +582,13 @@ impl FrenameApp {
         let recovery_lock = frename_core::recovery::InstanceLock::acquire();
         let (recovery_notes, restored_clip) = restore_after_crash(recovery_lock.as_ref());
         let mut folder_workspace = folder_workspace::FolderWorkspace::new();
+        // Until the window reports its size, the columns fit the size it opens with.
+        folder_workspace.set_window_width(
+            saved
+                .map(|g| g.width)
+                .unwrap_or(crate::ui::tokens::WINDOW_WIDTH)
+                .max(crate::ui::tokens::WINDOW_MIN_WIDTH),
+        );
         for note in recovery_notes {
             folder_workspace.add_startup_note(note);
         }
@@ -979,6 +986,7 @@ impl FrenameApp {
                 fetch
             }
             Message::WindowResized(width, height) => {
+                self.folder_workspace.set_window_width(width);
                 if !self.is_maximized {
                     self.window_size = (width, height);
                 }
@@ -1280,8 +1288,8 @@ impl FrenameApp {
             is_maximized: self.is_maximized,
             monitor_width: self.monitor_size.0,
             monitor_height: self.monitor_size.1,
-            left_panel_width: self.folder_workspace.left_width(),
-            folder_panel_width: self.folder_workspace.folder_width(),
+            left_panel_width: self.folder_workspace.saved_column_widths().0,
+            folder_panel_width: self.folder_workspace.saved_column_widths().1,
         });
     }
 
@@ -1399,6 +1407,20 @@ mod tests {
             (1000.0, 700.0),
             "tracked again after leaving"
         );
+    }
+
+    /// Issue #380: a window resize fits the columns, so the tags area keeps its minimum; the
+    /// widths the editor set are what is saved.
+    #[test]
+    fn a_narrower_window_keeps_the_tags_area_at_its_minimum() {
+        use crate::ui::tokens::{SPLITTER_HIT, TAGS_MIN_WIDTH, WINDOW_MIN_WIDTH};
+        let (mut app, ..) = app_with_loading_video();
+        let saved = app.folder_workspace.saved_column_widths();
+        let _ = app.update(Message::WindowResized(WINDOW_MIN_WIDTH, 600.0));
+        let ws = &app.folder_workspace;
+        let tags = WINDOW_MIN_WIDTH - ws.left_width() - ws.folder_width() - 2.0 * SPLITTER_HIT;
+        assert!(tags >= TAGS_MIN_WIDTH, "tags area {tags}");
+        assert_eq!(ws.saved_column_widths(), saved);
     }
 
     #[test]

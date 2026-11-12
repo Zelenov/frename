@@ -38,8 +38,8 @@ use crate::features::tag_grid::groups::Shape;
 use crate::features::tag_panel::{self, TagPanelState, TAG_LIST_SCROLLABLE_ID};
 use crate::features::video_controls;
 use crate::ui::tokens::{
-    FILE_LIST_MAX_WIDTH, FILE_LIST_MIN_WIDTH, FILE_LIST_WIDTH, SPLITTER_HIT, VIDEO_MIN_WIDTH,
-    VIDEO_WIDTH,
+    FILE_LIST_MAX_WIDTH, FILE_LIST_MIN_WIDTH, FILE_LIST_WIDTH, SPLITTER_HIT, TAGS_MIN_WIDTH,
+    VIDEO_MIN_WIDTH, VIDEO_WIDTH,
 };
 use crate::widgets::search_bar::SEARCH_BAR_INPUT_ID;
 
@@ -159,8 +159,12 @@ pub struct FolderWorkspace {
     /// first. apply_file_updated pushes the NavigateFileCommand from the first of its file. A
     /// list, not one value, so navigations before the video unloads each get their own step.
     navigation_targets: Vec<(FileId, FileId)>,
+    /// The video pane's and the file list's widths as the editor set them (saved); a narrower
+    /// window shows them smaller (`left_width()`, `folder_width()`) without changing them.
     left_width: f32,
     folder_width: f32,
+    /// The main window's width, once known: the columns are fitted to it.
+    window_width: Option<f32>,
     /// Last reported tag list scroll offset and viewport height (for scroll-into-view).
     tag_list_scroll_y: Option<f32>,
     tag_list_viewport_height: Option<f32>,
@@ -234,6 +238,18 @@ fn column_widths(video: f32, file_list: f32) -> (f32, f32) {
         video.max(VIDEO_MIN_WIDTH),
         file_list.clamp(FILE_LIST_MIN_WIDTH, FILE_LIST_MAX_WIDTH),
     )
+}
+
+/// The video pane's and the file list's widths as shown in a window `window_width` wide: the tags
+/// area keeps its minimum, and what it lacks comes off the video pane first, then off the file
+/// list, never below their own minimums (§13.9, #380). A wide enough window shows them as they are.
+fn fitted_column_widths(video: f32, file_list: f32, window_width: f32) -> (f32, f32) {
+    let room = window_width - 2.0 * SPLITTER_HIT - TAGS_MIN_WIDTH;
+    let mut over = (video + file_list - room).max(0.0);
+    let from_video = over.min((video - VIDEO_MIN_WIDTH).max(0.0));
+    over -= from_video;
+    let from_list = over.min((file_list - FILE_LIST_MIN_WIDTH).max(0.0));
+    (video - from_video, file_list - from_list)
 }
 
 /// Takes the keys from the one focusable widget with this id and leaves every other one as it
@@ -319,6 +335,7 @@ impl FolderWorkspace {
             navigation_targets: Vec::new(),
             left_width,
             folder_width,
+            window_width: None,
             tag_list_scroll_y: None,
             tag_list_viewport_height: None,
             folder_scroll_y: None,
@@ -561,6 +578,8 @@ impl FolderWorkspace {
             Message::FileNamePanel(msg) => self.handle_file_name_panel(msg),
             Message::SyncPanel(msg) => self.handle_sync_panel(msg),
             Message::LeftSplitterDragged(x) => {
+                // A drag acts on the columns as shown, so those become the editor's widths.
+                (self.left_width, self.folder_width) = (self.left_width(), self.folder_width());
                 self.left_width = x;
                 let folder_start = self.left_width + SPLITTER_HIT;
                 let folder_end = folder_start + self.folder_width;
@@ -572,6 +591,7 @@ impl FolderWorkspace {
                 Task::none()
             }
             Message::RightSplitterDragged(x) => {
+                (self.left_width, self.folder_width) = (self.left_width(), self.folder_width());
                 let new_folder_width = x - self.left_width - SPLITTER_HIT;
                 self.folder_width =
                     new_folder_width.clamp(FILE_LIST_MIN_WIDTH, FILE_LIST_MAX_WIDTH);
@@ -3680,12 +3700,32 @@ impl FolderWorkspace {
         self.file_workspace.tag_list().sync_locked()
     }
 
+    /// The video pane's width as shown: fitted to the window (`set_window_width`).
     pub fn left_width(&self) -> f32 {
-        self.left_width
+        self.shown_column_widths().0
     }
 
+    /// The file list's width as shown: fitted to the window (`set_window_width`).
     pub fn folder_width(&self) -> f32 {
-        self.folder_width
+        self.shown_column_widths().1
+    }
+
+    /// The video pane's and the file list's widths as the editor set them, to be saved: a window
+    /// made narrow for a moment does not change them.
+    pub fn saved_column_widths(&self) -> (f32, f32) {
+        (self.left_width, self.folder_width)
+    }
+
+    /// The main window is now `width` wide; the columns are fitted to it.
+    pub fn set_window_width(&mut self, width: f32) {
+        self.window_width = Some(width);
+    }
+
+    fn shown_column_widths(&self) -> (f32, f32) {
+        match self.window_width {
+            Some(window) => fitted_column_widths(self.left_width, self.folder_width, window),
+            None => (self.left_width, self.folder_width),
+        }
     }
 }
 
@@ -3775,6 +3815,73 @@ mod tests {
             (500.0, FILE_LIST_MAX_WIDTH)
         );
         assert_eq!(super::column_widths(640.0, 300.0), (640.0, 300.0));
+    }
+
+    /// Issue #380: a narrower window takes the width off the video pane first, then off the file
+    /// list, and the tags area keeps its minimum.
+    #[test]
+    fn a_narrow_window_keeps_the_tags_area_at_its_minimum() {
+        use crate::ui::tokens::{
+            FILE_LIST_MIN_WIDTH, SPLITTER_HIT, TAGS_MIN_WIDTH, VIDEO_MIN_WIDTH, VIDEO_WIDTH,
+            WINDOW_MIN_WIDTH, WINDOW_WIDTH,
+        };
+        let tags =
+            |(video, list): (f32, f32), window: f32| window - 2.0 * SPLITTER_HIT - video - list;
+
+        // Wide enough: the columns are as the editor set them.
+        let wide = super::fitted_column_widths(VIDEO_WIDTH, 300.0, WINDOW_WIDTH);
+        assert_eq!(wide, (VIDEO_WIDTH, 300.0));
+
+        // 1000: only the video pane gives way.
+        let w1000 = super::fitted_column_widths(VIDEO_WIDTH, 300.0, 1000.0);
+        assert_eq!(w1000.1, 300.0, "the file list keeps its width");
+        assert_eq!(tags(w1000, 1000.0), TAGS_MIN_WIDTH);
+        assert!(w1000.0 > VIDEO_MIN_WIDTH, "{w1000:?}");
+
+        // The minimum window: the video pane at its minimum, then the file list gives way.
+        let min = super::fitted_column_widths(VIDEO_WIDTH, 300.0, WINDOW_MIN_WIDTH);
+        assert_eq!(min.0, VIDEO_MIN_WIDTH);
+        assert!(min.1 >= FILE_LIST_MIN_WIDTH, "{min:?}");
+        assert_eq!(tags(min, WINDOW_MIN_WIDTH), TAGS_MIN_WIDTH);
+
+        // Narrower than every minimum together: both columns at their minimums, never below.
+        assert_eq!(
+            super::fitted_column_widths(VIDEO_WIDTH, 300.0, 600.0),
+            (VIDEO_MIN_WIDTH, FILE_LIST_MIN_WIDTH)
+        );
+    }
+
+    /// Issue #380: the workspace shows the fitted widths, keeps the editor's own to save, and gives
+    /// them back when the window is wide again.
+    #[test]
+    fn the_columns_follow_the_window_and_the_saved_widths_stay() {
+        use crate::ui::tokens::{SPLITTER_HIT, TAGS_MIN_WIDTH};
+        let mut ws = test_workspace();
+        let saved = ws.saved_column_widths();
+        ws.set_window_width(900.0);
+        let shown = ws.left_width() + ws.folder_width() + 2.0 * SPLITTER_HIT;
+        assert!(
+            900.0 - shown >= TAGS_MIN_WIDTH,
+            "tags area {}",
+            900.0 - shown
+        );
+        assert_eq!(
+            ws.saved_column_widths(),
+            saved,
+            "the saved widths are not changed"
+        );
+        ws.set_window_width(3000.0);
+        assert_eq!((ws.left_width(), ws.folder_width()), saved);
+
+        // A drag in the narrow window starts from the columns as shown.
+        ws.set_window_width(960.0);
+        let shown_video = ws.left_width();
+        let _ = ws.update(Message::RightSplitterDragged(
+            shown_video + SPLITTER_HIT + 250.0,
+        ));
+        assert_eq!(ws.folder_width(), 250.0);
+        assert_eq!(ws.left_width(), shown_video, "the video pane does not jump");
+        assert_eq!(ws.saved_column_widths(), (shown_video, 250.0));
     }
 
     /// Simulates the iced runtime processing a FileOpened task: directory already has selection, so send FileOpened(selected_file).
