@@ -3101,6 +3101,10 @@ impl FolderWorkspace {
         }
         if let file_name_panel::Message::ClearSegmentStart = msg {
             let old_secs = self.file_workspace.segment_start_secs();
+            // Already clear (a second click before the × went away): no undo step (#392).
+            if old_secs.is_none() {
+                return Task::none();
+            }
             self.file_workspace.set_segment_start_secs(None);
             self.history.push(Box::new(SetSegmentStartCommand {
                 old_secs,
@@ -3110,6 +3114,10 @@ impl FolderWorkspace {
         }
         if let file_name_panel::Message::ClearSegmentEnd = msg {
             let old_secs = self.file_workspace.segment_end_secs();
+            // Already clear (a second click before the × went away): no undo step (#392).
+            if old_secs.is_none() {
+                return Task::none();
+            }
             self.file_workspace.set_segment_end_secs(None);
             self.history.push(Box::new(SetSegmentEndCommand {
                 old_secs,
@@ -9870,6 +9878,42 @@ mod tests {
             .tag_list()
             .get_tag(ids[1])
             .is_some_and(|t| !t.is_checked()));
+    }
+
+    /// Issue #392: clearing an In or Out point that is already clear changes nothing, so it is
+    /// no undo step and Redo stays.
+    #[test]
+    fn clearing_an_in_or_out_that_is_already_clear_leaves_redo_alone() {
+        use crate::features::file_name_panel::Message as P;
+        let (_test_dir, mut workspace) = open_folder(1);
+        let tag_id = workspace
+            .file_workspace()
+            .tag_list()
+            .filtered_display_tag_ids()[0];
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
+        let _ = workspace.update(Message::Undo);
+        assert!(workspace.history.can_redo());
+        assert_eq!(workspace.file_workspace().segment_start_secs(), None);
+
+        let _ = workspace.update(Message::FileNamePanel(P::ClearSegmentStart));
+        assert!(
+            workspace.history.can_redo(),
+            "clearing no In records nothing"
+        );
+        let _ = workspace.update(Message::FileNamePanel(P::ClearSegmentEnd));
+        assert!(
+            workspace.history.can_redo(),
+            "clearing no Out records nothing"
+        );
+
+        // A point that is set is still cleared as one undo step.
+        let _ = workspace.update(Message::MediaViewer(
+            media_viewer::Message::SegmentStartMarked(2.0),
+        ));
+        let _ = workspace.update(Message::FileNamePanel(P::ClearSegmentStart));
+        assert_eq!(workspace.file_workspace().segment_start_secs(), None);
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(workspace.file_workspace().segment_start_secs(), Some(2.0));
     }
 
     #[test]
