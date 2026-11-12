@@ -1,6 +1,6 @@
 # 0.194
 ## Fixed
-- Settings → Describe with AI: the model list shows its prices in your language ("per M tokens" was in English in every language).
+- Settings → Describe with AI: the prices in the model list are now in your language.
 
 # 0.193
 ## Fixed

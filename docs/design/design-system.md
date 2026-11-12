@@ -2313,7 +2313,7 @@ No "General" (BIR). The version is on *Updates* ("About" would hold only it).
     button). Esc = Keep. The other rows stay where they are.
   - *Keyring unavailable:* warning notice with today's text and hint.
   - A failed save or removal: error line under the row.
-- **Model** (AI): dropdown 300 wide with the prices; help "Haiku is the cheapest; Sonnet and Opus
+- **Model** (AI): dropdown 360 wide with the prices (the longest model in the longest wording of a shipped language fits, #383); help "Haiku is the cheapest; Sonnet and Opus
   notice more." **Description language:** dropdown 300. **Moments:** radios *Only what stands
   out* — "Also suggests where to set In and Out (the AI pill next to IN and OUT)"; *Cover the
   whole clip* — "A moment for every part, quiet ones too; no In and Out suggestion". Default: only

@@ -34,6 +34,8 @@ pub const CHOICE_INDENT: f32 = CHECK_SIZE + SPACE_S;
 pub const FIELD_WIDTH_S: f32 = 160.0;
 pub const FIELD_WIDTH_M: f32 = 240.0;
 pub const FIELD_WIDTH_L: f32 = 300.0;
+/// A model with its prices in the longest wording of a shipped language (#383).
+pub const FIELD_WIDTH_XL: f32 = 360.0;
 /// One checkbox of a wrapping grid of short choices (languages).
 pub const CHOICE_WIDTH: f32 = 120.0;
 /// The dot that says "an update is ready", and the recording dot of a held marker button.

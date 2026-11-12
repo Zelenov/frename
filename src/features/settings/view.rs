@@ -375,7 +375,7 @@ fn ai(state: &SettingsState) -> Element<'_, Message> {
                             Some(option(frename_core::ai::model_from_id(&settings.ai_model))),
                             |option| Message::SetAiModel(option.model),
                         )
-                        .width(FIELD_WIDTH_L),
+                        .width(FIELD_WIDTH_XL),
                         focused(state, Control::AiModel),
                     ),
                     text::secondary(fl!("settings-ai-hint")).into(),
@@ -900,12 +900,11 @@ mod tests {
             let label = super::model_label(&model);
             assert_eq!(label, model.to_string(), "{}", model.id);
         }
-        let haiku = MODELS.iter().find(|m| m.id.contains("haiku")).copied();
-        if let Some(haiku) = haiku {
-            assert_eq!(
-                super::model_label(&haiku),
-                "Claude Haiku 4.5 ($1 / $5 per M tokens)"
-            );
-        }
+        let haiku = clipscribe::Model::from_id("claude-haiku-4-5");
+        assert_eq!(haiku.id, "claude-haiku-4-5", "Haiku is in MODELS");
+        assert_eq!(
+            super::model_label(&haiku),
+            "Claude Haiku 4.5 ($1 / $5 per M tokens)"
+        );
     }
 }
