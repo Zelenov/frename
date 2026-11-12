@@ -4323,7 +4323,15 @@ mod tests {
             crate::features::media_viewer::Message::SegmentStartMarked(3.0),
         ));
         let _ = workspace.update(Message::CopyTags);
+        // A tag ticked after the copy, so the paste really changes the tags and rebuilds the
+        // snapshot (a paste of the same tags changes nothing: #381).
+        let tag_id = workspace
+            .file_workspace()
+            .tag_list()
+            .filtered_display_tag_ids()[0];
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
         let _ = workspace.update(Message::PasteTags);
+        assert!(workspace.history.can_undo(), "the paste was a real one");
         assert_eq!(
             workspace.file_workspace().segment_start_secs(),
             Some(3.0),
@@ -4490,7 +4498,15 @@ mod tests {
             .tag_list_mut()
             .set_comment("keep this note".to_string());
         let _ = workspace.update(Message::CopyTags);
+        // A tag ticked after the copy, so the paste really changes the tags and rebuilds the
+        // snapshot (a paste of the same tags changes nothing: #381).
+        let tag_id = workspace
+            .file_workspace()
+            .tag_list()
+            .filtered_display_tag_ids()[0];
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
         let _ = workspace.update(Message::PasteTags);
+        assert!(workspace.history.can_undo(), "the paste was a real one");
         assert_eq!(
             workspace
                 .file_workspace()
