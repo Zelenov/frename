@@ -122,7 +122,7 @@ pub fn invalid_text_field<'a, M: Clone + 'a>(placeholder: &str, value: &str) -> 
 }
 
 /// Room at a search field's ends for the icon inside it: 8 + 16 + 6.
-const SEARCH_ICON_ROOM: f32 = SPACE_S + ICON_M + SPACE_TIGHT;
+pub const SEARCH_ICON_ROOM: f32 = SPACE_S + ICON_M + SPACE_TIGHT;
 
 /// A search field (§8.6): `search` inside on the left, and `x` "Clear" on the right while it
 /// has text. The caller adds `on_input`, `on_submit` and an id to the field it is given back

@@ -1,3 +1,7 @@
+# 0.198
+## Fixed
+- In a narrow file list or tags area, the search field's hint ("Find a file or a comment") ends in "…" when it does not fit, instead of stopping with no sign that text is missing.
+
 # 0.197
 ## Fixed
 - Clearing an In or Out point twice in a row (a quick double click on its ×) no longer adds an undo step that does nothing, and Redo stays available.
