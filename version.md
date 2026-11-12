@@ -1,6 +1,10 @@
-# 0.194
+# 0.195
 ## Fixed
 - Settings → Describe with AI: the model list no longer has English words in other languages; the line under it says, in your language, what the prices are.
+
+# 0.194
+## Fixed
+- Pressing `[` or `]` again on the frame that is already the In or Out point, or pasting the tags a clip already has, no longer adds an undo step that does nothing, and Redo stays available.
 
 # 0.193
 ## Fixed
