@@ -924,7 +924,10 @@ mod tests {
             }
             .to_string();
             assert!(!missing.ends_with('…'), "fits whole: {missing}");
-            assert!(crate::ui::text::body_width(&missing) <= room, "{missing}");
+            assert!(
+                crate::ui::text::text_width(&missing, crate::ui::tokens::TEXT_BODY) <= room,
+                "{missing}"
+            );
             let fine = super::ModelOption {
                 model,
                 needs_key: false,

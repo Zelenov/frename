@@ -1403,7 +1403,7 @@ mod tests {
                     provider = model.provider.label()
                 );
                 assert!(
-                    crate::ui::text::body_width(&label) <= room,
+                    crate::ui::text::text_width(&label, crate::ui::tokens::TEXT_BODY) <= room,
                     "{language}: {label}"
                 );
             }

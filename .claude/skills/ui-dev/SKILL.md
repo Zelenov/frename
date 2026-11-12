@@ -325,14 +325,15 @@ the first look. Read it before any UI change.
   `stack!` layer with `ui::menu::menu` at its anchor, and a full-size transparent `mouse_area`
   under it that closes it on a click beside it (see `folder::filter`, the video pane's More).
 - **Text width:** iced cannot measure text or cut it with "…". Mono text has a fixed advance
-  (`MONO_CHAR_WIDTH`), so a file name is cut exactly; other text is estimated
-  (`BODY_CHAR_WIDTH`, `CHIP_MINI_CHAR_WIDTH`). Use a realistic estimate to fit things into a row
+  (`MONO_CHAR_WIDTH`), so a file name is cut exactly (`ui::text::fit`); a single line of body or
+  caption text is cut with `ui::text::fit_body` / `fit_caption`, which measure the bundled Inter
+  (#391, #399). Elsewhere other text is estimated (`BODY_CHAR_WIDTH`, `CHIP_MINI_CHAR_WIDTH`). Use a realistic estimate to fit things into a row
   (a generous one hid chips that fitted), a generous one to size columns.
 - **Nothing draws past its background.** iced does not clip by default: text with
   `Wrapping::None` runs on past its row. Rows, nav items and menu items clip their content
   (`list::row_item`, `layout::nav_item_with`, `menu::item` do it), and a single line in a row is cut
-  with `ui::text::fit` (by `CAPTION_CHAR_WIDTH`, `MONO_CHAR_WIDTH`…) so it ends in "…" instead of
-  being sliced. A new container with a fill or an edge and text inside gets `.clip(true)`.
+  with `ui::text::fit_body` / `fit_caption` (Inter) or `ui::text::fit` (mono) so it ends in "…"
+  instead of being sliced. A new container with a fill or an edge and text inside gets `.clip(true)`.
 - **Long words do not wrap** with the default `Wrapping::Word`: a file name has no spaces and runs
   past a tooltip or a table cell. Text that may be a file name wraps with `Wrapping::WordOrGlyph`
   (`text::tooltip` does it for every tooltip; the failed-files table for its names).

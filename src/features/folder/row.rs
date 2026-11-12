@@ -311,7 +311,7 @@ fn comment_line<'a>(
         );
     }
     let first = snapshot.comment().lines().next().unwrap_or_default();
-    text::caption(text::fit(first, width, CAPTION_CHAR_WIDTH).into_owned())
+    text::caption(text::fit_caption(first, width).into_owned())
         .wrapping(Wrapping::None)
         .into()
 }
