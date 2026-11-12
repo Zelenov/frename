@@ -1,3 +1,7 @@
+# 0.203
+## Fixed
+- When the file search finds a word far into a long comment line in Japanese, Korean or Chinese, the line starts with "…" just before the word, so the word shows in the row instead of being hidden past its end.
+
 # 0.202
 ## Fixed
 - A comment line that the file search found ends in "…" when it does not fit, also in Cyrillic, Japanese, Korean or Chinese, instead of being cut off with no sign that text is missing.
