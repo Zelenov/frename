@@ -22,6 +22,25 @@ $OldGstSha256 = "a863bf3faa49e9f33bd3cc42967b473482d4dc98655ed95cba1ac59f26fb0cf
 
 $clips = (Resolve-Path "tests\media").Path
 
+# Downloads $Uri to $OutFile and checks its SHA-256. A download that is cut off or comes out wrong
+# is tried again (3 attempts, 10 s apart), so one network hiccup does not fail the run (#397).
+function Save-CheckedFile([string]$Uri, [string]$OutFile, [string]$Sha256) {
+    $attempts = 3
+    for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+        Remove-Item $OutFile -ErrorAction SilentlyContinue
+        try {
+            Invoke-WebRequest -Uri $Uri -OutFile $OutFile
+            if ((Get-FileHash $OutFile -Algorithm SHA256).Hash -eq $Sha256) { return }
+            $problem = "checksum mismatch"
+        } catch {
+            $problem = $_.Exception.Message
+        }
+        if ($attempt -eq $attempts) { throw "Downloading $Uri failed $attempts times: $problem" }
+        Write-Host "Download attempt $attempt of $Uri failed ($problem); trying again in 10 s"
+        Start-Sleep -Seconds 10
+    }
+}
+
 # Runs a frename exe's self-test and prints its log (from the data folder); release builds are
 # GUI exes, so the process is waited for explicitly.
 function Invoke-SelfTest([string]$Exe, [string]$DataDir, [string]$What) {
@@ -57,8 +76,7 @@ Invoke-SelfTest (Join-Path $current "frename.exe") $root "installed"
 
 Write-Host "== 3. Installed, with GStreamer $OldGstVersion on the system"
 $msi = Join-Path $env:TEMP "gstreamer-$OldGstVersion.msi"
-Invoke-WebRequest -Uri "https://gstreamer.freedesktop.org/data/pkg/windows/$OldGstVersion/msvc/gstreamer-1.0-msvc-x86_64-$OldGstVersion.msi" -OutFile $msi
-if ((Get-FileHash $msi -Algorithm SHA256).Hash -ne $OldGstSha256) { throw "Checksum mismatch for $msi" }
+Save-CheckedFile "https://gstreamer.freedesktop.org/data/pkg/windows/$OldGstVersion/msvc/gstreamer-1.0-msvc-x86_64-$OldGstVersion.msi" $msi $OldGstSha256
 # Every feature, so its plugins compete with the bundled ones for every format.
 $msiProcess = Start-Process msiexec.exe -ArgumentList @("/i", "`"$msi`"", "/qn", "ADDLOCAL=ALL") -Wait -PassThru
 if ($msiProcess.ExitCode -ne 0) { throw "Installing GStreamer $OldGstVersion failed: $($msiProcess.ExitCode)" }
