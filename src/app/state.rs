@@ -147,7 +147,9 @@ fn main_window_event(
     _window_id: window::Id,
 ) -> Option<Message> {
     match ev {
-        iced::Event::Window(window::Event::Opened { .. }) => Some(Message::WindowReady),
+        iced::Event::Window(window::Event::Opened { size, .. }) => {
+            Some(Message::WindowReady { width: size.width })
+        }
         iced::Event::Window(window::Event::Moved(point)) => {
             Some(Message::WindowMoved(point.x, point.y))
         }
@@ -582,13 +584,6 @@ impl FrenameApp {
         let recovery_lock = frename_core::recovery::InstanceLock::acquire();
         let (recovery_notes, restored_clip) = restore_after_crash(recovery_lock.as_ref());
         let mut folder_workspace = folder_workspace::FolderWorkspace::new();
-        // Until the window reports its size, the columns fit the size it opens with.
-        folder_workspace.set_window_width(
-            saved
-                .map(|g| g.width)
-                .unwrap_or(crate::ui::tokens::WINDOW_WIDTH)
-                .max(crate::ui::tokens::WINDOW_MIN_WIDTH),
-        );
         for note in recovery_notes {
             folder_workspace.add_startup_note(note);
         }
@@ -638,7 +633,7 @@ impl FrenameApp {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             // Only the main window's events get through the subscription filter.
-            Message::WindowReady => {
+            Message::WindowReady { width } => {
                 let language = Task::done(describe_ai_message(
                     batch::describe_ai::Message::SetLanguage(
                         self.settings.settings().summary_language,
@@ -665,6 +660,9 @@ impl FrenameApp {
                     moments,
                     tag_suggestions,
                     self.subtitle_config(),
+                    Task::done(Message::FolderWorkspace(
+                        folder_workspace::Message::WindowWidthChanged(width),
+                    )),
                     Task::done(Message::FolderWorkspace(open)),
                 ]);
                 if self.demo.is_none() {
@@ -986,13 +984,17 @@ impl FrenameApp {
                 fetch
             }
             Message::WindowResized(width, height) => {
-                self.folder_workspace.set_window_width(width);
                 if !self.is_maximized {
                     self.window_size = (width, height);
                 }
                 let fetch = self.fetch_window_extra();
                 self.save_window_state();
-                fetch
+                // The columns are fitted to the window (#380). Not in OS fullscreen (above): the
+                // workspace is covered then, and leaving it reports the window's size again.
+                let fit = Task::done(Message::FolderWorkspace(
+                    folder_workspace::Message::WindowWidthChanged(width),
+                ));
+                Task::batch([fetch, fit])
             }
             Message::WindowMaximizedFetched(maximized) => {
                 self.is_maximized = maximized;
@@ -1417,6 +1419,10 @@ mod tests {
         let (mut app, ..) = app_with_loading_video();
         let saved = app.folder_workspace.saved_column_widths();
         let _ = app.update(Message::WindowResized(WINDOW_MIN_WIDTH, 600.0));
+        // The task the resize returns, as the runtime would run it.
+        let _ = app.update(Message::FolderWorkspace(
+            folder_workspace::Message::WindowWidthChanged(WINDOW_MIN_WIDTH),
+        ));
         let ws = &app.folder_workspace;
         let tags = WINDOW_MIN_WIDTH - ws.left_width() - ws.folder_width() - 2.0 * SPLITTER_HIT;
         assert!(tags >= TAGS_MIN_WIDTH, "tags area {tags}");

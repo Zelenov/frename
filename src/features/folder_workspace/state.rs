@@ -160,9 +160,9 @@ pub struct FolderWorkspace {
     /// list, not one value, so navigations before the video unloads each get their own step.
     navigation_targets: Vec<(FileId, FileId)>,
     /// The video pane's and the file list's widths as the editor set them (saved); a narrower
-    /// window shows them smaller (`left_width()`, `folder_width()`) without changing them.
-    left_width: f32,
-    folder_width: f32,
+    /// window shows them smaller (`left_width()`, `folder_width()`) without changing them (#380).
+    chosen_video_width: f32,
+    chosen_list_width: f32,
     /// The main window's width, once known: the columns are fitted to it.
     window_width: Option<f32>,
     /// Last reported tag list scroll offset and viewport height (for scroll-into-view).
@@ -333,8 +333,8 @@ impl FolderWorkspace {
             spinner_frame: 0,
             pending_to_file_id: None,
             navigation_targets: Vec::new(),
-            left_width,
-            folder_width,
+            chosen_video_width: left_width,
+            chosen_list_width: folder_width,
             window_width: None,
             tag_list_scroll_y: None,
             tag_list_viewport_height: None,
@@ -578,25 +578,33 @@ impl FolderWorkspace {
             Message::FileNamePanel(msg) => self.handle_file_name_panel(msg),
             Message::SyncPanel(msg) => self.handle_sync_panel(msg),
             Message::LeftSplitterDragged(x) => {
-                // A drag acts on the columns as shown, so those become the editor's widths.
-                (self.left_width, self.folder_width) = (self.left_width(), self.folder_width());
-                self.left_width = x;
-                let folder_start = self.left_width + SPLITTER_HIT;
-                let folder_end = folder_start + self.folder_width;
+                self.adopt_shown_widths();
+                // The splitter can go past where the fitted video pane stops; the editor's width
+                // is the one the pane shows.
+                self.chosen_video_width = match self.window_width {
+                    Some(window) => fitted_column_widths(x, self.chosen_list_width, window).0,
+                    None => x,
+                };
+                let folder_start = self.chosen_video_width + SPLITTER_HIT;
+                let folder_end = folder_start + self.chosen_list_width;
                 let new_folder_width = folder_end - x - SPLITTER_HIT;
-                self.folder_width =
+                self.chosen_list_width =
                     new_folder_width.clamp(FILE_LIST_MIN_WIDTH, FILE_LIST_MAX_WIDTH);
                 self.app_db
-                    .set_panel_widths(self.left_width, self.folder_width);
+                    .set_panel_widths(self.chosen_video_width, self.chosen_list_width);
                 Task::none()
             }
             Message::RightSplitterDragged(x) => {
-                (self.left_width, self.folder_width) = (self.left_width(), self.folder_width());
-                let new_folder_width = x - self.left_width - SPLITTER_HIT;
-                self.folder_width =
+                self.adopt_shown_widths();
+                let new_folder_width = x - self.chosen_video_width - SPLITTER_HIT;
+                self.chosen_list_width =
                     new_folder_width.clamp(FILE_LIST_MIN_WIDTH, FILE_LIST_MAX_WIDTH);
                 self.app_db
-                    .set_panel_widths(self.left_width, self.folder_width);
+                    .set_panel_widths(self.chosen_video_width, self.chosen_list_width);
+                Task::none()
+            }
+            Message::WindowWidthChanged(width) => {
+                self.window_width = Some(width);
                 Task::none()
             }
             Message::FocusSearchBarAndKey(key) => self.focus_search_bar_and_key(key),
@@ -3713,18 +3721,20 @@ impl FolderWorkspace {
     /// The video pane's and the file list's widths as the editor set them, to be saved: a window
     /// made narrow for a moment does not change them.
     pub fn saved_column_widths(&self) -> (f32, f32) {
-        (self.left_width, self.folder_width)
+        (self.chosen_video_width, self.chosen_list_width)
     }
 
-    /// The main window is now `width` wide; the columns are fitted to it.
-    pub fn set_window_width(&mut self, width: f32) {
-        self.window_width = Some(width);
+    /// A splitter drag acts on the columns as shown, so those become the editor's widths.
+    fn adopt_shown_widths(&mut self) {
+        (self.chosen_video_width, self.chosen_list_width) = self.shown_column_widths();
     }
 
     fn shown_column_widths(&self) -> (f32, f32) {
         match self.window_width {
-            Some(window) => fitted_column_widths(self.left_width, self.folder_width, window),
-            None => (self.left_width, self.folder_width),
+            Some(window) => {
+                fitted_column_widths(self.chosen_video_width, self.chosen_list_width, window)
+            }
+            None => (self.chosen_video_width, self.chosen_list_width),
         }
     }
 }
@@ -3856,9 +3866,12 @@ mod tests {
     #[test]
     fn the_columns_follow_the_window_and_the_saved_widths_stay() {
         use crate::ui::tokens::{SPLITTER_HIT, TAGS_MIN_WIDTH};
+        fn set_window_width(ws: &mut FolderWorkspace, width: f32) {
+            let _ = ws.update(Message::WindowWidthChanged(width));
+        }
         let mut ws = test_workspace();
         let saved = ws.saved_column_widths();
-        ws.set_window_width(900.0);
+        set_window_width(&mut ws, 900.0);
         let shown = ws.left_width() + ws.folder_width() + 2.0 * SPLITTER_HIT;
         assert!(
             900.0 - shown >= TAGS_MIN_WIDTH,
@@ -3870,11 +3883,11 @@ mod tests {
             saved,
             "the saved widths are not changed"
         );
-        ws.set_window_width(3000.0);
+        set_window_width(&mut ws, 3000.0);
         assert_eq!((ws.left_width(), ws.folder_width()), saved);
 
         // A drag in the narrow window starts from the columns as shown.
-        ws.set_window_width(960.0);
+        set_window_width(&mut ws, 960.0);
         let shown_video = ws.left_width();
         let _ = ws.update(Message::RightSplitterDragged(
             shown_video + SPLITTER_HIT + 250.0,
@@ -3882,6 +3895,12 @@ mod tests {
         assert_eq!(ws.folder_width(), 250.0);
         assert_eq!(ws.left_width(), shown_video, "the video pane does not jump");
         assert_eq!(ws.saved_column_widths(), (shown_video, 250.0));
+
+        // The left splitter dragged past where the video pane stops: the width saved is the one
+        // shown, not the pointer's.
+        let _ = ws.update(Message::LeftSplitterDragged(900.0));
+        assert_eq!(ws.saved_column_widths().0, ws.left_width());
+        assert!(960.0 - ws.left_width() - ws.folder_width() - 2.0 * SPLITTER_HIT >= TAGS_MIN_WIDTH);
     }
 
     /// Simulates the iced runtime processing a FileOpened task: directory already has selection, so send FileOpened(selected_file).
@@ -10254,11 +10273,11 @@ mod tests {
 
         // A second workspace with a database of its own starts from the defaults.
         let b = test_workspace();
-        assert_ne!(b.left_width, 777.0);
+        assert_ne!(b.chosen_video_width, 777.0);
         assert_eq!(b.batch.action(), super::BatchState::default().action());
         // One built on A's database sees what A saved.
         let c = FolderWorkspace::with_app_db(db_a);
-        assert_eq!(c.left_width, 777.0);
+        assert_eq!(c.chosen_video_width, 777.0);
         assert_eq!(c.batch.action(), batch::Action::FixTags);
 
         let global = AppDatabase::new();

@@ -55,6 +55,8 @@ pub enum Message {
     LeftSplitterDragged(f32),
     /// Right splitter dragged (between folder and rename panel) — absolute cursor X
     RightSplitterDragged(f32),
+    /// The main window is now this wide: the columns are fitted to it (#380).
+    WindowWidthChanged(f32),
     /// Focus the search bar and emulate the triggering key into the filter (Iced cannot replay the event).
     FocusSearchBarAndKey(GlobalSearchKey),
     /// No-op (e.g. used when returning a focus operation from update).

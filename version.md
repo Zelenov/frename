@@ -1,6 +1,6 @@
 # 0.193
 ## Fixed
-- Making the window narrower no longer squeezes the tags area until tag names disappear: the video pane gives way first, then the file list, and the tags area keeps its minimum width. Widen the window again and the columns go back to the widths you set.
+- Making the window narrower no longer squeezes the tags area until tag names disappear: once it is at its minimum width, the video pane and then the file list get narrower instead. Widen the window again and the columns go back to the widths you set.
 
 # 0.192
 ## Fixed
