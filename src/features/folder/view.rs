@@ -204,12 +204,20 @@ fn lock_line<'a>(batch: &BatchState) -> Element<'a, Message> {
         .spacing(SPACE_S)
         .align_y(Alignment::Center),
     )
-    .padding(STRIP_PADDING)
+    // One line is `LOCK_LINE_HEIGHT` tall; a text that wraps (a long action name, another
+    // language, a narrow list) makes the line taller instead of drawing over the search (#382).
+    .padding(Padding {
+        top: LOCK_LINE_INSET,
+        bottom: LOCK_LINE_INSET,
+        ..STRIP_PADDING
+    })
     .width(Length::Fill)
-    .center_y(LOCK_LINE_HEIGHT)
     .style(style::raised)
     .into()
 }
+
+/// The lock line's inset above and below its text: one line of it is `LOCK_LINE_HEIGHT` tall.
+const LOCK_LINE_INSET: f32 = (LOCK_LINE_HEIGHT - LINE_BODY) / 2.0;
 
 /// How many checked files the search or a filter hides: they are in the job too.
 fn hidden_checked(checked: usize, listed_checked: usize) -> usize {

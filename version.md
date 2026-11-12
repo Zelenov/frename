@@ -1,3 +1,7 @@
+# 0.193
+## Fixed
+- While a batch job runs, the line over the file list that says the checks are locked no longer runs over the search field when it takes two lines (in Russian, or with a narrow list): the line grows to fit its text.
+
 # 0.192
 ## Fixed
 - A crash or a full disk while frename saves a comment to a `.comment.txt` file, or writes markers to a text file, no longer leaves that file empty or cut off.
