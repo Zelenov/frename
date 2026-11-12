@@ -1,6 +1,6 @@
 # 0.203
 ## Fixed
-- When the file search finds a word far into a long comment line in Japanese, Korean or Chinese, the line starts with "…" just before the word, so the word shows in the row instead of being hidden past its end.
+- When the file search finds a word far into a long comment line in Japanese, Korean or Chinese, the word now shows in the row instead of being hidden past its end.
 
 # 0.202
 ## Fixed

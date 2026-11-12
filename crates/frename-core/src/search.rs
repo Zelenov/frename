@@ -83,7 +83,7 @@ pub(crate) fn fragment(
     }
     const ELLIPSIS: &str = "…";
     // The longest tail of what comes before the hit that fits beside the "…".
-    let keep = lead - ELLIPSIS.chars().map(&width).sum::<f32>();
+    let keep = lead - width('…');
     let mut used = 0.0;
     let mut cut = first;
     for (at, c) in before.char_indices().rev() {
@@ -238,7 +238,9 @@ mod tests {
         let f = fragment(comment, &words, 10.0, one).expect("a fragment");
         assert!(f.text.starts_with('…'), "{}", f.text);
         assert_eq!(&f.text[f.highlights[0].clone()], "goat");
-        assert!(f.text.chars().take(12).count() == 12);
+        // As much of the line before the hit as fits beside the "…", and no more.
+        let lead = f.text[..f.highlights[0].start].chars().count();
+        assert_eq!(lead, 10, "{}", f.text);
         assert_eq!(fragment("no match", &words, 10.0, one), None);
     }
 
