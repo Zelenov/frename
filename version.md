@@ -1,6 +1,6 @@
 # 0.199
 ## Fixed
-- Folder names in the recent folders list, and the first comment line in a file's row, end in "…" when they do not fit, also in Russian, Ukrainian, Japanese, Korean and Chinese, instead of being cut off with no sign that text is missing.
+- Folder names in the recent folders list, and the first comment line in a file's row, end in "…" when they do not fit, also when they are written in Cyrillic, Japanese, Korean or Chinese, instead of being cut off with no sign that text is missing.
 
 # 0.198
 ## Fixed

@@ -71,12 +71,14 @@ fn entry_row<'a>(
     } else {
         TEXT_SECONDARY
     };
-    let name = text::fit_body(&folder.name(), room * 0.6).into_owned();
     let when = if missing {
         fl!("recent-folders-not-found")
     } else {
         age_text(recent_folders::age(folder.opened_at_ms, state.now_ms()))
     };
+    // The name gets what the row leaves beside its age (#399).
+    let name_room = room - text::text_width(&when, TEXT_CAPTION) - GAP;
+    let name = text::fit_body(&folder.name(), name_room).into_owned();
     let parent = folder
         .parent()
         .map(|parent| shorten_path(&parent, captions_in(room)))
