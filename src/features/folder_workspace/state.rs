@@ -958,8 +958,10 @@ impl FolderWorkspace {
             return Task::none();
         };
         // The clip already has exactly these tags: nothing to paste, no undo step, Redo stays
-        // (#381).
+        // (#381). The search filter is still cleared, as below: Ctrl+V reaches the search bar too.
         if snapshot_before.tags() == names.as_slice() {
+            self.file_workspace.set_tag_filter(String::new());
+            self.clamp_selection_to_filtered();
             return Task::none();
         }
         let mut snapshot_after = FileSnapshot::new(
@@ -9812,8 +9814,17 @@ mod tests {
         let _ = workspace.update(Message::Undo);
         assert!(workspace.history.can_redo());
 
+        // The search bar also takes the paste (the file name Ctrl+C put on the clipboard).
+        workspace
+            .file_workspace
+            .set_tag_filter("clip name".to_string());
         let _ = workspace.update(Message::PasteTags);
         assert!(workspace.history.can_redo(), "the same tags record nothing");
+        assert_eq!(
+            workspace.file_workspace().tag_list().filter_query(),
+            "",
+            "the paste still clears the search filter"
+        );
         let _ = workspace.update(Message::Redo);
         assert!(workspace
             .file_workspace()
