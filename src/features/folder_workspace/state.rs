@@ -578,10 +578,15 @@ impl FolderWorkspace {
             Message::FileNamePanel(msg) => self.handle_file_name_panel(msg),
             Message::SyncPanel(msg) => self.handle_sync_panel(msg),
             Message::LeftSplitterDragged(x) => {
-                // The splitter stops where the tags area would go below its minimum (view), so
-                // the file list keeps its width.
+                // As before #380 the file list keeps its width and moves along; once the tags
+                // area is at its minimum, the file list gives way instead, down to its own.
                 self.adopt_shown_widths();
                 self.chosen_video_width = x;
+                if let Some(window) = self.window_width {
+                    let room = window - 2.0 * SPLITTER_HIT - TAGS_MIN_WIDTH - x;
+                    self.chosen_list_width =
+                        self.chosen_list_width.min(room).max(FILE_LIST_MIN_WIDTH);
+                }
                 self.app_db
                     .set_panel_widths(self.chosen_video_width, self.chosen_list_width);
                 Task::none()
@@ -3888,13 +3893,30 @@ mod tests {
         assert_eq!(ws.left_width(), shown_video, "the video pane does not jump");
         assert_eq!(ws.saved_column_widths(), (shown_video, 250.0));
 
-        // A left drag (the view stops it at the tags area's minimum) moves only the video pane,
-        // and the pane follows the pointer.
+        // A left drag moves the file list along while the tags area has room (the list keeps
+        // its width), and then narrows the list, never the tags area below its minimum.
         let _ = ws.update(Message::LeftSplitterDragged(shown_video + 20.0));
-        assert_eq!(ws.left_width(), shown_video + 20.0);
+        assert_eq!(
+            ws.left_width(),
+            shown_video + 20.0,
+            "the pane follows the pointer"
+        );
         assert_eq!(ws.folder_width(), 250.0, "the file list keeps its width");
-        assert_eq!(ws.saved_column_widths(), (shown_video + 20.0, 250.0));
-        assert!(960.0 - ws.left_width() - ws.folder_width() - 2.0 * SPLITTER_HIT >= TAGS_MIN_WIDTH);
+        let _ = ws.update(Message::LeftSplitterDragged(shown_video + 60.0));
+        assert_eq!(
+            ws.left_width(),
+            shown_video + 60.0,
+            "the pane follows the pointer"
+        );
+        let tags = 960.0 - ws.left_width() - ws.folder_width() - 2.0 * SPLITTER_HIT;
+        assert_eq!(
+            tags, TAGS_MIN_WIDTH,
+            "the file list gave way, not the tags area"
+        );
+        assert_eq!(
+            ws.saved_column_widths(),
+            (ws.left_width(), ws.folder_width())
+        );
     }
 
     /// Simulates the iced runtime processing a FileOpened task: directory already has selection, so send FileOpened(selected_file).
