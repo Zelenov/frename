@@ -173,7 +173,8 @@ impl ProductionFileTagger {
         if new_path != path {
             // The video first: when it cannot be renamed (Premiere holds it), its comment and
             // subtitle files must stay with it rather than wait under the new name.
-            if let Err(e) = std::fs::rename(path, &new_path) {
+            // Its sidecars follow; a crash in between is finished at the next start (#377).
+            if let Err(e) = crate::recovery::rename_clip(path, &new_path) {
                 log::error!(
                     "ProductionFileTagger: rename {:?} → {:?} failed: {}",
                     path,
@@ -182,7 +183,6 @@ impl ProductionFileTagger {
                 );
                 return path.to_path_buf();
             }
-            super::file_tagger::rename_sidecars(path, &new_path);
             log::info!("Renamed on disk: {:?} → {:?}", path, new_path);
         }
         // A pending snapshot does not know an XMP comment, so it has no text file to write.

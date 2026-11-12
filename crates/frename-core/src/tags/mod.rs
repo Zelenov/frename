@@ -24,6 +24,7 @@ pub use file_tagger_logging::LoggingFileTagger;
 pub use folder_info::FolderInfo;
 pub use folder_tag_store::{CachedFile, FolderTagStore};
 pub use in_memory_file_tagger::InMemoryFileTagger;
+pub(crate) use production_file_tagger::rename_screenshots;
 pub use production_file_tagger::ProductionFileTagger;
 pub use screenshot::Screenshot;
 pub use stored_tag::StoredTag;

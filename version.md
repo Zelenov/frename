@@ -1,3 +1,7 @@
+# 0.205
+## Fixed
+- If frename stops (a crash, a kill or a power cut) just after renaming a clip and before its comment, subtitle and screenshot files follow it, the next start moves them to the clip's new name, and any unsaved work on that clip is restored to it instead of being kept aside as "clip gone".
+
 # 0.204
 ## Added
 - The player shows the `.capt` file that Generate subtitles saves next to a clip as its subtitles, with the speakers' names, first among the clip's subtitle files; the CAPT button switches back to it.

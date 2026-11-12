@@ -380,6 +380,8 @@ pub fn restore_all(_alone: &InstanceLock) -> Vec<Restored> {
 }
 
 fn restore_all_in(dir: &Path) -> Vec<Restored> {
+    // First the renames a crash cut in two, so an entry made on the old name finds its clip.
+    let renamed = finish_renames_in(dir);
     let Ok(read) = std::fs::read_dir(dir) else {
         return Vec::new();
     };
@@ -402,12 +404,15 @@ fn restore_all_in(dir: &Path) -> Vec<Restored> {
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Entry>(&bytes).ok())
             .filter(|entry| entry.version == VERSION);
-        let Some(entry) = entry else {
+        let Some(mut entry) = entry else {
             reports.push(Restored::Ignored {
                 kept: set_aside(dir, &file, None),
             });
             continue;
         };
+        if let Some((_, to)) = renamed.iter().find(|(from, _)| *from == entry.path) {
+            entry.path = to.clone();
+        }
         reports.push(restore_one(dir, &file, &entry));
     }
     reports
@@ -554,6 +559,137 @@ fn set_aside(dir: &Path, file: &Path, entry: Option<&Entry>) -> PathBuf {
             file.to_path_buf()
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Clip renames that a crash cut in two (#377)
+// ---------------------------------------------------------------------------
+
+/// A clip rename in progress: written before the video is renamed, removed once its sidecars
+/// have followed it. One left at the next start means the run stopped between the two.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct RenameIntent {
+    version: u32,
+    from: PathBuf,
+    to: PathBuf,
+}
+
+/// Where rename intents are kept: a folder of the journal, so only the one frename that holds
+/// the [`InstanceLock`] finishes them.
+fn renames_dir(journal: &Path) -> PathBuf {
+    journal.join("renames")
+}
+
+/// Rename the clip `from` to `to`, then its comment, subtitle, transcript and screenshot files.
+/// An intent is on disk first, so a crash, a kill or a power cut between the two steps is
+/// finished at the next start ([`restore_all`]) instead of leaving the sidecars under the old
+/// name for good. The caller has checked that `to` and its sidecars are free. An error means the
+/// video was not renamed, and nothing else was.
+pub(crate) fn rename_clip(from: &Path, to: &Path) -> std::io::Result<()> {
+    rename_clip_in(&journal_dir(), from, to)
+}
+
+fn rename_clip_in(journal: &Path, from: &Path, to: &Path) -> std::io::Result<()> {
+    let intent = write_intent(journal, from, to);
+    if let Err(e) = std::fs::rename(from, to) {
+        remove_intent(intent.as_deref());
+        return Err(e);
+    }
+    crate::tags::rename_sidecars(from, to);
+    remove_intent(intent.as_deref());
+    Ok(())
+}
+
+/// Write the intent of renaming `from` to `to`, flushed to disk. `None` when it cannot be
+/// written: the rename still goes on, as it did before intents existed.
+fn write_intent(journal: &Path, from: &Path, to: &Path) -> Option<PathBuf> {
+    let intent = RenameIntent {
+        version: VERSION,
+        from: from.to_path_buf(),
+        to: to.to_path_buf(),
+    };
+    let dir = renames_dir(journal);
+    let file = entry_file(&dir, from);
+    let written = (|| -> std::io::Result<()> {
+        std::fs::create_dir_all(&dir)?;
+        let temporary = file.with_extension("json.tmp");
+        let json = serde_json::to_vec(&intent).map_err(std::io::Error::other)?;
+        let mut out = std::fs::File::create(&temporary)?;
+        out.write_all(&json)?;
+        // On disk before the video moves: the next start must find it after a power cut.
+        out.sync_all()?;
+        drop(out);
+        std::fs::rename(temporary, &file)
+    })();
+    match written {
+        Ok(()) => Some(file),
+        Err(e) => {
+            log::warn!("recovery: the rename of {from:?} is not journaled: {e}");
+            None
+        }
+    }
+}
+
+fn remove_intent(file: Option<&Path>) {
+    if let Some(file) = file {
+        if let Err(e) = std::fs::remove_file(file) {
+            log::warn!("recovery: could not remove {file:?}: {e}");
+        }
+    }
+}
+
+/// Finish the clip renames an earlier run started and did not end: the video is under its new
+/// name and the old one is gone, so the sidecars still under the old name are moved after it.
+/// A rename that never happened (the video still has its old name) is simply forgotten.
+/// Returns the renames that had happened, `(from, to)`.
+fn finish_renames_in(journal: &Path) -> Vec<(PathBuf, PathBuf)> {
+    let dir = renames_dir(journal);
+    let Ok(read) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    let mut files: Vec<PathBuf> = read.filter_map(Result::ok).map(|e| e.path()).collect();
+    files.sort();
+    let mut finished = Vec::new();
+    for file in files {
+        if !file.extension().is_some_and(|e| e == "json") {
+            // A temporary file the crash cut short: the rename had not started.
+            let _ = std::fs::remove_file(&file);
+            continue;
+        }
+        let intent = std::fs::read(&file)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<RenameIntent>(&bytes).ok())
+            .filter(|intent| intent.version == VERSION);
+        if let Some(RenameIntent { from, to, .. }) = intent {
+            // Both names present: the rename did not happen (or only changed the case of the
+            // name on a file system where the sidecars are found in any case); nothing to move.
+            if to.exists() && !from.exists() {
+                finish_sidecars(&from, &to);
+                log::info!("recovery: finished the rename {from:?} → {to:?}");
+                finished.push((from, to));
+            }
+        } else {
+            log::warn!("recovery: an unreadable rename intent {file:?} is dropped");
+        }
+        let _ = std::fs::remove_file(&file);
+    }
+    finished
+}
+
+/// Move the sidecars still under `from`'s names to `to`'s, never replacing a file: the comment
+/// rename would replace one, so a comment already under the new name keeps the old one in place.
+fn finish_sidecars(from: &Path, to: &Path) {
+    let (old_comment, new_comment) = (
+        crate::comment::comment_path(from),
+        crate::comment::comment_path(to),
+    );
+    if old_comment.exists() && new_comment.exists() {
+        log::warn!("recovery: {old_comment:?} stays: {new_comment:?} already exists");
+        crate::subtitles::rename_subtitle_file(from, to);
+        crate::tags::rename_screenshots(from, to);
+        return;
+    }
+    crate::tags::rename_sidecars(from, to);
 }
 
 #[cfg(test)]
@@ -743,6 +879,132 @@ mod tests {
         assert!(
             !entry_file(&journal, &path).exists(),
             "a restored entry is gone"
+        );
+    }
+
+    /// #377: a run that stopped after the video was renamed and before its sidecars followed
+    /// has them moved at the next start, and forgets the intent.
+    #[test]
+    fn a_rename_cut_in_two_by_a_crash_is_finished_at_the_next_start() {
+        let dir = temp_dir("rename-cut");
+        let from = clip(&dir);
+        let to = dir.join("pick.clip.mp4");
+        let journal = dir.join("recovery");
+        std::fs::write(crate::comment::comment_path(&from), "A note").expect("comment");
+        std::fs::write(dir.join("clip.srt"), "1").expect("srt");
+        // The crash: the intent is written and the video renamed, nothing more.
+        assert!(write_intent(&journal, &from, &to).is_some());
+        std::fs::rename(&from, &to).expect("rename");
+
+        assert!(restore_all_in(&journal).is_empty());
+
+        assert_eq!(
+            std::fs::read_to_string(crate::comment::comment_path(&to)).expect("comment moved"),
+            "A note"
+        );
+        assert!(dir.join("pick.clip.srt").exists(), "the subtitles follow");
+        assert!(!crate::comment::comment_path(&from).exists());
+        assert!(!dir.join("clip.srt").exists());
+        assert_eq!(
+            std::fs::read_dir(renames_dir(&journal))
+                .expect("dir")
+                .count(),
+            0,
+            "the intent is gone"
+        );
+    }
+
+    /// The journal entry made on the old name is applied to the clip under its new one, not
+    /// kept aside as "clip gone".
+    #[test]
+    fn an_entry_made_before_a_cut_rename_finds_its_clip() {
+        let dir = temp_dir("rename-cut-entry");
+        let from = clip(&dir);
+        let to = dir.join("renamed.mp4");
+        let journal = dir.join("recovery");
+        write_in(&journal, &entry_for(&from)).expect("write");
+        assert!(write_intent(&journal, &from, &to).is_some());
+        std::fs::rename(&from, &to).expect("rename");
+
+        match restore_all_in(&journal).as_slice() {
+            // Before #377 it was kept aside as `ClipGone`.
+            [Restored::Applied { path, .. }] => {
+                assert_eq!(path, &dir.join("pick.wide.clip.mp4"));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    /// An intent whose rename never happened (the video still has its old name) moves nothing.
+    #[test]
+    fn an_intent_without_its_rename_moves_nothing() {
+        let dir = temp_dir("rename-not-started");
+        let from = clip(&dir);
+        let to = dir.join("pick.clip.mp4");
+        let journal = dir.join("recovery");
+        std::fs::write(crate::comment::comment_path(&from), "A note").expect("comment");
+        assert!(write_intent(&journal, &from, &to).is_some());
+        std::fs::write(renames_dir(&journal).join("y.json.tmp"), b"half").expect("temporary");
+
+        assert!(restore_all_in(&journal).is_empty());
+
+        assert!(from.exists() && !to.exists());
+        assert!(crate::comment::comment_path(&from).exists());
+        assert!(!crate::comment::comment_path(&to).exists());
+        assert_eq!(
+            std::fs::read_dir(renames_dir(&journal))
+                .expect("dir")
+                .count(),
+            0
+        );
+    }
+
+    /// A comment already under the new name is never replaced by the one left behind.
+    #[test]
+    fn finishing_a_rename_never_replaces_a_comment() {
+        let dir = temp_dir("rename-cut-comment-taken");
+        let from = clip(&dir);
+        let to = dir.join("pick.clip.mp4");
+        let journal = dir.join("recovery");
+        std::fs::write(crate::comment::comment_path(&from), "old").expect("comment");
+        assert!(write_intent(&journal, &from, &to).is_some());
+        std::fs::rename(&from, &to).expect("rename");
+        std::fs::write(crate::comment::comment_path(&to), "new").expect("comment");
+        std::fs::write(dir.join("clip.srt"), "1").expect("srt");
+
+        restore_all_in(&journal);
+
+        assert_eq!(
+            std::fs::read_to_string(crate::comment::comment_path(&to)).expect("comment"),
+            "new"
+        );
+        assert!(crate::comment::comment_path(&from).exists());
+        assert!(
+            dir.join("pick.clip.srt").exists(),
+            "the subtitles still follow"
+        );
+    }
+
+    /// A whole rename moves the video and its sidecars and leaves no intent behind; a failed
+    /// one changes nothing and leaves none either.
+    #[test]
+    fn a_whole_rename_leaves_no_intent() {
+        let dir = temp_dir("rename-whole");
+        let from = clip(&dir);
+        let to = dir.join("pick.clip.mp4");
+        let journal = dir.join("recovery");
+        std::fs::write(crate::comment::comment_path(&from), "A note").expect("comment");
+
+        rename_clip_in(&journal, &from, &to).expect("rename");
+        assert!(to.exists() && crate::comment::comment_path(&to).exists());
+        assert!(!from.exists() && !crate::comment::comment_path(&from).exists());
+
+        assert!(rename_clip_in(&journal, &dir.join("missing.mp4"), &dir.join("x.mp4")).is_err());
+        assert_eq!(
+            std::fs::read_dir(renames_dir(&journal))
+                .expect("dir")
+                .count(),
+            0
         );
     }
 
