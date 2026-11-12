@@ -1,3 +1,7 @@
+# 0.196
+## Fixed
+- Clearing an In or Out point twice in a row (a quick double click on its ×) no longer adds an undo step that does nothing, and Redo stays available.
+
 # 0.195
 ## Fixed
 - When the tags area is narrow, the line over the tag grid ("Reordering below reorders the folder") ends in "…" instead of being cut off in the middle of a word; hover it for the whole sentence.
