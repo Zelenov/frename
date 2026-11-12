@@ -127,6 +127,46 @@ pub fn fit(line: &str, width: f32, char_width: f32) -> Cow<'_, str> {
     Cow::Owned(format!("{}…", kept.trim_end()))
 }
 
+/// How wide `line` is in body text (`TEXT_BODY` Inter), from the font's own advances; a character
+/// Inter does not have (CJK, Hangul, kana) counts as one em, as the CJK fonts draw it.
+pub fn body_width(line: &str) -> f32 {
+    use std::sync::OnceLock;
+    static INTER: OnceLock<Option<ttf_parser::Face<'static>>> = OnceLock::new();
+    let face = INTER.get_or_init(|| ttf_parser::Face::parse(FONT_FILES[0], 0).ok());
+    let Some(face) = face else {
+        return line.chars().count() as f32 * TEXT_BODY;
+    };
+    let scale = TEXT_BODY / f32::from(face.units_per_em());
+    line.chars()
+        .map(|c| {
+            face.glyph_index(c)
+                .and_then(|g| face.glyph_hor_advance(g))
+                .map_or(TEXT_BODY, |advance| f32::from(advance) * scale)
+        })
+        .sum()
+}
+
+/// `line` in body text cut with "…" so it is at most `width` px wide, measured with
+/// [`body_width`] (unlike [`fit`], which takes an average width a character and can run past
+/// its room in Cyrillic or CJK, #391).
+pub fn fit_body(line: &str, width: f32) -> Cow<'_, str> {
+    if body_width(line) <= width {
+        return Cow::Borrowed(line);
+    }
+    let room = width - body_width("…");
+    let mut used = 0.0;
+    let mut kept = String::new();
+    for c in line.chars() {
+        let mut buf = [0u8; 4];
+        used += body_width(c.encode_utf8(&mut buf));
+        if used > room {
+            break;
+        }
+        kept.push(c);
+    }
+    Cow::Owned(format!("{}…", kept.trim_end()))
+}
+
 /// How a run of a [`body_runs`] line is drawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Run {
@@ -242,6 +282,36 @@ pub fn body_marked<'a, M: 'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Issue #391: a measured cut is never wider than its room, in Latin, Cyrillic or CJK, and
+    /// a line that fits is left whole.
+    #[test]
+    fn a_measured_cut_stays_within_its_room_in_every_script() {
+        for line in [
+            "Reordering below reorders the folder",
+            "Порядок нижче — для всієї теки",
+            "下での並べ替えはフォルダー全体に適用されます",
+            "아래에서 순서를 바꾸면 폴더 전체의 순서가 바뀝니다",
+        ] {
+            assert_eq!(
+                fit_body(line, 10_000.0),
+                line,
+                "a line that fits stays whole"
+            );
+            for room in [60.0, 120.0, 190.0] {
+                let cut = fit_body(line, room);
+                assert!(cut.ends_with('…'), "{cut}");
+                assert!(
+                    body_width(&cut) <= room,
+                    "{cut}: {} > {room}",
+                    body_width(&cut)
+                );
+            }
+        }
+        // CJK takes about an em a character, Latin about half.
+        assert!(body_width("下での") > 2.5 * TEXT_BODY);
+        assert!(body_width("abc") < 2.0 * TEXT_BODY);
+    }
 
     #[test]
     fn a_line_longer_than_its_room_ends_in_an_ellipsis() {
