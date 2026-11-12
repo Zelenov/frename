@@ -9,10 +9,9 @@
 //! (`clip.premiere.json`, which it can write) are read as subtitles too, by sonisub, laid out by
 //! the "short line" / "whole sentence" setting, with speaker names.
 //! When a video has several, `.capt` wins (it is the richest), then `.ass`, `.ssa`,
-//! `.premiere.json`, then `.srt`, unless
-//! the editor picked one for that clip ([`SubtitleFormat`], kept by the app database); a file
-//! that is empty or cannot be read gives way to the next. frename writes only `.srt` (and the
-//! transcript when asked).
+//! `.premiere.json`, then `.srt`, unless the editor picked one for that clip ([`SubtitleFormat`],
+//! kept by the app database); a file that is empty or cannot be read gives way to the next.
+//! frename writes only `.srt`, `.capt` (Generate subtitles) and the transcript when asked.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -162,8 +161,8 @@ const PREMIERE_EXTENSION: &str = "premiere.json";
 /// space after tags: subtitles are loaded far from the setting.
 static CUE_LENGTH: AtomicU8 = AtomicU8::new(0);
 
-/// Choose the layout the subtitles read from a CAPT file or a Premiere transcript get (a `.srt` is shown as
-/// written). A clip already open keeps what it loaded.
+/// Choose the layout the subtitles read from a CAPT file or a Premiere transcript get (a `.srt`
+/// is shown as written). A clip already open keeps what it loaded.
 pub fn set_cue_length(length: CueLength) {
     CUE_LENGTH.store(u8::from(length == CueLength::Sentence), Ordering::Relaxed);
 }
@@ -276,7 +275,8 @@ const MAX_CAPT_SPEAKER: usize = 1000;
 /// The names of a CAPT file's speakers by number, as the layout takes them; none when the header
 /// numbers a speaker past [`MAX_CAPT_SPEAKER`]. `Doc::speaker_names` makes a list as long as the
 /// highest number, so `speaker:99999999999` in a damaged file would take all the memory there is
-/// and stop the app (Zelenov/sonisub#45).
+/// and stop the app (Zelenov/sonisub#45). Remove this guard and its test when the pin moves to a
+/// sonisub with that fixed.
 fn capt_speaker_names(doc: &sonisub::captions::capt::Doc) -> Vec<String> {
     let numbered_too_high = doc.speakers.iter().any(|speaker| {
         speaker.name.is_some()
@@ -728,10 +728,9 @@ mod tests {
 
     /// A Premiere transcript as sonisub writes it: two speakers, a long first sentence.
     fn transcript() -> String {
-        let layout = sonisub::srt::Layout::default();
         let names = sonisub::srt::Layout {
             speaker_names: vec!["Eugene".into(), "Sasha".into()],
-            ..layout.clone()
+            ..sonisub::srt::Layout::default()
         };
         serde_json::to_string_pretty(
             &sonisub::premiere::build(&soniox(), &names, Some("en")).expect("a transcript"),

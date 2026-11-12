@@ -58,9 +58,9 @@ The interface is in 12 languages; [Settings](#settings) → Interface lists them
   run is resumed by running it again, and then groups clips that look like the same shot.
 - **Get subtitles from speech.** Generate subtitles sends the audio to Soniox, a paid
   speech-to-text service, and saves an `.srt` file, a Premiere Pro transcript, or both next to
-  the video. It also saves a `.capt` file next to the video: the whole transcript as plain text,
-  which the player shows as the clip's subtitles. A button in the corner of the comment box does
-  it for the clip you have open.
+  the video. It also saves a `.capt` file next to the video: the whole transcript with the
+  speakers and the time of every word, which the player shows as the clip's subtitles. A button
+  in the corner of the comment box does it for the clip you have open.
 - **Find any clip later.** Search the list by name, tag or comment, and filter it to untagged clips
   or clips with subtitles, comments or markers.
 - **Work on many clips at once.** Batch mode runs one action on all the clips you check, for
@@ -350,9 +350,9 @@ subtitles" filter, renaming with the video and Describe with AI treat them like 
 If a video has several subtitle files, `.capt` is shown first, then `.ass`, then `.ssa`, then a
 Premiere transcript, then `.srt`. The header of the subtitle list then has one button per file
 (`CAPT`, `ASS`, `SSA`, `Premiere`, `SRT`): click one to show that file instead, in the window and
-in fullscreen, without moving the playhead. frename remembers the choice for that clip, also after you rename it
-or restart. Describe with AI reads the file the clip shows. A file that is empty or cannot be read
-is passed over for the next one, and its button is marked with a warning sign.
+in fullscreen, without moving the playhead. frename remembers the choice for that clip, also after
+you rename it or restart. Describe with AI reads the file the clip shows. A file that is empty or
+cannot be read is passed over for the next one, and its button is marked with a warning sign.
 
 A Premiere Pro transcript next to the video (`clip.premiere.json`, which **Generate subtitles** can
 write) is shown the same way. Its words are cut into lines by the setting of Settings → Subtitles
@@ -367,8 +367,8 @@ video and Describe with AI treat it like a `.srt`. A `.capt` file that cannot be
 the next file.
 
 No subtitles yet? Check the videos in batch mode and run **Generate subtitles** (see below); it
-writes `.srt` and the `.capt` file the player shows first, and skips a video that already has a `.ass` or `.ssa` unless you tick **Replace
-existing subtitles**.
+writes `.srt` and the `.capt` file the player shows first, and skips a video that already has a
+`.ass` or `.ssa` unless you tick **Replace existing subtitles**.
 
 ## Batch mode
 
