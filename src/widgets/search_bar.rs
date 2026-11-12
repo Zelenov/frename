@@ -54,7 +54,8 @@ pub fn view<'a, M: Clone + 'a>(
         on_submit,
         trailing,
     } = bar;
-    // The placeholder is cut with "…" at the room the field really has, never mid-word (#393).
+    // The placeholder is cut with "…" at the room the field really has (#393); the field's
+    // borders are taken off too, as slack for the unkerned measure.
     let search = iced::widget::responsive(move |size| {
         let room = size.width - 2.0 * (form::SEARCH_ICON_ROOM + LINE);
         let on_input = on_input.clone();

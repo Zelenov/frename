@@ -1,6 +1,6 @@
 # 0.197
 ## Fixed
-- In a narrow file list or tags area, the search field's hint ("Find a file or a comment") ends in "…" instead of being cut off in the middle of a word.
+- In a narrow file list or tags area, the search field's hint ("Find a file or a comment") ends in "…" when it does not fit, instead of stopping with no sign that text is missing.
 
 # 0.196
 ## Fixed
