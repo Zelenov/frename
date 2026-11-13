@@ -283,7 +283,7 @@ pub fn clean_commented_tag(tag: &str) -> Option<String> {
 /// The tag [`set_commented_tag`] uses for `tag`: [cleaned](clean_commented_tag), and `None`
 /// when what is left can never be a tag (an In/Out point, see [`crate::tag_name_problem`]),
 /// which would never appear on a clip (#432).
-pub fn usable_commented_tag(tag: &str) -> Option<String> {
+pub(crate) fn usable_commented_tag(tag: &str) -> Option<String> {
     clean_commented_tag(tag).filter(|tag| crate::is_allowed_tag_name(tag))
 }
 

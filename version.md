@@ -1,6 +1,6 @@
 # 0.214
 ## Fixed
-- The Settings tag for videos with a comment can no longer be a name like an In/Out point (`in_00_00_07`), which never appeared on a clip. Settings says why, and videos with a comment get no tag.
+- Settings now says when the tag for videos with a comment is named like an In/Out point (`in_00_00_07`), which can never be a tag. Such a name turns that tag off instead of silently never appearing.
 
 # 0.213
 ## Fixed
