@@ -46,6 +46,9 @@ pub struct DemoScenario {
     /// Open the search bar over the side list with this text typed (#170).
     #[serde(default)]
     pub side_search: Option<String>,
+    /// Type this text into the tag search (#418: a name a file name cannot hold).
+    #[serde(default)]
+    pub tag_filter: Option<String>,
     /// Open **More** (the `⋯` button of the video controls), to show what a narrow pane folds
     /// into it.
     #[serde(default)]

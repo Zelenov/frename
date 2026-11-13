@@ -639,7 +639,8 @@ impl<S: StoredTagStore + Clone> TagList<S> {
 
     /// Create a new unsaved tag with the given name, insert it at the front of both display and
     /// selected collections, mark it checked=true. Returns the new tag's id.
-    /// Returns None if a tag with this name already exists (case-insensitive).
+    /// Returns None if a tag with this name already exists (case-insensitive), or if the name
+    /// is not [allowed](is_allowed_tag_name).
     pub fn create_new_tag(&mut self, name: impl Into<String>) -> Option<TagId> {
         self.insert_new_tag(name, Position::First)
     }
@@ -648,6 +649,10 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     fn insert_new_tag(&mut self, name: impl Into<String>, position: Position) -> Option<TagId> {
         let name = name.into();
         if self.has_tag_with_name(&name) {
+            return None;
+        }
+        if !is_allowed_tag_name(&name) {
+            log::warn!("TagList: not creating the tag {name:?}: a file name cannot hold it");
             return None;
         }
         let id = TagId::new();
@@ -1077,6 +1082,21 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     }
 }
 
+/// Whether `name` holds a character no file name can (`\\ / : * ? " < > |` on Windows; `/`
+/// moves a file into a folder elsewhere) or a control character. The one rule for a name typed
+/// for a file and for a tag, which becomes part of a file name.
+pub fn has_forbidden_file_name_char(name: &str) -> bool {
+    name.chars().any(|c| {
+        matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || c.is_control()
+    })
+}
+
+/// Whether `name` can be a tag: it holds no [forbidden
+/// character](has_forbidden_file_name_char) (#418).
+pub fn is_allowed_tag_name(name: &str) -> bool {
+    !has_forbidden_file_name_char(name)
+}
+
 /// Where [`TagList::insert_new_tag`] puts a new tag.
 #[derive(Clone, Copy)]
 enum Position {
@@ -1123,6 +1143,22 @@ mod tests {
             flags[unsaved..].iter().all(|stored| *stored),
             "{when}: unsaved tags are not all first: stored flags {flags:?}"
         );
+    }
+
+    /// #418: a tag with a character a file name cannot hold ("AC/DC" would move the clip into
+    /// a folder `AC`) is never created, typed or suggested.
+    #[test]
+    fn a_tag_a_file_name_cannot_hold_is_not_created() {
+        let mut list = list_with_unsaved_zork();
+        for name in ["AC/DC", "a\\b", "why?", "x:y", "tab\tname"] {
+            assert!(!is_allowed_tag_name(name), "{name}");
+            assert!(list.create_new_tag(name).is_none(), "{name}");
+            list.set_checked_by_name(name, true);
+            assert!(!list.has_tag_with_name(name), "{name}");
+        }
+        assert!(is_allowed_tag_name("Rock & Roll"));
+        assert!(is_allowed_tag_name("Кадр 2"));
+        assert!(list.create_new_tag("Rock & Roll").is_some());
     }
 
     #[test]

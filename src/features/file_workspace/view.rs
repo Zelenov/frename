@@ -201,7 +201,9 @@ where
     S: frename_core::StoredTagStore + Clone,
 {
     let filter = tag_list.filter_query();
-    let on_submit = if !filter.trim().is_empty() && !file_workspace.has_tag_with_name(filter.trim())
+    let on_submit = if !filter.trim().is_empty()
+        && !file_workspace.has_tag_with_name(filter.trim())
+        && frename_core::is_allowed_tag_name(filter.trim())
     {
         Message::TagPanel(tag_panel::Message::CreateTag(filter.trim().to_string()))
     } else {

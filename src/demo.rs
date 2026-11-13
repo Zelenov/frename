@@ -203,6 +203,11 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
             video::SearchMessage::Input(text.clone()),
         )));
     }
+    if let Some(text) = &scenario.tag_filter {
+        steps.push(folder_workspace::Message::TagPanel(
+            crate::features::tag_panel::Message::SetFilter(text.clone()),
+        ));
+    }
     if scenario.more {
         steps.push(video(video::Message::ToggleMore));
     }

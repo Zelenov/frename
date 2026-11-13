@@ -3722,9 +3722,7 @@ fn check_new_file_name(
     if typed.is_empty() {
         return Err(folder::RenameProblem::Empty);
     }
-    if typed.chars().any(|c| {
-        matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || c.is_control()
-    }) {
+    if frename_core::has_forbidden_file_name_char(typed) {
         return Err(folder::RenameProblem::BadCharacter);
     }
     if typed.ends_with('.') || typed.ends_with(' ') {
