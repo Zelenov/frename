@@ -1561,6 +1561,32 @@ mod tests {
         std::fs::write(path, text).expect("write");
     }
 
+    /// #421: a tag the file name already holds but a new tag could not have (`AC:DC`) is
+    /// unchecked by mistake; Ctrl+Z puts it back, though checking it anew is refused.
+    #[test]
+    fn undo_puts_back_a_tag_the_file_name_held() {
+        let dir_path = crate::test_support::fresh_dir("undo-held-bad-tag");
+        let file = File::from_path(dir_path.join("AC:DC.clip.mp4"), SystemTime::UNIX_EPOCH);
+        let mut directory = Directory::with_files(&dir_path, vec![file], FakeAppStorage::new());
+        let mut tag_list =
+            TagList::new(FakeAppStorage::new(), FileSnapshot::parse("AC:DC.clip.mp4"));
+        let id = tag_list.tag_id_by_name("AC:DC").expect("tag from the name");
+        assert!(tag_list.get_tag(id).unwrap().is_checked());
+        assert!(tag_list.toggle_by_id(id), "unchecking works");
+        assert!(!tag_list.toggle_by_id(id), "checking it anew is refused");
+        let mut history = History::new(50);
+        history.push(Box::new(crate::undo::ToggleTagCommand {
+            tag_id: id,
+            was_checked: true,
+        }));
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).expect("undo");
+        assert!(ctx.tag_list.get_tag(id).unwrap().is_checked(), "put back");
+    }
+
     #[test]
     fn undo_of_a_rename_refuses_to_overwrite_another_clip() {
         let (dir_path, mut directory, cmd, _) =

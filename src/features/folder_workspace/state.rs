@@ -923,9 +923,9 @@ impl FolderWorkspace {
             .iter()
             .filter_map(|name| tag_list.tag_id_by_name(name))
         {
-            let addable = tag_list
-                .get_tag(id)
-                .is_some_and(|tag| tag.is_stored() && !tag.is_checked());
+            let addable = tag_list.get_tag(id).is_some_and(|tag| {
+                tag.is_stored() && !tag.is_checked() && frename_core::is_allowed_tag_name(tag.tag())
+            });
             if addable && !ids.contains(&id) {
                 ids.push(id);
             }
@@ -2831,6 +2831,18 @@ impl FolderWorkspace {
         ])
     }
 
+    /// The note for a stored tag that could not be checked: its name cannot be in a file name
+    /// (#421), from before such names were refused. It says what to do, so it stays long.
+    fn tag_not_usable(&self, id: frename_core::TagId) -> Task<Message> {
+        let name = self
+            .file_workspace
+            .tag_list()
+            .get_tag(id)
+            .map(|t| t.tag().to_string())
+            .unwrap_or_default();
+        Self::long_notice(fl!("tag-not-usable", tag = name))
+    }
+
     /// `Shift+Space`: toggles the tag under the tag cursor, then lets the search bar go.
     fn toggle_selected_tag(&mut self) -> Task<Message> {
         // If search bar had focus, it may have inserted a space; strip it so Space doesn't add to the filter.
@@ -2850,17 +2862,21 @@ impl FolderWorkspace {
         let selected_id = self.tag_panel.selected_tag_id();
         let selected_visible = selected_id.filter(|id| filtered.contains(id));
         let id_to_toggle = selected_visible.or_else(|| filtered.first().copied());
+        let mut notice = Task::none();
         if let Some(id) = id_to_toggle {
             let was_checked = self
                 .file_workspace
                 .tag_list()
                 .get_tag(id)
                 .is_some_and(|t| t.is_checked());
-            self.file_workspace.toggle_tag_by_id(id);
-            self.history.push(Box::new(ToggleTagCommand {
-                tag_id: id,
-                was_checked,
-            }));
+            if self.file_workspace.toggle_tag_by_id(id) {
+                self.history.push(Box::new(ToggleTagCommand {
+                    tag_id: id,
+                    was_checked,
+                }));
+            } else {
+                notice = self.tag_not_usable(id);
+            }
             if selected_visible.is_none() {
                 self.tag_panel.set_selected(Some(id));
             }
@@ -2869,8 +2885,11 @@ impl FolderWorkspace {
         // Space would go to its text. Let go of them (typing a letter takes them back).
         // Only the search bar: the rename field, the comment box and the marker fields
         // are typed in on purpose.
-        iced::advanced::widget::operate(unfocus_only(iced::widget::Id::from(SEARCH_BAR_INPUT_ID)))
-            .map(|()| Message::Noop)
+        let unfocus = iced::advanced::widget::operate(unfocus_only(iced::widget::Id::from(
+            SEARCH_BAR_INPUT_ID,
+        )))
+        .map(|()| Message::Noop);
+        Task::batch([notice, unfocus])
     }
 
     fn handle_tag_panel(&mut self, msg: tag_panel::Message) -> Task<Message> {
@@ -2929,8 +2948,10 @@ impl FolderWorkspace {
                     .tag_list()
                     .get_tag(id)
                     .is_some_and(|t| t.is_checked());
-                self.file_workspace.toggle_tag_by_id(id);
                 self.tag_panel.set_selected(Some(id));
+                if !self.file_workspace.toggle_tag_by_id(id) {
+                    return self.tag_not_usable(id);
+                }
                 self.history.push(Box::new(ToggleTagCommand {
                     tag_id: id,
                     was_checked,
@@ -3170,17 +3191,21 @@ impl FolderWorkspace {
         };
         self.file_name_panel
             .update(msg, self.file_workspace.tag_list());
+        let mut notice = Task::none();
         if let Some(id) = self.file_name_panel.take_dropped_dragged_tag_id() {
             let was_checked = self
                 .file_workspace
                 .tag_list()
                 .get_tag(id)
                 .is_some_and(|t| t.is_checked());
-            self.file_workspace.toggle_tag_by_id(id);
-            self.history.push(Box::new(ToggleTagCommand {
-                tag_id: id,
-                was_checked,
-            }));
+            if self.file_workspace.toggle_tag_by_id(id) {
+                self.history.push(Box::new(ToggleTagCommand {
+                    tag_id: id,
+                    was_checked,
+                }));
+            } else {
+                notice = self.tag_not_usable(id);
+            }
         } else if let (Some(did), Some(idx)) = (dragged_id, drop_index) {
             let from_index = self.file_workspace.tag_list().checked_index_of(did);
             self.file_workspace.reorder_tag_to_index(did, idx);
@@ -3195,7 +3220,7 @@ impl FolderWorkspace {
                 }));
             }
         }
-        Task::none()
+        notice
     }
 
     /// The comment box lost the keys (or the file is about to change): what was typed in it
@@ -4384,6 +4409,71 @@ mod tests {
             workspace.file_workspace().segment_start_secs(),
             Some(3.0),
             "in/out points are not tags: a paste keeps them"
+        );
+    }
+
+    /// #421: a tag stored before names were checked, that a file name cannot hold, is not put on
+    /// the clip by a click; the refused click adds no undo step and keeps the redo stack, and the
+    /// AI does not offer it as a chip that would do nothing.
+    #[test]
+    fn a_stored_tag_a_file_name_cannot_hold_is_refused_without_an_undo_step() {
+        use crate::features::file_name_panel as panel;
+        let test_dir = TestDirectory::new(1);
+        std::fs::write(
+            test_dir.path().join(".frename"),
+            "version = 3\n\ntags = [\n  \
+             { id = \"00000000-0000-0000-0000-0000000000a1\", name = \"v1.2\", color = 1 },\n  \
+             { id = \"00000000-0000-0000-0000-0000000000a2\", name = \"pick\", color = 2 },\n]\n",
+        )
+        .unwrap();
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let id = |w: &FolderWorkspace, name: &str| {
+            w.file_workspace()
+                .tag_list()
+                .tag_id_by_name(name)
+                .expect(name)
+        };
+        let checked = |w: &FolderWorkspace, name: &str| {
+            let list = w.file_workspace().tag_list();
+            list.get_tag(id(w, name))
+                .is_some_and(|tag| tag.is_checked())
+        };
+        let (bad, pick) = (id(&workspace, "v1.2"), id(&workspace, "pick"));
+
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(pick)));
+        let _ = workspace.update(Message::Undo);
+        assert!(!checked(&workspace, "pick") && workspace.history.can_redo());
+
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(bad)));
+        assert!(!checked(&workspace, "v1.2"), "the click is refused");
+        assert!(
+            workspace.history.can_redo(),
+            "a refused click is no undo step"
+        );
+        let _ = workspace.update(Message::Redo);
+        assert!(
+            checked(&workspace, "pick"),
+            "redo still puts the earlier tag back"
+        );
+
+        workspace
+            .file_workspace
+            .tag_list_mut()
+            .set_comment("AI: A walk.\nSuggested tags: v1.2 (90%) · pick (50%)".to_string());
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(pick)));
+        let offered: Vec<_> = panel::pending_tag_suggestions(workspace.file_workspace().tag_list())
+            .into_iter()
+            .map(|tag| tag.name)
+            .collect();
+        assert_eq!(
+            offered,
+            ["pick"],
+            "the refused tag is not offered as a chip"
         );
     }
 
