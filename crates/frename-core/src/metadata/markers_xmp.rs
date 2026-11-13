@@ -13,7 +13,7 @@ use xmp_toolkit::{XmpError, XmpMeta, XmpValue};
 
 use crate::markers::{Marker, MarkerColor};
 
-use super::xmp::{track_path, TRACKS, XMP_DM};
+use super::xmp::{track_path, xmp_text, TRACKS, XMP_DM};
 
 const COMMENT_TRACK_TYPE: &str = "Comment";
 /// Rate of a track frename creates: milliseconds, like the in/out marker.
@@ -68,13 +68,6 @@ fn field(meta: &XmpMeta, path: &str, name: &str) -> Option<String> {
 
 fn set_field(meta: &mut XmpMeta, path: &str, name: &str, value: &str) -> Result<(), XmpError> {
     meta.set_struct_field(XMP_DM, path, XMP_DM, name, &XmpValue::new(xmp_text(value)))
-}
-
-/// `value` as the toolkit can store it: it refuses a NUL, which a pasted marker name or comment
-/// can hold, and every marker of the clip would stay unsaved (#445). A space takes its place,
-/// as in the comment (#441).
-fn xmp_text(value: &str) -> String {
-    value.replace('\0', " ")
 }
 
 /// Set a text field, or remove it when `value` is empty.
@@ -404,6 +397,20 @@ fn set_color(meta: &mut XmpMeta, marker: &str, color: MarkerColor) -> Result<(),
 mod tests {
     use super::*;
     use std::str::FromStr;
+
+    /// #440: a marker holding a NUL, saved once, is not written again unchanged: it is compared
+    /// as stored, with a space for the NUL.
+    #[test]
+    fn a_marker_with_a_nul_saved_once_is_not_written_again() {
+        let mut meta = XmpMeta::new().expect("meta");
+        let mut marker = Marker::new(1_000);
+        marker.guid = Some("c19c0922-775d-465c-917b-6a7c3a5c0902".to_string());
+        marker.name = "Лев\0рычит".to_string();
+        marker.comment = "крупный\0план".to_string();
+        let known = HashSet::new();
+        assert!(apply_markers(&mut meta, &[marker.clone()], &known).expect("first"));
+        assert!(!apply_markers(&mut meta, &[marker], &known).expect("again"));
+    }
 
     /// The research sample: what Premiere writes, `parseType="Resource"` form.
     const PREMIERE: &str = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
