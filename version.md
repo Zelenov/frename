@@ -1,3 +1,7 @@
+# 0.216
+## Fixed
+- A comment kept inside the video that holds an invisible NUL character (it can come with a paste) is no longer wiped on save, with a note wrongly blaming the file name: the character becomes a space.
+
 # 0.215
 ## Fixed
 - When a changed comment or in/out points cannot be written, because the comment file or the video is read-only or open in another program, a note now names the clip and says why.
