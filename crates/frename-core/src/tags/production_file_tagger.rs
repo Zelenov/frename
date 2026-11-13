@@ -549,6 +549,8 @@ mod tests {
     fn a_save_that_renames_moves_the_same_sidecars_as_undo_does() {
         let tagger = ProductionFileTagger;
         let path = clip_named("rename-sidecars", "goat.mov");
+        let journal = path.with_file_name("recovery");
+        crate::recovery::use_dir_on_this_thread(journal.clone());
         crate::comment::save_comment(&path, "note");
         let mut old_sidecars = crate::subtitles::subtitle_candidates(&path);
         old_sidecars.push(crate::subtitles::transcript_path(&path));
@@ -579,6 +581,9 @@ mod tests {
             assert!(!p.exists(), "{p:?} should have left the old name");
         }
         assert!(bak.exists());
+        // The rename went through the journaled one (#377), which left no intent behind.
+        let intents = std::fs::read_dir(journal.join("renames")).expect("journaled");
+        assert_eq!(intents.count(), 0);
     }
 
     #[test]

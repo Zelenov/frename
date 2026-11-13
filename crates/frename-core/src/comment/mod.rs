@@ -82,15 +82,21 @@ pub fn remove_comment_file(file_path: &Path) {
 pub fn rename_comment_file(old_file_path: &Path, new_file_path: &Path) {
     let old_comment = comment_path(old_file_path);
     let new_comment = comment_path(new_file_path);
-    if old_comment.exists() {
-        if let Err(e) = std::fs::rename(&old_comment, &new_comment) {
-            log::warn!(
-                "comment: failed to rename {:?} → {:?}: {}",
-                old_comment,
-                new_comment,
-                e
-            );
-        }
+    if !old_comment.exists() {
+        return;
+    }
+    // Never over another clip's comment. A change of case only is the same file on Windows and
+    // macOS, where the new name "exists" already.
+    let same_name_other_case = old_comment
+        .file_name()
+        .zip(new_comment.file_name())
+        .is_some_and(|(a, b)| a.eq_ignore_ascii_case(b));
+    if new_comment.exists() && !same_name_other_case {
+        log::warn!("comment: not renaming {old_comment:?}: {new_comment:?} already exists");
+        return;
+    }
+    if let Err(e) = std::fs::rename(&old_comment, &new_comment) {
+        log::warn!("comment: failed to rename {old_comment:?} → {new_comment:?}: {e}");
     }
 }
 

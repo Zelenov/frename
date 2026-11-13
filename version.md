@@ -1,6 +1,6 @@
 # 0.205
 ## Fixed
-- If frename stops (a crash, a kill or a power cut) just after renaming a clip and before its comment, subtitle and screenshot files follow it, the next start moves them to the clip's new name, and any unsaved work on that clip is restored to it instead of being kept aside as "clip gone".
+- After a crash or a kill right after a clip was renamed, the next start moves its comment, subtitle and screenshot files to the new name, and restores your unsaved work on that clip instead of keeping it aside.
 
 # 0.204
 ## Added
