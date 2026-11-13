@@ -657,8 +657,10 @@ AI: A walk.
     #[test]
     fn an_ai_description_alone_does_not_get_the_commented_tag() {
         let block = "AI: A walk.\n— Claude Haiku 4.5, 2026-09-26 —";
-        let path = Path::new(r"C:\frename-sync-ai-test\Food.clip.mp4");
-        let mut described = FileSnapshot::parse("Food.clip.mp4");
+        // Its own clip name: on Linux the backslashes are no folders, so the in-memory store keys
+        // the clip by its name alone, and another test's "Food.clip.mp4" would be this one (#436).
+        let path = Path::new(r"C:\frename-sync-ai-test\Walk.clip.mp4");
+        let mut described = FileSnapshot::parse("Walk.clip.mp4");
         described.set_comment(block.to_string());
         let path = FileTagger::save(&described, path);
         assert_eq!(
