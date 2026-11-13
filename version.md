@@ -1,3 +1,7 @@
+# 0.205
+## Fixed
+- A tag can no longer hold a character a file name cannot (`\ / : * ? " < > |`): typing one in the tag search says so instead of offering to create it. Before, a tag like "AC/DC" moved the clip into a folder `AC` or made every save fail.
+
 # 0.204
 ## Added
 - The player shows the `.capt` file that Generate subtitles saves next to a clip as its subtitles, with the speakers' names, first among the clip's subtitle files; the CAPT button switches back to it.

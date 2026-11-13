@@ -1,0 +1,15 @@
+# #418: the tag search with a name a file name cannot hold says why instead of offering "Create".
+source = "../../tests/folder"
+open = "pick.wide.night.city.MVI_0410.mp4"
+seek = 10.0
+window = [1440, 720]
+panels = [640, 360]
+tag_filter = "AC/DC"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.MVI_0410.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "skip.handheld.MVI_0402.mov"

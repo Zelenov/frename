@@ -128,8 +128,14 @@ where
     ];
 
     // The "Create" cell stays above the rows, so the scroll arithmetic counts only tags.
-    let create =
-        (!filter.is_empty() && !tag_list.has_tag_with_name(filter)).then(|| cell::create(filter));
+    // A name a file name cannot hold says why instead of offering to create it (#418).
+    let create = (!filter.is_empty() && !tag_list.has_tag_with_name(filter)).then(|| {
+        if frename_core::is_allowed_tag_name(filter) {
+            cell::create(filter)
+        } else {
+            cell::not_allowed()
+        }
+    });
     column![]
         .push(create)
         .push(with_bounds)
