@@ -693,9 +693,9 @@ mod tests {
                     saved.comment(),
                     (saved.segment_start(), saved.segment_end())
                 );
-                // The journal agrees for points inside the clip; ones at its edges, kept in the
-                // video, read back as none (#448).
-                if i == 0 {
+                // The journal agrees, except for points at the clip's edges kept in the video,
+                // which read back as none (#448).
+                if i == 0 || points_in_comment {
                     assert!(
                         crate::recovery::saved_what_was_wanted(&wanted, &saved),
                         "{name}: the journal counts it as saved"
