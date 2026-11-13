@@ -1,3 +1,7 @@
+# 0.211
+## Fixed
+- A tag named like an old in or out point (`in_00_00_07`) can no longer be created: the clip lost it on the next save. The tag search says why instead of offering to create it.
+
 # 0.210
 ## Fixed
 - A frame that cannot be saved next to its clip (a very long file name, or a read-only folder) now says so, instead of saying "Frame saved".

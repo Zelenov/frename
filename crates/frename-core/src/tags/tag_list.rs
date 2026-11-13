@@ -1091,11 +1091,35 @@ pub fn has_forbidden_file_name_char(name: &str) -> bool {
     })
 }
 
-/// Whether `name` can be a tag: it holds no [forbidden
-/// character](has_forbidden_file_name_char) (#418) and no `.`, which separates the tags in a
-/// file name: "v1.2" would read back as two tags, "v1" and "2" (#420).
+/// Why `name` cannot be a tag, if it cannot: a tag becomes part of the clip's file name and
+/// must read back from it as the same tag.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TagNameProblem {
+    /// A character no file name can hold (#418).
+    BadCharacter,
+    /// A `.`, which separates the tags in a file name: "v1.2" reads back as "v1" and "2" (#420).
+    Dot,
+    /// It reads as an in or out point older versions wrote into names (`in_00_00_07`), so the
+    /// clip reads back without it (#428).
+    InOutPoint,
+}
+
+/// Why `name` cannot be a tag; `None` when it can.
+pub fn tag_name_problem(name: &str) -> Option<TagNameProblem> {
+    if has_forbidden_file_name_char(name) {
+        Some(TagNameProblem::BadCharacter)
+    } else if name.contains('.') {
+        Some(TagNameProblem::Dot)
+    } else if super::file_snapshot::is_name_in_out_part(name.trim()) {
+        Some(TagNameProblem::InOutPoint)
+    } else {
+        None
+    }
+}
+
+/// Whether `name` can be a tag ([`tag_name_problem`] finds nothing).
 pub fn is_allowed_tag_name(name: &str) -> bool {
-    !has_forbidden_file_name_char(name) && !name.contains('.')
+    tag_name_problem(name).is_none()
 }
 
 /// Where [`TagList::insert_new_tag`] puts a new tag.
@@ -1164,6 +1188,22 @@ mod tests {
             list.set_checked_by_name(name, true);
             assert!(!list.has_tag_with_name(name), "{name}");
         }
+        // #428: a name read as an old in/out point.
+        for name in ["in_00_00_07", "out_01_02_03"] {
+            assert_eq!(
+                tag_name_problem(name),
+                Some(TagNameProblem::InOutPoint),
+                "{name}"
+            );
+            assert!(list.create_new_tag(name).is_none(), "{name}");
+            assert!(
+                FileSnapshot::parse(&format!("{name}.clip.mp4"))
+                    .tags()
+                    .is_empty(),
+                "why: it does not read back as a tag"
+            );
+        }
+        assert!(is_allowed_tag_name("in_take"));
         assert!(is_allowed_tag_name("Rock & Roll"));
         assert!(is_allowed_tag_name("Кадр 2"));
         assert!(list.create_new_tag("Rock & Roll").is_some());
