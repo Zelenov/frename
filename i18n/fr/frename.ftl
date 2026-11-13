@@ -799,6 +799,7 @@ tag-grid-delete = Supprimer « { $tag } » des tags du dossier
 tag-grid-create = Créer « { $tag } »
 tag-grid-dot-not-allowed = Interdit dans un tag : « . »
 tag-grid-in-out-not-allowed = Interdit comme tag : point d’entrée/sortie
+tag-not-usable = Le tag « { $tag } » ne peut pas figurer dans un nom de fichier. Le supprimer et en créer un sous un autre nom.
 tag-grid-no-file = Ouvrir un clip pour le tagger
 tag-grid-no-tags = Aucun tag pour l’instant
 tag-grid-no-tags-hint = Taper un nom et appuyer sur Entrée pour créer le premier.

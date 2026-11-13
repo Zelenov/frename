@@ -2,6 +2,10 @@
 ## Fixed
 - The Settings tag for videos with a comment can no longer be a name like an In/Out point (`in_00_00_07`), which never appeared on a clip. Settings says why, and videos with a comment get no tag.
 
+# 0.213
+## Fixed
+- An old tag whose name a file name cannot hold ("AC/DC", "v1.2") can no longer be put on a clip, where it was lost or broke the name on save. A note says to delete it and make one with another name.
+
 # 0.212
 ## Fixed
 - Taking a frame before the clip shows a picture no longer leaves an empty `.jpg` next to it and says "Frame saved": it says no frame was taken.

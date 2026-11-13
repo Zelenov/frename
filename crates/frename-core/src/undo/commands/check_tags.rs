@@ -26,7 +26,7 @@ impl CheckTagsCommand {
                 .ok_or(UndoError::TagNotFound(*id))?
                 .is_checked();
             if current != checked {
-                ctx.tag_list.toggle_by_id(*id);
+                ctx.tag_list.restore_toggle_by_id(*id);
             }
         }
         Ok(())

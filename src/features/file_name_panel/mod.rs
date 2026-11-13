@@ -59,7 +59,7 @@ where
 
 /// The folder's tags the open clip's AI description suggests that the clip does not have yet,
 /// most likely first: once added (or added by hand), a tag is no longer offered, and a tag the
-/// folder no longer has is not offered at all.
+/// folder no longer has, or one a file name cannot hold, is not offered at all.
 pub fn pending_tag_suggestions<S>(tag_list: &TagList<S>) -> Vec<SuggestedTag>
 where
     S: StoredTagStore + Clone,
@@ -70,7 +70,11 @@ where
             tag_list
                 .tag_id_by_name(&suggested.name)
                 .and_then(|id| tag_list.get_tag(id))
-                .is_some_and(|tag| tag.is_stored() && !tag.is_checked())
+                .is_some_and(|tag| {
+                    tag.is_stored()
+                        && !tag.is_checked()
+                        && frename_core::is_allowed_tag_name(tag.tag())
+                })
         })
         .collect()
 }

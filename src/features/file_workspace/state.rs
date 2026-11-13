@@ -227,8 +227,9 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     }
 
     /// Toggle stored tag by id. Only updates workspace tag_list; file is synced after save.
-    pub fn toggle_tag_by_id(&mut self, id: TagId) {
-        self.tag_list.toggle_by_id(id);
+    /// `false` when it did not change: a tag a file name cannot hold is not checked (#421).
+    pub fn toggle_tag_by_id(&mut self, id: TagId) -> bool {
+        self.tag_list.toggle_by_id(id)
     }
 
     /// Remove a stored tag by id from the store and rebuild the tag list. Delegates to TagList.

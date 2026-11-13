@@ -707,6 +707,7 @@ tag-grid-delete = 从文件夹的标签中删除“{ $tag }”
 tag-grid-create = 创建“{ $tag }”
 tag-grid-dot-not-allowed = 标签中不能使用：“.”
 tag-grid-in-out-not-allowed = 不能用作标签：入点/出点
+tag-not-usable = 标签“{ $tag }”不能用在文件名中。请删除它，并用别的名称新建一个标签。
 tag-grid-no-file = 打开素材后才能打标签
 tag-grid-no-tags = 还没有标签
 tag-grid-no-tags-hint = 输入名称并按 Enter 创建第一个。
