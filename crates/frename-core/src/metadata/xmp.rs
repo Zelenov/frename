@@ -125,9 +125,7 @@ pub(super) fn write(
         .filter(|(s, range)| range.is_some() || s.is_empty())
         .map(|(_, range)| range);
     let segment_stored = segment.is_some() && target_range.is_some();
-    // The toolkit takes text up to a NUL and drops the rest, so a pasted NUL would wipe the
-    // comment (#441); it is stored as a space, as the toolkit stores other control characters.
-    let comment = comment.map(|c| c.replace('\0', " ").trim().to_string());
+    let comment = comment.map(|c| xmp_text(c).trim().to_string());
     let comment = comment.as_deref().filter(|c| description(&meta) != *c);
     let range = target_range.filter(|r| in_out_range(&meta) != *r);
     if comment.is_none() && range.is_none() {
@@ -153,6 +151,14 @@ pub(super) fn write(
     file.try_close()?;
     times.restore(path)?;
     Ok(segment_stored)
+}
+
+/// `text` as the toolkit can store it: a NUL, which a paste can bring, becomes a space. The
+/// toolkit cuts a comment at a NUL (#441) and refuses a marker field holding one (#445); other
+/// control characters it already stores as spaces. Every text frename writes and compares
+/// against the file goes through this.
+pub(super) fn xmp_text(text: &str) -> String {
+    text.replace('\0', " ")
 }
 
 /// The clip markers in the file's XMP (see [`super::markers_xmp`]). `None` when the file cannot
