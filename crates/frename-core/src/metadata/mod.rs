@@ -874,6 +874,24 @@ mod tests {
         marker
     }
 
+    /// #445: a NUL in a marker's name or comment no longer makes the toolkit refuse every marker
+    /// of the clip: it is stored as a space, and saving the same marker again changes nothing.
+    #[test]
+    fn a_nul_in_a_marker_is_stored_as_a_space() {
+        let file = copy_of_clip("markers-nul");
+        let mut pasted = marker(10, "Лев\0рычит");
+        pasted.comment = "крупный\0план".to_string();
+        save_markers(&file, &[pasted.clone()], &HashSet::new()).expect("saved");
+        let read = load_markers(&file).expect("markers");
+        assert_eq!(read.len(), 1);
+        assert_eq!(read[0].name, "Лев рычит");
+        assert_eq!(read[0].comment, "крупный план");
+        let known: HashSet<String> = read.iter().filter_map(|m| m.guid.clone()).collect();
+        pasted.guid = read[0].guid.clone();
+        save_markers(&file, &[pasted], &known).expect("saved again");
+        assert_eq!(load_markers(&file), Some(read));
+    }
+
     #[test]
     fn markers_round_trip_through_the_video_with_every_field_and_color() {
         let file = copy_of_clip("markers-round-trip");
