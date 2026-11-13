@@ -573,7 +573,13 @@ fn tidy_comment(comment: &str) -> String {
 /// in/out points read back from the file. A save that failed silently (a read-only clip, a name
 /// taken) differs in at least one of them. A snapshot whose comment was not read stays out.
 pub fn saved_what_was_wanted(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
-    let text = |s: &str| s.replace("\r\n", "\n").trim().to_string();
+    // A NUL is stored as a space in the video (#441): that is the comment saved.
+    let text = |s: &str| {
+        s.replace("\r\n", "\n")
+            .replace('\0', " ")
+            .trim()
+            .to_string()
+    };
     wanted.tags() == saved.tags()
         && wanted.name_without_extension() == saved.name_without_extension()
         && wanted.extension().eq_ignore_ascii_case(saved.extension())
@@ -1350,6 +1356,19 @@ mod tests {
                 .count(),
             0
         );
+    }
+
+    /// #441: a NUL the video stored as a space counts as saved, so the journal entry goes.
+    #[test]
+    fn a_nul_stored_as_a_space_is_saved() {
+        let with = |comment: &str| {
+            let mut snapshot = FileSnapshot::parse("clip.mp4");
+            snapshot.set_comment(comment.to_string());
+            snapshot
+        };
+        assert!(saved_what_was_wanted(&with("a\0b"), &with("a b")));
+        assert!(saved_what_was_wanted(&with("abc\0"), &with("abc")));
+        assert!(!saved_what_was_wanted(&with("a\0b"), &with("ab")));
     }
 
     /// #416: only a comment the editor wrote that reads back empty is lost; one still loading,

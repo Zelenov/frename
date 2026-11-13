@@ -125,7 +125,10 @@ pub(super) fn write(
         .filter(|(s, range)| range.is_some() || s.is_empty())
         .map(|(_, range)| range);
     let segment_stored = segment.is_some() && target_range.is_some();
-    let comment = comment.filter(|c| description(&meta) != *c);
+    // The toolkit takes text up to a NUL and drops the rest, so a pasted NUL would wipe the
+    // comment (#441); it is stored as a space, as the toolkit stores other control characters.
+    let comment = comment.map(|c| c.replace('\0', " ").trim().to_string());
+    let comment = comment.as_deref().filter(|c| description(&meta) != *c);
     let range = target_range.filter(|r| in_out_range(&meta) != *r);
     if comment.is_none() && range.is_none() {
         file.close();
