@@ -452,6 +452,39 @@ mod tests {
         }
     }
 
+    /// #452: French puts a no-break space (U+00A0) before ":" and a narrow one (U+202F) before
+    /// ";", as the file's header says, so the mark never wraps to a line on its own. The one
+    /// exception lists the forbidden characters themselves, ":" among them.
+    #[test]
+    fn french_has_no_breaking_space_before_a_colon_or_semicolon() {
+        let path = i18n_dir().join("fr/frename.ftl");
+        let text = std::fs::read_to_string(&path).unwrap();
+        let mut id = String::new();
+        let mut wrong = Vec::new();
+        for line in text.lines() {
+            if line.starts_with('#') {
+                continue;
+            }
+            let value = match line.split_once(" = ") {
+                Some((key, value)) if !line.starts_with(' ') => {
+                    id = key.to_string();
+                    value
+                }
+                _ => line,
+            };
+            if id == "folder-rename-error-bad-character" {
+                continue;
+            }
+            if value.contains(" :") || value.contains(" ;") || value.contains("\u{a0};") {
+                wrong.push(id.clone());
+            }
+        }
+        assert!(
+            wrong.is_empty(),
+            "French spacing before : or ; in {wrong:?}"
+        );
+    }
+
     /// The plural categories each language's Fluent selects are expected to use (CLDR), with the
     /// last one the Fluent default (`*[..]`). Two-category languages (most of Western Europe)
     /// need no entry: they fall back to `["one", "other"]` below.
