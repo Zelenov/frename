@@ -312,12 +312,19 @@ impl FileTagger {
     }
 
     /// Save a screenshot image for the given file and position. An error says it was not
-    /// written (#424).
+    /// written (#424). No image (the player had no frame to give) writes nothing and is an
+    /// `InvalidData` error: an empty `.jpg` next to the clip is no frame (#430).
     pub fn save_screenshot(
         file_path: &Path,
         position_ms: u64,
         image_data: &[u8],
     ) -> std::io::Result<()> {
+        if image_data.is_empty() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "no frame was captured",
+            ));
+        }
         backend().save_screenshot(file_path, position_ms, image_data)
     }
 
@@ -416,6 +423,21 @@ mod tests {
         std::fs::write(crate::subtitles::capt_path(&new_path), "capt").expect("capt");
         assert!(target_name_taken(&old_path, &new_path));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// #430: no captured frame writes no file and says why.
+    #[test]
+    fn an_empty_frame_is_not_saved() {
+        let dir = crate::test_support::fresh_dir("empty-frame");
+        let clip = dir.join("clip.mov");
+        std::fs::write(&clip, b"clip").expect("clip");
+        let err = FileTagger::save_screenshot(&clip, 1_000, &[]).expect_err("refused");
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert_eq!(
+            std::fs::read_dir(&dir).expect("dir").count(),
+            1,
+            "nothing written"
+        );
     }
 
     /// Tags follow the folder's order; a file already in order is left alone.

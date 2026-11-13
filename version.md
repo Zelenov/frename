@@ -1,3 +1,7 @@
+# 0.212
+## Fixed
+- Taking a frame before the clip shows a picture no longer leaves an empty `.jpg` next to it and says "Frame saved": it says no frame was taken.
+
 # 0.210
 ## Fixed
 - A frame that cannot be saved next to its clip (a very long file name, or a read-only folder) now says so, instead of saying "Frame saved".
