@@ -1,3 +1,7 @@
+# 0.222
+## Fixed
+- In French, the question mark of the "remove the Gemini key" question no longer wraps to a line on its own.
+
 # 0.221
 ## Fixed
 - In French, a colon or semicolon no longer wraps to the start of a line on its own in a few texts.

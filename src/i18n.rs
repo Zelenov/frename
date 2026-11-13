@@ -452,11 +452,12 @@ mod tests {
         }
     }
 
-    /// #452: French puts a no-break space (U+00A0) before ":" and a narrow one (U+202F) before
-    /// ";", as the file's header says, so the mark never wraps to a line on its own. The one
-    /// exception lists the forbidden characters themselves, ":" among them.
+    /// #452, #454: French puts a no-break space (U+00A0) before ":" and a narrow one (U+202F)
+    /// before ";", "!", "?" and "%", as the file's header says, so the mark never wraps to a line
+    /// on its own. In the list of forbidden characters, only the label before the list is checked:
+    /// the list holds ":" and "?" themselves.
     #[test]
-    fn french_has_no_breaking_space_before_a_colon_or_semicolon() {
+    fn french_has_the_right_space_before_its_punctuation() {
         let path = i18n_dir().join("fr/frename.ftl");
         let text = std::fs::read_to_string(&path).unwrap();
         let mut id = String::new();
@@ -465,23 +466,33 @@ mod tests {
             if line.starts_with('#') {
                 continue;
             }
-            let value = match line.split_once(" = ") {
-                Some((key, value)) if !line.starts_with(' ') => {
+            let mut value = line;
+            if !line.starts_with(' ') {
+                if let Some((key, rest)) = line.split_once(" =") {
                     id = key.to_string();
-                    value
+                    value = rest;
                 }
-                _ => line,
-            };
-            if id == "folder-rename-error-bad-character" {
-                continue;
             }
-            if value.contains(" :") || value.contains(" ;") || value.contains("\u{a0};") {
+            if id == "folder-rename-error-bad-character" {
+                value = value.split_once(" \\ ").map_or(value, |(label, _)| label);
+            }
+            let narrow = [";", "!", "?", "%"];
+            let bad = [" :", "\u{202f}:"]
+                .into_iter()
+                .map(String::from)
+                .chain(
+                    narrow
+                        .iter()
+                        .flat_map(|mark| [format!(" {mark}"), format!("\u{a0}{mark}")]),
+                )
+                .any(|bad| value.contains(&bad));
+            if bad {
                 wrong.push(id.clone());
             }
         }
         assert!(
             wrong.is_empty(),
-            "French spacing before : or ; in {wrong:?}"
+            "French spacing before : ; ! ? or % in {wrong:?}"
         );
     }
 
