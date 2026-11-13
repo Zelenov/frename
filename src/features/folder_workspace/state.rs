@@ -2219,6 +2219,9 @@ impl FolderWorkspace {
             (None, _) => Task::none(),
         };
         let path_before = current_path.clone();
+        // Whether the save leaves the files named without the extension in place (#417): asked
+        // before it, as the save asks, for an undo to replay.
+        let stem_files_stay = frename_core::keeps_stem_files(&current_path);
         let (new_path, snapshot_after_save) = snapshot.save_and_reparse(&current_path);
         // A running job keeps some of its plan by path: the renamed clip keeps its place in it.
         if new_path != path_before {
@@ -2323,6 +2326,7 @@ impl FolderWorkspace {
                 path_after: new_path,
                 snapshot_before,
                 snapshot_after: snapshot_after_save,
+                stem_files_stay,
             }));
         }
 

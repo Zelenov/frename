@@ -19,16 +19,17 @@ pub struct NavigateFileCommand {
     pub path_after: PathBuf,
     pub snapshot_before: FileSnapshot,
     pub snapshot_after: FileSnapshot,
+    /// The save left the files named without the extension (subtitles, CAPT, transcript) where
+    /// they were, because another video shared the clip's name ([`crate::keeps_stem_files`],
+    /// taken before the save). Undo and redo replay exactly that (#417).
+    pub stem_files_stay: bool,
 }
 
 /// Rename `from` to `to` with the comment, subtitle and transcript files that travel with it.
 /// Refuses, changing nothing, when `to` or one of its sidecars exists: the same guard as the
 /// save that made the rename, so Ctrl+Z / Ctrl+Y never replace another clip.
-///
-/// `keep_stem_files`: whether the files named without the extension (subtitles, CAPT,
-/// transcript) stay where they are because another video shares the name (#417). A redo decides
-/// it as the save did, by the name the clip leaves; an undo by the name it goes back to, so it
-/// moves them back exactly when the save moved them.
+/// `keep_stem_files`: whether the files named without the extension stay where they are, as the
+/// save that made the rename decided (#417).
 fn rename_with_sidecars(from: &Path, to: &Path, keep_stem_files: bool) -> Result<(), UndoError> {
     if target_name_taken_with(from, to, keep_stem_files) {
         return Err(UndoError::NameTaken(to.to_path_buf()));
@@ -47,8 +48,7 @@ where
             if !self.path_after.exists() {
                 return Err(UndoError::FileNotFound(self.path_after.clone()));
             }
-            let keep = crate::subtitles::stem_is_shared(&self.path_before);
-            rename_with_sidecars(&self.path_after, &self.path_before, keep)?;
+            rename_with_sidecars(&self.path_after, &self.path_before, self.stem_files_stay)?;
         }
         ctx.directory
             .rename_file(self.file_id, &self.path_before, &self.snapshot_before);
@@ -63,8 +63,7 @@ where
             if !self.path_before.exists() {
                 return Err(UndoError::FileNotFound(self.path_before.clone()));
             }
-            let keep = crate::subtitles::stem_is_shared(&self.path_before);
-            rename_with_sidecars(&self.path_before, &self.path_after, keep)?;
+            rename_with_sidecars(&self.path_before, &self.path_after, self.stem_files_stay)?;
         }
         ctx.directory
             .rename_file(self.file_id, &self.path_after, &self.snapshot_after);

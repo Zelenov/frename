@@ -1256,6 +1256,27 @@ mod tests {
         assert!(dir.join("pick.clip.srt").exists(), "the subtitles follow");
     }
 
+    /// #417: a save that left the shared subtitles in place (another video has the clip's name)
+    /// and was cut by a crash is finished the same way: they stay with the other video.
+    #[test]
+    fn a_cut_rename_that_kept_shared_subtitles_keeps_them() {
+        let dir = temp_dir("rename-cut-shared-stem");
+        let from = clip(&dir);
+        std::fs::write(dir.join("clip.mov"), b"proxy").expect("proxy");
+        std::fs::write(dir.join("clip.srt"), "1").expect("srt");
+        let to = dir.join("pick.clip.mp4");
+        let journal = dir.join("recovery");
+        assert!(write_intent(&journal, &from, &to, false, Some(true)).is_some());
+        std::fs::rename(&from, &to).expect("rename");
+        // The proxy is gone by the next start: the recorded decision still holds.
+        std::fs::remove_file(dir.join("clip.mov")).expect("proxy gone");
+
+        restore_all_in(&journal);
+
+        assert!(dir.join("clip.srt").exists());
+        assert!(!dir.join("pick.clip.srt").exists());
+    }
+
     /// A whole rename moves the video and its sidecars and leaves no intent behind; a failed
     /// one changes nothing and leaves none either.
     #[test]

@@ -497,7 +497,7 @@ pub(crate) fn stem_is_shared(video_path: &Path) -> bool {
 /// Whether the files of `video_path` named without its extension (subtitles, CAPT, transcript)
 /// stay where they are when it is renamed: it has some, and another video shares the name
 /// ([`stem_is_shared`]). The folder is listed only for a clip that has such files.
-pub(crate) fn keeps_stem_files(video_path: &Path) -> bool {
+pub fn keeps_stem_files(video_path: &Path) -> bool {
     stem_files(video_path).iter().any(|p| p.is_file()) && stem_is_shared(video_path)
 }
 

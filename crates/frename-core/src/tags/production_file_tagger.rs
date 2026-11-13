@@ -158,7 +158,12 @@ impl ProductionFileTagger {
         // transcript sidecar) would silently replace it — e.g. two clips that end up with the
         // same tags and base name (duplicated subclips, `clip.mp4` and `clip (1).mp4` renamed
         // alike). See `target_name_taken` for what "taken" excludes (a same-file case change).
-        if new_path != path && super::file_tagger::target_name_taken(path, &new_path) {
+        // Whether the files named without the extension stay where they are (#417): decided once,
+        // for the check and the rename alike.
+        let keep_stem_files = crate::subtitles::keeps_stem_files(path);
+        if new_path != path
+            && super::file_tagger::target_name_taken_with(path, &new_path, keep_stem_files)
+        {
             log::error!(
                 "ProductionFileTagger: not saving {:?}: {:?} (or a sidecar) already exists",
                 path,
@@ -181,7 +186,7 @@ impl ProductionFileTagger {
                 path,
                 &new_path,
                 writes_text_file && saved.comment,
-                crate::subtitles::keeps_stem_files(path),
+                keep_stem_files,
             ) {
                 log::error!(
                     "ProductionFileTagger: rename {:?} → {:?} failed: {}",
